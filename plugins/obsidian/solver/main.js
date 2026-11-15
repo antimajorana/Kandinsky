@@ -1,4 +1,4 @@
-// Solver app commands & context-menu integration (main.js).
+// Solver app commands & context-menu integration (main.js): note-to-Solver handoff and Solver-to-note derivation import.
 
 async function sendToSolver(atlas, opts = {}) {
   const snap = atlas.context();
@@ -25,6 +25,16 @@ async function sendToSolver(atlas, opts = {}) {
   atlas.openView(JSON.stringify({ path, title, prompt }), { beside: true, title: "Solver" });
 }
 
+function openImportDialog(atlas, targetPath = "") {
+  const active = targetPath || (atlas.context()?.active?.path ?? "");
+  void atlas.openDialog(JSON.stringify({ targetPath: active }), {
+    title: "Import Solver Derivation to Note",
+    width: 680,
+    height: 540,
+    view: "import-dialog.js",
+  });
+}
+
 export function register(atlas) {
   atlas.registerCommand({
     id: "beside",
@@ -36,6 +46,12 @@ export function register(atlas) {
     id: "send-note",
     title: "Solver: Send current selection or note to Solver",
     run: () => sendToSolver(atlas, { beside: true }),
+  });
+
+  atlas.registerCommand({
+    id: "import-note",
+    title: "Solver: Import Solver derivation into a Kandinsky note…",
+    run: () => openImportDialog(atlas),
   });
 
   atlas.registerCommand({
@@ -68,6 +84,11 @@ export function register(atlas) {
         label: sel ? "Send selection to Solver" : "Send note to Solver",
         icon: "sigma",
         run: () => sendToSolver(atlas, { path: target?.path, selection: sel, beside: true }),
+      },
+      {
+        label: "Import Solver derivation into note…",
+        icon: "sigma",
+        run: () => openImportDialog(atlas, target?.path || ""),
       },
     ];
   });

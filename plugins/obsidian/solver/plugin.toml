@@ -1,14 +1,14 @@
 title = "Solver"
-description = "Solver Agent as a native Kandinsky app: multi-agent math & theoretical-physics workspace docked inside Kandinsky"
+description = "Solver Agent as a native Kandinsky app: multi-agent math & physics workspace docked inside Kandinsky with 1-click Solver-to-note derivation import"
 icon = "sigma"
 rail = true
 view = "view.js"
 main = "main.js"
-version = "1.0.0"
+version = "1.1.0"
 api = 28
 
 [permissions]
-exec = ["node", "powershell"]
+exec = ["node", "powershell", "wsl"]
 
 [helper]
 js = "helper.js"
@@ -27,6 +27,13 @@ label = "Solver API URL"
 kind = "text"
 default = "http://127.0.0.1:3000"
 hint = "Local backend API URL served by Solver Agent (default http://127.0.0.1:3000)"
+
+[[setting]]
+key = "notes_folder"
+label = "Imported derivations folder"
+kind = "text"
+default = "Solver"
+hint = "Vault folder where imported Solver derivations are saved as Markdown notes (leave blank for vault root)"
 
 [[setting]]
 key = "launcher_dir"

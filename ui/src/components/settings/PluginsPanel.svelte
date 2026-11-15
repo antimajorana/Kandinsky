@@ -194,15 +194,19 @@
 
   {#if showSolverCard && (tab === "all" || tab === "installed" || tab === "catalog")}
     {@const solverOn = !!(solverInstalled && !isOff("solver"))}
+    {@const solverNeedsUpdate = !!(solverInstalled && solverOffer?.version && solverInstalled.version !== solverOffer.version)}
     <div class="solver-feature">
       <span class="solver-badge" aria-hidden="true"><Icon name="sigma" size={16} /></span>
       <div class="solver-copy">
         <b>Solver App</b>
         <span class="badge ok">Kandinsky App</span>
-        <span class="d">Pins Solver to the top of your left sidebar, launches local Solver services silently in the background, and docks Solver beside your notes.</span>
+        <span class="d">Pins Solver to the top of your left sidebar, launches local Solver services silently, docks Solver beside your notes, and imports verified derivations into Markdown notes in one click.</span>
       </div>
       <span class="acts">
         {#if solverInstalled && solverOn && solverInstalled.view}
+          {#if solverNeedsUpdate && solverOffer}
+            <button class="btn small" onclick={() => void installFrom(solverOffer.url).then(refreshCatalog)}>Update to v{solverOffer.version}</button>
+          {/if}
           <button class="btn primary" onclick={() => open(pluginSpec(solverInstalled))}><Icon name="sigma" size={13} /> Open Solver</button>
           <button class="btn small" onclick={() => void openPluginSettings("solver")}>Settings…</button>
         {:else}
@@ -217,15 +221,19 @@
 
   {#if showAgyCard && (tab === "all" || tab === "installed" || tab === "catalog")}
     {@const agyOn = !!(agyInstalled && !isOff("antigravity"))}
+    {@const agyNeedsUpdate = !!(agyInstalled && agyOffer?.version && agyInstalled.version !== agyOffer.version)}
     <div class="solver-feature">
       <span class="solver-badge" aria-hidden="true"><Icon name="claude" size={16} /></span>
       <div class="solver-copy">
         <b>Google Antigravity</b>
         <span class="badge ok">AI Agent</span>
-        <span class="d">Integrates Antigravity (agy) like Claude: terminal sessions (+ menu &amp; Super+K), send note selections (@path#Lfrom-to), status bar launcher, and 1-click Kandinsky MCP connection.</span>
+        <span class="d">Integrates Antigravity (agy) like Claude: live status-bar model switcher (Carbon, Argon, Hydrogen), active subagent monitor, terminal sessions (+ menu &amp; Super+K), and Kandinsky MCP bridge.</span>
       </div>
       <span class="acts">
         {#if agyInstalled && agyOn && agyInstalled.view}
+          {#if agyNeedsUpdate && agyOffer}
+            <button class="btn small" onclick={() => void installFrom(agyOffer.url).then(refreshCatalog)}>Update to v{agyOffer.version}</button>
+          {/if}
           <button class="btn primary" onclick={() => open(pluginSpec(agyInstalled))}><Icon name="claude" size={13} /> Open Antigravity</button>
           <button class="btn small" onclick={() => void openPluginSettings("antigravity")}>Settings…</button>
         {:else}

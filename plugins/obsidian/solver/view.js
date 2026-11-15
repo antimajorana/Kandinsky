@@ -179,6 +179,20 @@ export default function mountSolver(host, atlas) {
       bar.append(reloadBtn);
     }
 
+    const importBtn = document.createElement("button");
+    importBtn.className = running ? "solver-btn primary" : "solver-btn";
+    importBtn.title = "Import a Solver derivation (math, proof steps & verification scripts) into a Kandinsky Markdown note";
+    importBtn.textContent = "Import to Note…";
+    importBtn.onclick = () => {
+      const active = atlas.context()?.active?.path ?? "";
+      void atlas.openDialog(JSON.stringify({ targetPath: active }), {
+        title: "Import Solver Derivation to Note",
+        width: 680,
+        height: 540,
+        view: "import-dialog.js",
+      });
+    };
+
     const splitBtn = document.createElement("button");
     splitBtn.className = "solver-btn";
     splitBtn.title = "Open a note beside Solver or dock Solver beside your active note";
@@ -201,7 +215,7 @@ export default function mountSolver(host, atlas) {
     settingsBtn.textContent = "Settings";
     settingsBtn.onclick = () => atlas.plugin.openSettings();
 
-    bar.append(splitBtn, browserBtn, settingsBtn);
+    bar.append(importBtn, splitBtn, browserBtn, settingsBtn);
   }
 
   function renderBody() {
@@ -253,12 +267,25 @@ export default function mountSolver(host, atlas) {
     checkBtn.textContent = "Check Again";
     checkBtn.onclick = () => void refreshStatus(false);
 
+    const impOfflineBtn = document.createElement("button");
+    impOfflineBtn.className = "solver-btn";
+    impOfflineBtn.textContent = "Import Solver .zip to Note…";
+    impOfflineBtn.onclick = () => {
+      const active = atlas.context()?.active?.path ?? "";
+      void atlas.openDialog(JSON.stringify({ targetPath: active }), {
+        title: "Import Solver Derivation to Note",
+        width: 680,
+        height: 540,
+        view: "import-dialog.js",
+      });
+    };
+
     const cfgBtn = document.createElement("button");
     cfgBtn.className = "solver-btn";
     cfgBtn.textContent = "Configure Paths…";
     cfgBtn.onclick = () => atlas.plugin.openSettings();
 
-    actions.append(startBtn, checkBtn, cfgBtn);
+    actions.append(startBtn, checkBtn, impOfflineBtn, cfgBtn);
     card.append(actions);
     wrap.append(card);
     body.replaceChildren(wrap);

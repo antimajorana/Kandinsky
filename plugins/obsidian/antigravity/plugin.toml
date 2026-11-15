@@ -1,9 +1,9 @@
 title = "Antigravity"
-description = "Google Antigravity (agy) inside Kandinsky like Claude: terminal sessions, send note selections (@path#Lfrom-to), status bar launcher, and 1-click Kandinsky MCP connection"
+description = "Google Antigravity (agy) inside Kandinsky like Claude: live model switcher, active subagent monitor, terminal sessions, @path#Lfrom-to selection handoff, and Kandinsky MCP bridge"
 icon = "claude"
 view = "view.js"
 main = "main.js"
-version = "1.0.0"
+version = "1.1.0"
 api = 28
 
 [[agent]]
@@ -17,11 +17,19 @@ commit_marks = ["co-authored-by: antigravity", "antigravity"]
 send_selection = "@{path}#L{from}-{to} "
 
 [permissions]
-exec = ["agy", "powershell"]
+exec = ["agy", "node", "powershell"]
 
 [helper]
 js = "helper.js"
 idle = "15m"
+
+[[setting]]
+key = "model"
+label = "Active Antigravity model"
+kind = "text"
+default = "default"
+suggest = "models"
+hint = "Model used for new Antigravity sessions (e.g. default, gemini-4-carbon-medium, gemini-4-argon-high, gemini-4-hydrogen-high)"
 
 [[setting]]
 key = "command"
@@ -29,15 +37,15 @@ label = "Antigravity command"
 kind = "text"
 default = "agy"
 suggest = "commands"
-hint = "Command used for Antigravity terminal sessions (default: agy, or add flags like `agy --mode auto`)"
+hint = "Command used for Antigravity terminal sessions (updated automatically when you switch models in the status bar)"
 
 [[setting]]
 key = "default_mode"
-label = "Default quick-launch mode"
+label = "Default execution mode"
 kind = "choice"
 choices = ["interactive", "plan", "accept-edits", "auto"]
 default = "interactive"
-hint = "Execution mode used by Antigravity quick-launch actions"
+hint = "Execution mode passed when launching Antigravity sessions"
 
 [[setting]]
 key = "default_effort"
@@ -45,14 +53,14 @@ label = "Reasoning effort"
 kind = "choice"
 choices = ["default", "low", "medium", "high", "xhigh", "max"]
 default = "default"
-hint = "Optional --effort flag passed when launching custom Antigravity sessions"
+hint = "Optional --effort flag passed when launching Antigravity sessions"
 
 [[setting]]
 key = "status_bar"
-label = "Show Antigravity in status bar"
+label = "Show Antigravity model & subagents in status bar"
 kind = "toggle"
 default = true
-hint = "Show an Antigravity status & quick-launch chip in Kandinsky's bottom status bar"
+hint = "Show live Antigravity model switcher & subagent monitor in Kandinsky's bottom status bar"
 
 [platforms]
 windows = "works"
