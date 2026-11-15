@@ -320,8 +320,12 @@ export const api = {
   pluginFetch: (id: string, req: PluginFetchRequest) => request<PluginFetchResponse>("POST", `/api/plugins/${encodeURIComponent(id)}/fetch`, { body: req }),
   /** A plugin's media address (core plugin_media.rs): the ticket the core keeps its headers under, secrets filled in. */
   pluginMedia: (id: string, req: { url: string; headers?: PluginFetchRequest["headers"] }) => request<{ src: string; ticket: string }>("POST", `/api/plugins/${encodeURIComponent(id)}/media`, { body: req }),
-  /** The plugins the configured release offers ([plugins] release_index), marked with what this vault has. */
+  /** The plugins the bundled catalog and configured release offer, marked with what this vault has. */
   availablePlugins: () => request<import("./gen/Available").Available[]>("GET", "/api/plugins/available"),
+  /** Obsidian community plugins detected in `<vault>/.obsidian/plugins/` (read-only). */
+  obsidianPlugins: () => request<{ id: string; name: string; version?: string; description?: string; author?: string; enabled: boolean }[]>("GET", "/api/plugins/obsidian"),
+  /** Moves unnecessary `.obsidian/plugins/<id>` folders safely into `.atlas/trash/`. */
+  removeObsidianPlugins: (ids: string[]) => request<{ moved: string[] }>("POST", "/api/plugins/obsidian/remove", { body: { ids } }),
   /** Copy a plugin into the vault (a folder, a git address, an archive); it arrives switched off. */
   installPlugin: (from: string, id?: string) => request<import("./gen/Installed").Installed>("POST", "/api/plugins/install", { body: { from, id } }),
   updatePlugin: (id: string) => request<import("./gen/Installed").Installed>("POST", `/api/plugins/${encodeURIComponent(id)}/update`),

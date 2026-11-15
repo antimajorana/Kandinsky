@@ -57,7 +57,7 @@ export const otherVaults: FileSource = {
     const place = `/v/${name}/`, path = rest.join("/");
     const now = await stateThere(place, path);
     if (!force && (!seen.has(local) || seen.get(local) !== now)) {
-      return { changed: seen.has(local) ? `${path} changed in ${name} since it was opened here` : `${path}: opened before Atlas started again, so a change in ${name} would not be seen` };
+      return { changed: seen.has(local) ? `${path} changed in ${name} since it was opened here` : `${path}: opened before Kandinsky started again, so a change in ${name} would not be seen` };
     }
     await call(place, "POST", "/api/fs/upload", { path, replace: "true" }, await api.raw(local));
     seen.set(local, await stateThere(place, path));

@@ -1,8 +1,8 @@
 /* Design tokens. Dark is the default; [data-theme="light"] swaps the palette.
    Everything else (dockview, CodeMirror, hljs, xterm, KaTeX colour) reads these variables. */
-@font-face { font-family: "Atlas Term Symbols"; font-weight: 400; font-display: swap; src: url("../assets/fonts/atlas-term-symbols-regular.woff2") format("woff2");
+@font-face { font-family: "Atlas Term Symbols"; font-weight: 400; font-display: swap; src: url("../assets/fonts/kandinsky-term-symbols-regular.woff2") format("woff2");
   unicode-range: U+2000-206F, U+2190-22FF, U+2300-23FF, U+2460-24FF, U+2500-27BF, U+2900-29FF, U+2B00-2BFF; }
-@font-face { font-family: "Atlas Term Symbols"; font-weight: 700; font-display: swap; src: url("../assets/fonts/atlas-term-symbols-bold.woff2") format("woff2");
+@font-face { font-family: "Atlas Term Symbols"; font-weight: 700; font-display: swap; src: url("../assets/fonts/kandinsky-term-symbols-bold.woff2") format("woff2");
   unicode-range: U+2000-206F, U+2190-22FF, U+2300-23FF, U+2460-24FF, U+2500-27BF, U+2900-29FF, U+2B00-2BFF; }
 
 :root {

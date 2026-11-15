@@ -27,6 +27,7 @@ import { sidebarActions } from "./sidebar.svelte";
 import { notesActions } from "./notes-system";
 import { paperActions } from "./papers";
 import type { IconName, PaneSpec } from "./panes";
+import { openSettingsAt } from "./settings-nav.svelte";
 import { setHomeSpec } from "./apps.svelte";
 
 export interface Action {
@@ -173,7 +174,7 @@ export async function sendToAgent(): Promise<void> {
   const live = () => [...terminals].filter(([, t]) => sends(t) && t.ready()).sort(([, a], [, b]) => b.usedAt - a.usedAt)[0];
   const first = declared[0];
   if (!live()) {
-    if (!first) { toast("No AI agent here", "Switch on an agent plugin (Claude) in Settings → Plugins, then send again."); return; }
+    if (!first) { toast("No AI agent here", "Switch on an agent plugin (Antigravity or Claude) in Settings → Plugins, then send again."); return; }
     open({ kind: "terminal", preset: "claude", agent: first.ref, n: nextTerminalN() });
   }
   for (let i = 0; i < 80; i++) {
@@ -200,7 +201,7 @@ export function openWith(path?: string): void {
     items: [
       ...views.map((o) => ({ value: `once:${o.id}`, title: o.title, detail: o.isDefault ? "default" : "", icon: o.icon, section: "Open with" })),
       ...views.filter((o) => !o.isDefault).map((o) => ({ value: `always:${o.id}`, title: `Always open .${ext} with ${o.title}`, icon: o.icon, section: "Default" })),
-      ...(custom ? [{ value: "always:", title: `Open .${ext} with Atlas's usual view again`, icon: "refresh" as const, section: "Default" }] : []),
+      ...(custom ? [{ value: "always:", title: `Open .${ext} with Kandinsky's usual view again`, icon: "refresh" as const, section: "Default" }] : []),
     ],
     onpick: async (v) => {
       const [how, id] = [v.slice(0, v.indexOf(":")), v.slice(v.indexOf(":") + 1)];
@@ -239,7 +240,7 @@ const PAGE_ZOOM = ".pdf-pane"; // panes with a zoom of their own
 // modules load, and in an import cycle (dock.ts ↔ tabs ↔ libraries) an imported function may not exist yet.
 export const actions: Action[] = [
   { id: "ui.palette", title: "Command palette", keys: "Super+E", alsoKeys: ["F1"], run: () => openPalette("all") },
-  { id: "ui.open-in-browser", title: "Open Atlas in the browser", run: () => openInBrowser() },
+  { id: "ui.open-in-browser", title: "Open Kandinsky in the browser", run: () => openInBrowser() },
   // e-ink (Settings → Appearance: ui.eink_refresh): the ghosts of earlier screens cleared by one full refresh
   { id: "ui.eink-refresh", title: "E-ink: clear the screen", run: () => void import("./eink").then((m) => m.einkRefresh(true)) },
   // the store before the note's pdf-marks block: each older drawing's marks moved over, after a yes (lib/pdf-migrate.ts)
@@ -303,6 +304,7 @@ export const actions: Action[] = [
   { id: "ui.reload", title: "Reload the interface", run: () => { void reloadInterface(); } },
   { id: "ui.vim", title: "Toggle vim mode", run: () => { toggleVim(); toast(`Vim mode ${app.vimEnabled ? "off" : "on"}`); } },
   { id: "ui.theme", title: "Toggle light / dark theme", icon: () => (app.theme === "dark" ? "sun" : "moon"), label: "Toggle theme", run: () => toggleTheme() },
+  { id: "ui.plugins", title: "Plugins: browse & manage plugins", label: "Plugins", icon: "plugin", run: () => { openSettingsAt("plugins"); } },
   { id: "ui.settings", title: "Settings", icon: "settings", keys: "Super+,", run: () => { open({ kind: "settings" }); } },
   // the keys zoom the tab they are in (lib/pane-zoom.ts); everything at once is its own trio
   { id: "ui.zoomIn", title: "Zoom in: this tab's text larger", keys: "Ctrl+Plus", alsoKeys: ["Ctrl+="], yieldTo: PAGE_ZOOM, run: () => zoomPane(1) },
@@ -331,7 +333,8 @@ export const actions: Action[] = [
   { id: "ui.glance", title: "Glance: follow another device (what it shows, full screen)", icon: "eye", run: () => void import("./where.svelte").then((m) => m.followDevice()) },
   { id: "ui.symbols", title: "Go to a symbol in the project (functions, classes…)", icon: "file-code", run: () => goToSymbol() },
   { id: "ui.problems", title: "Problems: errors and warnings of the current file", keys: "Super+M", run: () => showProblems() },
-  { id: "ui.graph", title: "Graph of notes (links between notes)", icon: "link", label: "Graph", keys: "Super+Shift+G", run: () => { open({ kind: "graph" }); } },
+  { id: "ui.graph", title: "Graph view: the notes and the links between them", icon: "graph", label: "Graph view", keys: "Super+Shift+G", plugin: "graph", run: () => { open({ kind: "graph" }); } },
+  { id: "ui.bases", title: "Bases: open one of the vault's bases, or make a new one", icon: "table", label: "Bases", plugin: "bases", run: () => void import("./bases-pick").then((m) => m.pickBase()) },
   { id: "ui.commands", title: "Commands & keyboard shortcuts (all commands, new command)", icon: "command", label: "Commands & shortcuts", keys: "Super+Shift+K", run: () => { open({ kind: "commands" }); } },
   ...tabActions,
   ...vaultActions,

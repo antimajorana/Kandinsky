@@ -1,0 +1,28 @@
+title = "Tag Wrangler & Tactician"
+description = "Browse hierarchical #tags across the vault, filter notes by tag, and bulk-rename or merge tags safely"
+icon = "hash"
+view = "view.js"
+main = "main.js"
+version = "0.1.0"
+phone = true
+api = 28
+
+[[setting]]
+key = "sort"
+label = "Default tag sort"
+kind = "choice"
+choices = ["count", "name"]
+default = "count"
+hint = "Order tags by note count or alphabetically"
+
+[[setting]]
+key = "include_subtags"
+label = "Rename subtags together"
+kind = "toggle"
+default = true
+hint = "Renaming #physics also renames #physics/quantum to #new/quantum"
+
+[platforms]
+windows = "works"
+linux = "works"
+macos = "works"

@@ -47,7 +47,7 @@
 
 <section class="settings-panel signins" data-testid="signins-panel">
   <h3>Sign-ins for plugins</h3>
-  <p class="desc">When a plugin reaches a service with a sign-in in front of it (Authelia, Authentik, oauth2-proxy…), Atlas asks you to sign in once, in a window of its own, and sends that sign-in with the plugins' later requests — one sign-in opens every service behind the same gate. Tick “Remember me” there: Atlas keeps the session alive by visiting it every few hours, so it lasts as long as the gate allows. Only plugins that list the site in their <code>net</code> permission get it.</p>
+  <p class="desc">When a plugin reaches a service with a sign-in in front of it (Authelia, Authentik, oauth2-proxy…), Kandinsky asks you to sign in once, in a window of its own, and sends that sign-in with the plugins' later requests — one sign-in opens every service behind the same gate. Tick “Remember me” there: Kandinsky keeps the session alive by visiting it every few hours, so it lasts as long as the gate allows. Only plugins that list the site in their <code>net</code> permission get it.</p>
   {#if error}<p class="bad">{error}</p>{/if}
   {#if kept.length}
     <ul>
@@ -61,7 +61,7 @@
     </ul>
   {:else if !error}<p class="muted">None yet.</p>{/if}
   <h4>OpenID providers</h4>
-  <p class="desc">A service that wants a token (OpenID Connect) gets one from your provider, shared by every plugin: signed in once, the others use it with no click, and with a gate session kept above the token comes silently. Atlas renews it before its hour ends and at least weekly, so it outlives a quiet month.</p>
+  <p class="desc">A service that wants a token (OpenID Connect) gets one from your provider, shared by every plugin: signed in once, the others use it with no click, and with a gate session kept above the token comes silently. Kandinsky renews it before its hour ends and at least weekly, so it outlives a quiet month.</p>
   {#if tokens.length}
     <ul>
       {#each tokens as t (t.key)}

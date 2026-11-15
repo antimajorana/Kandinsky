@@ -503,7 +503,7 @@ class TaskMarkWidget extends WidgetType {
     box.addEventListener("mousedown", (e) => {
       e.preventDefault();
       const line = view.state.doc.lineAt(view.posAtDOM(box));
-      if (this.toggle && this.toggle(view, line.number)) return; // Atlas: the caller's tick (done date, recurrence)
+      if (this.toggle && this.toggle(view, line.number)) return; // Kandinsky: the caller's tick (done date, recurrence)
       const m = /\[( |x|X)\]/.exec(line.text);
       if (!m) return;
       const at = line.from + m.index + 1;

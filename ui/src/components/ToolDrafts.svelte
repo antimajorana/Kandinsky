@@ -50,7 +50,7 @@
   {:else if !drafts.length && compact}
     <p class="muted">Nothing drafted right now.</p>
   {:else if !drafts.length}
-    <p class="muted">Nothing drafted right now. Atlas watches for patterns (folders of alike notes, repeated work) and drafts a tool here when it sees one — you never have to ask.</p>
+    <p class="muted">Nothing drafted right now. Kandinsky watches for patterns (folders of alike notes, repeated work) and drafts a tool here when it sees one — you never have to ask.</p>
   {:else if !shown}
     <!-- one line until asked: a list of cards took over the pane it sat in and read as an alarm -->
     <button class="summary" onclick={() => (shown = true)} aria-expanded="false">
@@ -60,7 +60,7 @@
     </button>
   {:else}
     <button class="summary open" onclick={() => (shown = false)} aria-expanded="true">
-      <span>Each suggestion says what Atlas noticed and which file it would write. <b>Keep</b> writes that file (plain text, yours to edit or delete); <b>Dismiss</b> hides the suggestion for good.</span>
+      <span>Each suggestion says what Kandinsky noticed and which file it would write. <b>Keep</b> writes that file (plain text, yours to edit or delete); <b>Dismiss</b> hides the suggestion for good.</span>
       <span class="more">Hide</span>
     </button>
     <ul>

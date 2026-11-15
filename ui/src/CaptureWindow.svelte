@@ -24,7 +24,7 @@
   const close = () => { location.href = "/__atlas_close"; };
 
   onMount(() => {
-    document.title = "Atlas capture";
+    document.title = "Kandinsky capture";
     document.documentElement.classList.add("capture-window");
     cb?.focus();
     // the look of the vault, and the list of vaults — neither is needed to type

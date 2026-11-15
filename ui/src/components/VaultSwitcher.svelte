@@ -74,9 +74,9 @@
 
   /** Why this window's vault cannot be linked to a mirror from here. */
   function mirrorRefusal(current: VaultEntry | undefined): string {
-    if (!current) return "This window shows a vault on a server. A mirror is the link from a vault on this machine to its copy on a server: open the local folder in Atlas and link it there.";
+    if (!current) return "This window shows a vault on a server. A mirror is the link from a vault on this machine to its copy on a server: open the local folder in Kandinsky and link it there.";
     if (current.kind !== "folder") return "This vault is on a server already: a mirror links a folder on this machine to it. Open the local folder and link it there.";
-    return "This vault is served by a program that does not keep Atlas's vault list (`atlas serve`, or another Atlas), so its mirror cannot be set from this window. Open the folder in the Atlas desktop app and link it there.";
+    return "This vault is served by a program that does not keep Kandinsky's vault list (`atlas serve`, or another Kandinsky), so its mirror cannot be set from this window. Open the folder in the Kandinsky desktop app and link it there.";
   }
 
   async function startLinking(e: VaultEntry) {
@@ -140,7 +140,7 @@
           </button>
           {#if e.managed}
             <span class="acts">
-              {#if e.mirror && reached[e.mirror] === "signin"}<button class="act" onclick={() => { window.open(`/signin/door?url=${encodeURIComponent(new URL(e.mirror!).origin + "/")}`, "_blank"); }} title="The mirror's sign-in page, in a window of Atlas">Sign in</button>{/if}
+              {#if e.mirror && reached[e.mirror] === "signin"}<button class="act" onclick={() => { window.open(`/signin/door?url=${encodeURIComponent(new URL(e.mirror!).origin + "/")}`, "_blank"); }} title="The mirror's sign-in page, in a window of Kandinsky">Sign in</button>{/if}
               {#if e.kind === "folder"}<button class="act" onclick={() => void startLinking(e)} title="Link this folder to its copy on a server">{e.mirror ? "Mirror…" : "Link mirror…"}</button>{/if}
               {#if !e.current}<button class="act" class:danger={removing === e.path} onclick={() => void remove(e)} title="Take it off this list (nothing is deleted)">{removing === e.path ? "Remove?" : "Remove"}</button>{/if}
             </span>

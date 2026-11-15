@@ -18,8 +18,8 @@ name = "email"
 path = "src/main.rs"
 
 [dependencies]
-atlas-plugin = { path = "../../../../crates/atlas-plugin" }
-atlas-text = { path = "../../../../crates/atlas-text" }
+atlas-plugin = { path = "../../../../crates/kandinsky-plugin" }
+atlas-text = { path = "../../../../crates/kandinsky-text" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros", "io-util"] }

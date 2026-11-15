@@ -63,7 +63,7 @@ export function hostOf(where: { server: boolean; phone: boolean; path: string })
 
 export const PAGES: PageDef[] = [
   {
-    id: "overview", title: "Overview", group: "general", icon: "outline", blurb: "What Atlas can do, area by area — and where to change it.",
+    id: "overview", title: "Overview", group: "general", icon: "outline", blurb: "What Kandinsky can do, area by area — and where to change it.",
     fields: [], features: ["ui.palette", "ui.quickOpen", "ui.capture", "ui.commands"], panels: ["overview"],
   },
   {
@@ -99,7 +99,7 @@ export const PAGES: PageDef[] = [
     features: ["ui.files", "ui.explorer", "ui.quickOpen", "ui.search", "ui.history", "ui.openWith", "ui.vault"], panels: ["openwith"],
   },
   {
-    id: "web", title: "Web", group: "working", icon: "globe", blurb: keyText("Links to web pages: in a tab of Atlas when the site allows it, in a browsing window of Atlas (Alt+← / Alt+→ back and forward, Super+Shift+O to your browser, Ctrl+W close) with ads and trackers blocked, or in your own browser."),
+    id: "web", title: "Web", group: "working", icon: "globe", blurb: keyText("Links to web pages: in a tab of Kandinsky when the site allows it, in a browsing window of Kandinsky (Alt+← / Alt+→ back and forward, Super+Shift+O to your browser, Ctrl+W close) with ads and trackers blocked, or in your own browser."),
     fields: ["web.*"], features: ["ui.web"],
   },
   {
@@ -111,7 +111,7 @@ export const PAGES: PageDef[] = [
     fields: ["pdf.*"], features: ["ui.library"],
   },
   {
-    id: "drawing", title: "Drawing", group: "working", icon: "image", blurb: "Excalidraw drawings inside Atlas: as a notepad (pens and paper, as on the Boox) or plain, on pages of a size you choose or an endless canvas. A drawing open on two devices shares its strokes as they are drawn. Rnote for long handwriting.",
+    id: "drawing", title: "Drawing", group: "working", icon: "image", blurb: "Excalidraw drawings inside Kandinsky: as a notepad (pens and paper, as on the Boox) or plain, on pages of a size you choose or an endless canvas. A drawing open on two devices shares its strokes as they are drawn. Rnote for long handwriting.",
     fields: ["draw.*"], features: ["ui.drawing", "draw.exportSvg"],
   },
   {
@@ -119,7 +119,7 @@ export const PAGES: PageDef[] = [
     fields: ["terminal.*"], features: ["ui.terminal", "ui.panel", "ui.claude", "ui.sendToClaude", "ui.panel.move", "ui.terminal.new", "ui.claude.new"],
   },
   {
-    id: "desktop", title: "Desktop app", group: "general", icon: "panel-bottom", blurb: "Atlas behind its window: closing it keeps Atlas running in the tray (schedules, mail checks and notifications go on), a click on the tray icon brings it back, and its menu gathers the notices you missed, does not disturb, captures and quits. It can also start with your session, straight into the tray.",
+    id: "desktop", title: "Desktop app", group: "general", icon: "panel-bottom", blurb: "Kandinsky behind its window: closing it keeps Kandinsky running in the tray (schedules, mail checks and notifications go on), a click on the tray icon brings it back, and its menu gathers the notices you missed, does not disturb, captures and quits. It can also start with your session, straight into the tray.",
     fields: ["desktop.*"], features: [], panels: ["capturekey"], only: ["app"],
   },
   {
@@ -136,12 +136,12 @@ export const PAGES: PageDef[] = [
     ],
   },
   {
-    id: "automation", title: "Automation", group: "plugins", icon: "clock", blurb: "Your workspace commands and their schedules, and the tools Atlas drafted from how you work.",
+    id: "automation", title: "Automation", group: "plugins", icon: "clock", blurb: "Your workspace commands and their schedules, and the tools Kandinsky drafted from how you work.",
     fields: ["automation.*"], features: ["ui.commands"], panels: ["drafts", "scripts"],
     next: [{ label: "Turn a shell line into a command", why: "A command gets a palette entry, a shortcut and an optional schedule.", run: "ui.commands" }],
   },
   {
-    id: "agents", title: "AI agents", group: "connections", icon: "claude", blurb: "Claude Code and other agents drive Atlas through `atlas mcp`. Each one you allow gets a token of its own, which you can revoke alone.",
+    id: "agents", title: "AI agents", group: "connections", icon: "claude", blurb: "Claude Code and other agents drive Kandinsky through `atlas mcp`. Each one you allow gets a token of its own, which you can revoke alone.",
     fields: [], features: [], panels: ["agents"], only: ["app"],
   },
   {

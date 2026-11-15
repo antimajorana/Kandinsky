@@ -31,7 +31,7 @@ export function initCssSnippets(): void {
   onSettings(() => apply());
 }
 
-export const SNIPPET_TEMPLATE = `/* A CSS snippet: it restyles Atlas as soon as you save it.
+export const SNIPPET_TEMPLATE = `/* A CSS snippet: it restyles Kandinsky as soon as you save it.
    Switch it off in Settings → CSS snippets. Useful hooks:
    colours  var(--accent) var(--bg) var(--bg-alt) var(--text) var(--heading) var(--border)
    notes    .markdown (the live-preview editor)   headings  .cm-header-1 … .cm-header-6

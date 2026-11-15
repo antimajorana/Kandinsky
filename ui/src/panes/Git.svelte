@@ -102,7 +102,7 @@
   }
   function push() {
     const n = status?.ahead ?? 0;
-    ask = { title: `Push ${n} commit${n === 1 ? "" : "s"} to ${status?.upstream ?? "the remote"}?`, confirm: "Push", hint: "Others will see them; a push is not undone by Atlas.", run: () => sync("push") };
+    ask = { title: `Push ${n} commit${n === 1 ? "" : "s"} to ${status?.upstream ?? "the remote"}?`, confirm: "Push", hint: "Others will see them; a push is not undone by Kandinsky.", run: () => sync("push") };
   }
 
   const showDiff = (e: StatusEntry, isStaged: boolean) => open({ kind: "diff", path: e.path, staged: isStaged });

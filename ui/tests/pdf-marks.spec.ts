@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { quoteOf, type TextPiece } from "../src/lib/atlas-mark";
+import { quoteOf, type TextPiece } from "../src/lib/kandinsky-mark";
 import { addPageFrame, marksToElements, type PageBox } from "./fixtures/old-pdf-drawing";
 import type { El } from "../src/lib/pdf-ink-scene";
 

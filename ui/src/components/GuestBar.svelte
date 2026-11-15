@@ -11,7 +11,7 @@
 <div class="guest" class:editing={info.editing} role="region" aria-label="Guest folder">
   <Icon name="folder-open" size={14} />
   <span class="what"><b>Guest folder</b> <span class="path" title={info.folder}>{info.folder}</span></span>
-  <span class="from">with {name(info.from)}'s plugins · not in the vault, forgotten when Atlas restarts</span>
+  <span class="from">with {name(info.from)}'s plugins · not in the vault, forgotten when Kandinsky restarts</span>
   <span class="state">{info.editing ? "Editing: changes are saved into this folder" : "Read-only"}</span>
   <button class="switch" class:on={info.editing} role="switch" aria-checked={info.editing} aria-label="Edit this folder" onclick={() => void setGuestEditing(!info.editing)}><span></span></button>
   <span class="label">Edit</span>

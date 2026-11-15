@@ -1,0 +1,19 @@
+title = "External Attachments & Embeds"
+description = "Link, preview, and open external files and cloud folders (such as kDrive) from inside notes"
+icon = "external-link"
+main = "main.js"
+version = "0.1.0"
+api = 28
+phone = true
+
+[[setting]]
+key = "external_root"
+label = "External attachments root"
+kind = "text"
+default = "C:/Users/antimajorana/kDrive"
+hint = "Default external folder for relative external paths"
+
+[platforms]
+windows = "works"
+linux = "works"
+macos = "works"

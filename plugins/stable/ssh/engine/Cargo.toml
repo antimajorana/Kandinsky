@@ -15,7 +15,7 @@ name = "atlas-ssh"
 path = "src/main.rs"
 
 [dependencies]
-atlas-plugin = { path = "../../../../crates/atlas-plugin" }
+atlas-plugin = { path = "../../../../crates/kandinsky-plugin" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 regex = "1"

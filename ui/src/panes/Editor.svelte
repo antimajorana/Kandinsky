@@ -478,7 +478,7 @@
       {#if isMarkdown(path) && status !== "error" && (settings.config?.editor.format_bar ?? false)}<FormatBar view={() => ed?.view ?? null} />{/if}
       <div class="editor-host" bind:this={host}></div>
     </div>
-    {#if isMarkdown(path) && status === "ready" && (settings.config?.editor.properties === "panel" || ((settings.config?.editor.properties ?? "hidden") === "hidden" && propsPanel.open))}
+    {#if isMarkdown(path) && status === "ready" && (settings.config?.editor.properties === "panel" || ((settings.config?.editor.properties ?? "inline") === "hidden" && propsPanel.open))}
       <PropertiesPanel text={docText} view={() => ed?.view ?? null} onopen={openLink} closable={settings.config?.editor.properties !== "panel"} />
     {/if}
   </div>

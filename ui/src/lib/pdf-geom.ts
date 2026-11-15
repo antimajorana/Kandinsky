@@ -2,7 +2,7 @@
 // before the page's /Rotate); the reader shows the page turned by its /Rotate, in points with y down ("shown"
 // space), scaled by CSS. The reader's own rotation turns the whole page box on top (`unturn`). Pure: no DOM.
 import type { Box } from "./pdfium-worker";
-import type { TextPiece } from "./atlas-mark";
+import type { TextPiece } from "./kandinsky-mark";
 
 /** A point of page space in shown space; `view` is the page's box, `rot` its /Rotate in quarter turns. */
 export function toShown(view: Box, rot: number, x: number, y: number): [number, number] {

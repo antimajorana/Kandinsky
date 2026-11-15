@@ -115,7 +115,7 @@ async function missingPackages(src: TikzSource): Promise<string[]> {
 
 async function compile(src: TikzSource, key: string): Promise<TikzResult> {
   const missing = await missingPackages(src);
-  if (missing.length) return { ok: false, error: `Not in the TeX that draws in Atlas: ${missing.join(", ")}. It has amsmath, amssymb, array, pgfplots, tikz-cd, tikz-3dplot, etoolbox, xparse and every TikZ library; the PDF export uses your TeX distribution and has them all.` };
+  if (missing.length) return { ok: false, error: `Not in the TeX that draws in Kandinsky: ${missing.join(", ")}. It has amsmath, amssymb, array, pgfplots, tikz-cd, tikz-3dplot, etoolbox, xparse and every TikZ library; the PDF export uses your TeX distribution and has them all.` };
   engine ??= startEngine();
   let w: Worker_;
   try { w = await engine; } catch (e) { engine = undefined; return { ok: false, error: `The TeX engine did not load: ${(e as Error).message}` }; }

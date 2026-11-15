@@ -43,7 +43,7 @@ rows:
   - [pins]
   - [bookmarks]
   - [tabs]
-  - [{view: toolbar, items: [ui.new, ui.sidePanel, spacer, ui.commands, ui.settings, ui.theme]}]
+  - [{view: toolbar, items: [ui.new, ui.sidePanel, spacer, ui.commands, ui.plugins, ui.settings, ui.theme]}]
 `;
 
 const blocksOf = (text: string): PageBlock[] => parsePage(text).model.rows.flatMap((r) => r.columns.flat()); // one column: a sidebar has no rows

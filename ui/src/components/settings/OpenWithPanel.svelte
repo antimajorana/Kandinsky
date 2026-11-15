@@ -14,8 +14,8 @@
   <h3>Open with</h3>
   <p class="desc">Files of these kinds open in another view. Set one from a file's right-click menu or <kbd>Ctrl Alt O</kbd> → “Always open … with”.</p>
   {#each rules as [ext, id] (ext)}
-    <div class="rule"><code>.{ext}</code><span>→ {id}</span><button class="icon-btn" title="Back to Atlas's usual view" aria-label="Remove .{ext} rule" onclick={() => drop(ext)}><Icon name="close" size={12} /></button></div>
-  {:else}<p class="muted">None: every file opens in Atlas's usual view.</p>{/each}
+    <div class="rule"><code>.{ext}</code><span>→ {id}</span><button class="icon-btn" title="Back to Kandinsky's usual view" aria-label="Remove .{ext} rule" onclick={() => drop(ext)}><Icon name="close" size={12} /></button></div>
+  {:else}<p class="muted">None: every file opens in Kandinsky's usual view.</p>{/each}
   {#if claimed.length}
     <h4>Claimed by plugins</h4>
     <p class="desc">These open in a plugin's view unless a rule above names another (switch the plugin off and they open as before).</p>

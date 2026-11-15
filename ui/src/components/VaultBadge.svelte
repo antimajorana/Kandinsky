@@ -4,7 +4,7 @@
 
   let { size = 28 }: { size?: number } = $props();
 
-  const name = $derived(app.workspace?.name ?? "Atlas");
+  const name = $derived(app.workspace?.name ?? "Kandinsky");
   // the first letter or digit ("~notes" → N), else the first character; a grapheme, so an emoji name stays whole
   const initial = $derived.by(() => {
     const chars = [...new Intl.Segmenter().segment(name.trim())].map((s) => s.segment);

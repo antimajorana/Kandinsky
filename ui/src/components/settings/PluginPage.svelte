@@ -103,7 +103,7 @@
     {#if problem}<p class="err">{problem}</p>{/if}
     {#if pluginLog[p.id]?.length}
       <details class="log" data-plugin-log={p.id}>
-        <summary>{pluginLog[p.id].length} problem{pluginLog[p.id].length === 1 ? "" : "s"} since Atlas started</summary>
+        <summary>{pluginLog[p.id].length} problem{pluginLog[p.id].length === 1 ? "" : "s"} since Kandinsky started</summary>
         {#each pluginLog[p.id] as l (l.at + l.where)}<span class="line"><i>{new Date(l.at).toLocaleTimeString()}</i> <b>{l.where}</b> {l.message}</span>{/each}
         <button class="clear" onclick={() => clearPluginLog(p.id)}>Clear</button>
       </details>

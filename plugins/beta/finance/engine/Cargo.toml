@@ -18,8 +18,8 @@ name = "finance"
 path = "src/main.rs"
 
 [dependencies]
-atlas-plugin = { path = "../../../../crates/atlas-plugin" }
-atlas-text = { path = "../../../../crates/atlas-text" }
+atlas-plugin = { path = "../../../../crates/kandinsky-plugin" }
+atlas-text = { path = "../../../../crates/kandinsky-text" }
 serde_json = { workspace = true }
 serde = { workspace = true }
 regex = "1"

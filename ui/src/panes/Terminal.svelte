@@ -69,7 +69,7 @@
 
   onMount(() => {
     const term = new Terminal({
-      fontFamily: '"JetBrains Mono", "Atlas Term Symbols", ui-monospace, monospace',
+      fontFamily: '"JetBrains Mono", "Kandinsky Term Symbols", ui-monospace, monospace',
       fontSize: size(),
       lineHeight: 1.25,
       cursorBlink: !document.documentElement.classList.contains("eink"), // e-ink: a blink is a refresh twice a second
@@ -118,7 +118,7 @@
         if (e.code === 1000 && e.reason === "exited") { void closePanel(panel); return; }
         conn = "exited";
         setThemeNotify(false); // the next program asks for itself
-        term.write("\r\n\x1b[2m[connection to Atlas lost — press Enter to start again]\x1b[0m\r\n");
+        term.write("\r\n\x1b[2m[connection to Kandinsky lost — press Enter to start again]\x1b[0m\r\n");
       };
     };
 
@@ -211,7 +211,7 @@
     window.addEventListener("atlas-resize-end", onResizeEnd);
 
     // Measure with the real font, or xterm's cell grid is computed for the fallback.
-    void Promise.all([document.fonts.load('13px "JetBrains Mono"'), document.fonts.load('13px "Atlas Term Symbols"', "⎿")]).finally(() => {
+    void Promise.all([document.fonts.load('13px "JetBrains Mono"'), document.fonts.load('13px "Kandinsky Term Symbols"', "⎿")]).finally(() => {
       if (disposed) return;
       term.open(host);
       // WebGL draws box-drawing and block characters itself, cell-exact: Claude's │ lines join with no gaps.

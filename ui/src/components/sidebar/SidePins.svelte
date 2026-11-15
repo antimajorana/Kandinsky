@@ -51,7 +51,7 @@
 
 {#if apps.length}
   <div class="apps" class:wide role="toolbar" aria-label="Apps" data-testid="apps">
-    {#each shown as a (a.ids[0])}
+    {#each shown as a (a.ids[0] ?? `app:${a.key}`)}
       {@const id = openId(a)}
       <button class="app" class:active={isActive(a)} class:open={!!id} aria-label={a.title} aria-pressed={isActive(a)} title={appTip(a)}
         data-app-id={a.ids[0]} onclick={() => go(a)} onauxclick={(e) => { if (e.button === 1 && id) { e.preventDefault(); closeTab(id); } }}

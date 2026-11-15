@@ -10,7 +10,7 @@ import { settings } from "./settings.svelte";
 import { librariesPage, librariesSpec } from "./libraries.svelte";
 
 /** The built-in plugins' ids — the core's `BuiltinPlugin` (config.rs) has the same; a typo is a type error. */
-export type BuiltinId = "library" | "latex";
+export type BuiltinId = "library" | "latex" | "graph" | "bases";
 
 export interface Builtin {
   id: BuiltinId;
@@ -18,8 +18,9 @@ export interface Builtin {
   description: string;
   icon: IconName;
   /** A button at the top of the left bar (lib/apps.svelte.ts) running `command` (an action marked `plugin: id`),
-   *  which opens `pane` — none while there is nothing to open. A plugin that only adds to the editor has none. */
-  button?: { command: string; pane: () => PaneSpec | null };
+   *  which opens `pane` — none while there is nothing to open. A plugin that only adds to the editor has none.
+   *  Without `pane` the button only runs the command (a chooser, as Bases' is): no tab is its own. */
+  button?: { command: string; pane?: () => PaneSpec | null };
   /** Its own page in Settings (lib/settings-pages.ts, a page with `plugin: id`), listed under Plugins. */
   page?: PageId;
   /** What it adds, for Settings → Plugins. */
@@ -33,6 +34,18 @@ export const BUILTINS: Builtin[] = [
     id: "library", title: "Library", icon: "library", button: { command: "ui.library", pane: () => (librariesPage() ? librariesSpec("references") : null) },
     description: "References (your papers, books, theses and lecture notes) as the first library of the Library page — the Catalog plugin's — \\cite completion and the PDF reader's paper actions. The references themselves — their notes, refs.bib, the Zotero connector, PDF sources — are the Catalog · Science plugin's.",
     parts: "References in the Library page · commands · \\cite completion",
+  },
+  {
+    // Obsidian's core "Graph view": a button on the left bar, as Obsidian's ribbon has
+    id: "graph", title: "Graph view", icon: "graph", button: { command: "ui.graph", pane: () => ({ kind: "graph" }) },
+    description: "The notes and the links between them as a graph, with Obsidian's settings: filters (search, tags, attachments, orphans), colour groups, display and forces. The first time, the graph starts from the vault's Obsidian graph settings (.obsidian/graph.json); changes are kept in .atlas/graph.json.",
+    parts: "Graph view · its button · the graph command",
+  },
+  {
+    // Obsidian's core "Bases": its `.base` files open as tables wherever they are; this adds the way in
+    id: "bases", title: "Bases", icon: "table", button: { command: "ui.bases" },
+    description: "Obsidian's databases: every .base file of the vault opens as tables of notes (filters, formulas, views). Its button lists the vault's bases and makes a new one.",
+    parts: "Its button: the vault's bases · New base",
   },
   {
     // the core keeps rendering $…$ in notes (Obsidian fidelity); everything about typing LaTeX is this plugin's

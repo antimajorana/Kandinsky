@@ -111,7 +111,7 @@
     const d = (e as CustomEvent).detail as { id: string; url?: string; title?: string; loading?: boolean; back?: boolean; forward?: boolean; open?: string; external?: string; action?: string; snapshot?: string; hover?: string; key?: { key: string; code: string; ctrl: boolean; shift: boolean; alt: boolean } };
     if (d.id !== panel.id) return;
     if (typeof d.hover === "string") return void (hover = d.hover);
-    if (d.snapshot) return void (shot = d.snapshot); // the page as it was, shown while the view is hidden under Atlas
+    if (d.snapshot) return void (shot = d.snapshot); // the page as it was, shown while the view is hidden under Kandinsky
     if (d.open) return void open({ kind: "web", url: d.open });
     if (d.external) return void inBrowser(d.external);
     if (d.action === "close") return void panel.close();

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/atlas-core", "crates/atlas", "crates/atlas-capture", "crates/atlas-android", "crates/atlas-pen", "crates/atlas-plugin", "crates/atlas-text", "plugins/beta/catalog/engine", "plugins/beta/catalog-papers/engine", "plugins/stable/ssh/engine", "plugins/beta/ocr/engine", "plugins/beta/finance/engine", "plugins/stable/email/engine", "plugins/beta/syncthing/engine", "plugins/beta/claude/engine", "crates/atlas-template", "crates/atlas-app", "crates/atlas-rar"]
+members = ["crates/kandinsky-core", "crates/kandinsky", "crates/kandinsky-capture", "crates/kandinsky-android", "crates/kandinsky-pen", "crates/kandinsky-plugin", "crates/kandinsky-text", "plugins/beta/catalog/engine", "plugins/beta/catalog-papers/engine", "plugins/stable/ssh/engine", "plugins/beta/ocr/engine", "plugins/beta/finance/engine", "plugins/stable/email/engine", "plugins/beta/syncthing/engine", "plugins/beta/claude/engine", "crates/kandinsky-template", "crates/kandinsky-app", "crates/kandinsky-rar"]
 
 [workspace.package]
 version = "0.2.10"
@@ -13,9 +13,9 @@ description = "A workspace over plain files: notes, papers, mail, code and runs,
 readme = "README.md"
 
 [workspace.dependencies]
-atlas-core = { path = "crates/atlas-core" }
-atlas-template = { path = "crates/atlas-template" }
-atlas-text = { path = "crates/atlas-text" }
+atlas-core = { path = "crates/kandinsky-core" }
+atlas-template = { path = "crates/kandinsky-template" }
+atlas-text = { path = "crates/kandinsky-text" }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

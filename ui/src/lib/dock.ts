@@ -179,7 +179,7 @@ class Watermark implements IWatermarkRenderer {
   readonly element = document.createElement("div");
   constructor() {
     this.element.className = "atlas-watermark";
-    this.element.innerHTML = `<div class="atlas-watermark-inner"><div class="wm-mark">Atlas</div>
+    this.element.innerHTML = `<div class="atlas-watermark-inner"><div class="wm-mark">Kandinsky</div>
       <div class="wm-row"><span>Command palette</span><span class="kbd-group"><kbd>Ctrl</kbd><kbd>K</kbd></span></div>
       <div class="wm-row"><span>Open file</span><span class="kbd-group"><kbd>Ctrl</kbd><kbd>P</kbd></span></div>
       <div class="wm-row"><span>Capture</span><span class="kbd-group"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>C</kbd></span></div>

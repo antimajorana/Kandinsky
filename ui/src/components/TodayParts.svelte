@@ -331,7 +331,7 @@
     {/if}
 
     {#if error && full}
-      <div class="card error-card"><strong>Can't reach the Atlas server.</strong><span class="faint small">{error}</span></div>
+      <div class="card error-card"><strong>Can't reach the Kandinsky server.</strong><span class="faint small">{error}</span></div>
     {/if}
 
     <div class="today-grid">
@@ -349,7 +349,7 @@
           {:else if today?.focus.text}
             <p class="empty">Nothing written in it yet. <button class="link" onclick={() => openPath(today!.focus.path)}>Write what matters now</button></p>
           {:else if today}
-            <p class="empty">No <code>{today.focus.path}</code> yet. <button class="link" onclick={() => openPath(today!.focus.path)}>Write one</button> — it's yours; Atlas only shows it.</p>
+            <p class="empty">No <code>{today.focus.path}</code> yet. <button class="link" onclick={() => openPath(today!.focus.path)}>Write one</button> — it's yours; Kandinsky only shows it.</p>
           {/if}
         </section>
         {/if}

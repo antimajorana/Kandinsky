@@ -13,10 +13,10 @@
     // a command's other keys count for the search too: "super" finds the whole Super layer (docs/guides/KEYS.md)
     const cmds = allCommands().filter((c) => (!onlyBound || c.keys) && words.every((w) => `${c.title} ${c.id} ${c.keys ?? ""} ${(c.alsoKeys ?? []).join(" ")}`.toLowerCase().includes(w)));
     return [
-      { title: "Atlas", list: cmds.filter((c) => c.source === "ui" && !c.id.startsWith("plugin.")) },
+      { title: "Kandinsky", list: cmds.filter((c) => c.source === "ui" && !c.id.startsWith("plugin.")) },
       { title: "Plugins", list: cmds.filter((c) => c.id.startsWith("plugin.")) },
       { title: "Workspace commands", list: cmds.filter((c) => c.source === "script") },
-      { title: "Atlas server", list: cmds.filter((c) => c.source === "builtin") },
+      { title: "Kandinsky server", list: cmds.filter((c) => c.source === "builtin") },
     ].filter((g) => g.list.length);
   });
   const changed = $derived(Object.keys(keymap.overrides).length);

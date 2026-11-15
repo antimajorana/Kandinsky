@@ -19,7 +19,7 @@
   const feats = (id: string) => (pageDef(id)?.features ?? []).flatMap((f) => { const a = actions.find((x) => x.id === f); return a ? [a] : []; });
 </script>
 
-{#if version}<p class="version" data-testid="atlas-version">Atlas <b>{version.version}</b>{#if version.commit} · commit <code>{version.commit}</code>{/if}{#if version.plugin_api} · plugin API {version.plugin_api}{/if}{#if version.ui} · interface build <code>{version.ui}</code>{/if}</p>{/if}
+{#if version}<p class="version" data-testid="atlas-version">Kandinsky <b>{version.version}</b>{#if version.commit} · commit <code>{version.commit}</code>{/if}{#if version.plugin_api} · plugin API {version.plugin_api}{/if}{#if version.ui} · interface build <code>{version.ui}</code>{/if}</p>{/if}
 <section class="cards" aria-label="Areas">
   {#each cards as p (p.page)}
     {@const changed = p.fields.filter(isModified).length}

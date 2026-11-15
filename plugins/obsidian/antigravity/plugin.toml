@@ -1,0 +1,60 @@
+title = "Antigravity"
+description = "Google Antigravity (agy) inside Kandinsky like Claude: terminal sessions, send note selections (@path#Lfrom-to), status bar launcher, and 1-click Kandinsky MCP connection"
+icon = "claude"
+view = "view.js"
+main = "main.js"
+version = "1.0.0"
+api = 28
+
+[[agent]]
+id = "antigravity"
+title = "Antigravity"
+icon = "claude"
+command = "{command:agy}"
+resume_session = ["--conversation", "{session}"]
+session_file = "~/.gemini/antigravity-cli/brain/{session}/.system_generated/logs/transcript.jsonl"
+commit_marks = ["co-authored-by: antigravity", "antigravity"]
+send_selection = "@{path}#L{from}-{to} "
+
+[permissions]
+exec = ["agy", "powershell"]
+
+[helper]
+js = "helper.js"
+idle = "15m"
+
+[[setting]]
+key = "command"
+label = "Antigravity command"
+kind = "text"
+default = "agy"
+suggest = "commands"
+hint = "Command used for Antigravity terminal sessions (default: agy, or add flags like `agy --mode auto`)"
+
+[[setting]]
+key = "default_mode"
+label = "Default quick-launch mode"
+kind = "choice"
+choices = ["interactive", "plan", "accept-edits", "auto"]
+default = "interactive"
+hint = "Execution mode used by Antigravity quick-launch actions"
+
+[[setting]]
+key = "default_effort"
+label = "Reasoning effort"
+kind = "choice"
+choices = ["default", "low", "medium", "high", "xhigh", "max"]
+default = "default"
+hint = "Optional --effort flag passed when launching custom Antigravity sessions"
+
+[[setting]]
+key = "status_bar"
+label = "Show Antigravity in status bar"
+kind = "toggle"
+default = true
+hint = "Show an Antigravity status & quick-launch chip in Kandinsky's bottom status bar"
+
+[platforms]
+windows = "works"
+linux = "works"
+macos = "works"

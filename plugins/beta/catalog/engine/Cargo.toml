@@ -14,9 +14,9 @@ name = "catalog"
 path = "src/main.rs"
 
 [dependencies]
-atlas-plugin = { path = "../../../../crates/atlas-plugin" }
-atlas-template = { path = "../../../../crates/atlas-template" }
-atlas-text = { path = "../../../../crates/atlas-text" }
+atlas-plugin = { path = "../../../../crates/kandinsky-plugin" }
+atlas-template = { path = "../../../../crates/kandinsky-template" }
+atlas-text = { path = "../../../../crates/kandinsky-text" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"

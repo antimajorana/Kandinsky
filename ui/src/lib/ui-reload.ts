@@ -36,11 +36,11 @@ export async function watchUiBuild(): Promise<void> {
     const now = await build();
     if (!now || now.build === mine) return;
     if (reloadKillsTerminals(now)) {
-      if (told !== now.build) toast("Atlas was updated", "Not reloaded: the terminals would end. Run “Reload the interface” when ready, or restart Atlas.", "info", 12_000);
+      if (told !== now.build) toast("Kandinsky was updated", "Not reloaded: the terminals would end. Run “Reload the interface” when ready, or restart Kandinsky.", "info", 12_000);
       told = now.build;
       return;
     }
-    toast("Atlas was updated", "Saving and reloading the interface…", "info", 3000);
+    toast("Kandinsky was updated", "Saving and reloading the interface…", "info", 3000);
     await reloadInterface();
   }, EVERY_MS);
 }

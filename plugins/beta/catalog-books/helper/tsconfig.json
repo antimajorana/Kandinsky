@@ -1,4 +1,4 @@
 {
-  "extends": "../../../../crates/atlas-core/sdk/js/tsconfig.helper.json",
+  "extends": "../../../../crates/kandinsky-core/sdk/js/tsconfig.helper.json",
   "include": ["*.ts"]
 }

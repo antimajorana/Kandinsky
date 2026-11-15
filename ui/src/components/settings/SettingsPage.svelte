@@ -79,7 +79,7 @@
         desc="The tiles above the tabs. A hidden app still opens from the palette and its keys; a plugin's pane gets a tile when its manifest says <code>rail = true</code>." />
       {#if librariesPage()}
         <SwitchList title="Libraries" label="Libraries" items={libraryChoices().map((e) => ({ key: e.id, title: e.title, icon: isIconName(e.icon) ? e.icon : "library" }))} hidden={libraryHidden} setHidden={setLibraryHidden} move={moveLibrary} movable={(k) => !libraryHidden(k)}
-          desc="The tabs of the Library page (the Catalog plugin's), in this order: Atlas's own and those your plugins add (the catalog adds one per group of kinds)." />
+          desc="The tabs of the Library page (the Catalog plugin's), in this order: Kandinsky's own and those your plugins add (the catalog adds one per group of kinds)." />
       {/if}
     {:else if panel === "snippets"}<SnippetsPanel onnew={() => (naming = "snippet")} />
     {:else if panel === "templates"}<TemplatesPanel />
@@ -96,7 +96,7 @@
         <button class="btn" onclick={() => openPath(settings.path)}><Icon name="edit" size={13} /> Edit the file</button></section>
     {:else if panel === "drafts"}
       <section class="panel"><h3>Suggested tools</h3>
-        <p class="what">Atlas looks through your vault for things you do again and again — a folder of notes that all look alike, two notes you open together, a search you keep running — and drafts a small tool for each: a table of the folder, a page with both notes, a page with the live search. Nothing is created until you press Keep, and what Keep writes is a plain file you can edit or delete.</p>
+        <p class="what">Kandinsky looks through your vault for things you do again and again — a folder of notes that all look alike, two notes you open together, a search you keep running — and drafts a small tool for each: a table of the folder, a page with both notes, a page with the live search. Nothing is created until you press Keep, and what Keep writes is a plain file you can edit or delete.</p>
         <ToolDrafts /></section>
     {/if}
   {/each}

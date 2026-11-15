@@ -152,7 +152,7 @@
     // a guest folder's window says so in its title and its bar (lib/guest.svelte.ts)
     Promise.all([api.workspace(), loadGuest()]).then(([w]) => {
       app.workspace = w;
-      document.title = guest.info ? `Guest: ${w.name} — Atlas` : `${w.name} — Atlas`;
+      document.title = guest.info ? `Guest: ${w.name} — Kandinsky` : `${w.name} — Kandinsky`;
     }, (err) => console.warn("[atlas] workspace fetch failed", err));
 
     void loadKeymap().catch(() => {});

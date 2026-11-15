@@ -1,0 +1,32 @@
+title = "Templater & Folder Templates"
+description = "Obsidian Templater compatibility: folder-to-template rules, Alt+E insert template, and <% tp.* %> variable expansion"
+icon = "file-code"
+version = "0.1.0"
+api = 28
+phone = true
+
+[[setting]]
+key = "templates_folder"
+label = "Templates folder"
+kind = "text"
+default = "zMeta/Templates"
+hint = "Folder containing Markdown templates (also checks Templates/ and .atlas/templates/)"
+
+[[setting]]
+key = "auto_folder_templates"
+label = "Apply folder templates automatically"
+kind = "toggle"
+default = true
+hint = "Apply matching folder templates from .obsidian/plugins/templater-obsidian/data.json or custom rules when creating an empty note"
+
+[[setting]]
+key = "folder_rules"
+label = "Custom folder rules"
+kind = "text"
+default = ""
+hint = "Optional folder=template.md rules (comma or semicolon separated)"
+
+[platforms]
+windows = "works"
+linux = "works"
+macos = "works"

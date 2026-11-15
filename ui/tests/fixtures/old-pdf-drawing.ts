@@ -1,7 +1,7 @@
 // An older PDF companion drawing (`x.pdf.excalidraw`) built for the migration's tests: Atlas no longer writes these,
 // it only reads them back as the PDF's marks (lib/pdf-ink-to-marks.ts, lib/pdf-migrate.ts). The layout is the Boox's
 // (InkStore.java `addPage`: four pages a row, A4's width); marks are pdf.js's serialized editors.
-import { markId, quoteOf, type AtlasMark, type Quad, type TextPiece } from "../../src/lib/atlas-mark";
+import { markId, quoteOf, type AtlasMark, type Quad, type TextPiece } from "../../src/lib/kandinsky-mark";
 import type { El } from "../../src/lib/pdf-ink-scene";
 
 /** InkStore.java's layout, so a page added here sits where the Boox would have put it. */

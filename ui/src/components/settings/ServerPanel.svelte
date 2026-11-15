@@ -68,7 +68,7 @@
 <section class="settings-panel server" data-testid="server-panel">
   {#if error}<p class="bad">{error}</p>{/if}
   {#if st}
-    <h3>This Atlas</h3>
+    <h3>This Kandinsky</h3>
     {#if st.serving}
       <p class="desc">Serving this vault to the network on port {st.port}. You are signed in {me?.via === "proxy" ? `by your proxy as ${me.user}` : me?.via === "token" ? `with the token “${me.device}”` : "with the password"}.</p>
       {#if me?.signOut}<button class="btn" onclick={() => void api.signOut().then(() => location.assign("/login"))}>Sign out of this browser</button>{/if}
@@ -79,7 +79,7 @@
 
     <h3>How people sign in</h3>
     <div class="modes" role="radiogroup" aria-label="Sign-in">
-      {#each [["password", "Password", "Atlas's own sign-in page, with the password below."], ["proxy", "Your proxy (Authelia)", "Only a request from a trusted proxy that names the user (forward-auth). Security keys come from the proxy."], ["both", "Both", "The proxy's word when there is one, the sign-in page otherwise."]] as [id, label, what] (id)}
+      {#each [["password", "Password", "Kandinsky's own sign-in page, with the password below."], ["proxy", "Your proxy (Authelia)", "Only a request from a trusted proxy that names the user (forward-auth). Security keys come from the proxy."], ["both", "Both", "The proxy's word when there is one, the sign-in page otherwise."]] as [id, label, what] (id)}
         <label class="mode"><input type="radio" name="auth" value={id} bind:group={mode} /><span><strong>{label}</strong><span class="muted">{what}</span></span></label>
       {/each}
     </div>

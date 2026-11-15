@@ -1,0 +1,20 @@
+title = "Folder Notes & Genkan"
+description = "Obsidian Folder Notes and Genkan MOC cards: open/create folder overview notes and render folder card grids"
+icon = "folder-open"
+main = "main.js"
+version = "0.1.0"
+phone = true
+api = 28
+
+[[setting]]
+key = "naming"
+label = "Folder note naming"
+kind = "choice"
+choices = ["folder-name", "index"]
+default = "folder-name"
+hint = "Folder/Folder.md (Obsidian Folder Notes default) or Folder/index.md"
+
+[platforms]
+windows = "works"
+linux = "works"
+macos = "works"

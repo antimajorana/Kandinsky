@@ -16,8 +16,8 @@ path = "src/main.rs"
 [dependencies]
 # a dropped PDF's first pages read in Rust (refs.rs pdf_text): no poppler needed
 pdf_oxide = "0.3.78"
-atlas-plugin = { path = "../../../../crates/atlas-plugin" }
-atlas-text = { path = "../../../../crates/atlas-text" }
+atlas-plugin = { path = "../../../../crates/kandinsky-plugin" }
+atlas-text = { path = "../../../../crates/kandinsky-text" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"

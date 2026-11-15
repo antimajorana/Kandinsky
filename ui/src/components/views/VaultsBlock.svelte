@@ -14,7 +14,7 @@
 
 <section class="vaults-block" data-testid="vaults-block" aria-label="Vaults">
   {#if manage === false}
-    <p class="muted">This Atlas serves one folder. Another vault is served by starting <code>atlas serve</code> on it.</p>
+    <p class="muted">This Kandinsky serves one folder. Another vault is served by starting <code>atlas serve</code> on it.</p>
   {:else}
     <div class="row">
       <button class="btn primary" disabled={manage === null} onclick={() => void askFolder(true)}><Icon name="plus" size={14} /> New vault…</button>

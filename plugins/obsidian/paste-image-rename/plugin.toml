@@ -1,0 +1,39 @@
+title = "Paste Image Rename"
+description = "Saves pasted or dropped images into zAttachments (or your chosen folder) named cleanly after the active note"
+icon = "image"
+version = "0.1.0"
+api = 28
+phone = true
+
+[[setting]]
+key = "attachment_folder"
+label = "Attachment folder"
+kind = "text"
+default = "zAttachments"
+hint = "Vault folder for pasted images (auto-reads .obsidian/plugins/obsidian-paste-image-rename if present)"
+
+[[setting]]
+key = "pattern"
+label = "Filename pattern"
+kind = "text"
+default = "{note}-{n}"
+hint = "Name pattern using {note}, {date}, {n}"
+
+[[setting]]
+key = "prompt_rename"
+label = "Prompt for image name"
+kind = "toggle"
+default = false
+hint = "Ask for a custom image name on every paste"
+
+[[setting]]
+key = "use_wikilink"
+label = "Use wikilinks"
+kind = "toggle"
+default = true
+hint = "Insert ![[image.png]] wikilink instead of Markdown ![](path)"
+
+[platforms]
+windows = "works"
+linux = "works"
+macos = "works"

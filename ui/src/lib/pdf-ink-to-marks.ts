@@ -10,7 +10,7 @@ import { localMinute } from "./local-day";
 import type { Mark } from "./gen/Mark";
 import type { Sample } from "./gen/Sample";
 import type { Stroke } from "./gen/Stroke";
-import type { AtlasMark } from "./atlas-mark";
+import type { AtlasMark } from "./kandinsky-mark";
 import type { Box } from "./pdf-engine";
 
 /** A page's box and /Rotate (Reader.space, PdfEngine.layers). */

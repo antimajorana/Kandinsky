@@ -15,7 +15,7 @@ name = "ocr"
 path = "src/main.rs"
 
 [dependencies]
-atlas-plugin = { path = "../../../../crates/atlas-plugin" }
+atlas-plugin = { path = "../../../../crates/kandinsky-plugin" }
 serde_json = { workspace = true }
 kreuzberg-tesseract = "4.10.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }

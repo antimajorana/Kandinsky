@@ -44,7 +44,7 @@ export function attachBrowserBack(on: () => boolean, step: () => boolean, leave:
   const pop = () => {
     if (!on()) return;
     if (dismiss() || step() || !leave()) guard();
-    else history.back(); // nothing left to go back to inside Atlas: leave, as Back would have
+    else history.back(); // nothing left to go back to inside Kandinsky: leave, as Back would have
   };
   addEventListener("popstate", pop);
   addEventListener("pointerdown", guard, true);

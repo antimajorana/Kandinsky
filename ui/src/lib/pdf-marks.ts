@@ -5,7 +5,7 @@
 import { api } from "./api";
 import { on, touches } from "./bus";
 import { boxShown, toShown } from "./pdf-geom";
-import { markId } from "./atlas-mark";
+import { markId } from "./kandinsky-mark";
 import type { Box } from "./pdf-engine";
 import type { Mark } from "./gen/Mark";
 import type { Op } from "./gen/Op";

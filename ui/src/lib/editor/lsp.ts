@@ -141,7 +141,7 @@ type WorkspaceEdit = { changes?: Record<string, TextEdit[]>; documentChanges?: {
 function editsByFile(r: WorkspaceEdit, what: string): Record<string, TextEdit[]> {
   const changes: Record<string, TextEdit[]> = { ...(r.changes ?? {}) };
   for (const d of r.documentChanges ?? []) {
-    if (d.kind) { toast(`${what} also wants to ${d.kind} a file`, "Atlas applied the text edits only."); continue; }
+    if (d.kind) { toast(`${what} also wants to ${d.kind} a file`, "Kandinsky applied the text edits only."); continue; }
     if (d.textDocument && d.edits) changes[d.textDocument.uri] = [...(changes[d.textDocument.uri] ?? []), ...d.edits];
   }
   return changes;

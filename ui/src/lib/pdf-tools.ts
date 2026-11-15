@@ -4,7 +4,7 @@
 // into the PDF's note (lib/pdf-marks.ts, core pdf_marks.rs), which every device writes; the PDF itself is never
 // touched. With the select tool a click picks a saved mark (the pane's bar recolours, rewords or deletes it) and a drag
 // moves one that sits on its own (a text box, post-it, stamp, clip). Undo takes this pane's last change back.
-import { quoteOf } from "./atlas-mark";
+import { quoteOf } from "./kandinsky-mark";
 import { encodeSamples, markAt, MOVABLE, movedBy, newMark, tagsIn, type Mark, type MarksView, type Op, type Sample, type Stamp } from "./pdf-marks";
 import type { Reader } from "./pdf-reader";
 

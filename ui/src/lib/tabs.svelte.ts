@@ -32,7 +32,7 @@ type SidebarPrefs = { width: number; collapsed: boolean };
 
 export const tabs = $state({
   /** cached until the settings arrive, so a restart does not flash the other layout */
-  layout: load<TabsLayout>(KEYS.tabs, "vertical"),
+  layout: load<TabsLayout>(KEYS.tabs, "horizontal"),
   groups: [] as TabGroup[],
   /** open apps (Home, Email…): shown with the pins, not in the groups (lib/apps.svelte.ts) */
   apps: [] as TabItem[],

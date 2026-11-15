@@ -37,7 +37,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -- the swipe is a touch shortcut; the tabs sheet does the same -->
 <header class="phone-top" ontouchstart={(e) => (from = { x: e.touches[0].clientX, y: e.touches[0].clientY })} ontouchend={swiped}>
   <button class="back" class:hidden={!back} aria-label="Back" onclick={() => navigate(-1)}><Icon name="chevron" size={20} /></button>
-  <span class="title">{shown?.title ?? "Atlas"}</span>
+  <span class="title">{shown?.title ?? "Kandinsky"}</span>
 </header>
 <button class="fab" aria-label="New…" title="New… · hold: capture" onpointerdown={press} onpointerup={release} onpointerleave={release} onpointercancel={release}
   oncontextmenu={(e) => e.preventDefault()} onclick={tap}><Icon name="plus" size={24} /></button>

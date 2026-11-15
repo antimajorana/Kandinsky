@@ -19,7 +19,7 @@ name = "claude"
 path = "src/main.rs"
 
 [dependencies]
-atlas-plugin = { path = "../../../../crates/atlas-plugin" }
+atlas-plugin = { path = "../../../../crates/kandinsky-plugin" }
 serde_json = { workspace = true }
 toml = "0.9"
 

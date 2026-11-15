@@ -15,7 +15,7 @@
 
   /** The tour: what each does, in a line, and the command it runs. A command missing here (a phone) is left out. */
   const TOUR: { id: string; icon: IconName; title: string; what: string }[] = [
-    { id: "ui.palette", icon: "command", title: "Commands", what: "Everything Atlas does, by name: type a few letters" },
+    { id: "ui.palette", icon: "command", title: "Commands", what: "Everything Kandinsky does, by name: type a few letters" },
     { id: "ui.quickOpen", icon: "file", title: "Open a file", what: "Any note, PDF or drawing, by a part of its name" },
     { id: "ui.search", icon: "search", title: "Search", what: "The words inside every note" },
     { id: "ui.note.new", icon: "file-text", title: "New note", what: "From a template, filed where it belongs" },

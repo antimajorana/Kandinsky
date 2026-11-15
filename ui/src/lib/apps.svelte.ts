@@ -30,8 +30,9 @@ export function allApps(): AppTile[] {
   const cmds = allCommands(), cmd = (id: string) => cmds.find((c) => c.id === id);
   const homeCmd = cmd("ui.today");
   const builtins = BUILTINS.filter((b) => builtinOn(b.id)).flatMap((b): AppTile[] => {
-    const c = b.button && cmd(b.button.command), pane = b.button?.pane();
-    return c && pane ? [{ key: b.id, ids: [paneId(pane)], title: c.label ?? b.title, icon: b.icon, keys: c.keys, command: c.id, open: () => void c.run() }] : [];
+    const c = b.button && cmd(b.button.command), pane = b.button?.pane ? b.button.pane() : undefined;
+    // a button with a pane shows only while there is one to open; one without (a chooser) always
+    return c && pane !== null ? [{ key: b.id, ids: pane ? [paneId(pane)] : [], title: c.label ?? b.title, icon: b.icon, keys: c.keys, command: c.id, open: () => void c.run() }] : [];
   });
   const vault = plugins.list.filter((p) => pluginOn(p) && p.rail && p.view).map((p): AppTile => ({
     key: p.id, ids: [paneId(pluginSpec(p))], title: p.title, icon: p.icon && isIconName(p.icon) ? p.icon : "plugin", keys: cmd(`plugin.${p.id}`)?.keys, command: `plugin.${p.id}`, open: () => void cmd(`plugin.${p.id}`)?.run(),

@@ -1,0 +1,47 @@
+title = "Solver"
+description = "Solver Agent as a native Kandinsky app: multi-agent math & theoretical-physics workspace docked inside Kandinsky"
+icon = "sigma"
+rail = true
+view = "view.js"
+main = "main.js"
+version = "1.0.0"
+api = 28
+
+[permissions]
+exec = ["node", "powershell"]
+
+[helper]
+js = "helper.js"
+idle = "15m"
+
+[[setting]]
+key = "url"
+label = "Solver UI URL"
+kind = "text"
+default = "http://localhost:4200"
+hint = "Local frontend URL served by Solver Agent (default http://localhost:4200)"
+
+[[setting]]
+key = "api_url"
+label = "Solver API URL"
+kind = "text"
+default = "http://127.0.0.1:3000"
+hint = "Local backend API URL served by Solver Agent (default http://127.0.0.1:3000)"
+
+[[setting]]
+key = "launcher_dir"
+label = "Solver Agent folder"
+kind = "text"
+default = "C:/Users/antimajorana/Documents/GitHub/re-Solver-Agent"
+hint = "Path to your local re-Solver-Agent folder containing local-launcher/Start-SolverAgent.ps1"
+
+[[setting]]
+key = "auto_start"
+label = "Auto-start Solver services when opened"
+kind = "toggle"
+default = true
+hint = "Start Solver's local WSL/Docker services silently in the background when opening the Solver app"
+
+[platforms]
+windows = "works"
+linux = "works"

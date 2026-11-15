@@ -24,7 +24,7 @@ import { toast } from "./state.svelte";
 import { exists, readText } from "./vault-files";
 
 export const BOOKMARKS_FILE = ".atlas/bookmarks.yaml";
-const HEADER = `# Bookmarks of this vault (Atlas reads and writes this file; edit it freely).
+const HEADER = `# Bookmarks of this vault (Kandinsky reads and writes this file; edit it freely).
 # pins: the tiles at the top of the sidebar. bookmarks: listed in the sidebar and the palette;
 # each is also a command, so it can have a shortcut (Settings → Keyboard).
 # An entry is a file path, or {path:, heading:} {view: library} {search: "…"} {command: id} {url: …},

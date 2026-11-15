@@ -123,7 +123,7 @@
     onpointermove={track} onclickcapture={aimedClick} bind:this={nav} data-testid="sidebar">
     <header class="head">
       <VaultBadge />
-      {#if wide}<button class="ws" onclick={() => void chooseVault()} title="{app.workspace?.root ?? ""} — switch vault ({keysOf("ui.vault") ?? "Ctrl+Alt+V"})">{app.workspace?.name ?? "Atlas"}<Icon name="chevron-down" size={12} /></button>{/if}
+      {#if wide}<button class="ws" onclick={() => void chooseVault()} title="{app.workspace?.root ?? ""} — switch vault ({keysOf("ui.vault") ?? "Ctrl+Alt+V"})">{app.workspace?.name ?? "Kandinsky"}<Icon name="chevron-down" size={12} /></button>{/if}
       <!-- in fullscreen the bar stays icons, so the button opens it over the page and closes it again (it used to do
            nothing there) -->
       <button class="icon-btn collapse tipped" onclick={(e) => { e.stopPropagation(); if (fullscreen.on) { if (side.held) release(); else hold(); return; } toggleSidebar(); side.peek = false; }} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}

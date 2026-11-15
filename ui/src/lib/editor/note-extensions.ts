@@ -101,7 +101,7 @@ export function noteExtensions(path: string, viewRef: { view: EditorView | null 
     // the YAML between the fences: Obsidian's Properties table in the note (`inline`), else one faint
     // "Properties" line (`hidden`; `panel` edits them beside the note). Keyed by mode + text.
     noteProperties: (fm: string) => {
-      const mode = settings.config?.editor.properties ?? "hidden";
+      const mode = settings.config?.editor.properties ?? "inline";
       const yaml = fm.replace(/^---\r?\n/, "").replace(/\r?\n(---|\.\.\.)\s*$/, "");
       return mode === "inline"
         ? { key: `inline:${propertySpec.version}:${fm}`, render: () => propertiesElement(yaml, dir, (t) => onOpenLink?.(t)) }

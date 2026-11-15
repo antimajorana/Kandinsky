@@ -1,0 +1,18 @@
+title = "Pseudocode Algorithms"
+description = "Renders Obsidian ```pseudo and ```pseudocode LaTeX algorithm blocks with numbered lines and math"
+icon = "code"
+version = "0.1.0"
+api = 28
+phone = true
+
+[[setting]]
+key = "line_numbers"
+label = "Line numbers"
+kind = "toggle"
+default = true
+hint = "Show line numbers beside algorithm steps"
+
+[platforms]
+windows = "works"
+linux = "works"
+macos = "works"

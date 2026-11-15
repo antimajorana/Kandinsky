@@ -19,4 +19,5 @@ runs_here: boolean,
 /**
  * The version installed in this vault (empty: one without a version), none when it is not.
  */
-installed?: string, };
+installed?: string,
+description?: string, };

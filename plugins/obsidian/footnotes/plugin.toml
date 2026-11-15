@@ -1,0 +1,12 @@
+title = "Footnotes & FakeLink"
+description = "Obsidian Footnote Shortcut and FakeLink helper: quick numbered [^n] footnotes, hover previews, and [placeholder] links"
+icon = "quote"
+main = "main.js"
+version = "0.1.0"
+phone = true
+api = 28
+
+[platforms]
+windows = "works"
+linux = "works"
+macos = "works"

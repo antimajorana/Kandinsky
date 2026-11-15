@@ -19,7 +19,7 @@ export function followRenderedLink(e: MouseEvent, notePath: string, beside: bool
     return false;
   }
   if (/^[a-z]+:/i.test(href)) return false;
-  e.preventDefault(); // a relative markdown link: the vault's file, inside Atlas
+  e.preventDefault(); // a relative markdown link: the vault's file, inside Kandinsky
   const dir = notePath.includes("/") ? notePath.slice(0, notePath.lastIndexOf("/")) : "";
   const rel = decodeURI(href);
   openPath(dir ? `${dir}/${rel}`.replace(/\/\.\//g, "/") : rel, undefined, { beside });

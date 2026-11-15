@@ -1,0 +1,32 @@
+title = "Dataview & DataviewJS"
+description = "Live-renders Obsidian ```dataview (TABLE, LIST, TASK) and ```dataviewjs code blocks inside notes"
+icon = "table"
+version = "0.1.0"
+api = 28
+phone = true
+
+[[setting]]
+key = "enable_dataviewjs"
+label = "Enable DataviewJS"
+kind = "toggle"
+default = true
+hint = "Execute ```dataviewjs blocks inside notes with the dv API"
+
+[[setting]]
+key = "date_format"
+label = "Date format"
+kind = "text"
+default = "YYYY-MM-DD"
+hint = "Format for displaying file.mtime, file.ctime, and date values (e.g. YYYY-MM-DD or DD-MM-YYYY)"
+
+[[setting]]
+key = "max_rows"
+label = "Default row limit"
+kind = "number"
+default = 500
+hint = "Safety limit when a query specifies no LIMIT clause"
+
+[platforms]
+windows = "works"
+linux = "works"
+macos = "works"

@@ -40,7 +40,7 @@ export function noteTriageBase(logDir: string): string {
     `        direction: ${dir}`,
   ];
   return [
-    "# Note triage: the notes that wait for a decision. Written once by Atlas (the command \"Notes: triage\"); yours to",
+    "# Note triage: the notes that wait for a decision. Written once by Kandinsky (the command \"Notes: triage\"); yours to",
     "# edit from now on — change a view, add one. Mail, references, the day's logs and agents' files are left out.",
     "filters:",
     "  and:",

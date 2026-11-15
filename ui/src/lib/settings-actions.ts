@@ -83,7 +83,7 @@ export async function newBlock(name: string): Promise<void> {
 export async function editHome(): Promise<void> {
   const { path } = await homeDoc();
   if (path) openPath(path);
-  else toast("No home file", "Set Home screen to a .page file (e.g. Home.page) on this page; Atlas creates it from a template.");
+  else toast("No home file", "Set Home screen to a .page file (e.g. Home.page) on this page; Kandinsky creates it from a template.");
 }
 
 export const VIEW_EXAMPLE = "```view\ntype: calendar\nfrom: section\n```\n";

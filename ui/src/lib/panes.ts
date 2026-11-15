@@ -135,6 +135,7 @@ export function paneTitle(s: PaneSpec): string {
 }
 
 export type IconName =
+  | "graph"
   | "today" | "home" | "files" | "search" | "lecture" | "command" | "file" | "file-code" | "file-text" | "pdf"
   | "image" | "terminal" | "claude" | "globe" | "mail" | "folder" | "folder-open" | "chevron" | "close" | "edit" | "trash"
   | "eye" | "check" | "circle" | "commit" | "clock" | "sun" | "moon" | "plus" | "minus" | "more" | "refresh" | "zoom"
@@ -169,7 +170,7 @@ export function paneIcon(s: PaneSpec): IconName {
       return "edit";
     case "outline": return "outline";
     case "commands": return "command";
-    case "graph": return "link";
+    case "graph": return "graph";
     case "plugin": return s.icon && isIconName(s.icon) ? s.icon : "plugin";
     case "block": return s.icon && isIconName(s.icon) ? s.icon : "chart";
   }

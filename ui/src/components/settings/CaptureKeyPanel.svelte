@@ -26,7 +26,7 @@
 
 <section class="settings-panel capture-key">
   <h3>Capture key</h3>
-  <p class="desc">One key, anywhere on the desktop, opens the capture box: a thought, a task or a link into today's log without switching to Atlas.</p>
+  <p class="desc">One key, anywhere on the desktop, opens the capture box: a thought, a task or a link into today's log without switching to Kandinsky.</p>
   {#if now}
     <div class="row">
       <span class="label">Now</span>
