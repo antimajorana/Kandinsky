@@ -13,7 +13,7 @@
 <p align="center"><sub>Kandinsky is based on Atlas by Alneb (github.com/Alneb/atlas), AGPL-3.0.</sub></p>
 
 <p align="center">
-  <a href="https://github.com/Alneb/atlas/actions/workflows/ci.yml"><img src="https://github.com/Alneb/atlas/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/antimajorana/kandinsky/actions/workflows/ci.yml"><img src="https://github.com/antimajorana/kandinsky/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License: AGPL-3.0"></a>
   <img src="https://img.shields.io/badge/status-early-orange" alt="Status: early">
 </p>
@@ -170,7 +170,7 @@ says what each tier promises and where each plugin stands. Each plugin's folder 
 ## Install
 
 **Linux packages.** Download the AppImage, `.deb`, `.rpm` or Flatpak from the
-[latest release](https://github.com/Alneb/atlas/releases), or build from source (below). The `.deb` and `.rpm` install
+[latest release](https://github.com/antimajorana/kandinsky/releases), or build from source (below). The `.deb` and `.rpm` install
 the `kandinsky` command line beside the app (`/usr/bin/kandinsky`), and the quick-capture box (`kandinsky-capture`, with the menu
 entry **Kandinsky Capture**: give it a key in your desktop's shortcut settings, docs/guides/CAPTURE.md); both are also
 files of their own in each release.

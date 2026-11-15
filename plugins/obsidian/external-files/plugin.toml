@@ -10,8 +10,8 @@ phone = true
 key = "external_root"
 label = "External attachments root"
 kind = "text"
-default = "C:/Users/antimajorana/kDrive"
-hint = "Default external folder for relative external paths"
+default = "~/kDrive"
+hint = "Default external folder for relative external paths (for example ~/kDrive)"
 
 [platforms]
 windows = "works"

@@ -2,16 +2,23 @@
 // Executes Jupyter (.ipynb) cells in a stateful Python kernel, WLJS/Wolfram (.wln/.wls) via wl.py,
 // opens .wln notebooks in WLJS, runs deterministic c_lint checks, and files accepted results via oracle_wiki.py.
 
-const ORACLE_PY = "C:/Users/antimajorana/Documents/GitHub/oracle-research/env/Scripts/python.exe";
-const C_LINT_PY = "C:/Users/antimajorana/Documents/GitHub/oracle-research/framework/tools/c_lint.py";
-const ORACLE_WIKI_PY = "C:/Users/antimajorana/Documents/GitHub/oracle-research/framework/tools/oracle_wiki.py";
-const WL_PY = "C:/Users/antimajorana/Documents/GitHub/oracle-research/framework/tools/wl.py";
-const VENV_JUPYTER = "C:/Users/antimajorana/.venvs/jupyter/Scripts/python.exe";
-const VENV_JUPYTER314 = "C:/Users/antimajorana/.venvs/jupyter314/Scripts/python.exe";
+const NODE_ORACLE_ENV = `
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const ORACLE_HOME = os.homedir();
+const ORACLE_RESEARCH_DIR = process.env.ORACLE_RESEARCH_DIR || path.join(ORACLE_HOME, "Documents", "GitHub", "oracle-research");
+const PY_BIN = process.platform === "win32" ? path.join("Scripts", "python.exe") : path.join("bin", "python");
+const ORACLE_PY = process.env.ORACLE_PYTHON || path.join(ORACLE_RESEARCH_DIR, "env", PY_BIN);
+const C_LINT_PY = path.join(ORACLE_RESEARCH_DIR, "framework", "tools", "c_lint.py");
+const ORACLE_WIKI_PY = path.join(ORACLE_RESEARCH_DIR, "framework", "tools", "oracle_wiki.py");
+const WL_PY = path.join(ORACLE_RESEARCH_DIR, "framework", "tools", "wl.py");
+const VENV_JUPYTER = path.join(ORACLE_HOME, ".venvs", "jupyter", PY_BIN);
+const VENV_JUPYTER314 = path.join(ORACLE_HOME, ".venvs", "jupyter314", PY_BIN);
+`.trim();
 
 const JUPYTER_NODE_SCRIPT = `
-const fs = require("node:fs");
-const path = require("node:path");
+${NODE_ORACLE_ENV}
 const { spawnSync } = require("node:child_process");
 
 const rawIn = fs.readFileSync(0, "utf8");
@@ -23,15 +30,15 @@ const want314 = requestedKernel === "jupyter314" || (requestedKernel === "auto" 
 
 const candidates = want314
   ? [
-      { exe: ${JSON.stringify(VENV_JUPYTER314)}, label: "jupyter314" },
-      { exe: ${JSON.stringify(VENV_JUPYTER)}, label: "jupyter" },
-      { exe: ${JSON.stringify(ORACLE_PY)}, label: "oracle-env" },
+      { exe: VENV_JUPYTER314, label: "jupyter314" },
+      { exe: VENV_JUPYTER, label: "jupyter" },
+      { exe: ORACLE_PY, label: "oracle-env" },
       { exe: "python", label: "python" },
     ]
   : [
-      { exe: ${JSON.stringify(VENV_JUPYTER)}, label: "jupyter" },
-      { exe: ${JSON.stringify(VENV_JUPYTER314)}, label: "jupyter314" },
-      { exe: ${JSON.stringify(ORACLE_PY)}, label: "oracle-env" },
+      { exe: VENV_JUPYTER, label: "jupyter" },
+      { exe: VENV_JUPYTER314, label: "jupyter314" },
+      { exe: ORACLE_PY, label: "oracle-env" },
       { exe: "python", label: "python" },
     ];
 
@@ -216,15 +223,13 @@ async function runJupyterCell(params = {}) {
 }
 
 const WOLFRAM_NODE_SCRIPT = `
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
+${NODE_ORACLE_ENV}
 const { spawnSync } = require("node:child_process");
 
 const req = JSON.parse(fs.readFileSync(0, "utf8") || "{}");
 const vaultRoot = process.cwd();
-const wlPy = ${JSON.stringify(WL_PY)};
-const oraclePy = ${JSON.stringify(ORACLE_PY)};
+const wlPy = WL_PY;
+const oraclePy = ORACLE_PY;
 
 let targetWls = "";
 let cleanupTmp = "";
@@ -347,15 +352,14 @@ async function openInWljs(params = {}) {
 }
 
 const CLINT_NODE_SCRIPT = `
-const fs = require("node:fs");
-const path = require("node:path");
+${NODE_ORACLE_ENV}
 const { spawnSync } = require("node:child_process");
 
 const req = JSON.parse(fs.readFileSync(0, "utf8") || "{}");
 const vaultRoot = process.cwd();
 const notePath = path.resolve(vaultRoot, String(req.path || ""));
-const pyExe = fs.existsSync(${JSON.stringify(ORACLE_PY)}) ? ${JSON.stringify(ORACLE_PY)} : "python";
-const cLintPy = ${JSON.stringify(C_LINT_PY)};
+const pyExe = fs.existsSync(ORACLE_PY) ? ORACLE_PY : "python";
+const cLintPy = C_LINT_PY;
 
 if (!req.path || !fs.existsSync(notePath)) {
   process.stdout.write(JSON.stringify({
@@ -440,15 +444,13 @@ async function runCLint(params = {}) {
 }
 
 const FILE_WIKI_NODE_SCRIPT = `
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
+${NODE_ORACLE_ENV}
 const { spawnSync } = require("node:child_process");
 
 const req = JSON.parse(fs.readFileSync(0, "utf8") || "{}");
 const vaultRoot = process.cwd();
-const pyExe = fs.existsSync(${JSON.stringify(ORACLE_PY)}) ? ${JSON.stringify(ORACLE_PY)} : "python";
-const wikiPy = ${JSON.stringify(ORACLE_WIKI_PY)};
+const pyExe = fs.existsSync(ORACLE_PY) ? ORACLE_PY : "python";
+const wikiPy = ORACLE_WIKI_PY;
 
 function stripFrontmatter(text) {
   return String(text || "").replace(/^---\\r?\\n[\\s\\S]*?\\r?\\n---(?:\\r?\\n|$)/, "");

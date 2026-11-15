@@ -14,7 +14,7 @@
   "bundle": {
     "active": false,
     "publisher": "alneb",
-    "homepage": "https://github.com/Alneb/atlas",
+    "homepage": "https://github.com/antimajorana/kandinsky",
     "license": "AGPL-3.0-or-later",
     "category": "Productivity",
     "shortDescription": "One fast desktop workspace over plain files",

@@ -2,7 +2,18 @@
 
 const DEFAULT_UI = "http://localhost:4200";
 const DEFAULT_API = "http://127.0.0.1:3000";
-const DEFAULT_DIR = "C:/Users/antimajorana/Documents/GitHub/re-Solver-Agent";
+const DEFAULT_DIR = "~/Documents/GitHub/re-Solver-Agent";
+
+async function resolveTildeDir(dirPath) {
+  const raw = String(dirPath || DEFAULT_DIR).trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  if (raw !== "~" && !raw.startsWith("~/")) return raw;
+  try {
+    const r = await kandinsky.exec("node", ["-e", "process.stdout.write(require('node:os').homedir())"], { timeout: 5 });
+    const home = String(r.stdout || "").trim().replace(/\\/g, "/").replace(/\/+$/, "");
+    if (home) return raw === "~" ? home : `${home}/${raw.slice(2)}`;
+  } catch {}
+  return raw;
+}
 // Solver's MongoDB runs natively in WSL Ubuntu as the systemd service mongod (no Docker).
 // serverSelectionTimeoutMS makes a stopped mongod fail in about 3 s instead of hanging.
 const MONGO_URI = "mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=3000";
@@ -98,7 +109,7 @@ async function startServices(params = {}) {
     return { ok: true, alreadyRunning: true, url: uiUrl, status: current };
   }
 
-  const baseDir = String(params.launcherDir || DEFAULT_DIR).trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  const baseDir = await resolveTildeDir(params.launcherDir || DEFAULT_DIR);
   const scriptPath = `${baseDir}/local-launcher/Start-SolverAgent.ps1`;
 
   const run = await kandinsky.exec(

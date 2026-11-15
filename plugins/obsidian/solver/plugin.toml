@@ -39,7 +39,7 @@ hint = "Vault folder where imported Solver derivations are saved as Markdown not
 key = "launcher_dir"
 label = "Solver Agent folder"
 kind = "text"
-default = "C:/Users/antimajorana/Documents/GitHub/re-Solver-Agent"
+default = "~/Documents/GitHub/re-Solver-Agent"
 hint = "Path to your local re-Solver-Agent folder containing local-launcher/Start-SolverAgent.ps1"
 
 [[setting]]

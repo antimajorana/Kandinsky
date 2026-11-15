@@ -18,7 +18,7 @@ name: kandinsky
 
 services:
   kandinsky:
-    image: ${KANDINSKY_IMAGE:-ghcr.io/alneb/atlas:latest}
+    image: ${KANDINSKY_IMAGE:-ghcr.io/antimajorana/kandinsky:latest}
     build:
       context: .
       dockerfile: packaging/docker/Dockerfile

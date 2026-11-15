@@ -1,7 +1,54 @@
 // External Attachments & Embeds — Kandinsky workspace plugin (API v28).
 // Links, previews, and opens external files and cloud folders (such as kDrive) from inside notes.
 
-const DEFAULT_EXTERNAL_ROOT = "C:/Users/antimajorana/kDrive";
+const DEFAULT_EXTERNAL_ROOT = "~/kDrive";
+
+let detectedHomeDir = "";
+let homeDetectPromise = null;
+
+function inferHomeFromVaultPath(rawPath) {
+  const norm = String(rawPath ?? "").replace(/\\/g, "/");
+  const m = /^([A-Za-z]:\/Users\/[^/]+|\/Users\/[^/]+|\/home\/[^/]+)(?:\/|$)/.exec(norm);
+  return m ? m[1] : "";
+}
+
+async function detectHomeDir() {
+  if (detectedHomeDir) return detectedHomeDir;
+  if (!homeDetectPromise && typeof fetch === "function") {
+    homeDetectPromise = (async () => {
+      try {
+        const res = await fetch("/api/vaults", { headers: { "x-kandinsky": "1" } });
+        if (!res.ok) return "";
+        const data = await res.json();
+        const vaults = Array.isArray(data?.vaults) ? data.vaults : [];
+        const currentFirst = [
+          ...vaults.filter((v) => v && v.name === data.current),
+          ...vaults.filter((v) => v && v.name !== data.current),
+        ];
+        for (const v of currentFirst) {
+          const h = inferHomeFromVaultPath(v.path);
+          if (h) {
+            detectedHomeDir = h;
+            return h;
+          }
+        }
+      } catch {
+        // Offline / Android / mocked test environments without /api/vaults continue cleanly
+      }
+      return "";
+    })();
+  }
+  return homeDetectPromise ? homeDetectPromise : "";
+}
+
+export function expandTildePath(p, homeDir = detectedHomeDir) {
+  const s = String(p ?? "");
+  if (!homeDir) return s;
+  const h = String(homeDir).replace(/\\/g, "/").replace(/\/+$/, "");
+  if (s === "~") return h;
+  if (s.startsWith("~/")) return `${h}/${s.slice(2)}`;
+  return s;
+}
 
 const ICONS = {
   "external-link": '<path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
@@ -40,7 +87,7 @@ function safeDecodeUri(raw) {
 }
 
 /** Convert a file:/// URL, absolute path, or external_root-relative path into a clean target path. */
-export function resolveExternalPath(rawInput, externalRoot = DEFAULT_EXTERNAL_ROOT) {
+export function resolveExternalPath(rawInput, externalRoot = DEFAULT_EXTERNAL_ROOT, homeDir = detectedHomeDir) {
   let s = String(rawInput ?? "").trim();
   if (!s) return "";
   if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
@@ -59,10 +106,11 @@ export function resolveExternalPath(rawInput, externalRoot = DEFAULT_EXTERNAL_RO
   const norm = s.replace(/\\/g, "/");
   const isWinDrive = /^[A-Za-z]:\//.test(norm) || /^[A-Za-z]:$/.test(norm);
   const isUnc = norm.startsWith("//");
-  const isPosixAbs = norm.startsWith("/") || norm.startsWith("~/");
-  if (isWinDrive || isUnc || isPosixAbs) return norm;
+  const isPosixAbs = norm.startsWith("/") || norm === "~" || norm.startsWith("~/");
+  if (isWinDrive || isUnc || isPosixAbs) return expandTildePath(norm, homeDir);
 
-  const root = String(externalRoot || DEFAULT_EXTERNAL_ROOT).trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  const rawRoot = externalRoot === undefined || externalRoot === null ? DEFAULT_EXTERNAL_ROOT : externalRoot;
+  const root = expandTildePath(String(rawRoot).trim().replace(/\\/g, "/").replace(/\/+$/, ""), homeDir);
   const rel = norm.replace(/^\.\//, "").replace(/^\/+/, "");
   return root ? `${root}/${rel}` : rel;
 }
@@ -171,26 +219,32 @@ function basenameOf(resolvedPath) {
   return (idx >= 0 ? trimmed.slice(idx + 1) : trimmed) || resolvedPath;
 }
 
-function openInSystemApp(kandinsky, resolvedPath) {
+async function openInSystemApp(kandinsky, resolvedPath) {
   if (!resolvedPath) return false;
+  let target = String(resolvedPath);
+  if (target === "~" || target.startsWith("~/")) {
+    const h = await detectHomeDir();
+    target = expandTildePath(target, h);
+  }
   // Primary API v28 call required by Kandinsky contract:
-  const tookNative = kandinsky.openNative(resolvedPath);
+  const tookNative = kandinsky.openNative(target);
   if (tookNative) return true;
 
   // Desktop / WebView fallback when openNative returns false:
-  if (/^https?:\/\//i.test(resolvedPath)) {
-    kandinsky.openLink?.(resolvedPath, { outside: true });
+  if (/^https?:\/\//i.test(target)) {
+    kandinsky.openLink?.(target, { outside: true });
     return true;
   }
   if (typeof kandinsky.openLink === "function") {
-    kandinsky.openLink(toFileUrl(resolvedPath));
+    kandinsky.openLink(toFileUrl(target));
     return true;
   }
-  kandinsky.toast?.("External Files", `Path: ${resolvedPath}`, "info");
+  kandinsky.toast?.("External Files", `Path: ${target}`, "info");
   return false;
 }
 
 export function register(kandinsky) {
+  void detectHomeDir();
   const getRoot = () => String(kandinsky.plugin?.settings?.external_root ?? DEFAULT_EXTERNAL_ROOT).trim() || DEFAULT_EXTERNAL_ROOT;
 
   // Track live CodeMirror views so Insert Card can insert right at the cursor when an editor is mounted

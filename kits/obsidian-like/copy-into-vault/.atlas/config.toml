@@ -1,0 +1,58 @@
+# Atlas settings that make "The Oracle" look and behave more like your Obsidian setup.
+#
+# Where it goes:  The Oracle\.atlas\config.toml
+#   ("Apply to The Oracle.cmd" in the kit copies it there and keeps your old file as
+#    config.toml.before-obsidian-kit; "Undo.cmd" puts the old one back.)
+# Every line here can also be changed later in Atlas: Settings. The names below are Atlas's own
+# names for them (read from Atlas 0.2.10 itself), and the comment says what it does.
+# Careful: Atlas refuses a settings file with a typo in it (it shows the error instead of guessing),
+# so if you edit this by hand, keep the quotes and brackets as they are.
+
+# --- Daily notes -> Atlas's daily log ---------------------------------------------------------
+# Obsidian: daily notes in Journal, from zMeta/Templates/daily.md.
+# Difference: Atlas always names a day's file YYYY-MM-DD.md (2026-11-14.md); your Obsidian names
+# them DD-MM-YYYY (14-11-2026.md). Your Journal folder has no daily notes yet, so nothing clashes.
+log_dir = "Journal"
+log_template = "daily"
+
+[ui]
+theme = "dark"              # already set in your vault before
+accent = "#889eea"          # the accent colour you use in Obsidian
+shape = "paper"             # flat panes with thin lines between them, as in Obsidian (Atlas's default: rounded cards)
+tabs = "horizontal"         # a row of tabs above each pane, as in Obsidian (Atlas's default: a vertical tab list)
+side_panel = "dock"         # files / search / outline in their own column on the left, as in Obsidian
+restore_layout = true       # reopen last session's tabs, as Obsidian does
+
+[editor]
+properties = "inline"       # a note's properties shown at its top, as Obsidian shows them
+inline_title = true         # the file name as a title above the note (Obsidian's "inline title")
+backlinks = true            # "Linked mentions" under each note (Obsidian's Backlinks)
+link_preview = true         # rest the pointer on a link to preview it (Obsidian's Page preview)
+fold_headings = true        # fold a section under its heading
+slash_menu = false          # you had Obsidian's slash commands switched off
+format_bar = false          # Obsidian shows no formatting toolbar on the desktop
+strict_line_breaks = false  # Obsidian's default: each line shows as written
+# Obsidian's "Excluded files" (your list): kept out of search, the graph, links and quick open,
+# but still shown in the file tree, exactly as Obsidian treats excluded files.
+index_exclude = ["/zMeta", "/.raw", "/.vault-meta", "/zAI", "/zArchive"]
+
+[notes]
+dir = "inbox"               # new notes go to inbox (Obsidian: "Default location for new notes")
+templates = "zMeta/Templates"
+capture_template = "capture"
+# Your Templater "folder templates", written the way Atlas reads them: a new note made in that
+# folder starts from that template (the name of a file in zMeta/Templates, without .md).
+# Atlas understands the Templater tags these templates use (tp.date.now, tp.file.title,
+# tp.file.cursor). Your "moc" template (wiki/mocs) starts with a Templater script (<%* ... %>),
+# which Atlas never runs, so that one rule is left out: MOC notes start plain in Atlas.
+template_rules = [
+  { folder = "wiki/sources/books", template = "book" },
+  { folder = "wiki/sources/papers", template = "paper" },
+  { folder = "Journal", template = "daily" },
+  { folder = "wiki/concepts", template = "concept" },
+  { folder = "wiki/notes", template = "note" },
+  { folder = "wiki/projects", template = "project" },
+]
+
+[desktop]
+on_close = "quit"           # closing the window quits Atlas, as in Obsidian (Atlas's default keeps it running in the tray)

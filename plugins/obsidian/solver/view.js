@@ -14,7 +14,7 @@ export function getSolverSettings(kandinsky) {
   return {
     url: String(s.url || "http://localhost:4200").trim().replace(/\/+$/, ""),
     apiUrl: String(s.api_url || "http://127.0.0.1:3000").trim().replace(/\/+$/, ""),
-    launcherDir: String(s.launcher_dir || "C:/Users/antimajorana/Documents/GitHub/re-Solver-Agent").trim(),
+    launcherDir: String(s.launcher_dir || "~/Documents/GitHub/re-Solver-Agent").trim(),
     autoStart: s.auto_start !== false,
   };
 }

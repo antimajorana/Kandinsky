@@ -392,9 +392,29 @@ async function liveStatus() {
 }
 
 async function connectKandinskyMcp(params = {}) {
-  const cliPath = String(
-    params.kandinskyExe || "C:/Users/antimajorana/AppData/Local/Kandinsky/kandinsky.exe",
-  ).trim();
+  let cliPath = String(params.kandinskyExe || "").trim();
+  if (!cliPath) {
+    const r = await kandinsky.exec(
+      "node",
+      [
+        "-e",
+        [
+          "const fs = require('node:fs'), os = require('node:os'), path = require('node:path');",
+          "const home = os.homedir();",
+          "const cands = [",
+          "  process.env.KANDINSKY_EXE,",
+          "  process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Kandinsky', 'kandinsky.exe'),",
+          "  path.join(home, 'AppData', 'Local', 'Kandinsky', 'kandinsky.exe'),",
+          "  path.join(home, '.local', 'bin', 'kandinsky'),",
+          "  '/usr/local/bin/kandinsky',",
+          "].filter(Boolean);",
+          "process.stdout.write(cands.find((p) => fs.existsSync(p)) || 'kandinsky');",
+        ].join(" "),
+      ],
+      { timeout: 6 },
+    );
+    cliPath = String(r.stdout || "").trim() || "kandinsky";
+  }
 
   try {
     await kandinsky.exec("agy", ["mcp", "remove", "kandinsky"], { timeout: 8 });

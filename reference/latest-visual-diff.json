@@ -1,0 +1,63 @@
+{
+  "captured_at": "2026-11-15T17:37:09.693Z",
+  "comparisons": {
+    "dark": {
+      "changed_bounding_box": {
+        "height": 888,
+        "width": 1416,
+        "x": 10,
+        "y": 7
+      },
+      "comparable": true,
+      "difference_fraction": 0.13302006172839506,
+      "differing_pixels": 172394,
+      "height": 900,
+      "identical": false,
+      "layout_similarity": 0.8327485380116959,
+      "max_channel_delta": 224,
+      "perceptual_similarity": 0.6107296809872024,
+      "sizes": {
+        "after": {
+          "height": 900,
+          "width": 1440
+        },
+        "before": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "tolerance": 16,
+      "total_pixels": 1296000,
+      "width": 1440
+    },
+    "light": {
+      "changed_bounding_box": {
+        "height": 888,
+        "width": 1416,
+        "x": 10,
+        "y": 7
+      },
+      "comparable": true,
+      "difference_fraction": 0.1303996913580247,
+      "differing_pixels": 168998,
+      "height": 900,
+      "identical": false,
+      "layout_similarity": 0.868421052631579,
+      "max_channel_delta": 230,
+      "perceptual_similarity": 0.6221980337581899,
+      "sizes": {
+        "after": {
+          "height": 900,
+          "width": 1440
+        },
+        "before": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      "tolerance": 16,
+      "total_pixels": 1296000,
+      "width": 1440
+    }
+  }
+}

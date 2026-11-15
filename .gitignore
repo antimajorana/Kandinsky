@@ -8,6 +8,7 @@ crates/kandinsky-app/gen/
 *.html
 !ui/capture.html
 !ui/index.html
+!reference/target-notion-kandinsky.html
 .env
 
 # Python caches (generated)

@@ -184,7 +184,7 @@ pub struct PluginsConfig {
 }
 
 /// The project's latest release.
-pub const RELEASE_INDEX: &str = "https://github.com/Alneb/atlas/releases/latest/download/plugins.json";
+pub const RELEASE_INDEX: &str = "https://github.com/antimajorana/kandinsky/releases/latest/download/plugins.json";
 
 impl Default for PluginsConfig {
     fn default() -> Self {
@@ -1174,7 +1174,7 @@ mod parsed {
     use std::path::{Path, PathBuf};
     use std::sync::{Mutex, MutexGuard};
 
-    type Kept = HashMap<PathBuf, (FileStamp, Config, bool)>;
+    type Kept = HashMap<PathBuf, (FileStamp, Config, (bool, bool))>;
 
     fn kept() -> MutexGuard<'static, Kept> {
         static KEPT: std::sync::LazyLock<Mutex<Kept>> = std::sync::LazyLock::new(Mutex::default);
@@ -1182,11 +1182,11 @@ mod parsed {
         KEPT.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    pub(super) fn get(path: &Path, stamp: &FileStamp) -> Option<(Config, bool)> {
+    pub(super) fn get(path: &Path, stamp: &FileStamp) -> Option<(Config, (bool, bool))> {
         kept().get(path).filter(|(s, ..)| s == stamp).map(|(_, c, set)| (c.clone(), *set))
     }
 
-    pub(super) fn put(path: &Path, stamp: FileStamp, c: &Config, set: bool) {
+    pub(super) fn put(path: &Path, stamp: FileStamp, c: &Config, set: (bool, bool)) {
         kept().insert(path.to_path_buf(), (stamp, c.clone(), set));
     }
 
@@ -1205,26 +1205,40 @@ impl Config {
             crate::file_stamp::Seen::Stamped(s) => Some(s),
             _ => None,
         };
-        let (mut c, set) = match stamp.as_ref().and_then(|s| parsed::get(&path, s)) {
+        let (mut c, (set_log, set_templates)) = match stamp.as_ref().and_then(|s| parsed::get(&path, s)) {
             Some(hit) => hit,
             None => {
-                let (c, text) = match std::fs::read_to_string(&path) {
-                    Ok(text) => (parse(&text).map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?.0, text),
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => (Self::default(), String::new()),
+                let (c, set_flags) = match std::fs::read_to_string(&path) {
+                    Ok(text) => {
+                        let (cfg, doc) = parse(&text).map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
+                        let set_log = doc.get("log_dir").is_some();
+                        let set_tpl = doc.get("notes").and_then(|t| t.get("templates")).is_some();
+                        (cfg, (set_log, set_tpl))
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => (Self::default(), (false, false)),
                     Err(e) => return Err(e.into()),
                 };
-                let set = text.lines().any(|l| l.trim_start().starts_with("log_dir"));
                 if let Some(s) = stamp {
-                    parsed::put(&path, s, &c, set);
+                    parsed::put(&path, s, &c, set_flags);
                 }
-                (c, set)
+                (c, set_flags)
             }
         };
-        // a vault from before the log moved under notes/ keeps writing where its logs are
-        if !set && c.log_dir == DEFAULT_LOG_DIR && root.join("log").is_dir() && !root.join(DEFAULT_LOG_DIR).exists() {
-            c.log_dir = "log".into();
-        }
+        Self::apply_vault_defaults(&mut c, root, set_log, set_templates);
         Ok(c)
+    }
+
+    fn apply_vault_defaults(&mut self, root: &Path, set_log: bool, set_templates: bool) {
+        // a vault from before the log moved under notes/ keeps writing where its logs are
+        if !set_log && self.log_dir == DEFAULT_LOG_DIR && root.join("log").is_dir() && !root.join(DEFAULT_LOG_DIR).exists() {
+            self.log_dir = "log".into();
+        }
+        // a vault using Obsidian Templater's `templates_folder` (e.g. `zMeta/Templates`) without `templates/`
+        if !set_templates && self.notes.templates == "templates" && !root.join("templates").exists() {
+            if let Some(obs) = Self::obsidian_templates_dir(root) {
+                self.notes.templates = obs;
+            }
+        }
     }
 
     /// JSON schema (titles, descriptions, enums, ranges) that the Settings pane renders.
@@ -1260,7 +1274,12 @@ impl Config {
             new_v.as_table().ok_or_else(|| anyhow::anyhow!("config is not a table"))?,
         );
         let out = doc.to_string();
-        let check = parse(&out)?.0;
+        let (mut check, check_doc) = parse(&out)?;
+        check.apply_vault_defaults(
+            root,
+            check_doc.get("log_dir").is_some(),
+            check_doc.get("notes").and_then(|t| t.get("templates")).is_some(),
+        );
         anyhow::ensure!(&check == new, "config did not round-trip; not written");
         crate::vault_write::write(path, out.as_bytes())?;
         Ok(())
@@ -1287,6 +1306,37 @@ impl Config {
     /// The note templates' folder (`[notes] templates`); None when it is empty: no templates, never the vault's top.
     pub fn templates_dir(&self) -> Option<&str> {
         Some(self.notes.templates.trim().trim_matches('/')).filter(|d| !d.is_empty())
+    }
+
+    /// Read-only lookup of Obsidian Templater (`templates_folder`) or core Templates (`folder`) when the default
+    /// `templates/` folder does not exist in `root`. Never mutates `.obsidian`.
+    pub fn obsidian_templates_dir(root: &Path) -> Option<String> {
+        for (rel, key) in [
+            (".obsidian/plugins/templater-obsidian/data.json", "templates_folder"),
+            (".obsidian/templates.json", "folder"),
+        ] {
+            let Ok(text) = std::fs::read_to_string(root.join(rel)) else { continue };
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
+            let Some(raw) = v.get(key).and_then(serde_json::Value::as_str) else { continue };
+            let dir = raw.trim().replace('\\', "/");
+            let dir = dir.trim_matches('/');
+            if !dir.is_empty() && !dir.split('/').any(|p| p == ".." || p.is_empty()) && root.join(dir).is_dir() {
+                return Some(dir.to_string());
+            }
+        }
+        None
+    }
+
+    /// The vault's effective templates folder: `[notes] templates`, auto-detecting Obsidian's `templates_folder`
+    /// (e.g. `zMeta/Templates`) when `notes.templates` is at its `"templates"` default and `templates/` is absent.
+    pub fn templates_dir_in(&self, root: &Path) -> Option<String> {
+        let configured = self.templates_dir()?;
+        if configured == "templates" && !root.join("templates").exists() {
+            if let Some(obs) = Self::obsidian_templates_dir(root) {
+                return Some(obs);
+            }
+        }
+        Some(configured.to_string())
     }
 
     /// The inbox folder (`[notes] inbox`); None when it is empty: no inbox — every note at the top is not a capture.
