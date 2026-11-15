@@ -93,7 +93,7 @@
       {#each rows as r (r.key)}
         <div class="row" class:missing={r.missing} data-key={r.key}>
           <div class="key" title={describe(r.key) || r.key}>
-            <span class="icon">{@html propertyIcon(r.kind)}</span>
+            <span class="icon">{@html propertyIcon(r.kind, r.key)}</span>
             {#if renaming === r.key}
               <input class="rename" aria-label="New name for {r.key}" bind:value={newName} use:focusSelect spellcheck="false"
                 onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); void finishRename(); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); renaming = null; } }}
@@ -137,7 +137,7 @@
   .row.missing .name { color: var(--text-faint); }
   .key { display: flex; align-items: center; gap: 6px; min-height: calc(22px * var(--ui-scale, 1)); padding-left: 3px; color: var(--text-muted); font-size: calc(12.5px * var(--ui-scale, 1)); }
   .icon { display: inline-grid; place-items: center; flex: none; opacity: .75; }
-  .icon :global(svg) { width: calc(13px * var(--ui-scale, 1)); height: calc(13px * var(--ui-scale, 1)); }
+  .icon :global(svg) { width: calc(13px * var(--ui-scale, 1)); height: calc(13px * var(--ui-scale, 1)); display: block; shape-rendering: geometricPrecision; }
   .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-weight: 550; }
   .rename { flex: 1; min-width: 0; height: calc(20px * var(--ui-scale, 1)); font: inherit; font-weight: 550; color: var(--text); background: var(--bg); border: 1px solid var(--accent); border-radius: var(--radius-sm); padding: 0 4px; }
   .rename:focus { outline: none; }

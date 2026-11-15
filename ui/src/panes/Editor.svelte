@@ -8,18 +8,21 @@
   import { keepRecovery as rescueCopy, recoveryPath } from "../lib/recovery";
   import { openLintPanel } from "@codemirror/lint";
   import { workspaceSymbols } from "../lib/editor/lsp";
-  import { settings } from "../lib/settings.svelte";
+  import { settings, setPropertiesView } from "../lib/settings.svelte";
   import { fileIcon } from "../lib/panes";
   import Icon from "../components/Icon.svelte";
-  import { onMount } from "svelte";
+  import { mount, onMount, unmount } from "svelte";
+  import type { EditorView } from "@codemirror/view";
   import { api, ApiError } from "../lib/api";
-  import { diff } from "../lib/frontmatter-edit";
+  import { diff, editFrontmatter } from "../lib/frontmatter-edit";
   import { on, touches } from "../lib/bus";
   import { app, toast } from "../lib/state.svelte";
-  import { setDirty, closePanel, open } from "../lib/dock";
+  import { setDirty, closePanel, open, openPath } from "../lib/dock";
+  import { openHome } from "../lib/actions";
   import { editors, noteEditorActive, openIntent } from "../lib/registry";
   import { createEditor, isMarkdown, type KandinskyEditor } from "../lib/editor/create";
   import FormatBar from "../components/FormatBar.svelte";
+  import NoteHero from "../components/NoteHero.svelte";
   import OracleBar from "../components/OracleBar.svelte";
   import SyncCopies from "../components/SyncCopies.svelte";
   import { refreshGitGutter } from "../lib/editor/git-gutter";
@@ -32,7 +35,10 @@
   import { setSelection } from "../lib/context.svelte";
   import Backlinks from "../components/Backlinks.svelte";
   import PropertiesPanel from "../components/PropertiesPanel.svelte";
-  import { propsPanel } from "../lib/properties-panel.svelte";
+  import { propsPanel, toggleProperties } from "../lib/properties-panel.svelte";
+  import { isNotionShell } from "../lib/shell-mode.svelte";
+  import { isFileStarred, toggleFileStar } from "../lib/bookmarks.svelte";
+  import { copyPath, tabs, toggleSidebar } from "../lib/tabs.svelte";
   import { phone } from "../lib/phone.svelte";
   import { nativeShell } from "../lib/native-shell.svelte";
   import { frontmatterOf } from "../lib/property-model";
@@ -92,7 +98,8 @@
   const writerName = $derived.by(() => { void livePeers; return live?.writerName() ?? null; });
   let disposed = false;
 
-  let mtime: number | undefined;
+  let mtime = $state<number | undefined>(undefined);
+  let nowTick = $state(Date.now());
   let saved = ""; // text as last known on disk
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inflight: Promise<void> | null = null;
@@ -111,7 +118,10 @@
   const autosave = () => isMarkdown(path) || (settings.config?.editor.autosave_code ?? false);
   const RECOVERY = recoveryPath(path);
   let parked = false; // the tab is going away with unsaved text (park)
-  let blameOn = false; // git blame shown beside the lines (toggleBlame)
+  let trashed = false; // guard so closing a trashed note does not save it back
+  let blameOn = $state(false); // git blame shown beside the lines (toggleBlame)
+  let rawSource = $state(false); // raw Markdown source mode (Ctrl+E)
+  let localFullWidth = $state<boolean | null>(null);
   let rescued = false; // text that could not be saved was put in the recovery copy (rescue)
   let recovered = $state<string | null>(null); // a recovery copy that differs from the file, offered back
   let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -124,6 +134,7 @@
 
   /** `closing`: the tab's last text, the editor already gone — saved all the same, or kept (rescue), never dropped. */
   async function save(force = false, closing?: string): Promise<void> {
+    if (trashed) return;
     clearTimeout(timer);
     while (inflight) await inflight; // the text is read after: what was typed meanwhile goes too
     const text = closing ?? (ed ? current() : null);
@@ -240,7 +251,148 @@
     void openWikilink(target, path, opts); // a PDF link keeps its #page=… (lib/pdf-place.ts)
   }
 
+  // a note a plugin draws its own way (a mail note as the mail): drawn over the editor, which stays loaded underneath
+  const noteProps = $derived(isMarkdown(path) && status === "ready" ? frontmatterOf(docText)?.data : null);
+  const isFullWidth = $derived(isMarkdown(path) ? (localFullWidth ?? (noteProps?.width === "full")) : Boolean(localFullWidth));
+  const starred = $derived(isFileStarred(path));
+  const pathSegments = $derived(path.split("/"));
+  const folderSegments = $derived(pathSegments.slice(0, -1));
+  const editedLabel = $derived.by(() => {
+    if (!mtime) return isNew ? "New file" : "";
+    const diffSec = Math.max(0, Math.floor((nowTick - mtime) / 1000));
+    if (diffSec < 120) return "Edited just now";
+    if (diffSec < 3600) return `Edited ${Math.floor(diffSec / 60)}m ago`;
+    if (diffSec < 86400) return `Edited ${Math.floor(diffSec / 3600)}h ago`;
+    const days = Math.floor(diffSec / 86400);
+    if (days < 7) return `Edited ${days}d ago`;
+    return `Edited ${new Date(mtime).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  });
+
+  function toggleSource(): void {
+    if (!ed || !isMarkdown(path)) return;
+    rawSource = ed.toggleSourceMode();
+  }
+
+  async function toggleFullWidth(): Promise<void> {
+    const next = !isFullWidth;
+    localFullWidth = next;
+    if (isMarkdown(path) && ed) {
+      try {
+        await editFrontmatter(ed.view, next ? { op: "set", key: "width", value: "full" } : { op: "remove", key: "width" });
+        localFullWidth = null;
+      } catch {
+        /* keep localFullWidth fallback */
+      }
+    }
+    requestAnimationFrame(() => ed?.view.requestMeasure());
+  }
+
+  function handleToggleProperties(): void {
+    if (settings.config?.editor.properties === "panel") {
+      setPropertiesView("inline");
+      toggleProperties(false);
+    } else {
+      toggleProperties();
+    }
+  }
+
+  async function trashThisNote(): Promise<void> {
+    if (trashed) return;
+    clearTimeout(timer);
+    trashed = true;
+    try {
+      const res = await api.trash(path);
+      saved = current();
+      isNew = false;
+      setDirty(panel.id, false);
+      const undoAct = res.to.startsWith(".kandinsky/")
+        ? [{ label: "Undo", run: () => void api.move(res.to, path).then(() => openPath(path)) }]
+        : undefined;
+      toast("Moved to Trash", `${shownPath(path)} → ${res.to}`, "info", 7000, undoAct);
+      await closePanel(panel);
+    } catch (err) {
+      trashed = false;
+      toast(`Could not move ${shownPath(path)} to Trash`, errText(err), "error");
+    }
+  }
+
+  async function copyText(val: string, msg: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(val);
+      toast(msg, shownName(path));
+    } catch {
+      toast("Could not copy to clipboard", "", "error");
+    }
+  }
+
+  let oracleSlotEl = $state<HTMLSpanElement>();
+
+  function triggerOracleButton(index: 0 | 1): void {
+    const sel = index === 0 ? ".clint-pill" : ".wiki-btn";
+    const direct = oracleSlotEl?.querySelector<HTMLButtonElement>(sel);
+    if (direct) {
+      direct.click();
+      return;
+    }
+    const btns = oracleSlotEl?.querySelectorAll<HTMLButtonElement>(".oracle-bar button");
+    btns?.[index]?.click();
+  }
+
+  function openPageMenu(e: MouseEvent): void {
+    popMenu(
+      below(e, [
+        ...(isMarkdown(path)
+          ? [
+              { label: isFullWidth ? "Standard reading width (740px)" : "Full width page", icon: "maximize" as const, run: () => void toggleFullWidth() },
+              { label: rawSource ? "Live preview mode" : "Source mode (raw Markdown)", hint: "Ctrl+E", icon: "code" as const, run: toggleSource },
+              { label: "Toggle Properties panel", icon: "table" as const, run: handleToggleProperties },
+              "sep" as const,
+              { label: "Run c_lint verification", icon: "check" as const, run: () => triggerOracleButton(0) },
+              { label: "File computation to Oracle Wiki…", icon: "bookmark" as const, run: () => triggerOracleButton(1) },
+              "sep" as const,
+            ]
+          : []),
+        { label: blameOn ? "Hide Git blame" : "Git blame (line history)", icon: "clock" as const, run: () => void editors.get(panel.id)?.toggleBlame() },
+        "sep",
+        { label: isMarkdown(path) ? "Move note to Trash" : "Move file to Trash", icon: "trash" as const, danger: true, run: () => void trashThisNote() },
+      ], 4),
+    );
+  }
+
+  function openShareMenu(e: MouseEvent): void {
+    popMenu(
+      below(e, [
+        { label: isMarkdown(path) ? "Copy Markdown" : "Copy file contents", icon: "copy", run: () => void copyText(current(), isMarkdown(path) ? "Markdown copied" : "Contents copied") },
+        ...(isMarkdown(path) ? [{ label: "Copy [[wikilink]]", icon: "link" as const, run: () => void copyText(`[[${shownName(path)}]]`, "Wikilink copied") }] : []),
+        { label: "Copy file path", icon: "file-text", run: () => void copyPath(path) },
+        { label: "Export / Print…", icon: "external-link", run: () => window.print() },
+      ], 4),
+    );
+  }
+
+  const heroProps = $state({
+    path,
+    noteProps: null as Record<string, unknown> | null,
+    view: (): EditorView | null => ed?.view ?? null,
+    isFullWidth: false,
+    onToggleWidth: () => void toggleFullWidth(),
+    onToggleProperties: () => handleToggleProperties(),
+  });
+
+  $effect(() => {
+    heroProps.noteProps = noteProps ?? null;
+    heroProps.isFullWidth = isFullWidth;
+  });
+
   onMount(() => {
+    let heroSlot: HTMLDivElement | null = null;
+    let heroInst: Record<string, unknown> | null = null;
+    const tickInterval = setInterval(() => { nowTick = Date.now(); }, 30_000);
+    const onToggleSource = () => {
+      if (panel.isActive && ed && isMarkdown(path)) rawSource = ed.toggleSourceMode();
+    };
+    window.addEventListener("kandinsky-toggle-source", onToggleSource);
+
     (async () => {
       let text = "";
       askMirror();
@@ -287,6 +439,13 @@
         onQuit: () => void closePanel(panel),
         onOpenLink: openLink,
       });
+      if (isMarkdown(path)) {
+        heroSlot = document.createElement("div");
+        heroSlot.className = "cm-note-hero-slot";
+        ed.view.scrollDOM.prepend(heroSlot);
+        heroInst = mount(NoteHero, { target: heroSlot, props: heroProps });
+        requestAnimationFrame(() => ed?.view.requestMeasure());
+      }
       status = "ready";
       void refreshGitGutter(ed.view, path);
       // a note is shared live with the other devices that open it (on by default; `[editor] live = false` turns it off)
@@ -307,7 +466,7 @@
           ed.view.dispatch({ changes: { from: at, insert }, selection: { anchor: at + insert.length }, scrollIntoView: true, userEvent: "input" });
         },
         flush: () => save(),
-        park: async () => { if (autosave()) await save(); else if (current() !== saved) parked = true; },
+        park: async () => { if (!trashed && autosave()) await save(); else if (!trashed && current() !== saved) parked = true; },
         vimMode: () => ed?.vimMode() ?? "",
         snapshot: () => ({ text: ed?.view.state.doc.toString() ?? "", ranges: ed?.view.state.selection.ranges.map((r) => ({ from: r.from, to: r.to })) ?? [] }),
         showProblems: () => (ed?.problems() ? openLintPanel(ed.view) : false),
@@ -338,6 +497,7 @@
           return headCache.heads.slice();
         },
       });
+      window.dispatchEvent(new CustomEvent("kandinsky-doc-change", { detail: panel.id }));
       function scanHeadings(doc: Text): { level: number; text: string; line: number }[] {
         const out: { level: number; text: string; line: number }[] = [];
         if (/\.tex$/i.test(path)) {
@@ -390,12 +550,14 @@
 
     return () => {
       disposed = true;
+      clearInterval(tickInterval);
+      window.removeEventListener("kandinsky-toggle-source", onToggleSource);
       offFs();
       offActive.dispose();
       const pending = current() !== saved ? current() : null; // read now: the editor goes below
       // read now too: the room goes below, and out of it this pane would count as the writer
-      if (pending !== null && autosave() && (live?.writes() ?? true)) void save(false, pending);
-      if (pending !== null && !autosave()) {
+      if (!trashed && pending !== null && autosave() && (live?.writes() ?? true)) void save(false, pending);
+      if (!trashed && pending !== null && !autosave()) {
         keepRecovery(true);
         // closed by hand: say where the changes went (a reload or the window closing reopens it with the offer)
         if (parked) toast(`${shownPath(path)} was not saved`, "Its changes are kept: open it again to restore them.", "info");
@@ -406,13 +568,14 @@
       window.removeEventListener("kandinsky-mirror-unlinked", askMirror);
       editors.delete(panel.id);
       setDirty(panel.id, false);
+      if (heroInst) { void unmount(heroInst); heroInst = null; }
+      heroSlot?.remove();
+      heroSlot = null;
       ed?.destroy();
       ed = null;
     };
   });
 
-  // a note a plugin draws its own way (a mail note as the mail): drawn over the editor, which stays loaded underneath
-  const noteProps = $derived(isMarkdown(path) && status === "ready" ? frontmatterOf(docText)?.data : null);
   const noteView = $derived(noteViewFor(noteProps));
   const drawn = $derived(!!noteView && !shownAsNote.has(path));
   let viewHost = $state<HTMLDivElement>();
@@ -429,37 +592,67 @@
   });
 </script>
 
-<div class="editor-pane" class:is-md={isMarkdown(path)} class:drawn>
+<div class="editor-pane" class:is-md={isMarkdown(path)} class:full-width={isFullWidth} class:drawn>
   {#if noteView}
     <button class="note-view-switch" onclick={() => (drawn ? shownAsNote.add(path) : shownAsNote.delete(path))}
       title={drawn ? "The note's markdown, to edit" : `Drawn as ${noteView.title.toLowerCase()}`}>{drawn ? "Show as note" : `Show as ${noteView.title.toLowerCase()}`}</button>
   {/if}
-  {#if settings.config?.editor.breadcrumbs ?? true}
-    <nav class="crumbs" aria-label="Path">
-      <div class="crumbs-trail">
-        {#each path.split("/") as seg, i}
-          {#if i > 0}<span class="sep">›</span>{/if}
-          {#if i < path.split("/").length - 1}
-            <!-- a folder of the path: the explorer there, the next step down (the folder or this note) selected -->
-            <button class="seg" title="Show {path.split("/").slice(0, i + 1).join("/")} in the explorer"
-              onclick={() => open({ kind: "explorer", source: "vault", place: "", path: path.split("/").slice(0, i + 1).join("/"), select: path.split("/")[i + 1] })}>{seg}</button>
-          {:else}
-            <span class="seg file"><Icon name={fileIcon(path)} size={13} />{shownName(seg)}</span>
-          {/if}
-        {/each}
+  {#if isNotionShell() || (settings.config?.editor.breadcrumbs ?? true)}
+    <header class="topbar" aria-label="Path">
+      <div class="breadcrumbs">
+        {#if isNotionShell() && tabs.sidebar.collapsed}
+          <button type="button" class="icon-btn expand-sb" onclick={toggleSidebar} title="Expand sidebar (Super+S)" aria-label="Expand sidebar">
+            <Icon name="panel-left" size={15} />
+          </button>
+        {/if}
+        <button type="button" class="seg vault" onclick={() => void openHome()} title="Open vault Home">
+          {app.workspace?.name ?? "Workspace"}
+        </button>
+        <span class="sep">›</span>
+        {#if folderSegments.length > 0}
+          <span class="folder-trail">
+            {#each folderSegments as seg, i}
+              {#if i > 0}<span class="sub-sep">/</span>{/if}
+              <button type="button" class="seg" title="Show {folderSegments.slice(0, i + 1).join('/')} in the explorer"
+                onclick={() => open({ kind: "explorer", source: "vault", place: "", path: folderSegments.slice(0, i + 1).join("/"), select: pathSegments[i + 1] })}>{seg}</button>
+            {/each}
+          </span>
+          <span class="sep">›</span>
+        {/if}
+        <strong class="doc-crumb">
+          {#if !isMarkdown(path)}<Icon name={fileIcon(path)} size={13} />{/if}
+          {shownName(path)}
+        </strong>
+        {#if rawSource}
+          <button type="button" class="source-chip" onclick={toggleSource} title="Switch back to Live Preview (Ctrl+E)">SOURCE</button>
+        {/if}
       </div>
-      {#if isMarkdown(path) && status === "ready"}
-        <div class="crumbs-actions">
-          <OracleBar {path} flush={() => save(false)} gotoLine={(line) => ed?.gotoLine(line)} />
-        </div>
-      {/if}
-    </nav>
+      <div class="top-actions">
+        {#if editedLabel}<span class="edited-lbl">{editedLabel}</span>{/if}
+        {#if isMarkdown(path) && status === "ready"}
+          <span class="oracle-slot" class:notion-quiet={isNotionShell()} bind:this={oracleSlotEl}>
+            <OracleBar {path} flush={() => save(false)} gotoLine={(line) => ed?.gotoLine(line)} />
+          </span>
+        {/if}
+        <button type="button" class="top-pill star-pill" class:starred={starred}
+          onclick={() => toggleFileStar(path, shownName(path))}
+          title={starred ? "Remove from Favorites" : "Add to Favorites"}>
+          {starred ? "★ Starred" : "★ Star"}
+        </button>
+        <button type="button" class="top-link" onclick={() => open({ kind: "git" })} title="Version history & Git diff">History</button>
+        <button type="button" class="top-more" aria-label="Page actions" title="Page actions" onclick={openPageMenu}>···</button>
+        <button type="button" class="top-pill" onclick={openShareMenu} title="Copy or export note">Share</button>
+        <button type="button" class="icon-btn trash-btn" title="Move to Trash" aria-label="Move to Trash" onclick={() => void trashThisNote()}>
+          <Icon name="trash" size={14} />
+        </button>
+      </div>
+    </header>
   {:else if isMarkdown(path) && status === "ready"}
-    <div class="crumbs oracle-strip">
-      <div class="crumbs-actions">
+    <header class="topbar compact">
+      <div class="top-actions" style="margin-left: auto;">
         <OracleBar {path} flush={() => save(false)} gotoLine={(line) => ed?.gotoLine(line)} />
       </div>
-    </div>
+    </header>
   {/if}
   {#if conflict}
     <div class="banner banner-warn" role="alert">
@@ -499,7 +692,7 @@
       {#if isMarkdown(path) && status !== "error" && (settings.config?.editor.format_bar ?? false)}<FormatBar view={() => ed?.view ?? null} />{/if}
       <div class="editor-host" bind:this={host}></div>
     </div>
-    {#if isMarkdown(path) && status === "ready" && (settings.config?.editor.properties === "panel" || ((settings.config?.editor.properties ?? "inline") === "hidden" && propsPanel.open))}
+    {#if isMarkdown(path) && status === "ready" && (settings.config?.editor.properties === "panel" || propsPanel.open)}
       <PropertiesPanel text={docText} view={() => ed?.view ?? null} onopen={openLink} closable={settings.config?.editor.properties !== "panel"} />
     {/if}
   </div>
@@ -515,21 +708,114 @@
   .mirror-chip:hover { opacity: 1; color: var(--text); }
   .mirror-chip.down { color: var(--text-faint); border-style: dashed; }
   .drawn .editor-row, .drawn :global(.format-bar) { display: none; }
-  .note-view-switch { position: absolute; top: 2px; right: 10px; z-index: 2; padding: 2px 9px; border-radius: 6px; border: 1px solid var(--border);
+  .note-view-switch { position: absolute; top: 46px; right: 14px; z-index: 4; padding: 2px 9px; border-radius: 6px; border: 1px solid var(--border);
     background: var(--bg); color: var(--text-muted); font-size: calc(12px * var(--ui-scale, 1)); }
   .note-view-switch:hover { color: var(--text); background: var(--bg-hover); }
   .editor-row { flex: 1; min-height: 0; display: flex; position: relative; } /* the phone's properties sheet covers it */
   .editor-col { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
   .editor-host { flex: 1; min-width: 0; min-height: 0; }
-  .crumbs { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 16px; min-height: 30px; overflow: visible; white-space: nowrap; position: relative; z-index: 5;
-    font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint); border-bottom: 1px solid var(--border); }
-  .crumbs-trail { display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .crumbs-actions { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 6px; }
-  .crumbs.oracle-strip { padding-block: 3px; min-height: 28px; }
-  .crumbs .seg { padding: 1px 4px; border-radius: 4px; color: var(--text-muted); }
-  .crumbs button.seg:hover { background: var(--bg-hover); color: var(--text); }
-  .crumbs .seg.file { display: inline-flex; gap: 5px; align-items: center; color: var(--text); }
-  .crumbs .sep { opacity: .6; }
+
+  .topbar {
+    flex: none; height: 40px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text-muted);
+    border-bottom: 1px solid var(--border); background: var(--bg); position: relative; z-index: 5; white-space: nowrap;
+  }
+  .topbar.compact { height: 32px; padding: 0 14px; }
+  .breadcrumbs { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .expand-sb { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 5px; color: var(--text-muted); flex: none; margin-right: 2px; }
+  .expand-sb:hover { background: var(--bg-hover); color: var(--text); }
+  .breadcrumbs .seg { padding: 2px 5px; border-radius: 4px; color: var(--text-muted); font: inherit; }
+  .breadcrumbs button.seg:hover { background: var(--bg-hover); color: var(--text); }
+  .breadcrumbs .folder-trail { display: inline-flex; align-items: center; gap: 1px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .breadcrumbs .sub-sep { color: var(--text-faint); padding: 0 1px; }
+  .breadcrumbs .sep { color: var(--text-faint); opacity: .75; }
+  .breadcrumbs .doc-crumb { display: inline-flex; align-items: center; gap: 5px; color: var(--heading); font-weight: 500; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
+  .source-chip { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .04em; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); margin-left: 4px; cursor: pointer; }
+  .source-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+  .top-actions { display: inline-flex; align-items: center; gap: 10px; flex: none; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint); }
+  .top-actions :global(.oracle-bar) { margin-left: 0; }
+  .oracle-slot { display: inline-flex; align-items: center; }
+  /* In Notion shell mode, keep a calm, discoverable 22px ◎ Run c_lint trigger visible at rest
+     and smoothly reveal File to Wiki… on topbar hover, focus, or active c_lint / Wiki modal state. */
+  .oracle-slot.notion-quiet {
+    --ob-gap: 0px;
+    --ob-wiki-w: 0px;
+    --ob-wiki-op: 0;
+    --ob-wiki-px: 0px;
+    --ob-wiki-bw: 0px;
+    --ob-wiki-pe: none;
+    --ob-pill-fg: var(--text-faint);
+    --ob-pill-bg: transparent;
+    --ob-pill-px: 7px;
+  }
+  .topbar:hover .oracle-slot.notion-quiet,
+  .oracle-slot.notion-quiet:hover,
+  .oracle-slot.notion-quiet:focus-within,
+  .oracle-slot.notion-quiet:has(:global(.clean)),
+  .oracle-slot.notion-quiet:has(:global(.issues)),
+  .oracle-slot.notion-quiet:has(:global(.running)),
+  .oracle-slot.notion-quiet:has(:global(.clint-pop)),
+  .oracle-slot.notion-quiet:has(:global(.lint-popover)),
+  .oracle-slot.notion-quiet:has(:global(.modal-backdrop)),
+  .oracle-slot.notion-quiet:has(:global(.wiki-backdrop)) {
+    --ob-gap: 6px;
+    --ob-wiki-w: 130px;
+    --ob-wiki-op: 1;
+    --ob-wiki-px: 8px;
+    --ob-wiki-bw: 1px;
+    --ob-wiki-pe: auto;
+    --ob-pill-fg: var(--text-muted);
+    --ob-pill-bg: var(--bg-elev);
+    --ob-pill-px: 8px;
+  }
+  .oracle-slot.notion-quiet :global(.oracle-bar) {
+    gap: var(--ob-gap);
+    transition: gap 150ms ease;
+  }
+  .oracle-slot.notion-quiet :global(.clint-pill:not(.clean):not(.issues):not(.running)) {
+    height: 22px;
+    padding: 0 var(--ob-pill-px);
+    font-size: calc(11.5px * var(--ui-scale, 1));
+    color: var(--ob-pill-fg);
+    background: var(--ob-pill-bg);
+    border-color: var(--border);
+  }
+  .oracle-slot.notion-quiet :global(.clint-pill:hover:not(:disabled)) {
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .oracle-slot.notion-quiet :global(.wiki-btn) {
+    max-width: var(--ob-wiki-w);
+    opacity: var(--ob-wiki-op);
+    padding-inline: var(--ob-wiki-px);
+    border-width: var(--ob-wiki-bw);
+    pointer-events: var(--ob-wiki-pe);
+    overflow: hidden;
+    transition: max-width 160ms ease, opacity 130ms ease, padding 160ms ease, border-width 160ms ease, background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .oracle-slot.notion-quiet :global(.wiki-btn:hover) {
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .edited-lbl { color: var(--text-faint); margin-right: 2px; }
+  .top-pill { padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font: inherit; cursor: pointer; transition: background 120ms, color 120ms, border-color 120ms; }
+  .top-pill:hover { background: var(--bg-hover); color: var(--text); border-color: var(--border-strong); }
+  .star-pill.starred { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 11%, transparent); border-color: color-mix(in srgb, var(--yellow) 36%, var(--border)); font-weight: 500; }
+  .top-link, .top-more { padding: 3px 5px; border-radius: 5px; color: var(--text-muted); font: inherit; cursor: pointer; transition: background 120ms, color 120ms; }
+  .top-link:hover, .top-more:hover { background: var(--bg-hover); color: var(--text); }
+  .top-more { font-weight: 600; letter-spacing: 0.06em; padding: 3px 6px; }
+  .trash-btn { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 5px; color: var(--text-faint); transition: background 120ms, color 120ms; }
+  .trash-btn:hover { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+
+  @media (max-width: 820px) {
+    .edited-lbl { display: none; }
+    .topbar { padding: 0 12px; }
+    .top-actions { gap: 6px; }
+  }
+
   .editor-host :global(.cm-editor) { height: 100%; }
   .new-file-hint { font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint); padding: 6px 16px 0; text-align: center; }
   .banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;

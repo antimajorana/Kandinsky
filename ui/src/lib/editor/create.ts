@@ -82,6 +82,10 @@ export interface KandinskyEditor {
   setDoc(text: string, opts?: { keepUndo?: boolean }): void;
   gotoLine(line: number): void;
   vimMode(): VimModeLabel;
+  /** Raw Markdown source mode (live preview off). */
+  sourceMode(): boolean;
+  setSourceMode(raw: boolean): void;
+  toggleSourceMode(): boolean;
   /** Error / warning counts, or null for a note (no language server). */
   problems(): Problems | null;
   /** Git blame beside the lines (null: away); `open` opens a commit. */
@@ -121,8 +125,9 @@ export function createEditor(o: EditorOptions): KandinskyEditor {
       if (completionStatus(v.state) === "pending" || untouchedTaskList(v)) closeCompletion(v);
       return false;
     } }, { key: "Mod-Shift-v", run: (v) => { stashVisual(v); return false; } },
-    // VS Code / Obsidian: Ctrl+H is find & replace (vim would take it as "left")
-    { key: "Mod-h", preventDefault: true, run: openReplace }])),
+    // VS Code / Obsidian: Ctrl+H is find & replace (vim would take it as "left"); Ctrl+E toggles source mode in notes
+    { key: "Mod-h", preventDefault: true, run: openReplace },
+    ...(md ? [{ key: "Mod-e", preventDefault: true, run: () => { window.dispatchEvent(new CustomEvent("kandinsky-toggle-source")); return true; } }] : [])])),
     Prec.highest(EditorView.domEventHandlers({ paste: (_e, v) => { restoreVisual(v); return false; } })),
     desktopKeys, // before vim (first wins): see its comment
     md ? [] : [lspKeys, definitionClicks], // Ctrl+click a name: its definition, from the language server (definition.ts)
@@ -226,10 +231,14 @@ export function createEditor(o: EditorOptions): KandinskyEditor {
   const onZoom = () => remeasureText(view);
   window.addEventListener(PANE_ZOOM_EVENT, onZoom);
   const offZoom = () => window.removeEventListener(PANE_ZOOM_EVENT, onZoom);
+  const onShellLayout = () => { if (md && !destroyed) view.dispatch({ effects: redecorate.of(null) }); };
+  window.addEventListener("kandinsky-layout", onShellLayout);
+  const offShellLayout = () => window.removeEventListener("kandinsky-layout", onShellLayout);
   const offSpec = md ? onPropertySpec(() => view.dispatch({ effects: redecorate.of(null) })) : () => {};
   const offLang = md ? onHighlightLanguage(() => view.dispatch({ effects: redecorate.of(null) })) : () => {}; // a fence's language arrived
   const offRenderer = md ? onRendererArrived(() => { view.dispatch({ effects: redecorate.of(null) }); view.requestMeasure(); }) : () => {}; // KaTeX arrived
 
+  let rawMode = false;
   let vimOn = o.vim;
   let mode: VimModeLabel = o.vim ? "NORMAL" : "";
   let modeHandler: ((e: { mode?: string; subMode?: string }) => void) | null = null;
@@ -275,6 +284,19 @@ export function createEditor(o: EditorOptions): KandinskyEditor {
       view.focus();
     },
     vimMode: () => mode,
+    sourceMode: () => rawMode,
+    setSourceMode(raw) {
+      if (!md || !mdx || raw === rawMode) return;
+      rawMode = raw;
+      view.dispatch({ effects: mdx.liveSlot.reconfigure(raw ? [] : mdx.live) });
+      view.dom.classList.toggle("is-source-mode", raw);
+      remeasureText(view);
+    },
+    toggleSourceMode() {
+      const next = !rawMode;
+      this.setSourceMode(next);
+      return rawMode;
+    },
     setBlame: (b, open) => view.dispatch({ effects: blameSlot.reconfigure(b ? blameExtension(b, open) : []) }),
     problems: () => (md || !lastProblems ? null : countProblems(view.state)),
     destroy() {
@@ -284,6 +306,7 @@ export function createEditor(o: EditorOptions): KandinskyEditor {
       destroyed = true;
       offSettings();
       offZoom();
+      offShellLayout();
       offSpec();
       offLang();
       offRenderer();

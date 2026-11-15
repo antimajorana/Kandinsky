@@ -57,8 +57,12 @@
   import GuestBar from "./components/GuestBar.svelte";
   import { guest, loadGuest } from "./lib/guest.svelte";
   import { startWhere } from "./lib/where.svelte";
+  import { isNotionShell, shellMode } from "./lib/shell-mode.svelte";
+  import { initFolderColors } from "./lib/folder-colors.svelte";
 
   let dockEl: HTMLDivElement;
+
+  const notion = $derived(shellMode.value === "notion" && isNotionShell());
 
   // shortcuts: defaults, `.kandinsky/keys.toml` overrides and script keys, all from one keymap
   const bound = $derived(bindings());
@@ -198,6 +202,7 @@
       startWhere(),
       initWorkspaces(),
       initBookmarks(),
+      initFolderColors(),
       initSidebar(),
       () => stopLayout(),
       offPhone,
@@ -230,18 +235,19 @@
   });
 </script>
 
-<div class="shell" class:full={fullscreen.on} class:phone={phone.on} class:vtabs={tabs.layout === "vertical"} class:split={tabs.groups.filter((g) => g.visible).length > 1}>
+<div class="shell" class:notion class:full={fullscreen.on} class:phone={phone.on} class:vtabs={!notion && tabs.layout === "vertical"} class:split={tabs.groups.filter((g) => g.visible).length > 1}>
   {#if phone.on && !nativeShell.on}<PhoneTop />{/if}
   {#if guest.info}<GuestBar />{/if}
   <div class="main">
-    {#if tabs.layout === "vertical"}<Sidebar />{:else}<Rail />{/if}
-    <!-- vertical tabs: the sidebar runs the full height (Zen), the status bar sits under the panes -->
+    {#if notion || tabs.layout === "vertical"}<Sidebar />{:else}<Rail />{/if}
+    <!-- vertical tabs: the sidebar runs the full height (Zen), the status bar sits under the panes;
+         notion shell: unified sidebar + full-width status bar across the bottom -->
     <div class="work">
       <div class="dock-wrap"><div class="dock" bind:this={dockEl}></div></div>
-      {#if tabs.layout === "vertical"}<StatusBar />{/if}
+      {#if !notion && tabs.layout === "vertical"}<StatusBar />{/if}
     </div>
   </div>
-  {#if tabs.layout !== "vertical"}<StatusBar />{/if}
+  {#if notion || tabs.layout !== "vertical"}<StatusBar />{/if}
   {#if phone.on && !nativeShell.on}<PhoneBar />{/if}
 </div>
 <Palette />
@@ -258,10 +264,16 @@
   .dock-wrap { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: clip; }
   .dock { position: absolute; top: 6px; right: 6px; bottom: 0; left: 0; }
   .vtabs .dock { top: 8px; right: 8px; }
+  .notion .dock { inset: 0; }
+  .notion :global(.dockview-theme-kandinsky .dv-dockview) { background-color: var(--border); }
+  .notion :global(.dockview-theme-kandinsky .dv-groupview),
+  .notion :global(.dockview-theme-kandinsky .dv-groupview.dv-active-group) { border: 0; border-radius: 0; box-shadow: none; }
+  .notion :global(.dockview-theme-kandinsky .dv-render-overlay) { border-radius: 0; }
+  .notion :global(footer.status) { background: var(--bg-side, var(--bg-alt)); border-top: 1px solid var(--border); }
   /* fullscreen (lib/fullscreen.svelte.ts): the maximized pane and the left bar as icons (it opens on hover);
      the rest hidden, not unmounted, so nothing reloads. No frame round the pane: the accent-tinted border
      of an active group in a split meant nothing with one pane on screen. */
-  .full .main > :global(:not(.work):not(.slot)), .full :global(.status) { display: none; }
+  .full .main > :global(:not(.work):not(.slot):not(.notion-slot)), .full :global(.status) { display: none; }
   .full .dock { inset: 0; }
   .full :global(.dockview-theme-kandinsky .dv-groupview) { border-color: transparent; border-radius: 0; }
   /* the phone (lib/phone.svelte.ts): the tab strip thumb-high and scrolling sideways; the shell under the system's bars */

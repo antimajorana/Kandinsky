@@ -240,19 +240,28 @@ fn default_name(root: &Path, cfg: &Config) -> Option<String> {
     template_text(root, cfg, "default").is_ok().then(|| "default".to_string())
 }
 
-/// Templater's own rules, read from the vault's Obsidian settings (`file_templates` / `folder_templates`, each only
-/// when switched on there), so a vault keeps choosing its templates the same way in both apps.
+/// Templater's own rules, read from the vault's Obsidian settings (`file_templates` / `folder_templates`, supporting
+/// both Templater v1 `enable_*_templates: true` and Templater v2 `trigger_on_file_creation_mode: "folder" | "regex"`),
+/// so a vault keeps choosing its templates the same way in both apps without mutating `.obsidian`.
 pub(crate) fn templater_rules(root: &Path, cfg: &Config) -> Vec<crate::config::TemplateRule> {
     let Ok(text) = std::fs::read_to_string(root.join(".obsidian/plugins/templater-obsidian/data.json")) else { return vec![] };
     let Ok(v) = serde_json::from_str::<Value>(&text) else { return vec![] };
-    let dir = cfg.templates_dir();
+    let dir = cfg.templates_dir_in(root);
     let name = |t: &str| {
-        let t = t.trim().trim_end_matches(".md");
-        dir.and_then(|d| t.strip_prefix(d)?.strip_prefix('/')).unwrap_or(t).to_string()
+        let norm = t.trim().replace('\\', "/");
+        let t = norm.trim_matches('/').trim_end_matches(".md");
+        dir.as_deref().and_then(|d| t.strip_prefix(d)?.strip_prefix('/')).unwrap_or(t).to_string()
     };
+    let v2_trigger_on = v.get("trigger_on_file_creation") != Some(&Value::Bool(false));
+    let v2_mode = v.get("trigger_on_file_creation_mode").and_then(Value::as_str).map(str::trim).unwrap_or("");
+    let file_on = v["enable_file_templates"] == Value::Bool(true)
+        || (v2_trigger_on && v2_mode.eq_ignore_ascii_case("regex"));
+    let folder_on = v["enable_folder_templates"] == Value::Bool(true)
+        || (v2_trigger_on && v2_mode.eq_ignore_ascii_case("folder"));
+
     let mut rules = vec![];
-    for (on, list, key) in [("enable_file_templates", "file_templates", "regex"), ("enable_folder_templates", "folder_templates", "folder")] {
-        if v[on] != Value::Bool(true) {
+    for (enabled, list, key) in [(file_on, "file_templates", "regex"), (folder_on, "folder_templates", "folder")] {
+        if !enabled {
             continue;
         }
         for r in v[list].as_array().into_iter().flatten() {
@@ -260,7 +269,11 @@ pub(crate) fn templater_rules(root: &Path, cfg: &Config) -> Vec<crate::config::T
             if what.trim().is_empty() || t.trim().is_empty() {
                 continue;
             }
-            let (title, folder) = if key == "regex" { (Some(what.to_string()), None) } else { (None, Some(what.trim_matches('/').to_string())) };
+            let (title, folder) = if key == "regex" {
+                (Some(what.to_string()), None)
+            } else {
+                (None, Some(what.replace('\\', "/").trim_matches('/').to_string()))
+            };
             rules.push(crate::config::TemplateRule { title, folder, template: name(t) });
         }
     }
@@ -276,8 +289,9 @@ fn template_by_rule(root: &Path, cfg: &Config, rel: &str) -> Option<String> {
 /// The template's text; a missing `fleeting` falls back to the built-in one, any other is an error.
 pub(crate) fn template_text(root: &Path, cfg: &Config, name: &str) -> Result<String> {
     // no templates folder: only the built-in ones
-    let rel = format!("{}/{name}.md", cfg.templates_dir().unwrap_or_default());
-    let read = match cfg.templates_dir() {
+    let eff_dir = cfg.templates_dir_in(root);
+    let rel = format!("{}/{name}.md", eff_dir.as_deref().unwrap_or_default());
+    let read = match eff_dir {
         Some(_) => std::fs::read_to_string(paths::safe_join(root, &rel)?),
         None => Err(std::io::ErrorKind::NotFound.into()),
     };
@@ -486,8 +500,8 @@ fn asks(template: &str) -> Vec<PromptAsk> {
 
 /// The templates "New note from a template…" offers: the `.md` files directly in `[notes] templates`.
 pub fn templates(root: &Path, cfg: &Config) -> Result<Vec<TemplateInfo>> {
-    let Some(dir) = cfg.templates_dir() else { return Ok(vec![]) };
-    let entries = match std::fs::read_dir(paths::safe_join(root, dir)?) {
+    let Some(dir) = cfg.templates_dir_in(root) else { return Ok(vec![]) };
+    let entries = match std::fs::read_dir(paths::safe_join(root, &dir)?) {
         Ok(e) => e,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
         Err(e) => return Err(e.into()),
@@ -827,6 +841,45 @@ mod tests {
         // with none set, a `default.md` is the default
         std::fs::write(dir.path().join("templates/default.md"), "---\nkind: plain\n---\n").unwrap();
         assert!(templates(dir.path(), &Config::default()).unwrap().iter().any(|x| x.name == "default" && x.default));
+    }
+
+    #[test]
+    fn templater_v2_folder_and_regex_modes_and_auto_detected_templates_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("zMeta/Templates")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".obsidian/plugins/templater-obsidian")).unwrap();
+        std::fs::write(dir.path().join("zMeta/Templates/Concept.md"), "---\ntype: concept\n---\n# {{title}}\n").unwrap();
+        std::fs::write(dir.path().join("zMeta/Templates/Daily.md"), "# Journal {{title}}\n").unwrap();
+        let data_path = dir.path().join(".obsidian/plugins/templater-obsidian/data.json");
+        let v2_folder = r#"{
+            "templates_folder": "zMeta/Templates",
+            "trigger_on_file_creation": true,
+            "trigger_on_file_creation_mode": "folder",
+            "folder_templates": [{"folder": "wiki/concepts", "template": "zMeta/Templates/Concept.md"}],
+            "file_templates": [{"regex": "^notes/\\d{4}-\\d{2}-\\d{2}", "template": "zMeta/Templates/Daily.md"}]
+        }"#;
+        std::fs::write(&data_path, v2_folder).unwrap();
+
+        let mut loaded = Config::load(dir.path()).unwrap();
+        assert_eq!(loaded.notes.templates, "zMeta/Templates");
+        assert!(loaded.index_excluded("zMeta/Templates/Concept.md"), "auto-detected templates folder excluded from index");
+        assert!(!dir.path().join(".kandinsky/config.toml").exists(), "read-only auto-detection never creates config");
+
+        let req = NewNote { template: None, title: "Defect Homology".into(), dir: Some("wiki/concepts".into()), near: None, text: None, values: None };
+        let created = new_note_at(dir.path(), &Config::default(), &req, now()).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.path().join(&created.path)).unwrap(), "---\ntype: concept\n---\n# Defect Homology\n");
+
+        // Saving an unrelated setting round-trips cleanly without mutating .obsidian
+        loaded.ui.font_size = 15;
+        Config::save(dir.path(), &loaded).unwrap();
+        assert_eq!(std::fs::read_to_string(&data_path).unwrap(), v2_folder, ".obsidian untouched");
+
+        // Templater v2 regex mode
+        let v2_regex = v2_folder.replace("\"folder\"", "\"regex\"");
+        std::fs::write(&data_path, v2_regex).unwrap();
+        let req_day = NewNote { template: None, title: "2026-11-15".into(), dir: Some("notes".into()), near: None, text: None, values: None };
+        let day_created = new_note_at(dir.path(), &Config::default(), &req_day, now()).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.path().join(&day_created.path)).unwrap(), "# Journal 2026-11-15\n");
     }
 
     #[test]

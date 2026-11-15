@@ -10,7 +10,7 @@
 //
 // A block is a name (`tasks`), or `{ view: <type>, …options, title: … }`. Older shorthands still
 // read: `{ note: x.md }`, `{ base: x.base }`, `{ text: "markdown" }`.
-import { parseDocument, stringify, isMap, isSeq, type Document } from "yaml";
+import { parseDocument, stringify, isMap, isScalar, isSeq, type Document } from "yaml";
 
 export interface PageBlock {
   /** Stable while the page is open (drag and drop, keyed rendering); not written to the file. */
@@ -21,7 +21,14 @@ export interface PageBlock {
   options: Record<string, unknown>;
 }
 export interface PageRow { columns: PageBlock[][]; widths?: number[] }
-export interface PageModel { title?: string; rows: PageRow[] }
+export interface PageModel {
+  title?: string;
+  icon?: string;
+  cover?: string;
+  width?: string;
+  props?: Record<string, unknown>;
+  rows: PageRow[];
+}
 /** Where a block is: row, column, index in the column. */
 export interface BlockAt { row: number; col: number; index: number }
 
@@ -42,12 +49,51 @@ function readBlock(v: unknown): PageBlock {
 }
 const readBlocks = (v: unknown): PageBlock[] => (Array.isArray(v) ? v.map(readBlock) : [readBlock(v)]);
 
+/** Reads all non-`rows` top-level YAML keys from `doc` (`title`, `icon`, `cover`, `width`, `description`, `tags`, …). */
+export function readPageProps(doc: Document): Record<string, unknown> {
+  const raw = doc.toJS();
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (k !== "rows" && v !== undefined && v !== null) out[k] = v;
+  }
+  return out;
+}
+
+function putTopProp(doc: Document, key: string, value: unknown | null): void {
+  const clean = key.trim();
+  if (!clean || clean === "rows") return;
+  if (value === null || value === undefined || value === "") {
+    doc.delete(clean);
+    return;
+  }
+  if (doc.has(clean)) {
+    doc.set(clean, value);
+    return;
+  }
+  if (isMap(doc.contents)) {
+    const rowsIdx = doc.contents.items.findIndex((p) => isScalar(p.key) && p.key.value === "rows");
+    if (rowsIdx >= 0) {
+      doc.contents.items.splice(rowsIdx, 0, doc.createPair(clean, value));
+      return;
+    }
+  }
+  doc.set(clean, value);
+}
+
+/** Sets or deletes a top-level metadata key cleanly above `rows:`, preserving YAML comments and `rows`. */
+export function setPageProp(doc: Document, key: string, value: unknown | null): string {
+  putTopProp(doc, key, value);
+  return doc.toString({ lineWidth: 0, flowCollectionPadding: false });
+}
+
 /** Parses a `.page` into the model and the YAML document it came from (kept for `writePage`);
  *  throws an Error whose message names the problem (the page shows it). */
 export function parsePage(src: string): { model: PageModel; doc: Document } {
   const doc = parseDocument(src);
   if (doc.errors.length) throw new Error(doc.errors[0].message);
-  const raw = (doc.toJS() ?? {}) as { title?: unknown; rows?: unknown };
+  const raw = (doc.toJS() ?? {}) as Record<string, unknown>;
+  const props = readPageProps(doc);
   const rows = (Array.isArray(raw.rows) ? raw.rows : []).map((r): PageRow => {
     const cols = r && typeof r === "object" && !Array.isArray(r) ? (r as { columns?: unknown; widths?: unknown }) : null;
     if (cols && Array.isArray(cols.columns)) {
@@ -56,7 +102,17 @@ export function parsePage(src: string): { model: PageModel; doc: Document } {
     }
     return { columns: [readBlocks(r)] };
   });
-  return { model: { title: typeof raw.title === "string" ? raw.title : undefined, rows }, doc };
+  return {
+    model: {
+      title: typeof raw.title === "string" ? raw.title : undefined,
+      icon: typeof raw.icon === "string" ? raw.icon : undefined,
+      cover: typeof raw.cover === "string" ? raw.cover : undefined,
+      width: typeof raw.width === "string" ? raw.width : undefined,
+      props,
+      rows,
+    },
+    doc,
+  };
 }
 
 /** The YAML a block is drawn from (what lib/blocks.ts mounts): its type and options. */
@@ -65,8 +121,11 @@ export const blockSrc = (b: PageBlock): string => stringify({ type: b.type, ...b
 const writeBlock = (b: PageBlock): unknown =>
   !b.title && !Object.keys(b.options).length ? b.type : { view: b.type, ...b.options, ...(b.title ? { title: b.title } : {}) };
 
-/** The file text for the model: only `rows` is rewritten (comments inside the old rows are not kept). */
+/** The file text for the model: top-level keys (`title`, `icon`, `cover`, `width`, …) and comments survive, and `rows` is rewritten. */
 export function writePage(m: PageModel, doc: Document): string {
+  for (const k of ["title", "icon", "cover", "width"] as const) {
+    if (m[k] !== undefined && m[k] !== doc.get(k)) putTopProp(doc, k, m[k] ?? null);
+  }
   const rows = m.rows.filter((r) => r.columns.some((c) => c.length)).map((r) => {
     const cols = r.columns.filter((c) => c.length);
     if (cols.length === 1) return cols[0].map(writeBlock);

@@ -9,20 +9,45 @@ import { kindOf, parseYaml, scalarText, WIKI } from "./property-model";
 import { propertySpec } from "./property-spec.svelte";
 import type { PropertyKind } from "./types";
 
+const BAUHAUS_VERIFICATION_ICON = '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2"/>';
+const BAUHAUS_GRID_ICON = '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M12 3.5v17M3.5 12h17"/>';
+const BAUHAUS_CALENDAR_ICON = '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/><circle cx="8.5" cy="14.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="14.5" r="1" fill="currentColor" stroke="none"/>';
+const BAUHAUS_PERSON_ICON = '<circle cx="12" cy="8" r="3.5"/><path d="M5.5 19.5a6.5 6.5 0 0 1 13 0"/>';
+
+const VERIFICATION_KEY_RE = /^(verification|status|state|check|audit|lint|health|stage|phase|result|verdict)$/i;
+const DOMAIN_KEY_RE = /^(domain|domains|tags?|topics?|field|fields|area|areas|sector|sectors|category|categories|subject)$/i;
+const DATE_KEY_RE = /^(date|created|updated|modified|due|deadline|scheduled|published|start|end)$/i;
+const PERSON_KEY_RE = /^(author|authors|owner|assignee|speaker|instructor)$/i;
+
 const ICON: Record<PropertyKind, string> = {
   text: '<path d="M4 7h16M4 12h16M4 17h10"/>',
   enum: '<path d="m8.5 10.5 3.5 3.5 3.5-3.5"/><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/>',
   list: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
-  date: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>',
+  date: BAUHAUS_CALENDAR_ICON,
   datetime: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   number: '<path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16"/>',
   bool: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   links: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
-  tags: '<path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1.5 1.5 0 0 1 0 2.1l-6.2 6.2a1.5 1.5 0 0 1-2.1 0z"/><circle cx="8" cy="8" r="1.3"/>',
+  tags: BAUHAUS_GRID_ICON,
 };
-/** A property kind's icon, as SVG markup (the inline table and the panel use the same ones). */
-export const propertyIcon = (k: PropertyKind) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
+
+function resolveIconBody(k: PropertyKind, key?: string): string {
+  const trimmed = key?.trim() ?? "";
+  if (trimmed) {
+    if (VERIFICATION_KEY_RE.test(trimmed)) return BAUHAUS_VERIFICATION_ICON;
+    if (DOMAIN_KEY_RE.test(trimmed)) return BAUHAUS_GRID_ICON;
+    if (DATE_KEY_RE.test(trimmed)) return BAUHAUS_CALENDAR_ICON;
+    if (PERSON_KEY_RE.test(trimmed)) return BAUHAUS_PERSON_ICON;
+  }
+  if (k === "tags") return BAUHAUS_GRID_ICON;
+  if (k === "date") return BAUHAUS_CALENDAR_ICON;
+  return ICON[k];
+}
+
+/** A property's semantic Bauhaus or kind icon, as SVG markup (shared by inline rows and PropertiesPanel). */
+export const propertyIcon = (k: PropertyKind, key?: string): string =>
+  `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${resolveIconBody(k, key)}</svg>`;
 const esc = escapeHtml;
 
 function valueHtml(v: unknown, kind: PropertyKind, dir: string): string {
@@ -54,7 +79,7 @@ export function propertiesElement(yamlText: string, dir: string, onLink: (target
   const rows = data
     ? Object.entries(data).map(([k, v]) => {
         const kind = kindOf(propertySpec.spec, k, v);
-        return `<div class="prop-row"><span class="prop-key" title="${esc(k)}">${propertyIcon(kind)}<span>${esc(k)}</span></span><span class="prop-value prop-${kind}">${valueHtml(v, kind, dir)}</span></div>`;
+        return `<div class="prop-row"><span class="prop-key" title="${esc(k)}">${propertyIcon(kind, k)}<span>${esc(k)}</span></span><span class="prop-value prop-${kind}">${valueHtml(v, kind, dir)}</span></div>`;
       }).join("")
     : `<div class="prop-row prop-error">Frontmatter is not valid YAML — click to edit it.</div>`;
   const count = data ? Object.keys(data).length : 0;

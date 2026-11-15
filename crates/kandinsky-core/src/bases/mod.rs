@@ -62,6 +62,9 @@ struct View {
     /// A cards view's picture: the property holding it (`note.cover`).
     #[serde(default)]
     image: Option<String>,
+    /// A calendar or timeline view's chosen date field (`dateProperty: due`).
+    #[serde(rename = "dateProperty", alias = "date_property", default)]
+    date_property: Option<String>,
 }
 
 impl View {
@@ -456,7 +459,26 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
             properties.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
             rows.truncate(view.limit.unwrap_or(usize::MAX));
             let group_by = view.group_by.as_ref().map(|g| g.property().to_string());
-            let order = if view.order.is_empty() { vec!["file.name".to_string()] } else { view.order.clone() };
+            let mut order = if view.order.is_empty() { vec!["file.name".to_string()] } else { view.order.clone() };
+            if matches!(view.kind.as_str(), "calendar" | "timeline") {
+                let has_col = |cols: &[String], cand: &str| {
+                    let bare = cand.strip_prefix("note.").unwrap_or(cand);
+                    cols.iter().any(|c| c == cand || c.strip_prefix("note.").unwrap_or(c) == bare)
+                };
+                if let Some(dp) = view.date_property.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                    if !has_col(&order, dp) {
+                        order.insert(order.len().min(1), dp.to_string());
+                    }
+                }
+                for cand in ["date", "due", "updated", "start", "end", "created"] {
+                    if rows.iter().any(|r| r.props.contains_key(cand)) && !has_col(&order, cand) {
+                        order.push(cand.to_string());
+                    }
+                }
+                if !has_col(&order, "file.mtime") {
+                    order.push("file.mtime".to_string());
+                }
+            }
             let columns = order
                 .iter()
                 .map(|id| BaseColumn {
@@ -672,6 +694,23 @@ views:
         assert_eq!(paths, ["a.md", "b.md"], "a by its inline tag, b by its PDF mark's tag");
         let tags = format!("{:?}", v.rows[0].cells[1]);
         assert!(tags.contains("\"Physics\"") && tags.contains("\"inline/nested\"") && !tags.contains("\"physics\""), "the property as written, no duplicate: {tags}");
+    }
+
+    #[test]
+    fn calendar_and_timeline_views_surface_date_columns_and_default_formula() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("a.md"), "---\ndue: 2026-11-20\n---\n").unwrap();
+        std::fs::write(d.path().join("b.md"), "---\nstatus: draft\n---\n").unwrap();
+        let src = "formulas:\n  Effective: default(due, \"2026-12-01\")\nviews:\n  - type: calendar\n    name: Schedule\n    dateProperty: due\n    order: [file.name, formula.Effective]\n  - type: timeline\n    name: Roadmap\n";
+        let r = evaluate(d.path(), &Config::default(), src, None);
+        assert_eq!(r.error, None);
+        let cal = &r.views[0];
+        assert_eq!(cal.kind, "calendar");
+        assert!(cal.columns.iter().any(|c| c.id == "due") && cal.columns.iter().any(|c| c.id == "file.mtime"));
+        let row_b = cal.rows.iter().find(|row| row.path == "b.md").unwrap();
+        let eff_idx = cal.columns.iter().position(|c| c.id == "formula.Effective").unwrap();
+        assert!(matches!(&row_b.cells[eff_idx], BaseCell::Text { value } if value == "2026-12-01"));
+        assert_eq!(r.views[1].kind, "timeline");
     }
 
     #[test]

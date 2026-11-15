@@ -30,6 +30,7 @@ import { applyWorkspacePreset, askManageWorkspaces, askSaveWorkspace } from "./w
 import type { IconName, PaneSpec } from "./panes";
 import { openSettingsAt } from "./settings-nav.svelte";
 import { setHomeSpec } from "./apps.svelte";
+import { toggleShellMode } from "./shell-mode.svelte";
 
 export interface Action {
   id: string;
@@ -266,13 +267,15 @@ export const actions: Action[] = [
   { id: "note.task-edit", title: "Note: create or edit task…", where: "note", run: () => noteFormat.run?.("taskDialog") },
   { id: "note.insert-template", title: "Note: insert a template…", where: "note", run: () => noteFormat.run?.("insertTemplate") },
   { id: "note.cycle", title: "Note: cycle this line — text, list item, to-do, text", keys: "Ctrl+Q", where: "note", run: () => noteFormat.run?.("cycle") },
+  { id: "note.sourceToggle", title: "Note: toggle Source / Live preview mode", keys: "Ctrl+E", run: () => { window.dispatchEvent(new CustomEvent("kandinsky-toggle-source")); } },
+  { id: "ui.quickSwitcher", title: "Quick switcher: search notes & commands", alsoKeys: ["Ctrl+O", "Ctrl+K"], run: () => openPalette("all") },
   { id: "ui.quickOpen", title: "Open file…", keys: "Super+P", alsoKeys: ["Ctrl+P"], run: () => openPalette("files") },
   // no default keys: Alt+←/→ move by word in the editor; the mouse's side buttons and a swipe do this (nav-input.ts)
   { id: "ui.back", title: "Go back (previous pane)", keys: "Super+[", run: () => navigate(-1) },
   { id: "ui.history", title: "History: the tabs visited, to go back to one…", run: () => historyList() },
   { id: "ui.forward", title: "Go forward", keys: "Super+]", run: () => navigate(1) },
   { id: "ui.today", title: "Home (your home document)", icon: "today", label: "Home", keys: "Super+H", run: () => void openHome() },
-  { id: "ui.capture", title: "Capture (a popup over the current pane)", keys: "Super+C", run: () => openQuickCapture() },
+  { id: "ui.capture", title: "Capture (a popup over the current pane)", keys: "Super+C", alsoKeys: ["Ctrl+Alt+N"], run: () => openQuickCapture() },
   // the bar as a capture box, wherever one is: the same completions (task fields, [[notes, #tags, @days)
   { id: "ui.capture-bar", title: "Capture in the bar", run: () => openPalette("capture") },
   // every capture by day, to triage (components/views/Captures.svelte): the `captures` block alone in a tab
@@ -323,6 +326,7 @@ export const actions: Action[] = [
   { id: "ui.git.blame", title: "Git: who changed each line (blame)", icon: "git", run: () => void toggleBlame() },
   { id: "ui.sidePanel", title: "Show / hide the side panel (files, search, outline, git)", icon: "folder-tree", label: "Side panel (show / hide)", keys: "Super+B", run: () => toggleSidePanel() },
   { id: "ui.sidePanel.move", title: "Move side panel (beside the editors ↔ in the left bar)", run: () => placeSidePanel(sideInBar() ? "dock" : "sidebar") },
+  { id: "ui.shell.toggle", title: "Workspace shell: switch between Nootion Unified Sidebar and Classic Rail", icon: "panel-left", run: () => toggleShellMode() },
   { id: "ui.panel", title: "Show / hide terminal panel", icon: "terminal", label: "Terminal (show / hide)", keys: "Super+J", run: () => toggleTerminalPanel() },
   { id: "ui.panel.move", title: "Move terminal panel (bottom ↔ right)", run: () => setTerminalPosition(settings.config?.terminal.position === "right" ? "bottom" : "right") },
   { id: "ui.properties.inline", title: "Properties: show them in the note (as Obsidian)", run: () => setPropertiesView("inline") },

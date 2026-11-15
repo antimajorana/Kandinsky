@@ -1,7 +1,8 @@
 // The dockview-core host: pane mounting, opening/focusing panes, layout persistence.
 import { tabFacts } from "./tab-facts";
 import { keyText } from "./keys";
-import { onWide } from "./phone.svelte";
+import { onWide, phone } from "./phone.svelte";
+import { isNotionShell } from "./shell-mode.svelte";
 import {
   createDockview,
   type DockviewApi,
@@ -188,9 +189,9 @@ class Watermark implements IWatermarkRenderer {
   init(): void {}
 }
 
-// the space between groups: cards float 6 px apart; on the paper shape (shape-paper.css) groups are flush and their
+// the space between groups: cards float 6 px apart; on the paper shape (shape-paper.css) or Notion shell groups are flush and their
 // 1 px gap, showing the dock's colour, is the rule between them
-const dockTheme = (shape: string) => ({ name: "kandinsky", className: "dockview-theme-kandinsky", gap: shape === "paper" ? 1 : 6,
+const dockTheme = (shape: string) => ({ name: "kandinsky", className: "dockview-theme-kandinsky", gap: shape === "paper" || isNotionShell() ? 1 : 6,
   dndOverlayMounting: "relative" as const, dndPanelOverlay: "group" as const, dndTabIndicator: "line" as const });
 
 export function initDock(el: HTMLElement, components: PaneComponents): DockviewApi {
@@ -252,7 +253,14 @@ export function initDock(el: HTMLElement, components: PaneComponents): DockviewA
   onSettings(moveSidePanel);
   onWide(moveSidePanel);
   let lastShape = "cards";
-  onSettings((c) => { if (c.ui.shape !== lastShape) dock.updateOptions({ theme: dockTheme(lastShape = c.ui.shape) }); });
+  let lastGap = isNotionShell() ? 1 : 6;
+  const syncDockTheme = (shape = lastShape) => {
+    lastShape = shape;
+    const gap = shape === "paper" || isNotionShell() ? 1 : 6;
+    if (gap !== lastGap) { lastGap = gap; dock.updateOptions({ theme: dockTheme(shape) }); }
+  };
+  onSettings((c) => syncDockTheme(c.ui.shape));
+  window.addEventListener("kandinsky-layout", () => syncDockTheme());
   onSettings((c) => {
     if (lastPos !== undefined && lastPos !== c.terminal.position) placeTerminalPanel(c.terminal.position);
     lastPos = c.terminal.position;
@@ -382,6 +390,10 @@ function giveKeys(id: string): void {
 export function open(spec: PaneSpec, opts: { activate?: boolean; beside?: boolean } = {}): DockviewPanelApi | null {
   const dock = getDock();
   if (!dock) return null;
+  if (spec.kind === "files" && isNotionShell() && !phone.on) {
+    window.dispatchEvent(new Event("kandinsky-expand-sidebar"));
+    return null;
+  }
   const side = sideIdOf(spec);
   if (side && sideInBar()) { showSide(side); return null; } // it lives in the left bar
   if ("path" in spec && spec.path) { rememberFile(spec.path); journalOpen(spec.path); }
@@ -563,8 +575,15 @@ export const openSide = (id: SideId): void => { open(sideSpec(id)); };
 
 const newShell = (): PaneSpec => ({ kind: "terminal", preset: "shell", n: nextTerminalN() });
 
-/** Ctrl+B (VS Code): the side panel (files, search, outline, git); its tabs stay open while hidden. */
-export const toggleSidePanel = (): void => (sideInBar() ? toggleSide() : togglePanel("side", () => ({ kind: "files" })));
+/** Ctrl+B / Super+B (VS Code): the side panel (files, search, outline, git); in Notion shell toggles the unified sidebar when no side tool is open. */
+export const toggleSidePanel = (): void => {
+  if (isNotionShell() && !phone.on && !zoneGroup("side")) {
+    window.dispatchEvent(new Event("kandinsky-toggle-sidebar"));
+    return;
+  }
+  if (sideInBar()) toggleSide();
+  else togglePanel("side", () => ({ kind: "files" }));
+};
 
 /** Follows ui.side_panel: the side tools leave the dock for the left bar, or come back to it. */
 let sideWasInBar: boolean | undefined;

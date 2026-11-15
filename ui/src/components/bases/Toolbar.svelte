@@ -40,6 +40,8 @@
     { kind: "cards", label: "Cards", icon: "grid" },
     { kind: "list", label: "List", icon: "rows" },
     { kind: "board", label: "Board", icon: "panel-left" },
+    { kind: "calendar", label: "Calendar", icon: "calendar" },
+    { kind: "timeline", label: "Timeline", icon: "clock" },
   ];
   const iconOf = (kind: string): IconName => KINDS.find((k) => k.kind === kind)?.icon ?? "table";
   const unique = (base: string) => { let n = base, i = 2; while (res.views.some((v) => v.name === n)) n = `${base} ${i++}`; return n; };

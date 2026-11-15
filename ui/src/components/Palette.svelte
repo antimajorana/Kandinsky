@@ -10,15 +10,20 @@
   import { besides, titledNotes, type Titled } from "../lib/titled-notes";
   import { Newest } from "../lib/newest";
   import { palette, closePalette, pickChosen, captureText, type PickItem } from "../lib/palette.svelte";
-  import { open, openPath, activeEditorId, getDock } from "../lib/dock";
+  import { open, openPath, activeEditorId, lastEditorId, getDock } from "../lib/dock";
   import { recentFiles, recentCommands, rememberCommand } from "../lib/recent";
   import { createNote } from "../lib/notes-system";
   import { editors } from "../lib/registry";
   import { fuzzy, highlightMatch } from "../lib/fuzzy";
   import { chordLabel, keyText, superOf } from "../lib/keys";
   import { fileIcon, type IconName } from "../lib/panes";
-  import { basename, shownName } from "../lib/paths";
-  import { toast } from "../lib/state.svelte";
+  import { basename, dirOf, shownName } from "../lib/paths";
+  import { app, toast } from "../lib/state.svelte";
+  import { tabs, activate, type TabItem } from "../lib/tabs.svelte";
+  import { context } from "../lib/context.svelte";
+  import { frontmatterOf } from "../lib/property-model";
+  import { listVault, resolveLink, resolveOrBeside } from "../lib/vault";
+  import type { Backlink } from "../lib/types";
   import { complete } from "../lib/textarea-complete";
   import { captureHint } from "../lib/capture-hints.svelte";
   import Icon from "./Icon.svelte";
@@ -71,25 +76,97 @@
   $effect(() => { if (palette.open) return closable(closePalette); }); // a phone's Back closes it (lib/back.ts)
   $effect(() => { if (palette.open) return holdFocus(); }); // closed, the focus goes back where it was
 
+  interface SpecialistEntry { handle: string; description: string; path: string }
+  let specialists = $state<SpecialistEntry[]>([]);
+  let specialistsLoadedAt = 0;
+  let specialistsWs = "";
+  let specialistsBusy = $state(false);
+
+  async function ensureSpecialists(): Promise<void> {
+    const ws = app.workspace?.root ?? "_";
+    if (specialistsBusy || (specialistsWs === ws && Date.now() - specialistsLoadedAt < 10_000)) return;
+    specialistsBusy = true;
+    try {
+      const exists = await api.exists(".agents/agents").catch(() => false);
+      if (!exists) { specialists = []; specialistsWs = ws; specialistsLoadedAt = Date.now(); return; }
+      const entries = await api.tree(".agents/agents", true).catch(() => []);
+      const mdEntries = entries.filter((e) => e.kind === "file" && /\.md$/i.test(e.name));
+      const docs = await Promise.all(mdEntries.map(async (e): Promise<SpecialistEntry | null> => {
+        try {
+          const doc = await api.file(e.path);
+          const data = frontmatterOf(doc.text)?.data ?? {};
+          const stem = e.name.replace(/\.md$/i, "");
+          const id = String(data.name || stem).trim().replace(/^@+/, "") || stem;
+          const description = String(data.description || data.title || "").replace(/\s+/g, " ").trim();
+          return { handle: `@${id}`, description, path: e.path };
+        } catch { return null; }
+      }));
+      specialists = docs.filter((d): d is SpecialistEntry => d !== null).sort((a, b) => a.handle.localeCompare(b.handle));
+      specialistsWs = ws;
+      specialistsLoadedAt = Date.now();
+    } finally {
+      specialistsBusy = false;
+    }
+  }
+
+  const activeFilePath = $derived(context.active?.path || editors.get(activeEditorId() ?? lastEditorId() ?? "")?.path || "");
+  let backlinkState = $state<{ forPath: string; links: Backlink[]; unlinked: Backlink[]; siblings: string[] }>({
+    forPath: "", links: [], unlinked: [], siblings: [],
+  });
+  let backlinksBusy = $state(false);
+
   // per open: take the keyboard, refresh what is listed (no state is reset here — see palette.svelte.ts)
   $effect(() => {
-    if (!palette.open) return;
+    if (!palette.open) {
+      backlinkState = { forPath: "", links: [], unlinked: [], siblings: [] };
+      return;
+    }
     const req = palette.mode === "pick" ? palette.pick : null;
     void tick().then(() => input?.focus());
-    if (palette.mode === "all") void loadKeymap().catch(() => {});
+    if (palette.mode === "all") {
+      void loadKeymap().catch(() => {});
+      void ensureSpecialists();
+    }
     if (req && !Array.isArray(req.items)) req.items().then((list) => (loaded = { req, list }), (err) => toast("Could not list the choices", errText(err), "error"));
+  });
+
+  $effect(() => {
+    if (palette.open && palette.mode === "all" && q.trim().startsWith("@")) void ensureSpecialists();
+  });
+
+  $effect(() => {
+    if (!palette.open || palette.mode !== "all" || !q.trim().startsWith("~")) { backlinksBusy = false; return; }
+    const target = activeFilePath;
+    if (!target) { backlinkState = { forPath: "", links: [], unlinked: [], siblings: [] }; backlinksBusy = false; return; }
+    if (backlinkState.forPath === target) return;
+    let alive = true;
+    backlinksBusy = true;
+    const folder = dirOf(target);
+    void Promise.all([
+      api.backlinks(target).catch(() => ({ path: target, links: [] as Backlink[], unlinked: [] as Backlink[] })),
+      listVault().catch(() => [] as string[]),
+    ]).then(([b, all]) => {
+      if (!alive) return;
+      const seen = new Set([...b.links.map((l) => l.source), ...b.unlinked.map((u) => u.source), target]);
+      const siblings = all
+        .filter((p) => dirOf(p) === folder && !seen.has(p) && /\.(md|markdown|page|pdf|ipynb|wln)$/i.test(p))
+        .sort((a, c) => a.localeCompare(c))
+        .slice(0, 30);
+      backlinkState = { forPath: target, links: b.links, unlinked: b.unlinked, siblings };
+    }).finally(() => { if (alive) backlinksBusy = false; });
+    return () => { alive = false; };
   });
 
   // "super e needs an easy capture mode as well": `+` first in the bar makes it a capture box; Backspace on
   // the empty box goes back to the commands
   $effect(() => {
     if (palette.open && palette.mode === "all" && palette.q.startsWith("+")) { palette.mode = "capture"; palette.q = palette.q.slice(1).trimStart(); }
-    // VS Code's habit: `>` first in the file finder (Ctrl+P) turns it into the commands, keeping the `>` (the bar's own
-    // "commands only" prefix) — it answered "No matches" before
-    if (palette.open && palette.mode === "files" && palette.q.startsWith(">")) palette.mode = "all";
+    // VS Code's habit: `>`, `%`, `@`, or `~` first in the file finder (Ctrl+P) turns it into the full palette
+    if (palette.open && palette.mode === "files" && /^[>%@~]/.test(palette.q)) palette.mode = "all";
   });
+  const isPrefixQuery = (s: string) => /^[>#%@~]/.test(s);
   // the capture row's words (the core's), asked only while a capture row can show
-  const captureHintNow = captureHint(() => (palette.open && (palette.mode === "capture" || palette.mode === "all") && !q.trim().startsWith(">") ? q.trim() : ""));
+  const captureHintNow = captureHint(() => (palette.open && (palette.mode === "capture" || palette.mode === "all") && !isPrefixQuery(q.trim()) ? q.trim() : ""));
   const captureWhat = () => captureHintNow.current.says;
   const captureNow = captureText;
 
@@ -98,7 +175,7 @@
   $effect(() => {
     const query = q.trim();
     const mode = palette.mode;
-    if (!palette.open || (mode !== "all" && mode !== "files") || !query || query.startsWith("#") || query.startsWith(">")) { fileSearches.stop(); fileHits = []; lineHits = []; titledHits = []; hitsFor = ""; busy = false; return; } // one still answering is now stale; the same query typed again waits for its own answer (else "Create note" shows before the file is found)
+    if (!palette.open || (mode !== "all" && mode !== "files") || !query || isPrefixQuery(query)) { fileSearches.stop(); fileHits = []; lineHits = []; titledHits = []; hitsFor = ""; busy = false; return; } // one still answering is now stale; the same query typed again waits for its own answer (else "Create note" shows before the file is found)
     fileSearches.run(async (still) => {
       busy = true;
       try {
@@ -179,6 +256,9 @@
       }
       case "all": {
         if (query.startsWith("#")) return headingItems(query.slice(1).trim());
+        if (query.startsWith("%")) return openTabItems(query.slice(1).trim());
+        if (query.startsWith("@")) return atItems(query.slice(1).trim());
+        if (query.startsWith("~")) return backlinkItems(query.slice(1).trim());
         const cq = query.startsWith(">") ? query.slice(1).trim() : query;
         // the palette's own command is no use from inside it; with nothing typed, the ones run lately lead
         const ran = cq ? [] : recentCommands();
@@ -199,7 +279,7 @@
         // and what was typed can always be captured from here (Super+E: commands, files, notes' text, capture) — once the
         // search has answered: before, the capture row was the only one, and an Enter typed early wrote a file's name
         // into today's log instead of opening the file
-        const capture: Item[] = query && !query.startsWith(">") && answered === query ? [{
+        const capture: Item[] = query && !isPrefixQuery(query) && answered === query ? [{
           key: "cap", section: "Capture", title: `Capture “${query}”`, detail: `${captureWhat()} — or press ${keysOf("ui.palette") ?? keyText("Super+E")} again`, icon: "plus", score: -2, hl: [],
           run: () => captureNow(query),
         }] : [];
@@ -208,15 +288,239 @@
     }
   });
 
-  function headingItems(query: string): Item[] {
-    const id = activeEditorId();
+  function headingItems(query: string, section = "Headings in this file"): Item[] {
+    const id = activeEditorId() ?? lastEditorId();
     const h = id ? editors.get(id) : undefined;
     if (!h || !id) return [];
     return score(h.headings(), (x) => x.text, query).map(({ item, score: s, hl }) => ({
-      key: `h:${item.line}`, section: "Headings in this file", title: item.text, detail: "#".repeat(item.level), icon: "file-text" as IconName, score: s, hl,
+      key: `h:${item.line}`, section, title: item.text, detail: "#".repeat(item.level), icon: "file-text" as IconName, score: s, hl,
       run: () => { getDock()?.getPanel(id)?.api.setActive(); h.gotoLine(item.line); },
     }));
   }
+
+  function openTabItems(pq: string): Item[] {
+    const mainGroups = tabs.groups.filter((g) => g.zone === "main");
+    const sideGroups = tabs.groups.filter((g) => g.zone === "side");
+    const bottomGroups = tabs.groups.filter((g) => g.zone === "bottom");
+    const seen = new Set<string>();
+    const raw: { tab: TabItem; section: string }[] = [];
+    const push = (t: TabItem, section: string) => { if (!seen.has(t.id)) { seen.add(t.id); raw.push({ tab: t, section }); } };
+    for (const t of tabs.apps) push(t, "Main panes");
+    mainGroups.forEach((g, gi) => {
+      const sec = mainGroups.length > 1 ? `Split ${gi + 1}` : "Main panes";
+      for (const t of g.tabs) push(t, sec);
+    });
+    for (const g of sideGroups) for (const t of g.tabs) push(t, "Side panels");
+    for (const g of bottomGroups) for (const t of g.tabs) push(t, "Bottom sessions");
+
+    const out: Item[] = [];
+    for (const { tab: t, section } of raw) {
+      const mt = fuzzy(pq, t.title);
+      const mp = pq ? fuzzy(pq, `${t.title} ${t.tip} ${section}`) : mt;
+      if (pq && !mt && !mp) continue;
+      const s = mt ? mt.score + 40 : (mp?.score ?? 0);
+      const tipText = t.tip && t.tip !== t.title ? t.tip : (t.path ?? "");
+      const detail = [tipText, t.active ? "(active)" : ""].filter(Boolean).join(" ");
+      out.push({
+        key: `tab:${t.id}`,
+        section,
+        title: t.title,
+        path: t.path,
+        detail: detail || undefined,
+        icon: t.icon,
+        score: s,
+        hl: mt?.indices ?? [],
+        run: () => activate(t.id),
+        ...(t.path ? { beside: () => openPath(t.path!, undefined, { beside: true }) } : {}),
+      });
+    }
+    return pq ? out.sort((a, b) => b.score - a.score) : out;
+  }
+
+  function applySpecialist(handle: string, description: string): void {
+    try { localStorage.setItem("kandinsky.agy.specialist", handle); } catch { /* storage unavailable */ }
+    window.dispatchEvent(new CustomEvent("kandinsky:agy-config", { detail: { specialist: handle, source: "palette" } }));
+    toast(handle ? `Switched Antigravity specialist to ${handle}` : "Switched Antigravity to Coordinator", description || undefined, "success");
+  }
+
+  function atItems(aq: string): Item[] {
+    let curSpec = "";
+    try { curSpec = localStorage.getItem("kandinsky.agy.specialist") ?? ""; } catch { /* ignore */ }
+    const specItems: Item[] = [];
+    for (const s of specialists) {
+      const mt = fuzzy(aq, s.handle);
+      const md = aq ? fuzzy(aq, `${s.handle} ${s.description}`) : mt;
+      if (aq && !mt && !md) continue;
+      const sc = mt ? mt.score + 50 : (md?.score ?? 0);
+      const detail = [curSpec === s.handle ? "(active)" : "", s.description || s.path].filter(Boolean).join(" · ");
+      specItems.push({
+        key: `ag:${s.handle}`,
+        section: "Vault @specialists",
+        title: s.handle,
+        path: s.path,
+        detail,
+        icon: "claude" as IconName,
+        score: sc,
+        hl: mt?.indices ?? [],
+        run: () => applySpecialist(s.handle, s.description),
+        beside: () => openPath(s.path, undefined, { beside: true }),
+      });
+    }
+    if (curSpec) {
+      const mc = fuzzy(aq, "@coordinator");
+      const md = aq ? fuzzy(aq, "@coordinator default reset") : mc;
+      if (!aq || mc || md) {
+        specItems.push({
+          key: "ag:@coordinator",
+          section: "Vault @specialists",
+          title: "@coordinator",
+          detail: `Clear ${curSpec} and return to default Coordinator`,
+          icon: "claude" as IconName,
+          score: mc ? mc.score : -1,
+          hl: mc?.indices ?? [],
+          run: () => applySpecialist("", "Default Antigravity coordinator"),
+        });
+      }
+    }
+    if (aq) specItems.sort((a, b) => b.score - a.score);
+
+    const heads = headingItems(aq, "Headings & symbols");
+
+    const edId = activeEditorId() ?? lastEditorId();
+    const ed = edId ? editors.get(edId) : undefined;
+    const linkOut: Item[] = [];
+    if (ed) {
+      const text = ed.snapshot().text;
+      const fromDir = dirOf(ed.path);
+      const seen = new Set<string>();
+      const re = /(?<!!)\[\[([^\]\n]+)\]\]/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(text)) !== null) {
+        const [lhs, alias] = m[1].split("|");
+        const [rawTarget, rawAnchor] = lhs.split("#");
+        const target = rawTarget.trim();
+        if (!target) continue;
+        const anchor = rawAnchor?.trim() || undefined;
+        const dedup = `${target.toLowerCase()}#${anchor ?? ""}`;
+        if (seen.has(dedup)) continue;
+        seen.add(dedup);
+        const found = resolveLink(target, fromDir);
+        const resolved = found ?? resolveOrBeside(target, fromDir);
+        const label = alias?.trim() || target;
+        const mt = fuzzy(aq, label);
+        const mp = aq ? fuzzy(aq, `${label} ${resolved}`) : mt;
+        if (aq && !mt && !mp) continue;
+        const sc = mt ? mt.score + 25 : (mp?.score ?? 0);
+        const detail = [resolved, anchor ? `#${anchor}` : "", found !== null ? "" : "(unresolved)"].filter(Boolean).join(" ");
+        linkOut.push({
+          key: `lnk:${resolved}#${anchor ?? ""}`,
+          section: "Links in this note",
+          title: label,
+          path: resolved,
+          detail,
+          icon: found !== null ? fileIcon(resolved) : ("link" as IconName),
+          score: sc,
+          hl: mt?.indices ?? [],
+          run: () => openPath(resolved, undefined, anchor ? { anchor } : {}),
+          beside: () => openPath(resolved, undefined, { beside: true, ...(anchor ? { anchor } : {}) }),
+        });
+      }
+      if (aq) linkOut.sort((a, b) => b.score - a.score);
+    }
+
+    return [...specItems, ...heads, ...linkOut];
+  }
+
+  function backlinkItems(bq: string): Item[] {
+    if (!activeFilePath) return [];
+    const grouped = new Map<string, Backlink[]>();
+    for (const l of backlinkState.links) grouped.set(l.source, [...(grouped.get(l.source) ?? []), l]);
+
+    const linkedOut: Item[] = [];
+    for (const [src, ls] of grouped) {
+      const first = ls[0];
+      const title = shownName(src);
+      const mt = fuzzy(bq, title);
+      const mc = bq ? fuzzy(bq, `${title} ${src} ${first.context}`) : mt;
+      if (bq && !mt && !mc) continue;
+      const sc = mt ? mt.score + 40 : (mc?.score ?? 0);
+      const snippet = first.context.trim().slice(0, 90);
+      const detail = [ls.length > 1 ? `${ls.length} links · L${first.line}` : `L${first.line}`, first.relation ? `(${first.relation})` : "", snippet].filter(Boolean).join(" · ");
+      linkedOut.push({
+        key: `bl:${src}`,
+        section: "Backlinks",
+        title,
+        path: src,
+        detail,
+        icon: fileIcon(src),
+        score: sc,
+        hl: mt?.indices ?? [],
+        run: () => openPath(src, first.line),
+        beside: () => openPath(src, first.line, { beside: true }),
+      });
+    }
+    if (bq) linkedOut.sort((a, b) => b.score - a.score);
+
+    const unlinkedSeen = new Set<string>();
+    const unlinkedOut: Item[] = [];
+    for (const u of backlinkState.unlinked) {
+      if (unlinkedSeen.has(u.source)) continue;
+      unlinkedSeen.add(u.source);
+      const title = shownName(u.source);
+      const mt = fuzzy(bq, title);
+      const mc = bq ? fuzzy(bq, `${title} ${u.source} ${u.context}`) : mt;
+      if (bq && !mt && !mc) continue;
+      const sc = mt ? mt.score + 20 : (mc?.score ?? 0);
+      unlinkedOut.push({
+        key: `ubl:${u.source}`,
+        section: "Unlinked mentions",
+        title,
+        path: u.source,
+        detail: `L${u.line} · ${u.context.trim().slice(0, 90)}`,
+        icon: fileIcon(u.source),
+        score: sc,
+        hl: mt?.indices ?? [],
+        run: () => openPath(u.source, u.line),
+        beside: () => openPath(u.source, u.line, { beside: true }),
+      });
+    }
+    if (bq) unlinkedOut.sort((a, b) => b.score - a.score);
+
+    const folder = dirOf(activeFilePath);
+    const siblingOut = fileItems(backlinkState.siblings, bq, "Related in folder").map((it) => ({
+      ...it,
+      key: `sib:${it.path}`,
+      detail: folder || "Vault root",
+    }));
+
+    return [...linkedOut, ...unlinkedOut, ...siblingOut];
+  }
+
+  const anyBusy = $derived(busy || backlinksBusy || (q.trim().startsWith("@") && specialistsBusy));
+  const fieldIcon = $derived.by((): IconName => {
+    if (palette.mode === "pick") return palette.pick?.icon ?? "command";
+    if (palette.mode === "url") return "globe";
+    if (palette.mode === "files") return "file";
+    if (palette.mode === "capture") return "plus";
+    const qt = q.trim();
+    if (qt.startsWith("%")) return "pages";
+    if (qt.startsWith("@")) return "claude";
+    if (qt.startsWith("~")) return "link";
+    if (qt.startsWith("#")) return "hash";
+    return "command";
+  });
+  const modeTag = $derived.by(() => {
+    if (palette.mode === "files") return "Files";
+    if (palette.mode === "pick") return palette.pick?.tag ?? "Pick";
+    if (palette.mode === "capture") return "Capture";
+    if (palette.mode === "url") return "Web";
+    const qt = q.trim();
+    if (qt.startsWith("%")) return "Open panes";
+    if (qt.startsWith("@")) return "@Agents & links";
+    if (qt.startsWith("~")) return "Backlinks";
+    if (qt.startsWith("#")) return "Headings";
+    return "Commands";
+  });
 
   $effect(() => { void items.length; if (sel >= items.length) palette.sel = Math.max(0, items.length - 1); });
 
@@ -231,7 +535,7 @@
   function onkeydown(e: KeyboardEvent) {
     if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) { e.preventDefault(); palette.sel = (sel + 1) % Math.max(1, items.length); scroll(); }
     else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p" && palette.mode !== "files")) { e.preventDefault(); palette.sel = (sel - 1 + items.length) % Math.max(1, items.length); scroll(); }
-    else if (e.key === "Enter") { e.preventDefault(); if (!items[sel] && q.trim() && answered !== q.trim()) enterPending = { q, beside: e.ctrlKey || superOf(e) }; else choose(items[sel], e.ctrlKey || superOf(e)); }
+    else if (e.key === "Enter") { e.preventDefault(); if (!items[sel] && q.trim() && !isPrefixQuery(q.trim()) && answered !== q.trim()) enterPending = { q, beside: e.ctrlKey || superOf(e) }; else choose(items[sel], e.ctrlKey || superOf(e)); }
     else if (e.key === "Escape") { e.preventDefault(); closePalette(); }
     else if (e.key === "Backspace" && palette.mode === "capture" && !palette.q) { e.preventDefault(); palette.mode = "all"; }
   }
@@ -248,11 +552,11 @@
     <!-- Tab walks the box and its rows, never out to the page behind the scrim; Esc closes from a row as from the box -->
     <div class="palette" role="dialog" aria-modal="true" tabindex="-1" aria-label="Command palette" onclick={(e) => e.stopPropagation()} onkeydown={framekeys} data-testid="palette">
       <div class="field">
-        <Icon name={palette.mode === "pick" ? palette.pick?.icon ?? "command" : palette.mode === "url" ? "globe" : palette.mode === "files" ? "file" : palette.mode === "capture" ? "plus" : "command"} size={16} />
+        <Icon name={fieldIcon} size={16} />
         <input bind:this={input} bind:value={palette.q} {onkeydown} {placeholder} spellcheck="false" autocomplete="off" aria-label={placeholder}
           use:complete={{ when: () => palette.mode === "capture" }} />
-        {#if busy}<span class="spin"></span>{/if}
-        <span class="mode-tag">{palette.mode === "all" ? "Commands" : palette.mode === "files" ? "Files" : palette.mode === "pick" ? palette.pick?.tag ?? "Pick" : palette.mode === "capture" ? "Capture" : "Web"}</span>
+        {#if anyBusy}<span class="spin"></span>{/if}
+        <span class="mode-tag">{modeTag}</span>
       </div>
       <div class="list" bind:this={listEl}>
         {#each items as it, i (it.key)}
@@ -267,12 +571,12 @@
           </button>
         {:else}
           <!-- a chooser that takes typed text and has nothing to offer for it yet (a rename to the same name) asks again -->
-          <div class="none">{palette.mode === "pick" && palette.pick?.typed ? palette.pick.placeholder : q.trim() ? (busy ? "Searching…" : "No matches") : palette.mode === "url" ? "Type an address" : "Start typing"}</div>
+          <div class="none">{palette.mode === "pick" && palette.pick?.typed ? palette.pick.placeholder : q.trim() ? (anyBusy ? "Searching…" : q.trim().startsWith("~") && !activeFilePath ? "Open a note first to inspect its backlinks" : "No matches") : palette.mode === "url" ? "Type an address" : "Start typing"}</div>
         {/each}
       </div>
       <div class="foot">
         <span class="keys-only"><kbd>↑</kbd><kbd>↓</kbd> move</span><span class="keys-only"><kbd>Enter</kbd> run</span>{#if items[sel]?.beside}<span class="keys-only"><kbd>Ctrl</kbd><kbd>Enter</kbd> open beside</span>{/if}<span class="keys-only"><kbd>Esc</kbd> close</span>
-        {#if palette.mode === "all"}<span class="faint"><kbd>#</kbd> headings · <kbd>&gt;</kbd> commands only · <kbd>+</kbd> capture</span>{/if}
+        {#if palette.mode === "all"}<span class="faint"><kbd>#</kbd> headings · <kbd>%</kbd> open panes · <kbd>@</kbd> @agents &amp; links · <kbd>~</kbd> backlinks · <kbd>&gt;</kbd> commands · <kbd>+</kbd> capture</span>{/if}
         {#if palette.mode === "capture"}<span class="faint">{#if !q.trim()}<CaptureGuides box={input} /> · {/if}<kbd>⌫</kbd> back to commands</span>{/if}
       </div>
     </div>

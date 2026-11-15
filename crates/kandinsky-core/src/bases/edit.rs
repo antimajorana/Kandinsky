@@ -302,7 +302,7 @@ fn to_text(doc: &Value) -> Result<String> {
 /// The view types Kandinsky draws; anything else would silently show as a table.
 fn view_kind(kind: &str) -> Result<&str> {
     match kind {
-        "table" | "cards" | "list" | "board" => Ok(kind),
+        "table" | "cards" | "list" | "board" | "calendar" | "timeline" => Ok(kind),
         _ => Err(Error::BadRequest(format!("unknown view type {kind}"))),
     }
 }
@@ -472,6 +472,10 @@ mod tests {
 
         let cards: Value = serde_yaml::from_str(&edit_view(BASE, "Open", &ViewEdit::Kind { kind: "cards".into() }).unwrap()).unwrap();
         assert_eq!(cards["views"][0]["type"].as_str(), Some("cards"));
+        let cal: Value = serde_yaml::from_str(&edit_view(BASE, "Open", &ViewEdit::Kind { kind: "calendar".into() }).unwrap()).unwrap();
+        assert_eq!(cal["views"][0]["type"].as_str(), Some("calendar"));
+        let tl: Value = serde_yaml::from_str(&edit_view(BASE, "Open", &ViewEdit::Add { name: "Roadmap".into(), kind: "timeline".into() }).unwrap()).unwrap();
+        assert_eq!(tl["views"][1]["type"].as_str(), Some("timeline"));
         assert!(edit_view(BASE, "Open", &ViewEdit::Kind { kind: "map".into() }).is_err());
 
         let two: Value = serde_yaml::from_str(&edit_view(BASE, "Open", &ViewEdit::Add { name: "Gallery".into(), kind: "cards".into() }).unwrap()).unwrap();

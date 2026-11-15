@@ -1,14 +1,16 @@
 <script lang="ts">
   // An Obsidian Base (`.base`), as Obsidian's Bases draws it: a toolbar (views, Sort, Filter, Properties, New) over the
-  // view — a table edited in place, cards, a list, or a board. Used by the Base pane, by notes that embed
-  // `![[x.base]]` and by page blocks; every change goes through the core: view edits to the `.base` (bases/edit.rs),
-  // cell edits to the note's frontmatter (/api/property).
+  // view — a table edited in place, cards, a list, a board, a calendar, or a timeline. Used by the Base pane, by notes
+  // that embed `![[x.base]]` and by page blocks; every change goes through the core: view edits to the `.base`
+  // (bases/edit.rs), cell edits to the note's frontmatter (/api/property).
   import { onMount } from "svelte";
   import Toolbar from "./bases/Toolbar.svelte";
   import BaseGrid from "./bases/BaseGrid.svelte";
   import BaseCards from "./bases/BaseCards.svelte";
   import BaseList from "./bases/BaseList.svelte";
   import BaseBoard from "./bases/BaseBoard.svelte";
+  import BaseCalendar from "./bases/BaseCalendar.svelte";
+  import BaseTimeline from "./bases/BaseTimeline.svelte";
   import { errText } from "../lib/text";
   import { shownName, shownPath } from "../lib/paths";
   import { api } from "../lib/api";
@@ -78,7 +80,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="base" class:embedded bind:this={host} bind:clientWidth={width} onmousedown={(e) => embedded && e.stopPropagation()}>
+<div class="base" class:embedded class:tall-embed={embedded && (view?.kind === "calendar" || view?.kind === "timeline")} bind:this={host} bind:clientWidth={width} onmousedown={(e) => embedded && e.stopPropagation()}>
   {#if res && view}
     <div class="top">
       <Toolbar {res} {view} {pinned} compact={embedded && width < 560} props={fields} {typeOf} onpick={(n) => (viewName = n)} onedit={(e, then) => void editView(e, then)} onnew={() => void newRow()} />
@@ -91,7 +93,11 @@
     <BaseBoard {view} onwrite={(p, k, v) => void write(p, k, v)} />
   {:else if view && view.kind === "cards"}
     <BaseCards {view} />
-  {:else if view && (view.kind === "list" || narrow)}
+  {:else if view && view.kind === "calendar" && (!embedded || width === 0 || width >= 420)}
+    <BaseCalendar {view} onwrite={(p, k, v) => void write(p, k, v)} onnew={() => void newRow()} />
+  {:else if view && view.kind === "timeline"}
+    <BaseTimeline {view} props={fields} onedit={(e) => void editView(e)} onwrite={(p, k, v) => void write(p, k, v)} />
+  {:else if view && (view.kind === "list" || view.kind === "calendar" || narrow)}
     <BaseList {view} />
   {:else if view}
     <BaseGrid {view} kindOf={kindFor} others={fields.filter((p) => !view.columns.some((c) => c.id === p.id))} onedit={(e) => void editView(e)} onwrite={(p, k, v) => void write(p, k, v)} />
@@ -105,6 +111,7 @@
 <style>
   .base { position: relative; display: flex; flex-direction: column; min-height: 0; font-family: var(--font-ui); font-size: calc(13px * var(--ui-scale, 1)); color: var(--text); white-space: normal; }
   .base.embedded { border: 1px solid var(--border); border-radius: var(--radius, 8px); background: transparent; margin: 6px 0; max-height: 420px; overflow: hidden; }
+  .base.embedded.tall-embed { max-height: 540px; }
   /* in a page's card the card is the frame: no box in a box */
   :global(.pb.card) .base.embedded { border: 0; margin: 0; }
   .top { display: flex; align-items: center; min-width: 0; }

@@ -29,6 +29,8 @@
   import { settings } from "../../lib/settings.svelte";
   import { openPath } from "../../lib/dock";
   import { newSnippet, newPlugin, newBlock, editHome, copyViewExample } from "../../lib/settings-actions";
+  import { setShellMode, shellMode } from "../../lib/shell-mode.svelte";
+  import { oracleExplorer, setHidePlumbing } from "../../lib/oracle-explorer.svelte";
   import type { Schema } from "../../lib/settings-schema";
 
   let { page, fields, pages = [], go = () => {}, embedded = false }: {
@@ -54,6 +56,50 @@
     <h2><Icon name={page.icon} size={18} /> {page.title}</h2>
     {#if page.blurb}<p class="blurb">{@html renderInlineMarkdown(page.blurb)}</p>{/if}
   </header>
+
+  {#if page.page === "appearance"}
+    <section class="panel shell-panel" aria-label="Workspace shell">
+      <h3>Workspace shell</h3>
+      <div class="shell-cards" role="radiogroup" aria-label="Workspace shell">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={shellMode.value === "notion"}
+          class="shell-card"
+          class:active={shellMode.value === "notion"}
+          onclick={() => setShellMode("notion")}
+        >
+          <span class="shell-card-head">
+            <span class="shell-card-title"><Icon name="panel-left" size={14} /> Nootion Unified Sidebar</span>
+            {#if shellMode.value === "notion"}<span class="shell-dot" aria-hidden="true">●</span>{/if}
+          </span>
+          <span class="shell-card-desc">Single clean sidebar with vault switcher, quick nav, favorites, and colored page tree; hides the outer icon rail and IDE tab strip.</span>
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={shellMode.value === "classic"}
+          class="shell-card"
+          class:active={shellMode.value === "classic"}
+          onclick={() => setShellMode("classic")}
+        >
+          <span class="shell-card-head">
+            <span class="shell-card-title"><Icon name="rows" size={14} /> Classic Rail + Tabs</span>
+            {#if shellMode.value === "classic"}<span class="shell-dot" aria-hidden="true">●</span>{/if}
+          </span>
+          <span class="shell-card-desc">Traditional activity icon rail and Dockview tab strips (or Zen vertical tabs).</span>
+        </button>
+      </div>
+      <label class="plumbing-check">
+        <input
+          type="checkbox"
+          checked={oracleExplorer.hidePlumbing}
+          onchange={(e) => setHidePlumbing(e.currentTarget.checked)}
+        />
+        <span>Hide AI agent plumbing in Vault Pages (<code>AGENTS.md</code>, <code>zAI</code>, <code>zMeta</code>, <code>wiki/meta</code>…)</span>
+      </label>
+    </section>
+  {/if}
 
   {#if features.length}
     <section class="features" aria-label="What you can do here">
@@ -153,4 +199,15 @@
   .rung:hover { border-color: var(--accent); background: var(--accent-soft); }
   .rung b { color: var(--accent); }
   .rung span { color: var(--text-muted); font-size: calc(12.5px * var(--ui-scale, 1)); }
+  .shell-panel { display: flex; flex-direction: column; gap: 10px; padding: 12px 18px 14px; }
+  .shell-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; }
+  .shell-card { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-alt); text-align: left; transition: border-color .12s, background .12s; }
+  .shell-card:hover { border-color: var(--border-strong); background: var(--bg-hover); }
+  .shell-card.active { border-color: var(--accent); background: var(--accent-soft); }
+  .shell-card-head { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .shell-card-title { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; color: var(--heading); font-size: calc(13px * var(--ui-scale, 1)); }
+  .shell-dot { color: var(--accent); font-size: 10px; }
+  .shell-card-desc { color: var(--text-muted); font-size: calc(12px * var(--ui-scale, 1)); line-height: 1.42; }
+  .plumbing-check { display: inline-flex; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px solid var(--border); color: var(--text); font-size: calc(12.5px * var(--ui-scale, 1)); cursor: pointer; }
+  .plumbing-check input { accent-color: var(--accent); }
 </style>

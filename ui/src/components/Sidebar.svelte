@@ -16,6 +16,8 @@
   import SidePanel from "./sidebar/SidePanel.svelte";
   import { sideInBar } from "../lib/side-panel.svelte";
   import { fullscreen } from "../lib/fullscreen.svelte";
+  import { shellMode } from "../lib/shell-mode.svelte";
+  import NotionSidebar from "./NotionSidebar.svelte";
 
   const collapsed = $derived(sideCollapsed());
   const wide = $derived(sideWide());
@@ -28,8 +30,8 @@
   const block = (el: HTMLElement, b: PageBlock) => ({ destroy: mountBlock(el, SIDEBAR_FILE, blockSrc(b), "side") });
 
   onMount(() => {
-    const take = () => void takeKeyboard();
-    const need = () => { if (collapsed && fullscreen.on && sideInBar()) hold(); };
+    const take = () => { if (shellMode.value !== "notion") void takeKeyboard(); };
+    const need = () => { if (shellMode.value !== "notion" && collapsed && fullscreen.on && sideInBar()) hold(); };
     // a held bar closes on a press anywhere else, or Escape
     const outside = (e: PointerEvent) => { if (side.held && !nav?.contains(e.target as Node) && !side.menu) release(); };
     const esc = (e: KeyboardEvent) => { if (side.held && e.key === "Escape") release(); };
@@ -116,6 +118,9 @@
   }
 </script>
 
+{#if shellMode.value === "notion"}
+  <NotionSidebar />
+{:else}
 <!-- the slot keeps the collapsed width while the full sidebar floats over the panes (peek) -->
 <div class="slot" style:width="{collapsed ? 'var(--sb-collapsed-w)' : `${tabs.sidebar.width}px`}">
   <!-- the click on empty space is the mouse's way to open it in fullscreen; the keys have Ctrl+Shift+A -->
@@ -159,6 +164,7 @@
   </nav>
 </div>
 {#if side.menu}<ContextMenu x={side.menu.x} y={side.menu.y} items={side.menu.items} onclose={() => (side.menu = null)} />{/if}
+{/if}
 
 <style>
   /* stretched by .main (no height: 100% — see App.svelte's dock note on WebKitGTK) */

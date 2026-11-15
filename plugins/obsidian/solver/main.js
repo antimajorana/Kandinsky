@@ -47,7 +47,90 @@ function openImportDialog(kandinsky, targetPath = "") {
   });
 }
 
+function isSolverTabOpen() {
+  if (typeof document === "undefined") return false;
+  if (document.querySelector(".solver-shell")) return true;
+  for (const el of document.querySelectorAll(".kandinsky-tab-title")) {
+    if ((el.textContent || "").trim() === "Solver") return true;
+  }
+  return false;
+}
+
 export function register(kandinsky) {
+  let disposed = false;
+  let probing = false;
+  let lastTabOpen = isSolverTabOpen();
+  let ctxTimer = null;
+
+  const statusItem = kandinsky.shell.statusItem({
+    id: "solver",
+    text: "Σ Solver: ready",
+    title: "Solver — Click to open side-by-side with current note",
+    run: () => kandinsky.openView(undefined, { beside: true }),
+  });
+
+  async function refreshSolverStatus(explicitOffline = false) {
+    if (disposed) return null;
+    if (probing && !explicitOffline) return null;
+    probing = true;
+    const s = (kandinsky.plugin && kandinsky.plugin.settings) || {};
+    const url = String(s.url || "http://localhost:4200").trim().replace(/\/+$/, "");
+    const apiUrl = String(s.api_url || "http://127.0.0.1:3000").trim().replace(/\/+$/, "");
+    try {
+      const st = await kandinsky.helper.call("status", { url, apiUrl }, { timeout: 10 });
+      if (disposed) return st;
+      const tabOpen = isSolverTabOpen();
+      lastTabOpen = tabOpen;
+      if (st && st.running) {
+        statusItem.set("Σ Solver: open", `Solver connected at ${st.url || url} — Click to open beside note`);
+      } else if (tabOpen) {
+        statusItem.set("Σ Solver: open", `Solver workspace open (${url}) — Click to open beside note`);
+      } else if (explicitOffline) {
+        statusItem.set("Σ Solver: offline", "Solver services offline — Click to launch Solver beside current note");
+      } else {
+        statusItem.set("Σ Solver: ready", "Solver installed (idle) — Click to launch Solver beside current note");
+      }
+      return st;
+    } catch {
+      if (!disposed) {
+        const tabOpen = isSolverTabOpen();
+        lastTabOpen = tabOpen;
+        if (tabOpen) {
+          statusItem.set("Σ Solver: open", `Solver workspace open (${url}) — Click to open beside note`);
+        } else if (explicitOffline) {
+          statusItem.set("Σ Solver: offline", "Solver helper unreachable — Click to launch Solver beside current note");
+        } else {
+          statusItem.set("Σ Solver: ready", "Solver installed (idle) — Click to launch Solver beside current note");
+        }
+      }
+      return null;
+    } finally {
+      probing = false;
+    }
+  }
+
+  const offContext =
+    typeof kandinsky.onContext === "function"
+      ? kandinsky.onContext(() => {
+          if (disposed) return;
+          if (ctxTimer) clearTimeout(ctxTimer);
+          ctxTimer = setTimeout(() => {
+            if (disposed) return;
+            const nowOpen = isSolverTabOpen();
+            if (nowOpen !== lastTabOpen) {
+              lastTabOpen = nowOpen;
+              if (nowOpen) {
+                statusItem.set("Σ Solver: open", "Solver workspace open — Click to open beside note");
+              }
+              void refreshSolverStatus(false);
+            }
+          }, 120);
+        })
+      : null;
+
+  const initTimer = setTimeout(() => void refreshSolverStatus(false), 600);
+  const pollTimer = setInterval(() => void refreshSolverStatus(false), 30000);
+
   kandinsky.registerCommand({
     id: "beside",
     title: "Solver: Open Solver side-by-side with current note",
@@ -76,20 +159,18 @@ export function register(kandinsky) {
     id: "status",
     title: "Solver: Check local Solver service status",
     run: async () => {
-      const s = (kandinsky.plugin && kandinsky.plugin.settings) || {};
-      const st = await kandinsky.helper.call("status", {
-        url: s.url || "http://localhost:4200",
-        apiUrl: s.api_url || "http://127.0.0.1:3000",
-      });
+      const st = await refreshSolverStatus(true);
       if (st && st.running) {
+        statusItem.set("Σ Solver: open", `Solver connected at ${st.url} — Click to open beside note`);
         kandinsky.toast("Solver is running", `Connected at ${st.url}`, "success", {
           label: "Open Solver",
-          run: () => kandinsky.openView(),
+          run: () => kandinsky.openView(undefined, { beside: true }),
         });
       } else {
+        statusItem.set("Σ Solver: offline", "Solver services offline — Click to launch Solver beside current note");
         kandinsky.toast("Solver is currently offline", "Open the Solver app in Kandinsky to start its background services.", "info", {
           label: "Start in Kandinsky",
-          run: () => kandinsky.openView(),
+          run: () => kandinsky.openView(undefined, { beside: true }),
         });
       }
     },
@@ -126,4 +207,13 @@ export function register(kandinsky) {
       },
     ];
   });
+
+  return () => {
+    disposed = true;
+    clearTimeout(initTimer);
+    clearInterval(pollTimer);
+    if (ctxTimer) clearTimeout(ctxTimer);
+    if (typeof offContext === "function") offContext();
+    statusItem.remove();
+  };
 }

@@ -17,6 +17,8 @@ import { onSettings, settings } from "./settings.svelte";
 import { glance, trackRecent } from "./tab-glance";
 import { toast } from "./state.svelte";
 import { iconSvg } from "./icons";
+import { phone } from "./phone.svelte";
+import { isNotionShell } from "./shell-mode.svelte";
 import type { TabsLayout } from "./gen/TabsLayout";
 import type { Action } from "./actions";
 
@@ -41,13 +43,14 @@ export const tabs = $state({
   pins: [] as Pin[],
   open: [] as string[],
   active: null as string | null,
-  sidebar: { width: 248, collapsed: false, ...load<Partial<SidebarPrefs>>(KEYS.sidebar, {}) } as SidebarPrefs,
+  sidebar: { width: 252, collapsed: false, ...load<Partial<SidebarPrefs>>(KEYS.sidebar, {}) } as SidebarPrefs,
 });
 
 export const pinId = (p: Pin) => paneId(p.spec);
 export const isPinned = (id: string) => tabs.pins.some((p) => pinId(p) === id);
 tabFacts.pinned = isPinned; // Back leaves a pinned tab open (dock.ts navigate)
 const vertical = () => tabs.layout === "vertical";
+const chromelessMain = () => tabs.layout === "vertical" || isNotionShell();
 
 // the user: the terminal section comes before the editors (side panel, terminal, editors)
 const ZONE_RANK: Record<PaneZone, number> = { side: 0, bottom: 1, main: 2 };
@@ -67,6 +70,16 @@ function item(p: IDockviewPanel, activeId: string | null): TabItem {
 function refresh(): void {
   const d = getDock();
   if (!d) return;
+  if (isNotionShell() && !phone.on) {
+    const dupFiles = d.panels.filter((p) => (p.params as PaneSpec | undefined)?.kind === "files");
+    if (dupFiles.length) {
+      if (dupFiles.some((p) => d.activePanel === p)) {
+        d.panels.find((x) => panelZone(x) === "main")?.api.setActive();
+      }
+      for (const p of dupFiles) p.api.close();
+      return;
+    }
+  }
   const v = vertical();
   const hidden = new Set(v ? tabs.pins.map(pinId) : []);
   const app = (p: IDockviewPanel) => v && isApp(p.id, p.params as PaneSpec);
@@ -114,21 +127,22 @@ function refresh(): void {
 let frame = 0;
 const schedule = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; refresh(); }); };
 
-/** With vertical tabs the groups have no tab strips, but the side column keeps its header: the row of
- *  its tools (dock.ts SideHeadActions), as on top of the side panel in the left bar. */
+/** With vertical tabs the groups have no tab strips, and in Notion shell main document groups have no IDE tab strip
+ *  (while bottom terminal groups keep their tab controls). */
 function applyHeaders(d: DockviewApi): void {
   for (const g of d.groups) {
-    const side = groupZone(g) === "side", hide = vertical() && !side;
+    const zone = groupZone(g), side = zone === "side";
+    const hide = (vertical() && !side) || (isNotionShell() && zone === "main");
     if (g.header.hidden !== hide) g.header.hidden = hide;
     for (const c of ["kandinsky-side-group", "atlas-side-group"]) g.element.classList.toggle(c, side && vertical()); // the old name: user CSS
   }
   halfCloses(d);
 }
 
-/** With no strip of tabs (vertical tabs), each half of a split editor carries its own × in its corner (closeHalf). */
+/** With no strip of tabs (vertical tabs or Notion shell), each half of a split editor carries its own × in its corner (closeHalf). */
 function halfCloses(d: DockviewApi): void {
   const halves = d.groups.filter((g) => groupZone(g) === "main" && g.panels.length && g.api.isVisible);
-  const split = vertical() && halves.length > 1 && !d.hasMaximizedGroup();
+  const split = chromelessMain() && halves.length > 1 && !d.hasMaximizedGroup();
   for (const g of d.groups) {
     let b = g.element.querySelector<HTMLButtonElement>(":scope > .half-close");
     if (!split || !halves.includes(g)) { b?.remove(); continue; }
@@ -149,7 +163,11 @@ export function attachTabs(d: DockviewApi): void {
   d.panels.forEach(watchTitle);
   d.onDidAddPanel((p) => { watchTitle(p); schedule(); });
   d.onDidAddGroup(() => { applyHeaders(d); schedule(); });
-  window.addEventListener("kandinsky-layout", schedule); // panel shown / hidden (no dockview event for it)
+  window.addEventListener("kandinsky-layout", () => { applyHeaders(d); schedule(); }); // panel shown / hidden or shellMode switched
+  window.addEventListener("kandinsky-expand-sidebar", () => {
+    if (tabs.sidebar.collapsed) { tabs.sidebar.collapsed = false; saveSidebar(); }
+  });
+  window.addEventListener("kandinsky-toggle-sidebar", toggleSidebar);
   for (const ev of [d.onDidRemovePanel, d.onDidMovePanel, d.onDidActivePanelChange, d.onDidActiveGroupChange, d.onDidRemoveGroup, d.onDidLayoutChange]) ev(schedule);
   applyHeaders(d);
   trackRecent(d);
@@ -321,7 +339,15 @@ export function unsplit(zone: PaneZone): void {
 }
 
 export function revealInTree(path: string): void {
-  open({ kind: "files" });
+  if (isNotionShell() && !phone.on) {
+    if (tabs.sidebar.collapsed) {
+      tabs.sidebar.collapsed = false;
+      saveSidebar();
+    }
+    window.dispatchEvent(new CustomEvent("kandinsky-active-file", { detail: path }));
+  } else {
+    open({ kind: "files" });
+  }
   // the tree listens once mounted; a first open mounts it a moment later
   const tell = () => window.dispatchEvent(new CustomEvent("kandinsky-active-file", { detail: path }));
   for (const ms of [60, 500]) setTimeout(tell, ms);

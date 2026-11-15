@@ -49,12 +49,26 @@ const dialogs = (kandinsky) => (kandinsky.version ?? 0) >= 23; // openDialog's `
 export function register(kandinsky) {
   const folder = () => folderOf(kandinsky);
   const isNote = (path) => path?.startsWith(`${folder()}/`) && path.endsWith(".md");
-  const bell = kandinsky.shell.statusItem({ id: "bell", text: "🔔", title: "Notifications", run: () => void list() });
+  const bell = kandinsky.shell.statusItem({
+    id: "bell",
+    text: "🔔",
+    title: "Notifications",
+    run: () => {
+      if (typeof window !== "undefined") {
+        const ev = new CustomEvent("kandinsky:open-notifications", { cancelable: true });
+        if (!window.dispatchEvent(ev)) return;
+      }
+      void list();
+    },
+  });
   const notes = () => sourceNotes(kandinsky);
   async function count() {
     let n = 0;
     for (const p of await notes()) n += Number((await kandinsky.noteProps(p).catch(() => ({}))).unread) || 0;
     bell.set(n ? `🔔 ${n}` : "🔔", n ? `${n} unread notification${n === 1 ? "" : "s"}` : "Notifications");
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("kandinsky:notifications-updated", { detail: { unread: n, folder: folder() } }));
+    }
   }
   // whoever ran the sync (the schedule, this page, another window): its loud messages are toasted once, here
   const unhear = kandinsky.helper.on("synced", (a) => {
@@ -101,6 +115,7 @@ export function register(kandinsky) {
       items: MUTE_CHOICES,
       onpick: async (v) => {
         const until = await muteSource(kandinsky, p, v);
+        void count();
         kandinsky.toast(v === "off" ? "Unmuted" : "Muted", `${sourceName(kandinsky, p)}${v === "off" || v === "always" ? "" : ` until ${until}`} — still logged`);
       },
     }) });
@@ -113,6 +128,12 @@ export function register(kandinsky) {
   }) });
   kandinsky.shell.menu("editor", (t) => ((t.selection ?? "").trim() ? [{ label: "Send the selection to my phone", icon: "arrow-up", run: () => send(t.selection.trim(), from()) }] : []));
 
+  const onSyncRequest = () => void sync(false);
+  if (typeof window !== "undefined") window.addEventListener("kandinsky:notifications-sync-request", onSyncRequest);
+
   void sync(true); // then the core's schedule, every 5 minutes; its findings arrive as `synced`
-  return unhear;
+  return () => {
+    unhear();
+    if (typeof window !== "undefined") window.removeEventListener("kandinsky:notifications-sync-request", onSyncRequest);
+  };
 }

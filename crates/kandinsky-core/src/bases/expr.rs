@@ -514,6 +514,14 @@ fn eval_call(callee: &Expr, args: &[Expr], ctx: &dyn Context, scope: Option<&Val
                 let idx = if cond.truthy() { 1 } else { 2 };
                 return args.get(idx).map(|e| eval_scoped(e, ctx, scope)).unwrap_or(Val::Null);
             }
+            "default" => {
+                let a = args.first().map(|e| eval_scoped(e, ctx, scope)).unwrap_or(Val::Null);
+                return if !a.is_empty() {
+                    a
+                } else {
+                    args.get(1).map(|e| eval_scoped(e, ctx, scope)).unwrap_or(Val::Null)
+                };
+            }
             "today" => {
                 let d = chrono::Local::now().date_naive().and_hms_opt(0, 0, 0).unwrap();
                 return Val::Date(d);
@@ -574,6 +582,7 @@ fn eval_call(callee: &Expr, args: &[Expr], ctx: &dyn Context, scope: Option<&Val
         return match method.as_str() {
             "isEmpty" => Val::Bool(recv.is_empty()),
             "isNotEmpty" => Val::Bool(!recv.is_empty()),
+            "default" => if !recv.is_empty() { recv } else { arg0.unwrap_or(Val::Null) },
             "contains" => {
                 let needle = arg0.unwrap_or(Val::Null);
                 match &recv {
@@ -739,6 +748,24 @@ mod tests {
         assert!(run("file.hasTag(\"x\", \"#Physics\")", &ctx).truthy(), "any of, case-insensitive");
         assert!(!run("file.hasTag(\"phys\")", &ctx).truthy());
         assert!(run("file.hasLink(\"Hubbard\")", &ctx).truthy() && !run("file.hasLink(\"Other\")", &ctx).truthy());
+    }
+
+    #[test]
+    fn default_fills_missing_or_empty_values_only() {
+        let ctx = TestCtx::new(&[
+            ("title", Val::Str("Symmetries".into())),
+            ("blank", Val::Str("   ".into())),
+            ("empty_list", Val::List(vec![])),
+            ("zero", Val::Num(0.0)),
+            ("flag", Val::Bool(false)),
+        ]);
+        assert!(run("default(missing, \"fallback\") == \"fallback\"", &ctx).truthy());
+        assert!(run("default(blank, \"fallback\") == \"fallback\"", &ctx).truthy());
+        assert!(run("default(empty_list, \"none\") == \"none\"", &ctx).truthy());
+        assert!(run("default(title, \"fallback\") == \"Symmetries\"", &ctx).truthy());
+        assert!(run("default(zero, 42) == 0", &ctx).truthy(), "0 is a real number, not missing");
+        assert!(run("default(flag, true) == false", &ctx).truthy(), "false is a real bool, not missing");
+        assert!(run("missing.default(\"method\") == \"method\"", &ctx).truthy());
     }
 
     #[test]

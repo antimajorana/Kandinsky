@@ -221,6 +221,22 @@ export function addBookmark(b: Bookmark): void {
 }
 export const removeBookmark = (b: Bookmark) => writeList("bookmarks", bookmarks.list.filter((x) => x !== b));
 
+/** Whether `path` is starred in `.kandinsky/bookmarks.yaml` (file bookmark without a specific heading). */
+export function isFileStarred(path: string): boolean {
+  return bookmarks.list.some((b) => b.target.kind === "file" && b.target.path === path && !b.target.heading);
+}
+
+/** Toggle favorite/star status for `path` in `.kandinsky/bookmarks.yaml` without altering the file itself. */
+export function toggleFileStar(path: string, title?: string): void {
+  const hit = bookmarks.list.find((b) => b.target.kind === "file" && b.target.path === path && !b.target.heading);
+  if (hit) {
+    void removeBookmark(hit);
+    toast("Removed from Favorites", shownName(path));
+  } else {
+    addBookmark({ target: { kind: "file", path }, ...(title && title !== shownName(path) ? { title } : {}) });
+  }
+}
+
 // --- commands -----------------------------------------------------------------------------------------
 
 const PREFIX = "bookmark.";

@@ -2,7 +2,7 @@
   import { tipFor } from "../lib/keymap.svelte";
   // Bottom status bar: workspace (horizontal tabs only), the plugins' cells, Antigravity @specialist + model chip, vim mode, server connection.
   import { app, toast } from "../lib/state.svelte";
-  import { toggleVim } from "../lib/settings.svelte";
+  import { settings, toggleVim } from "../lib/settings.svelte";
   import { showProblems } from "../lib/actions";
   import Icon from "./Icon.svelte";
   import { tabs } from "../lib/tabs.svelte";
@@ -19,6 +19,8 @@
   import { agentsOn } from "../lib/agents";
   import { sendPassageToAgent } from "../lib/editor-insert-bus";
   import { basename, type PaneSpec } from "../lib/panes";
+  import { isNotionShell } from "../lib/shell-mode.svelte";
+  import { frontmatterOf } from "../lib/property-model";
 
   interface VaultSpecialist {
     id: string;
@@ -147,7 +149,14 @@
     );
   });
 
-  const visibleStatusCells = $derived(statusCells.filter((c) => c.key !== "antigravity:agy"));
+  const visibleStatusCells = $derived.by(() => {
+    const list = statusCells.filter((c) => c.key !== "antigravity:agy");
+    return [...list].sort((a, b) => (a.key === "solver:solver" ? 1 : b.key === "solver:solver" ? -1 : 0));
+  });
+  const hasSolverCell = $derived(
+    visibleStatusCells.some((c) => c.key === "solver:solver" || c.text.includes("Solver")),
+  );
+  const solverDisabled = $derived(Boolean(settings.config?.plugins.off?.includes("solver")));
 
   let scanSeq = 0;
   async function scanVaultSpecialists(): Promise<void> {
@@ -366,6 +375,46 @@
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const dirtyCount = $derived(Object.keys(app.dirty).length);
 
+  let docTick = $state(0);
+  $effect(() => {
+    const onDocChange = () => { docTick++; };
+    window.addEventListener("kandinsky-doc-change", onDocChange);
+    return () => window.removeEventListener("kandinsky-doc-change", onDocChange);
+  });
+
+  const activeMdInfo = $derived.by(() => {
+    void docTick;
+    void tabs.active;
+    void context.active;
+    const edHandle = editors.get(activeEditorId() ?? lastEditorId() ?? "");
+    if (!edHandle || !/\.(md|markdown)$/i.test(edHandle.path)) return null;
+    const text = edHandle.snapshot().text;
+    const fm = frontmatterOf(text);
+    const data = fm?.data ?? null;
+    let rawVal: unknown = undefined;
+    if (data) {
+      for (const [k, v] of Object.entries(data)) {
+        if (k.toLowerCase() === "verification") { rawVal = v; break; }
+      }
+    }
+    const rawVerify =
+      rawVal === undefined || rawVal === null
+        ? ""
+        : (Array.isArray(rawVal) ? rawVal.map(String).join(" ") : String(rawVal)).trim();
+    const hasVerification = rawVerify.length > 0;
+    const vLow = rawVerify.toLowerCase();
+    const verifyClean =
+      vLow.includes("clean") || vLow.includes("verified") || vLow === "true" || vLow === "pass" || vLow === "passed";
+    const body = fm ? text.slice(fm.end) : text;
+    const words = body
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/[#*_`~>\[\]()|!$]+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean).length;
+    return { words, hasVerification, verifyClean, rawVerify };
+  });
+
   /** The cell whose panel is open, and its button (the popover's anchor). */
   let opened = $state<{ cell: StatusCell; anchor: HTMLElement } | null>(null);
   const toggle = (cell: StatusCell, anchor: HTMLElement) => {
@@ -379,19 +428,41 @@
   }
 </script>
 
-<footer class="status">
-  <!-- the tab sidebar names the workspace itself -->
-  {#if tabs.layout !== "vertical"}<span class="ws" title={app.workspace?.root ?? ""}>{app.workspace?.name ?? "—"}</span>{/if}
+<footer class="status" class:notion={isNotionShell()}>
+  {#if isNotionShell()}
+    {#if activeMdInfo?.hasVerification}
+      <span class="sb-verify">
+        <span class="v-dot" class:clean={activeMdInfo.verifyClean}>●</span>
+        {activeMdInfo.verifyClean ? "c_lint: verified" : `c_lint: ${activeMdInfo.rawVerify}`}
+      </span>
+    {/if}
+    <span class="sb-shape">Shape: {settings.config?.ui.shape === "cards" ? "Cards" : "Nootion Paper"}</span>
+  {:else if tabs.layout !== "vertical"}
+    <!-- the tab sidebar names the workspace itself -->
+    <span class="ws" title={app.workspace?.root ?? ""}>{app.workspace?.name ?? "—"}</span>
+  {/if}
   {#if zoomShown.percent !== 100}
     <button class="cell zoom" data-cell="zoom" onclick={() => zoomPane(0)} title={tipFor(`This tab is shown at ${zoomShown.percent} % of the settings' sizes. Click for 100 %`, "ui.zoomReset")}>{zoomShown.percent} %</button>
   {/if}
   {#if dirtyCount}<span class="saving">{dirtyCount} unsaved</span>{/if}
   <span class="grow"></span>
   {#each visibleStatusCells as c (c.key)}
-    {#if c.panel}<button class="cell" class:open={opened?.cell.key === c.key} title={c.title} data-cell={c.key} aria-haspopup="dialog" aria-expanded={opened?.cell.key === c.key} onclick={(e) => toggle(c, e.currentTarget)}>{c.text}</button>
-    {:else if c.run}<button class="cell" title={c.title} data-cell={c.key} onclick={() => void c.run?.()}>{c.text}</button>
-    {:else}<span class="cell" title={c.title} data-cell={c.key}>{c.text}</span>{/if}
+    {@const isSolver = c.key === "solver:solver" || c.text.includes("Solver")}
+    {@const solverOpen = isSolver && c.text.includes(": open")}
+    {@const solverOffline = isSolver && c.text.includes(": offline")}
+    {#if c.panel}<button class="cell" class:solver-chip={isSolver} class:solver-open={solverOpen} class:solver-offline={solverOffline} class:open={opened?.cell.key === c.key} title={c.title} data-cell={c.key} aria-haspopup="dialog" aria-expanded={opened?.cell.key === c.key} onclick={(e) => toggle(c, e.currentTarget)}>{c.text}</button>
+    {:else if c.run}<button class="cell" class:solver-chip={isSolver} class:solver-open={solverOpen} class:solver-offline={solverOffline} title={c.title} data-cell={c.key} onclick={() => void c.run?.()}>{c.text}</button>
+    {:else}<span class="cell" class:solver-chip={isSolver} class:solver-open={solverOpen} class:solver-offline={solverOffline} title={c.title} data-cell={c.key}>{c.text}</span>{/if}
   {/each}
+  {#if isNotionShell() && !hasSolverCell && !solverDisabled}
+    <button
+      type="button"
+      class="cell solver-chip"
+      data-cell="solver:solver"
+      title="Open Solver side-by-side"
+      onclick={() => open({ kind: "plugin", id: "solver", title: "Solver" }, { beside: true })}
+    >Σ Solver: ready</button>
+  {/if}
   <button
     class="cell sb-item agy-chip"
     class:open={agyOpen}
@@ -419,6 +490,9 @@
       <span class="agy-subcount" title="{agyLiveSubagents} live subagent(s)">⚡{agyLiveSubagents}</span>
     {/if}
   </button>
+  {#if isNotionShell() && activeMdInfo}
+    <span class="sb-words">{plural(activeMdInfo.words, "word")}</span>
+  {/if}
   {#if app.problems}
     <button class="problems" class:bad={app.problems.errors > 0} onclick={showProblems} title={tipFor("Problems in this file", "ui.problems")}
       aria-label="Problems: {plural(app.problems.errors, 'error')}, {plural(app.problems.warnings, 'warning')}">
@@ -555,12 +629,27 @@
 
 <style>
   .status { height: var(--status-h); flex: none; display: flex; align-items: center; gap: 14px; padding: 0 12px 0 14px; background: var(--bg-alt, var(--bg-app)); border-top: 1px solid var(--border); color: var(--text-muted); font-size: calc(11.5px * var(--ui-scale, 1)); user-select: none; }
+  .status.notion { --status-h: 24px; height: 24px; padding: 0 14px; font-size: calc(11px * var(--ui-scale, 1)); }
   .ws { color: var(--text-muted); font-weight: 500; }
+  .sb-verify { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); white-space: nowrap; }
+  .sb-verify .v-dot { font-size: 9.5px; line-height: 1; color: var(--yellow); }
+  .sb-verify .v-dot.clean { color: var(--green); }
+  .sb-shape, .sb-words { color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .grow { flex: 1; }
   /* a plugin's cell: quiet text; a button only shows it on hover */
   .cell { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   button.cell { padding: 1px 6px; border-radius: 5px; color: inherit; }
   button.cell:hover, button.cell.open { background: var(--bg-hover); color: var(--text); }
+  .cell[data-cell="solver:solver"], .solver-chip {
+    display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 5px;
+    color: var(--text-muted); font-variant-numeric: tabular-nums; letter-spacing: -0.005em;
+    transition: background .12s, color .12s;
+  }
+  button.cell[data-cell="solver:solver"]:hover, button.solver-chip:hover {
+    background: var(--bg-hover); color: var(--heading, var(--text));
+  }
+  .solver-chip.solver-open { color: var(--green); }
+  .solver-chip.solver-offline { color: var(--text-faint); }
   .sb-item.agy-chip { max-width: 38ch; display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: 5px; color: var(--text-muted); font-weight: 500; transition: background .12s, color .12s; }
   .sb-item.agy-chip:hover, .sb-item.agy-chip.open { background: var(--bg-hover); color: var(--heading, var(--text)); }
   .agy-dot { font-size: 9px; line-height: 1; color: var(--green); }

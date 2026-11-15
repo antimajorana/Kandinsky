@@ -7,11 +7,14 @@ import { parseYaml, scalarText } from "../property-model";
 export type PigmentTone = "viridian" | "cobalt" | "ochre" | "mauve" | "vermilion";
 
 const STATUS_KEY = /^(status|verification|state|check|audit|lint|health|stage|phase|result|verdict)$/i;
-const BADGE_KEY = /^(type|kind|category|role|class|format|series|course|venue)$/i;
+const DOMAIN_KEY = /^(domain|domains|tags?|topics?|field|fields|area|areas|sector|sectors|category|categories|subject)$/i;
+const BADGE_KEY = /^(type|kind|category|categories|role|class|format|series|course|venue|domain|domains|topics?|field|fields|area|areas|sector|sectors|subject)$/i;
 const MULTI_PIGMENTS: readonly PigmentTone[] = ["cobalt", "ochre", "mauve", "viridian"];
 
+const WIKI_PROVENANCE_VAL = /\bwiki\s+(accepted|filed|verified)\b/i;
 const VIRIDIAN_VAL = /\b(verified|clean|accepted|passed|pass|complete|completed|done|proven|proved|published|final|active|ok|ready|green)\b/i;
 const OCHRE_VAL = /\b(draft|wip|pending|in[-_ ]?progress|review|partial|warning|todo|open|sketch|conjecture|conditional)\b/i;
+const OCHRE_DOMAIN_VAL = /\b(crystal|defects?|lattice)\b/i;
 const VERMILION_VAL = /\b(failed|fail|failing|broken|error|rejected|refuted|blocked|stale|deprecated|missing|red)\b/i;
 const MAUVE_VAL = /\b(concept|definition|axiom|entity|reference|paper|book|archive|paused)\b/i;
 
@@ -30,18 +33,17 @@ export function classifyPigment(
 ): { tone: PigmentTone | null; dot: boolean; wrapScalar: boolean } {
   const val = rawValue.trim();
   if (!val) return { tone: null, dot: false, wrapScalar: false };
+  const k = key.trim();
 
-  if (STATUS_KEY.test(key) || VIRIDIAN_VAL.test(val) || VERMILION_VAL.test(val)) {
+  if (WIKI_PROVENANCE_VAL.test(val)) {
+    return { tone: "cobalt", dot: false, wrapScalar: true };
+  }
+
+  if (STATUS_KEY.test(k) || (!DOMAIN_KEY.test(k) && (VIRIDIAN_VAL.test(val) || VERMILION_VAL.test(val)))) {
     if (VERMILION_VAL.test(val)) return { tone: "vermilion", dot: true, wrapScalar: true };
     if (OCHRE_VAL.test(val)) return { tone: "ochre", dot: true, wrapScalar: true };
     if (VIRIDIAN_VAL.test(val)) return { tone: "viridian", dot: true, wrapScalar: true };
-    if (STATUS_KEY.test(key)) return { tone: "cobalt", dot: true, wrapScalar: true };
-  }
-
-  if (BADGE_KEY.test(key)) {
-    if (OCHRE_VAL.test(val)) return { tone: "ochre", dot: false, wrapScalar: true };
-    if (MAUVE_VAL.test(val)) return { tone: "mauve", dot: false, wrapScalar: true };
-    return { tone: "cobalt", dot: false, wrapScalar: true };
+    if (STATUS_KEY.test(k)) return { tone: "cobalt", dot: true, wrapScalar: true };
   }
 
   if (opts.isLink) return { tone: "cobalt", dot: false, wrapScalar: false };
@@ -49,6 +51,14 @@ export function classifyPigment(
     // Deterministic cycle across items in a list (`Algebraic Topology` → cobalt, `Crystal Defects` → ochre, …)
     const tone = MULTI_PIGMENTS[index % MULTI_PIGMENTS.length] ?? hashTone(val);
     return { tone, dot: false, wrapScalar: false };
+  }
+
+  if (BADGE_KEY.test(k)) {
+    if (OCHRE_VAL.test(val) || (DOMAIN_KEY.test(k) && OCHRE_DOMAIN_VAL.test(val))) {
+      return { tone: "ochre", dot: false, wrapScalar: true };
+    }
+    if (MAUVE_VAL.test(val)) return { tone: "mauve", dot: false, wrapScalar: true };
+    return { tone: "cobalt", dot: false, wrapScalar: true };
   }
 
   return { tone: null, dot: false, wrapScalar: false };
@@ -83,6 +93,12 @@ export function enhanceNotionProperties(host: HTMLElement, yamlText: string): HT
     const row = rowEls[rowIdx];
     if (!row) return;
     row.dataset.propKey = key;
+    const keySvg = row.querySelector<SVGElement>(".prop-key svg");
+    if (keySvg) {
+      keySvg.style.display = "block";
+      keySvg.style.flexShrink = "0";
+      keySvg.style.shapeRendering = "geometricPrecision";
+    }
     const valEl = row.querySelector<HTMLElement>(".prop-value");
     if (!valEl) return;
 

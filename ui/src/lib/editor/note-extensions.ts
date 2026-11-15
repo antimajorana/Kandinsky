@@ -12,8 +12,10 @@ import { taskChips } from "./task-chips";
 import { tickTaskLine } from "./task-tick";
 import { settings } from "../settings.svelte";
 import type { WorkspaceConfig } from "../types";
-import { Prec, type EditorState, type Extension } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { Compartment, Prec, StateField, type EditorState, type Extension } from "@codemirror/state";
+import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from "@codemirror/view";
+import { extractFrontmatterIcon } from "../folder-colors.svelte";
+import { isNotionShell } from "../shell-mode.svelte";
 import { foldGutter, foldNodeProp, foldKeymap } from "@codemirror/language";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import type { MarkdownConfig } from "@lezer/markdown";
@@ -57,7 +59,79 @@ const obsidianFolds: MarkdownConfig = {
   })],
 };
 
-export function noteExtensions(path: string, viewRef: { view: EditorView | null }, onOpenLink?: (target: string) => void): { head: Extension; body: Extension } {
+class PageEmblemWidget extends WidgetType {
+  constructor(readonly glyph: string) {
+    super();
+  }
+  eq(other: PageEmblemWidget): boolean {
+    return other.glyph === this.glyph;
+  }
+  toDOM(view: EditorView): HTMLElement {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "page-emblem";
+    btn.textContent = this.glyph;
+    btn.title = "Change page icon";
+    btn.setAttribute("aria-label", "Change page icon");
+    btn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = btn.getBoundingClientRect();
+      view.dom.dispatchEvent(
+        new CustomEvent("kandinsky-icon-picker", {
+          bubbles: true,
+          detail: { x: rect.left, y: rect.bottom + 6, el: btn },
+        }),
+      );
+    });
+    return btn;
+  }
+  ignoreEvent(): boolean {
+    return true;
+  }
+}
+
+function resolveNoteEmblem(state: EditorState): string {
+  const raw = extractFrontmatterIcon(state.doc.sliceString(0, Math.min(state.doc.length, 2500)));
+  if (raw.toLowerCase() === "none") return "";
+  if (raw) return raw;
+  return isNotionShell() ? "◎" : "";
+}
+
+function buildPageEmblemDeco(state: EditorState, path: string): DecorationSet {
+  const inlineOn = (settings.config?.editor.inline_title ?? true) && !headingRepeats(state, shownName(path));
+  if (inlineOn) return Decoration.none;
+  const doc = state.doc;
+  const fmClose = frontmatterClose(doc);
+  let h1Line: { from: number; to: number; text: string } | null = null;
+  for (let n = fmClose + 1; n <= Math.min(doc.lines, fmClose + 12); n++) {
+    const line = doc.line(n);
+    if (!line.text.trim()) continue;
+    if (/^#[ \t]+\S/.test(line.text)) h1Line = line;
+    break;
+  }
+  if (!h1Line) return Decoration.none;
+  const glyph = resolveNoteEmblem(state);
+  if (!glyph) return Decoration.none;
+  const m = /^(#[ \t]+)/.exec(h1Line.text);
+  if (!m) return Decoration.none;
+  const prefixEnd = h1Line.from + m[1].length;
+  const inPrefix = state.selection.ranges.some((r) => r.from < prefixEnd && r.to >= h1Line.from);
+  if (inPrefix) return Decoration.none;
+  return Decoration.set([
+    Decoration.widget({ widget: new PageEmblemWidget(glyph), side: -1 }).range(prefixEnd),
+  ]);
+}
+
+export function noteExtensions(
+  path: string,
+  viewRef: { view: EditorView | null },
+  onOpenLink?: (target: string, opts?: { beside?: boolean }) => void,
+): { head: Extension; body: Extension; liveSlot: Compartment; live: Extension } {
   const dir = dirOf(path);
   const isLog = () => {
     const logs = (settings.config?.log_dir ?? "notes/log").replace(/^\/+|\/+$/g, "");
@@ -128,7 +202,8 @@ export function noteExtensions(path: string, viewRef: { view: EditorView | null 
       if (!(settings.config?.editor.inline_title ?? true)) return null;
       const name = shownName(path);
       if (headingRepeats(state, name)) return null; // "titles are duplicated usually": the note's own `# ...` is the title
-      return { key: name, render: () => titleInput(path, name) };
+      const glyph = resolveNoteEmblem(state);
+      return { key: `${name}\u0000${glyph}`, render: () => titleInput(path, name, glyph, viewRef) };
     },
     inlineHtml: (source: string) => inlineHtml(source, dir) || null,
     toggleTask: tickTaskLine, // a box ticks as on Home: done date, next occurrence
@@ -167,21 +242,38 @@ export function noteExtensions(path: string, viewRef: { view: EditorView | null 
     hydrateBlock: (host: HTMLElement) => { unmount.set(host, hydrateRendered(host, path)); hydrateTables(host, viewRef); followLinksIn(host, path); },
     releaseBlock: (host: HTMLElement) => unmount.get(host)?.(), // the widget's DOM is gone for good (not a hidden tab)
   });
+  const pageEmblemField = StateField.define<DecorationSet>({
+    create(state) {
+      return buildPageEmblemDeco(state, path);
+    },
+    update(value, tr) {
+      if (!tr.docChanged && !tr.selection && !tr.effects.some((e) => e.is(redecorate))) return value;
+      return buildPageEmblemDeco(tr.state, path);
+    },
+    provide: (f) => EditorView.decorations.from(f),
+  });
+  const liveSlot = new Compartment();
+  const live: Extension = [
+    liveField,
+    pageEmblemField,
+    figureCaptions(equationsOf),
+    taskChips(() => settings.config?.editor.task_chips ?? true),
+    logLines(isLog),
+  ];
   return {
     head: liveKeys,
+    liveSlot,
+    live,
     body: [
       markdown({ base: markdownLanguage, extensions: [...obsidianMarkdown, obsidianFolds, AnyTaskStatus], addKeymap: false, htmlTagLanguage: noteHtml() }),
       Prec.high(keymap.of([{ key: "Enter", run: (v) => closeDisplayMath(v) || continueList(v) }, { key: "Backspace", run: backspaceMarkup }])),
       taskShortForms,
-      liveField,
-      figureCaptions(equationsOf),
+      liveSlot.of(live),
       hoverSync(dir),
       expressions(path),
       mathPreview(() => settings.config?.editor.math_preview ?? true),
       slashMenuExtension(),
       blockGutterExtension(),
-      taskChips(() => settings.config?.editor.task_chips ?? true),
-      logLines(isLog),
       mentions,
       noteSuggestions(path),
       // paste / drop files → saved beside the note (editor.attachment_folder) and embedded
@@ -290,7 +382,7 @@ export function headingRepeats(state: EditorState, name: string): boolean {
 /** The inline title as a field: the note's name, renamed in place — Enter (or leaving the field) renames the file,
  *  Esc puts the name back. A textarea grown to its text, so a long name wraps (an input cut it off on a phone). The editor ignores the widget's events (live-preview's InlineTitleWidget), so the field's
  *  keys and clicks are its own. */
-function titleInput(path: string, name: string): HTMLElement {
+function titleInput(path: string, name: string, glyph = "", viewRef?: { view: EditorView | null }): HTMLElement {
   const h = document.createElement("textarea");
   h.className = "inline-title";
   h.value = name;
@@ -315,5 +407,30 @@ function titleInput(path: string, name: string): HTMLElement {
     else if (e.key === "Escape") { e.preventDefault(); done = true; h.value = name; h.blur(); }
   });
   h.addEventListener("blur", commit);
-  return h;
+  if (!glyph) return h;
+  const wrap = document.createElement("div");
+  wrap.className = "inline-title-wrap";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "page-emblem";
+  btn.textContent = glyph;
+  btn.title = "Change page icon";
+  btn.setAttribute("aria-label", "Change page icon");
+  btn.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = btn.getBoundingClientRect();
+    (viewRef?.view?.dom ?? btn).dispatchEvent(
+      new CustomEvent("kandinsky-icon-picker", {
+        bubbles: true,
+        detail: { x: rect.left, y: rect.bottom + 6, el: btn },
+      }),
+    );
+  });
+  wrap.append(btn, h);
+  return wrap;
 }

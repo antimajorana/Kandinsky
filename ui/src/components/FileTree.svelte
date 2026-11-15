@@ -14,7 +14,9 @@
   import { LETTER } from "../lib/gitstatus.svelte";
   import { settings } from "../lib/settings.svelte";
   import { shownEntries, treeView } from "../lib/tree-view.svelte";
-  import { folderTint, isAgentPlumbing, oracleExplorer, toggleHidePlumbing } from "../lib/oracle-explorer.svelte";
+  import { isAgentPlumbing, oracleExplorer, toggleHidePlumbing } from "../lib/oracle-explorer.svelte";
+  import { getNoteIcon, resolveFolderTint } from "../lib/folder-colors.svelte";
+  import { isNotionShell } from "../lib/shell-mode.svelte";
   import { activeRow, changeOf, openDirs, revealed, setOpen } from "../lib/file-tree.svelte";
   import { joinPath, openExplorer, sources, type FileSource } from "../lib/file-sources.svelte";
   import { busy, listFolder, listed, openRemote, placesOf, remoteKey, remoteOpen, servers, setRemoteOpen, sortEntries, wantPlaces } from "../lib/remote-tree.svelte";
@@ -241,7 +243,9 @@
       {@const change = showGit ? changeOf(entry.path, entry.kind === "dir") : undefined}
       {@const opensNote = entry.kind === "dir" && !!entry.note}
       {@const isActive = activeRow.has(entry.path) || (opensNote && activeRow.has(entry.note!))}
-      {@const tint = folderTint(entry.path)}
+      {@const tint = resolveFolderTint(entry.path)}
+      {@const customIcon = entry.kind !== "dir" ? getNoteIcon(entry.path) : null}
+      {@const displayName = entry.kind !== "dir" && isNotionShell() && /\.md$/i.test(entry.name) ? entry.name.slice(0, -3) : entry.name}
       <li>
         <button class="row git-{change ?? 'clean'}" class:active={isActive} class:is-dir={entry.kind === "dir"} class:ignored={entry.ignored}
           style:padding-left="{8 + r.depth * 14}px" onclick={(e) => toggle(e, entry, r.open)} title={entry.path} data-path={entry.path} data-key={entry.path} draggable="true">
@@ -251,10 +255,14 @@
             {#if tint?.dot}<span class="bauhaus-dot" style:background={tint.dot}></span>{/if}
           {:else}
             <span class="chev"></span>
-            <span class="ico" style:color={tint?.dot ? tint.color : undefined} class:tinted-file={!!tint?.dot}><Icon name={fileIcon(entry.path)} size={15} /></span>
+            {#if customIcon}
+              <span class="ico custom-glyph" style:color={tint?.dot ? tint.color : undefined}>{customIcon}</span>
+            {:else}
+              <span class="ico" style:color={tint?.dot ? tint.color : undefined} class:tinted-file={!!tint?.dot}><Icon name={fileIcon(entry.path)} size={15} /></span>
+            {/if}
             {#if isActive}<span class="bauhaus-dot" style:background={tint?.dot ?? "var(--accent)"}></span>{/if}
           {/if}
-          <span class="name" class:tinted-dir={entry.kind === "dir" && !!tint?.dot} style:color={entry.kind === "dir" && tint?.dot && !change ? tint.color : undefined}>{entry.name}</span>
+          <span class="name" class:tinted-dir={entry.kind === "dir" && !!tint?.dot} style:color={entry.kind === "dir" && tint?.dot && !change ? tint.color : undefined}>{displayName}</span>
           {#if change}
             {#if entry.kind === "dir"}<span class="gdot" title="Contains {change} files"></span>
             {:else}<span class="glet" title={change}>{LETTER[change]}</span>{/if}
@@ -290,6 +298,7 @@
   /* fixed widths: a long name must not shrink the chevron slot (rows lost their alignment) */
   .chev, .ico { flex: none; }
   .ico { display: inline-flex; color: var(--text-faint); margin-right: 2px; }
+  .ico.custom-glyph { width: 15px; height: 15px; align-items: center; justify-content: center; font-size: calc(13px * var(--ui-scale, 1)); line-height: 1; color: var(--text-muted); }
   .ico.tinted-file { opacity: .78; }
   .ico.dir { color: var(--text-muted); opacity: .9; }
   .ico.dir.note { color: var(--text-faint); opacity: 1; }

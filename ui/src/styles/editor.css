@@ -72,10 +72,16 @@
 
 /* --- live preview (markdown: Notion × Bauhaus document sheet) ----------------------------- */
 .live-cm.cm-editor { --line-width: 740px; font-size: var(--prose-size, 15.5px); }
+.editor-pane.full-width .live-cm.cm-editor { --line-width: 1080px; --prose-width: 1080px; }
 .live-cm.cm-editor .cm-scroller.cm-scroller { font-family: var(--prose-font, var(--font-ui)); line-height: var(--prose-line-height, 1.68); }
+.live-cm .cm-scroller:has(> .cm-note-hero-slot) { flex-wrap: wrap !important; align-content: flex-start; }
+.live-cm .cm-note-hero-slot { flex: 0 0 100%; width: 100%; box-sizing: border-box; }
 .live-cm .cm-content { max-width: calc(var(--prose-width, var(--line-width, 740px)) + 112px); margin: 0 auto; padding: 36px 56px 45vh; box-sizing: border-box; width: 100%; }
+.live-cm .cm-scroller:has(> .cm-note-hero-slot) > .cm-content { flex: 1 1 0%; min-width: 0; width: auto; padding-top: 4px; }
 /* a phone's width goes to the words: 16 px at the sides (the desktop's 56 px took a fifth of the line) */
 html.phone .live-cm .cm-content { padding: 20px 16px 45vh; }
+html.phone .live-cm .cm-scroller:has(> .cm-note-hero-slot) > .cm-content { padding-top: 4px; }
+.live-cm.is-source-mode .cm-content { font-family: var(--font-mono); font-size: calc(13.5px * var(--ui-scale, 1)); line-height: 1.6; }
 .live-cm .cm-line { padding: 0; }
 .live-cm .cm-fm-anchor { height: 0; margin: 0; padding: 0; overflow: hidden; line-height: 0; font-size: 0; }
 .live-cm .cm-activeLine { background: transparent; }
@@ -178,7 +184,17 @@ html.phone .live-cm .cm-content { padding: 20px 16px 45vh; }
 .markdown .cm-footnote-label { font-size: .85em; color: var(--text-muted); }
 /* Notion × Obsidian inline page title: the file name at 33px above the note when no `# H1` repeats it */
 /* padding, never margin: CodeMirror measures block widgets by their border box (a margin shifted every click below it) */
+.page-emblem {
+  display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 7px;
+  background: var(--accent-soft); color: var(--accent); font-family: var(--font-ui); font-size: 16px;
+  font-weight: 600; line-height: 1; padding: 0; margin-right: 12px; vertical-align: -3px;
+  cursor: pointer; border: 0; text-indent: 0; flex-shrink: 0; transition: transform .12s, background .12s;
+}
+.page-emblem:hover { transform: scale(1.05); background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.inline-title-wrap { display: flex; align-items: center; gap: 12px; padding: 0 0 .35em; }
+.inline-title-wrap .page-emblem { margin-right: 0; }
 .markdown .inline-title { font-size: 2.06em; font-weight: 700; letter-spacing: -.028em; color: var(--heading, var(--text)); line-height: 1.18; margin: 0; padding: 0 0 .35em; overflow-wrap: anywhere; }
+.inline-title-wrap textarea.inline-title { padding-bottom: 0; flex: 1; min-width: 0; }
 textarea.inline-title { display: block; width: 100%; box-sizing: border-box; resize: none; overflow: hidden; border: 0; border-radius: 4px; background: transparent; font-family: inherit; outline: none; padding-inline: 0; cursor: text; }
 textarea.inline-title:hover { background: var(--bg-hover); }
 textarea.inline-title:focus { background: var(--bg-hover); box-shadow: inset 0 -2px 0 var(--accent); }
