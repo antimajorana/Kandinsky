@@ -15,10 +15,10 @@
   import Invest from "./Invest.svelte";
   import Sources from "./Sources.svelte";
 
-  let { atlas }: { atlas: PluginApi } = $props();
+  let { kandinsky }: { kandinsky: PluginApi } = $props();
   type Tab = "overview" | "transactions" | "spending" | "accounts" | "budget" | "review" | "invest" | "sources";
   const TABS: [Tab, string][] = [["overview", "Overview"], ["transactions", "Transactions"], ["spending", "Spending"], ["accounts", "Accounts"], ["budget", "Budget"], ["review", "Review"], ["invest", "Investments"], ["sources", "Sources"]];
-  const initialArg = () => atlas.arg; // the tab openView named ("review"); later args come as a new pane
+  const initialArg = () => kandinsky.arg; // the tab openView named ("review"); later args come as a new pane
   let tab = $state<Tab>(TABS.find(([t]) => t === initialArg())?.[0] ?? "overview");
   let summary = $state<Summary | null>(null);
   let rows = $state<Row[]>([]);
@@ -30,7 +30,7 @@
   let open = $state<Row | "new" | null>(null);
   let review: Review | undefined = $state();
   let invest: Invest | undefined = $state();
-  const cur = $derived(currency(atlas));
+  const cur = $derived(currency(kandinsky));
 
   // one period for Overview and Spending, from the latest month with transactions
   const last = $derived(rows[0]?.date.slice(0, 7) ?? ym(new Date()));
@@ -45,10 +45,10 @@
 
   async function load() {
     try {
-      const [s, t] = await Promise.all([call<Summary>(atlas, "summary"), call<{ transactions: Row[] }>(atlas, "transactions")]);
+      const [s, t] = await Promise.all([call<Summary>(kandinsky, "summary"), call<{ transactions: Row[] }>(kandinsky, "transactions")]);
       summary = s; rows = t.transactions;
       error = "";
-      diags = s.errors + s.warnings ? (await call<{ diagnostics: Diagnostic[] }>(atlas, "check")).diagnostics : [];
+      diags = s.errors + s.warnings ? (await call<{ diagnostics: Diagnostic[] }>(kandinsky, "check")).diagnostics : [];
       if (account) await openAccount(account, false);
       // an open editor follows its transaction (same place and header), or closes when it is gone
       if (open && open !== "new") { const o = open; open = rows.find((r) => r.path === o.path && r.line === o.line && r.text === o.text) ?? null; }
@@ -57,21 +57,21 @@
   async function openAccount(a: string, go = true) {
     account = a;
     if (go) tab = "accounts";
-    register = (await call<{ rows: RegisterRow[] }>(atlas, "register", { account: a })).rows;
+    register = (await call<{ rows: RegisterRow[] }>(kandinsky, "register", { account: a })).rows;
   }
   function show(q: string) { query = q; open = null; tab = "transactions"; }
   function edit(path: string, line: number) {
     const r = rows.find((x) => x.path === path && x.line === line);
-    if (r) { open = r; tab = "transactions"; } else atlas.open(path, line);
+    if (r) { open = r; tab = "transactions"; } else kandinsky.open(path, line);
   }
   load();
 
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const mine = (p?: string) => !!p && p.startsWith(`${folder(atlas)}/`);
+  const mine = (p?: string) => !!p && p.startsWith(`${folder(kandinsky)}/`);
   const later = () => { clearTimeout(timer); timer = setTimeout(() => { load(); review?.load(); invest?.load(); }, 300); };
   $effect(() => {
-    const offs = (["file:save", "file:create", "file:delete"] as const).map((ev) => atlas.on(ev, (e) => { if (mine((e as { path?: string }).path)) later(); }));
-    offs.push(atlas.on("file:rename", (e) => { const r = e as { from?: string; to?: string }; if (mine(r.from) || mine(r.to)) later(); }));
+    const offs = (["file:save", "file:create", "file:delete"] as const).map((ev) => kandinsky.on(ev, (e) => { if (mine((e as { path?: string }).path)) later(); }));
+    offs.push(kandinsky.on("file:rename", (e) => { const r = e as { from?: string; to?: string }; if (mine(r.from) || mine(r.to)) later(); }));
     return () => { clearTimeout(timer); offs.forEach((off) => off()); };
   });
 
@@ -99,18 +99,18 @@
         <button class:on={tab === t} aria-current={tab === t ? "page" : undefined} onclick={() => (tab = t)} title={`key ${i + 1}`}>{name}{#if t === "review" && summary?.review}<span class="badge">{summary.review}</span>{/if}</button>
       {/each}
     </nav>
-    <button class="atlas-btn" onclick={() => atlas.plugin.openSettings()}>Settings…</button>
+    <button class="kandinsky-btn" onclick={() => kandinsky.plugin.openSettings()}>Settings…</button>
   </header>
 
   {#if error}
-    <div class="atlas-notice error">{error}<div class="actions"><button class="atlas-btn" onclick={load}>Try again</button><button class="atlas-btn" onclick={() => atlas.plugin.openSettings()}>Settings…</button></div></div>
+    <div class="kandinsky-notice error">{error}<div class="actions"><button class="kandinsky-btn" onclick={load}>Try again</button><button class="kandinsky-btn" onclick={() => kandinsky.plugin.openSettings()}>Settings…</button></div></div>
   {:else if !summary}
-    <div class="atlas-empty">Reading the journal…</div>
+    <div class="kandinsky-empty">Reading the journal…</div>
   {:else if tab === "overview"}
-    <Overview {atlas} {summary} {rows} {diags} {cur} bind:period={() => period, (p) => (chosen = p)} {periods} {color} onshow={show}
+    <Overview {kandinsky} {summary} {rows} {diags} {cur} bind:period={() => period, (p) => (chosen = p)} {periods} {color} onshow={show}
       ontab={(t) => (tab = t)} onaccount={(a) => openAccount(a)} onchange={load} />
   {:else if tab === "transactions"}
-    <Transactions {atlas} {rows} accounts={summary.known} {cur} bind:query bind:open onchange={load} />
+    <Transactions {kandinsky} {rows} accounts={summary.known} {cur} bind:query bind:open onchange={load} />
   {:else if tab === "spending"}
     <Spend {rows} {cur} bind:period={() => period, (p) => (chosen = p)} {periods} {color} onshow={show} />
   {:else if tab === "accounts"}
@@ -126,18 +126,18 @@
           <h3>{account} <button class="link" onclick={() => show(account.toLowerCase())}>as transactions</button></h3>
           <Register rows={register} {account} onopen={(r) => edit(r.path, r.line)} />
         {:else}
-          <div class="atlas-empty">Choose an account or a category: its postings with the running balance, newest first; a row opens the transaction.</div>
+          <div class="kandinsky-empty">Choose an account or a category: its postings with the running balance, newest first; a row opens the transaction.</div>
         {/if}
       </main>
     </div>
   {:else if tab === "budget"}
-    <Budget {atlas} budget={summary.budget} {cur} onchange={load} />
+    <Budget {kandinsky} budget={summary.budget} {cur} onchange={load} />
   {:else if tab === "review"}
-    <Review bind:this={review} {atlas} known={summary.known} onchange={load} />
+    <Review bind:this={review} {kandinsky} known={summary.known} onchange={load} />
   {:else if tab === "invest"}
-    <Invest bind:this={invest} {atlas} {cur} />
+    <Invest bind:this={invest} {kandinsky} {cur} />
   {:else}
-    <Sources {atlas} sources={summary.sources} assets={summary.known.filter((a) => a.startsWith("Assets:"))} onchange={load} />
+    <Sources {kandinsky} sources={summary.sources} assets={summary.known.filter((a) => a.startsWith("Assets:"))} onchange={load} />
   {/if}
 </div>
 

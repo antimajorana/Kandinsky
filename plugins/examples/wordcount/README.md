@@ -1,7 +1,7 @@
 # Word count (example)
 
 The smallest working plugin: a block, a command, an editor menu row and one setting, in about 50 lines of JavaScript
-with no build step. Copy the folder to `<vault>/.atlas/plugins/wordcount/` and it is live; it reloads on every save.
+with no build step. Copy the folder to `<vault>/.kandinsky/plugins/wordcount/` and it is live; it reloads on every save.
 
 ## What it adds
 
@@ -12,12 +12,12 @@ with no build step. Copy the folder to `<vault>/.atlas/plugins/wordcount/` and i
 
 ## Settings
 
-- **Daily goal (words)** (500): read as `atlas.plugin.settings.goal`; the vault's value lives in
-  `.atlas/plugin-settings/wordcount.toml`.
+- **Daily goal (words)** (500): read as `kandinsky.plugin.settings.goal`; the vault's value lives in
+  `.kandinsky/plugin-settings/wordcount.toml`.
 
 ## What it shows a plugin author
 
-`register(atlas)`, `registerBlock` with options, `onFilesChanged` as a block's cleanup, `registerCommand`,
+`register(kandinsky)`, `registerBlock` with options, `onFilesChanged` as a block's cleanup, `registerCommand`,
 `shell.menu`, and the app's CSS variables. docs/guides/PLUGIN-API.md has the rest.
 
 ## Platforms

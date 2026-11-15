@@ -1,4 +1,4 @@
-//! JNI: `org.atlas.capture.Core`'s native methods, each a string in and out; a panic becomes `{"error"}`. The pens
+//! JNI: `org.kandinsky.capture.Core`'s native methods, each a string in and out; a panic becomes `{"error"}`. The pens
 //! and PDFium take and give float (or byte) arrays and throw IllegalArgumentException with why.
 use crate::phone;
 use crate::ink;
@@ -18,45 +18,45 @@ fn ret(env: &mut JNIEnv, f: impl FnOnce() -> String + std::panic::UnwindSafe) ->
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_prepare(mut env: JNIEnv, _: JClass, vault: JString) {
+pub extern "system" fn Java_org_kandinsky_capture_Core_prepare(mut env: JNIEnv, _: JClass, vault: JString) {
     let v = arg(&mut env, &vault);
     let _ = std::panic::catch_unwind(|| phone::prepare(Path::new(&v)));
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_suggest(mut env: JNIEnv, _: JClass, vault: JString, text: JString, caret: jint) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_suggest(mut env: JNIEnv, _: JClass, vault: JString, text: JString, caret: jint) -> jstring {
     let (v, t) = (arg(&mut env, &vault), arg(&mut env, &text));
     ret(&mut env, move || phone::suggest(Path::new(&v), &t, caret.max(0) as usize).to_string())
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_describe(mut env: JNIEnv, _: JClass, vault: JString, text: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_describe(mut env: JNIEnv, _: JClass, vault: JString, text: JString) -> jstring {
     let (v, t) = (arg(&mut env, &vault), arg(&mut env, &text));
     ret(&mut env, move || phone::describe(Some(Path::new(&v)).filter(|_| !v.is_empty()), &t))
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_save(mut env: JNIEnv, _: JClass, vault: JString, text: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_save(mut env: JNIEnv, _: JClass, vault: JString, text: JString) -> jstring {
     let (v, t) = (arg(&mut env, &vault), arg(&mut env, &text));
     ret(&mut env, move || phone::save(Path::new(&v), &t).to_string())
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_attach(mut env: JNIEnv, _: JClass, vault: JString, name: JString, source: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_attach(mut env: JNIEnv, _: JClass, vault: JString, name: JString, source: JString) -> jstring {
     let (v, n, s) = (arg(&mut env, &vault), arg(&mut env, &name), arg(&mut env, &source));
     ret(&mut env, move || phone::attach(Path::new(&v), &n, Path::new(&s)).to_string())
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_findVaults(mut env: JNIEnv, _: JClass, root: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_findVaults(mut env: JNIEnv, _: JClass, root: JString) -> jstring {
     let r = arg(&mut env, &root);
     ret(&mut env, move || phone::find_vaults(Path::new(&r)).to_string())
 }
 
-/// The full app's core: the vault's own Atlas server inside the app → `{port}` or `{error}` (serve.rs).
+/// The full app's core: the vault's own Kandinsky server inside the app → `{port}` or `{error}` (serve.rs).
 #[cfg(feature = "full")]
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_serve(mut env: JNIEnv, _: JClass, vault: JString, home: JString, vars: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_serve(mut env: JNIEnv, _: JClass, vault: JString, home: JString, vars: JString) -> jstring {
     let (v, h, e) = (arg(&mut env, &vault), arg(&mut env, &home), arg(&mut env, &vars));
     let vars: serde_json::Value = serde_json::from_str(&e).unwrap_or_default();
     crate::notices::install(&mut env);
@@ -66,7 +66,7 @@ pub extern "system" fn Java_org_atlas_capture_Core_serve(mut env: JNIEnv, _: JCl
 /// A folder vault's mirror and this app's sign-in for it, given to the in-app core (serve.rs `mirror`): `{ok}` or `{error}`.
 #[cfg(feature = "full")]
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_mirror(mut env: JNIEnv, _: JClass, vault: JString, mirror: JString, cookies: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_mirror(mut env: JNIEnv, _: JClass, vault: JString, mirror: JString, cookies: JString) -> jstring {
     let (v, m, c) = (arg(&mut env, &vault), arg(&mut env, &mirror), arg(&mut env, &cookies));
     ret(&mut env, move || crate::serve::mirror(Path::new(&v), &m, &c).to_string())
 }
@@ -74,14 +74,14 @@ pub extern "system" fn Java_org_atlas_capture_Core_mirror(mut env: JNIEnv, _: JC
 /// A sign-in to a service's gate made in the app (serve.rs `keep_signin`), for the in-app core's plugins: `{ok}` or `{error}`.
 #[cfg(feature = "full")]
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_keepSignin(mut env: JNIEnv, _: JClass, vault: JString, url: JString, cookies: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_keepSignin(mut env: JNIEnv, _: JClass, vault: JString, url: JString, cookies: JString) -> jstring {
     let (v, u, c) = (arg(&mut env, &vault), arg(&mut env, &url), arg(&mut env, &cookies));
     ret(&mut env, move || crate::serve::keep_signin(Path::new(&v), &u, &c).to_string())
 }
 
 /// A JPEG XL for the native plugins (image.rs): `[width, height, ARGB…]`, or null when it is not one.
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_decodeJxl(env: JNIEnv, _: JClass, bytes: jni::objects::JByteArray) -> jni::sys::jintArray {
+pub extern "system" fn Java_org_kandinsky_capture_Core_decodeJxl(env: JNIEnv, _: JClass, bytes: jni::objects::JByteArray) -> jni::sys::jintArray {
     let Ok(b) = env.convert_byte_array(&bytes) else { return std::ptr::null_mut() };
     let Ok(Ok((w, h, px))) = std::panic::catch_unwind(move || crate::image::decode_jxl(&b)) else { return std::ptr::null_mut() };
     let mut all = Vec::with_capacity(px.len() + 2);
@@ -96,18 +96,18 @@ pub extern "system" fn Java_org_atlas_capture_Core_decodeJxl(env: JNIEnv, _: JCl
 
 /// A built-in plugin's form from the manifest the app carries (phone::plugin_form): `{fields, settings}` or `{error}`.
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_pluginForm(mut env: JNIEnv, _: JClass, manifest: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_pluginForm(mut env: JNIEnv, _: JClass, manifest: JString) -> jstring {
     let m = arg(&mut env, &manifest);
     ret(&mut env, move || phone::plugin_form(&m).to_string())
 }
 
-/// The app's own interface for a server's vault (AtlasActivity serves it in place of the server's): the file at `path`
+/// The app's own interface for a server's vault (KandinskyActivity serves it in place of the server's): the file at `path`
 /// as `[mime, NUL, bytes…]`, the page told its API `prefix`; null when there is no such file.
 #[cfg(feature = "full")]
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_uiFile(mut env: JNIEnv, _: JClass, path: JString, prefix: JString) -> jni::sys::jbyteArray {
+pub extern "system" fn Java_org_kandinsky_capture_Core_uiFile(mut env: JNIEnv, _: JClass, path: JString, prefix: JString) -> jni::sys::jbyteArray {
     let (p, pre) = (arg(&mut env, &path), arg(&mut env, &prefix));
-    let Ok(Some((data, mime))) = std::panic::catch_unwind(move || atlas_core::server::ui_file(&p, &pre)) else { return std::ptr::null_mut() };
+    let Ok(Some((data, mime))) = std::panic::catch_unwind(move || kandinsky_core::server::ui_file(&p, &pre)) else { return std::ptr::null_mut() };
     let mut all = Vec::with_capacity(mime.len() + 1 + data.len());
     all.extend_from_slice(mime.as_bytes());
     all.push(0);
@@ -115,47 +115,47 @@ pub extern "system" fn Java_org_atlas_capture_Core_uiFile(mut env: JNIEnv, _: JC
     env.byte_array_from_slice(&all).map(|a| a.into_raw()).unwrap_or(std::ptr::null_mut())
 }
 
-/// `{version, api, ui}` of the interface this app carries (atlas_core::server::version_info), to compare with a server's.
+/// `{version, api, ui}` of the interface this app carries (kandinsky_core::server::version_info), to compare with a server's.
 #[cfg(feature = "full")]
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_version(mut env: JNIEnv, _: JClass) -> jstring {
-    ret(&mut env, || atlas_core::server::version_info().to_string())
+pub extern "system" fn Java_org_kandinsky_capture_Core_version(mut env: JNIEnv, _: JClass) -> jstring {
+    ret(&mut env, || kandinsky_core::server::version_info().to_string())
 }
 
 // ---- the core's text rules (text.rs), for the screens that kept copies: strings in and out, "" for null ----
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_untracked(mut env: JNIEnv, _: JClass, t: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_untracked(mut env: JNIEnv, _: JClass, t: JString) -> jstring {
     let t = arg(&mut env, &t);
     ret(&mut env, move || text::untracked(&t))
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_shareText(mut env: JNIEnv, _: JClass, subject: JString, t: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_shareText(mut env: JNIEnv, _: JClass, subject: JString, t: JString) -> jstring {
     let (s, t) = (arg(&mut env, &subject), arg(&mut env, &t));
     ret(&mut env, move || text::share_text(&s, &t))
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_shareQuote(mut env: JNIEnv, _: JClass, t: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_shareQuote(mut env: JNIEnv, _: JClass, t: JString) -> jstring {
     let t = arg(&mut env, &t);
     ret(&mut env, move || text::share_quote(&t))
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_underDraft(mut env: JNIEnv, _: JClass, draft: JString, shared: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_underDraft(mut env: JNIEnv, _: JClass, draft: JString, shared: JString) -> jstring {
     let (d, s) = (arg(&mut env, &draft), arg(&mut env, &shared));
     ret(&mut env, move || text::under_draft(&d, &s))
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_propsRead(mut env: JNIEnv, _: JClass, t: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_propsRead(mut env: JNIEnv, _: JClass, t: JString) -> jstring {
     let t = arg(&mut env, &t);
     ret(&mut env, move || text::props_read(&t).to_string())
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_propsSet(mut env: JNIEnv, _: JClass, t: JString, set: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_propsSet(mut env: JNIEnv, _: JClass, t: JString, set: JString) -> jstring {
     let (t, set) = (arg(&mut env, &t), arg(&mut env, &set));
     ret(&mut env, move || match serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&set) {
         Ok(set) => text::props_set(&t, &set),
@@ -164,13 +164,13 @@ pub extern "system" fn Java_org_atlas_capture_Core_propsSet(mut env: JNIEnv, _: 
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_propsList(mut env: JNIEnv, _: JClass, t: JString, key: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_propsList(mut env: JNIEnv, _: JClass, t: JString, key: JString) -> jstring {
     let (t, k) = (arg(&mut env, &t), arg(&mut env, &key));
     ret(&mut env, move || serde_json::json!(text::props_list(&t, &k)).to_string())
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_propsSetList(mut env: JNIEnv, _: JClass, t: JString, key: JString, items: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_propsSetList(mut env: JNIEnv, _: JClass, t: JString, key: JString, items: JString) -> jstring {
     let (t, k, items) = (arg(&mut env, &t), arg(&mut env, &key), arg(&mut env, &items));
     ret(&mut env, move || match serde_json::from_str::<Vec<String>>(&items) {
         Ok(items) => text::props_set_list(&t, &k, &items),
@@ -179,7 +179,7 @@ pub extern "system" fn Java_org_atlas_capture_Core_propsSetList(mut env: JNIEnv,
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_samplesEncode(mut env: JNIEnv, _: JClass, samples: JDoubleArray) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_samplesEncode(mut env: JNIEnv, _: JClass, samples: JDoubleArray) -> jstring {
     let n = env.get_array_length(&samples).unwrap_or(0).max(0) as usize;
     let mut s = vec![0.0; n];
     if env.get_double_array_region(&samples, 0, &mut s).is_err() {
@@ -189,7 +189,7 @@ pub extern "system" fn Java_org_atlas_capture_Core_samplesEncode(mut env: JNIEnv
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_samplesDecode(mut env: JNIEnv, _: JClass, t: JString) -> jdoubleArray {
+pub extern "system" fn Java_org_kandinsky_capture_Core_samplesDecode(mut env: JNIEnv, _: JClass, t: JString) -> jdoubleArray {
     let t = arg(&mut env, &t);
     let out = std::panic::catch_unwind(move || text::samples_decode(&t)).unwrap_or_default();
     let Ok(arr) = env.new_double_array(out.len() as i32) else { return std::ptr::null_mut() };
@@ -230,19 +230,19 @@ fn throw<T>(env: &mut JNIEnv, why: &str) -> *mut T {
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_penInk(mut env: JNIEnv, _: JClass, pen: jint, config: JFloatArray, samples: JFloatArray) -> jfloatArray {
+pub extern "system" fn Java_org_kandinsky_capture_Core_penInk(mut env: JNIEnv, _: JClass, pen: jint, config: JFloatArray, samples: JFloatArray) -> jfloatArray {
     let (cfg, raw) = (floats(&env, &config), floats(&env, &samples));
     give_floats(&mut env, move || ink::render(pen, &cfg, &raw))
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_penDefaults(mut env: JNIEnv, _: JClass, pen: jint, dpi: jfloat) -> jfloatArray {
+pub extern "system" fn Java_org_kandinsky_capture_Core_penDefaults(mut env: JNIEnv, _: JClass, pen: jint, dpi: jfloat) -> jfloatArray {
     give_floats(&mut env, move || ink::defaults(pen, dpi).map(Vec::from))
 }
 
 /// A charcoal stroke's dithered bitmap (ink::charcoal): 16 header bytes, then the pixels.
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_penCharcoal(mut env: JNIEnv, _: JClass, pen: jint, config: JFloatArray, samples: JFloatArray) -> jbyteArray {
+pub extern "system" fn Java_org_kandinsky_capture_Core_penCharcoal(mut env: JNIEnv, _: JClass, pen: jint, config: JFloatArray, samples: JFloatArray) -> jbyteArray {
     let (cfg, raw) = (floats(&env, &config), floats(&env, &samples));
     let out = match std::panic::catch_unwind(move || ink::charcoal(pen, &cfg, &raw)) {
         Ok(Ok(v)) => v,
@@ -254,22 +254,22 @@ pub extern "system" fn Java_org_atlas_capture_Core_penCharcoal(mut env: JNIEnv, 
 
 /// What Onyx's instant ink is told for a pen (ink::live): style, width, exact, n, params[n], settled config.
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_penLive(mut env: JNIEnv, _: JClass, pen: jint, config: JFloatArray) -> jfloatArray {
+pub extern "system" fn Java_org_kandinsky_capture_Core_penLive(mut env: JNIEnv, _: JClass, pen: jint, config: JFloatArray) -> jfloatArray {
     let cfg = floats(&env, &config);
     give_floats(&mut env, move || ink::live(pen, &cfg))
 }
 
-/// The shape a stroke (`x, y, t` per point) was meant as (atlas_pen::recognize): `[0]` none, else its kind and
+/// The shape a stroke (`x, y, t` per point) was meant as (kandinsky_pen::recognize): `[0]` none, else its kind and
 /// measures (shape.rs's wire format).
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_penShape(mut env: JNIEnv, _: JClass, xyt: JFloatArray, openink: jboolean) -> jfloatArray {
+pub extern "system" fn Java_org_kandinsky_capture_Core_penShape(mut env: JNIEnv, _: JClass, xyt: JFloatArray, openink: jboolean) -> jfloatArray {
     let pts = floats(&env, &xyt);
-    give_floats(&mut env, move || Ok::<_, ink::Refused>(atlas_pen::recognize(&pts, openink != 0)))
+    give_floats(&mut env, move || Ok::<_, ink::Refused>(kandinsky_pen::recognize(&pts, openink != 0)))
 }
 
 /// 0 filled, 1 translucent (the marker), 2 dabs; throws for a pen that does not exist.
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_penOutput(mut env: JNIEnv, _: JClass, pen: jint) -> jint {
+pub extern "system" fn Java_org_kandinsky_capture_Core_penOutput(mut env: JNIEnv, _: JClass, pen: jint) -> jint {
     match ink::output(pen) {
         Ok(o) => o,
         Err(why) => {
@@ -283,21 +283,21 @@ pub extern "system" fn Java_org_atlas_capture_Core_penOutput(mut env: JNIEnv, _:
 
 /// Loads libpdfium.so from `lib` once: "" when it is there, else why not (the reader then keeps PdfRenderer).
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_pdfiumInit(mut env: JNIEnv, _: JClass, lib: JString) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_pdfiumInit(mut env: JNIEnv, _: JClass, lib: JString) -> jstring {
     let l = arg(&mut env, &lib);
     ret(&mut env, move || crate::pdfium::init(Path::new(&l)).err().unwrap_or_default())
 }
 
 /// Each page's width, height (points), one pair after another.
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_pdfiumPages(mut env: JNIEnv, _: JClass, pdf: JString) -> jfloatArray {
+pub extern "system" fn Java_org_kandinsky_capture_Core_pdfiumPages(mut env: JNIEnv, _: JClass, pdf: JString) -> jfloatArray {
     let p = arg(&mut env, &pdf);
     give_floats(&mut env, move || -> Result<Vec<f32>, String> { Ok(crate::pdfium::pages(Path::new(&p))?.into_iter().flat_map(|(w, h)| [w, h]).collect()) })
 }
 
 /// Page `n` drawn `w` × `h`, RGBA (ARGB_8888's bytes): for `Bitmap.copyPixelsFromBuffer`.
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_pdfiumRender(mut env: JNIEnv, _: JClass, pdf: JString, n: jint, w: jint, h: jint, turns: jint) -> jbyteArray {
+pub extern "system" fn Java_org_kandinsky_capture_Core_pdfiumRender(mut env: JNIEnv, _: JClass, pdf: JString, n: jint, w: jint, h: jint, turns: jint) -> jbyteArray {
     let p = arg(&mut env, &pdf);
     let out = match std::panic::catch_unwind(move || crate::pdfium::render(Path::new(&p), n.max(1) as u32, w.max(1) as u32, h.max(1) as u32, turns.rem_euclid(4) as u8, true)) {
         Ok(Ok(v)) => v,
@@ -309,7 +309,7 @@ pub extern "system" fn Java_org_atlas_capture_Core_pdfiumRender(mut env: JNIEnv,
 
 /// Page `n`'s characters: code point, left, bottom, right, top (points, y up), five floats each.
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_pdfiumChars(mut env: JNIEnv, _: JClass, pdf: JString, n: jint) -> jfloatArray {
+pub extern "system" fn Java_org_kandinsky_capture_Core_pdfiumChars(mut env: JNIEnv, _: JClass, pdf: JString, n: jint) -> jfloatArray {
     let p = arg(&mut env, &pdf);
     give_floats(&mut env, move || -> Result<Vec<f32>, String> {
         Ok(crate::pdfium::chars(Path::new(&p), n.max(1) as u32)?.into_iter().flat_map(|(c, b)| [c as u32 as f32, b[0], b[1], b[2], b[3]]).collect())
@@ -318,7 +318,7 @@ pub extern "system" fn Java_org_atlas_capture_Core_pdfiumChars(mut env: JNIEnv, 
 
 /// Page `n`'s matches of `query`: for each, its number of boxes k, then k boxes of four floats.
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_pdfiumFind(mut env: JNIEnv, _: JClass, pdf: JString, n: jint, query: JString) -> jfloatArray {
+pub extern "system" fn Java_org_kandinsky_capture_Core_pdfiumFind(mut env: JNIEnv, _: JClass, pdf: JString, n: jint, query: JString) -> jfloatArray {
     let (p, q) = (arg(&mut env, &pdf), arg(&mut env, &query));
     give_floats(&mut env, move || -> Result<Vec<f32>, String> {
         Ok(crate::pdfium::find(Path::new(&p), n.max(1) as u32, &q)?
@@ -330,7 +330,7 @@ pub extern "system" fn Java_org_atlas_capture_Core_pdfiumFind(mut env: JNIEnv, _
 
 /// Page `n`'s links as JSON: `[{box, page} | {box, url}]`, or `{error}`.
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_Core_pdfiumLinks(mut env: JNIEnv, _: JClass, pdf: JString, n: jint) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_Core_pdfiumLinks(mut env: JNIEnv, _: JClass, pdf: JString, n: jint) -> jstring {
     let p = arg(&mut env, &pdf);
     ret(&mut env, move || match crate::pdfium::links(Path::new(&p), n.max(1) as u32) {
         Ok(ls) => serde_json::Value::Array(

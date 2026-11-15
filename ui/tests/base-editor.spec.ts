@@ -4,7 +4,7 @@ import { openFile } from "./open";
 // A base edited as in Obsidian's Bases: the toolbar's Filter (two scopes), Sort and Properties popovers, the view menu,
 // the table's header (drag, resize, menu) and its cells edited in place — each written to the `.base` or to the note at
 // once and shown in the table.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const text = (r: APIRequestContext, f: string) => r.get(`/api/file?path=${encodeURIComponent(f)}`, { headers: H }).then((x) => x.json()).then((j) => j.text as string);
 

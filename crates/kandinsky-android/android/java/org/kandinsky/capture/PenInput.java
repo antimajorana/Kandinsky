@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.content.Context;
 import android.view.MotionEvent;

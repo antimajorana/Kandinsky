@@ -80,7 +80,7 @@ pub fn read(first_page: &str, file: &str) -> Option<FirstPage> {
         let low = l.to_lowercase();
         ["dated", "date:", "received", "submitted", "published"].iter().any(|w| low.contains(w))
     });
-    let year = dated.and_then(|l| year_in(l)).or_else(|| year_in(&atlas_text::links::percent_decoded(file)));
+    let year = dated.and_then(|l| year_in(l)).or_else(|| year_in(&kandinsky_text::links::percent_decoded(file)));
     Some(FirstPage { title, authors, year })
 }
 

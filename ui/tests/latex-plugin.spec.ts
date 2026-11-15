@@ -2,7 +2,7 @@ import { test, expect, type APIRequestContext, type Page } from "@playwright/tes
 
 // LaTeX is a built-in plugin (lib/builtin-plugins.ts): its id in `[plugins] off` takes its snippets, Tab stops and
 // LaTeX completions out of the editor and its routes out of the core; its switch is in Plugins.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const NOTE = "latex-plugin-note.md";
 async function setOff(request: APIRequestContext, off: string[]) {
   const d = await (await request.get("/api/config", { headers: H })).json();

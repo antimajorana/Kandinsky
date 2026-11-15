@@ -1,7 +1,7 @@
 // Wikipedia for the catalog: `recognize` reads a Wikipedia page's one-line description to say what the page is about,
 // and the page's external links for the identifiers other sources use — both in ONE small request to the MediaWiki
 // query API (Wikipedia rate-limits bursts; a whole page's HTML per capture was ~1 MB). Tests: wikipedia.test.ts.
-import type { Params } from "atlas-helper";
+import type { Params } from "kandinsky-helper";
 
 const PAGE = /https?:\/\/([a-z]{2,3}(?:-[a-z]+)?)\.(?:m\.)?wikipedia\.org\/wiki\/([^\s?#]+)/i;
 
@@ -56,7 +56,7 @@ export function qualifier(title: string): string | null {
 
 /** The page's short description and its external links (IMDb, Letterboxd, MusicBrainz…), redirects followed. */
 export function queryUrl(lang: string, title: string): string {
-  return `https://${lang}.wikipedia.org/w/api.php?action=query&prop=description%7Cextlinks&titles=${atlas.url.quote(unquote(title), "")}`
+  return `https://${lang}.wikipedia.org/w/api.php?action=query&prop=description%7Cextlinks&titles=${kandinsky.url.quote(unquote(title), "")}`
     + "&ellimit=500&redirects=1&format=json&formatversion=2";
 }
 
@@ -68,10 +68,10 @@ export async function recognize(params: Params) {
   const [whole, lang, title] = [m[0], m[1].toLowerCase(), m[2]];
   // Wikimedia asks programs to say who to contact; without that it throttles hard. Two a second at most.
   const contact = String(params.settings?.contact ?? "").trim();
-  const agent = `Atlas/0.1 (personal notes app${contact ? `; ${contact}` : ""}) catalog-wikipedia`;
+  const agent = `Kandinsky/0.1 (personal notes app${contact ? `; ${contact}` : ""}) catalog-wikipedia`;
   let page: Page = {};
   try {
-    const pages: Page[] = (await atlas.fetchJson(queryUrl(lang, title), { headers: { "User-Agent": agent }, every: 0.5 }))?.query?.pages ?? [{}];
+    const pages: Page[] = (await kandinsky.fetchJson(queryUrl(lang, title), { headers: { "User-Agent": agent }, every: 0.5 }))?.query?.pages ?? [{}];
     page = pages[0]?.missing ? {} : (pages[0] ?? {});
   } catch (e) {
     // busy or unreachable: the title's qualifier alone still files "X (2019 film)" right; anything else waits for a retry
@@ -91,4 +91,4 @@ export async function recognize(params: Params) {
   return { candidates: [{ kind, ids, label: `${label} — ${page.description ?? qualifier(title)}` }] };
 }
 
-atlas.methods({ recognize });
+kandinsky.methods({ recognize });

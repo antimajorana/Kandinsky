@@ -4,7 +4,7 @@
   // click. Nothing is written before that click; each statement's note keeps the full report.
   import { call, folder, type PluginApi } from "./api";
 
-  let { atlas, onchange }: { atlas: PluginApi; onchange: () => void } = $props();
+  let { kandinsky, onchange }: { kandinsky: PluginApi; onchange: () => void } = $props();
   interface Line { note: string; account: string; source: string; rows: number; new: number; known: number; paired: number; skipped: number; checks: number; off: number }
   interface Run { files: string[]; report: string; new: number; errors: string[]; written: boolean; statements: Line[] }
   let run = $state<Run | null>(null);
@@ -15,12 +15,12 @@
   async function check(write = false) {
     busy = true;
     try {
-      run = await call<Run>(atlas, "import", { write });
+      run = await call<Run>(kandinsky, "import", { write });
       error = "";
       if (run.written) {
-        atlas.toast("Imported", `${run.new} transactions to review; the originals are in each account's archive.`);
+        kandinsky.toast("Imported", `${run.new} transactions to review; the originals are in each account's archive.`);
         onchange();
-        run = await call<Run>(atlas, "import");
+        run = await call<Run>(kandinsky, "import");
       }
     } catch (e) { error = (e as Error).message; } finally { busy = false; }
   }
@@ -31,20 +31,20 @@
   const repeats = $derived(run ? run.files.length - new Set(run.statements.map((l) => l.source)).size : 0);
 </script>
 
-<h3>Statements <span class="faint">{folder(atlas)}/statements/inbox/</span></h3>
+<h3>Statements <span class="faint">{folder(kandinsky)}/statements/inbox/</span></h3>
 {#if error}
-  <div class="atlas-notice error">{error}</div>
+  <div class="kandinsky-notice error">{error}</div>
 {:else if !run}
-  <div class="atlas-empty">Reading the inbox…</div>
+  <div class="kandinsky-empty">Reading the inbox…</div>
 {:else if !run.files.length}
-  <div class="atlas-empty">The inbox is empty. Drop a bank's export there (Norma 43, CSV, Excel, PDF): the preset that reads it is found from the file.</div>
+  <div class="kandinsky-empty">The inbox is empty. Drop a bank's export there (Norma 43, CSV, Excel, PDF): the preset that reads it is found from the file.</div>
 {:else}
   <p class="head">
     <b>{run.files.length}</b> files, <b>{run.statements.length}</b> statements, <b>{run.new}</b> new transactions ·
     {#if checks}{#if off}<span class="bad">{off} of {checks} balances disagree</span>{:else}<span class="good">all {checks} balances agree ✓</span>{/if}{/if}
     {#if repeats > 0}· {repeats} already imported{/if}
   </p>
-  {#each run.errors as e, i (i)}<div class="atlas-notice error">{e}</div>{/each}
+  {#each run.errors as e, i (i)}<div class="kandinsky-notice error">{e}</div>{/each}
   <table>
     <thead><tr><th>Statement</th><th class="n">rows</th><th class="n">new</th><th class="n">known</th><th class="n">transfers</th><th class="n">skipped</th><th>balances</th></tr></thead>
     <tbody>
@@ -58,11 +58,11 @@
     </tbody>
   </table>
   <div class="actions">
-    <button class="atlas-btn primary" disabled={busy || run.errors.length > 0} onclick={() => check(true)}>
+    <button class="kandinsky-btn primary" disabled={busy || run.errors.length > 0} onclick={() => check(true)}>
       {busy ? "Working…" : run.new ? `Import ${run.new} transactions` : "File the statements"}
     </button>
-    <button class="atlas-btn" disabled={busy} onclick={() => check()}>Check again</button>
-    <button class="atlas-btn" onclick={() => (open = !open)}>{open ? "Hide" : "Show"} the report</button>
+    <button class="kandinsky-btn" disabled={busy} onclick={() => check()}>Check again</button>
+    <button class="kandinsky-btn" onclick={() => (open = !open)}>{open ? "Hide" : "Show"} the report</button>
     {#if run.errors.length}<span class="faint">Fix the errors above first.</span>{/if}
   </div>
   {#if open}<pre>{run.report}</pre>{/if}

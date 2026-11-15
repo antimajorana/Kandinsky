@@ -9,7 +9,7 @@ test("the vault picker offers a server, and asks for its address", async ({ page
   await page.getByTestId("vault-switcher").getByRole("button", { name: "Connect to a server…" }).click();
   const palette = page.getByTestId("palette");
   await expect(palette.getByRole("textbox")).toHaveAttribute("placeholder", /server's address/);
-  await page.keyboard.type("https://atlas.example.org/v/notes/");
-  await expect(palette.getByText("Connect to https://atlas.example.org/v/notes/")).toBeVisible();
+  await page.keyboard.type("https://kandinsky.example.org/v/notes/");
+  await expect(palette.getByText("Connect to https://kandinsky.example.org/v/notes/")).toBeVisible();
   await page.keyboard.press("Escape");
 });

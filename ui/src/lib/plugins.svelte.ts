@@ -1,6 +1,6 @@
-// Workspace plugins (.atlas/plugins/<id>/, docs/guides/PLUGINS.md, docs/refactor/REFACTOR-plugins-v3.md): data + pieces.
+// Workspace plugins (.kandinsky/plugins/<id>/, docs/guides/PLUGINS.md, docs/refactor/REFACTOR-plugins-v3.md): data + pieces.
 // `main.js` registers blocks, commands and entity kinds at startup and again on every save (no rebuild); a pane
-// (`view.js`) and a rail button are opt-in. Plugins talk to Atlas only through the PluginApi, so the app never contains
+// (`view.js`) and a rail button are opt-in. Plugins talk to Kandinsky only through the PluginApi, so the app never contains
 // plugin-specific code. This module starts, reloads and watches them; the list and the ledger of registrations are
 // plugin-registry.svelte.ts, commands plugin-commands.ts, what a plugin is handed plugin-host-api.svelte.ts.
 import { errText } from "./text";
@@ -27,7 +27,7 @@ export { runPluginCommand } from "./plugin-commands";
 export type { ContextSnapshot, PaneAt, PluginFileSource } from "./plugin-host-api.svelte";
 
 // What a plugin is handed is fetched with the first plugin's code, not at start: it carries CodeMirror
-// (`atlas.editor.codemirror`), ~300 KB the start does not need otherwise.
+// (`kandinsky.editor.codemirror`), ~300 KB the start does not need otherwise.
 type Host = typeof import("./plugin-host-api.svelte");
 let host: Host | null = null;
 let hostLoading: Promise<Host> | null = null;
@@ -39,7 +39,7 @@ export function pluginApi(p: Plugin, at?: PaneAt): PluginApi {
   return host.pluginApi(p, at);
 }
 
-/** Run a plugin's main.js `register(atlas)` (after undoing its previous registrations). */
+/** Run a plugin's main.js `register(kandinsky)` (after undoing its previous registrations). */
 // the newest start of each plugin: a start overtaken while it fetched main.js (switched off, reloaded) stops there
 const starts = new Map<string, number>();
 
@@ -74,7 +74,7 @@ async function startMainNow(p: Plugin, run: number): Promise<void> {
   try {
     const [mod] = await Promise.all([importModule(p.main), loadHost()]);
     if (starts.get(p.id) !== run || !pluginOn(p)) return;
-    if (typeof mod.register !== "function") throw new Error("main.js has no `export function register(atlas)`");
+    if (typeof mod.register !== "function") throw new Error("main.js has no `export function register(kandinsky)`");
     const r = await mod.register(pluginApi(p));
     if (typeof r === "function") own(p.id, r); // its own cleanup, run on reload
   } catch (e) {
@@ -120,7 +120,7 @@ function closeOrphanViews(): void {
 
 let listed = false; // the vault's list was read (a failed read must not close every plugin's view)
 // a layout restored after the plugins loaded
-addEventListener("atlas-layout", () => { if (listed) closeOrphanViews(); });
+addEventListener("kandinsky-layout", () => { if (listed) closeOrphanViews(); });
 
 const told = new Set<string>();
 export async function loadPlugins(): Promise<void> {
@@ -146,9 +146,9 @@ export async function loadPlugins(): Promise<void> {
   if (typeof document !== "undefined") document.documentElement.dataset.pluginsStarted = "";
 }
 
-// `.atlas/init.js` (docs/guides/MALLEABLE.md rung 8): the workspace's own startup script — `register(atlas)`
+// `.kandinsky/init.js` (docs/guides/MALLEABLE.md rung 8): the workspace's own startup script — `register(kandinsky)`
 // with the plugin API, no manifest, reloaded on save. A plugin without the ceremony.
-const INIT_PATH = ".atlas/init.js";
+const INIT_PATH = ".kandinsky/init.js";
 const INIT: Plugin = { id: INIT_ID, title: "init.js", main: INIT_PATH, rail: false, opens: [], claims: [], has_data: false, settings: {}, fields: [], platforms: [], phone: true, permissions: { net: [], secrets: false, exec: [] }, has_helper: false, requires: [], requires_versions: {}, provides: [], parts: [], gives: [], agents: [] };
 async function startInit(): Promise<void> {
   // asked, not fetched: a missing init.js must not log a 404 on every start
@@ -172,19 +172,19 @@ export function watchPlugins(): () => void {
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const offFs = on("fs", (e) => {
     // a manifest, or a plugin folder appearing / going (copied in whole, its files may beat the watch)
-    // a manifest, or a plugin's settings file (.atlas/plugin-settings/<id>.toml: the values live there now)
-    if (touches(e.paths, (p) => /^\.atlas\/plugins\/[^/]+(\/plugin\.toml)?\/?$/.test(p) || /^\.atlas\/plugin-settings\/[^/]+\.toml$/.test(p))) { void loadPlugins(); return; }
+    // a manifest, or a plugin's settings file (.kandinsky/plugin-settings/<id>.toml: the values live there now)
+    if (touches(e.paths, (p) => /^\.kandinsky\/plugins\/[^/]+(\/plugin\.toml)?\/?$/.test(p) || /^\.kandinsky\/plugin-settings\/[^/]+\.toml$/.test(p))) { void loadPlugins(); return; }
     // a main.js or view.js that was not there when the list was read: the plugin just gained that part
     const known = new Set(plugins.list.flatMap((p) => [p.main, p.view]));
-    if (e.paths.some((p) => /^\.atlas\/plugins\/[^/]+\/(main|view)\.js$/.test(p) && !known.has(p))) { void loadPlugins(); return; }
+    if (e.paths.some((p) => /^\.kandinsky\/plugins\/[^/]+\/(main|view)\.js$/.test(p) && !known.has(p))) { void loadPlugins(); return; }
     if (e.paths.includes(INIT_PATH)) { clearTimeout(timers.get(INIT.id)); timers.set(INIT.id, setTimeout(() => void startInit(), 200)); }
-    const ids = new Set(e.paths.flatMap((p) => /^\.atlas\/plugins\/([^/]+)\/.+\.(m?js|json|css)$/.exec(p)?.[1] ?? []));
+    const ids = new Set(e.paths.flatMap((p) => /^\.kandinsky\/plugins\/([^/]+)\/.+\.(m?js|json|css)$/.exec(p)?.[1] ?? []));
     for (const id of ids) {
       clearTimeout(timers.get(id));
       timers.set(id, setTimeout(() => { const p = plugins.list.find((x) => x.id === id); if (p) void startMain(p); }, 200));
     }
     // the helper's own source changed: stop it, the next call starts the new code (its open sessions go)
-    const helpers = new Set(e.paths.flatMap((p) => /^\.atlas\/plugins\/([^/]+)\/.+\.(py|sh|bash|rb|pl|lua|jl|r)$/i.exec(p)?.[1] ?? []));
+    const helpers = new Set(e.paths.flatMap((p) => /^\.kandinsky\/plugins\/([^/]+)\/.+\.(py|sh|bash|rb|pl|lua|jl|r)$/i.exec(p)?.[1] ?? []));
     for (const id of helpers) {
       if (!plugins.list.find((x) => x.id === id)?.has_helper) continue;
       clearTimeout(timers.get(`helper:${id}`));

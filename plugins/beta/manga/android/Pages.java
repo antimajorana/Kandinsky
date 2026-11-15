@@ -1,4 +1,4 @@
-package org.atlas.plugins.manga;
+package org.kandinsky.plugins.manga;
 
 import android.graphics.Bitmap;
 import android.os.Build;
@@ -6,7 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.LruCache;
 
-import org.atlas.capture.Host;
+import org.kandinsky.capture.Host;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;

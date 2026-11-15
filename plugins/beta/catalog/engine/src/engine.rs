@@ -1,5 +1,5 @@
 //! The pipeline: load → recognise → dedupe → fetch → merge → write → sync, each stage narrated. All it needs from
-//! Atlas goes through [`Host`], so it is tested against a vault in memory and run against the core over the pipe.
+//! Kandinsky goes through [`Host`], so it is tested against a vault in memory and run against the core over the pipe.
 use crate::contrib::Registry;
 use crate::kind::{Kind, Kinds, Origin, Writer, KINDS_DIR};
 use crate::merge::{identifying, merge, Fetched, Merged};
@@ -11,11 +11,11 @@ use serde_json::{json, Map, Value};
 
 pub type Fail = String;
 
-/// What the engine asks of Atlas. Every method is one call to the core.
+/// What the engine asks of Kandinsky. Every method is one call to the core.
 pub trait Host {
     /// every enabled plugin's `[contributes.catalog]`, by plugin id
     fn contributions(&self) -> Result<Map<String, Value>, Fail>;
-    /// `(path, text)` of each `.atlas/kinds/*.yaml`
+    /// `(path, text)` of each `.kandinsky/kinds/*.yaml`
     fn vault_kinds(&self) -> Result<Vec<(String, String)>, Fail>;
     /// a plugin's `[[tool]]` called through the core (its helper, its secrets, its sign-in)
     fn tool(&self, plugin: &PluginId, tool: &str, input: Value) -> Result<Value, Fail>;
@@ -630,7 +630,7 @@ pub fn title_from_url(url: &str) -> Option<String> {
         !ROUTES.contains(&s.to_lowercase().as_str())
             && (s.chars().filter(|c| c.is_alphabetic()).count() >= 3 && s.chars().any(|c| matches!(c, '-' | '_' | '+' | ' ')) || s.chars().all(|c| c.is_alphabetic()) && s.len() >= 4)
     };
-    let segs: Vec<String> = parts.filter(|s| !s.is_empty()).map(atlas_text::links::percent_decoded).collect();
+    let segs: Vec<String> = parts.filter(|s| !s.is_empty()).map(kandinsky_text::links::percent_decoded).collect();
     let seg = segs.iter().map(String::as_str).rev().find(wordy);
     let words = match seg {
         Some(s) => {
@@ -721,7 +721,7 @@ mod tests {
             Ok(self.contributions.as_object().cloned().unwrap_or_default())
         }
         fn vault_kinds(&self) -> Result<Vec<(String, String)>, Fail> {
-            Ok(self.files.borrow().iter().filter(|(p, _)| p.starts_with(".atlas/kinds/")).map(|(p, t)| (p.clone(), t.clone())).collect())
+            Ok(self.files.borrow().iter().filter(|(p, _)| p.starts_with(".kandinsky/kinds/")).map(|(p, t)| (p.clone(), t.clone())).collect())
         }
         fn tool(&self, plugin: &PluginId, tool: &str, input: Value) -> Result<Value, Fail> {
             self.calls.borrow_mut().push(format!("{plugin}.{tool}"));
@@ -767,7 +767,7 @@ mod tests {
     }
 
     fn fm(t: &str) -> Fields {
-        let Some(yaml) = atlas_text::frontmatter::split(t).0 else { return Fields::new() };
+        let Some(yaml) = kandinsky_text::frontmatter::split(t).0 else { return Fields::new() };
         serde_yaml::from_str::<Value>(yaml).ok().and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default()
     }
 
@@ -850,7 +850,7 @@ mod tests {
     fn a_vault_kind_file_moves_the_library_and_a_refresh_updates_only_owned_properties() {
         let f = web_and_linkwarden();
         f.files.borrow_mut().insert(
-            ".atlas/kinds/article.yaml".into(),
+            ".kandinsky/kinds/article.yaml".into(),
             "name: article\ntype: clip\nfolder: Clips\nids: [{ id: url, property: source }]\nproperties: [title, site]\n".into(),
         );
         let e = Engine::new(f);
@@ -1048,6 +1048,6 @@ mod tests {
         assert_eq!(title_from_url("https://files.example.org/Livros/Group%20Theory%20Application%20to%20Condensed%20Matter.pdf").as_deref(), Some("Group Theory Application to Condensed Matter"));
         assert_eq!(title_from_url("https://files.example.org/Livros/Dresselhaus%20-%20Group%20Theory%20(2010).pdf").as_deref(), Some("Dresselhaus Group Theory (2010)"));
         assert_eq!(title_from_url("https://files.example.org/books/Teor%C3%ADa%20de%20grupos.pdf").as_deref(), Some("Teoría de grupos"));
-        assert_eq!(atlas_text::links::percent_decoded("100%25 and 50% off"), "100% and 50% off");
+        assert_eq!(kandinsky_text::links::percent_decoded("100%25 and 50% off"), "100% and 50% off");
     }
 }

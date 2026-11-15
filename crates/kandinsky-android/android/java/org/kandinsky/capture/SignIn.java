@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Activity;
 import android.content.Context;
@@ -10,13 +10,13 @@ import java.net.URL;
 import java.net.URLEncoder;
 
 /**
- * Signing in to an Atlas server whatever stands in front of it (docs/guides/ANDROID.md, "Signing in"). Nothing names a product: the server's answer says it all —
- * JSON 401 is Atlas's own sign-in; a redirect to another host, or a page where JSON was expected, is a sign-in in front.
- * Either way the way in is Atlas's `/auth/app`: through the front's page (in the app's WebView, its cookies kept) and
- * Atlas's question, it hands the app a device token (no OIDC).
+ * Signing in to an Kandinsky server whatever stands in front of it (docs/guides/ANDROID.md, "Signing in"). Nothing names a product: the server's answer says it all —
+ * JSON 401 is Kandinsky's own sign-in; a redirect to another host, or a page where JSON was expected, is a sign-in in front.
+ * Either way the way in is Kandinsky's `/auth/app`: through the front's page (in the app's WebView, its cookies kept) and
+ * Kandinsky's question, it hands the app a device token (no OIDC).
  */
 final class SignIn {
-    enum Front { OPEN, ATLAS, PROXY, DOWN }
+    enum Front { OPEN, KANDINSKY, PROXY, DOWN }
 
     /** What answered: `front`, the sign-in's host, and why when it is down. */
     static final class Probe {
@@ -26,22 +26,25 @@ final class SignIn {
 
     private SignIn() {}
 
-    /** The server's name for this app (server.rs `APPS`): the token comes back to this package's own address. */
+    /** The server's name for this app (server.rs `APPS`): the token comes back to this package's own address. (`capture`
+     *  and `boox` are the editions installed before the rename, whose tokens go to their old schemes.) */
     static String app(Context c) {
         switch (Edition.of(c)) {
-            case BOOX: return "boox";
-            case ATLAS: return "atlas";
-            default: return "capture";
+            case BOOX: return "kandinsky-boox";
+            case KANDINSKY: return "kandinsky";
+            default: return "kandinsky-capture";
         }
     }
 
     /** For the in-app sign-in, which catches the token's redirect itself whatever app it names: only the scope matters,
      *  so a server from before an app's name (`boox`) still lets it in. */
-    static String scopeApp(Context c) { return Edition.of(c).full() ? "atlas" : "capture"; }
+    static String scopeApp(Context c) { return Edition.of(c).full() ? "kandinsky" : "capture"; }
 
-    /** A token's way back (`<scheme>://signed-in?token=…`) to any of the three apps. */
+    /** A token's way back (`<scheme>://signed-in?token=…`) to any of the three apps; `org.atlas.*` too, where a server
+     *  sends the in-app sign-in's `capture` scope (the old capture app's name, server.rs `APPS`). */
     static boolean isReturn(Uri u) {
-        return u.getScheme() != null && u.getScheme().startsWith("org.atlas.") && "signed-in".equals(u.getHost());
+        String s = u.getScheme();
+        return s != null && (s.startsWith("org.kandinsky.") || s.startsWith("org.atlas.")) && "signed-in".equals(u.getHost());
     }
 
     static String device() { return Build.MANUFACTURER + " " + Build.MODEL; }
@@ -55,7 +58,7 @@ final class SignIn {
             h.setInstanceFollowRedirects(false);
             h.setConnectTimeout(8000);
             h.setReadTimeout(10000);
-            h.setRequestProperty("x-atlas", "1");
+            h.setRequestProperty("x-kandinsky", "1"); h.setRequestProperty("x-atlas", "1"); // and a server from before the rename
             if (with) Server.headers(c, server, h);
             int code = h.getResponseCode();
             String type = String.valueOf(h.getContentType());
@@ -63,10 +66,10 @@ final class SignIn {
             String serverHost = Uri.parse(server).getHost();
             if (code >= 300 && code < 400 && loc != null) {
                 String to = Uri.parse(new URL(new URL(server), loc).toString()).getHost();
-                p.front = to != null && !to.equals(serverHost) ? Front.PROXY : Front.ATLAS;
+                p.front = to != null && !to.equals(serverHost) ? Front.PROXY : Front.KANDINSKY;
                 p.host = to;
             } else if (type.contains("json")) {
-                p.front = code == 200 ? Front.OPEN : Front.ATLAS;
+                p.front = code == 200 ? Front.OPEN : Front.KANDINSKY;
             } else {
                 p.front = Front.PROXY; // a sign-in page served in place
                 p.host = serverHost;
@@ -80,9 +83,9 @@ final class SignIn {
         return p;
     }
 
-    /** Atlas's own step in the browser (a server with only Atlas's password): `/auth/app` asks, then hands this app a token. */
-    static void atlasInBrowser(Activity a, String server) {
-        a.getSharedPreferences("atlas", Context.MODE_PRIVATE).edit().putString("signin:server", server).apply();
+    /** Kandinsky's own step in the browser (a server with only Kandinsky's password): `/auth/app` asks, then hands this app a token. */
+    static void kandinskyInBrowser(Activity a, String server) {
+        a.getSharedPreferences("kandinsky", Context.MODE_PRIVATE).edit().putString("signin:server", server).apply();
         // the browser is the user's pick, not only the default: a security key needs one that hands WebAuthn to Android's
         // passkey service (Authnkey…) — a recent Chromium (Vanadium, Cromite, Chrome); the Boox's default Firefox build does not
         Intent view = new Intent(Intent.ACTION_VIEW, Uri.parse(appUrl(a, server))).addCategory(Intent.CATEGORY_BROWSABLE);

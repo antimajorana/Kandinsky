@@ -74,7 +74,7 @@ async function retarget(md: string, to: string): Promise<number> {
   return n;
 }
 
-/** Each Obsidian drawing made Atlas's: its scene saved as `x.excalidraw` — the name its `[[x.excalidraw]]` links already use —
+/** Each Obsidian drawing made Kandinsky's: its scene saved as `x.excalidraw` — the name its `[[x.excalidraw]]` links already use —
  *  whose save makes the companion note `x.md` (drawing_note.rs), and the old file to the Trash. Never over a file:
  *  one whose `x.excalidraw` or `x.md` is there is left, and said. */
 async function fromObsidian(): Promise<void> {
@@ -186,7 +186,7 @@ export function drawingsSource(): LibrarySource {
     open: (item) => openPath(item.id),
     many: (items) => [{
       label: `Delete ${items.length}…`, icon: "close", danger: true,
-      confirm: { title: `Move ${items.length} drawings (with their own notes) to the Trash?`, hint: "They can be brought back from .atlas/trash.", button: "Move to the Trash" },
+      confirm: { title: `Move ${items.length} drawings (with their own notes) to the Trash?`, hint: "They can be brought back from .kandinsky/trash.", button: "Move to the Trash" },
       run: () => removeMany(items.map((i) => i.id)),
     }],
   };

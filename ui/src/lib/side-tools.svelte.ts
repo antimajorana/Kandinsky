@@ -1,4 +1,4 @@
-// Tools a plugin adds to the side panel (`atlas.shell.sideTool`), next to Files / Search / Outline /
+// Tools a plugin adds to the side panel (`kandinsky.shell.sideTool`), next to Files / Search / Outline /
 // Git. A side tool is a block that lives in the side zone: in the left bar it is mounted like the
 // four built-in tools, beside the editors it is a tab of the side column. No imports: the dock, the
 // panes and the side panel all ask this list.

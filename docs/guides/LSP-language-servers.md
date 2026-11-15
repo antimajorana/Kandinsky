@@ -22,18 +22,18 @@ format, **Shift+F12** references. Markdown notes are never sent to a server.
 - Installed on the development machine: rust-analyzer, pylsp, clangd, basedpyright, texlab.
 
 ## How it works
-- `crates/atlas-core/src/lsp.rs`: `GET /api/lsp` → per language its extensions, the resolved command (or
+- `crates/kandinsky-core/src/lsp.rs`: `GET /api/lsp` → per language its extensions, the resolved command (or
   null) and the workspace `root_uri`. `GET /api/lsp/{rust|python|latex|c}` (WebSocket, Origin-checked like
   the PTY) spawns the server in the workspace root and relays: LSP `Content-Length` framing on stdio ↔ one
   text frame per JSON message. The process is killed when the socket closes (`kill_on_drop`); stderr goes
-  to `.atlas/cache/lsp-<lang>.log` (truncated per start).
+  to `.kandinsky/cache/lsp-<lang>.log` (truncated per start).
 - `ui/src/lib/editor/lsp.ts`: one `LSPClient` per language for the whole window (one server process per
   language), created on the first file that needs it; `lspFor(path)` returns the client's plugin for the
   file's URI and language id (c/cpp, latex/bibtex). `create.ts` attaches it through a compartment once the
   connection is up, so opening a file never waits on a server. A closed socket forgets the client; the next
   editor starts a fresh server.
-- `AtlasWorkspace` re-implements the library's (unexported) default workspace, tolerating the same file in
-  two tabs (follows the newest view) and implementing `displayFile`: open the file in Atlas, then wait (≤ 5 s)
+- `KandinskyWorkspace` re-implements the library's (unexported) default workspace, tolerating the same file in
+  two tabs (follows the newest view) and implementing `displayFile`: open the file in Kandinsky, then wait (≤ 5 s)
   for its editor to register through its LSP plugin.
 
 ## Tests
@@ -52,7 +52,7 @@ format, **Shift+F12** references. Markdown notes are never sent to a server.
 ## Update (same day): servers installed, client fixed
 - Installed: **basedpyright 1.40.2** (`uv tool install basedpyright` →
   `~/.local/bin`) and **texlab 5.26.0** (release binary → `~/.local/bin/texlab`). Auto-detection now picks
-  basedpyright for Python and texlab for LaTeX; the vault's `.atlas/config.toml` no longer pins pylsp.
+  basedpyright for Python and texlab for LaTeX; the vault's `.kandinsky/config.toml` no longer pins pylsp.
 - The vault's `pyrightconfig.json`: the project's venv, `basic` checking, heavy folders excluded.
 - **Client bug found**: @codemirror/lsp-client never answers requests FROM the server and sends no
   `workspaceFolders`, so basedpyright ignored `pyrightconfig.json` (60 strict-mode warnings on
@@ -73,9 +73,9 @@ Autocompletion of code inside code files. Tried on a scratch vault with the real
 | `.js` | none (not one of the four languages) | CodeMirror's own completion: the file's names and keywords (`area`, `return`). No types, no imports. |
 | `.rs` | **does not start** | `~/.cargo/bin/rust-analyzer` is rustup's stand-in and the component is not installed: `error: Unknown binary 'rust-analyzer' in official toolchain 'stable-x86_64-unknown-linux-gnu'`. Fix on the machine: `rustup component add rust-analyzer`. |
 
-Before today the Rust case was silent: the socket closed, the client was forgotten, and completion was just missing (plus an unhandled "Request timed out" in `.atlas/cache/ui.log` eight seconds later). Now `connect()` in `ui/src/lib/editor/lsp.ts` notes whether the server ever said anything; a server that closes without a word is reported once per language (`reportDead`): a 15-second error toast with the last line of `.atlas/cache/lsp-<lang>.log` and where to fix it (Settings → Code).
+Before today the Rust case was silent: the socket closed, the client was forgotten, and completion was just missing (plus an unhandled "Request timed out" in `.kandinsky/cache/ui.log` eight seconds later). Now `connect()` in `ui/src/lib/editor/lsp.ts` notes whether the server ever said anything; a server that closes without a word is reported once per language (`reportDead`): a 15-second error toast with the last line of `.kandinsky/cache/lsp-<lang>.log` and where to fix it (Settings → Code).
 
-Not covered by a server: JavaScript/TypeScript, shell, Julia. Adding one is a line in `LspLang` (`crates/atlas-core/src/lsp.rs`: extensions, candidates, a setting) — not done, nobody asked for a specific one yet.
+Not covered by a server: JavaScript/TypeScript, shell, Julia. Adding one is a line in `LspLang` (`crates/kandinsky-core/src/lsp.rs`: extensions, candidates, a setting) — not done, nobody asked for a specific one yet.
 
 
 ## Code actions (Ctrl+.)

@@ -3,7 +3,7 @@
 // each step the memory of WebKit's page process (PSS, from /proc: what the system really gives it), with its anonymous
 // and file-backed parts, and the page's DOM nodes and mounted panes.
 //
-//   ATLAS_URL=http://127.0.0.1:7791/ ATLAS_PROBE_COPY=1 node scripts/dev/webkit-probe.mjs --dist ui/dist scripts/dev/webkit-longday.mjs
+//   KANDINSKY_URL=http://127.0.0.1:7791/ KANDINSKY_PROBE_COPY=1 node scripts/dev/webkit-probe.mjs --dist ui/dist scripts/dev/webkit-longday.mjs
 //
 // JSC_forceRAMSize=<bytes> in the environment reaches the page process: JavaScriptCore then sizes its heap and its
 // collections for that much RAM.
@@ -26,38 +26,38 @@ function mem(pid) {
 }
 
 export default async ({ page, errs }) => {
-  const atlas = (f, ...a) => page.evaluate(([f, a]) => window.__atlas[f](...a), [f, a]);
+  const kandinsky = (f, ...a) => page.evaluate(([f, a]) => window.__kandinsky[f](...a), [f, a]);
   const rows = [];
   const snap = async (label) => {
     await page.waitForTimeout(1500);
     const pids = pageProcesses();
     const m = pids.map(mem).filter(Boolean).sort((a, b) => b.pss - a.pss)[0];
     const dom = await page.evaluate(() => document.getElementsByTagName("*").length);
-    const s = await atlas("sleeping");
+    const s = await kandinsky("sleeping");
     rows.push({ label, ...m, dom, panes: s.panes, asleep: s.asleep });
     console.log(`${label.padEnd(22)} page ${String(m?.pss).padStart(4)} MB (anon ${m?.anon}, file ${m?.file}, shmem ${m?.shmem}) · ${dom} elements · ${s.panes} panes, ${s.asleep} asleep`);
   };
 
   await page.waitForTimeout(3000);
   await snap("start");
-  const files = await page.evaluate(async () => (await (await fetch("/api/files", { headers: { "x-atlas": "1" } })).json()));
-  const pick = (re, n) => files.filter((f) => re.test(f) && !/^(mail|\.atlas)\//.test(f)).filter((_, i, a) => i % Math.max(1, Math.floor(a.length / n)) === 0).slice(0, n);
+  const files = await page.evaluate(async () => (await (await fetch("/api/files", { headers: { "x-kandinsky": "1" } })).json()));
+  const pick = (re, n) => files.filter((f) => re.test(f) && !/^(mail|\.kandinsky)\//.test(f)).filter((_, i, a) => i % Math.max(1, Math.floor(a.length / n)) === 0).slice(0, n);
   const share = (k) => Math.max(1, Math.round((TABS * k) / 40));
   const plan = [...pick(/\.md$/, share(18)), ...pick(/\.pdf$/, share(8)), ...pick(/\.excalidraw$/, share(5)), ...pick(/\.base$/, share(3)), ...pick(/\.page$/, share(2))];
   for (const [i, f] of plan.entries()) {
-    await atlas("open", f);
+    await kandinsky("open", f);
     await page.waitForTimeout(800);
     if ((i + 1) % 10 === 0) await snap(`after ${i + 1} tabs`);
   }
-  for (const id of ["ui.settings", "ui.libraries", "ui.graph"]) { await atlas("run", id); await page.waitForTimeout(1500); }
+  for (const id of ["ui.settings", "ui.libraries", "ui.graph"]) { await kandinsky("run", id); await page.waitForTimeout(1500); }
   await snap(`all ${plan.length + 3} open`);
   // back through them all, as a day's switching does
-  for (const f of plan) { await atlas("open", f); await page.waitForTimeout(150); }
+  for (const f of plan) { await kandinsky("open", f); await page.waitForTimeout(150); }
   await snap("cycled once");
-  const slept = await atlas("hibernate", 0);
+  const slept = await kandinsky("hibernate", 0);
   await page.waitForTimeout(5000); // a collection has the time to run
   await snap(`${slept} put to sleep`);
-  for (const p of await atlas("panes")) await atlas("close", p.id);
+  for (const p of await kandinsky("panes")) await kandinsky("close", p.id);
   await page.waitForTimeout(8000);
   await snap("every tab closed");
   if (errs.length) console.log(`page errors: ${errs.length}\n  ${errs.slice(0, 5).join("\n  ")}`);

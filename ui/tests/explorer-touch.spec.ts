@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 // The explorer on a touch screen (the Boox: "the file explorer from the web also needs some tweaking for
 // touchscreens"): a tap opens, rows a finger can hit, and the places as a menu when the pane is too narrow for them.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 test.use({ hasTouch: true });
 
 test("touch: a tap goes into a folder and opens a file; narrow, the places are a menu", async ({ page, request }) => {

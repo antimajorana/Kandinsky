@@ -3,7 +3,7 @@ import { openFile } from "./open";
 
 // "Context menus everywhere (… editor)": a right-click in the text opens the app's menu — the
 // clipboard, then the note keys — and Shift+right-click leaves the browser's own.
-const lastLine = (page: Page) => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string } | null } }).__atlas.editor()?.text.trimEnd().split("\n").pop() ?? "");
+const lastLine = (page: Page) => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } | null } }).__kandinsky.editor()?.text.trimEnd().split("\n").pop() ?? "");
 
 test("the editor's menu: copy and paste, bold on the selection, keys in it, focus back in the text", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);

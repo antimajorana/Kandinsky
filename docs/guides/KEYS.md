@@ -2,7 +2,7 @@
 
 The idea: Super+E opens a command bar that runs commands and also searches and opens files, and the most useful shortcuts use Super instead of Ctrl, inspired by Obsidian's and Zen's keys and by common Obsidian hotkeys (Super/Ctrl+E command palette, Super+F omnisearch, Alt+N / Super+N new note from a template, Ctrl+Q cycle list / checklist, Ctrl+Shift+= zoom). The part that is safe was applied; the part that would change habits is written here as a proposal.
 
-Every key can be changed in Settings → Keyboard (it writes `.atlas/keys.toml`); this page is about the defaults (`keys` and `alsoKeys` on the actions in `ui/src/lib/actions.ts`, `notes-system.ts`, `tabs.svelte.ts`).
+Every key can be changed in Settings → Keyboard (it writes `.kandinsky/keys.toml`); this page is about the defaults (`keys` and `alsoKeys` on the actions in `ui/src/lib/actions.ts`, `notes-system.ts`, `tabs.svelte.ts`).
 
 ## Applied first — only additions, nothing taken away (superseded by "Decided" below)
 
@@ -25,11 +25,11 @@ A command keeps its Ctrl key and gains a second one. Nothing that worked stopped
 
 **Capture mode**: `+` as the first character makes the bar a capture box — tag "Capture", the capture box's completions on its input (task fields as in a note, `[[` notes, `#tags`, `@days`; `textarea-complete.ts`, now also on an `<input>` with a `when`), one row saying what the text becomes ("a to-do, due tomorrow"; a written `📅 date` is read too), Enter captures, Backspace on the empty box goes back to the commands. Also the command **Capture in the bar**. Test: `command-bar.spec.ts`.
 
-**It also captures**: whatever is typed, the last row is "Capture “…”" — Enter on it (or a click) writes it to today's log exactly as the capture box would (`[] ` a to-do, `@tomorrow` a date). Test in `command-bar.spec.ts`. On the development desktop Super+E is free (KDE has the file manager on Super+Shift+E there), so once Atlas is restarted on the new build it reaches the bar.
+**It also captures**: whatever is typed, the last row is "Capture “…”" — Enter on it (or a click) writes it to today's log exactly as the capture box would (`[] ` a to-do, `@tomorrow` a date). Test in `command-bar.spec.ts`. On the development desktop Super+E is free (KDE has the file manager on Super+Shift+E there), so once Kandinsky is restarted on the new build it reaches the bar.
 
 **The command bar is one bar** (`components/Palette.svelte`, mode "all"): commands first, then headings of the open note, then files by name, and — new — **lines of notes that hold the words typed** ("In notes", from three letters on, eight lines; the Search tool has them all). Enter opens the line; Ctrl+Enter opens it beside. `>` limits it to commands, `#` to headings. Test: `command-bar.spec.ts`.
 
-**A warning about Super that cannot be fixed inside Atlas:** the desktop sees a Super key first. On KDE Plasma, Super+E opens the file manager, Super+L locks the screen, Super+D shows the desktop, Super+1…9 switch tasks, Super+Tab switches activities, and more. A key the desktop takes never reaches Atlas — nothing breaks, the key just does what the desktop says, and the Ctrl key for the same command still works. To give Super+E to Atlas: System Settings → Keyboard → Shortcuts, search the key, remove it there. That is why the Super keys above avoid the ones KDE uses by default except Super+E, chosen on purpose. **Not checked on a real desktop session.**
+**A warning about Super that cannot be fixed inside Kandinsky:** the desktop sees a Super key first. On KDE Plasma, Super+E opens the file manager, Super+L locks the screen, Super+D shows the desktop, Super+1…9 switch tasks, Super+Tab switches activities, and more. A key the desktop takes never reaches Kandinsky — nothing breaks, the key just does what the desktop says, and the Ctrl key for the same command still works. To give Super+E to Kandinsky: System Settings → Keyboard → Shortcuts, search the key, remove it there. That is why the Super keys above avoid the ones KDE uses by default except Super+E, chosen on purpose. **Not checked on a real desktop session.**
 
 ## The Predictor's keys
 
@@ -56,9 +56,9 @@ How (`desktopKeys` in `ui/src/lib/editor/create.ts`, placed before vim in the ed
 
 Settings → Writing → **Format bar** (`[editor] format_bar`, off by default): a row of buttons above a note — **B**, *I*, `<>` · H, •, 1., ☐, ❝ · Link, Table. Each does what the key does, with the same function (`formatNote` in `ui/src/lib/editor/md-format.ts`), and the keyboard stays in the text (a button does not take the selection). H cycles # → ## → ### → none; •, 1. and ❝ switch the line's start on and off (a list item becomes a numbered one, not both); Table puts a 2 × 2 table under the caret's line with the first header selected. A button's tooltip names its key where it has one. Component: `ui/src/components/FormatBar.svelte`. Test: `format-bar.spec.ts`. Looked at in both themes.
 
-## Decided — Super is Atlas's key, Ctrl is for text
+## Decided — Super is Kandinsky's key, Ctrl is for text
 
-The rule: Super is the main key for the app, Ctrl is for the classic things (text editing and the like), and nothing conflicts with KDE, whose bindings can be read; the old Ctrl+Shift / Ctrl+Alt app keys were dropped. Every Super key was checked against KDE's **active** bindings (`kglobalshortcutsrc` in the config folder, first field of each entry). KDE keeps Super alone (the launcher), Super+A (launches Atlas), D, L, R, T, W, Tab, Return, Backspace, the digits and Shift+A/E/I/P/Q/T, so none of those is used.
+The rule: Super is the main key for the app, Ctrl is for the classic things (text editing and the like), and nothing conflicts with KDE, whose bindings can be read; the old Ctrl+Shift / Ctrl+Alt app keys were dropped. Every Super key was checked against KDE's **active** bindings (`kglobalshortcutsrc` in the config folder, first field of each entry). KDE keeps Super alone (the launcher), Super+A (launches Kandinsky), D, L, R, T, W, Tab, Return, Backspace, the digits and Shift+A/E/I/P/Q/T, so none of those is used.
 
 | command | key now | was |
 |---|---|---|
@@ -76,7 +76,7 @@ The rule: Super is the main key for the app, Ctrl is for the classic things (tex
 | drawing · left bar · settings | **Super+Shift+D** · **Super+S** · **Super+,** | Ctrl+Alt+D · Ctrl+Alt+S · Ctrl+, |
 | home · back / forward | Super+H · Super+[ / ] | (unchanged) |
 | capture box: the vault list · the vault before / after | **Super+V** · **Super+↑ / ↓** (shown in the box's footer) | Alt+V · Alt+↑ / ↓ (still work) |
-| capture box: take the screen · the last screenshot · the clipboard · the page you were on | **Super+S** · **Super+Shift+S** · **Super+C** · **Super+U** (in the chips, or their hover note) | — (the box is its own window: Atlas's Super+S / Super+C do not apply there; KDE binds none of them) |
+| capture box: take the screen · the last screenshot · the clipboard · the page you were on | **Super+S** · **Super+Shift+S** · **Super+C** · **Super+U** (in the chips, or their hover note) | — (the box is its own window: Kandinsky's Super+S / Super+C do not apply there; KDE binds none of them) |
 | browsing window: the page in the desktop's browser | **Super+Shift+O** (Super+O is the outline) | Ctrl+Shift+O (never released) |
 | terminal copy / paste | **Ctrl+Shift+C / V** (Konsole's) | — |
 | close the tab | **Super+Q**, Ctrl+W (Ctrl+W stays the shell's in a terminal; Super+Q closes the terminal tab too) | Ctrl+W |
@@ -118,10 +118,10 @@ the system's copy, paste, cut, select-all and undo key; on Windows the system ke
 
 - On Windows a default already on that Ctrl+Alt key moves to Ctrl+Alt+Shift (Ctrl+Alt+P pin tab → Ctrl+Alt+Shift+P,
   since Super+P, open file, takes Ctrl+Alt+P), and is left without a key when its Shift form is taken too (add a
-  bookmark: Ctrl+Alt+Shift+B is Super+Shift+B, browse the web). A key set by hand in `.atlas/keys.toml` never moves.
+  bookmark: Ctrl+Alt+Shift+B is Super+Shift+B, browse the web). A key set by hand in `.kandinsky/keys.toml` never moves.
 - **AltGr** types its character and never runs a Ctrl+Alt shortcut: on Windows it reaches the page as Ctrl+Alt
   (`€` is AltGr+E on a Spanish keyboard), told apart by its `AltGraph` modifier.
-- In a terminal, Atlas answers its app keys and leaves the rest to the shell; on Windows Ctrl+Alt keys count as app keys
+- In a terminal, Kandinsky answers its app keys and leaves the rest to the shell; on Windows Ctrl+Alt keys count as app keys
   there (`appChord`).
 - Hints written in the interface with Super (a tooltip, a page's blurb) go through `keyText`, which spells them the same
   way; a key shown from the keymap is already the system's.
@@ -137,7 +137,7 @@ Settings → Keyboard marks, in red beside the command, a key that another comma
 
 - A default is `keys: "Super+K"` on the action, with `alsoKeys: ["F1"]` for more. Keys are matched by physical key (`ui/src/lib/keys.ts`), so they work on a Spanish layout; `Super`, `Meta` and `Cmd` are the same modifier. On macOS, Cmd+C / V / X / A / Z (and Cmd+Shift+Z) stay the system's copy, paste, cut, select all, undo and redo everywhere (`systemEditingChord` in `keys.ts`): no command bound to them (Capture's Super+C, the next vault's Super+V) takes them there; reach those from the command palette.
 - `where: "note"` limits a key to notes (Ctrl+B is bold there and nothing elsewhere); a focused terminal keeps every key without Super for its shell; `fromTerminal: true` lets a command's keys work from there too (Ctrl+Tab, Ctrl+`). (Until only plain Ctrl+letter keys of commands marked `yieldToTerminal` went to the shell.)
-- The user's own bindings win: `.atlas/keys.toml`, edited by Settings → Keyboard.
+- The user's own bindings win: `.kandinsky/keys.toml`, edited by Settings → Keyboard.
 
 
 **Closing tabs**: "Close others in this group" and **"Close all tabs"** (`ui.tabs.closeAll`, in the tab menu and the palette) close documents only — never a terminal, never a pinned tab. When the last document tab is gone, Home opens by itself (`tabs.svelte.ts` `whenNoTabs`).

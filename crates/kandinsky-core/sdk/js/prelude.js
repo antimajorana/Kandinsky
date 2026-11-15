@@ -1,21 +1,21 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0  (the plugin SDK, as the atlas-plugin crate; Atlas itself is AGPL-3.0-or-later)
-// The `atlas` object of a JavaScript helper (docs/guides/PLUGIN-API.md, "JavaScript helpers"). The core runs it before
+// SPDX-License-Identifier: MIT OR Apache-2.0  (the plugin SDK, as the kandinsky-plugin crate; Kandinsky itself is AGPL-3.0-or-later)
+// The `kandinsky` object of a JavaScript helper (docs/guides/PLUGIN-API.md, "JavaScript helpers"). The core runs it before
 // the plugin's helper.js, in the plugin's own QuickJS context (js_helper.rs); the node test harness (testing.ts) runs
-// the same file. It speaks the helper protocol of every helper over `__host.send(line)` / `__atlas_receive(line)`:
+// the same file. It speaks the helper protocol of every helper over `__host.send(line)` / `__kandinsky_receive(line)`:
 //   core → helper  {"id", "method", "params"}   and  {"reply", "status", "body"}
 //   helper → core  {"id", "result"|"error"}, {"event", "data"}  and  {"call", "verb", "path", "body"}
 // so everything a compiled helper reaches (the API, `fetch` within `[permissions] net`, its secrets) it reaches the same way.
 "use strict";
 (function (host) {
-  if (!host) throw new Error("the Atlas helper prelude runs only where the core (or the test harness) set __host");
+  if (!host) throw new Error("the Kandinsky helper prelude runs only where the core (or the test harness) set __host");
   const methods = Object.create(null);
   const waiting = new Map();
   let calls = 0;
 
-  class AtlasError extends Error {
+  class KandinskyError extends Error {
     constructor(why, status) {
       super(why);
-      this.name = "AtlasError";
+      this.name = "KandinskyError";
       this.status = status;
     }
   }
@@ -45,7 +45,7 @@
       return id;
     };
     globalThis.clearTimeout = globalThis.clearInterval = (id) => { timers.delete(id); };
-    globalThis.__atlas_timer = (id) => { const fn = timers.get(id); timers.delete(id); if (fn) fn(); };
+    globalThis.__kandinsky_timer = (id) => { const fn = timers.get(id); timers.delete(id); if (fn) fn(); };
   }
 
   /** `{a: 1, b: "x y"}` → `a=1&b=x%20y` (null and undefined left out). */
@@ -104,7 +104,7 @@
         continue;
       }
       if (missing.includes(res.status)) return null;
-      if (!res.ok) throw new AtlasError(`${site} answered ${res.status}`, res.status);
+      if (!res.ok) throw new KandinskyError(`${site} answered ${res.status}`, res.status);
       return res.text ?? "";
     }
     return null;
@@ -158,7 +158,7 @@
       host.exec(n, JSON.stringify({ program, args: args.map(String), stdin: opts.stdin, cwd: opts.cwd, timeout: opts.timeout, locale: opts.locale }));
     });
   }
-  globalThis.__atlas_exec = (n, answer) => {
+  globalThis.__kandinsky_exec = (n, answer) => {
     const r = runs.get(n), a = JSON.parse(answer);
     runs.delete(n);
     if (r) a.error ? r.reject(new Error(a.error)) : r.resolve(a);
@@ -174,14 +174,14 @@
       const result = await fn(params ?? {});
       send({ id, result: result === undefined ? null : result });
     } catch (e) {
-      const why = e instanceof AtlasError ? e.message : e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+      const why = e instanceof KandinskyError ? e.message : e instanceof Error ? `${e.name}: ${e.message}` : String(e);
       try { send({ id, error: why }); } catch { send({ id, error: "the answer could not be sent" }); }
     }
   }
 
-  globalThis.__atlas_receive = (line) => {
+  globalThis.__kandinsky_receive = (line) => {
     let m;
-    try { m = JSON.parse(line); } catch { console.error(`atlas: not JSON: ${String(line).slice(0, 200)}`); return; }
+    try { m = JSON.parse(line); } catch { console.error(`kandinsky: not JSON: ${String(line).slice(0, 200)}`); return; }
     if (m && typeof m.reply === "number") {
       const w = waiting.get(m.reply);
       if (!w) return;
@@ -190,22 +190,23 @@
       if (status >= 200 && status < 300) w.resolve(m.body ?? null);
       else {
         const why = m.body && typeof m.body === "object" ? m.body.error : m.body;
-        w.reject(new AtlasError(`${w.what}: ${why}`, status));
+        w.reject(new KandinskyError(`${w.what}: ${why}`, status));
       }
     } else if (m && typeof m.method === "string") {
       void dispatch(m.id, m.method, m.params);
     }
   };
 
-  globalThis.atlas = Object.freeze({
+  globalThis.kandinsky = Object.freeze({
     /** This plugin's id. */
     id: host.id,
-    AtlasError,
+    KandinskyError,
+    AtlasError: KandinskyError,
     /** Registers a method the core (a tool, a page, a schedule) calls: `fn(params)` → a JSON-able answer (or a promise). */
     method(name, fn) { methods[name] = fn; },
     /** Registers every function of `table` as a method. */
     methods(table) { for (const [k, fn] of Object.entries(table)) methods[k] = fn; },
-    /** An event for the page's `atlas.helper.on(name, …)`. */
+    /** An event for the page's `kandinsky.helper.on(name, …)`. */
     event(name, data) { send({ event: name, data: data === undefined ? null : data }); },
     call, get, post, put, del, qs, sleep,
     read: async (path) => (await get("/api/file", { path })).text,
@@ -236,5 +237,8 @@
       typstPdf: (path, to, o = {}) => native("convert.typst", { path, to, ...(o.source === undefined ? {} : { source: String(o.source) }), ...(o.fence ? { fence: true } : {}) }),
     }),
   });
+  // Installed helpers written before the rename (`atlas.*`, `AtlasError`) keep working unchanged.
+  globalThis.atlas = globalThis.kandinsky;
+  globalThis.AtlasError = KandinskyError;
 })(globalThis.__host);
 delete globalThis.__host;

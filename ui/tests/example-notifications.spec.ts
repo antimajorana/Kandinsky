@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 // The Notifications plugin installed as it is, against a stand-in ntfy server: "send to my phone" is one POST to
 // /<phone topic> from the plugin's helper, its body the text, its title (in the address: UTF-8) the note it came from,
 // the token handed to the helper by the core; what the phone sent to the inbox topic is polled and captured.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const example = (f: string) => readFileSync(fileURLToPath(new URL(`../../plugins/beta/notifications/${f}`, import.meta.url)), "utf8");
 let server: Server, port = 0;
@@ -31,12 +31,12 @@ test.beforeAll(async ({ request }) => {
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   port = (server.address() as AddressInfo).port;
-  await put(request, ".atlas/plugins/notifications/helper.js", example("helper.js")); // its helper, run in the core
-  for (const f of ["main.js", "sources.js", "send.js"]) await put(request, `.atlas/plugins/notifications/${f}`, example(f));
-  await put(request, ".atlas/plugins/notifications/plugin.toml", example("plugin.toml"));
+  await put(request, ".kandinsky/plugins/notifications/helper.js", example("helper.js")); // its helper, run in the core
+  for (const f of ["main.js", "sources.js", "send.js"]) await put(request, `.kandinsky/plugins/notifications/${f}`, example(f));
+  await put(request, ".kandinsky/plugins/notifications/plugin.toml", example("plugin.toml"));
 });
 test.afterAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/notifications/main.js", "export function register() {}\n");
+  await put(request, ".kandinsky/plugins/notifications/main.js", "export function register() {}\n");
   await request.post(`/api/fs/trash?path=${encodeURIComponent("notifications/backups.md")}`, { headers: H });
   await new Promise((done) => server.close(done));
 });

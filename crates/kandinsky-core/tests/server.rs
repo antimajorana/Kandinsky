@@ -1,6 +1,6 @@
-//! End-to-end: a real server on port 0 over a temp workspace seeded from real-shaped files (`ATLAS_TEST_VAULT`, when set).
+//! End-to-end: a real server on port 0 over a temp workspace seeded from real-shaped files (`KANDINSKY_TEST_VAULT`, when set).
 #![allow(clippy::disallowed_methods)] // a test writes its fixtures directly
-use atlas_core::api::*;
+use kandinsky_core::api::*;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::StatusCode;
 use serde_json::{json, Value};
@@ -8,9 +8,9 @@ use std::path::Path;
 use std::time::Duration;
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
 
-/// A real vault to take real-shaped files from: `ATLAS_TEST_VAULT` (unset: the stand-ins below). Only ever read.
+/// A real vault to take real-shaped files from: `KANDINSKY_TEST_VAULT` (unset: the stand-ins below). Only ever read.
 fn real_vault() -> Option<std::path::PathBuf> {
-    std::env::var_os("ATLAS_TEST_VAULT").map(std::path::PathBuf::from)
+    std::env::var_os("KANDINSKY_TEST_VAULT").map(std::path::PathBuf::from)
 }
 
 /// Copy (never write) a few real files from that vault; fall back to a stand-in when absent.
@@ -26,9 +26,9 @@ fn seed(root: &Path) {
     copy("docs/SYSTEM.md", "# System\n");
     copy("docs/INDEX.md", "# Index\n");
     // `log_dir` set explicitly: the stand-in has a legacy `log/` folder, which an unset `log_dir` would pick
-    copy(".atlas/config.toml", "log_dir = \"notes/log\"\nignore = [\"runs\", \"refs/zotero\"]\n");
+    copy(".kandinsky/config.toml", "log_dir = \"notes/log\"\nignore = [\"runs\", \"refs/zotero\"]\n");
     // a real vault's list may differ; the folders this test hides are always in it
-    let cfg = root.join(".atlas/config.toml");
+    let cfg = root.join(".kandinsky/config.toml");
     let mut table: toml::Table = std::fs::read_to_string(&cfg).unwrap().parse().unwrap();
     let ignore = table.entry("ignore").or_insert_with(|| toml::Value::Array(vec![])).as_array_mut().unwrap();
     for must in ["runs", "refs/zotero"] {
@@ -43,9 +43,9 @@ fn seed(root: &Path) {
     std::fs::write(root.join("runs/ignored.md"), "- [ ] must not show up\nsubbath\n").unwrap();
     std::fs::create_dir_all(root.join("refs/zotero")).unwrap();
     std::fs::write(root.join("refs/zotero/z.md"), "- [ ] nested ignore\n").unwrap();
-    std::fs::create_dir_all(root.join(".atlas/commands")).unwrap();
+    std::fs::create_dir_all(root.join(".kandinsky/commands")).unwrap();
     std::fs::write(
-        root.join(".atlas/commands/sum.toml"),
+        root.join(".kandinsky/commands/sum.toml"),
         "title = \"Sum\"\ndescription = \"adds args.a + args.b\"\nrun = \"python3 -c 'import json,sys; a=json.load(sys.stdin); print(json.dumps({\\\"sum\\\": a[\\\"a\\\"]+a[\\\"b\\\"]}))'\"\n",
     )
     .unwrap();
@@ -54,7 +54,7 @@ fn seed(root: &Path) {
 
 struct T {
     _dir: tempfile::TempDir,
-    handle: Option<atlas_core::ServerHandle>,
+    handle: Option<kandinsky_core::ServerHandle>,
     base: String,
     http: reqwest::Client,
 }
@@ -63,7 +63,7 @@ impl T {
     async fn start() -> Self {
         let dir = tempfile::tempdir().unwrap();
         seed(dir.path());
-        let handle = atlas_core::serve(dir.path().to_path_buf(), 0).await.unwrap();
+        let handle = kandinsky_core::serve(dir.path().to_path_buf(), 0).await.unwrap();
         let base = format!("http://127.0.0.1:{}", handle.port());
         Self { _dir: dir, handle: Some(handle), base, http: reqwest::Client::new() }
     }
@@ -74,7 +74,7 @@ impl T {
         self.handle.as_ref().unwrap().port()
     }
     async fn get(&self, path: &str) -> (StatusCode, Value) {
-        let r = self.http.get(format!("{}{path}", self.base)).header("x-atlas", "1").send().await.unwrap();
+        let r = self.http.get(format!("{}{path}", self.base)).header("x-kandinsky", "1").send().await.unwrap();
         let s = r.status();
         (s, r.json().await.unwrap_or(Value::Null))
     }
@@ -82,7 +82,7 @@ impl T {
         let r = self
             .http
             .request(method, format!("{}{path}", self.base))
-            .header("x-atlas", "1")
+            .header("x-kandinsky", "1")
             .json(&body)
             .send()
             .await
@@ -92,7 +92,7 @@ impl T {
     }
     async fn stop(mut self) {
         self.handle.take().unwrap().shutdown().await.unwrap();
-        assert!(!self.root().join(".atlas/cache/server.json").exists(), "server.json removed on shutdown");
+        assert!(!self.root().join(".kandinsky/cache/server.json").exists(), "server.json removed on shutdown");
     }
 }
 
@@ -102,11 +102,11 @@ async fn http_api_end_to_end() {
 
     // Discovery file.
     let sf: ServerFile =
-        serde_json::from_str(&std::fs::read_to_string(t.root().join(".atlas/cache/server.json")).unwrap()).unwrap();
+        serde_json::from_str(&std::fs::read_to_string(t.root().join(".kandinsky/cache/server.json")).unwrap()).unwrap();
     assert_eq!(sf.port, t.port());
     assert_eq!(sf.pid, std::process::id());
 
-    // Header guard: no x-atlas → 403, also for unknown routes and preflights.
+    // Header guard: no x-kandinsky → 403, also for unknown routes and preflights.
     let r = t.http.get(format!("{}/api/workspace", t.base)).send().await.unwrap();
     assert_eq!(r.status(), StatusCode::FORBIDDEN);
     let r = t
@@ -121,7 +121,7 @@ async fn http_api_end_to_end() {
     let r = t
         .http
         .get(format!("{}/api/workspace", t.base))
-        .header("x-atlas", "1")
+        .header("x-kandinsky", "1")
         .header("host", "evil.example")
         .send()
         .await
@@ -132,15 +132,15 @@ async fn http_api_end_to_end() {
     let (s, v) = t.get("/api/workspace").await;
     assert_eq!(s, StatusCode::OK);
     let info: WorkspaceInfo = serde_json::from_value(v).unwrap();
-    assert_eq!(Path::new(&info.root), atlas_core::paths::real(t.root()).unwrap());
+    assert_eq!(Path::new(&info.root), kandinsky_core::paths::real(t.root()).unwrap());
     assert_eq!(info.config.log_dir, "notes/log"); // the default since 958d51e
     // the real vault's config is what is copied (with `runs` added): it may anchor the entry at the root (`/runs`)
     assert!(info.config.ignore.iter().any(|p| p.trim_start_matches('/') == "runs"));
 
-    // Tree: dirs first, dotfiles hidden except .atlas, ignored dirs shown but flagged.
+    // Tree: dirs first, dotfiles hidden except .kandinsky, ignored dirs shown but flagged.
     let (_, v) = t.get("/api/tree").await;
     let names: Vec<String> = v.as_array().unwrap().iter().map(|e| e["name"].as_str().unwrap().to_string()).collect();
-    assert_eq!(&names[..4], [".atlas", "docs", "log", "notes"]);
+    assert_eq!(&names[..4], [".kandinsky", "docs", "log", "notes"]);
     let runs = v.as_array().unwrap().iter().find(|e| e["name"] == "runs").expect("ignored dir listed");
     assert_eq!(runs["ignored"], true);
     assert_eq!(v[0]["kind"], "dir");
@@ -148,7 +148,7 @@ async fn http_api_end_to_end() {
     let (_, v) = t.get("/api/tree?path=refs").await;
     assert_eq!(v[0]["ignored"], true, "refs/zotero ignored by nested path");
     // Exists: a file, a folder, a missing one — never a 404 (the UI's optional files)
-    for (path, there) in [("FOCUS.md", true), (".atlas", true), ("notes/none.md", false)] {
+    for (path, there) in [("FOCUS.md", true), (".kandinsky", true), ("notes/none.md", false)] {
         assert_eq!(t.get(&format!("/api/exists?path={path}")).await, (StatusCode::OK, Value::Bool(there)), "{path}");
     }
     assert_eq!(t.get("/api/exists?path=../etc").await.0, StatusCode::BAD_REQUEST);
@@ -194,7 +194,7 @@ async fn http_api_end_to_end() {
     assert_eq!(s, StatusCode::NOT_FOUND);
 
     // Raw.
-    let r = t.http.get(format!("{}/api/raw?path=image.png", t.base)).header("x-atlas", "1").send().await.unwrap();
+    let r = t.http.get(format!("{}/api/raw?path=image.png", t.base)).header("x-kandinsky", "1").send().await.unwrap();
     assert_eq!(r.headers()["content-type"], "image/png");
     assert_eq!(r.bytes().await.unwrap().len(), 4);
 
@@ -204,7 +204,7 @@ async fn http_api_end_to_end() {
     assert_eq!(s, StatusCode::OK, "{v}");
     let cap: CaptureResult = serde_json::from_value(v).unwrap();
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
-    assert_eq!(cap.path, atlas_core::capture::day_log(&info.config, chrono::Local::now().date_naive())); // one place builds the path
+    assert_eq!(cap.path, kandinsky_core::capture::day_log(&info.config, chrono::Local::now().date_naive())); // one place builds the path
     let log = std::fs::read_to_string(t.root().join(&cap.path)).unwrap();
     let bullet = log.lines().nth(cap.line as usize - 1).unwrap();
     assert!(bullet.starts_with("- ") && bullet.ends_with(" Idea: $G(i\\omega_n)$"), "{bullet}");
@@ -224,7 +224,7 @@ async fn http_api_end_to_end() {
         vec![LineHit { path: "notes/plan.md".into(), line: 2, text: "fit the subbath hybridization".into() }]
     );
     assert!(today.activity.changed.iter().any(|c| c.path == "FOCUS.md"));
-    assert!(!today.activity.changed.iter().any(|c| c.path.starts_with("runs/") || c.path.starts_with(".atlas")));
+    assert!(!today.activity.changed.iter().any(|c| c.path.starts_with("runs/") || c.path.starts_with(".kandinsky")));
 
     // Lectures are a workspace plugin now (docs/refactor/REFACTOR-plugins-v3.md): the core has no route.
     let (s, _) = t.send(reqwest::Method::POST, "/api/lecture", json!({"course": "x"})).await;
@@ -306,7 +306,7 @@ async fn events_and_origin_check() {
     })
     .await
     .unwrap();
-    assert_eq!(msg, Event::Notify(atlas_core::api::Notice::new("run finished").body("U=8")));
+    assert_eq!(msg, Event::Notify(kandinsky_core::api::Notice::new("run finished").body("U=8")));
 
     // The desktop app's sign-in window hands back the address it ended on; the page hears it.
     let back = "https://localhost/?code=abc&state=s1";
@@ -340,7 +340,7 @@ async fn events_and_origin_check() {
     })
     .await
     .expect("fs event for notes/plan.md");
-    assert!(paths.iter().all(|p| !p.starts_with(".atlas/cache")));
+    assert!(paths.iter().all(|p| !p.starts_with(".kandinsky/cache")));
     t.stop().await;
 }
 
@@ -368,12 +368,12 @@ async fn pty_shell_session() {
     let t = T::start().await;
     let mut ws = ws_connect(t.port(), "/api/pty?preset=shell&cols=100&rows=30", None).await.unwrap();
     ws.send(Message::Text(r#"{"resize":[120,40]}"#.into())).await.unwrap();
-    ws.send(Message::Binary(typed(r#"echo "hi atlas{SUM}"; pwd"#).into())).await.unwrap();
+    ws.send(Message::Binary(typed(r#"echo "hi kandinsky{SUM}"; pwd"#).into())).await.unwrap();
     // the folder's own name: the shells write the whole path each their way
     let here = t.root().file_name().unwrap().to_string_lossy().into_owned();
-    let out = read_until(&mut ws, "hi atlas42").await;
+    let out = read_until(&mut ws, "hi kandinsky42").await;
     let out = if out.contains(&here) { out } else { out + &read_until(&mut ws, &here).await };
-    assert!(out.contains("hi atlas42"), "{out}");
+    assert!(out.contains("hi kandinsky42"), "{out}");
     ws.close(None).await.unwrap();
     t.stop().await;
 }
@@ -477,7 +477,7 @@ async fn a_terminal_outlives_a_page_reload_and_ends_when_its_tab_closes() {
     ws.send(Message::Text(r#""end""#.into())).await.unwrap();
     let _ = tokio::time::timeout(Duration::from_secs(5), async { while let Some(Ok(m)) = ws.next().await { if matches!(m, Message::Close(_)) { break } } }).await;
     let gone = tokio::time::timeout(Duration::from_secs(5), async {
-        while atlas_core::platform::proc::pid_alive(pid.parse().unwrap()) {
+        while kandinsky_core::platform::proc::pid_alive(pid.parse().unwrap()) {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     })
@@ -530,29 +530,29 @@ async fn raw_put_keeps_original_and_checks_mtime() {
     let (_, f) = t.get("/api/tree?path=refs/papers/x").await;
     assert_eq!(f[0]["name"], "paper.pdf");
     let mtime = Mtime::of(&std::fs::metadata(t.root().join(rel)).unwrap()).unwrap().0;
-    let r = t.http.head(format!("{}/api/raw?path={rel}", t.base)).header("x-atlas", "1").send().await.unwrap();
-    assert_eq!(r.headers()["x-atlas-mtime"].to_str().unwrap(), mtime.to_string(), "HEAD exposes the mtime");
+    let r = t.http.head(format!("{}/api/raw?path={rel}", t.base)).header("x-kandinsky", "1").send().await.unwrap();
+    assert_eq!(r.headers()["x-kandinsky-mtime"].to_str().unwrap(), mtime.to_string(), "HEAD exposes the mtime");
 
     let put = |body: Vec<u8>, base: Option<u64>| {
         let mut url = format!("{}/api/raw?path={rel}", t.base);
         if let Some(b) = base {
             url.push_str(&format!("&base_mtime={b}"));
         }
-        t.http.put(url).header("x-atlas", "1").body(body).send()
+        t.http.put(url).header("x-kandinsky", "1").body(body).send()
     };
     // 13 MB: above the 12 MB global limit, so the route's own limit must apply.
     let big: Vec<u8> = b"%PDF-1.7 annotated ".iter().copied().cycle().take(13 << 20).collect();
     let r = put(big.clone(), Some(mtime)).await.unwrap();
     assert_eq!(r.status(), StatusCode::OK, "{:?}", r.text().await);
     assert_eq!(std::fs::read(t.root().join(rel)).unwrap(), big);
-    assert_eq!(std::fs::read(t.root().join(".atlas/originals").join(rel)).unwrap(), b"%PDF-1.7 original");
+    assert_eq!(std::fs::read(t.root().join(".kandinsky/originals").join(rel)).unwrap(), b"%PDF-1.7 original");
 
     let r = put(b"%PDF stale".to_vec(), Some(mtime)).await.unwrap();
     assert_eq!(r.status(), StatusCode::CONFLICT, "stale base_mtime must not clobber");
     // A second save never replaces the kept original.
     let r = put(b"%PDF-1.7 v3".to_vec(), None).await.unwrap();
     assert_eq!(r.status(), StatusCode::OK);
-    assert_eq!(std::fs::read(t.root().join(".atlas/originals").join(rel)).unwrap(), b"%PDF-1.7 original");
+    assert_eq!(std::fs::read(t.root().join(".kandinsky/originals").join(rel)).unwrap(), b"%PDF-1.7 original");
     let r = t.http.put(format!("{}/api/raw?path={rel}", t.base)).body("x").send().await.unwrap();
     assert_eq!(r.status(), StatusCode::FORBIDDEN, "guard applies to raw PUT too");
     t.stop().await;
@@ -624,7 +624,7 @@ async fn a_task_line_is_ticked_and_opened_again_as_text() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_switched_off_builtin_plugin_has_no_routes() {
     let t = T::start().await;
-    let cfg = t.root().join(".atlas/config.toml");
+    let cfg = t.root().join(".kandinsky/config.toml");
     std::fs::write(t.root().join("snips.js"), "[{trigger: 'ff', replacement: '\\\\frac{$0}{$1}', options: 'mA'}]").unwrap();
     // a new vault's config already has a [plugins] section: edit it, never append a second one
     let mut doc: toml_edit::DocumentMut = std::fs::read_to_string(&cfg).unwrap().parse().unwrap();
@@ -636,7 +636,7 @@ async fn a_switched_off_builtin_plugin_has_no_routes() {
     // off: the whole group answers 404, the handler never runs
     doc["plugins"]["off"] = toml_edit::value(toml_edit::Array::from_iter(["latex"]));
     std::fs::write(&cfg, doc.to_string()).unwrap();
-    let r = t.http.get(format!("{}/api/snippets", t.base)).header("x-atlas", "1").send().await.unwrap();
+    let r = t.http.get(format!("{}/api/snippets", t.base)).header("x-kandinsky", "1").send().await.unwrap();
     assert_eq!(r.status(), StatusCode::NOT_FOUND);
     assert!(r.text().await.unwrap().contains("LaTeX plugin is switched off"));
     t.stop().await;

@@ -1,5 +1,5 @@
-//! Atlas desktop shell: runs atlas-core in-process and points one webview at it. The window is
-//! just another HTTP client, so the same UI also works in a browser against `atlas serve`.
+//! Kandinsky desktop shell: runs kandinsky-core in-process and points one webview at it. The window is
+//! just another HTTP client, so the same UI also works in a browser against `kandinsky serve`.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod autostart;
@@ -27,7 +27,7 @@ fn webkit_rendering(root: &std::path::Path) {
     if !cfg!(target_os = "linux") {
         return; // a WebKitGTK setting
     }
-    use atlas_core::config::{Config, GpuRendering};
+    use kandinsky_core::config::{Config, GpuRendering};
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some() {
         return;
     }
@@ -42,17 +42,17 @@ fn webkit_rendering(root: &std::path::Path) {
     if compatible {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
-    eprintln!("atlas-app: rendering {mode:?} → {}", if compatible { "compatible (no DMA-BUF)" } else { "accelerated" });
+    eprintln!("kandinsky-app: rendering {mode:?} → {}", if compatible { "compatible (no DMA-BUF)" } else { "accelerated" });
 }
 
 /// The vault to show: the folder given on the command line, else the one opened most recently,
 /// else (first run) a small welcome vault that explains how to open or create one.
 fn vault_to_open(asked: Option<PathBuf>) -> anyhow::Result<PathBuf> {
-    use atlas_core::vaults;
+    use kandinsky_core::vaults;
     if let Some(known) = vaults::to_open(asked, &vaults::list_file()) {
         return Ok(known);
     }
-    let welcome = atlas_core::platform::dirs::atlas(atlas_core::platform::dirs::Base::Data).join("Welcome");
+    let welcome = kandinsky_core::platform::dirs::app(kandinsky_core::platform::dirs::Base::Data).join("Welcome");
     std::fs::create_dir_all(&welcome)?;
     let home = welcome.join("Home.page");
     if !home.exists() {
@@ -61,7 +61,7 @@ fn vault_to_open(asked: Option<PathBuf>) -> anyhow::Result<PathBuf> {
     Ok(welcome)
 }
 
-const WELCOME_PAGE: &str = r#"# The first screen of a fresh Atlas. This folder is a vault like any other; yours go wherever you like.
+const WELCOME_PAGE: &str = r#"# The first screen of a fresh Kandinsky. This folder is a vault like any other; yours go wherever you like.
 title: Welcome
 rows:
   - [greeting]
@@ -70,30 +70,30 @@ rows:
   - - view: text
       title: What a vault is
       text: |
-        Atlas works on **vaults**: plain folders of notes, papers, code and data. Each vault keeps its own
-        settings, plugins and pages in its `.atlas/` folder, so a work vault and a personal one stay apart.
+        Kandinsky works on **vaults**: plain folders of notes, papers, code and data. Each vault keeps its own
+        settings, plugins and pages in its `.kandinsky/` folder, so a work vault and a personal one stay apart.
         An Obsidian vault opens as it is.
 
-        **New vault…** makes a folder (for example `~/Notes`); **Open a folder…** takes one you have. Atlas
+        **New vault…** makes a folder (for example `~/Notes`); **Open a folder…** takes one you have. Kandinsky
         remembers it and opens it the next time it starts. Later, **Ctrl+Alt+V** switches between vaults and
         **F1** lists every command.
 
-        This Welcome vault is only a start page; what is written here stays in Atlas's own data folder.
+        This Welcome vault is only a start page; what is written here stays in Kandinsky's own data folder.
 "#;
 
 /// The desktop's core for `root`: on this machine only, locked (local_lock.rs `Lock::desktop`). It serves every vault
 /// of the vault list beside `root`, each at `/v/<name>/` and started when first opened, so switching is a page load in
 /// this window (server_desktop.rs).
-async fn desktop_core(root: PathBuf) -> anyhow::Result<atlas_core::server::ServerHandle> {
+async fn desktop_core(root: PathBuf) -> anyhow::Result<kandinsky_core::server::ServerHandle> {
     // the guest folders of the last run forgotten before any is served (core guest.rs); here, not in the core, so a
     // test's desktop-style core never touches this machine's
-    let swept = tokio::task::spawn_blocking(atlas_core::guest::sweep).await.unwrap_or(0);
+    let swept = tokio::task::spawn_blocking(kandinsky_core::guest::sweep).await.unwrap_or(0);
     if swept > 0 {
-        eprintln!("atlas: {swept} guest folder(s) of the last run forgotten");
+        eprintln!("kandinsky: {swept} guest folder(s) of the last run forgotten");
     }
-    let vaults = atlas_core::server::Vaults::Desktop { first: root, list: atlas_core::vaults::list_file() };
+    let vaults = kandinsky_core::server::Vaults::Desktop { first: root, list: kandinsky_core::vaults::list_file() };
     let port = last_port().filter(|p| std::net::TcpListener::bind(("127.0.0.1", *p)).is_ok()).unwrap_or(0);
-    let core = atlas_core::server::serve_vaults(vaults, atlas_core::server::Listen::Local(port, atlas_core::local_lock::Lock::desktop())).await?;
+    let core = kandinsky_core::server::serve_vaults(vaults, kandinsky_core::server::Listen::Local(port, kandinsky_core::local_lock::Lock::desktop())).await?;
     keep_port(core.port());
     Ok(core)
 }
@@ -102,7 +102,7 @@ async fn desktop_core(root: PathBuf) -> anyhow::Result<atlas_core::server::Serve
 /// IndexedDB and localStorage per origin: a new port at each start lost them all (TikZ pictures drawn again, every
 /// remembered pane and choice). So the core asks for its last port first, and takes any free one when it is in use.
 fn port_file() -> PathBuf {
-    atlas_core::platform::dirs::atlas(atlas_core::platform::dirs::Base::State).join("desktop-port")
+    kandinsky_core::platform::dirs::app_entry(kandinsky_core::platform::dirs::Base::State, "desktop-port")
 }
 
 fn last_port() -> Option<u16> {
@@ -113,7 +113,7 @@ fn keep_port(port: u16) {
     let file = port_file();
     let _ = file.parent().map(std::fs::create_dir_all);
     if let Err(e) = std::fs::write(&file, port.to_string()) {
-        eprintln!("atlas-app: the port is not kept for the next start ({}): {e}", file.display());
+        eprintln!("kandinsky-app: the port is not kept for the next start ({}): {e}", file.display());
     }
 }
 
@@ -129,11 +129,11 @@ fn capture_page(link: &str) -> String {
     }
 }
 
-/// `atlas-app --capture`: the native box (atlas-capture) when the package put one beside this program — an AppImage,
-/// the macOS app and the Windows install, where a shortcut can only name the app — and `ATLAS_CAPTURE` does not ask
+/// `kandinsky-app --capture`: the native box (kandinsky-capture) when the package put one beside this program — an AppImage,
+/// the macOS app and the Windows install, where a shortcut can only name the app — and `KANDINSKY_CAPTURE` does not ask
 /// for the web box. Its exit code; None: no native box here, the web box below opens.
 fn native_capture(folder: Option<&std::path::Path>) -> Option<i32> {
-    if std::env::var("ATLAS_CAPTURE").is_ok_and(|v| v == "webview") {
+    if kandinsky_core::env::var("CAPTURE").is_some_and(|v| v == "webview") {
         return None;
     }
     let boxed = capture_box()?;
@@ -142,7 +142,7 @@ fn native_capture(folder: Option<&std::path::Path>) -> Option<i32> {
     match cmd.status() {
         Ok(s) => Some(s.code().unwrap_or(1)),
         Err(e) => {
-            eprintln!("atlas-app: {} did not start ({e}); the web box instead", boxed.display());
+            eprintln!("kandinsky-app: {} did not start ({e}); the web box instead", boxed.display());
             None
         }
     }
@@ -151,10 +151,10 @@ fn native_capture(folder: Option<&std::path::Path>) -> Option<i32> {
 /// The native capture box the package put beside this program, if it did.
 fn capture_box() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    exe.with_file_name(format!("kandinsky-capture{}", std::env::consts::EXE_SUFFIX)).is_file().then(|| exe.with_file_name(format!("kandinsky-capture{}", std::env::consts::EXE_SUFFIX))).or_else(|| Some(exe.with_file_name(format!("atlas-capture{}", std::env::consts::EXE_SUFFIX))).filter(|b| b.is_file()))
+    exe.with_file_name(format!("kandinsky-capture{}", std::env::consts::EXE_SUFFIX)).is_file().then(|| exe.with_file_name(format!("kandinsky-capture{}", std::env::consts::EXE_SUFFIX))).or_else(|| Some(exe.with_file_name(format!("kandinsky-capture{}", std::env::consts::EXE_SUFFIX))).filter(|b| b.is_file()))
 }
 
-/// macOS: a global key for the capture box while Atlas runs — `ATLAS_CAPTURE_KEY` (Tauri's form, e.g.
+/// macOS: a global key for the capture box while Kandinsky runs — `KANDINSKY_CAPTURE_KEY` (Tauri's form, e.g.
 /// "Control+Super+C"; "none" for no key), Ctrl+Cmd+C by default (Cmd+Shift+C is taken by browsers and Finder).
 /// The box opens on the vault this window shows.
 #[cfg(target_os = "macos")]
@@ -165,36 +165,36 @@ fn capture_key(vault: PathBuf) -> tauri::plugin::TauriPlugin<tauri::Wry> {
             match capture_box() {
                 Some(b) => {
                     if let Err(e) = std::process::Command::new(&b).arg(&vault).spawn() {
-                        eprintln!("atlas-app: the capture box did not start: {e}");
+                        eprintln!("kandinsky-app: the capture box did not start: {e}");
                     }
                 }
-                None => eprintln!("atlas-app: no capture box beside the app"),
+                None => eprintln!("kandinsky-app: no capture box beside the app"),
             }
         }
     });
-    let key = std::env::var("ATLAS_CAPTURE_KEY").unwrap_or_else(|_| "Control+Super+C".into());
+    let key = kandinsky_core::env::var("CAPTURE_KEY").unwrap_or_else(|| "Control+Super+C".into());
     if key == "none" {
         return builder.build();
     }
     match key.parse::<Shortcut>().map_err(|e| e.to_string()).and_then(|k| builder.with_shortcut(k).map_err(|e| e.to_string())) {
         Ok(b) => b.build(),
         Err(e) => {
-            eprintln!("atlas-app: no capture key ({key:?}: {e})");
+            eprintln!("kandinsky-app: no capture key ({key:?}: {e})");
             Builder::new().build()
         }
     }
 }
 
-/// `atlas-app --capture [folder]`: the quick-capture window (docs/guides/CAPTURE.md) — one small frameless
-/// box above everything, showing the app's `/#capture` page. It talks to the Atlas already open on
+/// `kandinsky-app --capture [folder]`: the quick-capture window (docs/guides/CAPTURE.md) — one small frameless
+/// box above everything, showing the app's `/#capture` page. It talks to the Kandinsky already open on
 /// that vault when there is one (two cores on one vault would run its schedules twice), and only
 /// otherwise starts a core of its own for as long as the box is open. The page asks to be closed
-/// by going to `/__atlas_close` (after Enter, or on Esc).
+/// by going to `/__kandinsky_close` (after Enter, or on Esc).
 fn capture_window(root: PathBuf) -> anyhow::Result<()> {
     webkit_rendering(&root);
     let mut own = None;
     // the address to open: a locked core's one-time link (its cookie lets the box in), else the core's own
-    let link = match atlas_core::vaults::running_server(&root) {
+    let link = match kandinsky_core::vaults::running_server(&root) {
         Some(base) => tauri::async_runtime::block_on(post(&base, "/api/local/link", "{}"))
             .ok()
             .and_then(|answer| serde_json::from_str::<serde_json::Value>(&answer).ok()?["url"].as_str().map(String::from))
@@ -206,12 +206,12 @@ fn capture_window(root: PathBuf) -> anyhow::Result<()> {
             url
         }
     };
-    eprintln!("atlas-app: capture into {} ({})", root.display(), if own.is_some() { "its own core" } else { "the open Atlas" });
+    eprintln!("kandinsky-app: capture into {} ({})", root.display(), if own.is_some() { "its own core" } else { "the open Kandinsky" });
     let url: tauri::Url = capture_page(&link).parse()?;
     tauri::Builder::default()
         .setup(move |app| {
             let handle = app.handle().clone();
-            WebviewWindowBuilder::new(app, "capture", WebviewUrl::External(url))
+            window(app, "capture", WebviewUrl::External(url))
                 .title("Kandinsky capture")
                 // OS file drops reach the page's own `drop` (the editor, the explorer, the capture popup); Tauri's
                 // handler would take them first (on Windows the page then never sees a dropped file)
@@ -224,7 +224,7 @@ fn capture_window(root: PathBuf) -> anyhow::Result<()> {
                 .center()
                 .focused(true)
                 .on_navigation(move |to| {
-                    if to.path() == "/__atlas_close" {
+                    if to.path() == "/__kandinsky_close" {
                         handle.exit(0);
                         return false;
                     }
@@ -257,9 +257,9 @@ fn capture_window(root: PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `atlas-app --browse <url> [folder]`: that page in a browsing window of its own (browser.rs), ads blocked as the
+/// `kandinsky-app --browse <url> [folder]`: that page in a browsing window of its own (browser.rs), ads blocked as the
 /// vault's `[web]` settings say; no core, no main window. From a terminal, and how the blocking is checked.
-/// A vault on a server (`atlas-app https://atlas.example.org/v/notes/`, from the vault picker): no core on this machine,
+/// A vault on a server (`kandinsky-app https://kandinsky.example.org/v/notes/`, from the vault picker): no core on this machine,
 /// one window on the server's own page — the same app the server serves. Its sign-in in front (Authelia, a security key)
 /// happens in this window and WebKit keeps the session, as a browser would; the window follows it to other hosts and
 /// back. A link the page opens goes to the desktop's own handler (docs/design/DESIGN-desktop-remote.md).
@@ -268,10 +268,10 @@ fn remote_window(url: tauri::Url) -> anyhow::Result<()> {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1"); // as `ui.gpu_rendering = auto` does for a local vault
     }
     let host = url.host_str().unwrap_or_default().to_string();
-    eprintln!("atlas-app: a vault on a server, window → {url}");
+    eprintln!("kandinsky-app: a vault on a server, window → {url}");
     tauri::Builder::default()
         .setup(move |app| {
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+            window(app, "main", WebviewUrl::External(url))
                 .title(format!("Kandinsky — {host}"))
                 // OS file drops reach the page's own `drop` (the editor, the explorer, the capture popup); Tauri's
                 // handler would take them first (on Windows the page then never sees a dropped file)
@@ -316,7 +316,7 @@ fn fit_to_screen(window: &tauri::WebviewWindow) {
 
 /// The window in the theme's background (tokens.css `--bg-app`) until the page paints: no white flash at start.
 fn paint_before_page(window: &tauri::WebviewWindow, vault: &std::path::Path) {
-    use atlas_core::config::{Config, Theme};
+    use kandinsky_core::config::{Config, Theme};
     let dark = match Config::load(vault).map(|c| c.ui.theme).unwrap_or(Theme::System) {
         Theme::Dark => true,
         Theme::Light => false,
@@ -327,21 +327,21 @@ fn paint_before_page(window: &tauri::WebviewWindow, vault: &std::path::Path) {
 }
 
 /// Web pages as tabs on Windows: WebView2 is Chromium, so an extension of the app's own (`webview2/frame-any`, its
-/// declarativeNetRequest rules) removes X-Frame-Options and Content-Security-Policy from the pages Atlas's window frames
+/// declarativeNetRequest rules) removes X-Frame-Options and Content-Security-Policy from the pages Kandinsky's window frames
 /// — and only those (`initiatorDomains`: the core's own address) — and every site shows in a plain iframe, as in
 /// Obsidian. Written out under the cache at each start (WebView2 loads unpacked extensions from a folder). None: it
 /// could not be written; sites that refuse framing then open in a window, as before. WebKitGTK has no such hook
 /// (DEVELOPING.md, "Web pages as tabs"): Linux keeps a native view over the pane.
 #[cfg(windows)]
 fn frame_any_extension() -> Option<PathBuf> {
-    let root = atlas_core::platform::dirs::atlas(atlas_core::platform::dirs::Base::Cache).join("webview2-extensions");
+    let root = kandinsky_core::platform::dirs::app(kandinsky_core::platform::dirs::Base::Cache).join("webview2-extensions");
     let dir = root.join("frame-any");
     let files = [("manifest.json", include_str!("../webview2/frame-any/manifest.json")), ("rules.json", include_str!("../webview2/frame-any/rules.json"))];
     let written = std::fs::create_dir_all(&dir).and_then(|_| files.iter().try_for_each(|(name, text)| std::fs::write(dir.join(name), text)));
     match written {
         Ok(()) => Some(root),
         Err(e) => {
-            eprintln!("atlas-app: web pages as tabs: the WebView2 extension was not written to {}: {e}", dir.display());
+            eprintln!("kandinsky-app: web pages as tabs: the WebView2 extension was not written to {}: {e}", dir.display());
             None
         }
     }
@@ -349,22 +349,22 @@ fn frame_any_extension() -> Option<PathBuf> {
 
 /// Web pages as tabs on Linux: the libsoup hook (frames/frames.rs, built by build.rs) is written under the cache and
 /// put in LD_PRELOAD before WebKit starts its processes; it acts in the network process only and takes itself out of
-/// LD_PRELOAD in every process it is loaded into, so the shells and helpers Atlas starts never carry it on. False: it
+/// LD_PRELOAD in every process it is loaded into, so the shells and helpers Kandinsky starts never carry it on. False: it
 /// could not be written (the web tabs keep the native view, webtab.rs).
 #[cfg(target_os = "linux")]
 fn frames_preload() -> bool {
-    const LIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libatlas-webkit-frames.so"));
-    let dir = atlas_core::platform::dirs::atlas(atlas_core::platform::dirs::Base::Cache);
-    let path = dir.join("libatlas-webkit-frames.so");
+    const LIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libkandinsky-webkit-frames.so"));
+    let dir = kandinsky_core::platform::dirs::app(kandinsky_core::platform::dirs::Base::Cache);
+    let path = dir.join("libkandinsky-webkit-frames.so");
     let current = std::fs::read(&path).is_ok_and(|b| b == LIB);
     // written beside and renamed: a running WebKit process may have the old one mapped
     let written = current || {
-        let tmp = dir.join(format!("libatlas-webkit-frames.so.{}", std::process::id()));
-        std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&tmp, LIB)).and_then(|_| std::fs::rename(&tmp, &path)).map_err(|e| eprintln!("atlas-app: web pages as tabs: {} not written: {e}", path.display())).is_ok()
+        let tmp = dir.join(format!("libkandinsky-webkit-frames.so.{}", std::process::id()));
+        std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&tmp, LIB)).and_then(|_| std::fs::rename(&tmp, &path)).map_err(|e| eprintln!("kandinsky-app: web pages as tabs: {} not written: {e}", path.display())).is_ok()
     };
     if written {
         let before = std::env::var("LD_PRELOAD").unwrap_or_default();
-        let list = [path.to_string_lossy().into_owned()].into_iter().chain(before.split([':', ' ']).filter(|p| !p.is_empty() && !p.contains("atlas-webkit-frames")).map(str::to_owned));
+        let list = [path.to_string_lossy().into_owned()].into_iter().chain(before.split([':', ' ']).filter(|p| !p.is_empty() && !p.contains("kandinsky-webkit-frames")).map(str::to_owned));
         // SAFETY: main's first steps, before any thread exists
         unsafe { std::env::set_var("LD_PRELOAD", list.collect::<Vec<_>>().join(":")) };
     }
@@ -375,16 +375,16 @@ fn frames_preload() -> bool {
 /// iframes can show any site (lib/web-links.ts): on Windows the extension above removes the headers that forbid it, on
 /// Linux the libsoup hook (`frames_preload`).
 fn frames_any_page(frames: bool) -> &'static str {
-    if frames { "window.__atlasDesktop = true; window.__atlasFramesAnything = true;" } else { "window.__atlasDesktop = true;" }
+    if frames { "window.__kandinskyDesktop = true; window.__kandinskyFramesAnything = true;" } else { "window.__kandinskyDesktop = true;" }
 }
 
 /// The core's "choose a folder" (the vault switcher's Choose…) is the system's own dialog, over this window: typing a whole
 /// path was the only way, and on macOS nobody knows theirs.
 fn folder_dialog(app: &tauri::AppHandle) {
-    use atlas_core::vaults::PickPurpose;
+    use kandinsky_core::vaults::PickPurpose;
     use tauri_plugin_dialog::DialogExt;
     let app = app.clone();
-    atlas_core::vaults::on_pick_folder(move |purpose| {
+    kandinsky_core::vaults::on_pick_folder(move |purpose| {
         // the window of the moment: it is built again after its sleep (background.rs)
         let window = app.get_webview_window(MAIN_WINDOW)?;
         let title = match purpose {
@@ -401,7 +401,7 @@ fn folder_dialog(app: &tauri::AppHandle) {
 }
 
 fn browse_window(url: tauri::Url, root: PathBuf) -> anyhow::Result<()> {
-    let web = atlas_core::config::Config::load(&root).map(|c| c.web).unwrap_or_default();
+    let web = kandinsky_core::config::Config::load(&root).map(|c| c.web).unwrap_or_default();
     tauri::Builder::default()
         .setup(move |app| {
             browser::prepare(app.handle(), web);
@@ -413,8 +413,8 @@ fn browse_window(url: tauri::Url, root: PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// An AppImage's runtime points Python (and Perl) at the libraries in its own mount; every program Atlas starts inherits
-/// that, and the system's `python3` then fails ("Python path configuration") — every Python plugin with it. Atlas runs
+/// An AppImage's runtime points Python (and Perl) at the libraries in its own mount; every program Kandinsky starts inherits
+/// that, and the system's `python3` then fails ("Python path configuration") — every Python plugin with it. Kandinsky runs
 /// no interpreter itself, so those variables go before anything starts. By shape: any `PYTHON*` / `PERL*` variable whose
 /// value lies in `$APPDIR`; none outside an AppImage.
 fn leave_appimage_interpreters() {
@@ -431,11 +431,11 @@ fn leave_appimage_interpreters() {
 
 fn main() -> anyhow::Result<()> {
     leave_appimage_interpreters();
-    // GTK's Wayland app id (X11: WM_CLASS) is the program name; "atlas" makes KWin find atlas.desktop and its Icon=atlas,
-    // where the binary's name "atlas-app" matched no desktop file and the window showed Wayland's generic icon.
+    // GTK's Wayland app id (X11: WM_CLASS) is the program name; "kandinsky" makes KWin find kandinsky.desktop and its Icon=kandinsky,
+    // where the binary's name "kandinsky-app" matched no desktop file and the window showed Wayland's generic icon.
     #[cfg(target_os = "linux")]
-    gtk::glib::set_prgname(Some("atlas"));
-    // `atlas-app [folder]` is the app; `atlas-app --capture [folder]` the quick-capture box
+    gtk::glib::set_prgname(Some("kandinsky"));
+    // `kandinsky-app [folder]` is the app; `kandinsky-app --capture [folder]` the quick-capture box
     let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
     #[cfg(target_os = "linux")]
     if args.first().is_some_and(|a| a == web_filters::CONVERT_FLAG) {
@@ -454,22 +454,29 @@ fn main() -> anyhow::Result<()> {
         let rest = args.iter().skip(i + 2).find(|a| !a.to_string_lossy().starts_with("--")).map(PathBuf::from);
         return browse_window(url.parse().map_err(|e| anyhow::anyhow!("--browse {url:?}: {e}"))?, rest.unwrap_or_else(|| PathBuf::from(".")));
     }
+    // the folders of a build from before the rename (`<base>/atlas`, the window's data under the old identifier) become
+    // Kandinsky's before anything opens them; what cannot move stays in use (kandinsky-core platform/dirs_migrate.rs).
+    // Only the app itself moves them: the capture box and a browsing window only look them up, so they never move
+    // folders from under a window of this program that is starting or running.
+    for line in kandinsky_core::platform::dirs_migrate::migrate() {
+        eprintln!("kandinsky-app: {line}");
+    }
     // a server's address instead of a folder: a window on that vault's page, no core here
-    if let Some(url) = folder.as_ref().and_then(|f| atlas_core::vaults::server_address(&f.to_string_lossy())) {
+    if let Some(url) = folder.as_ref().and_then(|f| kandinsky_core::vaults::server_address(&f.to_string_lossy())) {
         return remote_window(url.parse()?);
     }
     let root = vault_to_open(folder)?;
     // `--background`: the core and the tray, no window until asked (the session's autostart entry, autostart.rs)
     let background_start = args.iter().any(|a| a == autostart::BACKGROUND);
-    // one Atlas per vault: a second launch brings the first one's window forward (it may be hidden in the tray)
-    if let Some(base) = atlas_core::vaults::running_server(&root) {
+    // one Kandinsky per vault: a second launch brings the first one's window forward (it may be hidden in the tray)
+    if let Some(base) = kandinsky_core::vaults::running_server(&root) {
         let asked = if background_start { Ok(String::new()) } else { tauri::async_runtime::block_on(post(&base, "/api/shell/show", "{}")) };
         match asked {
             Ok(_) => {
-                eprintln!("atlas-app: Atlas already runs on {} ({base}): {}", root.display(), if background_start { "nothing to start" } else { "its window brought forward" });
+                eprintln!("kandinsky-app: Kandinsky already runs on {} ({base}): {}", root.display(), if background_start { "nothing to start" } else { "its window brought forward" });
                 return Ok(());
             }
-            Err(e) => eprintln!("atlas-app: the Atlas running on {} has no window to show ({e}); starting one", root.display()),
+            Err(e) => eprintln!("kandinsky-app: the Kandinsky running on {} has no window to show ({e}); starting one", root.display()),
         }
     }
     webkit_rendering(&root);
@@ -478,24 +485,26 @@ fn main() -> anyhow::Result<()> {
     #[cfg(not(target_os = "linux"))]
     let frames = cfg!(windows);
     // the installed UI (packaging/install.sh copies it): a new interface reloads into this window
-    // without a new program (atlas-core ui_files.rs; the page watches /api/ui/build)
-    if std::env::var_os("ATLAS_UI_DIR").is_none() {
-        if let Some(d) = atlas_core::ui_files::installed() {
-            std::env::set_var("ATLAS_UI_DIR", d);
+    // without a new program (kandinsky-core ui_files.rs; the page watches /api/ui/build)
+    if kandinsky_core::env::var_os("UI_DIR").is_none() {
+        if let Some(d) = kandinsky_core::ui_files::installed() {
+            for name in kandinsky_core::env::both("UI_DIR") {
+                std::env::set_var(name, &d);
+            }
         }
     }
     // Tauri's async runtime is tokio; the server task keeps running on it after block_on returns.
     let server = tauri::async_runtime::block_on(desktop_core(root.clone()))?;
-    // the vault list (docs/guides/SHELL.md) is written here only: `atlas serve` on a throwaway folder leaves no trace
-    if let Err(e) = atlas_core::vaults::remember_now(&server.info().root) {
-        eprintln!("atlas-app: vault list not updated: {e}");
+    // the vault list (docs/guides/SHELL.md) is written here only: `kandinsky serve` on a throwaway folder leaves no trace
+    if let Err(e) = kandinsky_core::vaults::remember_now(&server.info().root) {
+        eprintln!("kandinsky-app: vault list not updated: {e}");
     }
-    // ATLAS_DEV=1 (the "Atlas (dev)" launcher): the UI from this repository's Vite dev server, so a
+    // KANDINSKY_DEV=1 (the "Kandinsky (dev)" launcher): the UI from this repository's Vite dev server, so a
     // saved .svelte / .ts / .css shows at once with no rebuild; the core stays the installed one
-    let mut dev = std::env::var_os("ATLAS_DEV").is_some().then(|| dev_ui(&server.url(), server.key())).transpose()?;
+    let mut dev = kandinsky_core::env::var_os("DEV").is_some().then(|| dev_ui(&server.url(), server.key())).transpose()?;
     // the locked core is opened by a one-time link that leaves the key's cookie in this window
-    let url = std::env::var("ATLAS_UI_URL").ok().or_else(|| dev.as_ref().map(|d| d.url.clone())).unwrap_or_else(|| server.open_url());
-    eprintln!("atlas-app: workspace {} served at {}; window → {url}", server.info().root.display(), server.url());
+    let url = kandinsky_core::env::var("UI_URL").or_else(|| dev.as_ref().map(|d| d.url.clone())).unwrap_or_else(|| server.open_url());
+    eprintln!("kandinsky-app: workspace {} served at {}; window → {url}", server.info().root.display(), server.url());
     watch_for_update(server.url());
     let url: tauri::Url = url.parse()?;
     let core = server.url();
@@ -508,13 +517,13 @@ fn main() -> anyhow::Result<()> {
     // the link a rebuilt window opens with: a locked core's one-time codes are spent, so a fresh one each time
     let server = std::sync::Arc::new(std::sync::Mutex::new(server));
     let fresh_link = {
-        let (server, fixed) = (server.clone(), std::env::var("ATLAS_UI_URL").ok().or_else(|| dev.as_ref().map(|d| d.url.clone())));
+        let (server, fixed) = (server.clone(), kandinsky_core::env::var("UI_URL").or_else(|| dev.as_ref().map(|d| d.url.clone())));
         move || fixed.clone().or_else(|| server.lock().unwrap().as_ref().map(|s| s.open_url()))
     };
     builder
         .setup(move |app| {
             let handle = app.handle().clone();
-            browser::prepare(&handle, atlas_core::config::Config::load(&vault).map(|c| c.web).unwrap_or_default());
+            browser::prepare(&handle, kandinsky_core::config::Config::load(&vault).map(|c| c.web).unwrap_or_default());
             let spec = MainSpec { home: url.clone(), core: core.clone(), vault: vault.clone(), frames };
             let open_main: background::OpenMain = Box::new(move |app, open| {
                 let mut to = fresh_link().and_then(|l| l.parse::<tauri::Url>().ok()).unwrap_or_else(|| spec.home.clone());
@@ -530,16 +539,16 @@ fn main() -> anyhow::Result<()> {
             tablet::watch(handle.clone()); // KDE's tablet mode → the touch layout (tablet.rs)
             // a notification's click, a second launch, the tray: one way to bring the window forward (shell.rs)
             let s = shell.clone();
-            atlas_core::shell::on_show(move |show| s.show(show.open));
+            kandinsky_core::shell::on_show(move |show| s.show(show.open));
             let s = shell.clone();
-            atlas_core::notify::on_notice(move |n, looked_at| s.notice(n, looked_at));
+            kandinsky_core::notify::on_notice(move |n, looked_at| s.notice(n, looked_at));
             let start_vault = vault.clone();
-            atlas_core::shell::on_config(move |root, cfg| {
+            kandinsky_core::shell::on_config(move |root, cfg| {
                 if same_folder(root, &start_vault) {
                     autostart::apply(cfg.desktop.start_at_login);
                 }
             });
-            autostart::apply(atlas_core::config::Config::load(&vault).map(|c| c.desktop.start_at_login).unwrap_or(false));
+            autostart::apply(kandinsky_core::config::Config::load(&vault).map(|c| c.desktop.start_at_login).unwrap_or(false));
             if background_start {
                 shell.start_asleep();
             } else {
@@ -555,7 +564,7 @@ fn main() -> anyhow::Result<()> {
                     api.prevent_close();
                 }
             }
-            // looking at Atlas, however it came forward (the taskbar, Alt+Tab, a click), is seeing its notices
+            // looking at Kandinsky, however it came forward (the taskbar, Alt+Tab, a click), is seeing its notices
             (MAIN_WINDOW, tauri::WindowEvent::Focused(true)) => {
                 if let Some(s) = SHELL.get() {
                     s.looked_at();
@@ -565,9 +574,9 @@ fn main() -> anyhow::Result<()> {
         })
         .build(context())?
         .run(move |_app, event| match event {
-            // the window closed by its sleep (or never opened, `--background`): Atlas runs on in the tray
+            // the window closed by its sleep (or never opened, `--background`): Kandinsky runs on in the tray
             tauri::RunEvent::ExitRequested { code: None, api, .. } if SHELL.get().is_some_and(|s| s.keeps_running()) => api.prevent_exit(),
-            // macOS: a click on the Dock icon of an Atlas with no window shown
+            // macOS: a click on the Dock icon of an Kandinsky with no window shown
             #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { has_visible_windows: false, .. } => {
                 if let Some(s) = SHELL.get() {
@@ -578,7 +587,7 @@ fn main() -> anyhow::Result<()> {
                 if let Some(mut d) = dev.take() {
                     let _ = d.vite.kill(); // the dev server goes with the window
                 }
-                // Graceful stop so `.atlas/cache/server.json` does not point at a dead port.
+                // Graceful stop so `.kandinsky/cache/server.json` does not point at a dead port.
                 if let Some(s) = server.lock().unwrap().take() {
                     let _ = tauri::async_runtime::block_on(s.shutdown());
                 }
@@ -606,7 +615,7 @@ fn start_tray(app: &tauri::AppHandle, shell: &std::sync::Arc<background::Shell>,
         let shell = shell.clone();
         tauri::async_runtime::spawn(async move {
             if let Err(e) = tray_sni::start(shell.clone(), tray_sni::Icons::from_rgba(&rgba, w, h), model).await {
-                eprintln!("atlas-app: no tray icon ({e}): closing the window quits Atlas");
+                eprintln!("kandinsky-app: no tray icon ({e}): closing the window quits Kandinsky");
                 if background_start {
                     shell.show(None);
                 }
@@ -615,7 +624,7 @@ fn start_tray(app: &tauri::AppHandle, shell: &std::sync::Arc<background::Shell>,
     }
     #[cfg(not(target_os = "linux"))]
     if let Err(e) = tray_tauri::start(app, shell.clone(), tray_tauri::Icons::from_rgba(&rgba, w, h), model) {
-        eprintln!("atlas-app: no tray icon ({e}): closing the window quits Atlas");
+        eprintln!("kandinsky-app: no tray icon ({e}): closing the window quits Kandinsky");
         if background_start {
             shell.show(None);
         }
@@ -659,10 +668,10 @@ impl MainSpec {
         let (handle, core, vault, vault_bg) = (app.clone(), self.core.clone(), self.vault.clone(), self.vault.clone());
         let off_app = OffApp { home: self.home.clone(), handle: handle.clone(), vault: vault.clone() };
         let spec = self.clone();
-        let main = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
+        let main = window(app, label, WebviewUrl::External(url))
             .title(title)
             .initialization_script(frames_any_page(self.frames))
-            // a web tab's frame: its address, history, find and Atlas's keys (frame_page.js; inert elsewhere)
+            // a web tab's frame: its address, history, find and Kandinsky's keys (frame_page.js; inert elsewhere)
             .initialization_script_for_all_frames(include_str!("frame_page.js"))
             // OS file drops reach the page's own `drop` (the editor, the explorer, the capture popup); Tauri's
             // handler would take them first (on Windows the page then never sees a dropped file)
@@ -675,7 +684,7 @@ impl MainSpec {
                 let _ = w.eval(tablet::script());
             }
         });
-        // the window's page never leaves Atlas (OffApp). WebKitGTK reports a frame's navigation as the page's, and
+        // the window's page never leaves Kandinsky (OffApp). WebKitGTK reports a frame's navigation as the page's, and
         // a web tab is a frame: there the guard watches the page's own loads instead (`load-changed` is the main
         // frame's alone), below; elsewhere the navigation hook is the main frame's.
         #[cfg(not(target_os = "linux"))]
@@ -694,7 +703,7 @@ impl MainSpec {
                     door_window(&handle, page, core.clone());
                     return tauri::webview::NewWindowResponse::Deny;
                 }
-                // the core's own address (the "Open Atlas in the browser" link) is for the desktop's browser
+                // the core's own address (the "Open Kandinsky in the browser" link) is for the desktop's browser
                 let own = to.port_or_known_default() == tauri::Url::parse(&core).ok().and_then(|c| c.port()) && matches!(to.host_str(), Some("127.0.0.1" | "localhost"));
                 match signin_return(&to) {
                     Some(back) => signin_window(&handle, to, back, core.clone()),
@@ -717,9 +726,9 @@ impl MainSpec {
             }
             pinch_to_wheel(&w.inner());
             pen_as_pen(&w.inner());
-            stay_in_atlas(&w.inner(), off_app);
+            stay_in_kandinsky(&w.inner(), off_app);
             webtab::attach(&w.inner()); // web pages as tabs, framing allowed or not
-            // a document, not a browser: no back/forward page cache, small memory caches — Atlas is one page and never goes back to a page it left
+            // a document, not a browser: no back/forward page cache, small memory caches — Kandinsky is one page and never goes back to a page it left
             if let Some(c) = w.inner().context() {
                 use webkit2gtk::WebContextExt;
                 c.set_cache_model(webkit2gtk::CacheModel::DocumentViewer);
@@ -729,10 +738,10 @@ impl MainSpec {
     }
 }
 
-/// The page leaving Atlas for an outside address (a sign-in, a stray link): the load is stopped before it commits
+/// The page leaving Kandinsky for an outside address (a sign-in, a stray link): the load is stopped before it commits
 /// (the page stays as it was) and the address goes where OffApp sends it. Linux only: see where it is called.
 #[cfg(target_os = "linux")]
-fn stay_in_atlas(view: &webkit2gtk::WebView, off: OffApp) {
+fn stay_in_kandinsky(view: &webkit2gtk::WebView, off: OffApp) {
     use webkit2gtk::{LoadEvent, WebViewExt};
     view.connect_load_changed(move |v, ev| {
         if !matches!(ev, LoadEvent::Started | LoadEvent::Redirected) {
@@ -795,9 +804,9 @@ fn pen_as_pen(view: &webkit2gtk::WebView) {
                 was_pen.set(true);
                 let axis = |a| ev.axis(a).unwrap_or(0.0);
                 let tilt = |a| (axis(a).clamp(-1.0, 1.0) * 90.0).round();
-                format!("window.atlasPen&&atlasPen({:.3},{},{},{})", axis(AxisUse::Pressure), tilt(AxisUse::Xtilt), tilt(AxisUse::Ytilt), s == InputSource::Eraser)
+                format!("window.kandinskyPen&&kandinskyPen({:.3},{},{},{})", axis(AxisUse::Pressure), tilt(AxisUse::Xtilt), tilt(AxisUse::Ytilt), s == InputSource::Eraser)
             }
-            _ if was_pen.replace(false) => "window.atlasPen&&atlasPen(null)".to_string(),
+            _ if was_pen.replace(false) => "window.kandinskyPen&&kandinskyPen(null)".to_string(),
             _ => return gtk::glib::Propagation::Proceed,
         };
         #[allow(deprecated)] // as pinch_to_wheel
@@ -822,14 +831,14 @@ fn returns_to(to: &tauri::Url, back: &tauri::Url) -> bool {
         && to.path().starts_with(back.path())
 }
 
-/// A provider's sign-in page in a window of Atlas, as Thunderbird does it: the user signs in there, and when the
+/// A provider's sign-in page in a window of Kandinsky, as Thunderbird does it: the user signs in there, and when the
 /// page heads for its return address the window closes and hands that address to the page that asked
-/// (POST /api/signin → the "signin" event → `atlas.signIn`). If the window cannot be made, the browser.
+/// (POST /api/signin → the "signin" event → `kandinsky.signIn`). If the window cannot be made, the browser.
 fn signin_window(app: &tauri::AppHandle, page: tauri::Url, back: tauri::Url, core: String) {
     static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let label = format!("signin-{}", N.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
     let (app2, label2) = (app.clone(), label.clone());
-    let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(page.clone()))
+    let built = window(app, &label, WebviewUrl::External(page.clone()))
         .title("Sign in — Kandinsky")
         .inner_size(520.0, 720.0)
         .center()
@@ -841,7 +850,7 @@ fn signin_window(app: &tauri::AppHandle, page: tauri::Url, back: tauri::Url, cor
             let (core, body, app, label) = (core.clone(), serde_json::json!({ "url": to.as_str() }).to_string(), app2.clone(), label2.clone());
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = post(&core, "/api/signin", &body).await {
-                    eprintln!("atlas-app: sign-in answer not delivered: {e}");
+                    eprintln!("kandinsky-app: sign-in answer not delivered: {e}");
                 }
                 if let Some(w) = app.get_webview_window(&label) {
                     let _ = w.close();
@@ -851,13 +860,13 @@ fn signin_window(app: &tauri::AppHandle, page: tauri::Url, back: tauri::Url, cor
         })
         .build();
     if let Err(e) = built {
-        eprintln!("atlas-app: no sign-in window ({e}); the browser instead");
+        eprintln!("kandinsky-app: no sign-in window ({e}); the browser instead");
         open_outside(page.as_str());
     }
 }
 
 /// The page's ask for a service sign-in (core `/signin/door?url=…` on this computer): the service's address.
-/// A guest folder's page (`/v/<name>/?guest=1`, core guest.rs): it opens in a window of Atlas, not the browser.
+/// A guest folder's page (`/v/<name>/?guest=1`, core guest.rs): it opens in a window of Kandinsky, not the browser.
 fn guest_page(to: &tauri::Url) -> bool {
     to.path().starts_with("/v/") && to.query_pairs().any(|(k, v)| k == "guest" && v == "1")
 }
@@ -866,7 +875,7 @@ fn guest_window(app: &tauri::AppHandle, spec: &MainSpec, page: tauri::Url) {
     static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let label = format!("guest-{}", N.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
     if let Err(e) = spec.window(app, &label, "Kandinsky — guest folder", page) {
-        eprintln!("atlas: the guest folder's window did not open: {e}");
+        eprintln!("kandinsky: the guest folder's window did not open: {e}");
     }
 }
 
@@ -879,7 +888,7 @@ fn door_target(to: &tauri::Url) -> Option<tauri::Url> {
     matches!(page.scheme(), "http" | "https").then_some(page)
 }
 
-/// A service's gate (Authelia, Authentik…) in a window of Atlas: the user signs in on its page (a security key works
+/// A service's gate (Authelia, Authentik…) in a window of Kandinsky: the user signs in on its page (a security key works
 /// there), and once a page of the service itself has loaded, its cookies go to the core (POST /api/signin/door),
 /// which sends them with the plugins' later requests to that site — then the window closes. A page of the service
 /// with no cookie at all is not a gate's doing: the window stays for the user to finish or close.
@@ -888,7 +897,7 @@ fn door_window(app: &tauri::AppHandle, page: tauri::Url, core: String) {
     let label = format!("door-{}", N.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
     let host = page.host_str().unwrap_or_default().to_ascii_lowercase();
     let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(page.clone()))
+    let built = window(app, &label, WebviewUrl::External(page.clone()))
         .title(format!("Sign in to {host} — Kandinsky"))
         .inner_size(520.0, 720.0)
         .center()
@@ -903,7 +912,7 @@ fn door_window(app: &tauri::AppHandle, page: tauri::Url, core: String) {
             tauri::async_runtime::spawn(async move {
                 let cookies: Vec<serde_json::Value> = match w.cookies_for_url(at) {
                     Ok(list) => list.iter().map(|c| door_cookie(c, &host)).collect(),
-                    Err(e) => return eprintln!("atlas-app: the sign-in window's cookies could not be read: {e}"),
+                    Err(e) => return eprintln!("kandinsky-app: the sign-in window's cookies could not be read: {e}"),
                 };
                 if cookies.is_empty() || done.swap(true, std::sync::atomic::Ordering::SeqCst) {
                     return;
@@ -911,13 +920,13 @@ fn door_window(app: &tauri::AppHandle, page: tauri::Url, core: String) {
                 let body = serde_json::json!({ "host": host, "cookies": cookies }).to_string();
                 match post(&core, "/api/signin/door", &body).await {
                     Ok(_) => drop(w.close()),
-                    Err(e) => eprintln!("atlas-app: sign-in to {host} not kept: {e}"),
+                    Err(e) => eprintln!("kandinsky-app: sign-in to {host} not kept: {e}"),
                 }
             });
         })
         .build();
     if let Err(e) = built {
-        eprintln!("atlas-app: no sign-in window ({e})");
+        eprintln!("kandinsky-app: no sign-in window ({e})");
     }
 }
 
@@ -953,16 +962,16 @@ impl OffApp {
 }
 
 /// A web page leaving the main window, as `[web] open_links` says: a Web tab of the app (the pane's
-/// `__atlasOpenWeb`, ui/src/lib/web-links.ts), a browsing window, or the desktop's browser. Other schemes: their handler.
+/// `__kandinskyOpenWeb`, ui/src/lib/web-links.ts), a browsing window, or the desktop's browser. Other schemes: their handler.
 fn web_link(app: &tauri::AppHandle, to: tauri::Url, vault: &std::path::Path) {
-    use atlas_core::config::WebLinks;
+    use kandinsky_core::config::WebLinks;
     if !matches!(to.scheme(), "http" | "https") {
         return open_outside(to.as_str());
     }
-    match atlas_core::config::Config::load(vault).map(|c| c.web.open_links).unwrap_or_default() {
+    match kandinsky_core::config::Config::load(vault).map(|c| c.web.open_links).unwrap_or_default() {
         WebLinks::Tab => match app.get_webview_window("main") {
             Some(main) => {
-                let js = format!("window.__atlasOpenWeb ? window.__atlasOpenWeb({}) : void 0", serde_json::Value::from(to.as_str()));
+                let js = format!("window.__kandinskyOpenWeb ? window.__kandinskyOpenWeb({}) : void 0", serde_json::Value::from(to.as_str()));
                 if main.eval(&js).is_err() {
                     browser::open(app, to, open_outside);
                 }
@@ -975,8 +984,8 @@ fn web_link(app: &tauri::AppHandle, to: tauri::Url, vault: &std::path::Path) {
 }
 
 fn open_outside(url: &str) {
-    if let Err(e) = atlas_core::platform::open::url(url) {
-        eprintln!("atlas-app: {e}");
+    if let Err(e) = kandinsky_core::platform::open::url(url) {
+        eprintln!("kandinsky-app: {e}");
     }
 }
 
@@ -997,22 +1006,34 @@ fn watch_for_update(base: String) {
             seen = now;
             let body = r#"{"args":{"title":"Kandinsky was updated","body":"A new build is installed. Restart Kandinsky to use it."}}"#;
             if let Err(e) = post(&base, "/api/cmd/notify", body).await {
-                eprintln!("atlas-app: update notice not shown: {e}");
+                eprintln!("kandinsky-app: update notice not shown: {e}");
             }
         }
     });
 }
 
+/// A window's builder, on the WebView data folder every window of this run shares: the old identifier's while it holds
+/// the only profile (dirs_migrate.rs `webview_dir`), else Tauri's default. Every window is made through this, or the
+/// first one made otherwise would start an empty profile under the new identifier, which then wins at every start.
+pub(crate) fn window<'a, R: tauri::Runtime, M: tauri::Manager<R>>(app: &'a M, label: impl Into<String>, url: WebviewUrl) -> WebviewWindowBuilder<'a, R, M> {
+    let built = WebviewWindowBuilder::new(app, label, url);
+    match kandinsky_core::platform::dirs_migrate::webview_dir() {
+        Some(dir) => built.data_directory(dir),
+        None => built,
+    }
+}
+
 /// A bare HTTP POST to the core on localhost (no HTTP client dependency for one request); with the core's key when it
-/// left one (a locked core, local_lock.rs), as the `atlas` CLI does. → the answer's body when it succeeded.
+/// left one (a locked core, local_lock.rs), as the `kandinsky` CLI does. → the answer's body when it succeeded.
 async fn post(base: &str, path: &str, body: &str) -> std::io::Result<String> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     // a vault of the desktop's core is served under its prefix (`http://127.0.0.1:port/v/name`)
     let (host, prefix) = split_base(base);
     let path = format!("{prefix}{path}");
-    let key = atlas_core::auth::local_key_header(host);
+    let key = kandinsky_core::auth::local_key_header(host);
     let mut s = tokio::net::TcpStream::connect(host).await?;
-    let req = format!("POST {path} HTTP/1.1\r\nHost: {host}\r\nx-atlas: 1\r\n{key}content-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len());
+    // `x-atlas: 1` too: a core from before the rename (an earlier build still running) asks for that one
+    let req = format!("POST {path} HTTP/1.1\r\nHost: {host}\r\nx-kandinsky: 1\r\nx-atlas: 1\r\n{key}content-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len());
     s.write_all(req.as_bytes()).await?;
     let mut answer = Vec::new();
     s.read_to_end(&mut answer).await?;
@@ -1033,25 +1054,25 @@ fn split_base(base: &str) -> (&str, &str) {
     }
 }
 
-/// The Vite dev server of the repository Atlas was built from, proxying `/api` to this window's core.
+/// The Vite dev server of the repository Kandinsky was built from, proxying `/api` to this window's core.
 struct DevUi {
     url: String,
     vite: std::process::Child,
 }
 
 fn dev_ui(core: &str, key: Option<&str>) -> anyhow::Result<DevUi> {
-    // ATLAS_REPO (written by install.sh): auto-install builds from a temporary copy, so the build's own path is not the repo
-    let repo = std::env::var_os("ATLAS_REPO").map(std::path::PathBuf::from).unwrap_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".."));
+    // KANDINSKY_REPO (written by install.sh): auto-install builds from a temporary copy, so the build's own path is not the repo
+    let repo = kandinsky_core::env::var_os("REPO").map(std::path::PathBuf::from).unwrap_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".."));
     let ui = repo.join("ui");
-    anyhow::ensure!(ui.join("package.json").is_file(), "ATLAS_DEV: no UI sources at {} (this build came from elsewhere)", ui.display());
-    let port = (5174..5200).find(|p| std::net::TcpListener::bind(("127.0.0.1", *p)).is_ok()).ok_or_else(|| anyhow::anyhow!("ATLAS_DEV: no free port for Vite"))?;
-    eprintln!("atlas-app: dev mode: Vite on {port}, from {}", ui.display());
+    anyhow::ensure!(ui.join("package.json").is_file(), "KANDINSKY_DEV: no UI sources at {} (this build came from elsewhere)", ui.display());
+    let port = (5174..5200).find(|p| std::net::TcpListener::bind(("127.0.0.1", *p)).is_ok()).ok_or_else(|| anyhow::anyhow!("KANDINSKY_DEV: no free port for Vite"))?;
+    eprintln!("kandinsky-app: dev mode: Vite on {port}, from {}", ui.display());
     let vite = std::process::Command::new("npm")
         // --host: "localhost" may resolve to ::1 only, and the window below waits on 127.0.0.1
         .args(["run", "dev", "--", "--host", "127.0.0.1", "--port", &port.to_string(), "--strictPort"])
         .current_dir(&ui)
-        .env("ATLAS_API", core)
-        .env("ATLAS_API_KEY", key.unwrap_or_default()) // vite.config.ts: the proxy signs its requests with it
+        .envs(kandinsky_core::env::both("API").map(|n| (n, core)))
+        .envs(kandinsky_core::env::both("API_KEY").map(|n| (n, key.unwrap_or_default()))) // vite.config.ts: the proxy signs its requests with it
         .spawn()?;
     // the window must not open on a server that is not listening yet
     for _ in 0..150 {
@@ -1060,7 +1081,7 @@ fn dev_ui(core: &str, key: Option<&str>) -> anyhow::Result<DevUi> {
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-    anyhow::bail!("ATLAS_DEV: Vite did not start on port {port} in 15 s")
+    anyhow::bail!("KANDINSKY_DEV: Vite did not start on port {port} in 15 s")
 }
 
 #[cfg(test)]
@@ -1076,10 +1097,10 @@ mod tests {
 
     #[test]
     fn the_welcome_page_parses_and_leads_to_a_vault() {
-        let p = atlas_core::page::parse(WELCOME_PAGE).unwrap();
+        let p = kandinsky_core::page::parse(WELCOME_PAGE).unwrap();
         assert_eq!(p.title.as_deref(), Some("Welcome"));
         let blocks: Vec<_> = p.rows.iter().flat_map(|r| r.columns.iter().flatten()).collect();
-        assert!(blocks.iter().any(|b| matches!(b, atlas_core::api::PageBlock::View { view, .. } if view == "vaults")), "the buttons to a vault");
+        assert!(blocks.iter().any(|b| matches!(b, kandinsky_core::api::PageBlock::View { view, .. } if view == "vaults")), "the buttons to a vault");
         // the keys it names are the app's (actions.ts / vaults.ts), not another program's
         assert!(WELCOME_PAGE.contains("Ctrl+Alt+V") && !WELCOME_PAGE.contains("Ctrl+K"));
     }

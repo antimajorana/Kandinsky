@@ -2630,7 +2630,7 @@ function na(e, t) {
 		"div[style*='border-top:solid #E1E1E1']",
 		"div[style*='border-top: solid #E1E1E1']",
 		"div[style*='border-top:solid #B5C4DF']",
-		".atlas-quote"
+		".kandinsky-quote"
 	].join(",");
 	function d(e) {
 		let t = e.body, n = t.querySelector(u);
@@ -2639,7 +2639,7 @@ function na(e, t) {
 		o && /wrote:\s*$|a écrit\s*:?\s*$|escribió:\s*$|schrieb.*:\s*$/i.test(o.textContent ?? "") && (o.textContent ?? "").length < 300 && (a = o);
 		for (let e = a; e && (i.push(e), r || e !== n); e = e.nextSibling);
 		let s = e.createElement("details"), c = e.createElement("summary");
-		s.className = "atlas-quoted", c.textContent = "···", c.title = "Show the earlier messages", a.parentNode.insertBefore(s, a), s.append(c, ...i);
+		s.className = "kandinsky-quoted", c.textContent = "···", c.title = "Show the earlier messages", a.parentNode.insertBefore(s, a), s.append(c, ...i);
 	}
 	function f(e) {
 		let t = e.match(/rgba?\(([\d.]+)[, ]+([\d.]+)[, ]+([\d.]+)(?:[,/ ]+([\d.]+))?\)/);
@@ -2712,15 +2712,15 @@ img:not([src]),img[src^="http"]:not([data-ok]){min-height:0}
 a{color:${s.link}}
 blockquote{margin:.5em 0 .5em .2em;padding-left:.9em;border-left:3px solid ${s.border};color:${s.muted}}
 blockquote blockquote{border-left-color:${s.borderStrong}}
-.atlas-plain{white-space:normal;font-size:15px;line-height:1.6;max-width:72ch}
-.atlas-signature{color:${s.faint};font-size:.92em}
-pre.atlas-text{white-space:pre-wrap;font:inherit}
-details.atlas-quoted>summary{display:inline-block;cursor:pointer;list-style:none;padding:0 8px;margin:6px 0;border-radius:6px;background:${s.chip};color:${s.muted};font:600 13px/1.4 system-ui,sans-serif;letter-spacing:.1em}
-details.atlas-quoted>summary::-webkit-details-marker{display:none}
-details.atlas-quoted[open]>summary{margin-bottom:8px}
+.kandinsky-plain{white-space:normal;font-size:15px;line-height:1.6;max-width:72ch}
+.kandinsky-signature{color:${s.faint};font-size:.92em}
+pre.kandinsky-text{white-space:pre-wrap;font:inherit}
+details.kandinsky-quoted>summary{display:inline-block;cursor:pointer;list-style:none;padding:0 8px;margin:6px 0;border-radius:6px;background:${s.chip};color:${s.muted};font:600 13px/1.4 system-ui,sans-serif;letter-spacing:.1em}
+details.kandinsky-quoted>summary::-webkit-details-marker{display:none}
+details.kandinsky-quoted[open]>summary{margin-bottom:8px}
 table{max-width:100%}
-mark.atlas-find{background:${s.dark ? "#7a5d00" : "#ffe27a"};color:inherit;border-radius:2px}
-mark.atlas-find.cur{background:${s.dark ? "#c77700" : "#ff9f1a"};color:${s.dark ? "#fff" : "#000"}}
+mark.kandinsky-find{background:${s.dark ? "#7a5d00" : "#ffe27a"};color:inherit;border-radius:2px}
+mark.kandinsky-find.cur{background:${s.dark ? "#c77700" : "#ff9f1a"};color:${s.dark ? "#fff" : "#000"}}
 </style></head><body>${t.html}</body></html>`;
 	});
 	function y() {
@@ -2734,7 +2734,7 @@ mark.atlas-find.cur{background:${s.dark ? "#c77700" : "#ff9f1a"};color:${s.dark 
 		for (let t of Array.from(e.images)) t.addEventListener("load", r);
 		e.addEventListener("toggle", r, !0), e.addEventListener("click", (e) => {
 			let n = e.target?.closest?.("a[href]");
-			n && t.atlas?.openLink && /^https?:/i.test(n.href) && e.button === 0 && (e.preventDefault(), t.atlas.openLink(n.href, { outside: e.shiftKey }));
+			n && t.kandinsky?.openLink && /^https?:/i.test(n.href) && e.button === 0 && (e.preventDefault(), t.kandinsky.openLink(n.href, { outside: e.shiftKey }));
 		}), e.addEventListener("keydown", (e) => {
 			(e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f" && (e.preventDefault(), Z(c)?.dispatchEvent(new KeyboardEvent("keydown", {
 				key: e.key,
@@ -2753,10 +2753,10 @@ mark.atlas-find.cur{background:${s.dark ? "#c77700" : "#ff9f1a"};color:${s.dark 
 //#endregion
 //#region plugins/stable/email/ui/src/open-mail.ts
 function ra(e, t = {}) {
-	window.__atlasEmailOpen = t, e.openView(void 0, {
+	window.__kandinskyEmailOpen = t, e.openView(void 0, {
 		title: "Email",
 		icon: "mail"
-	}), setTimeout(() => window.dispatchEvent(new CustomEvent("atlas-email:open", { detail: t })), 0);
+	}), setTimeout(() => window.dispatchEvent(new CustomEvent("kandinsky-email:open", { detail: t })), 0);
 }
 //#endregion
 //#region plugins/stable/email/ui/src/rules-host.ts
@@ -2764,10 +2764,10 @@ var ia = (e) => ({
 	call: (t, n = {}, r = 120) => Ri(e, t, n, r),
 	search: (t) => ra(e, { search: t }),
 	toast: (t, n = "info") => e.toast("Email", t, n),
-	atlas: { open: (t, n, r) => e.open(t, n, r) }
-}), aa = JSON.stringify({ dialog: "rules" }), oa = JSON.stringify({ dialog: "thunderbird" }), sa = /* @__PURE__ */ br("<div class=\"rule svelte-1mt0jy7\"><input class=\"when svelte-1mt0jy7\" placeholder=\"from:newsletter@shop.example\" aria-label=\"When new mail matches\"/> <span class=\"arrow svelte-1mt0jy7\">→</span> <input class=\"acts svelte-1mt0jy7\" placeholder=\"move Newsletters, read\" aria-label=\"Do\" list=\"email-rule-actions\"/> <button class=\"tool svelte-1mt0jy7\" title=\"Show the mail it matches now\"><!></button> <button class=\"tool svelte-1mt0jy7\" title=\"Remove this rule\"><!></button></div>"), ca = /* @__PURE__ */ br("<p class=\"faint svelte-1mt0jy7\">No rules yet.</p>"), la = /* @__PURE__ */ br("<option></option>"), ua = /* @__PURE__ */ br("<p class=\"error svelte-1mt0jy7\"> </p>"), da = /* @__PURE__ */ br("<button class=\"atlas-btn svelte-1mt0jy7\">Cancel</button>"), fa = /* @__PURE__ */ br("<div><span class=\"faint svelte-1mt0jy7\">for new mail in an inbox · kept in <button class=\"link svelte-1mt0jy7\"> </button></span> <p class=\"hint svelte-1mt0jy7\">When new mail matches the search, do the actions in order. A search is written as in the search box: <code class=\"svelte-1mt0jy7\">from:shop.example</code>, <code class=\"svelte-1mt0jy7\">subject:invoice has:attachment</code>, <code class=\"svelte-1mt0jy7\">list:physics</code>, <code class=\"svelte-1mt0jy7\">-from:boss</code>, several people at once: <code class=\"svelte-1mt0jy7\">from:ana@uni.example,bo@uni.example</code>. <b>important</b> stars it and keeps the conversation as a note at once; <b>not-important</b> moves it out of the inbox; <b>stop</b> keeps later rules from seeing it; <b>save</b> keeps the conversation as a note.</p> <!> <datalist id=\"email-rule-actions\"></datalist> <!> <footer class=\"svelte-1mt0jy7\"><button class=\"atlas-btn svelte-1mt0jy7\"><!> Add a rule</button> <span class=\"grow svelte-1mt0jy7\"></span> <!> <button class=\"atlas-btn primary svelte-1mt0jy7\"> </button></footer></div>"), pa = {
+	kandinsky: { open: (t, n, r) => e.open(t, n, r) }
+}), aa = JSON.stringify({ dialog: "rules" }), oa = JSON.stringify({ dialog: "thunderbird" }), sa = /* @__PURE__ */ br("<div class=\"rule svelte-1mt0jy7\"><input class=\"when svelte-1mt0jy7\" placeholder=\"from:newsletter@shop.example\" aria-label=\"When new mail matches\"/> <span class=\"arrow svelte-1mt0jy7\">→</span> <input class=\"acts svelte-1mt0jy7\" placeholder=\"move Newsletters, read\" aria-label=\"Do\" list=\"email-rule-actions\"/> <button class=\"tool svelte-1mt0jy7\" title=\"Show the mail it matches now\"><!></button> <button class=\"tool svelte-1mt0jy7\" title=\"Remove this rule\"><!></button></div>"), ca = /* @__PURE__ */ br("<p class=\"faint svelte-1mt0jy7\">No rules yet.</p>"), la = /* @__PURE__ */ br("<option></option>"), ua = /* @__PURE__ */ br("<p class=\"error svelte-1mt0jy7\"> </p>"), da = /* @__PURE__ */ br("<button class=\"kandinsky-btn svelte-1mt0jy7\">Cancel</button>"), fa = /* @__PURE__ */ br("<div><span class=\"faint svelte-1mt0jy7\">for new mail in an inbox · kept in <button class=\"link svelte-1mt0jy7\"> </button></span> <p class=\"hint svelte-1mt0jy7\">When new mail matches the search, do the actions in order. A search is written as in the search box: <code class=\"svelte-1mt0jy7\">from:shop.example</code>, <code class=\"svelte-1mt0jy7\">subject:invoice has:attachment</code>, <code class=\"svelte-1mt0jy7\">list:physics</code>, <code class=\"svelte-1mt0jy7\">-from:boss</code>, several people at once: <code class=\"svelte-1mt0jy7\">from:ana@uni.example,bo@uni.example</code>. <b>important</b> stars it and keeps the conversation as a note at once; <b>not-important</b> moves it out of the inbox; <b>stop</b> keeps later rules from seeing it; <b>save</b> keeps the conversation as a note.</p> <!> <datalist id=\"email-rule-actions\"></datalist> <!> <footer class=\"svelte-1mt0jy7\"><button class=\"kandinsky-btn svelte-1mt0jy7\"><!> Add a rule</button> <span class=\"grow svelte-1mt0jy7\"></span> <!> <button class=\"kandinsky-btn primary svelte-1mt0jy7\"> </button></footer></div>"), pa = {
 	hash: "svelte-1mt0jy7",
-	code: ".page.svelte-1mt0jy7 {display:grid;gap:10px;container-type:inline-size;}.dialog.svelte-1mt0jy7 {display:grid;gap:10px;align-content:start;container-type:inline-size;padding:14px 18px;height:100%;box-sizing:border-box;overflow:auto;}.faint.svelte-1mt0jy7 {color:var(--text-faint);font-size:0.9em;}.hint.svelte-1mt0jy7 {margin:0;color:var(--text-muted);font-size:0.9em;line-height:1.5;}code.svelte-1mt0jy7 {font-family:var(--font-mono);font-size:0.9em;background:var(--bg-hover);padding:0 4px;border-radius:4px;}.link.svelte-1mt0jy7 {all:unset;cursor:pointer;color:var(--accent);}.rule.svelte-1mt0jy7 {display:flex;gap:8px;align-items:center;}.rule.svelte-1mt0jy7 input:where(.svelte-1mt0jy7) {min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:6px 9px;font:inherit;}.when.svelte-1mt0jy7 {flex:3;font-family:var(--font-mono);font-size:0.92em !important;}.acts.svelte-1mt0jy7 {flex:2;}.arrow.svelte-1mt0jy7 {color:var(--text-faint);}.tool.svelte-1mt0jy7 {all:unset;cursor:pointer;padding:6px;border-radius:var(--radius-sm);color:var(--text-muted);}.tool.svelte-1mt0jy7:hover {background:var(--bg-hover);color:var(--text);}footer.svelte-1mt0jy7 {display:flex;gap:8px;align-items:center;padding-top:6px;}footer.svelte-1mt0jy7 .atlas-btn:where(.svelte-1mt0jy7) {display:inline-flex;gap:6px;align-items:center;}.primary.svelte-1mt0jy7 {background:var(--accent) !important;color:var(--accent-fg) !important;border-color:transparent !important;}.grow.svelte-1mt0jy7 {flex:1;}.error.svelte-1mt0jy7 {color:var(--red);margin:0;}\n  @container (max-width: 600px) {.rule.svelte-1mt0jy7 {flex-wrap:wrap;}.when.svelte-1mt0jy7, .acts.svelte-1mt0jy7 {flex-basis:100%;}.arrow.svelte-1mt0jy7 {display:none;} }"
+	code: ".page.svelte-1mt0jy7 {display:grid;gap:10px;container-type:inline-size;}.dialog.svelte-1mt0jy7 {display:grid;gap:10px;align-content:start;container-type:inline-size;padding:14px 18px;height:100%;box-sizing:border-box;overflow:auto;}.faint.svelte-1mt0jy7 {color:var(--text-faint);font-size:0.9em;}.hint.svelte-1mt0jy7 {margin:0;color:var(--text-muted);font-size:0.9em;line-height:1.5;}code.svelte-1mt0jy7 {font-family:var(--font-mono);font-size:0.9em;background:var(--bg-hover);padding:0 4px;border-radius:4px;}.link.svelte-1mt0jy7 {all:unset;cursor:pointer;color:var(--accent);}.rule.svelte-1mt0jy7 {display:flex;gap:8px;align-items:center;}.rule.svelte-1mt0jy7 input:where(.svelte-1mt0jy7) {min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:6px 9px;font:inherit;}.when.svelte-1mt0jy7 {flex:3;font-family:var(--font-mono);font-size:0.92em !important;}.acts.svelte-1mt0jy7 {flex:2;}.arrow.svelte-1mt0jy7 {color:var(--text-faint);}.tool.svelte-1mt0jy7 {all:unset;cursor:pointer;padding:6px;border-radius:var(--radius-sm);color:var(--text-muted);}.tool.svelte-1mt0jy7:hover {background:var(--bg-hover);color:var(--text);}footer.svelte-1mt0jy7 {display:flex;gap:8px;align-items:center;padding-top:6px;}footer.svelte-1mt0jy7 .kandinsky-btn:where(.svelte-1mt0jy7) {display:inline-flex;gap:6px;align-items:center;}.primary.svelte-1mt0jy7 {background:var(--accent) !important;color:var(--accent-fg) !important;border-color:transparent !important;}.grow.svelte-1mt0jy7 {flex:1;}.error.svelte-1mt0jy7 {color:var(--red);margin:0;}\r\n  @container (max-width: 600px) {.rule.svelte-1mt0jy7 {flex-wrap:wrap;}.when.svelte-1mt0jy7, .acts.svelte-1mt0jy7 {flex-basis:100%;}.arrow.svelte-1mt0jy7 {display:none;} }"
 };
 function ma(e, t) {
 	Ke(t, !0), Yr(e, pa);
@@ -2864,7 +2864,7 @@ function ma(e, t) {
 	Ee(x), Ee(p), wn(() => {
 		ii(p, 1, Qr(t.frame), "svelte-1mt0jy7"), Ar(g, Z(a) || "mail/rules.md"), te.disabled = Z(s), Ar(ne, Z(r) ? "Save rules" : "Save");
 	}), fr("click", h, () => {
-		t.mail.atlas.open(Z(a), void 0, { beside: !0 }), n()();
+		t.mail.kandinsky.open(Z(a), void 0, { beside: !0 }), n()();
 	}), fr("click", S, l), fr("click", te, d), Tr(e, p), qe();
 }
 pr(["click", "input"]);

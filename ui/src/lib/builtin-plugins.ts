@@ -1,4 +1,4 @@
-// Built-in plugins: parts of Atlas that are not for every vault (the Library is for science, not for
+// Built-in plugins: parts of Kandinsky that are not for every vault (the Library is for science, not for
 // a personal vault). Each one is switched like a vault plugin — its id in `[plugins] off` — and while
 // off it has no toolbar button, no commands, no completions, and its native part in the core is not
 // started. The native code stays in the core (it has to be fast: PDF import, the browser connector);
@@ -38,7 +38,7 @@ export const BUILTINS: Builtin[] = [
   {
     // Obsidian's core "Graph view": a button on the left bar, as Obsidian's ribbon has
     id: "graph", title: "Graph view", icon: "graph", button: { command: "ui.graph", pane: () => ({ kind: "graph" }) },
-    description: "The notes and the links between them as a graph, with Obsidian's settings: filters (search, tags, attachments, orphans), colour groups, display and forces. The first time, the graph starts from the vault's Obsidian graph settings (.obsidian/graph.json); changes are kept in .atlas/graph.json.",
+    description: "The notes and the links between them as a graph, with Obsidian's settings: filters (search, tags, attachments, orphans), colour groups, display and forces. The first time, the graph starts from the vault's Obsidian graph settings (.obsidian/graph.json); changes are kept in .kandinsky/graph.json.",
     parts: "Graph view · its button · the graph command",
   },
   {

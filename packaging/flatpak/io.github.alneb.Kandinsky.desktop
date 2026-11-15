@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=Atlas
+Name=Kandinsky
 Comment=Notes, papers, mail, code and terminals over plain files
-Exec=atlas-app %F
-Icon=io.github.alneb.Atlas
+Exec=kandinsky-app %F
+Icon=io.github.alneb.Kandinsky
 Categories=Office;Development;Science;
-StartupWMClass=atlas
+StartupWMClass=kandinsky

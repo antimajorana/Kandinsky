@@ -39,7 +39,7 @@
 		const text = String(params.text ?? "").trim();
 		if (!text || /^https?:\/\//.test(text)) return { candidates: [] };
 		const [title, year] = splitYear(text);
-		const r = await get(`${API}/search/multi?include_adult=false&language=${lang(params)}&query=${atlas.url.quote(title)}`) ?? {};
+		const r = await get(`${API}/search/multi?include_adult=false&language=${lang(params)}&query=${kandinsky.url.quote(title)}`) ?? {};
 		const out = [];
 		for (const x of r.results ?? []) {
 			const kind = x.media_type === "movie" ? "movie" : x.media_type === "tv" ? "show" : void 0;
@@ -143,7 +143,7 @@
 		Irish: "ga",
 		Ukrainian: "uk"
 	};
-	const un = (s) => s ? atlas.html.unescape(s) : "";
+	const un = (s) => s ? kandinsky.html.unescape(s) : "";
 	/** The page's schema.org Movie or TVSeries (its JSON-LD, CDATA comments and all). */
 	function ld(page) {
 		for (const m of page.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) try {
@@ -233,7 +233,7 @@
 		const [title, year] = splitYear(text);
 		const out = [];
 		for (const kind of ["movie", "show"]) {
-			const page = await getText(`${SITE}/search/${own(kind)}?query=${atlas.url.quote(title)}&language=${lang(params)}`) ?? "";
+			const page = await getText(`${SITE}/search/${own(kind)}?query=${kandinsky.url.quote(title)}&language=${lang(params)}`) ?? "";
 			for (const [tmdb, name, y] of searchPage(page, kind).slice(0, 6)) {
 				if (year && y && Math.abs(y - year) > 1) continue;
 				out.push({
@@ -247,7 +247,7 @@
 	}
 	/** TMDB's API with the token the core fills in; 404 is "no such id". */
 	const apiGet = async (url) => {
-		const res = await atlas.fetchResponse({
+		const res = await kandinsky.fetchResponse({
 			url,
 			headers: {
 				Authorization: {
@@ -259,19 +259,19 @@
 			timeout_secs: 20
 		});
 		if (res.status === 404) return null;
-		if (res.status === 401) throw new atlas.AtlasError("TMDB refused the token: set the API Read Access Token in Settings → Catalog · TMDB", 401);
-		if (!res.ok) throw new atlas.AtlasError(`TMDB answered ${res.status}`, res.status);
+		if (res.status === 401) throw new kandinsky.KandinskyError("TMDB refused the token: set the API Read Access Token in Settings → Catalog · TMDB", 401);
+		if (!res.ok) throw new kandinsky.KandinskyError(`TMDB answered ${res.status}`, res.status);
 		return JSON.parse(res.text || "{}");
 	};
-	const siteText = (url) => atlas.fetch(url);
+	const siteText = (url) => kandinsky.fetch(url);
 	const hasToken = async () => {
 		try {
-			return Boolean(await atlas.secret("token"));
+			return Boolean(await kandinsky.secret("token"));
 		} catch {
 			return false;
 		}
 	};
-	atlas.methods({
+	kandinsky.methods({
 		search: async (params) => await hasToken() ? searchWith(apiGet, params) : siteSearchWith(siteText, params),
 		details: async (params) => await hasToken() ? detailsWith(apiGet, params) : siteDetailsWith(siteText, params)
 	});

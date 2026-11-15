@@ -4,7 +4,7 @@ import { test, expect } from "@playwright/test";
 // still loading (they used to land in Today's capture box), and with a second shortcut in between.
 test("typing straight after Ctrl+Shift+F (then Ctrl+Shift+H) fills the search box, not the capture", async ({ page }) => {
   await page.goto("/");
-  const home = () => page.request.get("/api/file?path=Home.md", { headers: { "x-atlas": "1" } }).then((r) => r.json()).then((j) => j.text as string);
+  const home = () => page.request.get("/api/file?path=Home.md", { headers: { "x-kandinsky": "1" } }).then((r) => r.json()).then((j) => j.text as string);
   const before = await home();
   await page.keyboard.press("Control+Shift+F");
   await page.keyboard.type("hubbard", { delay: 5 });

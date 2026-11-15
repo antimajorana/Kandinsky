@@ -62,7 +62,7 @@ pub struct Unsubscribe {
 /// What the index keeps of a message: its header, enough to list, thread and search it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Envelope {
-    /// without the angle brackets; a made-up `atlas.<hash>@local` when the message has none
+    /// without the angle brackets; a made-up `kandinsky.<hash>@local` when the message has none
     pub message_id: String,
     pub subject: String,
     pub from: Vec<Person>,
@@ -192,7 +192,7 @@ pub fn envelope(raw: &[u8], arrived: Option<i64>) -> Envelope {
 fn made_up_id(raw: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     let h = Sha256::digest(&raw[..raw.len().min(4096)]);
-    format!("atlas.{}@local", h.iter().take(10).map(|b| format!("{b:02x}")).collect::<String>())
+    format!("kandinsky.{}@local", h.iter().take(10).map(|b| format!("{b:02x}")).collect::<String>())
 }
 
 pub fn envelope_of(m: &Message, raw: &[u8], arrived: Option<i64>) -> Envelope {
@@ -303,7 +303,7 @@ pub fn body_of(m: &Message) -> Body {
                 any_html = true;
                 html.push_str(h);
             }
-            PartType::Text(t) => html.push_str(&format!("<pre class=\"atlas-text\">{}</pre>", escape(t))),
+            PartType::Text(t) => html.push_str(&format!("<pre class=\"kandinsky-text\">{}</pre>", escape(t))),
             PartType::InlineBinary(_) | PartType::Binary(_) => {
                 if let Some(cid) = p.content_id() {
                     html.push_str(&format!("<img src=\"cid:{}\">", escape(cid.trim_matches(['<', '>']))));
@@ -688,7 +688,7 @@ mod tests {
     fn broken_and_missing_headers_still_make_an_envelope() {
         let raw = b"From: someone\r\nSubject: no id, bad date\r\nDate: yesterday-ish\r\nReferences: bare@id.example\r\n\r\nhello\r\n";
         let e = envelope(raw, Some(1_700_000_000));
-        assert!(e.message_id.starts_with("atlas.") && e.message_id.ends_with("@local"));
+        assert!(e.message_id.starts_with("kandinsky.") && e.message_id.ends_with("@local"));
         assert_eq!(e.date, 1_700_000_000, "the arrival date stands in for a date that cannot be read");
         assert_eq!(e.references, vec!["bare@id.example"]);
         assert_eq!(envelope(raw, None).message_id, e.message_id, "the made-up id is stable");

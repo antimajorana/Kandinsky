@@ -1,38 +1,38 @@
 //! The local core closed to other programs (docs/design/DESIGN-local-lock.md): with the lock on, a request to 127.0.0.1 must
-//! carry this run's key — as `Authorization: Bearer`, `x-atlas-token`, or the HttpOnly cookie a window gets by opening a
+//! carry this run's key — as `Authorization: Bearer`, `x-kandinsky-token`, or the HttpOnly cookie a window gets by opening a
 //! one-time link. On a phone every app shares the loopback interface, so without it any app could read the vault.
 use axum::http::{header, HeaderMap};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-pub const COOKIE: &str = "atlas_local";
+pub const COOKIE: &str = "kandinsky_local";
 /// How long a one-time link may wait before it is opened.
 const CODE_LIFE: Duration = Duration::from_secs(120);
 
 /// Whether a local core is locked. A closed choice, made where the core is started.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Lock {
-    /// Only the Host / `x-atlas: 1` checks against web pages (any program on the machine gets in).
+    /// Only the Host / `x-kandinsky: 1` checks against web pages (any program on the machine gets in).
     Open,
     /// A key per run; `fixed` names it (tests), else it is random.
     Locked { fixed: Option<String> },
 }
 
 impl Lock {
-    /// `ATLAS_LOCAL_LOCK=1` turns it on for `atlas serve` and the desktop app; `ATLAS_LOCAL_KEY` fixes the key.
+    /// `KANDINSKY_LOCAL_LOCK=1` turns it on for `kandinsky serve` and the desktop app; `KANDINSKY_LOCAL_KEY` fixes the key.
     pub fn from_env() -> Self {
-        match std::env::var("ATLAS_LOCAL_LOCK").as_deref() {
-            Ok("1" | "on" | "true") => Lock::Locked { fixed: std::env::var("ATLAS_LOCAL_KEY").ok().filter(|k| !k.is_empty()) },
+        match crate::env::var("LOCAL_LOCK").as_deref() {
+            Some("1" | "on" | "true") => Lock::Locked { fixed: crate::env::var("LOCAL_KEY").filter(|k| !k.is_empty()) },
             _ => Lock::Open,
         }
     }
 
-    /// The desktop app's core: locked unless `ATLAS_LOCAL_LOCK=0`. `atlas serve` and the tests keep [`Lock::from_env`]'s opt-in.
+    /// The desktop app's core: locked unless `KANDINSKY_LOCAL_LOCK=0`. `kandinsky serve` and the tests keep [`Lock::from_env`]'s opt-in.
     pub fn desktop() -> Self {
-        match std::env::var("ATLAS_LOCAL_LOCK").as_deref() {
-            Ok("0" | "off" | "false") => Lock::Open,
-            _ => Lock::Locked { fixed: std::env::var("ATLAS_LOCAL_KEY").ok().filter(|k| !k.is_empty()) },
+        match crate::env::var("LOCAL_LOCK").as_deref() {
+            Some("0" | "off" | "false") => Lock::Open,
+            _ => Lock::Locked { fixed: crate::env::var("LOCAL_KEY").filter(|k| !k.is_empty()) },
         }
     }
 }
@@ -43,8 +43,8 @@ pub struct LocalLock {
 }
 
 impl LocalLock {
-    /// A lock for the core on `port`; the key is written owner-only where this machine's `atlas` CLI looks for it
-    /// ([`crate::auth::local_key_file`]), so the CLI and `atlas mcp` need nothing more.
+    /// A lock for the core on `port`; the key is written owner-only where this machine's `kandinsky` CLI looks for it
+    /// ([`crate::auth::local_key_file`]), so the CLI and `kandinsky mcp` need nothing more.
     pub fn new(port: u16, fixed: Option<String>) -> anyhow::Result<Self> {
         let key = fixed.unwrap_or_else(|| format!("atl_{}", crate::auth::random_hex(32)));
         Ok(LocalLock { key: crate::auth::LocalKeyFile::write(port, key)?, codes: Mutex::default() })
@@ -57,7 +57,7 @@ impl LocalLock {
     /// The request carries this run's key, by any of its three ways.
     pub fn admits(&self, h: &HeaderMap) -> bool {
         let bearer = h.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer "));
-        let token = h.get(crate::auth::TOKEN_HEADER).and_then(|v| v.to_str().ok());
+        let token = crate::auth::header(h, crate::auth::TOKEN_HEADER).and_then(|v| v.to_str().ok());
         let cookie = crate::auth::cookie(h, COOKIE);
         let found = [bearer, token, cookie.as_deref()].into_iter().flatten().any(|k| same(k.trim(), self.key()));
         found
@@ -106,11 +106,11 @@ mod tests {
     fn the_key_is_taken_three_ways_and_nothing_else() {
         let l = lock();
         assert!(l.admits(&with("authorization", "Bearer atl_k")));
-        assert!(l.admits(&with("x-atlas-token", "atl_k")));
-        assert!(l.admits(&with("cookie", "a=b; atlas_local=atl_k")));
-        assert!(!l.admits(&with("x-atlas", "1")), "the old header alone is not a credential");
+        assert!(l.admits(&with("x-kandinsky-token", "atl_k")));
+        assert!(l.admits(&with("cookie", "a=b; kandinsky_local=atl_k")));
+        assert!(!l.admits(&with("x-kandinsky", "1")), "the old header alone is not a credential");
         assert!(!l.admits(&with("authorization", "Bearer atl_x")));
-        assert!(!l.admits(&with("cookie", "atlas_local=atl_kk")));
+        assert!(!l.admits(&with("cookie", "kandinsky_local=atl_kk")));
         assert!(!l.admits(&HeaderMap::new()));
     }
 

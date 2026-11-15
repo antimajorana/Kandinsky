@@ -1,6 +1,6 @@
 // YouTube for the catalog: `lookup` from a video id (oEmbed through the core's fetch; no key). The page itself, read by
 // the catalog, adds what oEmbed lacks (upload date, duration, description). Tests: youtube.test.ts.
-import type { Params } from "atlas-helper";
+import type { Params } from "kandinsky-helper";
 
 type Kind = "video" | "song";
 
@@ -23,9 +23,9 @@ export async function lookup(params: Params) {
   const kind: Kind = params.kind === "song" ? "song" : "video";
   const watch = encodeURIComponent(`https://www.youtube.com/watch?v=${vid}`);
   // 401/403: private, removed or age-restricted — as gone as a 404
-  const o = await atlas.fetchJson(`https://www.youtube.com/oembed?format=json&url=${watch}`, { timeout: 15, missing: [401, 403, 404] });
+  const o = await kandinsky.fetchJson(`https://www.youtube.com/oembed?format=json&url=${watch}`, { timeout: 15, missing: [401, 403, 404] });
   if (!o) return { ids: { youtube: vid, url: cleanUrl(vid, kind) }, fields: {}, skipped: "YouTube does not show this video (private, removed or age-restricted)" };
   return fromOembed(o, vid, kind);
 }
 
-atlas.methods({ lookup });
+kandinsky.methods({ lookup });

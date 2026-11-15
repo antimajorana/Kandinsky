@@ -1,8 +1,8 @@
 //! Vaults (docs/guides/SHELL.md): the folders the user works in, like Obsidian's vault list. A vault is
 //! any folder; everything specific to it (plugins, settings, pages, workspaces) lives in its own
-//! `.atlas/`, so the work vault and a personal vault share nothing but the app.
+//! `.kandinsky/`, so the work vault and a personal vault share nothing but the app.
 //!
-//! The list is one small file, `~/.config/atlas/vaults.toml` — the only thing Atlas keeps outside
+//! The list is one small file, `~/.config/kandinsky/vaults.toml` — the only thing Kandinsky keeps outside
 //! a vault. The desktop app writes it when it opens a vault or one of its windows takes the focus; a throwaway folder
 //! (`throwaway`: the temp folder, a Cargo target/) never ends up in it.
 use crate::{Error, Result};
@@ -25,7 +25,7 @@ pub struct Vault {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub url: Option<String>,
-    /// A local vault's copy on a server (`https://atlas.example.org/v/notes/`), kept in step by Syncthing: while it answers,
+    /// A local vault's copy on a server (`https://kandinsky.example.org/v/notes/`), kept in step by Syncthing: while it answers,
     /// a file open here is read, saved and edited live there, so only the server writes it and the two copies never
     /// conflict (docs/design/DESIGN-mirror.md).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -56,7 +56,7 @@ pub struct VaultRequest {
     #[serde(default)]
     pub create: bool,
     /// Open it as a guest of this window's vault (guest.rs): not remembered, read-only until switched on. A folder
-    /// with its own `.atlas/` is opened as the vault it is.
+    /// with its own `.kandinsky/` is opened as the vault it is.
     #[serde(default)]
     pub guest: bool,
 }
@@ -74,7 +74,7 @@ pub enum PickPurpose {
     Guest,
 }
 
-/// The desktop's folder dialog: set by the desktop app (atlas-app), absent on a server, which has no screen.
+/// The desktop's folder dialog: set by the desktop app (kandinsky-app), absent on a server, which has no screen.
 type Picker = Box<dyn Fn(PickPurpose) -> Option<PathBuf> + Send + Sync>;
 static PICKER: std::sync::OnceLock<Picker> = std::sync::OnceLock::new();
 
@@ -91,7 +91,7 @@ pub fn pick_folder(purpose: PickPurpose) -> Result<Option<PathBuf>> {
 }
 
 /// A folder made into a new vault: one that is not there yet, or an empty one (the folder dialog makes it before
-/// Atlas sees it). A folder that already holds files is opened as it is, never given a config.
+/// Kandinsky sees it). A folder that already holds files is opened as it is, never given a config.
 pub fn is_fresh(p: &Path) -> bool {
     !p.exists() || std::fs::read_dir(p).is_ok_and(|mut d| d.next().is_none())
 }
@@ -112,12 +112,12 @@ struct ListFile {
     vault: Vec<Vault>,
 }
 
-/// Where the list lives: `$ATLAS_VAULTS`, else `vaults.toml` in Atlas's config folder (`~/.config/atlas/` on Linux).
+/// Where the list lives: `$KANDINSKY_VAULTS`, else `vaults.toml` in Kandinsky's config folder (`~/.config/kandinsky/` on Linux).
 pub fn list_file() -> PathBuf {
-    if let Some(p) = std::env::var_os("ATLAS_VAULTS") {
+    if let Some(p) = crate::env::var_os("VAULTS") {
         return PathBuf::from(p);
     }
-    crate::platform::dirs::atlas(crate::platform::dirs::Base::Config).join("vaults.toml")
+    crate::platform::dirs::app(crate::platform::dirs::Base::Config).join("vaults.toml")
 }
 
 fn read(file: &Path) -> Vec<Vault> {
@@ -132,8 +132,8 @@ fn read_checked(file: &Path) -> std::result::Result<Vec<Vault>, String> {
 
 fn write(file: &Path, vaults: Vec<Vault>) -> Result<()> {
     let text = toml::to_string(&ListFile { vault: vaults }).map_err(|e| Error::Other(e.into()))?;
-    let text = format!("# Vaults Atlas has opened (most recent first). Removing an entry only forgets it.\n{text}");
-    crate::vault_write::outside::write(file, text.as_bytes()) // ~/.config/atlas: this machine's list
+    let text = format!("# Vaults Kandinsky has opened (most recent first). Removing an entry only forgets it.\n{text}");
+    crate::vault_write::outside::write(file, text.as_bytes()) // ~/.config/kandinsky: this machine's list
 }
 
 /// The known vaults, most recently opened first.
@@ -155,7 +155,7 @@ fn change(file: &Path, f: impl FnOnce(&mut Vec<Vault>) -> Result<()>) -> Result<
             Err(e) => {
                 // written over, it would keep only this change: the unreadable list is kept beside it first
                 let kept = file.with_extension("toml.unreadable");
-                eprintln!("atlas: {} cannot be read ({e}); kept as {}, a new list started", file.display(), kept.display());
+                eprintln!("kandinsky: {} cannot be read ({e}); kept as {}, a new list started", file.display(), kept.display());
                 crate::vault_write::outside::write(&kept, &std::fs::read(file)?)?;
                 Vec::new()
             }
@@ -200,9 +200,9 @@ pub fn to_open(asked: Option<PathBuf>, file: &Path) -> Option<PathBuf> {
 }
 
 /// [`remember`] in the user's own list, now — unless `root` is a throwaway folder ([`throwaway`]). A list of its own
-/// (`ATLAS_VAULTS`: the e2e suite's, whose vaults are all in the temp folder) keeps every vault.
+/// (`KANDINSKY_VAULTS`: the e2e suite's, whose vaults are all in the temp folder) keeps every vault.
 pub fn remember_now(root: &Path) -> Result<()> {
-    if throwaway(root) && std::env::var_os("ATLAS_VAULTS").is_none() {
+    if throwaway(root) && crate::env::var_os("VAULTS").is_none() {
         return Ok(());
     }
     remember(&list_file(), root, chrono::Utc::now().timestamp_millis())
@@ -216,7 +216,7 @@ pub fn throwaway(root: &Path) -> bool {
     root.starts_with(&tmp) || root.ancestors().any(|a| a.file_name().is_some_and(|n| n == "target") && a.parent().is_some_and(|p| p.join("Cargo.toml").is_file()))
 }
 
-/// A server's address typed where a folder goes (`https://atlas.example.org/v/notes/`): a vault on a server, opened in
+/// A server's address typed where a folder goes (`https://kandinsky.example.org/v/notes/`): a vault on a server, opened in
 /// a window on its page, whose sign-in in front (Authelia, a security key) happens in that window
 /// (docs/design/DESIGN-desktop-remote.md). The address as kept, or None: a folder.
 pub fn server_address(typed: &str) -> Option<String> {
@@ -225,7 +225,7 @@ pub fn server_address(typed: &str) -> Option<String> {
 }
 
 /// Records that the server vault at `url` was opened now: named for its host, and its vault when the address has one
-/// (`atlas.example.org · notes`).
+/// (`kandinsky.example.org · notes`).
 pub fn remember_server(file: &Path, url: &str, now_ms: i64) -> Result<()> {
     let u = reqwest::Url::parse(url).map_err(|e| Error::BadPath(format!("{url}: {e}")))?;
     let vault = u.path().strip_prefix("/v/").map(|p| p.trim_end_matches('/')).filter(|p| !p.is_empty());
@@ -261,43 +261,48 @@ pub fn resolve(typed: &str, create: bool) -> Result<PathBuf> {
     Ok(p)
 }
 
-/// A vault Atlas has just created gets a settings file that says where the switches are, with every built-in plugin
+/// A vault Kandinsky has just created gets a settings file that says where the switches are, with every built-in plugin
 /// on (the Library too: the Catalog's Libraries page shows it). An existing folder is never given a config this way.
 pub fn start_plain(root: &Path) -> Result<()> {
-    let cfg = root.join(".atlas/config.toml");
+    let cfg = crate::state_dir::join(root, crate::config::CONFIG_FILE);
     if !cfg.exists() {
-        crate::vault_write::write(&cfg, "# Settings of this vault (Settings in Atlas edits this file; your comments are kept).\n\n[plugins]\n# plugins this vault does not use (Settings → Plugins switches them)\noff = []\n".as_bytes())?;
+        crate::vault_write::write(&cfg, "# Settings of this vault (Settings in Kandinsky edits this file; your comments are kept).\n\n[plugins]\n# plugins this vault does not use (Settings → Plugins switches them)\noff = []\n".as_bytes())?;
     }
     Ok(())
 }
 
-/// The address of an Atlas already serving this vault, if one is: from its `.atlas/cache/server.json`,
+/// The address of an Kandinsky already serving this vault, if one is: from its `.kandinsky/cache/server.json`,
 /// believed only while the folder is the same and that process is alive (a crash leaves the file behind).
 pub fn running_server(root: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(root.join(".atlas/cache/server.json")).ok()?;
+    let f = server_in(root, &crate::state_dir::dir(root))?;
+    Some(format!("http://127.0.0.1:{}{}", f.port, f.path))
+}
+
+/// The server file in the state folder `state` of `root`, when it names this folder and a live process (a crash
+/// leaves the file behind). `state` is given so the folder of an older build (`.atlas`) can be asked too.
+pub fn server_in(root: &Path, state: &Path) -> Option<crate::api::ServerFile> {
+    let text = std::fs::read_to_string(state.join("cache/server.json")).ok()?;
     let f: crate::api::ServerFile = serde_json::from_str(&text).ok()?;
     let same = Path::new(&f.root).canonicalize().ok()? == root.canonicalize().ok()?;
-    (same && crate::platform::proc::pid_alive(f.pid)).then(|| format!("http://127.0.0.1:{}{}", f.port, f.path))
+    (same && crate::platform::proc::pid_alive(f.pid)).then_some(f)
 }
 
-/// Another Atlas process serving `root` (its address), never this one: the desktop's one core starts a vault only when
+/// Another Kandinsky process serving `root` (its address), never this one: the desktop's one core starts a vault only when
 /// nothing else runs it (two cores on one vault would run its schedules twice).
 pub fn served_elsewhere(root: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(root.join(".atlas/cache/server.json")).ok()?;
-    let f: crate::api::ServerFile = serde_json::from_str(&text).ok()?;
-    (f.pid != std::process::id()).then_some(())?;
-    running_server(root)
+    let f = server_in(root, &crate::state_dir::dir(root))?;
+    (f.pid != std::process::id()).then(|| format!("http://127.0.0.1:{}{}", f.port, f.path))
 }
 
-/// Opens `root` in a window of its own: a second `atlas-app`, so each vault runs apart from the
-/// others. `$ATLAS_APP` names the program; otherwise the one running, one beside it, or `atlas-app`
+/// Opens `root` in a window of its own: a second `kandinsky-app`, so each vault runs apart from the
+/// others. `$KANDINSKY_APP` names the program; otherwise the one running, one beside it, or `kandinsky-app`
 /// on the PATH.
 pub fn open_window(root: &Path) -> Result<()> {
-    let app = std::env::var_os("ATLAS_APP").map(PathBuf::from).unwrap_or_else(|| {
+    let app = crate::env::var_os("APP").map(PathBuf::from).unwrap_or_else(|| {
         let me = std::env::current_exe().ok();
-        let is_app = |p: &PathBuf| p.file_stem().is_some_and(|n| n == "kandinsky-app" || n == "atlas-app");
+        let is_app = |p: &PathBuf| p.file_stem().is_some_and(|n| n == "kandinsky-app" || n == crate::legacy::APP_EXE);
         let k_exe = format!("kandinsky-app{}", std::env::consts::EXE_SUFFIX);
-        let a_exe = format!("atlas-app{}", std::env::consts::EXE_SUFFIX);
+        let a_exe = format!("{}{}", crate::legacy::APP_EXE, std::env::consts::EXE_SUFFIX);
         let beside = me.as_ref().and_then(|p| p.parent()).and_then(|d| [d.join(&k_exe), d.join(&a_exe)].into_iter().find(|p| p.is_file()));
         me.clone().filter(is_app).or(beside).unwrap_or_else(|| PathBuf::from("kandinsky-app"))
     });
@@ -306,7 +311,7 @@ pub fn open_window(root: &Path) -> Result<()> {
     crate::platform::proc::detach(&mut cmd); // it outlives the window that opened it
     cmd.spawn()
         .map(|_| ())
-        .map_err(|e| Error::CommandFailed(format!("could not start {}: {e} (is the Atlas desktop app installed?)", app.display())))
+        .map_err(|e| Error::CommandFailed(format!("could not start {}: {e} (is the Kandinsky desktop app installed?)", app.display())))
 }
 
 #[cfg(test)]
@@ -334,9 +339,9 @@ mod tests {
         std::fs::create_dir_all(&phd).unwrap();
         remember(&file, &phd, 1).unwrap();
         let path = crate::paths::real(&phd).unwrap().to_string_lossy().into_owned();
-        set_mirror(&file, &path, Some("https://atlas.example.org/v/notes/")).unwrap();
+        set_mirror(&file, &path, Some("https://kandinsky.example.org/v/notes/")).unwrap();
         remember(&file, &phd, 2).unwrap();
-        assert_eq!(list(&file)[0].mirror.as_deref(), Some("https://atlas.example.org/v/notes/"), "reopening keeps it");
+        assert_eq!(list(&file)[0].mirror.as_deref(), Some("https://kandinsky.example.org/v/notes/"), "reopening keeps it");
         assert!(set_mirror(&file, &path, Some("~/elsewhere")).is_err(), "a folder is not a mirror");
         assert!(set_mirror(&file, "/not/listed", Some("https://a.example/v/x/")).is_err());
         set_mirror(&file, &path, None).unwrap();
@@ -359,13 +364,13 @@ mod tests {
         let file = d.path().join("vaults.toml");
         let a = d.path().join("work");
         std::fs::create_dir_all(&a).unwrap();
-        assert_eq!(server_address("  https://atlas.example.org/v/notes/ ").as_deref(), Some("https://atlas.example.org/v/notes/"));
+        assert_eq!(server_address("  https://kandinsky.example.org/v/notes/ ").as_deref(), Some("https://kandinsky.example.org/v/notes/"));
         assert_eq!(server_address("~/Notes"), None);
         assert_eq!(server_address("/srv/notes"), None);
         remember(&file, &a, 100).unwrap();
-        remember_server(&file, "https://atlas.example.org/v/notes/", 200).unwrap();
+        remember_server(&file, "https://kandinsky.example.org/v/notes/", 200).unwrap();
         let l = list(&file);
-        assert_eq!((l[0].name.as_str(), l[0].url.as_deref(), l[0].missing), ("atlas.example.org · notes", Some("https://atlas.example.org/v/notes/"), false));
+        assert_eq!((l[0].name.as_str(), l[0].url.as_deref(), l[0].missing), ("kandinsky.example.org · notes", Some("https://kandinsky.example.org/v/notes/"), false));
         assert_eq!(to_open(None, &file), Some(crate::paths::real(&a).unwrap()), "a window without a folder opens the last folder, not the server");
     }
 
@@ -408,14 +413,14 @@ mod tests {
     }
 
     #[test]
-    fn a_vault_atlas_creates_starts_with_every_plugin_on_and_a_config_is_never_replaced() {
+    fn a_vault_kandinsky_creates_starts_with_every_plugin_on_and_a_config_is_never_replaced() {
         let d = tempfile::tempdir().unwrap();
         start_plain(d.path()).unwrap();
         let cfg = crate::workspace::Workspace::open(d.path()).unwrap().config().unwrap();
         assert!(cfg.plugins.off.is_empty());
-        std::fs::write(d.path().join(".atlas/config.toml"), "vim = false\n").unwrap();
+        std::fs::write(d.path().join(".kandinsky/config.toml"), "vim = false\n").unwrap();
         start_plain(d.path()).unwrap();
-        assert_eq!(std::fs::read_to_string(d.path().join(".atlas/config.toml")).unwrap(), "vim = false\n");
+        assert_eq!(std::fs::read_to_string(d.path().join(".kandinsky/config.toml")).unwrap(), "vim = false\n");
     }
 
     #[test]
@@ -429,11 +434,11 @@ mod tests {
     }
 
     #[test]
-    fn a_running_atlas_is_found_only_while_it_is_alive_and_on_the_same_folder() {
+    fn a_running_kandinsky_is_found_only_while_it_is_alive_and_on_the_same_folder() {
         let d = tempfile::tempdir().unwrap();
         assert_eq!(running_server(d.path()), None, "no file");
-        std::fs::create_dir_all(d.path().join(".atlas/cache")).unwrap();
-        let file = |pid: u32, root: &Path| std::fs::write(d.path().join(".atlas/cache/server.json"), serde_json::json!({ "port": 4242, "pid": pid, "root": root }).to_string()).unwrap();
+        std::fs::create_dir_all(d.path().join(".kandinsky/cache")).unwrap();
+        let file = |pid: u32, root: &Path| std::fs::write(d.path().join(".kandinsky/cache/server.json"), serde_json::json!({ "port": 4242, "pid": pid, "root": root }).to_string()).unwrap();
         file(std::process::id(), d.path());
         assert_eq!(running_server(d.path()).as_deref(), Some("http://127.0.0.1:4242"));
         file(u32::MAX - 7, d.path());

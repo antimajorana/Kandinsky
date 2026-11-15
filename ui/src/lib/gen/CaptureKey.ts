@@ -2,7 +2,7 @@
 import type { KeyDesktop } from "./KeyDesktop";
 
 /**
- * What Settings shows: the key now (KDE's spelling), whether Atlas can set one here, and what to do otherwise.
+ * What Settings shows: the key now (KDE's spelling), whether Kandinsky can set one here, and what to do otherwise.
  */
 export type CaptureKey = { desktop: KeyDesktop, key: string | null, can_set: boolean, 
 /**

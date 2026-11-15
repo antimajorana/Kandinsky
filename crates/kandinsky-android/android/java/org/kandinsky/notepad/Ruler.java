@@ -1,4 +1,4 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.graphics.Canvas;
 import android.graphics.Paint;

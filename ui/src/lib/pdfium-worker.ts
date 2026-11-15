@@ -1,4 +1,4 @@
-// PDFium (WebAssembly, EmbedPDF's build) in a worker: Atlas's default PDF engine (lib/pdf-engine.ts) — pages drawn for the reader, covers,
+// PDFium (WebAssembly, EmbedPDF's build) in a worker: Kandinsky's default PDF engine (lib/pdf-engine.ts) — pages drawn for the reader, covers,
 // thumbnails, previews and embeds, and a page's text, links and annotations, find, the outline.
 // A document is read through a callback in 1 MB pieces fetched by synchronous range requests (allowed in a worker),
 // so a 70 MB book's cover reads ~3 MB. Requests: lib/pdfium.ts. Places cross in PDF points, page space (y up).
@@ -47,7 +47,7 @@ const docs = new Map<string, Doc>();
 function fetchRange(url: string, from: number, to: number): { bytes: Uint8Array; size: number } {
   const x = new XMLHttpRequest();
   x.open("GET", url, false);
-  x.setRequestHeader("x-atlas", "1");
+  x.setRequestHeader("x-kandinsky", "1");
   x.setRequestHeader("Range", `bytes=${from}-${to}`);
   x.responseType = "arraybuffer";
   x.send();

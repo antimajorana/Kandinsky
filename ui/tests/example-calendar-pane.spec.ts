@@ -26,26 +26,26 @@ test.beforeAll(async ({ request }) => {
   feed = createServer((_q, r) => { r.writeHead(200, { "Content-Type": "text/calendar", ETag: '"f1"' }); r.end(FEED); });
   await new Promise<void>((ok) => feed.listen(0, "127.0.0.1", ok));
   const port = (feed.address() as { port: number }).port;
-  const dir = join(WS, ".atlas/plugins/dav");
+  const dir = join(WS, ".kandinsky/plugins/dav");
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   for (const f of ["view.js", "main.js", "ui-lib"]) cpSync(join(PLUGIN, f), join(dir, f), { recursive: true });
   const manifest = readFileSync(join(PLUGIN, "plugin.toml"), "utf8").replace(/^run = .*$/m, `run = "${join(PLUGIN, "engine/target/debug/dav")}"`);
   writeFileSync(join(dir, "plugin.toml"), manifest);
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: ".atlas/plugin-settings/dav.toml", text: `default_view = "week"\ntime_format = "24h"\n\n[[accounts]]\nname = "home"\nurl = "http://127.0.0.1:9/caldav/"\nuser = "alice"\n\n[[accounts]]\nname = "uni"\nurl = "http://127.0.0.1:9/remote.php/dav/"\nuser = "a.r"\n\n[[subscriptions]]\nname = "seminars"\nurl = "http://127.0.0.1:${port}/seminars.ics"\ncolor = "#14b8a6"\n` } });
-  await request.post("/api/plugins/dav/helper/stop", { headers: { "x-atlas": "1" } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: ".kandinsky/plugin-settings/dav.toml", text: `default_view = "week"\ntime_format = "24h"\n\n[[accounts]]\nname = "home"\nurl = "http://127.0.0.1:9/caldav/"\nuser = "alice"\n\n[[accounts]]\nname = "uni"\nurl = "http://127.0.0.1:9/remote.php/dav/"\nuser = "a.r"\n\n[[subscriptions]]\nname = "seminars"\nurl = "http://127.0.0.1:${port}/seminars.ics"\ncolor = "#14b8a6"\n` } });
+  await request.post("/api/plugins/dav/helper/stop", { headers: { "x-kandinsky": "1" } });
 });
 test.afterAll(async ({ request }) => {
-  await request.post("/api/plugins/dav/helper/stop", { headers: { "x-atlas": "1" } });
-  rmSync(join(WS, ".atlas/plugins/dav"), { recursive: true, force: true });
-  await request.post(`/api/fs/trash?path=${encodeURIComponent(".atlas/plugin-settings/dav.toml")}`, { headers: { "x-atlas": "1" } });
+  await request.post("/api/plugins/dav/helper/stop", { headers: { "x-kandinsky": "1" } });
+  rmSync(join(WS, ".kandinsky/plugins/dav"), { recursive: true, force: true });
+  await request.post(`/api/fs/trash?path=${encodeURIComponent(".kandinsky/plugin-settings/dav.toml")}`, { headers: { "x-kandinsky": "1" } });
   feed?.close();
 });
 
 async function openPane(page: Page) {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __atlas: { commands(): { id: string }[] } }).__atlas.commands().some((c) => c.id === "plugin.dav.open")), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __kandinsky: { commands(): { id: string }[] } }).__kandinsky.commands().some((c) => c.id === "plugin.dav.open")), { timeout: 20_000 }).toBe(true);
   const palette = page.getByTestId("palette");
   await expect(async () => {
     if (await palette.isVisible()) await page.keyboard.press("Escape");
@@ -120,7 +120,7 @@ test("each account has its own heading in the side panel, with why it does not s
   await expect(cal.locator(".side h3", { hasText: "Subscriptions" })).toBeVisible();
   // Settings' helpers: each card's state, and a Test of an unsaved card
   const status = await page.evaluate(async () => {
-    const r = await fetch("/api/plugins/dav/helper", { method: "POST", headers: { "content-type": "application/json", "x-atlas": "1" }, body: JSON.stringify({ method: "account_status", params: {} }) });
+    const r = await fetch("/api/plugins/dav/helper", { method: "POST", headers: { "content-type": "application/json", "x-kandinsky": "1" }, body: JSON.stringify({ method: "account_status", params: {} }) });
     return r.ok ? await r.json() : { error: r.status };
   });
   expect(JSON.stringify(status)).toContain("no app password yet");
@@ -138,7 +138,7 @@ test("Calendar: new event is a dialog with the pane's editor, the calendar not o
   });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __atlas: { commands(): { id: string }[] } }).__atlas.commands().some((c) => c.id === "plugin.dav.new")), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __kandinsky: { commands(): { id: string }[] } }).__kandinsky.commands().some((c) => c.id === "plugin.dav.new")), { timeout: 20_000 }).toBe(true);
   await page.keyboard.press("F1");
   await page.keyboard.type("Calendar: new event");
   await page.keyboard.press("Enter");
@@ -168,10 +168,10 @@ test("a meeting from Email: the new-event dialog seeded with the subject and the
   });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __atlas: { commands(): { id: string }[] } }).__atlas.commands().some((c) => c.id === "plugin.dav.new")), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __kandinsky: { commands(): { id: string }[] } }).__kandinsky.commands().some((c) => c.id === "plugin.dav.new")), { timeout: 20_000 }).toBe(true);
   // what Email's Meeting button sends; the Calendar says it heard it (else Email says there is no Calendar)
-  const heard = page.evaluate(() => new Promise<boolean>((ok) => { window.addEventListener("atlas-calendar:heard", () => ok(true), { once: true }); setTimeout(() => ok(false), 3000); }));
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("atlas-calendar:new", { detail: { title: "Thesis plan", guests: ["bob@example.org", "cy@example.org"], ack: true } })));
+  const heard = page.evaluate(() => new Promise<boolean>((ok) => { window.addEventListener("kandinsky-calendar:heard", () => ok(true), { once: true }); setTimeout(() => ok(false), 3000); }));
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("kandinsky-calendar:new", { detail: { title: "Thesis plan", guests: ["bob@example.org", "cy@example.org"], ack: true } })));
   expect(await heard).toBe(true);
   const form = page.getByRole("form", { name: "New event" });
   await expect(form.getByRole("textbox", { name: "Title" })).toHaveValue("Thesis plan", { timeout: 15_000 });

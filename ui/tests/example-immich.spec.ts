@@ -9,7 +9,7 @@ import { WS } from "../playwright.config";
 
 // The example Immich plugin installed as it is, against a stand-in Immich: the latest photos as
 // thumbnails, each fetched by the core into the plugin's cache (`saveTo`) with the key it keeps.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const example = (f: string) => readFileSync(fileURLToPath(new URL(`../../plugins/examples/immich/${f}`, import.meta.url)), "utf8");
 // the smallest PNG there is: one pixel
@@ -29,12 +29,12 @@ test.beforeAll(async ({ request }) => {
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   port = (server.address() as AddressInfo).port;
-  await put(request, ".atlas/plugins/immich/main.js", example("main.js"));
-  await put(request, ".atlas/plugins/immich/plugin.toml", example("plugin.toml"));
+  await put(request, ".kandinsky/plugins/immich/main.js", example("main.js"));
+  await put(request, ".kandinsky/plugins/immich/plugin.toml", example("plugin.toml"));
   await put(request, "notes/photos-week.md", "# Photos\n\n```view\ntype: immich.recent\ncount: 2\n```\n\nend\n");
 });
 test.afterAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/immich/main.js", "export function register() {}\n");
+  await put(request, ".kandinsky/plugins/immich/main.js", "export function register() {}\n");
   await new Promise((done) => server.close(done));
 });
 
@@ -46,5 +46,5 @@ test("an Immich block shows the latest photos, fetched by the core into the plug
   const imgs = page.locator('.cm-content img[alt="beach.jpg"], .cm-content img[alt="lab.jpg"]');
   await expect(imgs).toHaveCount(2);
   expect(keys.every((k) => k === "im-key"), "the key on every request, put in by the core").toBe(true);
-  expect(existsSync(join(WS, ".atlas/cache/plugins/immich/thumbs/a1.jpg"))).toBe(true);
+  expect(existsSync(join(WS, ".kandinsky/cache/plugins/immich/thumbs/a1.jpg"))).toBe(true);
 });

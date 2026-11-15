@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { WS } from "../playwright.config";
 import { installEmailPlugin } from "./fixtures/plugins";
 
-// The Email plugin's Outlook sign-in through Atlas's sign-in window (engine/src/oauth.rs, ui/src/signin.ts): the
+// The Email plugin's Outlook sign-in through Kandinsky's sign-in window (engine/src/oauth.rs, ui/src/signin.ts): the
 // window's return address finishes it; Microsoft's refusal is said in plain words. The sign-in is a dialog (SignIn.svelte).
-const H = { "x-atlas": "1" };
-const SETTINGS = ".atlas/plugin-settings/email.toml";
+const H = { "x-kandinsky": "1" };
+const SETTINGS = ".kandinsky/plugin-settings/email.toml";
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 
 test.beforeAll(async ({ request }) => {
@@ -18,7 +18,7 @@ test.beforeAll(async ({ request }) => {
 });
 test.afterAll(async ({ request }) => {
   await request.post("/api/plugins/email/helper/stop", { headers: H });
-  rmSync(join(WS, ".atlas/plugins/email"), { recursive: true, force: true });
+  rmSync(join(WS, ".kandinsky/plugins/email"), { recursive: true, force: true });
 });
 
 test("the sign-in window's return address finishes the sign-in, and a refusal says why", async ({ page, request }) => {

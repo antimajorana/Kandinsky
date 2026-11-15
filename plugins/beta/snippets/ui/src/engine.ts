@@ -45,8 +45,8 @@ function coreOf(m: RegExpExecArray): string {
   return last && m[0].endsWith(last) ? last : m[0];
 }
 
-export function makeEngine(atlas: PluginApi) {
-  const cm = atlas.editor.codemirror;
+export function makeEngine(kandinsky: PluginApi) {
+  const cm = kandinsky.editor.codemirror;
   const stops = makeStops(cm);
   const { EditorView: View, keymap } = cm.view;
   const { Prec } = cm.state;
@@ -60,7 +60,7 @@ export function makeEngine(atlas: PluginApi) {
   let OWN: string[] = [], BIG: SortedWords | null = null;
   /** The spelling dictionaries (`words.txt`, beside the plugin), fetched once: until they come the short list holds. */
   async function loadWords(): Promise<number> {
-    const answer = await fetch(atlas.assetUrl("words.txt"));
+    const answer = await fetch(kandinsky.assetUrl("words.txt"));
     if (!answer.ok) throw new Error(`words.txt: ${answer.status}`);
     BIG = new SortedWords(await answer.text());
     DICT = new Dictionary([...WORDS, ...OWN], BIG);
@@ -79,19 +79,19 @@ export function makeEngine(atlas: PluginApi) {
   }
 
   const fixedPlace = new WeakMap<EditorView, Place>(); // the checks' own detached editors
-  const placeOf = (view: EditorView, pos: number): Place => fixedPlace.get(view) ?? atlas.editor.place(view, pos);
+  const placeOf = (view: EditorView, pos: number): Place => fixedPlace.get(view) ?? kandinsky.editor.place(view, pos);
   /** Notes and .tex files always; a code file only if some snippet speaks its language. */
-  const runsHere = (view: EditorView) => fixedPlace.has(view) || anyCode || /\.(md|markdown|tex)$/i.test(atlas.editor.path(view));
+  const runsHere = (view: EditorView) => fixedPlace.has(view) || anyCode || /\.(md|markdown|tex)$/i.test(kandinsky.editor.path(view));
 
   const atOf = (view: EditorView, before: string, selection = ""): At => ({
-    before, selection, after: view.state.sliceDoc(view.state.selection.main.head, view.state.doc.lineAt(view.state.selection.main.head).to), path: atlas.editor.path(view),
+    before, selection, after: view.state.sliceDoc(view.state.selection.main.head, view.state.doc.lineAt(view.state.selection.main.head).to), path: kandinsky.editor.path(view),
   });
 
   function fits(s: Compiled, place: Place, view: EditorView): boolean {
-    if (s.files && !s.files.some((g) => g.test(atlas.editor.path(view)))) return false;
+    if (s.files && !s.files.some((g) => g.test(kandinsky.editor.path(view)))) return false;
     switch (place.kind) {
       // a code file runs only what names its language; a fence also what is for any code
-      case "code": return s.code && (s.langs ? s.langs.includes(place.lang) : /\.(md|markdown)$/i.test(atlas.editor.path(view)));
+      case "code": return s.code && (s.langs ? s.langs.includes(place.lang) : /\.(md|markdown)$/i.test(kandinsky.editor.path(view)));
       case "text": return s.text;
       case "math":
         if (!s.math || (place.textArg && !s.inTextArg)) return false;

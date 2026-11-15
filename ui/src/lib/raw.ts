@@ -1,4 +1,4 @@
-// Local files as blob: URLs. /api/raw requires the x-atlas header, which <img src> cannot send,
+// Local files as blob: URLs. /api/raw requires the x-kandinsky header, which <img src> cannot send,
 // so images are fetched once with the header and cached as object URLs.
 import { api } from "./api";
 import { keepCapped } from "./capped";

@@ -1,12 +1,12 @@
 // The file tree without repetition (docs/design/DESIGN-shared-notes.md). What is
 // another entry's by its shape folds away — a mail's `<name> files/` beside `<name>.md`, a file's ink
 // (`x.pdf.excalidraw`, a manga chapter's `x.cbz.ink.json`), an old `x.pdf.md` beside `x.pdf` — and so do a note with
-// `shown: false`, a dotfile (`.atlas`, `.git`) and, in the tree, a folder's own note (the folder's row opens it). Both
+// `shown: false`, a dotfile (`.kandinsky`, `.git`) and, in the tree, a folder's own note (the folder's row opens it). Both
 // explorers (the tree and the explorer tab) hide by this one rule, and one "Show hidden files" brings everything back.
 import { load, save } from "./prefs";
 import type { TreeEntry } from "./types";
 
-const KEY = "atlas.tree.showAll";
+const KEY = "kandinsky.tree.showAll";
 export const treeView = $state({ showAll: load<boolean>(KEY, false) });
 export function toggleShowAll(): void {
   treeView.showAll = !treeView.showAll;

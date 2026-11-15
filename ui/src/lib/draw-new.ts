@@ -17,7 +17,7 @@ const FORMATS: { id: string; title: string; detail: string; size?: [number, numb
   { id: "a4-landscape", title: "A4 pages, landscape", detail: "297 × 210 mm", size: [1123, 794] },
 ];
 
-/** The paper a new page carries (draw-notepad.ts PAPERS; the frame's `customData.atlasTemplate`, as the Boox's Notepad
+/** The paper a new page carries (draw-notepad.ts PAPERS; the frame's `customData.kandinskyTemplate`, as the Boox's Notepad
  *  writes it): asked after the size ("once you select the size it should prompt you for the background"). */
 const PAPER_CHOICES: { id: Paper; title: string; detail: string }[] = [
   { id: "blank", title: "Blank", detail: "nothing under the ink" },
@@ -34,7 +34,7 @@ function firstElements(f: (typeof FORMATS)[number], paper: Paper = "blank"): unk
   const base = { angle: 0, strokeColor: "#bbb", backgroundColor: "transparent", fillStyle: "solid", strokeWidth: 1, strokeStyle: "solid", roughness: 0, opacity: 100,
     groupIds: [], roundness: null, seed: 1, version: 1, versionNonce: 1, isDeleted: false, boundElements: null, link: null, locked: true, updated: Date.now() };
   if (f.size) return [{ ...base, id: `page-${Date.now().toString(36)}-0`, type: "frame", x: 0, y: 0, width: f.size[0], height: f.size[1], name: "Page 1", frameId: null,
-    ...(paper !== "blank" ? { customData: { atlasTemplate: paper } } : {}) }];
+    ...(paper !== "blank" ? { customData: { kandinskyTemplate: paper } } : {}) }];
   // the corner's two edges, long enough to be seen as the canvas's edges; the drawing keeps the view right of and
   // below them (draw-excalidraw.ts `CORNER`)
   if (f.corner) return [
@@ -48,7 +48,7 @@ function firstElements(f: (typeof FORMATS)[number], paper: Paper = "blank"): unk
 async function make(f: (typeof FORMATS)[number], paper: Paper = "blank", dir?: string): Promise<string> {
   const into = (dir ?? settings.config?.draw?.dir ?? "notes/drawings").replace(/\/+$/, "");
   const path = `${into}/${stamp()}.excalidraw`;
-  await api.putFile(path, JSON.stringify({ type: "excalidraw", version: 2, source: "atlas", elements: firstElements(f, paper), appState: {}, files: {} }));
+  await api.putFile(path, JSON.stringify({ type: "excalidraw", version: 2, source: "kandinsky", elements: firstElements(f, paper), appState: {}, files: {} }));
   // as any drawing opens: the phone app's own Notepad when it opens drawings, else the drawing's pane
   openPath(path);
   return path;

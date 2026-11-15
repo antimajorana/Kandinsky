@@ -2,7 +2,7 @@
   import { localDay } from "../../lib/local-day";
   // The `task-list` view: tasks with what their line says — priority, due date, recurrence, tags —
   // under their group's heading when the block groups them. The core has already filtered, sorted
-  // and grouped (crates/atlas-core/src/tasks.rs); this only draws, and ticks.
+  // and grouped (crates/kandinsky-core/src/tasks.rs); this only draws, and ticks.
   import type { ViewRow } from "../../lib/gen/ViewRow";
   import { openPath } from "../../lib/dock";
   let { rows, ontick }: { rows: ViewRow[]; ontick: (r: ViewRow) => void } = $props();
@@ -28,7 +28,7 @@
   {#each withHeads as { r, head } (`${r.path}:${r.line ?? ""}:${r.title}`)}
     {#if head !== null}<li class="head"><span>{head}</span><span class="n">{count(head)}</span></li>{/if}
     <li class="task" class:done={r.done} data-priority={r.props.priority ?? "normal"}>
-      <input type="checkbox" class="atlas-check" checked={r.done ?? false} disabled={r.done ?? false} aria-label="Done: {r.title}" onchange={() => ontick(r)} />
+      <input type="checkbox" class="kandinsky-check" checked={r.done ?? false} disabled={r.done ?? false} aria-label="Done: {r.title}" onchange={() => ontick(r)} />
       <!-- always there, so titles line up whether or not a task has a priority -->
       <span class="pri" title={r.props.priority ? `Priority: ${r.props.priority}` : undefined}>{PRIORITY[r.props.priority ?? ""] ?? ""}</span>
       <button class="title" data-path={r.path} data-line={r.line} onclick={() => r.path && openPath(r.path, r.line ?? undefined)} title="{r.path}:{r.line}">{r.title}</button>

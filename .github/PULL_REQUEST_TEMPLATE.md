@@ -1,4 +1,4 @@
-## What changes for the person using Atlas
+## What changes for the person using Kandinsky
 
 <!-- One or two sentences. Screenshots (light and dark theme) for anything visible. -->
 

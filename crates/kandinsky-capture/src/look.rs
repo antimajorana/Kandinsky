@@ -1,4 +1,4 @@
-//! Atlas's look in egui: the colours of ui/src/styles/tokens.css (dark and light), the UI font the
+//! Kandinsky's look in egui: the colours of ui/src/styles/tokens.css (dark and light), the UI font the
 //! desktop has (Inter when installed, else Noto Sans), and the few pieces the box is made of — a
 //! list's card and rows (the web lists' `.ta-complete`), a key chip, the vault pill.
 use crate::icons::{self, Icon};
@@ -57,11 +57,11 @@ pub const ROW: f32 = 26.0;
 pub const POP_PAD: f32 = 4.0;
 
 pub fn palette(ctx: &egui::Context) -> Palette {
-    ctx.data(|d| d.get_temp(egui::Id::new("atlas-palette"))).unwrap_or(DARK)
+    ctx.data(|d| d.get_temp(egui::Id::new("kandinsky-palette"))).unwrap_or(DARK)
 }
 
 pub fn apply(ctx: &egui::Context, p: Palette, font: Option<Vec<u8>>) {
-    ctx.data_mut(|d| d.insert_temp(egui::Id::new("atlas-palette"), p));
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("kandinsky-palette"), p));
     let mut v = if p.dark { egui::Visuals::dark() } else { egui::Visuals::light() };
     v.panel_fill = Color32::TRANSPARENT;
     v.window_fill = p.bg;
@@ -201,7 +201,7 @@ pub fn row_width(ctx: &egui::Context, label: &str, detail: &str) -> f32 {
     })
 }
 
-/// Atlas's tile (the sidebar's brand: accent → purple, an "A"), its corners rounded.
+/// Kandinsky's tile (the sidebar's brand: accent → purple, an "A"), its corners rounded.
 pub fn brand(ui: &mut egui::Ui, p: Palette, size: f32) {
     use std::f32::consts::{FRAC_PI_2, PI};
     let (rect, _) = ui.allocate_exact_size(vec2(size, size), egui::Sense::hover());

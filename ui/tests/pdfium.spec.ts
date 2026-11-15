@@ -4,7 +4,7 @@ import { writePdf } from "./fixtures/pdf";
 // PDF pages are drawn by PDFium in its worker (lib/pdf-pages.ts), the reader's included (lib/pdf-reader.ts): a PDF
 // whose first page is turned (/Rotate 90, left half red, right half blue: red on top once turned) and whose others are
 // one colour each, sampled a quarter and three quarters down each picture.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const PATH = "pdfium-test/colours.pdf";
 
 interface Page { draw: string; rotate?: number }

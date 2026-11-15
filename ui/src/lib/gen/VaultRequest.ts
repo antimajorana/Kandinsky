@@ -6,6 +6,6 @@
 export type VaultRequest = { path: string, create: boolean, 
 /**
  * Open it as a guest of this window's vault (guest.rs): not remembered, read-only until switched on. A folder
- * with its own `.atlas/` is opened as the vault it is.
+ * with its own `.kandinsky/` is opened as the vault it is.
  */
 guest: boolean, };

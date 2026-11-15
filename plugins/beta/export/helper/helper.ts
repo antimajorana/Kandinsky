@@ -2,7 +2,7 @@
 // LaTeX or Typst source, or Word. translate.ts makes the note pandoc Markdown; pandoc writes each format; the core's
 // Typst compiles the Typst road's PDF; latexmk the LaTeX road's. Results go under the exports folder at the note's own
 // path (`notes/a/x.md` → `exports/notes/a/x.pdf`), a preview into the plugin's cache. The note is only read.
-import type { Params } from "atlas-helper";
+import type { Params } from "kandinsky-helper";
 import { macroDefinitions } from "../../../../ui/src/lib/tex-portable";
 import { bibKeys, dirname, relative, translate, type Translated } from "./translate";
 
@@ -18,12 +18,12 @@ const STYLES: Record<string, { biblatex: string; typst: string }> = {
   alphabetic: { biblatex: "alphabetic", typst: "alphanumeric" },
   physics: { biblatex: "phys", typst: "american-physics-society" },
 };
-const CACHE = ".atlas/cache/plugins/export";
-/** Where the dialog leaves a ```tikz picture drawn by the page's TeX (`atlas.tikz.png`), by its key. */
+const CACHE = ".kandinsky/cache/plugins/export";
+/** Where the dialog leaves a ```tikz picture drawn by the page's TeX (`kandinsky.tikz.png`), by its key. */
 export const tikzPng = (key: string) => `${CACHE}/figures/${key}.png`;
 /** A fence's key: the hash of its source, the same for the dialog (from `describe`) and the road. */
-const keyOf = (source: string) => atlas.hash.sha256(source).slice(0, 16);
-const PLUGIN = ".atlas/plugins/export";
+const keyOf = (source: string) => kandinsky.hash.sha256(source).slice(0, 16);
+const PLUGIN = ".kandinsky/plugins/export";
 
 /** The dialog's choices; any left out come from the plugin's settings, then these defaults. */
 export interface Options {
@@ -53,12 +53,12 @@ export const LAYOUTS: Record<string, { meta: Record<string, unknown>; header: st
 };
 export const layoutOf = (o: Options) => LAYOUTS[o.layout ?? "plain"] ?? LAYOUTS.plain;
 
-const progress = (stage: string, text: string) => atlas.event("progress", { stage, text });
+const progress = (stage: string, text: string) => kandinsky.event("progress", { stage, text });
 
 /** Runs a program the manifest names; its output, or why not (with its last error lines). */
 async function run(program: "pandoc" | "latexmk", args: string[], opts: { cwd?: string; stdin?: string; timeout?: number } = {}) {
-  const r = await atlas.exec(program, args, { ...opts, timeout: opts.timeout ?? 120 }).catch((e: Error) => {
-    throw new Error(/not installed/.test(e.message) ? `${program} is not installed on the machine running Atlas` : e.message);
+  const r = await kandinsky.exec(program, args, { ...opts, timeout: opts.timeout ?? 120 }).catch((e: Error) => {
+    throw new Error(/not installed/.test(e.message) ? `${program} is not installed on the machine running Kandinsky` : e.message);
   });
   return r;
 }
@@ -94,11 +94,11 @@ async function prepare(params: Params, preview: boolean): Promise<Job> {
   const o: Options = { ...(params.settings ?? {}), ...(params.options ?? {}) };
   const folder = String(o.folder ?? "exports").trim().replace(/^\/+|\/+$/g, "") || "exports";
   const outDir = [preview ? `${CACHE}/preview` : folder, dirname(rel)].filter(Boolean).join("/");
-  const files: string[] = await atlas.files();
+  const files: string[] = await kandinsky.files();
   const bib = findBib(files, String(o.bibliography ?? ""));
-  const keys = bib ? bibKeys(await atlas.read(bib)) : new Set<string>();
+  const keys = bib ? bibKeys(await kandinsky.read(bib)) : new Set<string>();
   progress("translate", `reading ${rel}`);
-  const t = await translate({ files, read: (p) => atlas.read(p) }, rel, outDir, keys);
+  const t = await translate({ files, read: (p) => kandinsky.read(p) }, rel, outDir, keys);
   if (t.cited.length && !bib) t.warnings.push("papers are cited but no .bib was found (the Bibliography option)");
   const stem = rel.slice(rel.lastIndexOf("/") + 1).replace(/\.md$/i, "");
   const figures: Record<string, number> = {};
@@ -133,7 +133,7 @@ function metadata(j: Job, road: "latex" | "typst" | "docx", header: string[]): s
   }
   if (header.length) m["header-includes"] = header;
   const yaml = Object.entries(m).filter(([, v]) => v !== undefined).map(([k, v]) => yamlEntry(k, v)).join("\n");
-  // Atlas's own macros (\ket…): pandoc applies these to every formula for Typst and Word; LaTeX gets them in its header
+  // Kandinsky's own macros (\ket…): pandoc applies these to every formula for Typst and Word; LaTeX gets them in its header
   return `---\n${yaml}\n---\n\n${road === "latex" ? "" : `${macroDefinitions("newcommand")}\n\n`}`;
 }
 
@@ -157,7 +157,7 @@ async function fences(j: Job, road: "latex" | "typst" | "docx"): Promise<string>
     else if (f.lang === "typst" && road === "latex") {
       // drawn by the core's Typst into a PDF picture the LaTeX includes
       const pdf = `${CACHE}/figures/${keyOf(f.source)}.pdf`;
-      atlas.convert.typstPdf(`${dirname(j.rel) || "."}/.fence.typ`, pdf, { source: f.source, fence: true });
+      kandinsky.convert.typstPdf(`${dirname(j.rel) || "."}/.fence.typ`, pdf, { source: f.source, fence: true });
       out[i] = `![](<${relative(j.outDir, pdf)}>)`;
     } else if (f.lang === "tikz" && j.figures[keyOf(f.source)]) {
       // drawn by the page's TeX as a PNG (the web fonts inside), at the width TeX gave it
@@ -193,13 +193,13 @@ export function latexErrors(log: string): string {
 }
 
 async function typstRoad(j: Job, format: "pdf-typst" | "typ"): Promise<string> {
-  const header = j.o.typstPreamble ? [await atlas.read(j.o.typstPreamble).catch(() => { j.t.warnings.push(`Typst preamble not found: ${j.o.typstPreamble}`); return ""; })] : [];
+  const header = j.o.typstPreamble ? [await kandinsky.read(j.o.typstPreamble).catch(() => { j.t.warnings.push(`Typst preamble not found: ${j.o.typstPreamble}`); return ""; })] : [];
   const header2 = header.filter(Boolean).map((h) => "```{=typst}\n" + h + "\n```");
   const typ = await pandoc(j, "typst", metadata(j, "typst", header2) + (await fences(j, "typst")));
   const at = `${j.outDir}/${j.stem}.typ`;
-  if (format === "typ") { await atlas.write(at, typ); return at; }
+  if (format === "typ") { await kandinsky.write(at, typ); return at; }
   progress("typst", "compiling the PDF with Typst");
-  return atlas.convert.typstPdf(at, `${j.outDir}/${j.stem}.pdf`, { source: typ });
+  return kandinsky.convert.typstPdf(at, `${j.outDir}/${j.stem}.pdf`, { source: typ });
 }
 
 async function latexRoad(j: Job, format: "pdf-latex" | "tex"): Promise<string[]> {
@@ -213,7 +213,7 @@ async function latexRoad(j: Job, format: "pdf-latex" | "tex"): Promise<string[]>
   const extra = ["--lua-filter", `${PLUGIN}/tikz.lua`, ...layoutOf(j.o).args, ...(j.t.cited.length && j.bib ? ["--biblatex"] : [])];
   const tex = await pandoc(j, "latex", metadata(j, "latex", header) + (await fences(j, "latex")), extra);
   const at = `${j.outDir}/${j.stem}.tex`;
-  await atlas.write(at, tex);
+  await kandinsky.write(at, tex);
   if (format === "tex") return [at];
   const engine = String(j.o.engine || "lualatex");
   const buildDir = `${CACHE}/build/${j.rel.replace(/[^\w.-]+/g, "_")}`;
@@ -222,7 +222,7 @@ async function latexRoad(j: Job, format: "pdf-latex" | "tex"): Promise<string[]>
   const r = await run("latexmk", [ENGINES[engine] ?? "-lualatex", "-interaction=nonstopmode", "-halt-on-error", "-file-line-error",
     "-emulate-aux-dir", `-auxdir=${build}`, "-outdir=.", `./${j.stem}.tex`], { cwd: j.outDir, timeout: 600 }); // `./`: a note named "-x" is no option
   if (r.status !== 0) {
-    const log = await atlas.read(`${buildDir}/${j.stem}.log`).catch(() => r.stdout);
+    const log = await kandinsky.read(`${buildDir}/${j.stem}.log`).catch(() => r.stdout);
     throw new Error(`LaTeX failed on ${at}:\n${latexErrors(log)}`);
   }
   return [at, `${j.outDir}/${j.stem}.pdf`];
@@ -230,7 +230,7 @@ async function latexRoad(j: Job, format: "pdf-latex" | "tex"): Promise<string[]>
 
 async function docxRoad(j: Job): Promise<string> {
   const out = `${j.outDir}/${j.stem}.docx`;
-  await atlas.write(out, ""); // makes its folder; pandoc writes over it
+  await kandinsky.write(out, ""); // makes its folder; pandoc writes over it
   const cite = j.t.cited.length && j.bib ? ["--citeproc"] : [];
   await pandoc(j, "docx", metadata(j, "docx", []) + (await fences(j, "docx")), [...cite, `--resource-path=${j.outDir}`], out);
   return out;
@@ -264,4 +264,4 @@ async function describe(params: Params) {
   return { meta: j.t.meta, cited: j.t.cited, bib: j.bib, fences: j.t.fences.map((f) => f.lang), tikz, warnings: j.t.warnings, ext: EXT };
 }
 
-atlas.methods({ formats, describe, export: exportNote });
+kandinsky.methods({ formats, describe, export: exportNote });

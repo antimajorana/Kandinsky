@@ -6,13 +6,13 @@ import { WS } from "../playwright.config";
 // The quick-capture window (docs/guides/CAPTURE.md): `/#capture` is the app reduced to one box — what the
 // desktop app shows for a global shortcut. Enter writes and the window asks to be closed; Esc asks
 // to be closed without writing; another known vault can be chosen from the box.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const OTHER = `${WS}-capture-other`;
 const localDay = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
 test("the capture window: only the box, its hints, Enter saves into today's log and closes", async ({ page, request }) => {
   const closes: string[] = [];
-  await page.route("**/__atlas_close", (route) => { closes.push(route.request().url()); return route.fulfill({ status: 204, body: "" }); });
+  await page.route("**/__kandinsky_close", (route) => { closes.push(route.request().url()); return route.fulfill({ status: 204, body: "" }); });
   await page.goto("/#capture");
   const box = page.getByTestId("capture");
   await expect(box).toBeFocused();
@@ -33,7 +33,7 @@ test("the capture window: only the box, its hints, Enter saves into today's log 
 test("the capture window: Esc closes without writing; another vault can be chosen", async ({ page, request }) => {
   await request.post("/api/vaults/open", { headers: H, data: { path: OTHER, create: true } });
   const closes: string[] = [];
-  await page.route("**/__atlas_close", (route) => { closes.push("x"); return route.fulfill({ status: 204, body: "" }); });
+  await page.route("**/__kandinsky_close", (route) => { closes.push("x"); return route.fulfill({ status: 204, body: "" }); });
   await page.goto("/#capture");
   const box = page.getByTestId("capture");
   await box.fill("for the other vault");

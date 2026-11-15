@@ -27,9 +27,17 @@ idle = "15m"
 key = "model"
 label = "Active Antigravity model"
 kind = "text"
-default = "default"
+default = "gemini-4-carbon-high"
 suggest = "models"
-hint = "Model used for new Antigravity sessions (e.g. default, gemini-4-carbon-medium, gemini-4-argon-high, gemini-4-hydrogen-high)"
+hint = "Model used for new Antigravity sessions (e.g. gemini-4-carbon-high, gemini-4-argon-high, gemini-4-hydrogen-high, gemini-3.8-flash-high)"
+
+[[setting]]
+key = "specialist"
+label = "Active vault @specialist"
+kind = "text"
+default = ""
+suggest = "specialists"
+hint = "Optional vault specialist from .agents/agents/*.md (e.g. @deriver, @topology, @numerics; empty for Coordinator)"
 
 [[setting]]
 key = "command"

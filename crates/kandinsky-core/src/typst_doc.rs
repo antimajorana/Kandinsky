@@ -220,7 +220,7 @@ mod tests {
         assert!(to_pdf(dir.path(), "exports/x.typ", "../x.pdf", None, false).is_err());
         // a text standing beside a note: its pictures read there, the PDF where asked
         std::fs::write(dir.path().join("exports/dot.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"4\"/>").unwrap();
-        to_pdf(dir.path(), "exports/.fence.typ", ".atlas/cache/f.pdf", Some("#image(\"dot.svg\")"), true).unwrap();
-        assert!(dir.path().join(".atlas/cache/f.pdf").is_file());
+        to_pdf(dir.path(), "exports/.fence.typ", ".kandinsky/cache/f.pdf", Some("#image(\"dot.svg\")"), true).unwrap();
+        assert!(dir.path().join(".kandinsky/cache/f.pdf").is_file());
     }
 }

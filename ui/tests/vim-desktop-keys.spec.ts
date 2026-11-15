@@ -4,8 +4,8 @@ import { openFile } from "./open";
 // "make two vim modes, classic one, but also one where visual deos not interfere wuth crtl x y c etc
 // and it works in a normal way": `[editor] vim_keys = "desktop"`. The setting is served to the page
 // (the shared test vault's config is not changed).
-const text = (page: Page) => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string; vim: string } | null } }).__atlas.editor()?.text ?? "");
-const mode = (page: Page) => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string; vim: string } | null } }).__atlas.editor()?.vim ?? "");
+const text = (page: Page) => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string; vim: string } | null } }).__kandinsky.editor()?.text ?? "");
+const mode = (page: Page) => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string; vim: string } | null } }).__kandinsky.editor()?.vim ?? "");
 
 async function open(page: Page, vimKeys: "classic" | "desktop") {
   await page.route("**/api/config", async (route) => {

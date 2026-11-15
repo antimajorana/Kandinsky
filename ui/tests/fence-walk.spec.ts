@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { fences } from "../src/lib/fence-walk";
 import { noteHeadings } from "../src/lib/note-anchor";
 
-// Lines and paths read as the core reads them: fenced code (lib/fence-walk.ts ↔ atlas-text fence.rs, the same cases
+// Lines and paths read as the core reads them: fenced code (lib/fence-walk.ts ↔ kandinsky-text fence.rs, the same cases
 // as its test) and a path out of the vault (lib/paths.ts ↔ links.rs normalize). Pure.
 const code = (text: string) => { const f = fences(); return text.split("\n").map((l) => f.code(l)); };
 

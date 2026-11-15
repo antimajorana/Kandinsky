@@ -1,4 +1,4 @@
-//! A workspace is any folder; `.atlas/` inside it is optional.
+//! A workspace is any folder; `.kandinsky/` inside it is optional.
 use crate::api::WorkspaceInfo;
 use crate::config::Config;
 use crate::{paths, Error, Result};
@@ -45,12 +45,19 @@ impl Workspace {
         Ok(WorkspaceInfo { root: self.root.to_string_lossy().into_owned(), name: self.name(), config: self.config()? })
     }
 
+    /// `<state folder>/cache`: `.kandinsky/cache`, or `.atlas/cache` in a vault not yet migrated (`state_dir`).
     pub fn cache_dir(&self) -> PathBuf {
-        self.root.join(".atlas/cache")
+        crate::state_dir::dir(&self.root).join("cache")
     }
 }
 
-/// Walk up from `start` to the first folder containing `.atlas/`; `None` if there is none.
+/// Walk up from `start` to the first folder containing `.kandinsky/` (or `.atlas/`, a vault from before the rename);
+/// `None` if there is none.
 pub fn find_root(start: &Path) -> Option<PathBuf> {
-    start.ancestors().find(|d| d.join(".atlas").is_dir()).map(Path::to_path_buf)
+    start.ancestors().find(|d| is_vault(d)).map(Path::to_path_buf)
+}
+
+/// Does `dir` hold a state folder (`.kandinsky/` or the legacy `.atlas/`)?
+pub fn is_vault(dir: &Path) -> bool {
+    [crate::state_dir::STATE_DIR, crate::legacy::STATE_DIR].iter().any(|n| dir.join(n).is_dir())
 }

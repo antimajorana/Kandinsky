@@ -1,9 +1,9 @@
-package org.atlas.plugins.manga;
+package org.kandinsky.plugins.manga;
 
 import android.view.View;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.NativePlugin;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.NativePlugin;
 
 /** The manga plugin's Android side (docs/refactor/REFACTOR-native-plugins.md): the reader only — the library is the
  *  web side's (view.js), which hands a chapter over: a vault .cbz, a vault folder of pictures, or a Suwayomi chapter

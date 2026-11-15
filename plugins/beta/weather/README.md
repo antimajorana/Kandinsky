@@ -25,7 +25,7 @@ No requirements. Daily reads the `weather` property it writes.
 
 ## Needs
 
-Nothing installed: the helper is JavaScript run inside Atlas's core. The network: `api.open-meteo.com`,
+Nothing installed: the helper is JavaScript run inside Kandinsky's core. The network: `api.open-meteo.com`,
 `geocoding-api.open-meteo.com`, and `api.seeip.org` when no place is set.
 
 ## Platforms

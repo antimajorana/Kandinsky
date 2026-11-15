@@ -1,11 +1,11 @@
-# Contributing to Atlas
+# Contributing to Kandinsky
 
-Atlas is one person's workspace first, so the rules below are the ones that keep it maintainable by
+Kandinsky is one person's workspace first, so the rules below are the ones that keep it maintainable by
 someone who did not write it. The fuller guide is [DEVELOPING.md](guides/DEVELOPING.md).
 
 ## Before writing anything: where does the change go?
 
-- **About one vault's work** (a dashboard, a workflow, a lecture course): that vault's `.atlas/` — a
+- **About one vault's work** (a dashboard, a workflow, a lecture course): that vault's `.kandinsky/` — a
   page, a command, a plugin. Not this repository. See [EXTENDING.md](guides/EXTENDING.md).
 - **Useful to every vault** (a block type, a setting, an API for plugins, rendering): here.
 - **For some vaults only** (papers, a server's service, a language's run tools): a plugin
@@ -54,5 +54,5 @@ no sources until its log reaches the end-to-end stage.
 
 Name the files you add (`git add -- <paths>`, not `-A`). The first line follows
 [Conventional Commits](https://www.conventionalcommits.org/) (`fix(editor): tables keep their column widths`) and says
-what changed for the person using Atlas; the body gives the why. Run `bash scripts/dev/gate.sh` before opening a pull
+what changed for the person using Kandinsky; the body gives the why. Run `bash scripts/dev/gate.sh` before opening a pull
 request, and add a line to [CHANGELOG.md](CHANGELOG.md) under "Unreleased" for a change people will notice.

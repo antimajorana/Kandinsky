@@ -5,14 +5,14 @@ import { fileURLToPath } from "node:url";
 // The Export plugin installed as it is: "Export…" on a note opens its dialog in a popup over the app (API 20), the
 // note's title already in it; with pandoc on the machine, PDF (Typst) previews by itself (the core's Typst) and
 // Export writes the PDF under exports/. A ```typst block in a note is drawn by the core too.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const example = (f: string) => readFileSync(fileURLToPath(new URL(`../../plugins/beta/export/${f}`, import.meta.url)), "utf8");
 
 test.beforeAll(async ({ request }) => {
-  for (const f of ["main.js", "view.js", "plugin.toml", "helper.js", "tikz.lua"]) await put(request, `.atlas/plugins/export/${f}`, example(f));
+  for (const f of ["main.js", "view.js", "plugin.toml", "helper.js", "tikz.lua"]) await put(request, `.kandinsky/plugins/export/${f}`, example(f));
 });
-test.afterAll(async ({ request }) => { await put(request, ".atlas/plugins/export/main.js", "export function register() {}\n"); });
+test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/export/main.js", "export function register() {}\n"); });
 
 test("Export… opens the dialog in a popup; PDF (Typst) previews and exports", async ({ page, request }) => {
   await put(request, "notes/export-me.md", "---\nauthor: Alice\n---\n# A small report\n\nSome text with $x^2$ and ==a mark==.\n\n```typst\n$ integral_0^1 x dif x = 1/2 $\n```\n");

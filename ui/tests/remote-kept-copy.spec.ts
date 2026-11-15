@@ -9,8 +9,8 @@ import { WS } from "../playwright.config";
 // A server's folders in the vault's tree (lib/remote-tree): listed when unfolded, a file fetched when opened; and a file
 // opened before still opens with the server out of reach (offline, the VPN down): the copy fetched last time, said so
 // (file-sources: every plugin source's `local` keeps its copies). The server is the copyparty stand-in.
-const H = { "x-atlas": "1" };
-const DIR = ".atlas/plugins/copyparty";
+const H = { "x-kandinsky": "1" };
+const DIR = ".kandinsky/plugins/copyparty";
 const ROOT = `${WS}-copyparty-offline`;
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const example = (f: string) => readFileSync(fileURLToPath(new URL(`../../plugins/beta/copyparty/${f}`, import.meta.url)), "utf8");
@@ -25,7 +25,7 @@ test.beforeAll(async ({ request }) => {
   server = spawn("python3", [fileURLToPath(new URL("../../scripts/vault/tests/fake_copyparty.py", import.meta.url)), ROOT, ""], { stdio: ["ignore", "pipe", "inherit"] });
   const { port } = await new Promise<{ port: number }>((ok) => createInterface({ input: server!.stdout! }).once("line", (l) => ok(JSON.parse(l))));
   await put(request, `${DIR}/main.js`, example("main.js"));
-  await put(request, ".atlas/plugin-settings/copyparty.toml", `[[servers]]\nname = "far"\nurl = "http://127.0.0.1:${port}/hdd1/"\n`);
+  await put(request, ".kandinsky/plugin-settings/copyparty.toml", `[[servers]]\nname = "far"\nurl = "http://127.0.0.1:${port}/hdd1/"\n`);
   await put(request, `${DIR}/plugin.toml`, example("plugin.toml"));
 });
 test.afterAll(async ({ request }) => {

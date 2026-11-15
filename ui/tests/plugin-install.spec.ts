@@ -6,16 +6,16 @@ import { join } from "node:path";
 // Plugins v4, distribution (docs/guides/PLUGINS.md "v4"): a plugin is copied into the vault from a folder
 // (or a git address, or an archive), arrives switched on with what it may do said out loud, is
 // updated keeping the vault's settings, and is removed to the trash.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const read = async (r: APIRequestContext, path: string) => ((await (await r.get(`/api/file?path=${encodeURIComponent(path)}`, { headers: H })).json()) as { text?: string }).text ?? "";
 let src = "";
 const manifest = (v: string) => `title = "Carried"\nversion = "${v}"\n\n[settings]\ncolor = "red"\n\n[[setting]]\nkey = "color"\nkind = "text"\n\n[permissions]\nnet = ["carried.example.org"]\n`;
 
 test.beforeAll(() => {
-  src = join(mkdtempSync(join(tmpdir(), "atlas-plugin-src-")), "carried");
+  src = join(mkdtempSync(join(tmpdir(), "kandinsky-plugin-src-")), "carried");
   mkdirSync(src);
   writeFileSync(join(src, "plugin.toml"), manifest("1.0.0"));
-  writeFileSync(join(src, "main.js"), 'export function register(atlas) { atlas.shell.statusItem({ id: "v", text: "carried " + atlas.plugin.version + " " + atlas.plugin.settings.color }); }\n');
+  writeFileSync(join(src, "main.js"), 'export function register(kandinsky) { kandinsky.shell.statusItem({ id: "v", text: "carried " + kandinsky.plugin.version + " " + kandinsky.plugin.settings.color }); }\n');
 });
 test.afterAll(async ({ request }) => { await request.post("/api/plugins/carried/remove", { headers: H }); });
 
@@ -44,8 +44,8 @@ test("install from a folder (on, permissions said), switch off and on, update ke
   await expect(cell).toHaveText("carried 1.0.0 red");
 
   // the vault changes a setting; the author ships 1.1.0; update keeps the setting
-  const toml = await read(request, ".atlas/plugins/carried/plugin.toml");
-  await request.put("/api/file", { headers: H, data: { path: ".atlas/plugins/carried/plugin.toml", text: toml.replace('color = "red"', 'color = "teal"') } });
+  const toml = await read(request, ".kandinsky/plugins/carried/plugin.toml");
+  await request.put("/api/file", { headers: H, data: { path: ".kandinsky/plugins/carried/plugin.toml", text: toml.replace('color = "red"', 'color = "teal"') } });
   await expect(cell).toHaveText("carried 1.0.0 teal");
   writeFileSync(join(src, "plugin.toml"), manifest("1.1.0"));
   await page.getByRole("button", { name: "Update Carried" }).click();
@@ -57,27 +57,27 @@ test("install from a folder (on, permissions said), switch off and on, update ke
   await page.getByTestId("palette").getByText("Remove Carried", { exact: true }).click();
   await expect(page.getByText("Removed Carried")).toBeVisible({ timeout: 15_000 }); // after the folder is moved and the plugins reloaded: slow on a CI runner
   await expect(cell).toHaveCount(0);
-  expect(await read(request, ".atlas/plugins/carried/plugin.toml")).toBe("");
+  expect(await read(request, ".kandinsky/plugins/carried/plugin.toml")).toBe("");
 });
 
-// A release's plugins (scripts/dev/plugin-pack.mjs: plugins.json beside atlas-plugin-<id>.tar.gz), served here by a
+// A release's plugins (scripts/dev/plugin-pack.mjs: plugins.json beside kandinsky-plugin-<id>.tar.gz), served here by a
 // local stand-in for the release's download address: listed in "Install…", installed from the archive's address.
 test("Install… lists the release's plugins and installs one from its archive's address", async ({ page, request }) => {
   const { createServer } = await import("node:http");
   const { execFileSync } = await import("node:child_process");
   const { readFileSync } = await import("node:fs");
-  const dir = mkdtempSync(join(tmpdir(), "atlas-release-"));
+  const dir = mkdtempSync(join(tmpdir(), "kandinsky-release-"));
   mkdirSync(join(dir, "released"));
   writeFileSync(join(dir, "released", "plugin.toml"), 'title = "Released"\nversion = "2.0.0"\n');
   writeFileSync(join(dir, "released", "main.js"), "export function register() {}\n");
-  execFileSync("tar", ["-czf", join(dir, "atlas-plugin-released.tar.gz"), "-C", dir, "released"]);
+  execFileSync("tar", ["-czf", join(dir, "kandinsky-plugin-released.tar.gz"), "-C", dir, "released"]);
   const index = [
-    { id: "released", title: "Released", version: "2.0.0", tier: "beta", file: "atlas-plugin-released.tar.gz", platforms: "any", size: 1, sha256: "x" },
-    { id: "elsewhere", title: "Elsewhere only", version: "1.0.0", tier: "stable", file: "atlas-plugin-elsewhere.tar.gz", platforms: ["sparc-plan9"], size: 1, sha256: "x" },
+    { id: "released", title: "Released", version: "2.0.0", tier: "beta", file: "kandinsky-plugin-released.tar.gz", platforms: "any", size: 1, sha256: "x" },
+    { id: "elsewhere", title: "Elsewhere only", version: "1.0.0", tier: "stable", file: "kandinsky-plugin-elsewhere.tar.gz", platforms: ["sparc-plan9"], size: 1, sha256: "x" },
   ];
   const server = createServer((req, res) => {
     if (req.url === "/dl/plugins.json") return res.end(JSON.stringify(index));
-    if (req.url === "/dl/atlas-plugin-released.tar.gz") return res.end(readFileSync(join(dir, "atlas-plugin-released.tar.gz")));
+    if (req.url === "/dl/kandinsky-plugin-released.tar.gz") return res.end(readFileSync(join(dir, "kandinsky-plugin-released.tar.gz")));
     res.statusCode = 404; res.end();
   });
   await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
@@ -105,9 +105,9 @@ test("Install… lists the release's plugins and installs one from its archive's
     await palette.getByText("Released 2.0.0", { exact: true }).click();
     await expect(page.getByText("Installed Released")).toBeVisible();
     await expect(page.getByRole("switch", { name: "Plugin Released" })).toHaveAttribute("aria-checked", "true");
-    const source = await read(request, ".atlas/plugins/released/.source");
+    const source = await read(request, ".kandinsky/plugins/released/.source");
     expect(source).toContain('kind = "download"');
-    expect(source).toContain(`/dl/atlas-plugin-released.tar.gz`);
+    expect(source).toContain(`/dl/kandinsky-plugin-released.tar.gz`);
   } finally {
     d.config.plugins.release_index = before;
     await request.put("/api/config", { headers: H, data: d.config });

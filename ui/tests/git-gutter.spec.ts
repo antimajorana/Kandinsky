@@ -6,7 +6,7 @@ import { WS } from "../playwright.config";
 
 // "git gutter": in a code file, a mark beside each line that differs from what git has — new,
 // changed, removed — refreshed when the file is saved.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const git = (...args: string[]) => execFileSync("git", args, { cwd: WS, stdio: "pipe" });
 

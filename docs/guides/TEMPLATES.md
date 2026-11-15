@@ -1,8 +1,8 @@
-# Templates — Atlas's own template language
+# Templates — Kandinsky's own template language
 
-Atlas has its own dynamic templates built in instead of Templater: a powerful template engine, and templates are never linked and never offered in `[[` suggestions.
+Kandinsky has its own dynamic templates built in instead of Templater: a powerful template engine, and templates are never linked and never offered in `[[` suggestions.
 
-A template is a plain Markdown note in the templates folder (`[notes] templates`, default `templates/`). Atlas fills it in when a note is made from it: **New… → *name* note**, "New note from a template…", captures as notes (`[notes] capture_template`), the agent tool `atlas_new_note`, reading notes for papers. The engine is `crates/atlas-template` (shared by the core and the catalog's helper); it reads values and never runs code, so a template from anywhere is safe to use.
+A template is a plain Markdown note in the templates folder (`[notes] templates`, default `templates/`). Kandinsky fills it in when a note is made from it: **New… → *name* note**, "New note from a template…", captures as notes (`[notes] capture_template`), the agent tool `kandinsky_new_note`, reading notes for papers. The engine is `crates/kandinsky-template` (shared by the core and the catalog's helper); it reads values and never runs code, so a template from anywhere is safe to use.
 
 The syntax is a superset of Obsidian's core Templates plugin (`{{date}}`, `{{time}}`, `{{title}}`, `{{date:YYYY-MM-DD}}`), so existing templates keep working. Templater's `<% tp.… %>` tags that templates commonly use (`tp.file.title`, `tp.date.now`, `tp.file.creation_date`, `tp.file.cursor()`, `tp.file.move(...)` for the folder) are still understood after the `{{…}}` pass, for old templates; `<%* … %>` scripts are never run and stay visible.
 
@@ -48,7 +48,7 @@ Blocks nest. Inside `#each`, `this` is the item, `@index` counts from 1, and an 
 
 ## Rules
 
-- **A tag Atlas cannot fill stays as written** (an unknown name, a typo'd filter, an unclosed block): nothing vanishes silently, the mistake is visible in the note.
+- **A tag Kandinsky cannot fill stays as written** (an unknown name, a typo'd filter, an unclosed block): nothing vanishes silently, the mistake is visible in the note.
 - `create_in: <folder>` in a template's frontmatter says where its notes go (taken out of the note).
 - **Templates are not notes**: the templates folder is left out of `[[` completion, backlinks, the graph, Bases and tasks (`Config::index_excluded`); a test in `link_targets.rs` holds it.
 - `GET /api/note/templates` lists them with their folder, properties and prompts; `POST /api/note/new` takes `values`.
@@ -72,8 +72,8 @@ course:
 ## Summary
 ```
 
-One condition, or a list of them; the parts of one condition must all fit. Every way Atlas makes a note asks the same
-rules (`crates/atlas-core/src/template_rules.rs`): **New…** and a link to a missing note, the phone's **+**, a capture
+One condition, or a list of them; the parts of one condition must all fit. Every way Kandinsky makes a note asks the same
+rules (`crates/kandinsky-core/src/template_rules.rs`): **New…** and a link to a missing note, the phone's **+**, a capture
 made a note, the day's log, a file's companion note, an agent's or a plugin's new note. The order they are tried:
 templates' own rules (the most specific first: a file pattern or a title over a folder, a deeper folder over a
 shallower one), then `[notes] template_rules` (else Templater's), then the older settings as rules
@@ -84,7 +84,7 @@ wins.
 (`property: { type: movie }`; a tag added to `tags` counts), and it was not so before, the template is merged into
 the note: only what the note lacks is added — a missing property (an empty one filled), the template's list items
 after the note's own, a missing section after the one the template puts before it, a missing block (` ```view `…)
-at its section's end — and nothing of the note's is changed, moved or removed (`atlas-text` `merge`). In the editor it
+at its section's end — and nothing of the note's is changed, moved or removed (`kandinsky-text` `merge`). In the editor it
 is one change of its own (Ctrl+Z undoes it; the notice too); written by anything else (a plugin, an agent, the
 phone), the core writes it. A new file, a template itself, and a save that changes no such property bring nothing.
 
@@ -106,8 +106,8 @@ A vault with no `template_rules` uses its **Templater** rules (`.obsidian/plugin
 vault coming from Obsidian keeps choosing its daily, weekly and dream templates the same way in both apps. A rule
 with a regex that does not compile, or naming a template that is not there, is skipped — and so is a Templater rule
 whose template is built on a script (`<%* … %>`: the Vault's daily template fetches the weather and moves the file),
-since Atlas runs no scripts and the note would hold the script's text; the next rule that fits is used. Write an
-Atlas version of such a template (`{{weather.…}}`, `create_in:`) and name it in `template_rules`. In Settings → Notes the rules
+since Kandinsky runs no scripts and the note would hold the script's text; the next rule that fits is used. Write an
+Kandinsky version of such a template (`{{weather.…}}`, `create_in:`) and name it in `template_rules`. In Settings → Notes the rules
 are one JSON object per line.
 
 ### When nothing chose one: the default template
@@ -147,14 +147,14 @@ gave is left out (`Unknown::Empty`) instead of shown as written, since nobody ty
 
 A plugin tool can provide a value: `template = "weather"` in its `[[tool]]` makes `{{weather.…}}` in any template
 its answer, asked just before the note is made, and only when the template (or one it includes) uses that name
-(`crates/atlas-core/src/template_values.rs`). This is what Templater did with user scripts (`tp.user.getWeather()`),
+(`crates/kandinsky-core/src/template_values.rs`). This is what Templater did with user scripts (`tp.user.getWeather()`),
 without a template ever running code: the plugin is a reviewed, permissioned program; the template stays data.
 A provider that fails is logged and its tags stay as written.
 
 The **Weather** plugin (`plugins/beta/weather`, Open-Meteo, no key) is the first: `{{weather.summary}}`
 ("10 °C, lluvia ligera, 4 °C / 12 °C"), `city`, `region`, `country`, `temperature`, `feels_like`, `condition`, `min`,
 `max`, `rain`, `humidity`, `wind`, `sunrise`, `sunset` — the place from its setting, else this machine's address;
-descriptions in English or Spanish. A daily template written for Atlas, as a Templater one would:
+descriptions in English or Spanish. A daily template written for Kandinsky, as a Templater one would:
 
 ```markdown
 ---

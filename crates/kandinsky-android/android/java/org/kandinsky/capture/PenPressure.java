@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.os.SystemClock;
 
@@ -28,9 +28,9 @@ public final class PenPressure {
             reader = PenReader.start((action, tool, x, y, pressure, tx, ty, side, timeUs) -> {
                 if (action == PenReader.DOWN || action == PenReader.MOVE || action == PenReader.UP) keep(SystemClock.uptimeMillis(), pressure);
             });
-            android.util.Log.i("AtlasPen", "the stylus from evdev: " + reader.info());
+            android.util.Log.i("KandinskyPen", "the stylus from evdev: " + reader.info());
         } catch (java.io.IOException | UnsatisfiedLinkError | RuntimeException e) {
-            android.util.Log.i("AtlasPen", "no stylus from evdev (MotionEvents' pressure, uncurved): " + e.getMessage());
+            android.util.Log.i("KandinskyPen", "no stylus from evdev (MotionEvents' pressure, uncurved): " + e.getMessage());
         }
     }
 

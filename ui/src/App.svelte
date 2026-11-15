@@ -60,7 +60,7 @@
 
   let dockEl: HTMLDivElement;
 
-  // shortcuts: defaults, `.atlas/keys.toml` overrides and script keys, all from one keymap
+  // shortcuts: defaults, `.kandinsky/keys.toml` overrides and script keys, all from one keymap
   const bound = $derived(bindings());
 
   /** Is the key for a pane matching `sel`? Inside it (or on its dock wrapper), or focus is nowhere (the pane redrew what held
@@ -78,7 +78,7 @@
     for (const b of bound) {
       if (!matches(b.chord, e) || (b.cmd.where === "note" && !inNote)) continue;
       // a terminal keeps every key without Super for its shell (Ctrl+W, Ctrl+K, Ctrl+B, Alt+…): from
-      // there Atlas answers only Super keys, F-keys and commands marked `fromTerminal`
+      // there Kandinsky answers only Super keys, F-keys and commands marked `fromTerminal`
       const shellKey = !appChord(b.chord) && !/^F\d{1,2}$/.test(b.chord.code);
       if ((inTerminal && shellKey && !b.cmd.fromTerminal) || (b.cmd.yieldTo && keeps(b.cmd.yieldTo, target))) return;
       e.preventDefault();
@@ -102,14 +102,14 @@
         if (ed) { ed.api.setActive(); editors.get(ed.id)?.focus(); }
         break;
       }
-      default: { const never: never = p; console.warn("[atlas] focus: unknown pane", never); }
+      default: { const never: never = p; console.warn("[kandinsky] focus: unknown pane", never); }
     }
   }
 
   onMount(() => {
     installPreviews(); // hover previews of links and of the left bar's tabs
     installDiagnostics();
-    // this window's vault is the active one: the capture box (atlas-capture) starts on the vault opened last
+    // this window's vault is the active one: the capture box (kandinsky-capture) starts on the vault opened last
     const active = () => { if (!apiBase().startsWith("/remote/")) void api.vaultActive().catch(() => {}); };
     window.addEventListener("focus", active);
     if (document.hasFocus()) active(); // a switch loads the vault's page in a window that has the focus already
@@ -126,7 +126,7 @@
     const offPhone = attachPhone(dock);
     const offEink = attachEink(dock); // e-ink: a full refresh where ghosts come from
     const offNative = attachNativeShell();
-    // a browser's Back closes what is open, then goes back a place; a phone then leaves Atlas, a desktop stays in its vault.
+    // a browser's Back closes what is open, then goes back a place; a phone then leaves Kandinsky, a desktop stays in its vault.
     // A mouse's side button is taken by nav-input.ts as well: that step counts once.
     const offTouch = attachTouch(); // a long press is a right click; finger-sized targets are styles/touch.css
     const offMenu = attachAppMenu(); // the app's right-click menu where no part has its own (lib/app-menu.ts)
@@ -140,7 +140,7 @@
       .then(() => loadShellPrefs(settings.config?.ui.restore_layout !== false))
       .then(() => restoreLayout(settings.config?.ui.restore_layout !== false))
       // a start that cannot restore says why (the tabs as they were are lost for this start, Home opens)
-      .catch((e) => { console.warn("[atlas] the tabs as they were could not be restored", e); return false; })
+      .catch((e) => { console.warn("[kandinsky] the tabs as they were could not be restored", e); return false; })
       .then(() => { stopLayout = autosaveLayout(); return openHome(); });
     // a window the desktop app rebuilt from the tray or a notification's click names the note to open (`?open=`)
     const asked = new URLSearchParams(location.search).get("open");
@@ -153,7 +153,7 @@
     Promise.all([api.workspace(), loadGuest()]).then(([w]) => {
       app.workspace = w;
       document.title = guest.info ? `Guest: ${w.name} — Kandinsky` : `${w.name} — Kandinsky`;
-    }, (err) => console.warn("[atlas] workspace fetch failed", err));
+    }, (err) => console.warn("[kandinsky] workspace fetch failed", err));
 
     void loadKeymap().catch(() => {});
     initCssSnippets();
@@ -171,7 +171,7 @@
     void started.catch(() => {}).then(() => setTimeout(idle, 1500));
     void loadPlugins();
     // introspection for automation and the UX audit: what exists, by the app's own account
-    (window as unknown as { __atlas: unknown }).__atlas = {
+    (window as unknown as { __kandinsky: unknown }).__kandinsky = {
       commands: () => allCommands().map(({ id, title, source, keys }) => ({ id, title, source, keys })),
       paneKinds: PANE_KINDS,
       editor: () => { const id = activeEditorId() ?? lastEditorId(); const e = id ? editors.get(id) : undefined; return e ? { path: e.path, vim: e.vimMode(), ...e.snapshot() } : null; },
@@ -192,7 +192,7 @@
       on("focus", (e) => focusPane(e.pane)),
       on("fs", (e) => { if (e.paths.length) e.paths.forEach(invalidate); else invalidateAll(); }),
       on("fs", (e) => { if (touches(e.paths, (p) => p === settings.path)) loadSettings().catch(() => {}); }),
-      on("fs", (e) => { if (touches(e.paths, (p) => p === ".atlas/keys.toml" || p.startsWith(".atlas/commands/"))) void loadKeymap().catch(() => {}); }),
+      on("fs", (e) => { if (touches(e.paths, (p) => p === ".kandinsky/keys.toml" || p.startsWith(".kandinsky/commands/"))) void loadKeymap().catch(() => {}); }),
       watchPlugins(),
       watchServiceSignins(),
       startWhere(),
@@ -263,7 +263,7 @@
      of an active group in a split meant nothing with one pane on screen. */
   .full .main > :global(:not(.work):not(.slot)), .full :global(.status) { display: none; }
   .full .dock { inset: 0; }
-  .full :global(.dockview-theme-atlas .dv-groupview) { border-color: transparent; border-radius: 0; }
+  .full :global(.dockview-theme-kandinsky .dv-groupview) { border-color: transparent; border-radius: 0; }
   /* the phone (lib/phone.svelte.ts): the tab strip thumb-high and scrolling sideways; the shell under the system's bars */
   .phone { padding-top: env(safe-area-inset-top, 0px); }
   /* inside the phone app (lib/native-shell.svelte.ts) its native bars stand in for these, and for the system's insets */

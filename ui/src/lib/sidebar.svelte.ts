@@ -1,4 +1,4 @@
-// The sidebar is a page of blocks (docs/guides/SHELL.md): `.atlas/sidebar.page` lists them top to bottom —
+// The sidebar is a page of blocks (docs/guides/SHELL.md): `.kandinsky/sidebar.page` lists them top to bottom —
 // `toolbar`, `pins`, `bookmarks`, `tabs`, or any other block (outline, backlinks, a calendar). Without
 // the file the default below is used; "Sidebar: arrange its blocks…" writes it and opens it as a page.
 // Also here: what the sidebar's own blocks share — the keyboard cursor, the filter, drag state, menu.
@@ -32,7 +32,7 @@ import { toolItems, type ToolEntry } from "./toolbar";
 import { readText } from "./vault-files";
 import { superOf } from "./keys";
 
-export const SIDEBAR_FILE = ".atlas/sidebar.page";
+export const SIDEBAR_FILE = ".kandinsky/sidebar.page";
 export const DEFAULT_SIDEBAR = `# The sidebar, top to bottom. Arrange it like any page (the Arrange button), or edit this text.
 # Its own blocks: toolbar (items: command ids, plus the words plugins and spacer), pins, bookmarks,
 # tabs. Any other block works too: outline, backlinks, files, {view: calendar, from: tasks}…

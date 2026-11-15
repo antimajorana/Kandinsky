@@ -59,15 +59,15 @@ pub fn unpack_whole(archive: &Path, into: &Path) -> Result<bool, String> {
     }
 }
 
-/// The cache file for vault file `rel` made into `ext`: `.atlas/cache/plugins/<id>/<key>.<ext>`, absolute and relative.
+/// The cache file for vault file `rel` made into `ext`: `.kandinsky/cache/plugins/<id>/<key>.<ext>`, absolute and relative.
 fn cached(root: &Path, id: &str, rel: &str, ext: &str) -> Result<(PathBuf, String), String> {
     use sha2::Digest;
     let src = crate::paths::safe_join(root, rel).map_err(|e| e.to_string())?;
     let meta = std::fs::metadata(&src).map_err(|e| format!("{rel}: {e}"))?;
     let time = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos());
     let key: String = sha2::Sha256::digest(format!("{rel}\0{}\0{time}", meta.len())).iter().take(10).map(|b| format!("{b:02x}")).collect();
-    let out = format!(".atlas/cache/plugins/{id}/{key}.{ext}");
-    Ok((root.join(&out), out))
+    let out = format!(".kandinsky/cache/plugins/{id}/{key}.{ext}");
+    Ok((crate::state_dir::join(root, &out), out))
 }
 
 /// Runs `make` into a part file beside `out` and moves it into place: a failed or stopped run leaves nothing.
@@ -217,10 +217,10 @@ fn un7z_pictures(src: &Path, into: &Path) -> Result<(), String> {
     failed.map_or(Ok(()), Err)
 }
 
-/// RAR on the phone: no program to run, so libarchive (BSD) compiled into the core (crates/atlas-rar).
+/// RAR on the phone: no program to run, so libarchive (BSD) compiled into the core (crates/kandinsky-rar).
 #[cfg(target_os = "android")]
 fn unrar(src: &Path, into: &Path) -> Result<(), String> {
-    atlas_rar::unpack(src, into)
+    kandinsky_rar::unpack(src, into)
 }
 
 /// RAR through the first program here that unpacks it (its licence keeps an unRAR reader out of the core).
@@ -285,7 +285,7 @@ mod tests {
         }
         std::fs::write(d.path().join("c.cbt"), t.into_inner().unwrap()).unwrap();
         let out = comic_to_cbz(d.path(), "manga", "c.cbt").unwrap();
-        assert!(out.starts_with(".atlas/cache/plugins/manga/") && out.ends_with(".cbz"));
+        assert!(out.starts_with(".kandinsky/cache/plugins/manga/") && out.ends_with(".cbz"));
         assert_eq!(names(&d.path().join(&out)), ["b/01.png", "b/02.png"]);
         let made_at = std::fs::metadata(d.path().join(&out)).unwrap().modified().unwrap();
         assert_eq!(comic_to_cbz(d.path(), "manga", "c.cbt").unwrap(), out);
@@ -303,7 +303,7 @@ mod tests {
         std::fs::write(d.path().join("x.cbr"), b"plain text").unwrap();
         assert!(comic_to_cbz(d.path(), "manga", "x.cbr").unwrap_err().contains("not an archive"));
         assert!(comic_to_cbz(d.path(), "manga", "../x.cbr").is_err(), "outside the vault");
-        assert!(std::fs::read_dir(d.path().join(".atlas/cache/plugins/manga")).unwrap().flatten().all(|e| e.path().extension().is_some_and(|x| x == "cbz")), "no part files or unpack folders left");
+        assert!(std::fs::read_dir(d.path().join(".kandinsky/cache/plugins/manga")).unwrap().flatten().all(|e| e.path().extension().is_some_and(|x| x == "cbz")), "no part files or unpack folders left");
     }
 
     #[test]
@@ -353,14 +353,14 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         std::fs::write(d.path().join("b.djvu"), b"AT&TFORM nonsense").unwrap();
         assert!(djvu_to_pdf(d.path(), "books", "b.djvu").unwrap_err().contains("not a DjVu book"));
-        assert!(!d.path().join(".atlas/cache/plugins/books").read_dir().is_ok_and(|mut r| r.next().is_some()), "nothing left");
+        assert!(!d.path().join(".kandinsky/cache/plugins/books").read_dir().is_ok_and(|mut r| r.next().is_some()), "nothing left");
     }
 
-    /// A real book when one is named (ATLAS_TEST_DJVU): its PDF has every page and the text layer.
+    /// A real book when one is named (KANDINSKY_TEST_DJVU): its PDF has every page and the text layer.
     #[test]
     fn a_real_djvu_book_becomes_a_pdf_with_its_text() {
-        let Some(book) = std::env::var_os("ATLAS_TEST_DJVU").map(PathBuf::from) else {
-            eprintln!("skipped: ATLAS_TEST_DJVU names no DjVu book");
+        let Some(book) = std::env::var_os("KANDINSKY_TEST_DJVU").map(PathBuf::from) else {
+            eprintln!("skipped: KANDINSKY_TEST_DJVU names no DjVu book");
             return;
         };
         let d = tempfile::tempdir().unwrap();

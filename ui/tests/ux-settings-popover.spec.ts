@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 // A toolbar's popover (components/Popover.svelte) lives at the end of <body>: it takes the focus when it opens, keeps
 // Tab inside, and Esc gives the focus back to its button.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("a popover opened by keyboard is reachable, keeps Tab, and Esc returns to its button", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "db/ux-pop.base", text: "views:\n  - type: table\n    name: All\n" } });

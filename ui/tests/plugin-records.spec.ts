@@ -4,7 +4,7 @@ import { storedSecret } from "./fixtures/secrets";
 // A `kind = "records"` setting (docs/guides/PLUGIN-API.md, "Settings"): a list of cards in the plugin's form —
 // added, removed after a confirm, moved to the top (the main one), fields shown by `when` and folded by
 // `group`, a secret per card, buttons that run the plugin's command with the card, and one under the list.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const read = async (r: APIRequestContext, path: string) => ((await (await r.get(`/api/file?path=${encodeURIComponent(path)}`, { headers: H })).json()) as { text: string }).text;
 // a secret's value never reaches a page: read where the core keeps it
@@ -35,22 +35,22 @@ key = "motto"
 label = "Motto"
 kind = "text"
 `;
-const MAIN = `export function register(atlas) {
-  const people = atlas.plugin.settings.people ?? [];
-  atlas.shell.statusItem({ id: "crew", text: "crew: " + people.map((p) => p.name + (p.plane ? "/" + p.plane : "")).join(",") });
-  atlas.registerCommand({ id: "settings", title: "Crew: settings", run: () => atlas.plugin.openSettings() });
-  atlas.registerCommand({ id: "greet", title: "Crew: greet", run: (arg) => { window.__crewGreeted = arg; atlas.toast("Hello " + (arg?.record ?? "nobody")); } });
-  atlas.registerCommand({ id: "import", title: "Crew: import", run: async (arg) => {
-    await atlas.plugin.saveSettings({ people: [...atlas.plugin.settings.people, { name: "imported" }] });
-    atlas.toast("Imported into " + arg?.setting);
+const MAIN = `export function register(kandinsky) {
+  const people = kandinsky.plugin.settings.people ?? [];
+  kandinsky.shell.statusItem({ id: "crew", text: "crew: " + people.map((p) => p.name + (p.plane ? "/" + p.plane : "")).join(",") });
+  kandinsky.registerCommand({ id: "settings", title: "Crew: settings", run: () => kandinsky.plugin.openSettings() });
+  kandinsky.registerCommand({ id: "greet", title: "Crew: greet", run: (arg) => { window.__crewGreeted = arg; kandinsky.toast("Hello " + (arg?.record ?? "nobody")); } });
+  kandinsky.registerCommand({ id: "import", title: "Crew: import", run: async (arg) => {
+    await kandinsky.plugin.saveSettings({ people: [...kandinsky.plugin.settings.people, { name: "imported" }] });
+    kandinsky.toast("Imported into " + arg?.setting);
   } });
 }\n`;
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/crew/plugin.toml", TOML);
-  await put(request, ".atlas/plugins/crew/main.js", MAIN);
+  await put(request, ".kandinsky/plugins/crew/plugin.toml", TOML);
+  await put(request, ".kandinsky/plugins/crew/main.js", MAIN);
 });
-test.afterAll(async ({ request }) => { await put(request, ".atlas/plugins/crew/main.js", "export function register() {}\n"); });
+test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/crew/main.js", "export function register() {}\n"); });
 
 // after a save the plugin reloads (twice: the save, then the file watcher), so its command can be gone for a moment
 async function openForm(page: Page) {
@@ -102,8 +102,8 @@ test("records are cards: add, when, group, a secret per card, make main, save", 
 
   await expect(cell, "the plugin was reloaded with its cards, in their order").toHaveText("crew: bob/B-17,ann");
   // the cards are in the vault's settings file (2026-10-18: not in plugin.toml); the manifest keeps its schema only
-  expect(await read(request, ".atlas/plugins/crew/plugin.toml")).toContain("# the crew, as cards");
-  const text = await read(request, ".atlas/plugin-settings/crew.toml");
+  expect(await read(request, ".kandinsky/plugins/crew/plugin.toml")).toContain("# the crew, as cards");
+  const text = await read(request, ".kandinsky/plugin-settings/crew.toml");
   expect(text.indexOf('name = "bob"')).toBeLessThan(text.indexOf('name = "ann"'));
   expect(text, "the cards as tables of the file").toMatch(/\[\[people\]\]/);
   expect(text, "a default is not written; a secret never is").not.toContain('role = "cook"');

@@ -7,7 +7,7 @@ import type { NoticeLevel } from "./NoticeLevel";
  */
 export type Notice = { title: string, body?: string, 
 /**
- * Who says it: `atlas`, a plugin's id, a notifications source (the system's group, a mute's key).
+ * Who says it: `kandinsky`, a plugin's id, a notifications source (the system's group, a mute's key).
  */
 source?: string, 
 /**

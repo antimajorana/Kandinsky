@@ -3,7 +3,7 @@ import { openFile } from "./open";
 
 // Tags: frontmatter `tags:` and inline #tags, nested with "/". A `tags` block lists them with their
 // notes; `tag:<name>` in quick open (and the Search pane) lists a tag's notes.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("the tags block nests tags and opens a tag's notes; tag: works in quick open", async ({ page, request }) => {
   const put = (path: string, text: string) => request.put("/api/file", { headers: H, data: { path, text } });

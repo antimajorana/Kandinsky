@@ -1,6 +1,6 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
-import org.atlas.capture.Host;
+import org.kandinsky.capture.Host;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -11,7 +11,7 @@ import java.util.concurrent.Executors;
 /** The page each drawing was last shown at, so it opens there again. One small file in the vault, so it travels to the other devices:
  *  `{ "<drawing path>": "<page frame id>" }`; a page is kept by its frame's id, which moving pages does not change. */
 final class LastPages {
-    static final String FILE = ".atlas/notepad/last-pages.json";
+    static final String FILE = ".kandinsky/notepad/last-pages.json";
     private static final ExecutorService ONE = Executors.newSingleThreadExecutor(); // in order, off the UI thread
 
     private LastPages() {}

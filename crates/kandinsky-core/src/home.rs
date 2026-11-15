@@ -1,5 +1,5 @@
 //! The home document (docs/guides/MALLEABLE.md, "everything is a file"): the first screen is a file the user
-//! reshapes — by default `Home.page`, the Today dashboard as a layout (page.rs); a `.md` works too. Atlas writes it once, from the
+//! reshapes — by default `Home.page`, the Today dashboard as a layout (page.rs); a `.md` works too. Kandinsky writes it once, from the
 //! template below, when it does not exist; after that it is the user's note and never rewritten.
 use crate::{Result, Workspace};
 
@@ -50,8 +50,8 @@ mod tests {
         std::fs::write(d.path().join("Home.page"), "mine").unwrap();
         super::ensure(&ws).unwrap();
         assert_eq!(std::fs::read_to_string(d.path().join("Home.page")).unwrap(), "mine", "never rewritten");
-        std::fs::create_dir_all(d.path().join(".atlas")).unwrap();
-        std::fs::write(d.path().join(".atlas/config.toml"), "home = \"\"\n").unwrap();
+        std::fs::create_dir_all(d.path().join(".kandinsky")).unwrap();
+        std::fs::write(d.path().join(".kandinsky/config.toml"), "home = \"\"\n").unwrap();
         assert_eq!(super::ensure(&ws).unwrap(), None);
     }
 }

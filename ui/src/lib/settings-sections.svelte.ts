@@ -1,4 +1,4 @@
-// Sections plugins draw on their page in Settings (`atlas.plugin.registerSettingsSection`, plugin API 12), by plugin
+// Sections plugins draw on their page in Settings (`kandinsky.plugin.registerSettingsSection`, plugin API 12), by plugin
 // id. No imports of the plugin machinery: plugins.svelte.ts registers into it.
 import type { SettingsSection } from "./plugin-api";
 

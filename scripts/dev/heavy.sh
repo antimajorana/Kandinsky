@@ -9,10 +9,10 @@ set -uo pipefail
 [ $# -gt 0 ] || { echo "usage: heavy.sh <command> [args…]" >&2; exit 2; }
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-6}"
 # already inside a heavy scope (a gate calling an install), or no user systemd (a container): just nice it
-if [ -n "${ATLAS_HEAVY:-}" ] || ! systemd-run --user --scope --quiet true 2>/dev/null; then
+if [ -n "${KANDINSKY_HEAVY:-}" ] || ! systemd-run --user --scope --quiet true 2>/dev/null; then
   exec nice -n 19 ionice -c3 "$@"
 fi
-export ATLAS_HEAVY=1
+export KANDINSKY_HEAVY=1
 echo "[heavy] own scope: MemoryMax ${HEAVY_MAX:-6G} + swap ${HEAVY_SWAP:-3G}, ${CARGO_BUILD_JOBS} jobs — $1" >&2
 exec systemd-run --user --scope --quiet --collect \
   -p MemoryMax="${HEAVY_MAX:-6G}" -p MemorySwapMax="${HEAVY_SWAP:-3G}" \

@@ -2,7 +2,7 @@
   import { tipFor } from "../lib/keymap.svelte";
   // The bar above a code file (`[editor] code_bar`): what one reaches for in an IDE — find, replace,
   // go to line, format, the file's problems — and the tools plugins add for this file (run, build,
-  // test: `atlas.editor.toolbar`). Each built-in button runs the same command as its key.
+  // test: `kandinsky.editor.toolbar`). Each built-in button runs the same command as its key.
   import type { EditorView } from "@codemirror/view";
   import { codeTools } from "../lib/editor/create";
   import { toast, type Problems } from "../lib/state.svelte";

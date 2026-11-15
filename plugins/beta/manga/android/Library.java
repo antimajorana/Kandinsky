@@ -1,7 +1,7 @@
-package org.atlas.plugins.manga;
+package org.kandinsky.plugins.manga;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.Props;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.Props;
 import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
@@ -89,7 +89,7 @@ final class Library {
         if (t == null) return new JSONObject();
         try {
             JSONObject old = new JSONObject(t);
-            save(host, s, old); // into the note once; `atlas companions` then retires the file
+            save(host, s, old); // into the note once; `kandinsky companions` then retires the file
             return old;
         } catch (Exception e) { return new JSONObject(); }
     }

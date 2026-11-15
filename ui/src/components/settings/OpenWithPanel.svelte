@@ -1,5 +1,5 @@
 <script lang="ts">
-  // `[files] open_with`: which extensions open in a view other than Atlas's usual one; below, what plugins claim
+  // `[files] open_with`: which extensions open in a view other than Kandinsky's usual one; below, what plugins claim
   // (`claims` in their manifest), which a rule here overrides (lib/openers.ts `resolveSpec`).
   import Icon from "../Icon.svelte";
   import { settings, updateSettings } from "../../lib/settings.svelte";

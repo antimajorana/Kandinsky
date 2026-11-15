@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 // "ansi colors support": a file holding ANSI SGR codes is drawn in the
 // terminal's palette with the codes hidden; on the line being edited they show (lib/editor/ansi.ts).
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const LOG = "step 1 \x1b[31mERROR\x1b[0m bad input\n\x1b[1;32mok\x1b[0m done\n\x1b[38;5;208morange\x1b[0m and \x1b[38;2;10;20;30mrgb\x1b[0m\n\x1b[33mcarried\nover\x1b[0m plain\n";
 
 test("ANSI codes in a log are hidden and their colours drawn; the edited line shows them", async ({ page, request }) => {

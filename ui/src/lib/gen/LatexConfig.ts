@@ -11,7 +11,7 @@ export type LatexConfig = {
 snippets: boolean, 
 /**
  * Snippet file or folder in Obsidian LaTeX Suite format (a JS array of {trigger, replacement, options}).
- * A relative path is inside the vault (`.atlas/snippets/snippets.coffee`); `~/…` is under home.
+ * A relative path is inside the vault (`.kandinsky/snippets/snippets.coffee`); `~/…` is under home.
  */
 snippets_file: string, 
 /**

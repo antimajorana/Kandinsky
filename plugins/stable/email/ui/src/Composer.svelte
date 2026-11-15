@@ -20,10 +20,10 @@
   let showBcc = $state(!!d.bcc);
   let preview = $state<string | null>(null);
   let text: HTMLTextAreaElement | undefined = $state();
-  // the text is the app's prose editor when this Atlas has one (v25: the plugins' spelling, predictions and snippets
+  // the text is the app's prose editor when this Kandinsky has one (v25: the plugins' spelling, predictions and snippets
   // work in it, as in a note); a plain textarea on an older one
   // svelte-ignore state_referenced_locally
-  const proseEditor = mail.atlas.editor?.prose as typeof mail.atlas.editor.prose | undefined;
+  const proseEditor = mail.kandinsky.editor?.prose as typeof mail.kandinsky.editor.prose | undefined;
   let host: HTMLDivElement | undefined = $state();
   let ed: ProseEditor | null = $state(null);
   const placeholder = $derived(d.forward ? "Add a note (optional)…" : d.reply_to ? "Your reply…" : "Write… (Markdown: **bold**, *italic*, - lists, > quotes)");
@@ -124,7 +124,7 @@
     changed();
   }
   async function link() {
-    const url = await askLine(mail.atlas, "Link to (address):", "https://");
+    const url = await askLine(mail.kandinsky, "Link to (address):", "https://");
     if (url) wrap("[", `](${url})`, "link text");
   }
   async function togglePreview() {
@@ -164,7 +164,7 @@
     if ((!files.length && !nothing) || !hasBody()) return;
     e.preventDefault();
     if (nothing) {
-      const res = await fetch("/api/clipboard/image", { headers: { "x-atlas": "1" } }).catch(() => null);
+      const res = await fetch("/api/clipboard/image", { headers: { "x-kandinsky": "1" } }).catch(() => null);
       if (res?.status !== 200) return;
       const blob = await res.blob();
       files = [new File([blob], "image.png", { type: blob.type || "image/png" })];
@@ -187,12 +187,12 @@
     changed();
   }
   function fromVault() {
-    mail.atlas.pick({
+    mail.kandinsky.pick({
       placeholder: "A file of the vault to attach…", tag: "Attach",
       items: async () => {
         try {
           const all = (await (await fetch("/api/files")).json()) as string[];
-          return all.filter((p) => !p.startsWith(".atlas/")).slice(0, 5000).map((p) => ({ value: p, title: p.split("/").at(-1) ?? p, detail: p }));
+          return all.filter((p) => !p.startsWith(".kandinsky/")).slice(0, 5000).map((p) => ({ value: p, title: p.split("/").at(-1) ?? p, detail: p }));
         } catch { return []; }
       },
       typed: (t) => `Attach “${t}”`,
@@ -202,7 +202,7 @@
   function drop(e: DragEvent) {
     e.preventDefault();
     over = false;
-    const vault = e.dataTransfer?.getData("text/x-atlas-path") || "";
+    const vault = e.dataTransfer?.getData("text/x-kandinsky-path") || "";
     if (vault) { d.files = [...d.files, { name: vault.split("/").at(-1) ?? vault, path: vault }]; changed(); return; }
     if (e.dataTransfer?.files.length) addFiles(e.dataTransfer.files);
   }
@@ -218,9 +218,9 @@
 
   async function check(): Promise<boolean> {
     if (!d.to.trim() && !d.cc.trim() && !d.bcc.trim()) { c.error = "Who is it for? Fill in To."; return false; }
-    if (!d.subject.trim() && !(await askYes(mail.atlas, "Send it without a subject?", { ok: "Send" }))) return false;
+    if (!d.subject.trim() && !(await askYes(mail.kandinsky, "Send it without a subject?", { ok: "Send" }))) return false;
     const own = d.body.split(/\n\s*>|\nOn .* wrote:/)[0];
-    if (FORGOT.test(own) && !d.files.length && !d.forward && !(await askYes(mail.atlas, "The text mentions an attachment, but nothing is attached. Send anyway?", { ok: "Send anyway" }))) return false;
+    if (FORGOT.test(own) && !d.files.length && !d.forward && !(await askYes(mail.kandinsky, "The text mentions an attachment, but nothing is attached. Send anyway?", { ok: "Send anyway" }))) return false;
     return true;
   }
 
@@ -241,7 +241,7 @@
       } catch (e) { reopen(e as Error); }
       return;
     }
-    const wait = Number(setting(mail.atlas, "undo_send", 10)) * 1000;
+    const wait = Number(setting(mail.kandinsky, "undo_send", 10)) * 1000;
     let undone = false;
     const go = async () => {
       if (undone) return;
@@ -276,7 +276,7 @@
   };
 
   async function discard() {
-    if ((c.dirty || d.draft) && (d.body.trim() || d.subject.trim()) && !(await askYes(mail.atlas, "Discard this message?", { ok: "Discard", danger: true }))) return;
+    if ((c.dirty || d.draft) && (d.body.trim() || d.subject.trim()) && !(await askYes(mail.kandinsky, "Discard this message?", { ok: "Discard", danger: true }))) return;
     clearTimeout(timer);
     mail.closeComposer(c.key);
     if (d.draft) {
@@ -330,12 +330,12 @@
       </div>
     {/if}
     <div class="torow">
-      <div class="grow"><AddressField atlas={mail.atlas} label="To" bind:value={d.to} autofocus={!d.to && !inline} /></div>
+      <div class="grow"><AddressField kandinsky={mail.kandinsky} label="To" bind:value={d.to} autofocus={!d.to && !inline} /></div>
       {#if !showCc}<button class="link" onclick={() => (showCc = true)}>Cc</button>{/if}
       {#if !showBcc}<button class="link" onclick={() => (showBcc = true)}>Bcc</button>{/if}
     </div>
-    {#if showCc}<AddressField atlas={mail.atlas} label="Cc" bind:value={d.cc} />{/if}
-    {#if showBcc}<AddressField atlas={mail.atlas} label="Bcc" bind:value={d.bcc} />{/if}
+    {#if showCc}<AddressField kandinsky={mail.kandinsky} label="Cc" bind:value={d.cc} />{/if}
+    {#if showBcc}<AddressField kandinsky={mail.kandinsky} label="Bcc" bind:value={d.bcc} />{/if}
     {#if !inline || !d.reply_to}
       <input class="subject" placeholder="Subject" bind:value={d.subject} oninput={changed} aria-label="Subject" />
     {/if}
@@ -385,12 +385,12 @@
 
   <footer class="foot">
     <div class="send">
-      <button class="atlas-btn primary" onclick={() => send()} disabled={c.sending} title="Send (Ctrl+Enter)">Send</button>
-      <button class="atlas-btn primary more" onclick={() => (later = !later)} aria-expanded={later} title="Send later…"><Icon name="down" size={14} /></button>
+      <button class="kandinsky-btn primary" onclick={() => send()} disabled={c.sending} title="Send (Ctrl+Enter)">Send</button>
+      <button class="kandinsky-btn primary more" onclick={() => (later = !later)} aria-expanded={later} title="Send later…"><Icon name="down" size={14} /></button>
       {#if later}
         <div class="later" role="dialog" aria-label="Send later">
           {#each laterChoices() as ch (ch.label)}<button onclick={() => { later = false; send(ch.at); }}>{ch.label}<span class="faint">{new Date(ch.at * 1000).toLocaleString(undefined, { weekday: "short", hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}</span></button>{/each}
-          <div class="custom"><input bind:value={laterText} placeholder="tomorrow 9, mon 14:00, 3h…" onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); sendLater(); } }} /><button class="atlas-btn" onclick={sendLater}>Schedule</button></div>
+          <div class="custom"><input bind:value={laterText} placeholder="tomorrow 9, mon 14:00, 3h…" onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); sendLater(); } }} /><button class="kandinsky-btn" onclick={sendLater}>Schedule</button></div>
         </div>
       {/if}
     </div>
@@ -453,8 +453,8 @@
   .drop { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 12%, var(--bg)); border-radius: var(--radius); font-weight: 600; color: var(--accent-strong); pointer-events: none; }
   .foot { display: flex; align-items: center; gap: 6px; padding-top: 4px; }
   .send { position: relative; display: flex; }
-  .send .atlas-btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; font-weight: 600; }
-  .send .atlas-btn:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); padding-inline: 18px; }
+  .send .kandinsky-btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; font-weight: 600; }
+  .send .kandinsky-btn:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); padding-inline: 18px; }
   .send .more { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; border-left: 1px solid color-mix(in srgb, var(--accent-fg) 25%, transparent) !important; padding-inline: 6px; display: grid; place-items: center; }
   .later { position: absolute; bottom: 110%; left: 0; z-index: 10; width: 280px; background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow-md, var(--shadow-sm)); padding: 6px; display: grid; gap: 2px; }
   .later > button { all: unset; cursor: pointer; display: flex; justify-content: space-between; padding: 7px 10px; border-radius: var(--radius-sm); }

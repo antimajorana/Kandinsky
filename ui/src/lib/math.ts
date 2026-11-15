@@ -36,7 +36,7 @@ function drawPending(el: HTMLElement): void {
   try { katex!.render(compat(source, block), el, opts(block)); } catch { el.classList.add("math-error"); }
 }
 
-// One macro table for the session (Atlas's own, tex-portable.ts, then a note's), so `\def`/`\newcommand` in one formula
+// One macro table for the session (Kandinsky's own, tex-portable.ts, then a note's), so `\def`/`\newcommand` in one formula
 // carry to the next (what readers of physics notes expect from MathJax-era documents).
 const macros: Record<string, string> = { ...MACROS };
 

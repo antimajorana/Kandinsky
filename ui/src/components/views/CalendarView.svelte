@@ -24,7 +24,7 @@
   const undated = $derived(rows.filter((r) => !r.date));
 </script>
 
-<div class="cal atlas-view-calendar">
+<div class="cal kandinsky-view-calendar">
   <header>
     <button onclick={() => step(-1)} aria-label="Previous month">‹</button>
     <span class="t">{title}</span>

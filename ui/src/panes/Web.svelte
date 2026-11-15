@@ -1,6 +1,6 @@
 <script lang="ts">
   // Web pane: any URL with a small address bar. In the desktop app it is a WebKit view of the app's own laid over this
-  // pane (atlas-app webtab.rs), so a site that forbids framing shows too; elsewhere (a browser, the phone) an iframe.
+  // pane (kandinsky-app webtab.rs), so a site that forbids framing shows too; elsewhere (a browser, the phone) an iframe.
   import { onDestroy, onMount } from "svelte";
   import { onOverlays, overlayOver } from "../lib/overlays";
   import type { PaneProps } from "../lib/dock";
@@ -15,7 +15,7 @@
   const initial = spec.url;
   let url = $state(initial);
   let shown = $state(initial);
-  /** The frame's own address, set only by Atlas (a page that navigates itself must not be reloaded by the pane). */
+  /** The frame's own address, set only by Kandinsky (a page that navigates itself must not be reloaded by the pane). */
   let src = $state(initial);
   let frame = $state<HTMLIFrameElement>();
   let slot = $state<HTMLDivElement>();
@@ -32,13 +32,13 @@
 
   type Native = { postMessage(s: string): void };
   // the native view over the pane only without the frames hook, or when Settings asks for it (lib/web-links.ts); chosen once per tab
-  const native = nativeTabView() ? (globalThis as unknown as { webkit?: { messageHandlers?: { atlasWeb?: Native } } }).webkit?.messageHandlers?.atlasWeb : undefined;
-  // a frame that shows any site (lib/web-links.ts) has the native view's page script too (atlas-app frame_page.js),
+  const native = nativeTabView() ? (globalThis as unknown as { webkit?: { messageHandlers?: { kandinskyWeb?: Native } } }).webkit?.messageHandlers?.kandinskyWeb : undefined;
+  // a frame that shows any site (lib/web-links.ts) has the native view's page script too (kandinsky-app frame_page.js),
   // spoken to by postMessage: the same requests and answers
   const framed = !native && framesAnything;
   const ask = (m: Record<string, unknown>) => {
     if (native) native.postMessage(JSON.stringify({ id: panel.id, ...m }));
-    else if (framed) frame?.contentWindow?.postMessage({ atlasFrameDo: m }, "*");
+    else if (framed) frame?.contentWindow?.postMessage({ kandinskyFrameDo: m }, "*");
   };
 
   function normal(u: string): string {
@@ -57,11 +57,11 @@
     if (native) ask({ op: "go", url: u });
     else src = u;
   }
-  /** The page (or a link Shift+clicked in it) in the system's browser, as Atlas opens any outside link. */
+  /** The page (or a link Shift+clicked in it) in the system's browser, as Kandinsky opens any outside link. */
   const inBrowser = (u: string) => void openOutside(u);
   function reload() { if (native || framed) ask({ op: "reload" }); else if (frame) frame.src = shown; }
 
-  // the native view follows this pane's place, and hides when the pane is hidden or something of Atlas lies over it:
+  // the native view follows this pane's place, and hides when the pane is hidden or something of Kandinsky lies over it:
   // a registered overlay (lib/overlays.ts: the palette, dialogs, menus, popovers, the Ctrl+Tab glance), told at once;
   // and, for what is not registered (the side bar opened over the panes, a plugin's own popup), a grid that reaches the
   // edges, as elementFromPoint sees it (something lying over one side only covers the edge points)
@@ -101,7 +101,7 @@
     else if (e.key === "Escape") { e.preventDefault(); closeFind(); }
   }
 
-  /** A Super chord pressed in the page: the global command Atlas binds to it (a page never gets Super). */
+  /** A Super chord pressed in the page: the global command Kandinsky binds to it (a page never gets Super). */
   function superKey(k: { key: string; code: string; ctrl: boolean; shift: boolean; alt: boolean }) {
     const ev = new KeyboardEvent("keydown", { key: k.key, code: k.code, ctrlKey: k.ctrl, shiftKey: k.shift, altKey: k.alt, metaKey: true });
     bindings().find((b) => !b.cmd.where && matches(b.chord, ev))?.cmd.run();
@@ -134,8 +134,8 @@
 
   /** A frame's page script speaking (only that frame's window: another page's messages are not this pane's). */
   function fromFrame(e: MessageEvent) {
-    const m = e.source && e.source === frame?.contentWindow ? (e.data as { atlasFrame?: Record<string, unknown> } | null)?.atlasFrame : undefined;
-    if (m) heard(new CustomEvent("atlas-web", { detail: { id: panel.id, ...m } }));
+    const m = e.source && e.source === frame?.contentWindow ? (e.data as { kandinskyFrame?: Record<string, unknown> } | null)?.kandinskyFrame : undefined;
+    if (m) heard(new CustomEvent("kandinsky-web", { detail: { id: panel.id, ...m } }));
   }
 
   onMount(() => {
@@ -147,16 +147,16 @@
     const ro = new ResizeObserver(place);
     if (slot) ro.observe(slot);
     const tick = setInterval(place, 250); // overlays opening, the dock moving the pane: nothing else tells
-    for (const ev of ["resize", "atlas-layout"]) window.addEventListener(ev, place);
+    for (const ev of ["resize", "kandinsky-layout"]) window.addEventListener(ev, place);
     document.addEventListener("visibilitychange", place);
-    window.addEventListener("atlas-web", heard);
+    window.addEventListener("kandinsky-web", heard);
     const unlisten = onOverlays(place);
     place();
     return () => {
       ro.disconnect(); clearInterval(tick); unlisten();
-      for (const ev of ["resize", "atlas-layout"]) window.removeEventListener(ev, place);
+      for (const ev of ["resize", "kandinsky-layout"]) window.removeEventListener(ev, place);
       document.removeEventListener("visibilitychange", place);
-      window.removeEventListener("atlas-web", heard);
+      window.removeEventListener("kandinsky-web", heard);
     };
   });
   onDestroy(() => ask({ op: "close" }));

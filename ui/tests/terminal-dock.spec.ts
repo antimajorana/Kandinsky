@@ -54,7 +54,7 @@ test("closing the last editor tab and opening one keeps the layout", async ({ pa
   await page.keyboard.press("Enter");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.waitForTimeout(400);
-  const files = await box(".side-pane"), term = await box(".xterm"), today = await box(".atlas-pane-page");
+  const files = await box(".side-pane"), term = await box(".xterm"), today = await box(".kandinsky-pane-page");
   expect(Math.abs(files.width - before.files.width), "the side panel keeps its width").toBeLessThan(12);
   expect(Math.abs(term.height - before.term.height), "the terminal keeps its height").toBeLessThan(12);
   expect(today.x, "the editor is right of the side panel").toBeGreaterThanOrEqual(files.x + files.width - 2);

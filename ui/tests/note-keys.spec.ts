@@ -5,11 +5,11 @@ import { openFile } from "./open";
 // The app's own commands are on Super keys (Super+E / F1 the palette, Super+B the side panel), the
 // same in a note and outside one; outside a note Ctrl+K and Ctrl+B are nobody's.
 // the file's text, not what is drawn: live preview hides the marks of the span the caret has left
-const lastLine = (page: Page) => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string } | null } }).__atlas.editor()?.text.trimEnd().split("\n").pop() ?? "");
+const lastLine = (page: Page) => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } | null } }).__kandinsky.editor()?.text.trimEnd().split("\n").pop() ?? "");
 // a note of its own: the shared test vault's notes may hold what other specs typed (an unclosed `$` makes the new
 // line math, where `//` is a fraction)
 async function note(page: Page): Promise<void> {
-  await page.request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "notes/note-keys.md", text: "# Keys\n\nA line of text.\n" } });
+  await page.request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "notes/note-keys.md", text: "# Keys\n\nA line of text.\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "note-keys.md");
@@ -48,7 +48,7 @@ test("in a note Ctrl+B / Ctrl+I / Ctrl+K make bold, italic and a link, and undo 
 test("outside a note Ctrl+K / Ctrl+B do nothing; the app's Super+E / Super+B open the palette and the side panel", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  const home = () => page.request.get("/api/file?path=Home.md", { headers: { "x-atlas": "1" } }).then((r) => r.json()).then((j) => j.text as string);
+  const home = () => page.request.get("/api/file?path=Home.md", { headers: { "x-kandinsky": "1" } }).then((r) => r.json()).then((j) => j.text as string);
   const before = await home();
   await page.keyboard.press("Control+k");
   await page.keyboard.press("Control+b");
@@ -67,7 +67,7 @@ test("outside a note Ctrl+K / Ctrl+B do nothing; the app's Super+E / Super+B ope
 // made a blank line and a new `- [ ]` (CodeMirror's loose list), and every Enter after it a blank line
 test("Enter on an empty to-do ends the list; no blank line, no second marker", async ({ page }) => {
   await note(page);
-  const text = () => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string } | null } }).__atlas.editor()?.text ?? "");
+  const text = () => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } | null } }).__kandinsky.editor()?.text ?? "");
   await page.keyboard.type("- [ ] buy milk");
   await page.keyboard.press("Enter");
   await expect.poll(() => lastLine(page)).toBe("- [ ]");

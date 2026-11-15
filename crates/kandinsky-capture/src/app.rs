@@ -63,8 +63,8 @@ pub struct Capture {
     /// What the text will become, for the vault chosen: (text, vault, words), remembered until either changes
     said: std::cell::RefCell<Option<(String, Option<PathBuf>, String)>>,
     /// the chosen vault's settings, read once per vault rather than on every key
-    settings: std::cell::RefCell<Option<(PathBuf, Option<atlas_core::config::Config>)>>,
-    /// The Super key is held (set by the window from winit: egui does not report Super on Linux). Super is Atlas's key
+    settings: std::cell::RefCell<Option<(PathBuf, Option<kandinsky_core::config::Config>)>>,
+    /// The Super key is held (set by the window from winit: egui does not report Super on Linux). Super is Kandinsky's key
     /// for its own actions, Ctrl the text's (docs/guides/KEYS.md).
     pub super_key: bool,
     vaults: Vec<Vault>,
@@ -122,7 +122,7 @@ impl Capture {
             asks: 0,
             pill: None,
             started: Instant::now(),
-            timing: std::env::var_os("ATLAS_CAPTURE_TIMING").is_some(),
+            timing: kandinsky_core::env::var_os("CAPTURE_TIMING").is_some(),
             floating: false,
             list_x: None,
             hit: Vec::new(),
@@ -165,7 +165,7 @@ impl Capture {
         if memo.as_ref().is_none_or(|(t, r, _)| *t != self.text || *r != root) {
             let mut kept = self.settings.borrow_mut();
             if let Some(r) = root.as_ref().filter(|r| kept.as_ref().is_none_or(|(k, _)| k != *r)) {
-                *kept = Some((r.clone(), atlas_core::Workspace::open(r).and_then(|ws| ws.config()).ok()));
+                *kept = Some((r.clone(), kandinsky_core::Workspace::open(r).and_then(|ws| ws.config()).ok()));
             }
             let cfg = kept.as_ref().filter(|(k, _)| Some(k) == root.as_ref()).and_then(|(_, c)| c.as_ref());
             let says = complete::what_it_becomes(root.as_deref().zip(cfg), &self.text);
@@ -438,13 +438,13 @@ impl Capture {
         if (want - have).abs() > 0.5 && self.asks < 5 {
             self.asks += 1;
             if self.timing {
-                eprintln!("atlas-capture: asking for {want} pt (the window is {have})");
+                eprintln!("kandinsky-capture: asking for {want} pt (the window is {have})");
             }
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(vec2(WIDTH, want)));
             ctx.request_repaint_after(Duration::from_millis(30)); // to see whether it took
         }
         if self.first && self.timing {
-            eprintln!("atlas-capture: first frame drawn {} ms after start", self.started.elapsed().as_millis());
+            eprintln!("kandinsky-capture: first frame drawn {} ms after start", self.started.elapsed().as_millis());
         }
         self.first = false;
     }
@@ -485,7 +485,7 @@ impl Capture {
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(vec2(FLOAT_WIDTH, want)));
         }
         if self.first && self.timing {
-            eprintln!("atlas-capture: first frame drawn {} ms after start", self.started.elapsed().as_millis());
+            eprintln!("kandinsky-capture: first frame drawn {} ms after start", self.started.elapsed().as_millis());
         }
         self.first = false;
     }
@@ -507,7 +507,7 @@ impl Capture {
                 .frame(false)
                 .margin(egui::Margin::symmetric(0.0, 2.0))
                 .font(FontId::proportional(look::TEXT))
-                .hint_text(egui::RichText::new(atlas_core::capture::PROMPT).color(p.faint))
+                .hint_text(egui::RichText::new(kandinsky_core::capture::PROMPT).color(p.faint))
                 .lock_focus(true)
                 .show(ui)
         });
@@ -575,7 +575,7 @@ impl Capture {
     /// → the list's rectangle.
     fn list(&mut self, ui: &mut egui::Ui, p: Palette, anchor_x: f32, room: egui::Rangef, top: Option<f32>) -> Option<Rect> {
         let ctx = ui.ctx().clone();
-        let home = atlas_core::platform::dirs::home().unwrap_or_default().to_string_lossy().into_owned();
+        let home = kandinsky_core::platform::dirs::home().unwrap_or_default().to_string_lossy().into_owned();
         let rows: Vec<(Icon, String, String)> = match &self.popup {
             Popup::Complete { items, .. } => items.iter().map(|s| (s.icon, s.label.clone(), s.detail.clone())).collect(),
             Popup::Vaults { .. } => self
@@ -698,7 +698,7 @@ impl Capture {
             Phase::Typing if self.text.trim().is_empty() && matches!(self.popup, Popup::Complete { .. } | Popup::Vaults { .. }) => {}
             Phase::Typing if self.text.trim().is_empty() => {
                 let mut clicked = None;
-                for (i, atlas_core::capture::Guide { shown, starts, what, tip }) in atlas_core::capture::GUIDES.iter().enumerate() {
+                for (i, kandinsky_core::capture::Guide { shown, starts, what, tip }) in kandinsky_core::capture::GUIDES.iter().enumerate() {
                     if i > 0 {
                         ui.add_space(4.0);
                     }
@@ -760,6 +760,6 @@ fn compose(root: &std::path::Path, typed: String, parts: Vec<Part>) -> anyhow::R
 }
 
 fn close(ctx: &egui::Context, why: &str) {
-    eprintln!("atlas-capture: closing ({why})");
+    eprintln!("kandinsky-capture: closing ({why})");
     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
 }

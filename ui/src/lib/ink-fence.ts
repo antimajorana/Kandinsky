@@ -23,5 +23,5 @@ const card = (what: "drawing" | "handwriting"): FenceRender => (host, fence) => 
   return () => box.remove();
 };
 
-registerFence("atlas", "handdrawn-ink", card("drawing"));
-registerFence("atlas", "handwritten-ink", card("handwriting"));
+registerFence("kandinsky", "handdrawn-ink", card("drawing"));
+registerFence("kandinsky", "handwritten-ink", card("handwriting"));

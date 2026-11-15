@@ -3,7 +3,7 @@ import type { PaneRef } from "./PaneRef";
 import type { Selection } from "./Selection";
 
 /**
- * What the user is looking at, as last reported by the UI — lets Claude (via `atlas mcp`) see
+ * What the user is looking at, as last reported by the UI — lets Claude (via `kandinsky mcp`) see
  * the current file and selection without the user pasting it.
  */
 export type UiState = { 

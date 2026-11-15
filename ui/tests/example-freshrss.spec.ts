@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 // The example FreshRSS plugin installed as it is, against a stand-in Fever API: unread articles in a
 // block; "Save" makes a note of one in the reading folder.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const read = async (r: APIRequestContext, path: string) => ((await (await r.get(`/api/file?path=${encodeURIComponent(path)}`, { headers: H })).json()) as { text?: string }).text ?? "";
 const example = (f: string) => readFileSync(fileURLToPath(new URL(`../../plugins/examples/freshrss/${f}`, import.meta.url)), "utf8");
@@ -27,11 +27,11 @@ test.beforeAll(async ({ request }) => {
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   port = (server.address() as AddressInfo).port;
-  for (const f of ["main.js", "helper.js", "plugin.toml"]) await put(request, `.atlas/plugins/freshrss/${f}`, example(f));
+  for (const f of ["main.js", "helper.js", "plugin.toml"]) await put(request, `.kandinsky/plugins/freshrss/${f}`, example(f));
   await put(request, "notes/feeds.md", "# Feeds\n\n```view\ntype: freshrss.unread\n```\n\nend\n");
 });
 test.afterAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/freshrss/main.js", "export function register() {}\n");
+  await put(request, ".kandinsky/plugins/freshrss/main.js", "export function register() {}\n");
   await new Promise((done) => server.close(done));
 });
 

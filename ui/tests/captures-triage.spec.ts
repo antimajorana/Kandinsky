@@ -5,7 +5,7 @@ import { WS } from "../playwright.config";
 
 // The Captures view (docs/design/DESIGN-capture-triage.md): every capture of the day logs by day, and the answers that
 // triage one — each written into the capture's own line by the core, and a filed one added to its note.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const LOG = "log/2020-03-03.md";
 const TARGET = "notes/capture-target.md";
 const put = (request: APIRequestContext, path: string, text: string) => request.put("/api/file", { headers: H, data: { path, text } });
@@ -133,7 +133,7 @@ test("a capture shows its picture, and is deleted into the trash", async ({ page
     await row("the board").getByRole("button", { name: /^Delete/ }).click();
     await expect(row("the board")).toHaveCount(0);
     await expect.poll(() => read(request, log)).toBe("---\ndate: 2020-03-05\ntype: log\n---\n## Log\n- 09:30 stays\n");
-    const trash = join(WS, ".atlas/trash");
+    const trash = join(WS, ".kandinsky/trash");
     const kept = existsSync(trash) ? readdirSync(trash, { recursive: true }).map(String).filter((f) => f.endsWith("2020-03-05.md")) : [];
     expect(kept.map((f) => readFileSync(join(trash, f), "utf8"))).toContain("- 09:00 the board\n  ![[capture-board.png]]\n");
   } finally {

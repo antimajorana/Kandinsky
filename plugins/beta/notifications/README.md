@@ -26,7 +26,7 @@ else your phone's ntfy topic) and turns what the phone sends to an inbox topic i
 - **Folder of the notes** (`notifications`).
 - **Your phone's topic**: what "send to my phone" posts to when no Apprise address is set.
 - **Topic to capture from**: what you send there from the phone becomes a capture; empty: not read.
-- **Apprise address**: the Apprise API's notify address (`…/notify/<key>`); when set, Atlas's own messages go through
+- **Apprise address**: the Apprise API's notify address (`…/notify/<key>`); when set, Kandinsky's own messages go through
   it.
 - **ntfy user** and **ntfy password** (a secret), or **ntfy access token** (a secret), for a server that asks for a
   sign-in; empty for open topics.
@@ -36,12 +36,12 @@ else your phone's ntfy topic) and turns what the phone sends to an inbox topic i
 No requirements. The Calendar plugin (`dav`) uses this plugin's ntfy server for its instant updates when it has none of
 its own and this plugin can run with a server set. It replaces the older **ntfy** plugin (`replaces`): installing it
 carries ntfy's server, inbox and token over, its topic as **Your phone's topic**, and moves ntfy's folder to
-`.atlas/trash/`.
+`.kandinsky/trash/`.
 
 ## Platforms
 
 Linux works; Android works (`phone = true`); macOS, Windows and a server are untested. The helper is JavaScript run
-inside Atlas's core (no Python, the same on the phone).
+inside Kandinsky's core (no Python, the same on the phone).
 
 ## Status
 

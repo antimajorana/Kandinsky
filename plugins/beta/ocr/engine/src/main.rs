@@ -2,7 +2,7 @@
 //! read on this machine by Tesseract (kreuzberg-tesseract: the engine compiled into this program, its language models
 //! fetched once), kept under the capture as a collapsed callout — so search finds it — and handed to the catalog like
 //! typed text, so a link or a DOI in a screenshot is filed too. Tesseract over ocrs: ocrs read "mañana" as "ma?ana"; Tesseract reads Spanish, French… as written.
-use atlas_plugin::{serve, Atlas, Error, Methods, Result};
+use kandinsky_plugin::{serve, Kandinsky, Error, Methods, Result};
 use kreuzberg_tesseract::TesseractAPI;
 use serde_json::{json, Value};
 use std::cell::RefCell;
@@ -122,7 +122,7 @@ fn tidy(lines: impl IntoIterator<Item = String>) -> String {
 
 /// Where a picture named in a note is: a path as written (beside the note, or from the vault's root), else the one
 /// file of that name anywhere (an `![[embed]]` names only the file).
-fn locate(atlas: &Atlas, root: &Path, note: &str, name: &str) -> Result<PathBuf> {
+fn locate(kandinsky: &Kandinsky, root: &Path, note: &str, name: &str) -> Result<PathBuf> {
     // a name out of the vault (`/…`, `../…`, from a shared text) is not read
     if !Path::new(name).components().all(|c| matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir)) {
         return fail(format!("{name} is not a picture of the vault"));
@@ -134,7 +134,7 @@ fn locate(atlas: &Atlas, root: &Path, note: &str, name: &str) -> Result<PathBuf>
         }
     }
     let file = name.rsplit('/').next().unwrap_or(name);
-    if let Some(rel) = atlas.files(false)?.into_iter().find(|f| f == file || f.ends_with(&format!("/{file}"))) {
+    if let Some(rel) = kandinsky.files(false)?.into_iter().find(|f| f == file || f.ends_with(&format!("/{file}"))) {
         return Ok(root.join(rel));
     }
     // a picture written a moment ago (the capture's own) may not be in the index yet: it is on disk
@@ -144,7 +144,7 @@ fn locate(atlas: &Atlas, root: &Path, note: &str, name: &str) -> Result<PathBuf>
     }
 }
 
-/// The file named `file` under `root`, hidden folders (`.atlas`, `.git`) left out; the first found.
+/// The file named `file` under `root`, hidden folders (`.kandinsky`, `.git`) left out; the first found.
 fn on_disk(root: &Path, file: &str) -> Option<PathBuf> {
     let mut dirs = vec![root.to_path_buf()];
     while let Some(dir) = dirs.pop() {
@@ -173,15 +173,15 @@ struct Reader {
 }
 
 impl Reader {
-    fn engine(&mut self, atlas: &Atlas, languages: &str) -> Result<&TesseractAPI> {
+    fn engine(&mut self, kandinsky: &Kandinsky, languages: &str) -> Result<&TesseractAPI> {
         if self.engine.as_ref().is_none_or(|(l, _)| l != languages) {
-            let cache = PathBuf::from(std::env::var("ATLAS_PLUGIN_CACHE").unwrap_or_else(|_| format!(".atlas/cache/plugins/{ME}")));
+            let cache = PathBuf::from(std::env::var("KANDINSKY_PLUGIN_CACHE").unwrap_or_else(|_| kandinsky_plugin::live_rel(std::path::Path::new("."), &format!(".kandinsky/cache/plugins/{ME}"))));
             let data = cache.join("tessdata");
             for lang in languages.split('+') {
                 let file = format!("{lang}.traineddata");
                 if !data.join(&file).is_file() {
                     eprintln!("ocr: fetching the {lang} model (once)");
-                    let r = atlas.post(&format!("/api/plugins/{ME}/fetch"), &json!({ "url": format!("{MODELS_URL}/{file}"), "save_to": format!("tessdata/{file}"), "timeout_secs": 300 }))?;
+                    let r = kandinsky.post(&format!("/api/plugins/{ME}/fetch"), &json!({ "url": format!("{MODELS_URL}/{file}"), "save_to": format!("tessdata/{file}"), "timeout_secs": 300 }))?;
                     if r["ok"] != json!(true) {
                         return fail(format!("the OCR model for {lang} could not be fetched (status {})", r["status"]));
                     }
@@ -194,10 +194,10 @@ impl Reader {
         Ok(&self.engine.as_ref().expect("loaded above").1)
     }
 
-    fn read(&mut self, atlas: &Atlas, path: &Path, languages: &str) -> Result<String> {
+    fn read(&mut self, kandinsky: &Kandinsky, path: &Path, languages: &str) -> Result<String> {
         let (img, scale) = prepare(image::open(path).or_else(|e| fail(format!("{}: {e}", path.display())))?);
         let (w, h) = img.dimensions();
-        let api = self.engine(atlas, languages)?;
+        let api = self.engine(kandinsky, languages)?;
         let (w, h) = (i32::try_from(w).or_else(|_| fail("too wide"))?, i32::try_from(h).or_else(|_| fail("too tall"))?);
         api.set_image(img.as_raw(), w, h, 1, w).or_else(|e| fail(format!("{}: {e}", path.display())))?;
         api.set_source_resolution(96 * scale).or_else(|e| fail(e.to_string()))?; // a screen's 96, times what prepare enlarged
@@ -288,18 +288,18 @@ fn str_param<'a>(p: &'a Value, key: &str) -> Result<&'a str> {
 }
 
 /// After a capture: each picture in it read, its text put under it, and all of it offered to the catalog.
-fn on_capture(atlas: &Atlas, reader: &mut Reader, p: &Value) -> Result<Value> {
+fn on_capture(kandinsky: &Kandinsky, reader: &mut Reader, p: &Value) -> Result<Value> {
     let text = str_param(p, "text")?;
     let pictures = pictures_in(text);
     if pictures.is_empty() {
         return Ok(json!({ "skipped": "no picture" }));
     }
     let note = str_param(p, "path")?;
-    let root = PathBuf::from(std::env::var("ATLAS_ROOT").unwrap_or_else(|_| ".".into()));
+    let root = PathBuf::from(std::env::var("KANDINSKY_ROOT").unwrap_or_else(|_| ".".into()));
     // each picture on its own: one that cannot be found or read does not keep the others from being read
     let (mut read, mut failed) = (Vec::new(), Vec::new());
     for name in &pictures {
-        match locate(atlas, &root, note, name).and_then(|at| reader.read(atlas, &at, &languages(p))) {
+        match locate(kandinsky, &root, note, name).and_then(|at| reader.read(kandinsky, &at, &languages(p))) {
             Ok(words) if !words.is_empty() => read.push((name.clone(), words)),
             Ok(_) => {}
             Err(e) => failed.push(format!("{}: {}", name.rsplit('/').next().unwrap_or(name), e.why)),
@@ -311,7 +311,7 @@ fn on_capture(atlas: &Atlas, reader: &mut Reader, p: &Value) -> Result<Value> {
             false => fail(failed.join("; ")),
         };
     }
-    let mut body = atlas.read(note)?;
+    let mut body = kandinsky.read(note)?;
     let before = body.clone();
     // the capture's own line (1-based from the hook) first: the picture may be named again further down
     let from = p.get("line").and_then(Value::as_u64).and_then(|l| usize::try_from(l).ok()).map(|l| l.saturating_sub(1));
@@ -321,7 +321,7 @@ fn on_capture(atlas: &Atlas, reader: &mut Reader, p: &Value) -> Result<Value> {
         }
     }
     if body != before {
-        atlas.write(note, &body)?;
+        kandinsky.write(note, &body)?;
     }
     let count: usize = read.iter().map(|(_, w)| w.split_whitespace().count()).sum();
     let mut said = format!("Read {count} words from {}", read.iter().map(|(n, _)| n.rsplit('/').next().unwrap_or(n)).collect::<Vec<_>>().join(", "));
@@ -333,7 +333,7 @@ fn on_capture(atlas: &Atlas, reader: &mut Reader, p: &Value) -> Result<Value> {
     let filed = if p.pointer("/settings/to_catalog").and_then(Value::as_bool) == Some(false) {
         None
     } else {
-        atlas.post("/api/plugins/@catalog/tools/capture", &json!({ "text": all, "path": note })).ok().filter(|v| v.get("path").is_some())
+        kandinsky.post("/api/plugins/@catalog/tools/capture", &json!({ "text": all, "path": note })).ok().filter(|v| v.get("path").is_some())
     };
     Ok(match filed {
         Some(v) => json!({ "path": v["path"], "notice": format!("{said}; {}", v["notice"].as_str().unwrap_or("filed")) }),
@@ -342,29 +342,29 @@ fn on_capture(atlas: &Atlas, reader: &mut Reader, p: &Value) -> Result<Value> {
 }
 
 fn main() {
-    let atlas = Rc::new(Atlas::new());
+    let kandinsky = Rc::new(Kandinsky::new());
     let reader = Rc::new(RefCell::new(Reader::default()));
     let mut m = Methods::new();
     {
-        let (atlas, reader) = (atlas.clone(), reader.clone());
+        let (kandinsky, reader) = (kandinsky.clone(), reader.clone());
         m.add("read", move |p| {
-            let root = PathBuf::from(std::env::var("ATLAS_ROOT").unwrap_or_else(|_| ".".into()));
+            let root = PathBuf::from(std::env::var("KANDINSKY_ROOT").unwrap_or_else(|_| ".".into()));
             let path = str_param(&p, "path")?;
-            let text = reader.borrow_mut().read(&atlas, &locate(&atlas, &root, "", path)?, &languages(&p))?;
+            let text = reader.borrow_mut().read(&kandinsky, &locate(&kandinsky, &root, "", path)?, &languages(&p))?;
             Ok(json!({ "text": text }))
         });
     }
     {
         // when the vault opens and when the settings change: the languages' models fetched then, not inside the first
         // capture's hook, where every capture behind it would wait for the download
-        let (atlas, reader) = (atlas.clone(), reader.clone());
+        let (kandinsky, reader) = (kandinsky.clone(), reader.clone());
         m.add("prepare", move |p| {
             let languages = languages(&p);
-            reader.borrow_mut().engine(&atlas, &languages)?;
+            reader.borrow_mut().engine(&kandinsky, &languages)?;
             Ok(json!({ "languages": languages }))
         });
     }
-    m.add("capture", move |p| on_capture(&atlas, &mut reader.borrow_mut(), &p));
+    m.add("capture", move |p| on_capture(&kandinsky, &mut reader.borrow_mut(), &p));
     serve(m);
 }
 
@@ -407,10 +407,10 @@ mod tests {
 
     #[test]
     fn a_picture_not_yet_indexed_is_found_on_disk() {
-        let root = std::env::temp_dir().join(format!("atlas-ocr-test-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("kandinsky-ocr-test-{}", std::process::id()));
         std::fs::create_dir_all(root.join("log/2026/files")).unwrap();
-        std::fs::create_dir_all(root.join(".atlas")).unwrap();
-        std::fs::write(root.join(".atlas/Shot.png"), b"hidden").unwrap();
+        std::fs::create_dir_all(root.join(".kandinsky")).unwrap();
+        std::fs::write(root.join(".kandinsky/Shot.png"), b"hidden").unwrap();
         std::fs::write(root.join("log/2026/files/Shot.png"), b"x").unwrap();
         assert_eq!(on_disk(&root, "Shot.png"), Some(root.join("log/2026/files/Shot.png")));
         assert_eq!(on_disk(&root, "None.png"), None);

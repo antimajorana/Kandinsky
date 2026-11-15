@@ -1,7 +1,7 @@
 // The TubeArchivist preset: the request TubeArchivist gets, the note's link to the archive, and what is left alone.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { harness, Status } from "atlas-helper/testing";
+import { harness, Status } from "kandinsky-helper/testing";
 import "./helper";
 
 const secrets: Record<string, string> = {};

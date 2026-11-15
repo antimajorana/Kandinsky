@@ -112,7 +112,7 @@ pub enum Outcome {
 /// What to do when the UID is already on the server.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Existing {
-    /// write ours over it unless its X-ATLAS-HASH says it already holds the same thing
+    /// write ours over it unless its X-KANDINSKY-HASH says it already holds the same thing
     Update,
     /// leave it (an invite the user may have answered in another program)
     Keep,
@@ -249,7 +249,7 @@ impl Client {
         let http = Http::builder()
             .redirect(reqwest::redirect::Policy::none()) // followed by hand, keeping the method (PROPFIND, REPORT)
             .timeout(std::time::Duration::from_secs(30))
-            .user_agent(concat!("Atlas-dav/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("Kandinsky-dav/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(|e| DavError::Setup(format!("the HTTP client could not start: {e}")))?;
         Ok(Client { http, base: as_dir(base), user: user.to_string(), password: acc.password.clone() })
@@ -521,7 +521,7 @@ impl Client {
     }
 
     /// Writes the calendar object `ics` (one event, UID `uid`) into `cal`. New: added under `<uid>.ics`. There already
-    /// (under any name): kept, or updated when its X-ATLAS-HASH differs from `hash` — with If-Match on the ETag read.
+    /// (under any name): kept, or updated when its X-KANDINSKY-HASH differs from `hash` — with If-Match on the ETag read.
     pub fn upsert(
         &self,
         cal: &Url,
@@ -533,9 +533,9 @@ impl Client {
         let cal = as_dir(cal.clone());
         let href = cal.join(&resource_name(uid)).map_err(|e| DavError::Setup(e.to_string()))?;
         let what = |u: &Url| format!("PUT {}", u.path());
-        // a UID Atlas did not make (an invite) may already be stored under another program's name, and not every
+        // a UID Kandinsky did not make (an invite) may already be stored under another program's name, and not every
         // server refuses a second copy (RustiCal has no no-uid-conflict check): look it up first
-        let elsewhere = if uid.starts_with("atlas-") { None } else { self.find_uid(&cal, uid)? };
+        let elsewhere = if crate::uid::is_own(uid) { None } else { self.find_uid(&cal, uid)? };
         let found = if elsewhere.is_some() {
             elsewhere
         } else {
@@ -558,7 +558,7 @@ impl Client {
                 _ => Err(DavError::Status { what: what(&href), code: 412, body: String::new() }),
             };
         };
-        if existing == Existing::Keep || hash.is_some_and(|h| ics::unfold(&text).contains(&format!("X-ATLAS-HASH:{h}")))
+        if existing == Existing::Keep || hash.is_some_and(|h| ics::has_hash(&text, h))
         {
             return Ok((Outcome::Unchanged, at));
         }

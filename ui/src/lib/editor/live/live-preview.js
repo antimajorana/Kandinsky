@@ -1,5 +1,5 @@
 // Obsidian-style live preview for the note editor. Started in obsidian-web (web/src/engine/cm/live-preview.js), now
-// Atlas's own: changed here. Types: ./live-preview.d.ts
+// Kandinsky's own: changed here. Types: ./live-preview.d.ts
 
 // Obsidian-style live preview for CodeMirror 6.
 //
@@ -255,7 +255,7 @@ function embedOptions(text) {
 }
 
 /** A non-image embed (a transcluded note), shown as a chip until opened. */
-/** Atlas: the words a link reads instead of its target (a numbered equation's "(3)", lib/equations.ts). */
+/** Kandinsky: the words a link reads instead of its target (a numbered equation's "(3)", lib/equations.ts). */
 class LinkLabelWidget extends KeyedWidget {
   toDOM() {
     const s = document.createElement("span");
@@ -270,23 +270,57 @@ class EmbedChipWidget extends KeyedWidget {
   }
 }
 
-/** A formula and the punctuation after it, kept on one line (Atlas). */
+class EqrefWidget extends KeyedWidget {
+  constructor(id, label) {
+    super(id + "\u0000" + label);
+    this.id = id;
+    this.label = label;
+  }
+  toDOM() {
+    const s = document.createElement("span");
+    s.className = "cm-hmd-internal-link cm-eqref";
+    s.dataset.target = `#^${this.id}`;
+    s.dataset.eqref = this.id;
+    s.textContent = this.label;
+    return s;
+  }
+}
+
+class HiddenFrontmatterWidget extends KeyedWidget {
+  constructor() { super("fm-hidden"); }
+  toDOM() {
+    const d = document.createElement("div");
+    d.className = "cm-fm-anchor";
+    return d;
+  }
+  ignoreEvent() { return true; }
+}
+
+/** A formula and the punctuation after it, kept on one line (Kandinsky). */
 const MATH_GLUE = Decoration.mark({ class: "cm-math-glue", inclusiveStart: true }); // inclusive: opens before the formula's widget, so it wraps it
 
 /** Rendered math, or the source in a styled box when no renderer is supplied. */
 class MathWidget extends KeyedWidget {
-  constructor(source, block, render) {
-    super((block ? "B" : "I") + source);
+  constructor(source, block, render, readyKey = "1", state = null) {
+    super((block ? "B" : "I") + readyKey + ":" + source);
     this.source = source;
     this.block = block;
     this.render = render;
+    this.state = state;
   }
   toDOM() {
     const host = document.createElement(this.block ? "div" : "span");
     host.className = this.block ? "cm-math-block" : "cm-math-inline";
+    const eqm = /\\eqref\{([^}]+)\}/.exec(this.source);
+    if (eqm) {
+      const id = eqm[1].trim();
+      host.dataset.eqref = id;
+      host.dataset.target = `#^${id}`;
+      host.classList.add("cm-eqref");
+    }
     if (this.render) {
       try {
-        this.render(host, this.source, this.block);
+        this.render(host, this.source, this.block, this.state);
         return host;
       } catch (err) {
         // A malformed formula must not take the editor down with it.
@@ -481,7 +515,7 @@ class ListMarkWidget extends WidgetType {
 
 /** A task checkbox, matching the reader's `li > input[type=checkbox]`. */
 class TaskMarkWidget extends WidgetType {
-  // Atlas: the status as written (` `, `x`, `-`…), on the box as `data-task` the way the reader marks it
+  // Kandinsky: the status as written (` `, `x`, `-`…), on the box as `data-task` the way the reader marks it
   constructor(status, toggle) {
     super();
     this.status = status;
@@ -499,7 +533,7 @@ class TaskMarkWidget extends WidgetType {
     box.dataset.task = this.status;
     // Toggling is an edit, and the edit has to go through the document rather
     // than the DOM -- letting the box flip on its own would show a state the
-    // markdown does not have. (Atlas: a click now makes that edit, `[ ]` ↔ `[x]`.)
+    // markdown does not have. (Kandinsky: a click now makes that edit, `[ ]` ↔ `[x]`.)
     box.addEventListener("mousedown", (e) => {
       e.preventDefault();
       const line = view.state.doc.lineAt(view.posAtDOM(box));
@@ -557,7 +591,7 @@ function frontmatterEnd(state) {
 
 /**
  * The line number of the frontmatter's closing fence, 0 when the note has none: the fences as the core reads them
- * (atlas-text `frontmatter`, property-model.ts `frontmatterSpan`) — the first line exactly `---` (after a BOM), the
+ * (kandinsky-text `frontmatter`, property-model.ts `frontmatterSpan`) — the first line exactly `---` (after a BOM), the
  * closing one `---` or `...` at the margin, trailing blanks allowed. The one reading for the editor.
  *
  * @param {import("@codemirror/state").Text} doc
@@ -583,9 +617,25 @@ export function frontmatterClose(doc) {
  * @param {import("@codemirror/state").Text} doc
  * @returns {number} an offset safe to use as an initial selection
  */
+/**
+ * If the first non-blank line after line `afterLine` is an ATX `# H1` heading, returns `{ prevEnd, line }`,
+ * where `prevEnd` is the end offset of the line immediately before `# H1` (frontmatter + any blank separator lines).
+ */
+function leadingH1(doc, afterLine) {
+  for (let n = afterLine + 1; n <= Math.min(doc.lines, afterLine + 12); n++) {
+    const line = doc.line(n);
+    if (!line.text.trim()) continue;
+    if (/^#[ \t]+\S/.test(line.text)) return { prevEnd: doc.line(n - 1).to, line };
+    return null;
+  }
+  return null;
+}
+
 export function bodyStart(doc) {
   const n = frontmatterClose(doc);
   if (!n) return 0;
+  const h1 = leadingH1(doc, n);
+  if (h1 && h1.line.number < doc.lines) return doc.line(h1.line.number + 1).from;
   // The line after the closing fence, when the note has one.
   return n < doc.lines ? doc.line(n + 1).from : doc.line(n).to;
 }
@@ -601,13 +651,14 @@ function normalizeOptions(options) {
     // not know (no vault index) draws every link as a normal link, rather than
     // dimming the whole document as if nothing resolved.
     linkResolves: options.linkResolves || (() => true),
-    // Atlas: what a link reads instead of its target (a numbered equation), null for most
+    // Kandinsky: what a link reads instead of its target (a numbered equation), null for most
     linkLabel: options.linkLabel || null,
     // Syntax highlighting inside fenced code blocks, as [{from,to,cls}] ranges
     // over the code text. Defaults to none, which leaves code as plain
     // monospace -- the behaviour before this was wired in.
     highlightCode: options.highlightCode || (() => []),
     renderMath: options.renderMath || null,
+    mathReady: options.mathReady || (() => true),
     // The two halves of "render this block the way the read view does". Split in
     // two on purpose: blockHtml() runs inside buildDecorations, i.e. on every
     // keystroke, so it must be a cheap lookup; hydrateBlock() does the expensive
@@ -751,7 +802,7 @@ class RenderedBlockWidget extends KeyedWidget {
     this.hydrate = hydrate;
     this.release = release;
   }
-  // Atlas: the same source can render anew (an equation's number moved when one was added above it)
+  // Kandinsky: the same source can render anew (an equation's number moved when one was added above it)
   eq(other) {
     return super.eq(other) && other.html === this.html;
   }
@@ -928,8 +979,8 @@ export function buildDecorations(state, ranges, options = {}) {
     // and `$$x` (no closing yet) must dim two characters at the front and none
     // at the back rather than eat two characters of maths.
     const raw = state.doc.sliceString(from, to);
-    const open = /^\$+/.exec(raw)?.[0].length ?? 0;
-    const close = /\$+$/.exec(raw)?.[0].length ?? 0;
+    const open = /^(\$\$+|\\\[)/.exec(raw)?.[0].length ?? (/^\$+/.exec(raw)?.[0].length ?? 0);
+    const close = /(\$\$+|\\\])$/.exec(raw)?.[0].length ?? (/\$+$/.exec(raw)?.[0].length ?? 0);
     const inner = { from: from + open, to: to - close };
     // A MARK over an empty range is a RangeError, not a no-op ("Mark decorations
     // may not be empty"), and a throw in here takes the whole decoration field
@@ -990,16 +1041,16 @@ export function buildDecorations(state, ranges, options = {}) {
   // than raw YAML does, and Obsidian shows a properties widget here rather than
   // the source. Raw YAML only on purpose (`rawProperties`): Alt+click on the
   // widget or the editor menu's "Edit properties as text".
-  const fmEnd = frontmatterEnd(state);
+  const fmClose = frontmatterClose(state.doc);
+  const fmEnd = fmClose ? state.doc.line(fmClose).to : 0;
+  const topH1 = fmEnd && !title ? leadingH1(state.doc, fmClose) : null;
+  let fmHiddenTo = fmEnd;
   if (fmEnd) {
     if (state.field(rawProperties, false) && revealed(state, 0, fmEnd)) {
+      fmHiddenTo = 0;
       for (let n = 1; n <= state.doc.lines; n++) {
         const line = state.doc.line(n);
         add(line.from, line.from, Decoration.line({ class: "cm-frontmatter" }));
-        // Colour the `key:` part. The markdown parser gives us nothing here --
-        // to it this is prose -- and unstyled YAML is genuinely hard to read, so
-        // one regex earns its keep. Deliberately shape-based rather than a list
-        // of known property names, so a new property looks right immediately.
         const key = /^(\s*-?\s*)([A-Za-z_][\w .-]*)(:)/.exec(line.text);
         if (key) {
           const start = line.from + key[1].length;
@@ -1007,18 +1058,36 @@ export function buildDecorations(state, ranges, options = {}) {
         }
         if (line.to >= fmEnd) break;
       }
+    } else if (topH1) {
+      // Notion document sheet: collapse frontmatter + blank gap above the leading `# H1` page title,
+      // and place the compact property rows directly underneath `# H1`.
+      fmHiddenTo = topH1.prevEnd;
+      const spec = opts.noteProperties(state.doc.sliceString(0, fmEnd));
+      add(
+        0,
+        topH1.prevEnd,
+        Decoration.replace({
+          widget: new HiddenFrontmatterWidget(),
+          block: true,
+          skipEntry: true,
+        })
+      );
+      add(topH1.line.from, topH1.line.from, Decoration.line({ class: "cm-page-title-h1" }));
+      add(
+        topH1.line.to,
+        topH1.line.to,
+        Decoration.widget({
+          widget: new PropertiesWidget(spec ? "properties:" + spec.key : "properties", spec?.render),
+          block: true,
+          side: 1,
+          skipEntry: true,
+        })
+      );
     } else {
-      // The key carries the app's own identity for the properties (path plus a
-      // fingerprint of the values), so editing a property redraws the widget and
-      // an unrelated keystroke does not. Falling back to a constant is right for
-      // the chip: it never changes.
       const spec = opts.noteProperties(state.doc.sliceString(0, fmEnd));
       add(
         0,
         fmEnd,
-        // `skipEntry` keeps arrow keys OUT of the frontmatter: walking up off
-        // the first line of the body should not drop you into raw YAML. The
-        // widget is still reachable, by clicking it.
         Decoration.replace({
           widget: new PropertiesWidget(spec ? "properties:" + spec.key : "properties", spec?.render),
           block: true,
@@ -1026,6 +1095,9 @@ export function buildDecorations(state, ranges, options = {}) {
         })
       );
     }
+  } else {
+    const bareH1 = !title ? leadingH1(state.doc, 0) : null;
+    if (bareH1) add(bareH1.line.from, bareH1.line.from, Decoration.line({ class: "cm-page-title-h1" }));
   }
 
   // Set by the Blockquote branch when a callout's `> [!type]` marker is being
@@ -1047,7 +1119,7 @@ export function buildDecorations(state, ranges, options = {}) {
   // that matched 53 of 72 text runs against the read view dropped to 3.)
   const rendered = [];
   // Only over the ranges asked for (the whole note on a full pass): a pass that redraws one block after a keystroke
-  // must not slice and look up every other block of a long note (Atlas: a 4.5 MB note of inlined pictures spent
+  // must not slice and look up every other block of a long note (Kandinsky: a 4.5 MB note of inlined pictures spent
   // most of each key here). A block overlapping the edge is entered whole, as a full pass would.
   const lo = Math.min(...ranges.map((r) => r.from)), hi = Math.max(...ranges.map((r) => r.to));
   syntaxTree(state).iterate({
@@ -1055,7 +1127,7 @@ export function buildDecorations(state, ranges, options = {}) {
     to: hi,
     enter(node) {
       if (rendered.length && node.from < rendered[rendered.length - 1].to) return false;
-      if (fmEnd && node.to <= fmEnd) return false;
+      if (fmHiddenTo && node.to <= fmHiddenTo) return false;
       if (!rendersAsBlock(node.name, node, state)) return undefined;
 
       // The PARSER's boundary, expanded only to whole lines.
@@ -1107,7 +1179,7 @@ export function buildDecorations(state, ranges, options = {}) {
         // Skip nodes that lie ENTIRELY inside the frontmatter. Testing `from`
         // instead would match the document node itself (which starts at 0) and
         // abort the whole walk, leaving the note undecorated.
-        if (fmEnd && node.to <= fmEnd) return false;
+        if (fmHiddenTo && node.to <= fmHiddenTo) return false;
 
         // Anything inside a chunk the renderer already owns is off limits: a
         // second decoration there would overlap the block replacement, which
@@ -1188,7 +1260,7 @@ export function buildDecorations(state, ranges, options = {}) {
         if (name === "TaskMarker") {
           const item = node.node.parent;
           if (item && !revealed(state, item.from, item.to)) {
-            // Atlas: any status but a space is a closed box, as Obsidian draws it (`[-]`, `[/]`…)
+            // Kandinsky: any status but a space is a closed box, as Obsidian draws it (`[-]`, `[/]`…)
             const status = state.doc.sliceString(node.from + 1, node.from + 2) || " ";
             let to = node.to;
             if (state.doc.sliceString(to, to + 1) === " ") to++;
@@ -1233,7 +1305,7 @@ export function buildDecorations(state, ranges, options = {}) {
             node.to,
             Decoration.mark({
               class: missing ? "cm-hmd-internal-link is-unresolved" : "cm-hmd-internal-link",
-              // Atlas: the real target, so a click on an aliased link opens the right note, and its label (a PDF
+              // Kandinsky: the real target, so a click on an aliased link opens the right note, and its label (a PDF
               // link's label is the words to select on its page)
               attributes: target ? { "data-target": state.doc.sliceString(target.from, target.to),
                 ...(alias ? { "data-label": state.doc.sliceString(alias.from, alias.to) } : {}) } : undefined,
@@ -1243,7 +1315,7 @@ export function buildDecorations(state, ranges, options = {}) {
             // With an alias, the target is noise: Obsidian shows only the alias.
             // The marks themselves are hidden by the MARK_NODES branch.
             if (alias && target) add(target.from, alias.from, Decoration.replace({}));
-            // Atlas: a link that reads otherwise than its target (a numbered equation: "(3)")
+            // Kandinsky: a link that reads otherwise than its target (a numbered equation: "(3)")
             const label = !alias && target && opts.linkLabel ? opts.linkLabel(state, state.doc.sliceString(target.from, target.to)) : null;
             if (label) add(target.from, target.to, Decoration.replace({ widget: new LinkLabelWidget(label) }));
           }
@@ -1289,7 +1361,7 @@ export function buildDecorations(state, ranges, options = {}) {
 
         // --- [text](url): hide the brackets and the target, keep the text ---
         if (name === "Link") {
-          // Atlas: the target on the mark, for the hover preview (lib/preview.ts)
+          // Kandinsky: the target on the mark, for the hover preview (lib/preview.ts)
           const href = node.node.getChild("URL");
           add(node.from, node.to, Decoration.mark({ class: "cm-link", attributes: href ? { "data-href": state.doc.sliceString(href.from, href.to) } : undefined }));
           if (!revealed(state, node.from, node.to)) {
@@ -1370,6 +1442,23 @@ export function buildDecorations(state, ranges, options = {}) {
           return;
         }
 
+        // --- \eqref{label} in prose ---
+        if (name === "Eqref") {
+          const raw = state.doc.sliceString(node.from, node.to);
+          const id = raw.slice(7, -1).trim();
+          if (!id) return;
+          if (revealed(state, node.from, node.to)) {
+            add(node.from, node.to, Decoration.mark({
+              class: "cm-hmd-internal-link cm-eqref",
+              attributes: { "data-target": `#^${id}`, "data-eqref": id },
+            }));
+            return;
+          }
+          const resolved = (opts.linkLabel && opts.linkLabel(state, `#^${id}`)) || `(${id})`;
+          add(node.from, node.to, Decoration.replace({ widget: new EqrefWidget(id, resolved) }));
+          return false;
+        }
+
         // --- math ---
         if (name === "InlineMath" || name === "BlockMath") {
           const block = name === "BlockMath";
@@ -1382,9 +1471,12 @@ export function buildDecorations(state, ranges, options = {}) {
             return false;
           }
           const raw = state.doc.sliceString(node.from, node.to);
-          const source = block ? raw.replace(/^\$\$|\$\$$/g, "").trim() : raw.slice(1, -1);
+          const source = block ? raw.replace(/^(\$\$|\\\[)|(\$\$|\\\])$/g, "").trim() : raw.slice(1, -1);
           if (!source) return;
-          const widget = new MathWidget(source, block, opts.renderMath);
+          const eqm = /\\eqref\{([^}]+)\}/.exec(source);
+          const eqNum = eqm && opts.linkLabel ? opts.linkLabel(state, `#^${eqm[1].trim()}`) || "" : "";
+          const readyKey = (opts.mathReady() ? "1" : "0") + (eqNum ? `:${eqNum}` : "");
+          const widget = new MathWidget(source, block, opts.renderMath, readyKey, state);
           if (block) {
             // A block replacement must span whole lines or CodeMirror will throw.
             const first = state.doc.lineAt(node.from);
@@ -1395,7 +1487,7 @@ export function buildDecorations(state, ranges, options = {}) {
             }
           }
           add(node.from, node.to, Decoration.replace({ widget }));
-          // punctuation right after a formula stays on its line (Atlas): a line could break between
+          // punctuation right after a formula stays on its line (Kandinsky): a line could break between
           // the inline-block and its ", which" or "."
           if (!block) {
             const glue = /^[.,;:!?)\]’”]+/.exec(state.doc.sliceString(node.to, Math.min(node.to + 4, state.doc.lineAt(node.to).to)));
@@ -1567,10 +1659,13 @@ export const rawProperties = StateField.define({
 const keepCaretOutOfProperties = EditorState.transactionFilter.of((tr) => {
   if (!tr.selection || tr.effects.some((e) => e.is(showRawProperties) && e.value)) return tr;
   if (tr.startState.field(rawProperties, false)) return tr;
-  const end = frontmatterEnd(tr.state);
+  const fmClose = frontmatterClose(tr.state.doc);
+  if (!fmClose) return tr;
+  const h1 = leadingH1(tr.state.doc, fmClose);
+  const end = h1 ? h1.prevEnd : tr.state.doc.line(fmClose).to;
   if (!end || tr.selection.ranges.every((r) => r.from > end)) return tr;
-  const body = bodyStart(tr.state.doc);
-  return [tr, { selection: { anchor: body }, sequential: true }];
+  const land = h1 && h1.line.number >= tr.state.doc.lines ? h1.line.from : bodyStart(tr.state.doc);
+  return [tr, { selection: { anchor: land }, sequential: true }];
 });
 /** Shows the properties as raw YAML with the caret on their first key (the deliberate way in). */
 export function editRawProperties(view) {
@@ -1716,7 +1811,7 @@ function decorate(state, opts) {
 /**
  * Only what an edit or a caret move can change, rebuilt; the rest of the decorations mapped through the change.
  * Rebuilding the whole note on every key cost a 4.5 MB note (pictures inlined as data: URLs) 22 ms a key at the
- * median and 300 ms at worst — every rendered block's source sliced, hashed and looked up again (measured in Atlas). The region is whole top-level blocks (a paragraph, a list, a fence, a heading) around
+ * median and 300 ms at worst — every rendered block's source sliced, hashed and looked up again (measured in Kandinsky). The region is whole top-level blocks (a paragraph, a list, a fence, a heading) around
  * the changes and around the old and new selection: every node that overlaps it lies inside it, so dropping the old
  * decorations there and adding the new ones leaves nothing twice. Null — rebuild everything — when the edit can
  * change the structure beyond its block (a fence, $$, HTML, a front matter or rule line, typed or deleted), on an
@@ -1753,6 +1848,11 @@ function redecorate_(value, tr, opts) {
   // a heading touched (before or after the edit) can change what is drawn elsewhere — the inline title at the top
   // hides when the note's first heading says the same — so the whole note is drawn again
   if (touchesHeading(tree, from, to) || oldSpans.some(([a, b]) => touchesHeading(oldTree, a, b))) return null;
+  const fmClose = frontmatterClose(state.doc);
+  if (fmClose) {
+    const h1 = leadingH1(state.doc, fmClose);
+    if (from <= (h1 ? h1.line.to : state.doc.line(fmClose).to) + 2) return null;
+  }
   return finish(redraw(value.deco.map(tr.changes), state, from, to, opts));
 }
 /** `deco` with what lies in from..to dropped and drawn again from the state. A node reaching past the range (a `$$`

@@ -1,4 +1,4 @@
-package org.atlas.plugins.books;
+package org.kandinsky.plugins.books;
 
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
@@ -19,16 +19,16 @@ import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.InkStore;
-import org.atlas.capture.Look;
-import org.atlas.capture.NativePlugin;
-import org.atlas.capture.PageInk;
-import org.atlas.capture.PageSource;
-import org.atlas.capture.PdfText;
-import org.atlas.capture.Pdfium;
-import org.atlas.capture.PenBar;
-import org.atlas.capture.ReaderBars;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.InkStore;
+import org.kandinsky.capture.Look;
+import org.kandinsky.capture.NativePlugin;
+import org.kandinsky.capture.PageInk;
+import org.kandinsky.capture.PageSource;
+import org.kandinsky.capture.PdfText;
+import org.kandinsky.capture.Pdfium;
+import org.kandinsky.capture.PenBar;
+import org.kandinsky.capture.ReaderBars;
 import org.json.JSONArray;
 import org.json.JSONObject;
 

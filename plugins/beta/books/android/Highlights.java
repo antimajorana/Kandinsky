@@ -1,4 +1,4 @@
-package org.atlas.plugins.books;
+package org.kandinsky.plugins.books;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -12,7 +12,7 @@ final class Highlights {
 
     /** The book's note as it is now, made by the core when missing — as every device makes it (the vault's template
      *  rules, the book's block; `book`, `author` as properties) — and with a "Highlights" heading to write under. */
-    static String noteText(org.atlas.capture.Host host, String book, String note, String title, String author) throws Exception {
+    static String noteText(org.kandinsky.capture.Host host, String book, String note, String title, String author) throws Exception {
         String md;
         if (host.exists(note)) md = host.readText(note);
         else {

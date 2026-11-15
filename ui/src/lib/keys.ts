@@ -51,17 +51,17 @@ export function superOf(e: KeyboardEvent | MouseEvent): boolean {
   return e.metaKey || superHeld || e.getModifierState?.("Super") || e.getModifierState?.("OS") || false;
 }
 
-/** macOS, where Cmd is both Super (Atlas's app keys) and the system's editing key. */
+/** macOS, where Cmd is both Super (Kandinsky's app keys) and the system's editing key. */
 export const isMac = (): boolean => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const MAC_EDITING = new Set(["KeyC", "KeyV", "KeyX", "KeyA", "KeyZ"]);
 
 /** Cmd+C / V / X / A / Z (and Cmd+Shift+Z) on macOS: copy, paste, cut, select all, undo, redo — the system's, in every
- *  text field and terminal, so no Atlas command bound to Super+C (Capture) or Super+V (the next vault) takes them there. */
+ *  text field and terminal, so no Kandinsky command bound to Super+C (Capture) or Super+V (the next vault) takes them there. */
 export function systemEditingChord(e: KeyboardEvent): boolean {
   return e.metaKey && !e.ctrlKey && !e.altKey && MAC_EDITING.has(e.code) && isMac();
 }
 
-/** The system the keys are typed on: Atlas's app keys are written with Super (the Linux desktop's habit, KEYS.md). */
+/** The system the keys are typed on: Kandinsky's app keys are written with Super (the Linux desktop's habit, KEYS.md). */
 export type KeySystem = "mac" | "windows" | "linux";
 export const keySystem = (): KeySystem =>
   isMac() ? "mac" : typeof navigator !== "undefined" && /Windows/.test(navigator.userAgent) ? "windows" : "linux";
@@ -89,7 +89,7 @@ export const keyText = (text: string, sys: KeySystem = keySystem()): string => {
   return as ? text.replace(/\bSuper\+/g, `${as.join("+")}+`) : text;
 };
 
-/** Is this one of Atlas's app keys (Super, or what stands for it here), which reach Atlas even from a terminal? */
+/** Is this one of Kandinsky's app keys (Super, or what stands for it here), which reach Kandinsky even from a terminal? */
 export function appChord(c: Chord, sys: KeySystem = keySystem()): boolean {
   return c.meta || (sys === "windows" && c.ctrl && c.alt);
 }

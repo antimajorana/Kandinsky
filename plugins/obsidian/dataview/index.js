@@ -1,8 +1,8 @@
 // Fast cached Markdown vault indexer for Dataview & DataviewJS.
 // Walks .md files concurrently, parses YAML frontmatter, inline `key:: value` fields, #tags, [[links]], and tasks,
-// and refreshes incrementally via `atlas.onFilesChanged`.
+// and refreshes incrementally via `kandinsky.onFilesChanged`.
 
-const SKIP_DIRS = new Set([".git", ".obsidian", ".atlas", ".trash", "node_modules", "__pycache__"]);
+const SKIP_DIRS = new Set([".git", ".obsidian", ".kandinsky", ".atlas" /* a vault not yet renamed */, ".trash", "node_modules", "__pycache__"]);
 
 export const normPath = (p) => String(p ?? "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
 
@@ -422,7 +422,7 @@ export function parseMarkdownPage(path, text, meta = {}, getDefaultFmt = () => "
 }
 
 /** Create the shared, incrementally cached VaultIndex for a Dataview plugin instance. */
-export function createVaultIndex(atlas, getDefaultFmt = () => "YYYY-MM-DD") {
+export function createVaultIndex(kandinsky, getDefaultFmt = () => "YYYY-MM-DD") {
   const entriesByPath = new Map(); // path -> { mtime, size, page }
   const byBasename = new Map();    // lowercase basename -> path[]
   let initialized = false;
@@ -490,7 +490,7 @@ export function createVaultIndex(atlas, getDefaultFmt = () => "YYYY-MM-DD") {
   async function walkVaultMdFiles(dir = "", acc = []) {
     let list = [];
     try {
-      list = await atlas.list(dir);
+      list = await kandinsky.list(dir);
     } catch {
       return acc;
     }
@@ -534,7 +534,7 @@ export function createVaultIndex(atlas, getDefaultFmt = () => "YYYY-MM-DD") {
       await Promise.all(slice.map(async (f) => {
         const p = normPath(f.path);
         try {
-          const text = await atlas.readText(p);
+          const text = await kandinsky.readText(p);
           const page = parseMarkdownPage(p, text, { mtime: f.mtime, size: f.size }, getDefaultFmt);
           entriesByPath.set(p, { mtime: f.mtime, size: f.size, page });
         } catch {
@@ -564,19 +564,19 @@ export function createVaultIndex(atlas, getDefaultFmt = () => "YYYY-MM-DD") {
       return;
     }
 
-    const mdPaths = paths.map(normPath).filter((p) => /\.md$/i.test(p) && !p.startsWith(".atlas/") && !p.startsWith(".obsidian/"));
+    const mdPaths = paths.map(normPath).filter((p) => /\.md$/i.test(p) && !p.startsWith(".kandinsky/") && !p.startsWith(".atlas/") && !p.startsWith(".obsidian/"));
     if (!mdPaths.length) return;
 
     await Promise.all(mdPaths.map(async (p) => {
       try {
-        if (!(await atlas.exists(p))) {
+        if (!(await kandinsky.exists(p))) {
           entriesByPath.delete(p);
           return;
         }
         const dir = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
-        const list = await atlas.list(dir).catch(() => []);
+        const list = await kandinsky.list(dir).catch(() => []);
         const hit = list.find((e) => normPath(e.path) === p);
-        const text = await atlas.readText(p);
+        const text = await kandinsky.readText(p);
         const page = parseMarkdownPage(p, text, { mtime: hit?.mtime, size: hit?.size }, getDefaultFmt);
         entriesByPath.set(p, { mtime: hit?.mtime, size: hit?.size, page });
       } catch {

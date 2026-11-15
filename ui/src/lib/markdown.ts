@@ -15,6 +15,7 @@ import { tagAt, tagMayFollow } from "./tag-syntax";
 import { keepCapped } from "./capped";
 import { displayClosed } from "./math-close";
 import { equationTarget, FIGURE_LINE, figureCaption, noteEquations, numberedTex, refOf, texKey, type Equations } from "./equations";
+import { scanExtraEquations } from "./editor/pigment-pills";
 
 export { resolveRel };
 
@@ -103,6 +104,53 @@ const mathBlockOf = (open: string, close: string) => function mathBlock(state: S
     return true;
   }
 };
+
+const ENV_OPEN_RE = /^\\begin\{(equation|align|gather|multline|eqnarray)(\*?)\}/;
+function mathEnvBlock(state: StateBlock, startLine: number, endLine: number, silent: boolean): boolean {
+  const src = state.src;
+  const lineStart = (l: number) => state.bMarks[l] + state.tShift[l];
+  if (state.sCount[startLine] - state.blkIndent >= 4) return false;
+  const firstSlice = src.slice(lineStart(startLine), state.eMarks[startLine]);
+  const env = ENV_OPEN_RE.exec(firstSlice);
+  if (!env) return false;
+  const close = `\\end{${env[1]}${env[2]}}`;
+  if (!displayClosed((a, b) => src.slice(a, b), src.length, lineStart(startLine) + env[0].length, close)) return false;
+  if (silent) return true;
+  let line = startLine;
+  let end = firstSlice.indexOf(close, env[0].length);
+  if (end >= 0) end += lineStart(startLine);
+  else {
+    for (line = startLine + 1; line < endLine; line++) {
+      const idx = src.indexOf(close, lineStart(line));
+      if (idx >= 0 && idx < state.eMarks[line]) { end = idx; break; }
+    }
+  }
+  line = Math.min(line, endLine - 1);
+  const parts: string[] = [];
+  for (let l = startLine; l <= line; l++) parts.push(src.slice(lineStart(l), state.eMarks[l]));
+  const t = state.push("math_block", "math", 0);
+  t.block = true;
+  t.content = parts.join("\n").trim();
+  t.map = [startLine, line + 1];
+  t.markup = env[0];
+  state.line = line + 1;
+  return true;
+}
+
+function eqrefInline(state: StateInline, silent: boolean): boolean {
+  const src = state.src, start = state.pos;
+  if (src.charCodeAt(start) !== 0x5c /* \ */ || src.slice(start, start + 7) !== "\\eqref{") return false;
+  const close = src.indexOf("}", start + 7);
+  if (close < 0 || close === start + 7) return false;
+  const id = src.slice(start + 7, close);
+  if (/[\n{}]/.test(id) || !id.trim()) return false;
+  if (!silent) {
+    const t = state.push("eqref", "", 0);
+    t.content = id.trim();
+  }
+  state.pos = close + 1;
+  return true;
+}
 
 // --- wikilinks [[t|a]], embeds ![[x]], highlight ==x==, #tags ------------------------------------
 function wikilink(state: StateInline, silent: boolean): boolean {
@@ -231,8 +279,28 @@ function callouts(state: StateCore): void {
 export interface MdEnv {
   /** directory of the note, for relative embeds */ dir?: string;
   /** the note's numbered equations (lib/equations.ts), filled by renderMarkdown */ equations?: Equations;
+  /** extra equations from standalone \begin{align|equation} blocks and \tag{label} */ extraEquations?: Map<string, { num: string; line: number }>;
 }
 const dirOf = (env: unknown): string | undefined => (env as MdEnv | undefined)?.dir;
+
+function resolveEqLabel(env: unknown, id: string): string | undefined {
+  const e = env as MdEnv | undefined;
+  const own = refOf(e?.equations, id);
+  if (own) return own;
+  const ext = e?.extraEquations?.get(id)?.num;
+  return ext ? `(${ext})` : undefined;
+}
+
+function replaceEqrefsInTex(tex: string, env: unknown): { tex: string; firstId: string | null } {
+  let firstId: string | null = null;
+  const out = tex.replace(/\\eqref\{([^}]+)\}/g, (_m, rawId: string) => {
+    const id = rawId.trim();
+    if (!firstId && id) firstId = id;
+    const label = resolveEqLabel(env, id) ?? `(${id})`;
+    return `\\text{${label}}`;
+  });
+  return { tex: out, firstId };
+}
 
 function build() {
   const md = new MarkdownIt({
@@ -253,9 +321,11 @@ function build() {
   });
   // indented code off, as in the editor (obsidian-syntax.js): tab-indented prose is text here
   md.disable("code");
+  md.inline.ruler.before("escape", "eqref", eqrefInline);
   md.inline.ruler.after("escape", "math_inline", mathInline);
   md.block.ruler.after("blockquote", "math_block", mathBlockOf("$$", "$$"), { alt: ["paragraph", "reference", "blockquote", "list"] });
   md.block.ruler.after("math_block", "math_block_tex", mathBlockOf("\\[", "\\]"), { alt: ["paragraph", "reference", "blockquote", "list"] });
+  md.block.ruler.after("math_block_tex", "math_block_env", mathEnvBlock, { alt: ["paragraph", "reference", "blockquote", "list"] });
   md.inline.ruler.before("link", "wikilink", wikilink);
   md.inline.ruler.before("emphasis", "mark", highlightMark);
   md.inline.ruler.push("hashtag", hashtag);
@@ -277,12 +347,34 @@ function build() {
     if (t[i].info.trim() === "view") return `<div class="view-block" data-src="${esc(t[i].content)}"><p class="view-loading">…</p></div>`;
     return defaultFence(t, i, o, env, self); // the Obsidian Ink blocks are a fence of their own (ink-fence.ts)
   };
-  r.math_inline = (t, i) => (t[i].info ? `<span class="math-glue">${mathToString(t[i].content, false)}${md.utils.escapeHtml(t[i].info)}</span>` : mathToString(t[i].content, false));
-  r.math_block = (t, i, _o, env) => {
-    const n = (env as MdEnv).equations?.byTex.get(texKey(t[i].content));
-    return `<div class="math-display">${mathToString(numberedTex(t[i].content, n), true)}</div>\n`;
+  r.eqref = (t, i, _o, env) => {
+    const id = t[i].content;
+    const label = resolveEqLabel(env, id) ?? `(${id})`;
+    return `<a class="internal-link eqref-link" data-href="#^${esc(id)}" data-eq="${esc(id)}" data-eqref="${esc(id)}" href="#">${esc(label)}</a>`;
   };
-  r.math_block_inline = (t, i) => `<span class="math-display">${mathToString(t[i].content, true)}</span>`;
+  r.math_inline = (t, i, _o, env) => {
+    const { tex, firstId } = replaceEqrefsInTex(t[i].content, env);
+    const rendered = mathToString(tex, false);
+    const core = firstId
+      ? `<a class="internal-link eqref-link" data-href="#^${esc(firstId)}" data-eq="${esc(firstId)}" data-eqref="${esc(firstId)}" href="#">${rendered}</a>`
+      : rendered;
+    return t[i].info ? `<span class="math-glue">${core}${md.utils.escapeHtml(t[i].info)}</span>` : core;
+  };
+  r.math_block = (t, i, _o, env) => {
+    const raw = t[i].content;
+    const lbl = /\\label\{([^}]+)\}/.exec(raw)?.[1]?.trim() ?? /\\tag\*?\{([^}]+)\}/.exec(raw)?.[1]?.trim();
+    const n = (env as MdEnv).equations?.byTex.get(texKey(raw)) ?? (lbl ? (env as MdEnv).extraEquations?.get(lbl)?.num : undefined);
+    const { tex } = replaceEqrefsInTex(numberedTex(raw, n && !/\\tag\*?\{/.test(raw) ? n : undefined), env);
+    // KaTeX requires `aligned` / `gathered` rather than top-level `align` / `gather` when unnumbered too
+    const compat = tex.replace(/\\(begin|end)\{(equation|align|gather|multline|eqnarray)(\*?)\}/g, (_m, be: string, name: string) =>
+      name === "equation" || name === "multline" ? "" : `\\${be}{${name === "align" || name === "eqnarray" ? "aligned" : "gathered"}}`);
+    const idAttr = lbl ? ` data-eq-id="${esc(lbl)}"` : "";
+    return `<div class="math-display"${idAttr}>${mathToString(compat, true)}</div>\n`;
+  };
+  r.math_block_inline = (t, i, _o, env) => {
+    const { tex } = replaceEqrefsInTex(t[i].content, env);
+    return `<span class="math-display">${mathToString(tex, true)}</span>`;
+  };
   r.wikilink = (t, i, _o, env) => {
     const { target, alias } = t[i].meta as { target: string; alias?: string };
     // a link to a numbered equation reads "(3)": this note's at once, another note's filled in by hydrate.ts
@@ -393,7 +485,7 @@ DOMPurify.addHook("uponSanitizeElement", (node, data) => {
   el.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
   el.setAttribute("loading", "lazy");
 });
-const PURIFY = { ADD_ATTR: ["data-src", "data-href", "data-target", "target", "allow", "allowfullscreen", "referrerpolicy", "loading"], ADD_TAGS: ["semantics", "annotation", "iframe"], FORBID_TAGS: ["style"] };
+const PURIFY = { ADD_ATTR: ["data-src", "data-href", "data-target", "data-eq", "data-eqref", "data-eq-id", "target", "allow", "allowfullscreen", "referrerpolicy", "loading"], ADD_TAGS: ["semantics", "annotation", "iframe"], FORBID_TAGS: ["style"] };
 
 /** Sanitized HTML for a raw HTML fragment written in a note (the editor's inline `<img>`, `<br>`). */
 export function sanitizeHtml(html: string, dir?: string): string {
@@ -408,7 +500,12 @@ export function renderInlineMarkdown(text: string): string {
 }
 
 export function renderMarkdown(text: string, env: MdEnv = {}): string {
-  if (!env.equations && (text.includes("$$") || text.includes("^"))) env = { ...env, equations: noteEquations(text) };
+  if (!env.equations && (text.includes("$$") || text.includes("^") || text.includes("\\begin{") || text.includes("\\eqref{") || text.includes("\\tag"))) {
+    const equations = noteEquations(text);
+    env = { ...env, equations, extraEquations: scanExtraEquations(text, equations.byId) };
+  } else if (env.equations && !env.extraEquations && (text.includes("\\begin{") || text.includes("\\tag"))) {
+    env = { ...env, extraEquations: scanExtraEquations(text, env.equations.byId) };
+  }
   const html = md.render(stripComments(text), env as Parameters<typeof md.render>[1]);
   purifyEnv = env;
   try { return DOMPurify.sanitize(html, PURIFY) as string; } finally { purifyEnv = {}; }

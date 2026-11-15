@@ -1,21 +1,21 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 
-// `atlas.live.join` (API 8, docs/guides/PLUGIN-API.md; REFACTOR-core-to-plugins.md A4): a plugin's two windows on one
+// `kandinsky.live.join` (API 8, docs/guides/PLUGIN-API.md; REFACTOR-core-to-plugins.md A4): a plugin's two windows on one
 // file's room hear each other, and exactly one of them is the room's writer.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
-const MAIN = `export function register(atlas) {
-  const room = atlas.live.join("notes/shared.md", { message: (from, m) => { document.body.dataset.heard = String(m.text); } });
+const MAIN = `export function register(kandinsky) {
+  const room = kandinsky.live.join("notes/shared.md", { message: (from, m) => { document.body.dataset.heard = String(m.text); } });
   window.__room = room;
-  window.__pen = atlas.pen;
+  window.__pen = kandinsky.pen;
 }
 `;
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/echo/plugin.toml", 'title = "Echo"\napi = 8\n');
-  await put(request, ".atlas/plugins/echo/main.js", MAIN);
+  await put(request, ".kandinsky/plugins/echo/plugin.toml", 'title = "Echo"\napi = 8\n');
+  await put(request, ".kandinsky/plugins/echo/main.js", MAIN);
 });
-test.afterAll(async ({ request }) => { await put(request, ".atlas/plugins/echo/main.js", "export function register() {}\n"); });
+test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/echo/main.js", "export function register() {}\n"); });
 
 test("a plugin's live room: a message from one window arrives in the other, one of them writes", async ({ browser }) => {
   const [a, b] = await Promise.all([browser.newPage(), browser.newPage()]);
@@ -40,7 +40,7 @@ test("a plugin asks the core's pen recogniser: a held circle comes back as a sha
     for (let i = 1; i <= 10; i++) xyt.push(280, 200, 720 + i * 70); // held still at the end
     return (await (window as unknown as { __pen: { shape(x: number[]): Promise<{ wire: number[] }> } }).__pen.shape(xyt)).wire;
   });
-  // the wire of an ellipse (atlas-pen shape.rs; lib/pen-shapes.ts wireToSkeleton): [3, cx, cy, width, height, angle]
+  // the wire of an ellipse (kandinsky-pen shape.rs; lib/pen-shapes.ts wireToSkeleton): [3, cx, cy, width, height, angle]
   expect(wire[0]).toBe(3);
   expect(Math.abs(wire[1] - 200) + Math.abs(wire[2] - 200)).toBeLessThan(10);
   expect(Math.abs(wire[3] - 160) + Math.abs(wire[4] - 160)).toBeLessThan(20);

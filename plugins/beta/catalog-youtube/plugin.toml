@@ -28,7 +28,7 @@ recognize = [
   { pattern = "(?i)youtu\\.be/([\\w-]{11})", kind = "video", id = "youtube" },
 ]
 sources = [{ kind = ["video", "song"], tool = "lookup", priority = 60, needs = ["youtube"] }]
-# the video and song kinds are the catalog's (engine/kinds/); a vault reshapes them with .atlas/kinds/<kind>.yaml
+# the video and song kinds are the catalog's (engine/kinds/); a vault reshapes them with .kandinsky/kinds/<kind>.yaml
 
 # where it runs (PLUGIN-API.md, "Platforms"); a platform not named is untested (Android: only with `phone = true`)
 [platforms]

@@ -2,31 +2,31 @@
 // editor's live preview (Bases, views, embeds, pictures, tables, math), compares its box with what it draws — empty
 // space at its bottom, and the gap to the next line beyond the usual margins. Prints the worst, by note.
 //
-//   ATLAS_PROBE_COPY=1 ATLAS_URL=<a core on a COPY> node scripts/dev/render-gaps.mjs [--dist ui/dist] [--notes 40] [--min 12]
+//   KANDINSKY_PROBE_COPY=1 KANDINSKY_URL=<a core on a COPY> node scripts/dev/render-gaps.mjs [--dist ui/dist] [--notes 40] [--min 12]
 import { resolve } from "node:path";
 import { readOnlyPage } from "./webkit-probe.mjs";
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : d; };
 const dist = opt("--dist"), nNotes = Number(opt("--notes", "40")), min = Number(opt("--min", "12"));
 const { browser, page } = await readOnlyPage({ dist: dist && resolve(dist), width: 1300, height: 900 });
-const files = await page.evaluate(async () => (await (await fetch("/api/files", { headers: { "x-atlas": "1" } })).json()));
+const files = await page.evaluate(async () => (await (await fetch("/api/files", { headers: { "x-kandinsky": "1" } })).json()));
 // notes that embed or draw something: read a sample, keep those with ![[ … ]], ```view / ```base or a base embed
 const candidates = [];
-for (const f of files.filter((x) => x.endsWith(".md") && !x.startsWith("mail/") && !x.startsWith(".atlas/"))) {
+for (const f of files.filter((x) => x.endsWith(".md") && !x.startsWith("mail/") && !x.startsWith(".kandinsky/"))) {
   if (candidates.length >= nNotes) break;
-  const t = await page.evaluate(async (p) => { const r = await fetch(`/api/file?path=${encodeURIComponent(p)}`, { headers: { "x-atlas": "1" } }); return r.ok ? (await r.json()).text : ""; }, f);
+  const t = await page.evaluate(async (p) => { const r = await fetch(`/api/file?path=${encodeURIComponent(p)}`, { headers: { "x-kandinsky": "1" } }); return r.ok ? (await r.json()).text : ""; }, f);
   if (/!\[\[|```(view|base|dataview)|\$\$/.test(t)) candidates.push(f);
 }
 console.log(`[gaps] ${candidates.length} notes with rendered blocks`);
 const rows = [];
 for (const note of candidates) {
-  await page.evaluate((p) => window.__atlas.open(p), note);
+  await page.evaluate((p) => window.__kandinsky.open(p), note);
   await page.waitForTimeout(2500); // embeds, Bases, pictures
   const found = await page.evaluate((min) => {
     const ed = [...document.querySelectorAll(".cm-editor")].find((e) => e.offsetParent);
     if (!ed) return [];
     const out = [];
-    const kind = (b) => b.querySelector(".base, .base-embed") ? "base" : b.querySelector(".pdf-embed, .atlas-pane-pdf") ? "pdf" : b.querySelector(".view-block") ? "view" : b.querySelector(".note-embed") ? "note-embed" : b.querySelector("img") ? "image" : b.querySelector("table") ? "table" : b.querySelector(".katex-display") ? "math" : "block";
+    const kind = (b) => b.querySelector(".base, .base-embed") ? "base" : b.querySelector(".pdf-embed, .kandinsky-pane-pdf") ? "pdf" : b.querySelector(".view-block") ? "view" : b.querySelector(".note-embed") ? "note-embed" : b.querySelector("img") ? "image" : b.querySelector("table") ? "table" : b.querySelector(".katex-display") ? "math" : "block";
     for (const b of ed.querySelectorAll(".cm-rendered-block, .cm-embed-image-host")) {
       const box = b.getBoundingClientRect();
       if (!box.height) continue;

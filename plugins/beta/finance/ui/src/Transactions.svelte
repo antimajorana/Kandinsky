@@ -5,8 +5,8 @@
   import { kind, matcher, net, sideName, sides, type Row } from "./model";
   import Editor from "./Editor.svelte";
 
-  let { atlas, rows, accounts, cur, query = $bindable(""), open = $bindable<Row | "new" | null>(null), onchange }: {
-    atlas: PluginApi; rows: Row[]; accounts: string[]; cur: string; query?: string; open?: Row | "new" | null; onchange: () => void;
+  let { kandinsky, rows, accounts, cur, query = $bindable(""), open = $bindable<Row | "new" | null>(null), onchange }: {
+    kandinsky: PluginApi; rows: Row[]; accounts: string[]; cur: string; query?: string; open?: Row | "new" | null; onchange: () => void;
   } = $props();
 
   const KINDS = [["all", "All"], ["spend", "Spending"], ["income", "Income"], ["transfer", "Transfers"]] as const;
@@ -55,7 +55,7 @@
       <div class="seg" role="radiogroup" aria-label="Kind">
         {#each KINDS as [k, name] (k)}<button role="radio" aria-checked={only === k} class:on={only === k} onclick={() => (only = k)}>{name}</button>{/each}
       </div>
-      <button class="atlas-btn primary" onclick={() => (open = "new")} title="n">New…</button>
+      <button class="kandinsky-btn primary" onclick={() => (open = "new")} title="n">New…</button>
     </div>
     <p class="count">
       <b>{found.length.toLocaleString()}</b> {found.length === 1 ? "transaction" : "transactions"}{#if query || only !== "all"} · net {money(total, cur, { sign: true })}{/if}
@@ -78,15 +78,15 @@
           <span class="amt" class:in={k !== "transfer" && net(t) > 0} class:moved={k === "transfer"}>{k === "transfer" ? "⇄ " : ""}{money(net(t), cur, { sign: k !== "transfer" })}</span>
         </button>
       {:else}
-        <div class="atlas-empty">{rows.length ? "Nothing matches. Try fewer words, or clear the search." : "No transactions yet: import a statement (Overview) or add one with New…"}</div>
+        <div class="kandinsky-empty">{rows.length ? "Nothing matches. Try fewer words, or clear the search." : "No transactions yet: import a statement (Overview) or add one with New…"}</div>
       {/each}
-      {#if found.length > shown}<button class="atlas-btn more" onclick={() => (shown += 400)}>Show {Math.min(400, found.length - shown)} more of {found.length - shown}</button>{/if}
+      {#if found.length > shown}<button class="kandinsky-btn more" onclick={() => (shown += 400)}>Show {Math.min(400, found.length - shown)} more of {found.length - shown}</button>{/if}
     </div>
   </section>
 
   {#if open}
     {#key open === "new" ? "new" : open.path + ":" + open.line + open.text}
-      <Editor {atlas} txn={open === "new" ? null : open} {accounts} {payees} onclose={() => (open = null)} onsaved={() => { open = null; onchange(); }} />
+      <Editor {kandinsky} txn={open === "new" ? null : open} {accounts} {payees} onclose={() => (open = null)} onsaved={() => { open = null; onchange(); }} />
     {/key}
   {/if}
 </div>

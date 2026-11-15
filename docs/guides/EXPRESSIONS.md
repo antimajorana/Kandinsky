@@ -59,7 +59,7 @@ A line `key:: value` (alone, or as a list item) is a property of the section it 
 
 ## Trust
 
-An expression is code of your own vault, like a plugin or `.atlas/init.js` — it runs because it is in a note you opened. The containment is for accidents and pasted notes, not a security boundary against a determined author:
+An expression is code of your own vault, like a plugin or `.kandinsky/init.js` — it runs because it is in a note you opened. The containment is for accidents and pasted notes, not a security boundary against a determined author:
 
 - it runs in a **web worker**: it cannot touch the page, the editor, or the app's state, and cannot freeze the app (3 s limit, then the worker is replaced);
 - the worker's `fetch`, `XMLHttpRequest`, `WebSocket`, `importScripts`, storage and `navigator` are removed before any expression runs, and `import(…)` is refused;

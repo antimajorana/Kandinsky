@@ -1,12 +1,12 @@
 // Where the caret is, for whatever types differently in math: math, text or code, and which math. The core's, as
-// note completion and the LaTeX symbols ask it too; a plugin asks through `atlas.editor.place`.
+// note completion and the LaTeX symbols ask it too; a plugin asks through `kandinsky.editor.place`.
 import type { EditorState } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
 
 /** Heuristic scan up to the caret: `$`/`$$`/`\(`/`\[`, fences skipped; an unclosed `$` counts as math, as it is while
  *  a formula is being typed. */
 export function mathMode(text: string, pos: number): "display" | "inline" | null {
-  let inline = false, display = false, code = false, i = 0;
+  let inline = false, display = false, code = false, env = 0, i = 0;
   while (i < pos) {
     if (i === 0 || text[i - 1] === "\n") {
       const fence = /^([`~]{3,})[^\n]*\n?/.exec(text.slice(i, i + 200));
@@ -19,9 +19,14 @@ export function mathMode(text: string, pos: number): "display" | "inline" | null
       }
     }
     const c = text[i];
-    if (c === "\\") {
+    if (!code && c === "\\") {
       const n = text[i + 1];
-      if (n === "(") inline = true; else if (n === ")") inline = false; else if (n === "[") display = true; else if (n === "]") display = false;
+      if (n === "(") { inline = true; i += 2; continue; }
+      if (n === ")") { inline = false; i += 2; continue; }
+      if (n === "[") { display = true; i += 2; continue; }
+      if (n === "]") { display = false; i += 2; continue; }
+      const m = /^\\(begin|end)\{([^}]*)\}/.exec(text.slice(i, i + 40));
+      if (m && MATH_ENV.test(m[2])) { env = Math.max(0, env + (m[1] === "begin" ? 1 : -1)); i += m[0].length; continue; }
       i += 2; continue;
     }
     if (c === "`") { code = !code; i++; continue; }
@@ -31,7 +36,7 @@ export function mathMode(text: string, pos: number): "display" | "inline" | null
     }
     i++;
   }
-  return display ? "display" : inline ? "inline" : null;
+  return display || env > 0 ? "display" : inline ? "inline" : null;
 }
 
 const MATH_ENV = /^(equation|align|alignat|gather|multline|flalign|eqnarray|math|displaymath|dmath)\*?$/;

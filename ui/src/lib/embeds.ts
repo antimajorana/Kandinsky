@@ -145,7 +145,7 @@ async function drawRegistered(el: HTMLElement, by: Embed, path: string, anchor: 
   el.classList.add("registered-embed");
   el.replaceChildren();
   const fail = (e: unknown) => {
-    if (by.owner !== "core") logPlugin(by.owner, `embed ${path}`, e); else console.error("[atlas] embed", path, e);
+    if (by.owner !== "core") logPlugin(by.owner, `embed ${path}`, e); else console.error("[kandinsky] embed", path, e);
     el.replaceChildren(Object.assign(document.createElement("p"), { className: "view-error", textContent: `${path.split("/").pop()}: ${errText(e)}` }));
   };
   try {

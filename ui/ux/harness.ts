@@ -1,12 +1,12 @@
 // UX audit harness: a journey is a user goal split into named steps. Each step is timed, counts the
 // keys and clicks it cost, is screenshotted, and runs a page audit (layout, contrast, labels, errors).
-// A failing step does not end the journey — it is recorded (`broken` for a feature Atlas has,
-// `missing` for one a user would expect but Atlas lacks), so one run yields the whole gap list.
+// A failing step does not end the journey — it is recorded (`broken` for a feature Kandinsky has,
+// `missing` for one a user would expect but Kandinsky lacks), so one run yields the whole gap list.
 import { test, type Locator, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const OUT = process.env.ATLAS_UX_OUT ?? join(process.cwd(), "ux-report");
+export const OUT = process.env.KANDINSKY_UX_OUT ?? join(process.cwd(), "ux-report");
 
 export type Status = "ok" | "slow" | "broken" | "missing" | "present" | "skipped";
 export interface Finding { rule: string; target: string; detail: string }
@@ -38,7 +38,7 @@ export class User {
 
   /** Pane kinds open right now, as the UI reports them to the core (`/api/ui/state`). */
   async trackKinds() {
-    const st = await this.page.request.get("/api/ui/state", { headers: { "x-atlas": "1" } }).then((r) => r.json()).catch(() => null);
+    const st = await this.page.request.get("/api/ui/state", { headers: { "x-kandinsky": "1" } }).then((r) => r.json()).catch(() => null);
     for (const p of [...(st?.open ?? []), ...(st?.active ? [st.active] : [])]) if (!this.result.kinds.includes(p.kind)) this.result.kinds.push(p.kind);
   }
 
@@ -73,7 +73,7 @@ export class User {
 
   /**
    * One user-visible step. `budget` (ms) is how long it may take before it counts as slow;
-   * `want: true` marks a feature a user would expect that Atlas may not have yet.
+   * `want: true` marks a feature a user would expect that Kandinsky may not have yet.
    */
   async step(name: string, opts: { budget?: number; want?: boolean; why?: string }, fn: () => Promise<void>) {
     const budget = opts.budget ?? 1000;
@@ -85,7 +85,7 @@ export class User {
       // eslint-disable-next-line no-control-regex -- Playwright colours its messages
       error = String(e instanceof Error ? e.message : e).replace(/\u001b\[[0-9;]*m/g, "").split("\n").find((l) => l.trim()) ?? "failed";
     }
-    const ms = Date.now() - t0 - (this.typingMs - typed0); // time spent waiting on Atlas
+    const ms = Date.now() - t0 - (this.typingMs - typed0); // time spent waiting on Kandinsky
     await this.page.waitForTimeout(150); // let the frame settle before judging it
     const findings = await this.page.evaluate(audit).catch(() => [] as Finding[]);
     await this.trackKinds();

@@ -3,10 +3,10 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { WS } from "../playwright.config";
 
-// Note triage (lib/note-triage.ts): the command writes `.atlas/note-triage.base` once — never over the owner's — and
+// Note triage (lib/note-triage.ts): the command writes `.kandinsky/note-triage.base` once — never over the owner's — and
 // opens it; its views list the vault's own notes that wait for a decision, never mail, logs or references.
-const H = { "x-atlas": "1" };
-const BASE = ".atlas/note-triage.base";
+const H = { "x-kandinsky": "1" };
+const BASE = ".kandinsky/note-triage.base";
 const put = (request: APIRequestContext, path: string, text: string) => request.put("/api/file", { headers: H, data: { path, text } });
 
 test.describe.configure({ mode: "serial" });

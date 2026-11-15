@@ -5,11 +5,11 @@ const { decompressFromBase64 } = lz; // CommonJS module
 
 // Rendering regressions, each a shape taken from the user's real Obsidian notes (see
 // docs/guides/MD-RENDERING.md). Fixtures are written through the API so no other test's files change.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAIAAABxZ0isAAAAEUlEQVR4nGNocFDAihgGUgIAYUoqARogppwAAAAASUVORK5CYII=", "base64");
 const NOTES: Record<string, string> = {
   // a daily note whose title "2026-10-15" was drawn twice (file name and heading)
-  "mdr/2026-10-15.md": "---\ntags: [daily]\n---\n\n# 2026-10-15\n\n- [ ] something\n\n<!-- atlas:no-tasks -->\n",
+  "mdr/2026-10-15.md": "---\ntags: [daily]\n---\n\n# 2026-10-15\n\n- [ ] something\n\n<!-- kandinsky:no-tasks -->\n",
   "mdr/Kondo model.md": "# The *Kondo* model\n\ntext\n",
   // Internship Porto: the closer mid-line, prose after it; every later formula used to desync
   "mdr/midline.md": "Intro\n$$\n\\ket{e} = \\sum_i \\psi_i\n$$which in space representation look like\n$$\ny = 1\n$$\nWhere $\\phi_{0}$ and $\\phi_{e}$ are orbitals.\n",
@@ -32,7 +32,7 @@ const NOTES: Record<string, string> = {
   "mdr/drawn.md": "A sketch\n\n![[mdr-sketch.excalidraw|center]]\n\nAfter.\n",
   // a notebook's page: `#Page 2` embeds that frame only
   "mdr/paged.md": "Lecture\n\n![[mdr-book.excalidraw#Page 2]]\n\nAfter.\n",
-  "attachments/mdr-book.excalidraw": "{\"type\": \"excalidraw\", \"version\": 2, \"source\": \"atlas-test\", \"elements\": [{\"id\": \"p1\", \"type\": \"frame\", \"x\": 0, \"y\": 0, \"width\": 794, \"height\": 1123, \"name\": \"Page 1\"}, {\"id\": \"p2\", \"type\": \"frame\", \"x\": 0, \"y\": 1171, \"width\": 794, \"height\": 1123, \"name\": \"Page 2\"}, {\"id\": \"r1\", \"type\": \"rectangle\", \"x\": 100, \"y\": 100, \"width\": 200, \"height\": 100, \"frameId\": \"p1\"}, {\"id\": \"e2\", \"type\": \"ellipse\", \"x\": 100, \"y\": 1300, \"width\": 300, \"height\": 150, \"frameId\": \"p2\"}], \"appState\": {}, \"files\": {}}",
+  "attachments/mdr-book.excalidraw": "{\"type\": \"excalidraw\", \"version\": 2, \"source\": \"kandinsky-test\", \"elements\": [{\"id\": \"p1\", \"type\": \"frame\", \"x\": 0, \"y\": 0, \"width\": 794, \"height\": 1123, \"name\": \"Page 1\"}, {\"id\": \"p2\", \"type\": \"frame\", \"x\": 0, \"y\": 1171, \"width\": 794, \"height\": 1123, \"name\": \"Page 2\"}, {\"id\": \"r1\", \"type\": \"rectangle\", \"x\": 100, \"y\": 100, \"width\": 200, \"height\": 100, \"frameId\": \"p1\"}, {\"id\": \"e2\", \"type\": \"ellipse\", \"x\": 100, \"y\": 1300, \"width\": 300, \"height\": 150, \"frameId\": \"p2\"}], \"appState\": {}, \"files\": {}}",
   "attachments/mdr-sketch.excalidraw.md": "---\nexcalidraw-plugin: parsed\n---\n# Excalidraw Data\n## Drawing\n```compressed-json\nN4IgLgngDgpiBcIYA8DGBDANgSwCYCd0B3EAGhADcZ8BnbAewDsEAmcmTGAWxkbBoQBtUHgQh8ARjLhocRPhiow6RgHNO05AgAM5CDvJE8YABattukCZjZVJsAgkXyK9XMs0w+egGsYAYXpMenwxAGIJGEjI6QAjdFQfVW8AV0ZcQODQxC8VGih0BT5pADNsTEwAZUgNRBog0XJPbz8AdWMzeDYQZt8YaohanobcaVS7RhgaAXgJcnoC1GxIR2cQZPoUqABJXBnBAF1yEsIeXYRGFIryVPTJ6YurzCaYGFHZ8ipaBmYPymo6EwAHJMVByOYgbA0AAiHBgYDeCBKWBoMHIsU26QAopweHwZpdriAtrh0Aj3hCcIwfI8icFEoj4MjMKiAL5HEDoKBQapkuSgCjYGBEABCCSStwyQRC4RKcvlIFZx3KUwQwFZrKAA==\n```\n%%\n",
   // Obsidian Ink plugin: a pointer to a .drawing file that is not here
   "mdr/ink.md": "Intro\n\n```handdrawn-ink\n{\n  \"versionAtEmbed\": \"0.3.4\",\n  \"filepath\": \"files/Ink/Drawing/2025.4.3 - 9.16am.drawing\"\n}\n```\n\nAfter.\n",

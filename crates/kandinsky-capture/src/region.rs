@@ -77,7 +77,7 @@ impl InputRegion {
         self.surface.set_input_region(Some(&region));
         region.destroy();
         if let Err(e) = self.conn.flush() {
-            eprintln!("atlas-capture: input region not sent: {e}");
+            eprintln!("kandinsky-capture: input region not sent: {e}");
         }
         self.last = r;
     }

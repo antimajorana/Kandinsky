@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { textPdf } from "./fixtures/pdf";
 
 // The PDF pane's toolbar and keys (panes/Pdf.svelte): the page box, the find bar, keys after the find bar closes.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const DIR = "pdf-ux-test";
 const PATH = `${DIR}/ux.pdf`;
 const PAGES = [["The quantum dot model", "quantum again"], ["A second page of quantum text"], ["The last page"]];
@@ -21,7 +21,7 @@ test.afterAll(async ({ request }) => {
 async function openPdf(page: Page) {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("atlas.pdf")) localStorage.removeItem(k); });
+  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("kandinsky.pdf")) localStorage.removeItem(k); });
   await page.request.post("/api/cmd/open", { headers: H, data: { args: { path: PATH } } });
   const pane = page.locator(".pdf-pane").last();
   await expect(pane.locator(".pager .faint")).toHaveText("/ 3", { timeout: 20000 });
@@ -95,7 +95,7 @@ test("the picked mark's bar follows its mark when the page is zoomed", async ({ 
   const id = "m-uxzoom01";
   await page.request.post(`/api/pdf-marks?pdf=${encodeURIComponent(PATH)}`, { headers: H, data: [{ op: "put", mark: { id, page: 1, version: 1, color: "#FFE066", kind: "highlight", quads: [[72, 696, 250, 716]] } }] });
   const pane = await openPdf(page);
-  const hl = pane.locator(`.page[data-page-number="1"] svg.atlas-marks [data-mark="${id}"]`);
+  const hl = pane.locator(`.page[data-page-number="1"] svg.kandinsky-marks [data-mark="${id}"]`);
   await expect(hl).toBeAttached({ timeout: 20000 });
   const c = (await hl.boundingBox())!;
   await page.mouse.click(c.x + c.width / 2, c.y + c.height / 2);
@@ -192,8 +192,8 @@ test("the Marks list: a click picks its mark and points it out; a filter whose l
   await pane.locator(".toolbar").getByRole("button", { name: "Marks", exact: true }).click();
   const list = pane.getByRole("navigation", { name: "Marks" });
   await list.locator('.mark[data-kind="highlight"]').click();
-  const drawn = pane.locator(`svg.atlas-marks [data-mark="${hl}"]`);
-  await expect(drawn).toHaveClass(/atlas-flash-mark/);
+  const drawn = pane.locator(`svg.kandinsky-marks [data-mark="${hl}"]`);
+  await expect(drawn).toHaveClass(/kandinsky-flash-mark/);
   await expect(drawn).toBeInViewport();
   await expect(pane.getByTestId("pdf-mark-bar")).toContainText("Highlight");
   // filtered to the stamps, then the only stamp deleted: the list shows every mark again

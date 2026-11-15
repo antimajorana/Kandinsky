@@ -380,7 +380,7 @@ pub mod tests_support {
             Arc::new(|_: &str, _: &[(&str, &str)]| Err("no network in tests".to_string())),
             Box::new(move |n: &str, d: Value| ev.lock().unwrap().push((n.to_string(), d))),
         );
-        m.set_core(Arc::new(|path: &str, _: &Value| Err(format!("no Atlas in tests: {path}"))));
+        m.set_core(Arc::new(|path: &str, _: &Value| Err(format!("no Kandinsky in tests: {path}"))));
         m.remember(&json!({
             "settings": { "accounts": [{ "name": "fake", "user": crate::fake::USER, "from": "Me <me@example.org>", "imap_host": "127.0.0.1", "imap_port": server.imap_port, "smtp_host": "127.0.0.1", "smtp_port": server.smtp_port, "security": "none" }] },
             "secrets": { "accounts.fake.password": crate::fake::PASSWORD }

@@ -70,7 +70,7 @@ Linux works; the others are untested.
 
 ## Status
 
-Beta. `cargo test -p atlas-finance` covers the engine (parsing, booking, checks, imports, the hledger export compared
+Beta. `cargo test -p kandinsky-finance` covers the engine (parsing, booking, checks, imports, the hledger export compared
 balance by balance when hledger is installed). Missing for stable: an end-to-end spec, journal and archive writes
-through Atlas's API (they are written to disk directly), currency defaults that do not assume a country, and a 1.0
+through Kandinsky's API (they are written to disk directly), currency defaults that do not assume a country, and a 1.0
 version.

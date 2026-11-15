@@ -1,6 +1,6 @@
 // Vaults (docs/guides/SHELL.md): the folders the user works in, like Obsidian's. Each opens in a window of
-// its own with its own `.atlas/` (settings, plugins, pages, workspaces), so vaults share nothing
-// but the app. The list lives in ~/.config/atlas/vaults.toml (core vaults.rs).
+// its own with its own `.kandinsky/` (settings, plugins, pages, workspaces), so vaults share nothing
+// but the app. The list lives in ~/.config/kandinsky/vaults.toml (core vaults.rs).
 import { errText } from "./text";
 import type { Action } from "./actions";
 import { api, apiBase, ApiError, ownCore } from "./api";
@@ -81,7 +81,7 @@ function askFolderTyped(purpose: Purpose): void {
 /** Asks for a server's address, then opens that vault in a window on its page (the sign-in in front happens there). */
 function askServer(): void {
   setTimeout(() => pick({
-    placeholder: "The server's address — its vault's, or the server's own (https://atlas.example.org/v/notes/)…",
+    placeholder: "The server's address — its vault's, or the server's own (https://kandinsky.example.org/v/notes/)…",
     tag: "Server", icon: "server", items: [],
     typed: (t) => (/^https?:\/\/\S+$/.test(t.trim()) ? `Connect to ${t.trim()}` : "An address starting with https://"),
     onpick: (v, isNew) => { if (isNew && /^https?:\/\/\S+$/.test(v.trim())) void openVault(v.trim()); },
@@ -139,7 +139,7 @@ export async function vaultListing(): Promise<VaultListing> {
     if (mirrors.has(slash(address))) continue;
     entries.push({ name: v.name, path: address, kind: "server", current: slash(address) === here, missing: false, warm: false, managed: false, go: () => { location.href = throughBridge(address); } });
   }
-  // a vault served by `atlas serve` is on no list: this window's vault is shown all the same
+  // a vault served by `kandinsky serve` is on no list: this window's vault is shown all the same
   if (!remote && !entries.some((e) => e.current)) {
     entries.push({ name: l.current.split(/[\\/]/).filter(Boolean).pop() ?? l.current, path: l.current, kind: "folder", current: true, missing: false, warm: true, managed: false, go: () => {} });
   }

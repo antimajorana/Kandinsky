@@ -473,7 +473,7 @@ fn unsnooze(m: &Arc<Mail>, p: &Value) -> Result<Value, String> {
     for id in &ids {
         if let Some(x) = m.index.msg(*id) {
             for l in x.labels.iter().chain(m.index.flags_of_folder(&x.account, &x.folder).iter().filter(|(i, _)| i == id).flat_map(|(_, f)| f.split_whitespace().map(String::from).collect::<Vec<_>>()).collect::<Vec<_>>().iter()) {
-                if l.starts_with("$atlas-snooze-") {
+                if ops::is_snooze_keyword(l) {
                     let _ = m.rt.block_on(ops::flag(m, &[*id], l, false));
                 }
             }
@@ -493,7 +493,7 @@ fn undo(m: &Arc<Mail>, p: &Value) -> Result<Value, String> {
         if let Some(x) = m.index.msg(mv.id) {
             for (i, f) in m.index.flags_of_folder(&x.account, &x.folder) {
                 if i == mv.id {
-                    for k in f.split_whitespace().filter(|k| k.starts_with("$atlas-snooze-")) {
+                    for k in f.split_whitespace().filter(|k| ops::is_snooze_keyword(k)) {
                         let _ = m.rt.block_on(ops::flag(m, &[mv.id], k, false));
                     }
                 }
@@ -508,7 +508,7 @@ fn label(m: &Arc<Mail>, p: &Value) -> Result<Value, String> {
     Ok(json!({ "ok": true }))
 }
 
-/// One attachment: written to the plugin's cache (to open in Atlas), or into a vault folder (`to`) → its vault path.
+/// One attachment: written to the plugin's cache (to open in Kandinsky), or into a vault folder (`to`) → its vault path.
 fn attachment(m: &Arc<Mail>, p: &Value) -> Result<Value, String> {
     let id = p.get("id").and_then(Value::as_i64).ok_or("which message?")?;
     let part = p.get("part").and_then(Value::as_u64).ok_or("which file?")? as u32;
@@ -532,7 +532,7 @@ fn attachment(m: &Arc<Mail>, p: &Value) -> Result<Value, String> {
     };
     // into the vault never over a file; the cache's copy is replaced
     let fname = if s(p, "to").is_empty() { fname } else { crate::notes::free_name(&dir, &fname) };
-    atlas_plugin::write_file(dir.join(&fname), &bytes).map_err(|e| e.to_string())?; // the cache's straight to disk
+    kandinsky_plugin::write_file(dir.join(&fname), &bytes).map_err(|e| e.to_string())?; // the cache's straight to disk
     let path = if rel_base.is_empty() { fname } else { format!("{rel_base}/{fname}") };
     Ok(json!({ "path": path, "mime": mime, "size": bytes.len() }))
 }
@@ -686,7 +686,7 @@ fn templates(m: &Arc<Mail>, _p: &Value) -> Result<Value, String> {
 
 fn front(text: &str) -> (HashMap<String, String>, String) {
     let mut props = HashMap::new();
-    if let (Some(yaml), body) = atlas_text::frontmatter::split(text) {
+    if let (Some(yaml), body) = kandinsky_text::frontmatter::split(text) {
         for line in yaml.lines() {
             if let Some((k, v)) = line.split_once(':') {
                 props.insert(k.trim().to_string(), v.trim().trim_matches('"').to_string());
@@ -705,7 +705,7 @@ fn unsubscribe(m: &Arc<Mail>, p: &Value) -> Result<Value, String> {
     if u["one_click"].as_bool() == Some(true) {
         if let Some(url) = u["url"].as_str() {
             let req = json!({ "url": url, "method": "POST", "headers": { "content-type": "application/x-www-form-urlencoded" }, "body": "List-Unsubscribe=One-Click", "timeout_secs": 30 });
-            let r = atlas_plugin::Atlas::new().post("/api/plugins/email/fetch", &req).map_err(|e| e.to_string())?;
+            let r = kandinsky_plugin::Kandinsky::new().post("/api/plugins/email/fetch", &req).map_err(|e| e.to_string())?;
             if r["ok"].as_bool() == Some(true) {
                 return Ok(json!({ "done": "one-click" }));
             }
@@ -910,7 +910,7 @@ fn test_account(m: &Arc<Mail>, p: &Value) -> Result<Value, String> {
     })
 }
 
-/// "Open the Microsoft page again": the user's browser, never a window of Atlas (only Microsoft's pages).
+/// "Open the Microsoft page again": the user's browser, never a window of Kandinsky (only Microsoft's pages).
 fn signin_reopen(_: &Arc<Mail>, p: &Value) -> Result<Value, String> {
     let url = s(p, "url");
     let microsoft = ["https://login.microsoftonline.com/", "https://microsoft.com/", "https://www.microsoft.com/"].iter().any(|h| url.starts_with(h));
@@ -938,7 +938,7 @@ fn rename_account(m: &Arc<Mail>, p: &Value) -> Result<Value, String> {
     m.watching.lock().unwrap().remove(from);
     let base = m.root.join(crate::rules::folder(m));
     let (a, b) = (base.join(crate::notes::note_name(from)), base.join(crate::notes::note_name(to)));
-    let moved = a.is_dir() && !b.exists() && atlas_plugin::move_path(&a, &b).is_ok();
+    let moved = a.is_dir() && !b.exists() && kandinsky_plugin::move_path(&a, &b).is_ok();
     Ok(json!({ "moved": moved }))
 }
 
@@ -981,7 +981,7 @@ fn consent(m: &Mail, account: &str, what: &str) -> Result<crate::account::Accoun
         crate::account::Consent::Ask => {}
     }
     let Some(allow) = ask_page(m, "consent", json!({ "account": acc.name, "user": acc.user, "what": what }), ASK_SECONDS) else {
-        return Err(format!("no answer in Atlas within {ASK_SECONDS} s (the question was closed, or no Atlas window is open) — the user can allow it on {}'s card", acc.name));
+        return Err(format!("no answer in Kandinsky within {ASK_SECONDS} s (the question was closed, or no Kandinsky window is open) — the user can allow it on {}'s card", acc.name));
     };
     if allow != "once" && allow != "always" {
         return Err(format!("the user said no to Claude reading {}", acc.name));
@@ -1011,8 +1011,8 @@ fn agent_open(m: &Arc<Mail>, p: &Value) -> Result<Value, String> {
     let x = find_msg(m, &acc.name, p)?;
     match ask_page(m, "open", json!({ "message": x.id }), OPEN_SECONDS).as_deref() {
         Some("opened") => Ok(json!({ "opened": x.subject, "account": acc.name, "uid": x.uid.to_string() })),
-        Some(_) => Err("the Atlas window could not show the message".into()),
-        None => Err("no Atlas window showed the message: is Atlas open on this vault, with the Email plugin on?".into()),
+        Some(_) => Err("the Kandinsky window could not show the message".into()),
+        None => Err("no Kandinsky window showed the message: is Kandinsky open on this vault, with the Email plugin on?".into()),
     }
 }
 

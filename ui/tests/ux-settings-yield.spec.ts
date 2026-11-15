@@ -3,7 +3,7 @@ import { textPdf } from "./fixtures/pdf";
 
 // A pane that keeps a key of its own (`yieldTo`: the PDF's Ctrl+=) keeps it while the focus sits on the dock's
 // wrapper around it, not only on something inside it.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const DIR = "ux-yield-test", PATH = `${DIR}/y.pdf`;
 
 test.beforeAll(async ({ request }) => {

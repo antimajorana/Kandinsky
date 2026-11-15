@@ -1,8 +1,9 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.graphics.RectF;
 
-import org.atlas.capture.Host;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.Legacy;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -56,6 +57,7 @@ final class Scene {
         try { scene = new JSONObject(text == null || text.isEmpty() ? "{}" : text); } catch (JSONException e) { scene = new JSONObject(); }
         files = scene.optJSONObject("files") != null ? scene.optJSONObject("files") : new JSONObject();
         JSONArray els = scene.optJSONArray("elements");
+        Legacy.currentKeys(els); // a drawing from before the rename (`atlasPage`, `atlasTemplate`…) reads the same
         for (int i = 0; els != null && i < els.length(); i++) {
             JSONObject e = els.optJSONObject(i);
             if (e != null) seen.put(e.optString("id"), e);
@@ -337,7 +339,7 @@ final class Scene {
         }
         for (JSONObject p : frames.values()) els.put(p); // frames before what they hold, as Excalidraw orders them
         for (JSONObject it : items.values()) els.put(it);
-        if (!scene.has("type")) scene.put("type", "excalidraw").put("version", 2).put("source", "atlas (notepad)").put("files", new JSONObject())
+        if (!scene.has("type")) scene.put("type", "excalidraw").put("version", 2).put("source", "kandinsky (notepad)").put("files", new JSONObject())
             .put("appState", new JSONObject().put("viewBackgroundColor", "#ffffff"));
         scene.put("elements", els);
         if (!c.files.isEmpty()) {

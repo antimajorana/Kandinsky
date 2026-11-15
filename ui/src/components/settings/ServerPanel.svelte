@@ -1,7 +1,7 @@
 <script lang="ts">
-  // Settings → Server (docs/guides/SERVER.md): how a served Atlas lets people in. On a serving Atlas it changes the running
+  // Settings → Server (docs/guides/SERVER.md): how a served Kandinsky lets people in. On a serving Kandinsky it changes the running
   // server (the password and tokens at once, the options when it starts again); on the desktop it prepares the files
-  // `atlas serve --listen` starts from. Nothing here lives in the vault.
+  // `kandinsky serve --listen` starts from. Nothing here lives in the vault.
   import { errText, errReason } from "../../lib/text";
   import { onMount } from "svelte";
   import { api } from "../../lib/api";
@@ -37,7 +37,7 @@
   async function saveOptions(): Promise<void> {
     try {
       await api.serverOptions({ auth: mode, trustedProxies: proxies.split(/[\s,]+/).filter(Boolean), remoteUserHeader: header, allowPlainHttp: plain, mcp });
-      optsMsg = st?.serving ? "Saved. The server uses them once it starts again." : "Saved: used by `atlas serve --listen`.";
+      optsMsg = st?.serving ? "Saved. The server uses them once it starts again." : "Saved: used by `kandinsky serve --listen`.";
       await load();
     } catch (e) { optsMsg = why(e); }
   }
@@ -73,7 +73,7 @@
       <p class="desc">Serving this vault to the network on port {st.port}. You are signed in {me?.via === "proxy" ? `by your proxy as ${me.user}` : me?.via === "token" ? `with the token “${me.device}”` : "with the password"}.</p>
       {#if me?.signOut}<button class="btn" onclick={() => void api.signOut().then(() => location.assign("/login"))}>Sign out of this browser</button>{/if}
     {:else}
-      <p class="desc">Not serving to the network (the desktop listens on this machine only, with no sign-in). To serve a vault from a server: <code>atlas serve --listen 0.0.0.0:7700</code>. What you set below is what it starts with; it is kept in <code>{st.files.settings}</code>, never in the vault.</p>
+      <p class="desc">Not serving to the network (the desktop listens on this machine only, with no sign-in). To serve a vault from a server: <code>kandinsky serve --listen 0.0.0.0:7700</code>. What you set below is what it starts with; it is kept in <code>{st.files.settings}</code>, never in the vault.</p>
     {/if}
     {#if st.notReady}<p class="warn">Not ready to serve: {st.notReady}.</p>{/if}
 
@@ -88,7 +88,7 @@
       <label class="row"><span>User header</span><input bind:value={header} aria-label="User header" /></label>
     {/if}
     <label class="check"><input type="checkbox" bind:checked={plain} /> Allow the password over plain HTTP from other machines <span class="muted">(only on a network you trust: a LAN or VPN)</span></label>
-    <label class="check"><input type="checkbox" bind:checked={mcp} /> Let AI agents in (<code>atlas mcp</code>) <span class="muted">(off on a server by default; the desktop is not affected)</span></label>
+    <label class="check"><input type="checkbox" bind:checked={mcp} /> Let AI agents in (<code>kandinsky mcp</code>) <span class="muted">(off on a server by default; the desktop is not affected)</span></label>
     <div class="actions"><button class="btn primary" onclick={() => void saveOptions()}>Save sign-in options</button><span class="msg">{optsMsg}</span></div>
     <p class="muted">Terminals, plugin helpers and code blocks work in a signed-in browser as on the desktop, so the sign-in is what stands between the internet and this machine: beyond your own network, put Authelia (with a security key) in front.</p>
 

@@ -1,7 +1,7 @@
 //! Language servers for the code editor. Each `/api/lsp/{lang}` WebSocket spawns one server in the
 //! workspace root and relays JSON-RPC: LSP's `Content-Length` framing on stdio ↔ one WebSocket text
 //! message per JSON message (what @codemirror/lsp-client's Transport expects). The server dies with
-//! the socket; its stderr goes to `.atlas/cache/lsp-<lang>.log`.
+//! the socket; its stderr goes to `.kandinsky/cache/lsp-<lang>.log`.
 use crate::api::LspServerInfo;
 use crate::config::{Config, LspConfig};
 use crate::Workspace;
@@ -148,7 +148,7 @@ fn frame(msg: &str) -> Vec<u8> {
 
 pub async fn session(socket: WebSocket, ws: Workspace, lang: LspLang) {
     if let Err(e) = run(socket, &ws, lang).await {
-        eprintln!("atlas: {} language server: {e:#}", lang.name());
+        eprintln!("kandinsky: {} language server: {e:#}", lang.name());
     }
 }
 

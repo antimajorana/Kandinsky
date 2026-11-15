@@ -11,7 +11,7 @@ export function bridgeBase(address: string): string {
   return `/remote/${u.host}${u.pathname.replace(/\/+$/, "")}`;
 }
 
-/** The server part of an address, as the dialog shows it (`atlas.example.org`). */
+/** The server part of an address, as the dialog shows it (`kandinsky.example.org`). */
 export const hostOf = (address: string): string => { try { return new URL(address).host; } catch { return address; } };
 
 /** `online`: it answers; `signin`: its gate wants a sign-in first; `offline`: no answer (the local copy is used). */
@@ -21,7 +21,7 @@ export async function reach(address: string, ms = 8000): Promise<MirrorState> {
   const stop = new AbortController();
   const timer = setTimeout(() => stop.abort(), ms);
   try {
-    const r = await fetch(`${bridgeBase(address)}/api/workspace`, { headers: { "x-atlas": "1" }, signal: stop.signal });
+    const r = await fetch(`${bridgeBase(address)}/api/workspace`, { headers: { "x-kandinsky": "1" }, signal: stop.signal });
     if (r.ok) return "online";
     const body = await r.json().catch(() => null) as { signin?: unknown } | null;
     return r.status === 401 && body?.signin ? "signin" : "offline";
@@ -36,7 +36,7 @@ export async function reach(address: string, ms = 8000): Promise<MirrorState> {
 export async function serverVaults(server: string): Promise<{ name: string; address: string }[]> {
   try {
     const origin = new URL(server).origin;
-    const r = await fetch(`${bridgeBase(origin)}/api/vaults`, { headers: { "x-atlas": "1" } });
+    const r = await fetch(`${bridgeBase(origin)}/api/vaults`, { headers: { "x-kandinsky": "1" } });
     if (!r.ok) return [];
     const l = await r.json() as { vaults: { name: string; url?: string }[] };
     return l.vaults.map((v) => ({ name: v.name, address: `${origin}${v.url ?? "/"}` }));
@@ -70,10 +70,10 @@ export async function mirrorState(): Promise<{ address: string; state: MirrorSta
   return known?.address ? { address: known.address, state: known.state } : null;
 }
 
-/** The link was changed (the vault switcher): asked again, and the panes' chips follow (`atlas-mirror-unlinked`). */
+/** The link was changed (the vault switcher): asked again, and the panes' chips follow (`kandinsky-mirror-unlinked`). */
 export function forgetMirrorState(): void {
   known = null;
-  window.dispatchEvent(new Event("atlas-mirror-unlinked"));
+  window.dispatchEvent(new Event("kandinsky-mirror-unlinked"));
 }
 
 /** The mirror's gate wants a sign-in (the core's leases and live rooms go through it): its page in a window of the app

@@ -38,7 +38,7 @@ test("a .base file opens as a table pane with its views", async ({ page }) => {
 });
 
 test("a header's menu sorts the view and writes the sort to the .base", async ({ page, request }) => {
-  const H = { "x-atlas": "1" };
+  const H = { "x-kandinsky": "1" };
   await request.put("/api/file", { headers: H, data: { path: "db/sorted.base", text: 'filters:\n  and:\n    - type == "Lecture"\nviews:\n  - type: table\n    name: Lectures\n    order: [file.name, date]\n' } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
@@ -53,7 +53,7 @@ test("a header's menu sorts the view and writes the sort to the .base", async ({
 });
 
 test("click a Base cell to edit the note's property in place (frontmatter only)", async ({ page, request }) => {
-  const h = { "x-atlas": "1" };
+  const h = { "x-kandinsky": "1" };
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "all.base");
@@ -80,7 +80,7 @@ test("click a Base cell to edit the note's property in place (frontmatter only)"
 // Notion parity: + New (folder / properties from the filters), a board grouped by a property (drag a
 // card = change it), hide / add a column — each written to the notes or the .base file.
 test("bases: new note in the view, board with drag, hide and add a column", async ({ page, request }) => {
-  const H = { "x-atlas": "1" };
+  const H = { "x-kandinsky": "1" };
   const put = (path: string, text: string) => request.put("/api/file", { headers: H, data: { path, text } });
   const text = (f: string) => request.get(`/api/file?path=${encodeURIComponent(f)}`, { headers: H }).then((r) => r.json()).then((j) => j.text as string);
   await put("db/tasks/a.md", "---\nkind: task\nstatus: todo\n---\n");
@@ -115,7 +115,7 @@ test("bases: new note in the view, board with drag, hide and add a column", asyn
 });
 
 test("an embed that names its view shows that view alone, without the other views' tabs", async ({ page, request }) => {
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "early-only.md", text: "# Early only\n\n![[all.base#Early]]\n" } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "early-only.md", text: "# Early only\n\n![[all.base#Early]]\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "early-only.md");
@@ -125,11 +125,11 @@ test("an embed that names its view shows that view alone, without the other view
   await base.locator(".view-switch").click();
   await expect(page.getByRole("menuitem", { name: /^Lectures/ })).toHaveCount(0); // the other views are the database's
   await page.keyboard.press("Escape");
-  await request.post("/api/fs/trash?path=early-only.md", { headers: { "x-atlas": "1" } });
+  await request.post("/api/fs/trash?path=early-only.md", { headers: { "x-kandinsky": "1" } });
 });
 
 test("a column's summary, groups in a table, a card's picture — each written to the .base", async ({ page, request }) => {
-  const H = { "x-atlas": "1" };
+  const H = { "x-kandinsky": "1" };
   const put = (path: string, text: string) => request.put("/api/file", { headers: H, data: { path, text } });
   const text = (f: string) => request.get(`/api/file?path=${encodeURIComponent(f)}`, { headers: H }).then((r) => r.json()).then((j) => j.text as string);
   await put("db/shop/a.md", "---\nkind: item\nprice: 3\nshop: north\ncover: \"[[a.svg]]\"\n---\n");

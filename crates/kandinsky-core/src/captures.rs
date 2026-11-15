@@ -84,7 +84,7 @@ fn log_day(cfg: &Config, rel: &str) -> Option<String> {
 /// heading inside a code fence (a shell `# comment`) neither starts nor ends it.
 pub(crate) fn log_section(lines: &[&str]) -> std::ops::Range<usize> {
     let level = |l: &str| l.starts_with('#').then(|| l.trim_start_matches('#')).filter(|r| r.starts_with(' ')).map(|_| l.len() - l.trim_start_matches('#').len());
-    let mut fences = atlas_text::fence::Fences::default();
+    let mut fences = kandinsky_text::fence::Fences::default();
     let prose: Vec<bool> = lines.iter().map(|l| !fences.code(l)).collect();
     let Some(start) = (0..lines.len()).find(|&i| prose[i] && crate::capture::is_log_heading(lines[i])) else { return 0..lines.len() };
     let own = level(lines[start]).unwrap_or(2);
@@ -95,7 +95,7 @@ pub(crate) fn log_section(lines: &[&str]) -> std::ops::Range<usize> {
 /// The captures of one day's log, in file order.
 fn in_log(rel: &str, day: &str, text: &str) -> Vec<CaptureItem> {
     let lines: Vec<&str> = text.split('\n').collect();
-    let mut fences = atlas_text::fence::Fences::default();
+    let mut fences = kandinsky_text::fence::Fences::default();
     let mut out = vec![];
     for i in log_section(&lines) {
         let l = lines[i];
@@ -526,7 +526,7 @@ mod tests {
         let read = || std::fs::read_to_string(d.path().join(p)).unwrap();
         ask(d.path(), &cfg, p, 12, TriageAction::Delete).unwrap();
         assert_eq!(read(), LOG.replace("- 09:12 check the tail\n  http://x.org\n", ""), "the bullet and the line under it, nothing else");
-        let kept: Vec<_> = walkdir(d.path().join(".atlas/trash"));
+        let kept: Vec<_> = walkdir(d.path().join(".kandinsky/trash"));
         assert_eq!(kept.len(), 1);
         assert!(kept[0].ends_with(p) && std::fs::read_to_string(&kept[0]).unwrap() == "- 09:12 check the tail\n  http://x.org\n");
         // edited since it was listed: nothing goes
@@ -535,7 +535,7 @@ mod tests {
         // a note of the inbox goes to the trash whole
         ask(d.path(), &cfg, "inbox/A thought.md", 0, TriageAction::Delete).unwrap();
         assert!(!d.path().join("inbox/A thought.md").exists());
-        assert_eq!(walkdir(d.path().join(".atlas/trash")).len(), 2);
+        assert_eq!(walkdir(d.path().join(".kandinsky/trash")).len(), 2);
     }
 
     fn walkdir(dir: std::path::PathBuf) -> Vec<std::path::PathBuf> {

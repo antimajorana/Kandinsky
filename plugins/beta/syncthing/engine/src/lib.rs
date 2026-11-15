@@ -86,7 +86,7 @@ pub fn scan(request: Request, m: &Machine, root: &Path, params: &Value) -> Resul
     };
     // no paths at all: the core dropped events (anything may have changed), so the whole vault is scanned
     let everything = params["paths"].as_array().is_none_or(Vec::is_empty);
-    let mut paths: Vec<&str> = params["paths"].as_array().into_iter().flatten().filter_map(Value::as_str).filter(|p| !p.is_empty() && !p.starts_with(".atlas/cache/")).collect();
+    let mut paths: Vec<&str> = params["paths"].as_array().into_iter().flatten().filter_map(Value::as_str).filter(|p| !p.is_empty() && !p.starts_with(".kandinsky/cache/")).collect();
     paths.sort_unstable();
     paths.dedup();
     if paths.is_empty() && !everything {
@@ -156,12 +156,12 @@ mod tests {
             asked.borrow_mut().push((method.to_string(), url.to_string(), key.to_string()));
             Ok(if url.ends_with("/rest/config/folders") { json!([{"id": "work", "path": "/home/u/Work"}]) } else { Value::Null })
         };
-        let params = json!({"paths": ["notes/a b.md", ".atlas/cache/x", "b.md", "notes/a b.md"], "secrets": {"api_key": "k"}, "settings": {}});
+        let params = json!({"paths": ["notes/a b.md", ".kandinsky/cache/x", "b.md", "notes/a b.md"], "secrets": {"api_key": "k"}, "settings": {}});
         assert_eq!(scan(&request, &machine(NONE), Path::new("/home/u/Work"), &params), Ok(json!({"folder": "work", "scanned": 2})));
         assert_eq!(asked.borrow().last().unwrap(), &("POST".into(), "http://127.0.0.1:8384/rest/db/scan?folder=work&sub=b.md&sub=notes%2Fa+b.md".into(), "k".into()));
         assert_eq!(asked.borrow().len(), 2, "one listing, one scan for both paths");
         // only the cache changed: nothing to scan, not even a listing
-        let only_cache = json!({"paths": [".atlas/cache/x"], "secrets": {"api_key": "k"}, "settings": {}});
+        let only_cache = json!({"paths": [".kandinsky/cache/x"], "secrets": {"api_key": "k"}, "settings": {}});
         assert_eq!(scan(&request, &machine(NONE), Path::new("/home/u/Work"), &only_cache), Ok(json!({"scanned": 0})));
         assert_eq!(asked.borrow().len(), 2);
     }

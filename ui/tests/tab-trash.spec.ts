@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // A note can be deleted from its tab: the tab's menu moves it to the Trash.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("a note's tab moves it to the Trash, after a yes, and closes", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/to-trash-from-tab.md", text: "# Bye\n" } });

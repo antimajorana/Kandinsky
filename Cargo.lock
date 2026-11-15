@@ -508,335 +508,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "atlas"
-version = "0.2.10"
-dependencies = [
- "anyhow",
- "atlas-core",
- "chrono",
- "clap",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "atlas-android"
-version = "0.2.10"
-dependencies = [
- "anyhow",
- "atlas-capture",
- "atlas-core",
- "atlas-pen",
- "atlas-text",
- "chrono",
- "jni 0.21.1",
- "libc",
- "openink-pen",
- "openink-stroke",
- "regex",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "tokio",
- "walkdir",
-]
-
-[[package]]
-name = "atlas-app"
-version = "0.2.10"
-dependencies = [
- "adblock",
- "anyhow",
- "atlas-core",
- "base64 0.22.1",
- "gio-sys",
- "glib-sys",
- "gobject-sys",
- "gtk",
- "javascriptcore-rs",
- "ksni",
- "png 0.17.16",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-global-shortcut",
- "tempfile",
- "tokio",
- "webkit2gtk",
- "webkit2gtk-sys",
- "zbus",
-]
-
-[[package]]
-name = "atlas-capture"
-version = "0.2.10"
-dependencies = [
- "anyhow",
- "atlas-core",
- "chrono",
- "dbus",
- "egui",
- "egui-winit",
- "image",
- "png 0.17.16",
- "rusqlite",
- "serde_json",
- "softbuffer",
- "tempfile",
- "wayland-backend",
- "wayland-client",
- "winit",
-]
-
-[[package]]
-name = "atlas-catalog"
-version = "0.1.0"
-dependencies = [
- "atlas-plugin",
- "atlas-template",
- "atlas-text",
- "chrono",
- "regex",
- "scraper",
- "serde",
- "serde_json",
- "serde_yaml",
- "url",
-]
-
-[[package]]
-name = "atlas-claude"
-version = "0.1.0"
-dependencies = [
- "atlas-plugin",
- "serde_json",
- "tempfile",
- "toml 0.9.12+spec-1.1.0",
-]
-
-[[package]]
-name = "atlas-core"
-version = "0.2.10"
-dependencies = [
- "anyhow",
- "arboard",
- "argon2",
- "atlas-pen",
- "atlas-rar",
- "atlas-template",
- "atlas-text",
- "axum",
- "base64 0.22.1",
- "chrono",
- "chrono-tz",
- "csv",
- "djvu-rs",
- "filetime",
- "flate2",
- "futures-util",
- "getrandom 0.2.17",
- "gix",
- "grep-matcher",
- "grep-regex",
- "grep-searcher",
- "image",
- "jxl-oxide",
- "libc",
- "libloading 0.8.9",
- "lopdf",
- "mime_guess",
- "notify",
- "pdf_oxide",
- "portable-pty",
- "regex",
- "reqwest 0.12.28",
- "rquickjs",
- "rust-embed",
- "rustls",
- "schemars 1.2.3",
- "scraper",
- "serde",
- "serde_json",
- "serde_yaml",
- "sevenz-rust2",
- "sha2 0.10.9",
- "similar",
- "tar",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-tungstenite 0.28.0",
- "tokio-util",
- "toml 0.9.12+spec-1.1.0",
- "toml_edit 0.25.15+spec-1.1.0",
- "tower",
- "tower-http",
- "trash",
- "ts-rs",
- "typst",
- "typst-kit",
- "typst-layout",
- "typst-pdf",
- "typst-svg",
- "walkdir",
- "webpki-roots 1.0.11",
- "windows",
- "windows-sys 0.61.2",
- "zbus",
- "zip 8.6.0",
-]
-
-[[package]]
-name = "atlas-email"
-version = "0.1.0"
-dependencies = [
- "ammonia",
- "async-imap",
- "atlas-plugin",
- "atlas-text",
- "base64 0.22.1",
- "chrono",
- "chrono-tz",
- "futures",
- "mail-builder",
- "mail-parser",
- "pulldown-cmark",
- "rand 0.8.8",
- "regex",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "tokio",
- "tokio-rustls",
- "webpki-roots 1.0.11",
-]
-
-[[package]]
-name = "atlas-finance"
-version = "0.1.0"
-dependencies = [
- "atlas-plugin",
- "atlas-text",
- "base64 0.22.1",
- "calamine",
- "chrono",
- "csv",
- "flate2",
- "pdf_oxide",
- "rand 0.8.8",
- "regex",
- "rsa",
- "rust_decimal",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2 0.10.9",
- "tar",
- "tempfile",
- "toml 0.9.12+spec-1.1.0",
- "unicode-normalization",
-]
-
-[[package]]
-name = "atlas-ocr"
-version = "0.1.0"
-dependencies = [
- "atlas-plugin",
- "image",
- "kreuzberg-tesseract",
- "serde_json",
-]
-
-[[package]]
-name = "atlas-papers"
-version = "0.1.0"
-dependencies = [
- "atlas-plugin",
- "atlas-text",
- "chrono",
- "httparse",
- "pdf_oxide",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2 0.10.9",
- "tempfile",
-]
-
-[[package]]
-name = "atlas-pen"
-version = "0.2.10"
-dependencies = [
- "openink-shape",
-]
-
-[[package]]
-name = "atlas-plugin"
-version = "0.2.10"
-dependencies = [
- "serde_json",
-]
-
-[[package]]
-name = "atlas-rar"
-version = "0.2.10"
-dependencies = [
- "cmake",
- "flate2",
- "libc",
- "sha2 0.10.9",
- "tar",
- "tempfile",
-]
-
-[[package]]
-name = "atlas-ssh"
-version = "0.1.0"
-dependencies = [
- "atlas-plugin",
- "chrono",
- "regex",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "atlas-syncthing"
-version = "0.1.0"
-dependencies = [
- "atlas-plugin",
- "serde_json",
-]
-
-[[package]]
-name = "atlas-template"
-version = "0.2.10"
-dependencies = [
- "chrono",
- "serde_json",
-]
-
-[[package]]
-name = "atlas-text"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde_yaml",
- "tempfile",
-]
-
-[[package]]
 name = "atoi_simd"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5569,6 +5240,335 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1130d80c7374efad55a117d715a3af9368f0fa7a2c54573afc15a188cd984837"
 dependencies = [
  "mutate_once",
+]
+
+[[package]]
+name = "kandinsky"
+version = "0.2.10"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "kandinsky-core",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "kandinsky-android"
+version = "0.2.10"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "jni 0.21.1",
+ "kandinsky-capture",
+ "kandinsky-core",
+ "kandinsky-pen",
+ "kandinsky-text",
+ "libc",
+ "openink-pen",
+ "openink-stroke",
+ "regex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "walkdir",
+]
+
+[[package]]
+name = "kandinsky-app"
+version = "0.2.10"
+dependencies = [
+ "adblock",
+ "anyhow",
+ "base64 0.22.1",
+ "gio-sys",
+ "glib-sys",
+ "gobject-sys",
+ "gtk",
+ "javascriptcore-rs",
+ "kandinsky-core",
+ "ksni",
+ "png 0.17.16",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-global-shortcut",
+ "tempfile",
+ "tokio",
+ "webkit2gtk",
+ "webkit2gtk-sys",
+ "zbus",
+]
+
+[[package]]
+name = "kandinsky-capture"
+version = "0.2.10"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dbus",
+ "egui",
+ "egui-winit",
+ "image",
+ "kandinsky-core",
+ "png 0.17.16",
+ "rusqlite",
+ "serde_json",
+ "softbuffer",
+ "tempfile",
+ "wayland-backend",
+ "wayland-client",
+ "winit",
+]
+
+[[package]]
+name = "kandinsky-catalog"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "kandinsky-plugin",
+ "kandinsky-template",
+ "kandinsky-text",
+ "regex",
+ "scraper",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "url",
+]
+
+[[package]]
+name = "kandinsky-claude"
+version = "0.1.0"
+dependencies = [
+ "kandinsky-plugin",
+ "serde_json",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
+name = "kandinsky-core"
+version = "0.2.10"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "argon2",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "chrono-tz",
+ "csv",
+ "djvu-rs",
+ "filetime",
+ "flate2",
+ "futures-util",
+ "getrandom 0.2.17",
+ "gix",
+ "grep-matcher",
+ "grep-regex",
+ "grep-searcher",
+ "image",
+ "jxl-oxide",
+ "kandinsky-pen",
+ "kandinsky-rar",
+ "kandinsky-template",
+ "kandinsky-text",
+ "libc",
+ "libloading 0.8.9",
+ "lopdf",
+ "mime_guess",
+ "notify",
+ "pdf_oxide",
+ "portable-pty",
+ "regex",
+ "reqwest 0.12.28",
+ "rquickjs",
+ "rust-embed",
+ "rustls",
+ "schemars 1.2.3",
+ "scraper",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sevenz-rust2",
+ "sha2 0.10.9",
+ "similar",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-tungstenite 0.28.0",
+ "tokio-util",
+ "toml 0.9.12+spec-1.1.0",
+ "toml_edit 0.25.15+spec-1.1.0",
+ "tower",
+ "tower-http",
+ "trash",
+ "ts-rs",
+ "typst",
+ "typst-kit",
+ "typst-layout",
+ "typst-pdf",
+ "typst-svg",
+ "walkdir",
+ "webpki-roots 1.0.11",
+ "windows",
+ "windows-sys 0.61.2",
+ "zbus",
+ "zip 8.6.0",
+]
+
+[[package]]
+name = "kandinsky-email"
+version = "0.1.0"
+dependencies = [
+ "ammonia",
+ "async-imap",
+ "base64 0.22.1",
+ "chrono",
+ "chrono-tz",
+ "futures",
+ "kandinsky-plugin",
+ "kandinsky-text",
+ "mail-builder",
+ "mail-parser",
+ "pulldown-cmark",
+ "rand 0.8.8",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "tokio-rustls",
+ "webpki-roots 1.0.11",
+]
+
+[[package]]
+name = "kandinsky-finance"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "calamine",
+ "chrono",
+ "csv",
+ "flate2",
+ "kandinsky-plugin",
+ "kandinsky-text",
+ "pdf_oxide",
+ "rand 0.8.8",
+ "regex",
+ "rsa",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2 0.10.9",
+ "tar",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+ "unicode-normalization",
+]
+
+[[package]]
+name = "kandinsky-ocr"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "kandinsky-plugin",
+ "kreuzberg-tesseract",
+ "serde_json",
+]
+
+[[package]]
+name = "kandinsky-papers"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "httparse",
+ "kandinsky-plugin",
+ "kandinsky-text",
+ "pdf_oxide",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
+name = "kandinsky-pen"
+version = "0.2.10"
+dependencies = [
+ "openink-shape",
+]
+
+[[package]]
+name = "kandinsky-plugin"
+version = "0.2.10"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "kandinsky-rar"
+version = "0.2.10"
+dependencies = [
+ "cmake",
+ "flate2",
+ "libc",
+ "sha2 0.10.9",
+ "tar",
+ "tempfile",
+]
+
+[[package]]
+name = "kandinsky-ssh"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "kandinsky-plugin",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "kandinsky-syncthing"
+version = "0.1.0"
+dependencies = [
+ "kandinsky-plugin",
+ "serde_json",
+]
+
+[[package]]
+name = "kandinsky-template"
+version = "0.2.10"
+dependencies = [
+ "chrono",
+ "serde_json",
+]
+
+[[package]]
+name = "kandinsky-text"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde_yaml",
+ "tempfile",
 ]
 
 [[package]]

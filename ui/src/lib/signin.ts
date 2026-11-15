@@ -1,15 +1,15 @@
-// `atlas.signIn`: a provider's sign-in page (OAuth) whose answer comes back to a localhost address. The
+// `kandinsky.signIn`: a provider's sign-in page (OAuth) whose answer comes back to a localhost address. The
 // desktop app shows such a page in a window of its own and, when it reaches that address, closes it and
-// hands the address back (crates/atlas-app `signin_window` → POST /api/signin → the "signin" event). In a
+// hands the address back (crates/kandinsky-app `signin_window` → POST /api/signin → the "signin" event). In a
 // browser the page opens in a tab; the server answers the address it ends on with a page that posts it back here
-// (crates/atlas-core/src/signin_return.rs, the same channel name), and keeps it in localStorage (the same key) for a
+// (crates/kandinsky-core/src/signin_return.rs, the same channel name), and keeps it in localStorage (the same key) for a
 // tab that was not waiting: `returned`. Callers keep pasting as the last resort.
 import { on } from "./bus";
 import { drop, load } from "./prefs";
 
 type Waiter = { back: string; done: (url: string) => void; fail: (e: Error) => void };
 const waiting = new Set<Waiter>();
-const KEPT = "atlas-signin-return"; // signin_return.rs KEPT
+const KEPT = "kandinsky-signin-return"; // signin_return.rs KEPT
 const KEEP_MS = 30 * 60_000;
 
 function kept(): { url: string; at: number } | null {
@@ -33,7 +33,7 @@ export function signIn(url: string, back: string): Promise<string> {
     // a waiting tab takes the address and forgets the kept copy, so no other tab finishes it a second time
     const came = (url: string) => { for (const w of waiting) if (url.startsWith(w.back)) { waiting.delete(w); forget(url); w.done(url); } };
     on("signin", (e) => came(e.url));
-    if ("BroadcastChannel" in window) new BroadcastChannel("atlas-signin").onmessage = (m) => typeof m.data === "string" && came(m.data);
+    if ("BroadcastChannel" in window) new BroadcastChannel("kandinsky-signin").onmessage = (m) => typeof m.data === "string" && came(m.data);
   }
   // a new sign-in to the same address replaces an unfinished one (its window was closed by hand)
   for (const w of waiting) if (w.back === back) { waiting.delete(w); w.fail(new Error("replaced by a new sign-in")); }

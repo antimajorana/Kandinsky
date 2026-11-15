@@ -16,5 +16,5 @@ body:
   - type: input
     id: version
     attributes:
-      label: Atlas and plugin version
-      description: "`atlas --version`; the plugin's version is in Settings → Plugins"
+      label: Kandinsky and plugin version
+      description: "`kandinsky --version`; the plugin's version is in Settings → Plugins"

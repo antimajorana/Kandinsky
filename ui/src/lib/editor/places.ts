@@ -3,7 +3,7 @@
 import type { EditorView } from "@codemirror/view";
 import { load, save } from "../prefs";
 
-const KEY = "atlas.places.v1";
+const KEY = "kandinsky.places.v1";
 const MAX = 400;
 /** Offsets into the file: the caret, the first line on screen. */
 export interface Place { head: number; top: number }

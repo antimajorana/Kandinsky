@@ -6,8 +6,8 @@
   import { draftOf, imbalance, sides, type Draft, type Row } from "./model";
   import { localDay } from "../../../../../ui/src/lib/local-day"; // today where the user is, not UTC's
 
-  let { atlas, txn, accounts, payees, onclose, onsaved }: {
-    atlas: PluginApi; txn: Row | null; accounts: string[]; payees: string[]; onclose: () => void; onsaved: (path?: string) => void;
+  let { kandinsky, txn, accounts, payees, onclose, onsaved }: {
+    kandinsky: PluginApi; txn: Row | null; accounts: string[]; payees: string[]; onclose: () => void; onsaved: (path?: string) => void;
   } = $props();
 
   const blank = (): Draft => ({ date: localDay(), status: "*", payee: "", narration: "", tags: [], postings: [{ account: "", amount: "" }, { account: "", amount: "" }] });
@@ -32,8 +32,8 @@
     busy = true; error = "";
     try {
       const at = txn ? { path: txn.path, line: txn.line, text: txn.text } : {};
-      const r = await call<{ path: string }>(atlas, "txn_save", { draft: { ...draft, tags: tags() }, ...at });
-      atlas.toast(txn ? "Saved" : "Added", `${draft.payee} · ${draft.date}`, "success");
+      const r = await call<{ path: string }>(kandinsky, "txn_save", { draft: { ...draft, tags: tags() }, ...at });
+      kandinsky.toast(txn ? "Saved" : "Added", `${draft.payee} · ${draft.date}`, "success");
       onsaved(r.path);
     } catch (e) { error = (e as Error).message; } finally { busy = false; }
   }
@@ -42,9 +42,9 @@
     if (!txn || busy) return;
     busy = true; error = "";
     try {
-      const r = await call<{ path: string; removed: string }>(atlas, "txn_delete", { path: txn.path, line: txn.line, text: txn.text });
+      const r = await call<{ path: string; removed: string }>(kandinsky, "txn_delete", { path: txn.path, line: txn.line, text: txn.text });
       const what = `${txn.payee} · ${txn.date}`;
-      atlas.toast("Deleted", what, "info", { label: "Undo", run: () => void call(atlas, "txn_restore", { path: r.path, text: r.removed }).then(() => atlas.toast("Restored", what, "success")).catch((e) => atlas.toast("Not restored", (e as Error).message, "error")) });
+      kandinsky.toast("Deleted", what, "info", { label: "Undo", run: () => void call(kandinsky, "txn_restore", { path: r.path, text: r.removed }).then(() => kandinsky.toast("Restored", what, "success")).catch((e) => kandinsky.toast("Not restored", (e as Error).message, "error")) });
       onsaved();
     } catch (e) { error = (e as Error).message; } finally { busy = false; }
   }
@@ -88,7 +88,7 @@
         <button class="x" onclick={() => draft.postings.splice(i, 1)} disabled={draft.postings.length <= 2} aria-label="Remove this posting" title="Remove">−</button>
       </div>
     {/each}
-    <button class="atlas-btn add" onclick={() => draft.postings.push({ account: "", amount: "" })}>Add a posting</button>
+    <button class="kandinsky-btn add" onclick={() => draft.postings.push({ account: "", amount: "" })}>Add a posting</button>
   </div>
   <p class="balance" class:bad={!balanced} role="status">
     {#if check.bad.length}Not an amount: {check.bad.join(", ")} (write it as “-12.40 EUR”)
@@ -103,13 +103,13 @@
     </dl>
   {/if}
 
-  {#if error}<div class="atlas-notice error">{error}</div>{/if}
+  {#if error}<div class="kandinsky-notice error">{error}</div>{/if}
 
   <footer>
-    <button class="atlas-btn primary" disabled={busy || !balanced || !draft.payee.trim() || (!!txn && !changed)} onclick={save} title="Ctrl+Enter">{busy ? "Saving…" : txn ? "Save" : "Add"}</button>
+    <button class="kandinsky-btn primary" disabled={busy || !balanced || !draft.payee.trim() || (!!txn && !changed)} onclick={save} title="Ctrl+Enter">{busy ? "Saving…" : txn ? "Save" : "Add"}</button>
     {#if txn}
-      <button class="atlas-btn" onclick={() => atlas.open(txn.path, txn.line)}>Open in the journal</button>
-      <button class="atlas-btn danger" disabled={busy} onclick={remove}>Delete</button>
+      <button class="kandinsky-btn" onclick={() => kandinsky.open(txn.path, txn.line)}>Open in the journal</button>
+      <button class="kandinsky-btn danger" disabled={busy} onclick={remove}>Delete</button>
     {/if}
     <span class="faint where">{txn ? `${txn.path.split("/").pop()}:${txn.line}` : `goes to journal/${draft.date.slice(0, 4)}.fin`}</span>
   </footer>

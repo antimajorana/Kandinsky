@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The badge atop the rail and the sidebar: the open vault's initial, so two windows on two vaults tell apart at a glance. Atlas's own mark is the app icon (packaging/icon/).
+  // The badge atop the rail and the sidebar: the open vault's initial, so two windows on two vaults tell apart at a glance. Kandinsky's own mark is the app icon (packaging/icon/).
   import { app } from "../lib/state.svelte";
 
   let { size = 28 }: { size?: number } = $props();

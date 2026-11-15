@@ -1,4 +1,4 @@
-# The catalog's film. A vault changes any of it with its own .atlas/kinds/movie.yaml (folder, names, links, `set`).
+# The catalog's film. A vault changes any of it with its own .kandinsky/kinds/movie.yaml (folder, names, links, `set`).
 name: movie
 label: Film
 folder: notes/films  # under notes/: the top level holds kinds of file, not topics

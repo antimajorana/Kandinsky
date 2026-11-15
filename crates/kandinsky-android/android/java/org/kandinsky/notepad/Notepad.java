@@ -1,13 +1,13 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.view.View;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.NativePlugin;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.NativePlugin;
 
 /** The notepad's Android side: on an e-ink screen a drawing opened from the vault goes to the pen screen; a phone keeps
  *  Excalidraw. A PDF goes to the book reader, whose pen and marks are kept in the PDF's note (pdf-marks), as on the
- *  desktop; an older `x.pdf.excalidraw` still opens here until `atlas pdf-marks migrate` moves it into the note. */
+ *  desktop; an older `x.pdf.excalidraw` still opens here until `kandinsky pdf-marks migrate` moves it into the note. */
 public final class Notepad implements NativePlugin {
     @Override public String id() { return "notepad"; }
 

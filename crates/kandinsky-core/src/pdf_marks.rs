@@ -653,11 +653,11 @@ mod tests {
 
     #[test]
     fn a_line_it_cannot_read_is_kept() {
-        let note = format!("text\n\n{OPEN}\nm-eeeeeee1 highlight p2 {{\"quads\":[]}}\nsomething from a newer Atlas\n{CLOSE}\n");
+        let note = format!("text\n\n{OPEN}\nm-eeeeeee1 highlight p2 {{\"quads\":[]}}\nsomething from a newer Kandinsky\n{CLOSE}\n");
         let b = read(&note);
         assert_eq!(b.marks.len(), 1);
-        assert_eq!(b.unread, vec!["something from a newer Atlas".to_string()]);
-        assert!(write(&note, &b).contains("something from a newer Atlas"));
+        assert_eq!(b.unread, vec!["something from a newer Kandinsky".to_string()]);
+        assert!(write(&note, &b).contains("something from a newer Kandinsky"));
     }
 
     #[test]

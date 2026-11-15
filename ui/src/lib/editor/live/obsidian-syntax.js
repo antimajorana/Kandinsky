@@ -1,5 +1,5 @@
 // Obsidian's markdown syntax for the editor's parser. Started in obsidian-web (web/src/engine/cm/obsidian-syntax.js),
-// now Atlas's own: changed here. Types: ./obsidian-syntax.d.ts
+// now Kandinsky's own: changed here. Types: ./obsidian-syntax.d.ts
 
 // Obsidian-flavored Markdown syntax for the Lezer parser behind CodeMirror 6.
 //
@@ -186,6 +186,32 @@ const Footnote = {
   ],
 };
 
+// --- \eqref{label} in prose -------------------------------------------------
+const Eqref = {
+  defineNodes: [{ name: "Eqref" }],
+  parseInline: [
+    {
+      name: "Eqref",
+      before: "Escape",
+      parse(cx, next, pos) {
+        if (next !== CH_BACKSLASH) return -1;
+        if (cx.slice(pos, pos + 7) !== "\\eqref{") return -1;
+        let end = pos + 7;
+        while (end < cx.end) {
+          const ch = cx.char(end);
+          if (ch === CH_NEWLINE || ch === 123 /* { */) return -1;
+          if (ch === 125 /* } */) {
+            if (end === pos + 7) return -1;
+            return cx.addElement(cx.elt("Eqref", pos, end + 1));
+          }
+          end++;
+        }
+        return -1;
+      },
+    },
+  ],
+};
+
 // --- $inline math$ ----------------------------------------------------------
 const InlineMath = {
   defineNodes: [{ name: "InlineMath" }, { name: "MathMark" }],
@@ -296,6 +322,7 @@ const Icon = {
 // lines. Follows the same shape as lezer's own FencedCode: `line` is mutated in
 // place by cx.nextLine(), and cx.lineStart tracks the current line's offset.
 const closedAhead = (cx, from, closer) => displayClosed((a, b) => cx.input.read(a, b), cx.input.length, from, closer);
+const ENV_OPEN_RE = /^\\begin\{(equation|align|gather|multline|eqnarray)(\*?)\}/;
 
 const BlockMath = {
   defineNodes: [{ name: "BlockMath" }],
@@ -305,25 +332,36 @@ const BlockMath = {
       before: "LinkReference",
 
       /**
-       * Let a `$$` line interrupt a paragraph.
-       *
-       * `parse` is only ever consulted at the START of a block, so without this
-       * a `$$` fence written directly under a line of prose -- no blank line
-       * between, which is how much of this vault is written -- stays swallowed
-       * inside the Paragraph and no BlockMath node is ever produced. The formula
-       * then renders as loose `$$` lines with raw TeX between them, which is
-       * exactly the "multi-line $$ is broken in real notes" bug.
-       *
-       * Returning true here ends the leaf block, so the line is reconsidered as
-       * the start of a new one and `parse` below gets its chance.
+       * Let a `$$`, `\[`, or `\begin{align|equation|…}` line interrupt a paragraph.
        */
       endLeaf(cx, line) {
         const rest = line.text.slice(line.pos);
-        return (rest.startsWith("$$") || rest.startsWith("\\[")) && closedAhead(cx, cx.lineStart + line.pos + 2, rest.startsWith("$$") ? "$$" : "\\]");
+        if (rest.startsWith("$$") || rest.startsWith("\\[")) {
+          return closedAhead(cx, cx.lineStart + line.pos + 2, rest.startsWith("$$") ? "$$" : "\\]");
+        }
+        const env = ENV_OPEN_RE.exec(rest);
+        return !!env && closedAhead(cx, cx.lineStart + line.pos + env[0].length, `\\end{${env[1]}${env[2]}}`);
       },
 
       parse(cx, line) {
         const rest = line.text.slice(line.pos);
+        const env = ENV_OPEN_RE.exec(rest);
+        if (env) {
+          const closer = `\\end{${env[1]}${env[2]}}`;
+          if (!closedAhead(cx, cx.lineStart + line.pos + env[0].length, closer)) return false;
+          const from = cx.lineStart + line.pos;
+          let idx = line.text.indexOf(closer, line.pos + env[0].length);
+          while (idx < 0) {
+            if (!cx.nextLine()) {
+              cx.addElement(cx.elt("BlockMath", from, cx.prevLineEnd()));
+              return true;
+            }
+            idx = line.text.indexOf(closer, line.pos);
+          }
+          cx.addElement(cx.elt("BlockMath", from, cx.lineStart + line.text.length));
+          cx.nextLine();
+          return true;
+        }
         // `\[ … \]` too (LaTeX display math): the same rules with its own closer
         const tex = rest.startsWith("\\[");
         if (!tex && !rest.startsWith("$$")) return false;
@@ -375,6 +413,7 @@ const obsidianHighlighting = {
       WikilinkTarget: t.link,
       WikilinkAlias: t.link,
       Wikilink: t.link,
+      Eqref: t.link,
       Embed: t.link,
       Highlight: t.special(t.emphasis),
       "InlineMath BlockMath": t.atom,
@@ -398,6 +437,7 @@ export const obsidianMarkdown = [
   Footnote,
   Wikilink,
   Highlight,
+  Eqref,
   InlineMath,
   BlockMath,
   Tag,
@@ -406,7 +446,7 @@ export const obsidianMarkdown = [
 ];
 
 /**
- * Atlas: a task box with any one status, as Obsidian reads it -- `[-]` (cancelled), `[/]`, `[>]`… -- and not only
+ * Kandinsky: a task box with any one status, as Obsidian reads it -- `[-]` (cancelled), `[/]`, `[>]`… -- and not only
  * GFM's `[ ]` / `[x]`. Gives the same `Task` / `TaskMarker` nodes as GFM's TaskList, so it needs GFM's nodes (the
  * editor's `markdownLanguage`) and runs before it.
  */

@@ -1,4 +1,4 @@
-// The phone app's native shell (docs/guides/ANDROID.md, "The native shell"): inside atlas.apk this page is the note view of a
+// The phone app's native shell (docs/guides/ANDROID.md, "The native shell"): inside kandinsky.apk this page is the note view of a
 // native app. The app draws its bars, the open files' sheet, its menu and the phone's settings; this page shows
 // everything else — Home, Files, Search, the open files, any view. Only files are tabs: the rest is a "view", one at a time. This module hides the page's own
 // phone bars, reports the tabs to the app and takes its orders. Without the app's bridge it does nothing.
@@ -19,7 +19,7 @@ import { openPluginSettings } from "./plugin-settings.svelte";
 import { librariesSpec, openLibraries } from "./libraries.svelte";
 import { paneId } from "./panes";
 
-/** What the app injects (AtlasActivity's `addJavascriptInterface`); strings only, as the bridge requires. */
+/** What the app injects (KandinskyActivity's `addJavascriptInterface`); strings only, as the bridge requires. */
 interface Bridge {
   ready(): void;
   tabs(json: string): void;
@@ -33,7 +33,7 @@ interface Bridge {
   /** the app's own readers with a place of their own (Books, Manga): `[{ plugin, title }]`, and opening one */
 }
 
-const bridge = (globalThis as unknown as { AtlasNative?: Bridge }).AtlasNative;
+const bridge = (globalThis as unknown as { KandinskyNative?: Bridge }).KandinskyNative;
 export const nativeShell = { on: !!bridge };
 
 /** The app signs in to a service's gate itself (a browser tab can't hand its cookies over); false without that app. */
@@ -58,11 +58,14 @@ export function attachNativeShell(): () => void {
   // looks its document up first; a Files tapped meanwhile was then covered by Home a moment later)
   let asked = 0;
   const front = <A extends unknown[], R>(f: (...a: A) => R) => (...a: A): R => { asked += 1; return f(...a); };
-  (globalThis as unknown as { atlasShell: unknown }).atlasShell = {
+  // the phone app from before the rename sends its orders to `atlasShell` (its bridge is mapped in index.html): the same
+  // object under that name, or the page would hide its own bars and then ignore every order of that app
+  const shell = globalThis as unknown as { kandinskyShell: unknown; atlasShell: unknown };
+  shell.atlasShell = shell.kandinskyShell = {
     open: front((path: string, line?: number) => openPath(path, line || undefined)),
-    /** the tabs the app kept for this vault, back behind the shown view (AtlasActivity.pageReady) */
+    /** the tabs the app kept for this vault, back behind the shown view (KandinskyActivity.pageReady) */
     restore: (path: string) => restorePath(path),
-    /** AtlasActivity's PenCatcher: a stroke caught natively over the drawing (pen-target.ts). */
+    /** KandinskyActivity's PenCatcher: a stroke caught natively over the drawing (pen-target.ts). */
     penStroke: (json: string) => deliverPenStroke(json),
     /** the stroke so far (null: it ended), while another device watches (pen-target.ts wantPenDrafts) */
     penDraft: (json: string | null) => deliverPenDraft(json),
@@ -86,7 +89,7 @@ export function attachNativeShell(): () => void {
     command: (id: string) => allCommands().find((c) => c.id === id)?.run(),
     /** the system Back, first: closes what is open over the page (lib/back.ts); false when nothing was */
     dismiss: () => dismiss(),
-    // the ⋮ menu's file actions (AtlasActivity.menu); a tab follows a rename and closes with its file (gone-files.ts)
+    // the ⋮ menu's file actions (KandinskyActivity.menu); a tab follows a rename and closes with its file (gone-files.ts)
     reveal: (path: string) => revealInTree(path),
     rename: async (path: string, name: string) => {
       // the phone shows the name without its extension: it stays (keepExt)

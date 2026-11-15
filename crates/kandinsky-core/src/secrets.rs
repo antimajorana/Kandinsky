@@ -1,11 +1,11 @@
 //! Secrets of plugins (a server's token, a password): kept **outside the vault**, so they are never
 //! in its git, its sync or its backups by accident. One JSON file per vault,
-//! `~/.config/atlas/secrets/<vault id>.json` (mode 0600, its folder 0700), holding
+//! `~/.config/kandinsky/secrets/<vault id>.json` (mode 0600, its folder 0700), holding
 //! `{ plugin id: { name: value } }`. The desktop keyring is the better home and can replace this
 //! file behind the same three functions; the file is what works everywhere (also headless).
-//! A server's host may also mount secrets as read-only files, `$ATLAS_SECRET_FILES/<plugin>/<name>`
+//! A server's host may also mount secrets as read-only files, `$KANDINSKY_SECRET_FILES/<plugin>/<name>`
 //! (the Docker/systemd-credentials shape, docs/guides/SERVER.md): they win over the JSON file and cannot be
-//! changed from Atlas.
+//! changed from Kandinsky.
 use crate::{Error, Result};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -19,7 +19,7 @@ pub struct Store {
     mounted: Option<PathBuf>,
 }
 
-/// FNV-1a, written out: the id must be the same in every Atlas version (std's hasher is not).
+/// FNV-1a, written out: the id must be the same in every Kandinsky version (std's hasher is not).
 fn fnv1a(bytes: &[u8]) -> u64 {
     bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3))
 }
@@ -31,20 +31,26 @@ fn valid(name: &str) -> bool {
 }
 
 impl Store {
-    /// The store of the vault at `root`: `$ATLAS_SECRETS_DIR`, else beside the vault list
-    /// (`~/.config/atlas/secrets/`). The file is named by the vault's folder name and a hash of its
+    /// The store of the vault at `root`: `$KANDINSKY_SECRETS_DIR`, else beside the vault list
+    /// (`~/.config/kandinsky/secrets/`). The file is named by the vault's folder name and a hash of its
     /// full path, so two vaults called "notes" do not share secrets.
     pub fn for_vault(root: &Path) -> Self {
-        let dir = std::env::var_os("ATLAS_SECRETS_DIR")
+        let dir = crate::env::var_os("SECRETS_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| crate::vaults::list_file().parent().map(Path::to_path_buf).unwrap_or_default().join("secrets"));
-        Self { mounted: std::env::var_os("ATLAS_SECRET_FILES").map(PathBuf::from), ..Self::in_dir(&dir, root) }
+        Self { mounted: crate::env::var_os("SECRET_FILES").map(PathBuf::from), ..Self::in_dir(&dir, root) }
     }
 
     pub fn in_dir(dir: &Path, root: &Path) -> Self {
         let full = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         let name: String = full.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default().chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').take(24).collect();
         Self { file: dir.join(format!("{name}-{:016x}.json", fnv1a(full.to_string_lossy().as_bytes()))), mounted: None }
+    }
+
+    /// The file this store keeps its secrets in (named by the vault's path: `platform::dirs_migrate` renames it when
+    /// the vault moves with the app's folder).
+    pub fn file(&self) -> &Path {
+        &self.file
     }
 
     /// The host's file for `plugin`'s `name`, when one is mounted (names that are not plain never reach the disk).
@@ -123,7 +129,7 @@ impl Store {
         Ok(out)
     }
 
-    /// The table changed by `op` (which says whether it did) and written back, under a lock every Atlas process of this
+    /// The table changed by `op` (which says whether it did) and written back, under a lock every Kandinsky process of this
     /// computer takes: a token refresh and a settings save at once, even from two processes, never drop one.
     fn edit(&self, op: impl FnOnce(&mut Table) -> bool) -> Result<bool> {
         crate::vault_write::outside::locked(&self.file, || {
@@ -188,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn a_host_mounted_secret_file_wins_and_cannot_be_changed_from_atlas() {
+    fn a_host_mounted_secret_file_wins_and_cannot_be_changed_from_kandinsky() {
         let (dir, vault, host) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         std::fs::create_dir(host.path().join("finance")).unwrap();
         std::fs::write(host.path().join("finance/bank_key"), "first line\nabc\nlast line\n").unwrap();

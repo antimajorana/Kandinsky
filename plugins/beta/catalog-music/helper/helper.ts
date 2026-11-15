@@ -1,8 +1,8 @@
 // MusicBrainz for the catalog: `lookup` finds an album (release group), a song (recording) or an artist by its id, by
 // the link it was captured from (MusicBrainz keeps links to Spotify, Bandcamp, Apple Music… on its entries), or by the
-// artist and title a page gave (`hints`), and answers the catalog's fields. Requests go through Atlas's core.
+// artist and title a page gave (`hints`), and answers the catalog's fields. Requests go through Kandinsky's core.
 // Tests: music.test.ts.
-import type { Params } from "atlas-helper";
+import type { Params } from "kandinsky-helper";
 
 const API = "https://musicbrainz.org/ws/2";
 const COVERS = "https://coverartarchive.org";
@@ -14,7 +14,7 @@ const INC: Record<Kind, string> = { album: "artist-credits+genres+releases+media
 const FIELD: Record<Kind, string> = { album: "releasegroup", song: "recording", artist: "artist" };
 
 // MusicBrainz asks for one request a second and a User-Agent saying who asks; 400 is its "no such id"
-const get = (url: string) => atlas.fetchJson(url, { headers: { "User-Agent": "Atlas/0.1 (personal notes app; catalog-music)" }, every: 1, missing: [400, 404] });
+const get = (url: string) => kandinsky.fetchJson(url, { headers: { "User-Agent": "Kandinsky/0.1 (personal notes app; catalog-music)" }, every: 1, missing: [400, 404] });
 
 interface Credit { name?: string; artist?: { name?: string } }
 interface Release { title?: string; date?: string; status?: string; media?: { "track-count"?: number }[]; "release-group"?: { "primary-type"?: string; "secondary-types"?: string[] } }
@@ -31,7 +31,7 @@ const yearOf = (date: unknown) => (typeof date === "string" && /^\d{4}/.test(dat
 
 function genres(e: Entity): string[] | undefined {
   const gs = [...(e.genres ?? [])].sort((a, b) => (b.count ?? 0) - (a.count ?? 0));
-  return gs.length ? gs.slice(0, 5).map((g) => atlas.text.title(g.name)) : undefined;
+  return gs.length ? gs.slice(0, 5).map((g) => kandinsky.text.title(g.name)) : undefined;
 }
 
 function duration(length: number | undefined): string | undefined {
@@ -78,7 +78,7 @@ function fieldsOf(kind: Kind, e: Entity): Record<string, unknown> {
 /** The entity MusicBrainz has linked to this address (a Spotify album, a Bandcamp page), if any. */
 async function byLink(kind: Kind, url: string | undefined): Promise<string | undefined> {
   if (!url || url.includes("musicbrainz.org")) return undefined;
-  const r = (await get(`${API}/url?resource=${atlas.url.quote(url, "")}&inc=release-group-rels+release-rels+recording-rels+artist-rels&fmt=json`)) ?? {};
+  const r = (await get(`${API}/url?resource=${kandinsky.url.quote(url, "")}&inc=release-group-rels+release-rels+recording-rels+artist-rels&fmt=json`)) ?? {};
   const want = ENTITY[kind];
   for (const rel of r.relations ?? []) {
     if (rel[want]) return rel[want].id;
@@ -97,7 +97,7 @@ async function bySearch(kind: Kind, hints: Record<string, unknown>): Promise<str
   const artist = cleanArtist(named) ?? cleanArtist(hints.channel);
   if (!title || (kind === "song" && !artist)) return undefined; // a song's name alone matches covers and karaoke
   const q = `${FIELD[kind]}:"${title}"` + (artist && kind !== "artist" ? ` AND artist:"${artist}"` : "");
-  const r = (await get(`${API}/${ENTITY[kind]}?query=${atlas.url.quote(q)}&limit=50&fmt=json`)) ?? {};
+  const r = (await get(`${API}/${ENTITY[kind]}?query=${kandinsky.url.quote(q)}&limit=50&fmt=json`)) ?? {};
   let sure: (Entity & { score?: number })[] = (r[`${ENTITY[kind]}s`] ?? []).filter((h: { score?: number }) => Number(h.score ?? 0) >= SURE);
   if (kind === "song") {
     // a famous song has dozens of recordings (live, remasters, covers): the one with this very name, out first
@@ -125,4 +125,4 @@ export async function lookup(params: Params) {
   return { ids: { musicbrainz: mbid }, fields };
 }
 
-atlas.methods({ lookup });
+kandinsky.methods({ lookup });

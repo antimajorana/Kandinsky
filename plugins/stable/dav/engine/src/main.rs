@@ -1,9 +1,9 @@
-//! The Calendar (DAV) plugin's helper. With no argument it serves Atlas over the helper pipe (plugin.toml `[helper]`),
+//! The Calendar (DAV) plugin's helper. With no argument it serves Kandinsky over the helper pipe (plugin.toml `[helper]`),
 //! each call on its own thread; with a method name it runs that one method on the JSON params read from stdin and
 //! prints the answer (for tests and by hand):
 //!   echo '{"settings": {...}, "secrets": {"password": "..."}}' | dav calendars
-use atlas_dav::{api, conf};
-use atlas_plugin::{serve_threads, SharedMethods};
+use kandinsky_dav::{api, conf};
+use kandinsky_plugin::{serve_threads, SharedMethods};
 use serde_json::{json, Value};
 use std::sync::atomic::Ordering;
 

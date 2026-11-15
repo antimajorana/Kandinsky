@@ -1,5 +1,5 @@
 // A PDF mark as a thing of its own (docs/design/DESIGN-pdf-notes.md, "The model"): every element a device writes into
-// a PDF's companion drawing carries `customData.atlasMark`. The passage is anchored by its boxes in PDF points and its
+// a PDF's companion drawing carries `customData.kandinskyMark`. The passage is anchored by its boxes in PDF points and its
 // words (a W3C text-quote: the quote with a few words around it), never by one engine's text pieces, so any engine can
 // find it again. Several elements share one id: a highlight's line boxes, an ink mark's strokes.
 
@@ -8,7 +8,7 @@ export type Device = "desktop" | "android";
 /** A box in PDF points, page space (y up): x0, y0, x1, y1. */
 export type Quad = [number, number, number, number];
 
-export interface AtlasMark {
+export interface KandinskyMark {
   id: string;
   kind: MarkKind;
   /** 1-based. */

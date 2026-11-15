@@ -1,7 +1,7 @@
 //! Installing a plugin: from a folder, a git address or an archive, **copied into the vault**
-//! (`.atlas/plugins/<id>/`) — decided 2026-10-14: every vault carries its own plugins, complete on
+//! (`.kandinsky/plugins/<id>/`) — decided 2026-10-14: every vault carries its own plugins, complete on
 //! its own. Nothing is ever deleted: what an install or a removal replaces is moved to
-//! `.atlas/trash/`. A plugin arrives **switched off**: its manifest (and what it asks to be allowed)
+//! `.kandinsky/trash/`. A plugin arrives **switched off**: its manifest (and what it asks to be allowed)
 //! is to be read in Settings before it runs.
 use crate::plugins::{self, Permissions, PLUGINS_DIR};
 use crate::{vault_write, Error, Result};
@@ -24,8 +24,8 @@ pub enum Source {
 }
 
 const ARCHIVES: [&str; 4] = [".zip", ".tar.gz", ".tgz", ".tar"];
-/// What release archives are called (`atlas-plugin-<id>.tar.gz`, scripts/dev/plugin-pack.mjs): the id is the rest.
-const RELEASE_PREFIX: &str = "atlas-plugin-";
+/// What release archives are called (`kandinsky-plugin-<id>.tar.gz`, scripts/dev/plugin-pack.mjs): the id is the rest.
+const RELEASE_PREFIX: &str = "kandinsky-plugin-";
 
 impl Source {
     /// By shape: a web address of a `.zip`, `.tar.gz`, `.tgz` or `.tar` is a download; any other address or `…​.git`
@@ -56,7 +56,7 @@ impl Source {
     }
 
     /// What `.source` keeps: a folder or archive as an absolute path (a relative one meant something only where
-    /// `atlas` was run), an address as given.
+    /// `kandinsky` was run), an address as given.
     fn recorded(&self) -> String {
         match self {
             Self::Folder(p) | Self::Archive(p) => std::path::absolute(p).unwrap_or_else(|_| p.clone()).to_string_lossy().into_owned(),
@@ -74,7 +74,8 @@ impl Source {
         };
         let last = text.trim_end_matches('/').rsplit(['/', '\\', ':']).next().unwrap_or_default();
         let stem = [".git", ".tar.gz", ".tgz", ".tar", ".zip"].iter().fold(last, |s, e| s.strip_suffix(e).unwrap_or(s));
-        let stem = stem.strip_prefix(RELEASE_PREFIX).unwrap_or(stem);
+        // upstream's releases name their archives with the name from before the rename (legacy.rs)
+        let stem = stem.strip_prefix(RELEASE_PREFIX).or_else(|| stem.strip_prefix(crate::legacy::RELEASE_PREFIX)).unwrap_or(stem);
         stem.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '-' }).collect::<String>().trim_matches('-').to_string()
     }
 }
@@ -231,7 +232,7 @@ fn unpack(archive: &Path, work: &Path) -> Result<()> {
 /// Fetches `url` into `to` (redirects followed: a release's `latest/download/…` address is one).
 fn download(url: &str, to: &Path) -> Result<()> {
     let client = reqwest::blocking::Client::builder().use_preconfigured_tls(crate::tls_chain::config())
-        .user_agent(concat!("atlas/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("kandinsky/", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(300))
         .build()
         .map_err(|e| Error::CommandFailed(format!("download: {e}")))?;
@@ -264,7 +265,7 @@ pub fn adopt_replaced(root: &Path, secrets: &crate::secrets::Store, id: &str, fr
     let mut trashed = Vec::new();
     let mut had = Vec::new();
     for r in plugins::replaces(root, id) {
-        let folder = root.join(PLUGINS_DIR).join(&r.id);
+        let folder = crate::state_dir::join(root, PLUGINS_DIR).join(&r.id);
         if folder.is_dir() {
             had.push(off.contains(&r.id));
             if off.contains(&r.id) {
@@ -302,27 +303,27 @@ pub fn adopt_all_replaced(root: &Path) {
     for p in plugins::list(root).into_iter().filter(|p| p.error.is_none()) {
         let fresh = !root.join(plugins::settings_path(&p.id)).exists();
         match adopt_replaced(root, &secrets, &p.id, fresh) {
-            Ok(moved) if !moved.is_empty() => eprintln!("atlas: plugin {} took over what it replaces; moved to the trash: {}", p.id, moved.join(", ")),
+            Ok(moved) if !moved.is_empty() => eprintln!("kandinsky: plugin {} took over what it replaces; moved to the trash: {}", p.id, moved.join(", ")),
             Ok(_) => {}
-            Err(e) => eprintln!("atlas: plugin {}: taking over the plugins it replaces failed: {e}", p.id),
+            Err(e) => eprintln!("kandinsky: plugin {}: taking over the plugins it replaces failed: {e}", p.id),
         }
     }
 }
 
 /// `[plugins] off` of the vault's config: `id` in it or out of it (comments kept).
 pub fn set_off(root: &Path, id: &str, off: bool) -> Result<()> {
-    let path = root.join(".atlas/config.toml");
+    let path = crate::state_dir::join(root, crate::config::CONFIG_FILE);
     // under the lock Settings saves take (Config::save): a switch and a save at once both stay
     vault_write::locked(&path, || set_off_in(&path, id, off))
 }
 
 fn set_off_in(path: &Path, id: &str, off: bool) -> Result<()> {
     let text = std::fs::read_to_string(path).unwrap_or_default();
-    let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e| Error::BadRequest(format!(".atlas/config.toml: {e}")))?;
+    let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e| Error::BadRequest(format!(".kandinsky/config.toml: {e}")))?;
     if !doc.contains_key("plugins") {
         doc["plugins"] = toml_edit::Item::Table(toml_edit::Table::new());
     }
-    let table = doc["plugins"].as_table_mut().ok_or_else(|| Error::BadRequest(".atlas/config.toml: plugins is not a table".into()))?;
+    let table = doc["plugins"].as_table_mut().ok_or_else(|| Error::BadRequest(".kandinsky/config.toml: plugins is not a table".into()))?;
     let mut list: Vec<String> = table.get("off").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default();
     list.retain(|x| x != id);
     if off {
@@ -335,7 +336,7 @@ fn set_off_in(path: &Path, id: &str, off: bool) -> Result<()> {
 /// Installs (or, with `replace`, updates) a plugin. An update keeps the vault's own `[settings]`.
 pub fn install(root: &Path, source: &Source, id: Option<&str>, replace: bool) -> Result<Installed> {
     // two installs at once (Update clicked on two plugins) each get their own folder
-    let work = vault_write::cache::unique(&root.join(format!(".atlas/cache/plugin-install-{}", stamp())));
+    let work = vault_write::cache::unique(&crate::state_dir::dir(root).join(format!("cache/plugin-install-{}", stamp())));
     let _ = vault_write::cache::remove_dir_all(&work);
     let result = (|| -> Result<Installed> {
         let commit = fetch(source, &work)?;
@@ -344,9 +345,9 @@ pub fn install(root: &Path, source: &Source, id: Option<&str>, replace: bool) ->
         if !plugins::valid_id(&id) {
             return Err(Error::BadRequest(format!("{id:?} is not a plugin id (letters, digits, - and _): give one with --id")));
         }
-        // the manifest must be one this Atlas reads, before anything in the vault changes
+        // the manifest must be one this Kandinsky reads, before anything in the vault changes
         let m = plugins::summary_of(&std::fs::read_to_string(from.join("plugin.toml"))?).map_err(|e| Error::BadRequest(format!("plugin.toml: {e}")))?;
-        let dest = root.join(PLUGINS_DIR).join(&id);
+        let dest = crate::state_dir::join(root, PLUGINS_DIR).join(&id);
         if dest.exists() && !replace {
             return Err(Error::BadRequest(format!("{PLUGINS_DIR}/{id} is already there: update it instead (or remove it first)")));
         }
@@ -360,7 +361,7 @@ pub fn install(root: &Path, source: &Source, id: Option<&str>, replace: bool) ->
             .collect();
         vault_write::cache::write(
             &from.join(SOURCE_FILE),
-            format!("# Where this plugin was installed from (`atlas plugin update {id}` goes back there).\nkind = {:?}\nfrom = {:?}\ninstalled = {:?}\n{}shipped = {}\n", source.kind(), source.recorded(), chrono::Local::now().format("%Y-%m-%d").to_string(), commit.map(|c| format!("commit = {c:?}\n")).unwrap_or_default(), toml::Value::Array(shipped)).as_bytes(),
+            format!("# Where this plugin was installed from (`kandinsky plugin update {id}` goes back there).\nkind = {:?}\nfrom = {:?}\ninstalled = {:?}\n{}shipped = {}\n", source.kind(), source.recorded(), chrono::Local::now().format("%Y-%m-%d").to_string(), commit.map(|c| format!("commit = {c:?}\n")).unwrap_or_default(), toml::Value::Array(shipped)).as_bytes(),
         )?;
         // a plugin installed is meant to be used: it starts on, also when an earlier copy had been switched off (an
         // update keeps whatever the vault chose)
@@ -368,7 +369,7 @@ pub fn install(root: &Path, source: &Source, id: Option<&str>, replace: bool) ->
         // from here on the old copy is in the Trash: only the move into place is left to fail
         let mut replaced = None;
         if dest.exists() {
-            // the vault's settings live in .atlas/plugin-settings/, which an update never touches; an older copy's
+            // the vault's settings live in .kandinsky/plugin-settings/, which an update never touches; an older copy's
             // [settings] move there before the copy goes to the Trash
             plugins::move_settings_out(root, &id)?;
             replaced = Some(to_trash(root, &id)?);
@@ -448,7 +449,7 @@ enum Platforms {
     Built(Vec<String>),
 }
 
-/// Only the word `"any"`: another string is an index this Atlas does not read, not a plugin for every platform.
+/// Only the word `"any"`: another string is an index this Kandinsky does not read, not a plugin for every platform.
 #[derive(Deserialize)]
 enum AnyWord {
     #[serde(rename = "any")]
@@ -460,7 +461,7 @@ pub fn available(root: &Path, index: &str) -> Result<Vec<Available>> {
     if index.trim().is_empty() {
         return Ok(Vec::new());
     }
-    let work = vault_write::cache::unique(&root.join(format!(".atlas/cache/plugin-index-{}", stamp()))).with_extension("json");
+    let work = vault_write::cache::unique(&crate::state_dir::dir(root).join(format!("cache/plugin-index-{}", stamp()))).with_extension("json");
     let got = download(index, &work).and_then(|_| Ok(std::fs::read_to_string(&work)?));
     let _ = vault_write::cache::remove_file(&work);
     let entries: Vec<IndexEntry> = serde_json::from_str(&got?).map_err(|e| Error::BadRequest(format!("{index}: not a plugin index: {e}")))?;
@@ -638,7 +639,7 @@ pub fn obsidian_detected(root: &Path) -> Vec<ObsidianDetected> {
     out
 }
 
-/// Moves unnecessary `<vault>/.obsidian/plugins/<id>` folders safely into `.atlas/trash/` (never permanently deleted)
+/// Moves unnecessary `<vault>/.obsidian/plugins/<id>` folders safely into `.kandinsky/trash/` (never permanently deleted)
 /// and removes their ids from `<vault>/.obsidian/community-plugins.json`.
 pub fn remove_obsidian_plugins(root: &Path, ids: &[String]) -> Result<Vec<String>> {
     let want: std::collections::HashSet<&str> = ids.iter().map(String::as_str).filter(|id| plugins::valid_id(id)).collect();
@@ -692,7 +693,7 @@ pub fn update(root: &Path, id: &str) -> Result<Installed> {
     if !plugins::valid_id(id) {
         return Err(Error::BadRequest(format!("bad plugin id {id:?}")));
     }
-    let text = std::fs::read_to_string(root.join(PLUGINS_DIR).join(id).join(SOURCE_FILE))
+    let text = std::fs::read_to_string(crate::state_dir::join(root, PLUGINS_DIR).join(id).join(SOURCE_FILE))
         .map_err(|_| Error::BadRequest(format!("plugin {id} was not installed from anywhere (no {SOURCE_FILE} in its folder): nothing to update from")))?;
     let t: toml::Table = toml::from_str(&text).map_err(|e| Error::BadRequest(format!("{SOURCE_FILE}: {e}")))?;
     let from = t.get("from").and_then(|v| v.as_str()).ok_or_else(|| Error::BadRequest(format!("{SOURCE_FILE}: no `from`")))?;
@@ -700,7 +701,7 @@ pub fn update(root: &Path, id: &str) -> Result<Installed> {
     // the last release brought (`shipped`; an install from before it was kept: none known) do not.
     let shipped: std::collections::HashSet<String> =
         t.get("shipped").and_then(|v| v.as_array()).into_iter().flatten().filter_map(|v| v.as_str().map(str::to_string)).collect();
-    let dir = root.join(PLUGINS_DIR).join(id);
+    let dir = crate::state_dir::join(root, PLUGINS_DIR).join(id);
     let mut own = vec![];
     for e in walkdir::WalkDir::new(&dir).into_iter().flatten().filter(|e| e.file_type().is_file()) {
         if let Ok(rel) = e.path().strip_prefix(&dir) {
@@ -716,9 +717,9 @@ pub fn update(root: &Path, id: &str) -> Result<Installed> {
     Ok(done)
 }
 
-/// Takes a plugin out of the vault: its folder goes to `.atlas/trash/` (returned), nothing is deleted.
+/// Takes a plugin out of the vault: its folder goes to `.kandinsky/trash/` (returned), nothing is deleted.
 pub fn remove(root: &Path, id: &str) -> Result<String> {
-    if !plugins::valid_id(id) || !root.join(PLUGINS_DIR).join(id).is_dir() {
+    if !plugins::valid_id(id) || !crate::state_dir::join(root, PLUGINS_DIR).join(id).is_dir() {
         return Err(Error::NotFound(format!("{PLUGINS_DIR}/{id}")));
     }
     let to = to_trash(root, id)?;
@@ -765,15 +766,18 @@ mod tests {
 
     #[test]
     fn sources_are_told_apart_by_shape() {
-        assert_eq!(Source::parse("https://example.org/me/atlas-dice.git"), Source::Git("https://example.org/me/atlas-dice.git".into()));
-        assert_eq!(Source::parse("git@example.org:me/atlas-dice"), Source::Git("git@example.org:me/atlas-dice".into()));
+        assert_eq!(Source::parse("https://example.org/me/kandinsky-dice.git"), Source::Git("https://example.org/me/kandinsky-dice.git".into()));
+        assert_eq!(Source::parse("git@example.org:me/kandinsky-dice"), Source::Git("git@example.org:me/kandinsky-dice".into()));
         assert_eq!(Source::parse("~/Downloads/dice.tar.gz"), Source::Archive("~/Downloads/dice.tar.gz".into()));
         assert_eq!(Source::parse("../plugins/dice"), Source::Folder("../plugins/dice".into()));
-        assert_eq!(Source::parse("https://example.org/me/atlas-dice.git").default_id(), "atlas-dice");
+        assert_eq!(Source::parse("https://example.org/me/kandinsky-dice.git").default_id(), "kandinsky-dice");
         assert_eq!(Source::parse("git@example.org:me/My Dice").default_id(), "My-Dice");
         assert_eq!(Source::parse("/x/dice v2.tar.gz").default_id(), "dice-v2");
+        // upstream's release assets keep the prefix from before the rename
+        assert_eq!(Source::parse("https://example.org/r/download/atlas-plugin-dice.tar.gz").default_id(), "dice");
+        assert_eq!(Source::parse("https://example.org/r/download/kandinsky-plugin-dice.zip").default_id(), "dice");
         // a release asset: downloaded, and named without the archives' prefix
-        let latest = "https://example.org/me/atlas/releases/latest/download/atlas-plugin-dice.tar.gz";
+        let latest = "https://example.org/me/kandinsky/releases/latest/download/kandinsky-plugin-dice.tar.gz";
         assert_eq!(Source::parse(latest), Source::Download(latest.into()));
         assert_eq!(Source::parse(latest).default_id(), "dice");
         assert_eq!(Source::parse("https://example.org/dice.zip?token=x").default_id(), "dice");
@@ -789,7 +793,7 @@ mod tests {
         let got = install(root, &Source::Folder(src.clone()), None, false).unwrap();
         assert_eq!((got.id.as_str(), got.title.as_str(), got.version.as_deref(), got.on, &got.replaced), ("dice-plugin", "Dice", Some("0.1.0"), true, &None));
         assert_eq!(got.permissions.net, ["dice.example.org"]);
-        let dir = root.join(PLUGINS_DIR).join("dice-plugin");
+        let dir = crate::state_dir::join(root, PLUGINS_DIR).join("dice-plugin");
         assert!(dir.join("main.js").is_file() && !dir.join(".git").exists(), "its files, not its version control");
         assert!(!crate::workspace::Workspace::open(root).unwrap().config().unwrap().plugins.off.contains(&"dice-plugin".to_string()), "it starts switched on");
         assert!(std::fs::read_to_string(dir.join(SOURCE_FILE)).unwrap().contains("kind = \"folder\""));
@@ -798,7 +802,7 @@ mod tests {
         std::fs::create_dir_all(src.join(".claude/.cc-writes")).unwrap();
         let rel = Source::Folder(src.strip_prefix(std::env::current_dir().unwrap()).map(Path::to_path_buf).unwrap_or_else(|_| src.clone()));
         install(root, &rel, Some("dice-again"), false).unwrap();
-        let again = root.join(PLUGINS_DIR).join("dice-again");
+        let again = crate::state_dir::join(root, PLUGINS_DIR).join("dice-again");
         assert!(!again.join(".claude").exists(), "no hidden folder copied");
         assert!(std::fs::read_to_string(again.join(SOURCE_FILE)).unwrap().contains(&format!("from = {:?}", src.to_string_lossy())));
         remove(root, "dice-again").unwrap();
@@ -814,7 +818,7 @@ mod tests {
         assert_eq!((up.version.as_deref(), up.on), (Some("0.2.0"), true), "the new code, still switched on");
         let text = std::fs::read_to_string(dir.join("plugin.toml")).unwrap();
         assert!(text.contains("version = \"0.2.0\""), "the new manifest: {text}");
-        let own = std::fs::read_to_string(root.join(".atlas/plugin-settings/dice-plugin.toml")).unwrap();
+        let own = std::fs::read_to_string(root.join(".kandinsky/plugin-settings/dice-plugin.toml")).unwrap();
         assert!(own.contains("sides = 20"), "the vault's own setting survived, in its settings file: {own}");
         assert_eq!(crate::plugins::list(root)[0].settings["sides"], serde_json::json!(20));
         let old = root.join(up.replaced.unwrap());
@@ -824,12 +828,12 @@ mod tests {
         assert!(!dir.exists() && root.join(to).join("plugin.toml").is_file());
         assert!(remove(root, "dice-plugin").is_err());
 
-        // not a plugin, a bad id, a manifest this Atlas does not read: refused, the vault untouched
+        // not a plugin, a bad id, a manifest this Kandinsky does not read: refused, the vault untouched
         assert!(install(root, &Source::Folder(elsewhere.path().join("nothing")), None, false).is_err());
         assert!(install(root, &Source::Folder(src.clone()), Some("../x"), false).is_err());
         std::fs::write(src.join("plugin.toml"), "titel = \"typo\"\n").unwrap();
         assert!(install(root, &Source::Folder(src), Some("bad"), false).is_err());
-        assert!(!root.join(PLUGINS_DIR).join("bad").exists());
+        assert!(!crate::state_dir::join(root, PLUGINS_DIR).join("bad").exists());
     }
 
     /// A merged plugin takes over those it `replaces`: settings (renamed) and secrets carried, folders and settings files
@@ -845,18 +849,18 @@ mod tests {
         };
         put(&format!("{PLUGINS_DIR}/ntfy/plugin.toml"), "title = \"ntfy\"\n");
         put(&format!("{PLUGINS_DIR}/tube/plugin.toml"), "title = \"Tube\"\n");
-        put(".atlas/plugin-settings/ntfy.toml", "topic = \"mine\"\nserver = \"https://push.example.org\"\n");
-        put(".atlas/plugin-settings/tube.toml", "address = \"https://tube.example.org\"\n");
-        put(".atlas/plugin-settings/merged.toml", "server = \"https://kept.example.org\"\n");
-        put(".atlas/config.toml", "[plugins]\noff = [\"ntfy\", \"tube\"]\n");
+        put(".kandinsky/plugin-settings/ntfy.toml", "topic = \"mine\"\nserver = \"https://push.example.org\"\n");
+        put(".kandinsky/plugin-settings/tube.toml", "address = \"https://tube.example.org\"\n");
+        put(".kandinsky/plugin-settings/merged.toml", "server = \"https://kept.example.org\"\n");
+        put(".kandinsky/config.toml", "[plugins]\noff = [\"ntfy\", \"tube\"]\n");
         secrets.set("tube", "token", "t1").unwrap();
         put(&format!("{PLUGINS_DIR}/merged/plugin.toml"), "title = \"Merged\"\n[replaces]\nntfy = { rename = { topic = \"phone_topic\" } }\ntube = { set = { preset = \"Tube\" } }\n");
 
         let moved = adopt_replaced(root, &secrets, "merged", true).unwrap();
         assert_eq!(moved.len(), 4, "two folders and two settings files: {moved:?}");
         assert!(moved.iter().all(|m| root.join(m).exists()), "in the trash, not gone");
-        assert!(!root.join(PLUGINS_DIR).join("ntfy").exists() && !root.join(".atlas/plugin-settings/tube.toml").exists());
-        let t: toml::Table = toml::from_str(&std::fs::read_to_string(root.join(".atlas/plugin-settings/merged.toml")).unwrap()).unwrap();
+        assert!(!crate::state_dir::join(root, PLUGINS_DIR).join("ntfy").exists() && !root.join(".kandinsky/plugin-settings/tube.toml").exists());
+        let t: toml::Table = toml::from_str(&std::fs::read_to_string(root.join(".kandinsky/plugin-settings/merged.toml")).unwrap()).unwrap();
         assert_eq!(t["phone_topic"].as_str(), Some("mine"), "renamed on the way");
         assert_eq!(t["server"].as_str(), Some("https://kept.example.org"), "the new plugin's own value wins");
         assert_eq!(t["address"].as_str(), Some("https://tube.example.org"));
@@ -868,7 +872,7 @@ mod tests {
 
         // a plugin the vault already used is never switched off by what it absorbs
         put(&format!("{PLUGINS_DIR}/ntfy/plugin.toml"), "title = \"ntfy\"\n");
-        put(".atlas/config.toml", "[plugins]\noff = [\"ntfy\"]\n");
+        put(".kandinsky/config.toml", "[plugins]\noff = [\"ntfy\"]\n");
         adopt_replaced(root, &secrets, "merged", false).unwrap();
         assert!(crate::workspace::Workspace::open(root).unwrap().config().unwrap().plugins.off.is_empty());
     }
@@ -887,17 +891,17 @@ mod tests {
         let catalog = format!("{PLUGINS_DIR}/catalog/plugin.toml");
         put(&catalog, "title = \"Catalog\"\n[replaces]\ncatalog-web = { if_off = { read_pages = false } }\n");
         put(&format!("{PLUGINS_DIR}/catalog-web/plugin.toml"), "title = \"Web\"\n");
-        put(".atlas/config.toml", "[plugins]\noff = [\"catalog-web\"]\n");
+        put(".kandinsky/config.toml", "[plugins]\noff = [\"catalog-web\"]\n");
         adopt_replaced(root, &secrets, "catalog", false).unwrap();
-        let t: toml::Table = toml::from_str(&std::fs::read_to_string(root.join(".atlas/plugin-settings/catalog.toml")).unwrap()).unwrap();
+        let t: toml::Table = toml::from_str(&std::fs::read_to_string(root.join(".kandinsky/plugin-settings/catalog.toml")).unwrap()).unwrap();
         assert_eq!(t["read_pages"].as_bool(), Some(false));
-        assert!(!root.join(PLUGINS_DIR).join("catalog-web").exists(), "its folder to the trash");
+        assert!(!crate::state_dir::join(root, PLUGINS_DIR).join("catalog-web").exists(), "its folder to the trash");
 
-        std::fs::remove_file(root.join(".atlas/plugin-settings/catalog.toml")).unwrap();
+        std::fs::remove_file(root.join(".kandinsky/plugin-settings/catalog.toml")).unwrap();
         put(&format!("{PLUGINS_DIR}/catalog-web/plugin.toml"), "title = \"Web\"\n");
-        put(".atlas/config.toml", "");
+        put(".kandinsky/config.toml", "");
         adopt_replaced(root, &secrets, "catalog", false).unwrap();
-        assert!(!root.join(".atlas/plugin-settings/catalog.toml").exists(), "on: nothing to write, the default stands");
+        assert!(!root.join(".kandinsky/plugin-settings/catalog.toml").exists(), "on: nothing to write, the default stands");
     }
 
     #[test]
@@ -914,7 +918,7 @@ mod tests {
         git(&["-c", "user.name=T", "-c", "user.email=t@example.org", "commit", "-q", "-m", "v2"]);
         let got = install(vault.path(), &Source::parse(&repo.to_string_lossy()), None, false).unwrap();
         assert_eq!((got.id.as_str(), got.version.as_deref()), ("dice", Some("2.0.0")));
-        let dir = vault.path().join(PLUGINS_DIR).join("dice");
+        let dir = crate::state_dir::join(vault.path(), PLUGINS_DIR).join("dice");
         assert!(dir.join("main.js").is_file() && !dir.join(".git").exists(), "a copy, not a checkout");
         let source = std::fs::read_to_string(dir.join(SOURCE_FILE)).unwrap();
         assert!(source.contains("kind = \"git\"") && source.contains("commit = \""), "{source}");
@@ -929,7 +933,7 @@ mod tests {
         assert!(made.success());
         let got = install(vault.path(), &Source::parse(&tar.to_string_lossy()), None, false).unwrap();
         assert_eq!((got.id.as_str(), got.version.as_deref()), ("dice", Some("1.0.0")), "named by the archive");
-        assert!(vault.path().join(PLUGINS_DIR).join("dice/main.js").is_file());
+        assert!(crate::state_dir::join(vault.path(), PLUGINS_DIR).join("dice/main.js").is_file());
     }
 
     /// Serves `body` once on a local port; returns the port.
@@ -954,13 +958,13 @@ mod tests {
         source(elsewhere.path(), "1.0.0");
         install(vault.path(), &Source::Folder(elsewhere.path().join("dice-plugin")), Some("dice"), false).unwrap();
         let index = serde_json::json!([
-            {"id": "dice", "title": "Dice", "version": "1.1.0", "tier": "beta", "file": "atlas-plugin-dice.tar.gz", "platforms": "any", "size": 1, "sha256": "x"},
-            {"id": "nowhere", "title": "Nowhere", "version": null, "tier": "stable", "file": "atlas-plugin-nowhere.tar.gz", "platforms": ["sparc-plan9"], "size": 1, "sha256": "x"},
+            {"id": "dice", "title": "Dice", "version": "1.1.0", "tier": "beta", "file": "kandinsky-plugin-dice.tar.gz", "platforms": "any", "size": 1, "sha256": "x"},
+            {"id": "nowhere", "title": "Nowhere", "version": null, "tier": "stable", "file": "kandinsky-plugin-nowhere.tar.gz", "platforms": ["sparc-plan9"], "size": 1, "sha256": "x"},
         ]);
         let port = serve_once(index.to_string().into_bytes());
         let got = available(vault.path(), &format!("http://127.0.0.1:{port}/releases/latest/download/plugins.json")).unwrap();
         assert_eq!(got.len(), 2);
-        assert_eq!(got[0].url, format!("http://127.0.0.1:{port}/releases/latest/download/atlas-plugin-dice.tar.gz"));
+        assert_eq!(got[0].url, format!("http://127.0.0.1:{port}/releases/latest/download/kandinsky-plugin-dice.tar.gz"));
         assert_eq!((got[0].runs_here, got[0].installed.as_deref()), (true, Some("1.0.0")));
         assert_eq!((got[1].runs_here, got[1].installed.as_deref()), (false, None));
         assert!(available(vault.path(), "").unwrap().is_empty(), "no index set: nothing offered");
@@ -974,14 +978,14 @@ mod tests {
         let tar = elsewhere.path().join("pack.tar.gz");
         assert!(std::process::Command::new("tar").arg("-czf").arg(&tar).arg("-C").arg(elsewhere.path()).arg("dice-plugin").status().unwrap().success());
         let port = serve_once(std::fs::read(&tar).unwrap());
-        let url = format!("http://127.0.0.1:{port}/download/atlas-plugin-dice.tar.gz");
+        let url = format!("http://127.0.0.1:{port}/download/kandinsky-plugin-dice.tar.gz");
         let got = install(vault.path(), &Source::parse(&url), None, false).unwrap();
         assert_eq!((got.id.as_str(), got.version.as_deref()), ("dice", Some("1.2.0")));
-        let dir = vault.path().join(PLUGINS_DIR).join("dice");
+        let dir = crate::state_dir::join(vault.path(), PLUGINS_DIR).join("dice");
         assert!(dir.join("main.js").is_file());
         let kept = std::fs::read_to_string(dir.join(SOURCE_FILE)).unwrap();
         assert!(kept.contains("kind = \"download\"") && kept.contains(&url), "{kept}");
-        let left: Vec<_> = std::fs::read_dir(vault.path().join(".atlas/cache")).unwrap().flatten().map(|e| e.file_name()).collect();
+        let left: Vec<_> = std::fs::read_dir(vault.path().join(".kandinsky/cache")).unwrap().flatten().map(|e| e.file_name()).collect();
         assert!(left.is_empty(), "the download and the work folder are gone: {left:?}");
     }
 }

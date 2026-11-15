@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Kandinsky",
   "version": "0.2.10",
-  "identifier": "dev.atlas.app",
+  "identifier": "dev.kandinsky.app",
   "build": {
     "frontendDist": "../../ui/dist",
     "devUrl": "http://localhost:5173"
@@ -21,21 +21,21 @@
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico", "icons/icon.png"],
     "linux": {
       "deb": { "files": {
-        "/usr/bin/atlas": "../../target/release/kandinsky",
-        "/usr/bin/atlas-capture": "../../target/release/kandinsky-capture",
-        "/usr/bin/atlas-quick-capture": "../../packaging/kandinsky-quick-capture",
-        "/usr/share/applications/atlas-capture.desktop": "../../packaging/kandinsky-capture.desktop",
-        "/usr/share/applications/atlas-capture-box.desktop": "../../packaging/kandinsky-capture-box.desktop",
-        "/usr/share/icons/hicolor/scalable/apps/atlas.svg": "../../packaging/icon/kandinsky.svg"
+        "/usr/bin/kandinsky": "../../target/release/kandinsky",
+        "/usr/bin/kandinsky-capture": "../../target/release/kandinsky-capture",
+        "/usr/bin/kandinsky-quick-capture": "../../packaging/kandinsky-quick-capture",
+        "/usr/share/applications/kandinsky-capture.desktop": "../../packaging/kandinsky-capture.desktop",
+        "/usr/share/applications/kandinsky-capture-box.desktop": "../../packaging/kandinsky-capture-box.desktop",
+        "/usr/share/icons/hicolor/scalable/apps/kandinsky.svg": "../../packaging/icon/kandinsky.svg"
       } },
-      "appimage": { "files": { "/usr/bin/atlas-capture": "../../target/release/kandinsky-capture" } },
+      "appimage": { "files": { "/usr/bin/kandinsky-capture": "../../target/release/kandinsky-capture" } },
       "rpm": { "files": {
-        "/usr/bin/atlas": "../../target/release/kandinsky",
-        "/usr/bin/atlas-capture": "../../target/release/kandinsky-capture",
-        "/usr/bin/atlas-quick-capture": "../../packaging/kandinsky-quick-capture",
-        "/usr/share/applications/atlas-capture.desktop": "../../packaging/kandinsky-capture.desktop",
-        "/usr/share/applications/atlas-capture-box.desktop": "../../packaging/kandinsky-capture-box.desktop",
-        "/usr/share/icons/hicolor/scalable/apps/atlas.svg": "../../packaging/icon/kandinsky.svg"
+        "/usr/bin/kandinsky": "../../target/release/kandinsky",
+        "/usr/bin/kandinsky-capture": "../../target/release/kandinsky-capture",
+        "/usr/bin/kandinsky-quick-capture": "../../packaging/kandinsky-quick-capture",
+        "/usr/share/applications/kandinsky-capture.desktop": "../../packaging/kandinsky-capture.desktop",
+        "/usr/share/applications/kandinsky-capture-box.desktop": "../../packaging/kandinsky-capture-box.desktop",
+        "/usr/share/icons/hicolor/scalable/apps/kandinsky.svg": "../../packaging/icon/kandinsky.svg"
       } }
     }
   }

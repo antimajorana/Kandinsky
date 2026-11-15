@@ -1,4 +1,4 @@
-// What a plugin is handed (`register(atlas)`, a pane's `api`): the PluginApi of plugin-api.ts, built for one plugin.
+// What a plugin is handed (`register(kandinsky)`, a pane's `api`): the PluginApi of plugin-api.ts, built for one plugin.
 // Every registration goes through `own`, so it is undone when the plugin reloads or is switched off.
 import { zipIndex, zipBlob } from "./zip";
 import { openOutside, openWeb } from "./web-links";
@@ -12,6 +12,8 @@ import { placeAt } from "./editor/math-context";
 import { renderMathInto } from "./math";
 import { errText } from "./text";
 import { on } from "./bus";
+import { comparesOldStatePaths, withOldStatePaths } from "./legacy-names";
+import { pluginFileUrl } from "./plugin-files";
 import { returned, signIn } from "./signin";
 import { blobUrl, pdfThumbUrl, thumbUrl } from "./raw";
 import { richTitle } from "./rich-title";
@@ -76,12 +78,26 @@ export async function noteProps(path: string): Promise<Record<string, unknown>> 
   return frontmatterOf(text)?.data ?? {};
 }
 
-/** What a plugin hands `atlas.files.source`: a FileSource without its id (the plugin's) and with any icon name. */
+/** What a plugin hands `kandinsky.files.source`: a FileSource without its id (the plugin's) and with any icon name. */
 export type PluginFileSource = Partial<Omit<FileSource, "id" | "icon">> & { icon?: string };
 
 /** Where a pane's API is: the file, `openView` argument and link anchor it was opened with, its editor contract, and
  *  `hold`, which keeps its subscriptions for as long as the pane (without one: as long as the plugin). */
 export interface PaneAt { path?: string; arg?: string; anchor?: string; pane?: PluginPane; hold?: (undo: () => void) => () => void }
+
+/** Per plugin (and its code's files): whether it was written before the rename and compares changed paths with
+ *  `.atlas/` (legacy-names.ts). Read once from its own files. */
+const oldStateNames = new Map<string, Promise<boolean>>();
+function writtenForOldStateName(p: Plugin): Promise<boolean> {
+  const files = [p.main, p.view].filter((f): f is string => !!f);
+  const key = [p.id, ...files].join(" ");
+  let known = oldStateNames.get(key);
+  if (!known) {
+    known = Promise.all(files.map((f) => fetch(pluginFileUrl(f)).then((r) => (r.ok ? r.text() : "")).catch(() => ""))).then((codes) => codes.some(comparesOldStatePaths));
+    oldStateNames.set(key, known);
+  }
+  return known;
+}
 
 export function pluginApi(p: Plugin, at: PaneAt = {}): PluginApi {
   const { path, arg } = at;
@@ -120,7 +136,12 @@ export function pluginApi(p: Plugin, at: PaneAt = {}): PluginApi {
     fileUrl: async (path) => blobUrl(await vaultPath(path)),
     assetUrl: (rel) => { if (p.id === INIT_ID) throw new Error("init.js has no folder of its own: assetUrl is a plugin's"); return pluginAssetUrl(p.id, rel); },
     thumbUrl: async (path, width) => { const at = await vaultPath(path); return /\.pdf$/i.test(at) ? pdfThumbUrl(at, width) : thumbUrl(at, width); },
-    onFilesChanged: (fn) => hold(on("fs", (e) => fn(e.paths))),
+    // a plugin written before the rename is told a state-folder change under the old name too, which it compares with
+    onFilesChanged: (fn) => {
+      let old = false;
+      void writtenForOldStateName(p).then((v) => (old = v));
+      return hold(on("fs", (e) => fn(old ? withOldStatePaths(e.paths) : e.paths)));
+    },
     eink: { get on() { return document.documentElement.classList.contains("eink"); }, refresh: () => void import("./eink").then((m) => m.einkRefresh()), pen: penOver },
     toast: (title, body, kind = "info", options) => toast(title, body, kind, options?.timeout, options?.run && { label: options.label ?? "Open", run: () => { try { options.run!(); } catch (e) { logPlugin(p.id, "toast", e); } } }),
     richTitle: (text) => richTitle(String(text)),

@@ -1,10 +1,10 @@
-# A minimal Atlas plugin: copy this folder to <vault>/.atlas/plugins/wordcount/ and it is live.
+# A minimal Kandinsky plugin: copy this folder to <vault>/.kandinsky/plugins/wordcount/ and it is live.
 # Only `title` is required. Everything a plugin can declare: docs/PLUGINS.md.
 title = "Word count"
 description = "a block that counts the words of the note it is in"
 phone = true # runs in the phone apps too (only plugins marked so start there)
 
-# read in main.js as atlas.plugin.settings.goal; the vault's value lives in .atlas/plugin-settings/wordcount.toml
+# read in main.js as kandinsky.plugin.settings.goal; the vault's value lives in .kandinsky/plugin-settings/wordcount.toml
 # (Settings → Plugins writes it), never in this manifest: a field's `default` stands in until then
 [[setting]]
 key = "goal"

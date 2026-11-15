@@ -5,7 +5,7 @@ import { shownName } from "../src/lib/paths";
 import { writeFileSync } from "node:fs";
 
 const OUT = process.env.KEYPROBE_OUT;
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const MD = "# Probe\n\nalpha beta gamma\nalpha beta gamma\n\n- item one\n- [ ] task two\n\nlast line\n";
 const PY = "import os\n\n\ndef energy(t):\n    value = t * 2\n    value = value + 1\n    return value\n";
 
@@ -23,7 +23,7 @@ const APP_KEYS = [
 
 interface Sig { doc: string; sel: string; focus: string; tabs: string; overlays: string; side: string }
 const sig = (page: Page): Promise<Sig> => page.evaluate(() => {
-  const ed = (window as unknown as { __atlas: { editor(): { text: string; vim: string; ranges: { from: number; to: number }[] } | null } }).__atlas.editor();
+  const ed = (window as unknown as { __kandinsky: { editor(): { text: string; vim: string; ranges: { from: number; to: number }[] } | null } }).__kandinsky.editor();
   const a = document.activeElement as HTMLElement | null;
   const vis = (s: string) => [...document.querySelectorAll<HTMLElement>(s)].filter((e) => e.offsetParent !== null || e.getClientRects().length).length;
   return {

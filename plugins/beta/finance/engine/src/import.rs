@@ -33,7 +33,7 @@ impl Ids {
 /// A bank's number in any of the shapes statements use: `1,234.56`, `1.234,56`, `-336,03`, `1234.5`, `1.234.567`; a
 /// currency's sign or code around it (`€12,00`, `12,00 EUR`); an accountant's negative, `(336.03)` or `336,03-`; a side
 /// in words, `12.00 DR` (a debit: negative) or `12.00 CR`. Any other word is not a number (None), never dropped: a
-/// sign said in a word Atlas does not know would come out wrong.
+/// sign said in a word Kandinsky does not know would come out wrong.
 pub fn bank_number(s: &str) -> Option<Decimal> {
     let words: Vec<String> = s.split(|c: char| !c.is_alphabetic()).filter(|w| !w.is_empty()).map(str::to_uppercase).collect();
     let side = |w: &str| matches!(w, "DR" | "DB" | "DEBIT" | "CR" | "CREDIT");

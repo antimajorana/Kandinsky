@@ -8,7 +8,7 @@ What hurt most:
 
 They chose:
 - a **sidebar + pages** layout;
-- Settings **doubling as the "what can Atlas do" map**: each page shows its area's features, their shortcuts and
+- Settings **doubling as the "what can Kandinsky do" map**: each page shows its area's features, their shortcuts and
   a Try button.
 
 It fits the dynamic-documents rework by following docs/guides/MALLEABLE.md:
@@ -74,20 +74,20 @@ grouped by page, include matching **features** (with Try), and the box is focuse
 | Code | autosave, tool bar, git gutter, line numbers, wrap, guides, minimap, breadcrumbs, lsp.* | problems, git, replace | — | — |
 | Files & search | ignore, index exclude, files.* | files, explorer, open file, search, history, open with, switch vault | open with | — |
 | Web | web.* (open links in **a tab**, a window or the browser; block ads; filter lists) | open web page | — | — |
-| Server | — (kept outside the vault: `~/.config/atlas/server.toml`) | — | this Atlas serving or not; sign-in (password / proxy / both), trusted proxies, plain HTTP, AI agents; the password; device tokens (made, shown once, revoked); signed-in browsers, sign out everywhere (docs/guides/SERVER.md) | — |
+| Server | — (kept outside the vault: `~/.config/kandinsky/server.toml`) | — | this Kandinsky serving or not; sign-in (password / proxy / both), trusted proxies, plain HTTP, AI agents; the password; device tokens (made, shown once, revoked); signed-in browsers, sign out everywhere (docs/guides/SERVER.md) | — |
 | References & PDF | pdf.* (the references' own settings are the Catalog · Science plugin's) | References | — | — |
 | Drawing | draw.* (folder, Rnote commands, notepad, **a new drawing's pages**) | new drawing, export as SVG | — | — |
 | Terminal & agents | terminal.* | terminal, panel, Claude, send to Claude, move panel, new shell | — | — |
-| Keyboard | — | — | every command grouped (Atlas / plugins / workspace / server), filter, "only with a shortcut", rebind in place | turn a shell line into a command |
+| Keyboard | — | — | every command grouped (Kandinsky / plugins / workspace / server), filter, "only with a shortcut", rebind in place | turn a shell line into a command |
 | Plugins | — | — | plugins (on/off, open, its page, its settings file, update, remove, install, new) | write a plugin; make a block |
 | Automation | automation.* | commands | toolsmith drafts (Keep / Dismiss), workspace commands (schedule, origin, shortcut) | turn a shell line into a command |
-| AI agents | — | — | agents allowed through `atlas mcp`, each with its own token | — |
+| AI agents | — | — | agents allowed through `kandinsky mcp`, each with its own token | — |
 | Advanced | gpu rendering | — | the settings file (Edit the file) | — |
 
 ## New config (all optional, defaults unchanged)
 - `[ui] accent = "#rrggbb"`: derives `--accent`, `--accent-strong`, `--accent-soft`, `--accent-sel`, `--link`,
-  `--tag-*` with `color-mix`. Clearing it removes Atlas's override: the colour scheme's own accent comes back.
-- `[ui] palette`: the colour scheme, built in, light and dark alike — `atlas`, `ink`, `clay`, `sage`, `sea`, `dusk`,
+  `--tag-*` with `color-mix`. Clearing it removes Kandinsky's override: the colour scheme's own accent comes back.
+- `[ui] palette`: the colour scheme, built in, light and dark alike — `kandinsky`, `ink`, `clay`, `sage`, `sea`, `dusk`,
   `graphite`, `phosphor`, `rose`, `honey`, `slate`, `forest`, `coffee`, `ember`, `glacier`, `sand`, `midnight`
   (`ui/src/styles/palettes.css`; `phosphor` is black on white / white on black at full strength with its green, and
   a saved `contrast` — the scheme it replaced — reads as it; the last nine generated with every text colour and accent checked for contrast: text ≥ 7:1,
@@ -150,7 +150,7 @@ would cycle):
 - **One place per thing.** A panel appears on one page only, and a field a panel edits is in `HIDDEN` so it is not
   placed again as a row: the plugins' sign-ins and the OpenID provider fields (`plugins.oidc_*`) are Accounts' only
   (SigninsPanel draws the fields). A page's `group` is required, so a new page cannot land outside the nav's order.
-- **A plugin's file buttons open its settings file** (`.atlas/plugin-settings/<id>.toml`, the one its page writes);
+- **A plugin's file buttons open its settings file** (`.kandinsky/plugin-settings/<id>.toml`, the one its page writes);
   its manifest and code are links at the foot of its page, for whoever writes plugins.
 
 ## The reorganization
@@ -178,11 +178,11 @@ After a day of features, Settings had fallen behind: many new things were not in
     `type: log` as properties and the day as a heading, now in the vault's date names (Spanish when
     `editor.date_names` says so; it was always English). A named template that is missing falls back, so a capture
     never fails over it.
-  - `web.open_links = "tab"` (the new default): what links already did — a tab of Atlas when the
+  - `web.open_links = "tab"` (the new default): what links already did — a tab of Kandinsky when the
     site allows framing, else a browsing window — but now a choice. `window` and `browser` skip the tab
     (`web-links.ts`); the app treats `tab` as `window` for what it opens (`main.rs`).
   - `web.tab_view = "frame"` (default; the Linux desktop app): a web tab is a frame inside its pane — any site shows,
-    signed in, and Atlas's menus draw over it (the libsoup hook, DEVELOPING.md "Web pages as tabs, per platform");
+    signed in, and Kandinsky's menus draw over it (the libsoup hook, DEVELOPING.md "Web pages as tabs, per platform");
     `"native"`: the WebKit view laid over the pane. In a plain browser (a vault on a server) a web link opens a tab
     of that browser instead, whatever these say.
   - `draw.page_format`: `ask` (default) or one of the formats of "New drawing" (A4, A4 landscape, A5, Letter, Boox,

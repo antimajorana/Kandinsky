@@ -25,7 +25,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
-      # an artifact keeps the folders below its paths' common root (atlas-macOS/dmg/…), hence the **; a pattern that
+      # an artifact keeps the folders below its paths' common root (kandinsky-macOS/dmg/…), hence the **; a pattern that
       # finds nothing fails the release instead of leaving a package out
       - name: Draft release
         uses: softprops/action-gh-release@v3
@@ -34,15 +34,15 @@ jobs:
           draft: true
           generate_release_notes: true
           files: |
-            artifacts/linux/atlas
-            artifacts/linux/atlas-app
-            artifacts/linux/atlas-capture
+            artifacts/linux/kandinsky
+            artifacts/linux/kandinsky-app
+            artifacts/linux/kandinsky-capture
             artifacts/linux/*.AppImage
             artifacts/linux/*.deb
             artifacts/linux/*.rpm
-            artifacts/**/atlas.flatpak
-            artifacts/atlas-macOS/**/*.dmg
-            artifacts/atlas-Windows/**/*.exe
+            artifacts/**/kandinsky.flatpak
+            artifacts/kandinsky-macOS/**/*.dmg
+            artifacts/kandinsky-Windows/**/*.exe
             artifacts/android-apks/**/*.apk
             artifacts/plugins/*.tar.gz
             artifacts/plugins/plugins.json

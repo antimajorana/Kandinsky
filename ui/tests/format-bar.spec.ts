@@ -3,8 +3,8 @@ import { openFile } from "./open";
 
 // "A classic formatting bar for markdown (bold, lists, headings, link, table, to-do), optional":
 // `[editor] format_bar`. Off by default; on, its buttons do what the keys do and the text keeps the keys.
-const lastLine = (page: Page) => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string } | null } }).__atlas.editor()?.text.trimEnd().split("\n").pop() ?? "");
-const text = (page: Page) => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string } | null } }).__atlas.editor()?.text ?? "");
+const lastLine = (page: Page) => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } | null } }).__kandinsky.editor()?.text.trimEnd().split("\n").pop() ?? "");
+const text = (page: Page) => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } | null } }).__kandinsky.editor()?.text ?? "");
 
 async function note(page: Page, bar: boolean) {
   await page.route("**/api/config", async (route) => {

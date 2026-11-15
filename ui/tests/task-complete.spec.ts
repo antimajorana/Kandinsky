@@ -5,8 +5,8 @@ import { test, expect, type Page } from "@playwright/test";
 // "behaved very weirdly deleting and duplicating things": a word that only looked like a field
 // ("fix the low") was replaced by the field's emoji on Enter, and the Enter made no new line.
 // The user's settings: vim on, desktop keys, typewriter, the format bar.
-const H = { "x-atlas": "1" };
-const text = (page: Page) => page.evaluate(() => (window as any).__atlas.editor().text as string);
+const H = { "x-kandinsky": "1" };
+const text = (page: Page) => page.evaluate(() => (window as any).__kandinsky.editor().text as string);
 
 async function note(page: Page, name: string) {
   await page.request.put("/api/file", { headers: H, data: { path: `notes/${name}.md`, text: "# Todo\n\n" } });
@@ -15,7 +15,7 @@ async function note(page: Page, name: string) {
   await page.keyboard.type(`${name}.md`);
   await expect(page.getByTestId("palette").getByText(`${name}`, { exact: true }).first()).toBeVisible();
   await page.keyboard.press("Enter");
-  await expect.poll(() => page.evaluate(() => (window as any).__atlas.editor()?.path)).toContain(name);
+  await expect.poll(() => page.evaluate(() => (window as any).__kandinsky.editor()?.path)).toContain(name);
   const content = page.locator(".cm-content:visible").first();
   await content.click();
   await page.keyboard.press("Control+End");

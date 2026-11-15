@@ -1,5 +1,5 @@
 // What to offer while a task (`- [ ] …`) is typed: dates, priority, recurrence — the Obsidian Tasks
-// fields. The rules live in the core (crates/atlas-core/src/task_suggest.rs: natural dates such as
+// fields. The rules live in the core (crates/kandinsky-core/src/task_suggest.rs: natural dates such as
 // "next fri" or "in 3 days", the new-line row first so a word that only looks like a field never
 // eats Enter); this module asks for them and draws a row the same way in the editor's list
 // (md-complete.ts) and in the capture boxes (textarea-complete.ts): the app's own monochrome icon,

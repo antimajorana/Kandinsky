@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The sidebar's frame (docs/guides/SHELL.md): the vault's name, then the blocks `.atlas/sidebar.page` lists
+  // The sidebar's frame (docs/guides/SHELL.md): the vault's name, then the blocks `.kandinsky/sidebar.page` lists
   // (lib/sidebar.svelte.ts). Collapses to icons (expands while hovered), resizes by its edge.
   import { onMount } from "svelte";
   import { app } from "../lib/state.svelte";
@@ -10,6 +10,7 @@
   import { sidebar, side, sideCollapsed, sideWide, takeKeyboard, SIDEBAR_FILE } from "../lib/sidebar.svelte";
   import { tabs, setSidebarWidth, toggleSidebar } from "../lib/tabs.svelte";
   import { chooseVault } from "../lib/vaults";
+  import { openWorkspacesMenu, workspaceState } from "../lib/workspaces";
   import Icon from "./Icon.svelte";
   import ContextMenu from "./ContextMenu.svelte";
   import SidePanel from "./sidebar/SidePanel.svelte";
@@ -32,13 +33,13 @@
     // a held bar closes on a press anywhere else, or Escape
     const outside = (e: PointerEvent) => { if (side.held && !nav?.contains(e.target as Node) && !side.menu) release(); };
     const esc = (e: KeyboardEvent) => { if (side.held && e.key === "Escape") release(); };
-    window.addEventListener("atlas-tabs-focus", take);
-    window.addEventListener("atlas-side-needed", need);
+    window.addEventListener("kandinsky-tabs-focus", take);
+    window.addEventListener("kandinsky-side-needed", need);
     window.addEventListener("pointerdown", outside, true);
     window.addEventListener("keydown", esc, true);
     return () => {
-      window.removeEventListener("atlas-tabs-focus", take);
-      window.removeEventListener("atlas-side-needed", need);
+      window.removeEventListener("kandinsky-tabs-focus", take);
+      window.removeEventListener("kandinsky-side-needed", need);
       window.removeEventListener("pointerdown", outside, true);
       window.removeEventListener("keydown", esc, true);
     };
@@ -75,7 +76,7 @@
     side.peek = true;
   }
   // what lies over the panes changed: a native view (a web tab) hides under the open bar now, not at its next check
-  $effect(() => { void side.peek; window.dispatchEvent(new Event("atlas-layout")); });
+  $effect(() => { void side.peek; window.dispatchEvent(new Event("kandinsky-layout")); });
   function track(e: PointerEvent) {
     pointer = { x: e.clientX, y: e.clientY };
     if (aim && Math.hypot(e.clientX - aim.x, e.clientY - aim.y) > 4) aim = null;
@@ -89,23 +90,24 @@
     e.preventDefault(); e.stopPropagation();
     to.click();
   }
+  let wsMenuOpen = $state(false);
   function leave() {
     clearTimeout(hoverT);
-    if (!collapsed || side.kb || side.held || side.menu || side.dragId) return;
+    if (!collapsed || side.kb || side.held || side.menu || wsMenuOpen || side.dragId) return;
     hoverT = setTimeout(() => (side.peek = false), 260);
   }
   function onFocusOut(e: FocusEvent) {
     const to = e.relatedTarget as Node | null;
-    if (side.kb && !(e.currentTarget as HTMLElement).contains(to) && !side.menu) { side.kb = false; side.peek = false; side.cursor = null; side.filtering = false; side.filter = ""; }
+    if (side.kb && !(e.currentTarget as HTMLElement).contains(to) && !side.menu && !wsMenuOpen) { side.kb = false; side.peek = false; side.cursor = null; side.filtering = false; side.filter = ""; }
   }
 
   function resize(e: PointerEvent) {
     e.preventDefault();
     const x0 = e.clientX, w0 = tabs.sidebar.width;
-    document.body.classList.add("atlas-resizing");
+    document.body.classList.add("kandinsky-resizing");
     const move = (ev: PointerEvent) => setSidebarWidth(w0 + ev.clientX - x0);
     const up = () => {
-      document.body.classList.remove("atlas-resizing");
+      document.body.classList.remove("kandinsky-resizing");
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
     };
@@ -123,7 +125,16 @@
     onpointermove={track} onclickcapture={aimedClick} bind:this={nav} data-testid="sidebar">
     <header class="head">
       <VaultBadge />
-      {#if wide}<button class="ws" onclick={() => void chooseVault()} title="{app.workspace?.root ?? ""} — switch vault ({keysOf("ui.vault") ?? "Ctrl+Alt+V"})">{app.workspace?.name ?? "Kandinsky"}<Icon name="chevron-down" size={12} /></button>{/if}
+      {#if wide}
+        <button class="ws" onclick={() => void chooseVault()} title="{app.workspace?.root ?? ""} — switch vault ({keysOf("ui.vault") ?? "Ctrl+Alt+V"})">{app.workspace?.name ?? "Kandinsky"}<Icon name="chevron-down" size={12} /></button>
+        <button class="icon-btn layouts tipped" class:on={wsMenuOpen || Boolean(workspaceState.active)}
+          onclick={(e) => { e.stopPropagation(); wsMenuOpen = true; void openWorkspacesMenu(e, () => { wsMenuOpen = false; }); }}
+          aria-haspopup="menu" aria-label="Workspaces and layout presets"
+          data-tip={tipFor(workspaceState.active ? `Workspaces · ${workspaceState.active}` : "Workspaces & 1-click presets", "ui.workspace.switch")}
+          data-testid="workspaces-menu">
+          <Icon name="grid" size={15} />
+        </button>
+      {/if}
       <!-- in fullscreen the bar stays icons, so the button opens it over the page and closes it again (it used to do
            nothing there) -->
       <button class="icon-btn collapse tipped" onclick={(e) => { e.stopPropagation(); if (fullscreen.on) { if (side.held) release(); else hold(); return; } toggleSidebar(); side.peek = false; }} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -165,6 +176,8 @@
   .ws { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; min-height: 26px; padding: 0 6px; margin-left: -6px; border-radius: 6px; text-align: left; font-weight: 600; font-size: calc(13px * var(--ui-scale, 1)); color: var(--heading); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ws:hover { background: var(--bg-hover); }
   .ws :global(svg) { flex: none; color: var(--text-faint); }
+  .layouts { color: var(--text-faint); }
+  .layouts:hover, .layouts.on { color: var(--accent); background: var(--bg-hover); }
   .head .tipped::after { left: auto; right: 0; top: calc(100% + 6px); transform: none; }
   .sidebar:not(.wide) .head .tipped::after { left: calc(100% + 10px); right: auto; top: 50%; transform: translateY(-50%); }
 

@@ -1,4 +1,4 @@
-// Fenced code blocks a plugin draws (`atlas.editor.registerFence("statblock", render)`): a
+// Fenced code blocks a plugin draws (`kandinsky.editor.registerFence("statblock", render)`): a
 // ```statblock fence in a note is shown by the plugin, in live preview and in the reading view.
 // The markdown renderer is not involved: a fence is rendered as the code block it is, and this
 // module puts the plugin's drawing in its place once it is on the page — so a fence nobody draws
@@ -34,7 +34,7 @@ export function registerFence(plugin: string, name: string, render: FenceRender)
 /** Draws the fence beside its code block (hidden meanwhile); follows the plugin coming, changing and going. */
 function mountFence(pre: HTMLElement, name: string, ctx: FenceContext): () => void {
   const host = document.createElement("div");
-  host.className = "atlas-block fence-block";
+  host.className = "kandinsky-block fence-block";
   host.dataset.fenceName = name;
   // what happens inside the drawing is the plugin's: the editor must not take it for a click into the source
   for (const ev of ["keydown", "keyup", "keypress", "beforeinput", "input", "mousedown", "paste", "cut", "copy"]) host.addEventListener(ev, (e) => e.stopPropagation());

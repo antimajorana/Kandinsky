@@ -8,7 +8,7 @@ import { WS } from "../playwright.config";
 // The books plugin (plugins/beta/books/view.js): an EPUB built here (EPUB 3: container, package, nav,
 // two chapters, a stylesheet), read in the page — the library, the reader, the contents, a link inside the book,
 // paging, and where you are written to the book's note (reading_chapter, reading_at, progress, last_read).
-const PLUGIN = join(WS, ".atlas/plugins/books");
+const PLUGIN = join(WS, ".kandinsky/plugins/books");
 
 function zip(files: [string, string, boolean][]): Buffer {
   const locals: Buffer[] = [], central: Buffer[] = [];
@@ -123,12 +123,12 @@ test("books: the library, an EPUB read in the page, paged, its contents and link
   const md = readFileSync(note, "utf8");
   expect(md).toMatch(/^book: ['"]\[\[quantum\.epub\]\]['"]$/m); // made by the core, as on every device
   expect(md).toContain("> — Two: readout, chapter 2");
-  await expect(book.locator("mark.atlas-hl")).toHaveText("Paragraph 1"); // "Paragraph 1 " squashed: the trailing space dropped
+  await expect(book.locator("mark.kandinsky-hl")).toHaveText("Paragraph 1"); // "Paragraph 1 " squashed: the trailing space dropped
   // back to the library and in again: where you left
   await pane.getByRole("button", { name: "‹ Library" }).click();
   await openBook();
   await expect(pane.frameLocator("iframe.b-frame").locator("h1")).toHaveText("Two");
-  await expect(pane.frameLocator("iframe.b-frame").locator("mark.atlas-hl")).toHaveText("Paragraph 1"); // marked again from the note
+  await expect(pane.frameLocator("iframe.b-frame").locator("mark.kandinsky-hl")).toHaveText("Paragraph 1"); // marked again from the note
 
   // a second highlight in the same paragraph: both marked, now and when the book opens again (wrapping the first one
   // split the paragraph's text, and the second was looked for where the text had been)
@@ -142,10 +142,10 @@ test("books: the library, an EPUB read in the page, paged, its contents and link
     d.dispatchEvent(new Event("selectionchange"));
   });
   await pane.getByRole("button", { name: "Highlight" }).click();
-  await expect(book.locator("mark.atlas-hl")).toHaveText(["Paragraph 1", "superconducting qubits"]);
+  await expect(book.locator("mark.kandinsky-hl")).toHaveText(["Paragraph 1", "superconducting qubits"]);
   await pane.getByRole("button", { name: "‹ Library" }).click();
   await openBook();
-  await expect(book.locator("mark.atlas-hl")).toHaveText(["Paragraph 1", "superconducting qubits"]);
+  await expect(book.locator("mark.kandinsky-hl")).toHaveText(["Paragraph 1", "superconducting qubits"]);
 
   // search the whole book: every chapter's hits, a click opens the chapter at the page of the find, marked
   await pane.getByRole("button", { name: "Search" }).click();
@@ -157,7 +157,7 @@ test("books: the library, an EPUB read in the page, paged, its contents and link
   await expect(pane.locator(".b-count")).toHaveText("1 found");
   await pane.locator(".b-hit").click();
   await expect(book.locator("h1")).toHaveText("One");
-  await expect(book.locator("mark.atlas-found")).toHaveText("Paragraph 30 of");
+  await expect(book.locator("mark.kandinsky-found")).toHaveText("Paragraph 30 of");
   await expect(pane.locator(".b-where")).not.toHaveText(/^1 \//); // paged on to where it is
   await expect(pane.locator(".b-find")).toBeHidden();
   await pane.getByRole("button", { name: "Search" }).click();
@@ -169,9 +169,9 @@ test("books: the library, an EPUB read in the page, paged, its contents and link
 });
 
 // the editor contract (plugin API 7): Books claims `.epub`, so a click in the file tree opens the reader, and a link's
-// `#…` naming an entry of the contents opens the book there (`atlas.anchor`) rather than where it was left
+// `#…` naming an entry of the contents opens the book there (`kandinsky.anchor`) rather than where it was left
 test("books: an .epub opens in the reader on a click in the file tree, at the chapter a link names", async ({ page, request }) => {
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "notes/books-link.md", text: "# Reading\n\nStart [[quantum.epub#One: qubits|at qubits]].\n" } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "notes/books-link.md", text: "# Reading\n\nStart [[quantum.epub#One: qubits|at qubits]].\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+Shift+f");

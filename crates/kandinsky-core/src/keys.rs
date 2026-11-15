@@ -1,14 +1,14 @@
-//! `.atlas/keys.toml`: the user's keyboard shortcuts, `"<command id>" = "Ctrl+Alt+X"` (`""` unbinds).
+//! `.kandinsky/keys.toml`: the user's keyboard shortcuts, `"<command id>" = "Ctrl+Alt+X"` (`""` unbinds).
 //! Applies to built-in UI actions, server built-ins and workspace scripts alike; edited from the
 //! Commands pane or by hand. Saving keeps the file's comments and order (toml_edit).
 use crate::api::Keymap;
 use crate::{Error, Result};
 use std::path::Path;
 
-pub const KEYS_FILE: &str = ".atlas/keys.toml";
+pub const KEYS_FILE: &str = ".kandinsky/keys.toml";
 
 pub fn load(root: &Path) -> Result<Keymap> {
-    let Ok(text) = std::fs::read_to_string(root.join(KEYS_FILE)) else { return Ok(Keymap::default()) };
+    let Ok(text) = std::fs::read_to_string(crate::state_dir::join(root, KEYS_FILE)) else { return Ok(Keymap::default()) };
     let table: toml::Table = toml::from_str(&text).map_err(|e| Error::BadRequest(format!("{KEYS_FILE}: {e}")))?;
     let keys = table.into_iter().filter_map(|(k, v)| Some((k, v.as_str()?.to_string()))).collect();
     Ok(Keymap { keys })
@@ -19,7 +19,7 @@ pub fn set(root: &Path, id: &str, keys: Option<&str>) -> Result<Keymap> {
     if id.is_empty() || id.len() > 120 {
         return Err(Error::BadRequest("bad command id".into()));
     }
-    let path = root.join(KEYS_FILE);
+    let path = crate::state_dir::join(root, KEYS_FILE);
     // under the file's lock: two bindings set at once (two windows) both stay
     crate::vault_write::locked(&path, || set_in(&path, id, keys))?;
     load(root)
@@ -37,7 +37,7 @@ fn set_in(path: &Path, id: &str, keys: Option<&str>) -> Result<()> {
     }
     // a fresh file starts with a header (a lone comment in an empty document would drift to the end)
     let header = if existing.is_none() {
-        "# Keyboard shortcuts: command id = chord (\"\" unbinds). Edited by Atlas's Commands pane.\n"
+        "# Keyboard shortcuts: command id = chord (\"\" unbinds). Edited by Kandinsky's Commands pane.\n"
     } else {
         ""
     };
@@ -56,7 +56,7 @@ mod tests {
         let m = set(d.path(), "refs.bib", Some("")).unwrap();
         assert_eq!(m.keys.get("ui.git").map(String::as_str), Some("Ctrl+Alt+G"));
         assert_eq!(m.keys.get("refs.bib").map(String::as_str), Some(""), "explicit unbind is kept");
-        let text = std::fs::read_to_string(d.path().join(KEYS_FILE)).unwrap();
+        let text = std::fs::read_to_string(crate::state_dir::join(d.path(), KEYS_FILE)).unwrap();
         assert!(text.starts_with("# Keyboard shortcuts"));
         let m = set(d.path(), "ui.git", None).unwrap();
         assert!(!m.keys.contains_key("ui.git"));

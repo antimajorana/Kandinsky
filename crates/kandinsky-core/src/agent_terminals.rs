@@ -32,7 +32,7 @@ pub struct AgentDecl {
     #[ts(optional)]
     pub session_file: Option<String>,
     /// Arguments, passed as written (not filled), that make the agent write its current session to the file named by
-    /// `$ATLAS_SESSION_REPORT` (JSON with `session_id`) whenever it starts one: an agent may move a conversation to a
+    /// `$KANDINSKY_SESSION_REPORT` (JSON with `session_id`) whenever it starts one: an agent may move a conversation to a
     /// new id (Claude Code on /clear, or a resume), and the tab then resumes that one, not the id it started with.
     #[serde(default)]
     pub session_report: Vec<String>,
@@ -80,7 +80,7 @@ pub fn has_session(pattern: &str) -> bool {
 
 /// Where a tab's agent reports its current session (`session_report`): one small file per tab, in the vault's cache.
 pub fn report_file(root: &Path, tab_session: &str) -> std::path::PathBuf {
-    root.join(".atlas/cache/agent-sessions").join(format!("{tab_session}.json"))
+    crate::state_dir::dir(root).join("cache/agent-sessions").join(format!("{tab_session}.json"))
 }
 
 /// The session the agent last reported for this tab, if it is a UUID it still has a transcript of.
@@ -113,7 +113,7 @@ pub fn command(decl: &AgentDecl, settings: &toml::Table, session: Option<&str>, 
                 let _ = crate::vault_write::mkdir(dir);
             }
             args.extend(decl.session_report.iter().cloned());
-            env.push(("ATLAS_SESSION_REPORT".into(), r.to_string_lossy().into_owned()));
+            env.push(("KANDINSKY_SESSION_REPORT".into(), r.to_string_lossy().into_owned()));
         }
     }
     (program, args, env)
@@ -183,7 +183,7 @@ session_file = "{account:~/.claude}/projects/*/{session}.jsonl"
         let report = t.path().join("cache/agent-sessions").join(format!("{tab}.json"));
         let (_, a, env) = command(&decl, &s, Some(tab), Some(&report));
         assert_eq!(a, ["--session-id", tab, "--settings", r#"{"hooks":{}}"#], "no report yet: the tab's own id; the hook passed as written");
-        assert!(env.contains(&("ATLAS_SESSION_REPORT".to_string(), report.to_string_lossy().into_owned())));
+        assert!(env.contains(&("KANDINSKY_SESSION_REPORT".to_string(), report.to_string_lossy().into_owned())));
         // the agent moved the conversation (/clear) and reported it; its transcript exists
         std::fs::write(&report, format!(r#"{{"session_id":"{moved}","source":"clear"}}"#)).unwrap();
         std::fs::create_dir_all(t.path().join("projects/-home-x")).unwrap();

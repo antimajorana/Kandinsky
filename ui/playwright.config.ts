@@ -6,24 +6,24 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { catalogFixture } from "./tests/fixtures/catalog";
 
-// A throwaway workspace, rebuilt on every run, served by the real `atlas` binary (UI embedded).
+// A throwaway workspace, rebuilt on every run, served by the real `kandinsky` binary (UI embedded).
 // Build the UI first (`npm run build`) — the server serves what was compiled into it.
 // Overridable so concurrent runs (several people or agents in one checkout) never share a workspace.
-// a shell started inside Atlas inherits ATLAS_UI_DIR: the tests would be served the installed UI, not the
+// a shell started inside Kandinsky inherits KANDINSKY_UI_DIR: the tests would be served the installed UI, not the
 // built one. Removed from process.env itself — Playwright gives the web server process.env plus `env`.
-delete process.env.ATLAS_UI_DIR;
+delete process.env.KANDINSKY_UI_DIR;
 // a helper never opens the user's real browser from a test (the email plugin's sign-in, mail.py `open_browser`)
-process.env.ATLAS_NO_BROWSER = "1";
-// …nor puts a deleted file in the desktop Trash (files.rs `trash`): `.atlas/trash/` in the throwaway vault
-process.env.ATLAS_VAULT_TRASH = "1";
+process.env.KANDINSKY_NO_BROWSER = "1";
+// …nor puts a deleted file in the desktop Trash (files.rs `trash`): `.kandinsky/trash/` in the throwaway vault
+process.env.KANDINSKY_VAULT_TRASH = "1";
 // …nor shows a notice on the desktop (notify.rs `platform`): a test's failing helper is no news for the person there
-process.env.ATLAS_NO_NOTIFY = "1";
-export const WS = process.env.ATLAS_PW_WS ?? join(process.env.TMPDIR ?? tmpdir(), "atlas-ui-test-ws");
-const PORT = Number(process.env.ATLAS_PW_PORT ?? 7720);
+process.env.KANDINSKY_NO_NOTIFY = "1";
+export const WS = process.env.KANDINSKY_PW_WS ?? join(process.env.TMPDIR ?? tmpdir(), "kandinsky-ui-test-ws");
+const PORT = Number(process.env.KANDINSKY_PW_PORT ?? 7720);
 // the core runs locked (DESIGN-local-lock.md), as the phone's does: every request of the tests carries this run's key —
 // a cookie in the browsers (pages, WebSockets), a header from the request fixture
 // (in the environment: the config is read again in every worker, which inherits it from the runner)
-const KEY = (process.env.ATLAS_PW_KEY ||= `atl_test${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`);
+const KEY = (process.env.KANDINSKY_PW_KEY ||= `atl_test${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`);
 // a scripted language server (hover, a diagnostic, completion): the LSP test must not depend on what is installed
 const FAKE_LS = fileURLToPath(new URL("./tests/fixtures/fake_ls.py", import.meta.url));
 // the SSH example plugin runs this instead of ssh (example-ssh.spec.ts): no network, no real config
@@ -37,18 +37,18 @@ const files: Record<string, string> = {
   // test that PUTs config would race another test's restore
   // restore_layout off: the layout is a file of the workspace now, and every test starts clean
   // the AI agent of the tests: a plugin's agent (agent_terminals.rs) whose program is `cat`, so what is typed echoes back
-  ".atlas/plugins/claude/plugin.toml": `title = "Claude"\nicon = "claude"\n\n[[agent]]\nid = "claude"\ntitle = "Claude"\nicon = "claude"\ncommand = "cat"\nsend_selection = "@{path}#L{from}-{to} "\n`,
+  ".kandinsky/plugins/claude/plugin.toml": `title = "Claude"\nicon = "claude"\n\n[[agent]]\nid = "claude"\ntitle = "Claude"\nicon = "claude"\ncommand = "cat"\nsend_selection = "@{path}#L{from}-{to} "\n`,
   // the references library is the catalog-papers plugin's: its manifest, its helper the debug build (webServer builds it)
-  ".atlas/plugins/catalog-papers/plugin.toml": readFileSync(fileURLToPath(new URL("../plugins/beta/catalog-papers/plugin.toml", import.meta.url)), "utf8")
+  ".kandinsky/plugins/catalog-papers/plugin.toml": readFileSync(fileURLToPath(new URL("../plugins/beta/catalog-papers/plugin.toml", import.meta.url)), "utf8")
     .replace(/^run = .*$/m, `run = "${fileURLToPath(new URL("../target/debug/papers", import.meta.url))}"`),
   // the Libraries page is the Catalog plugin's pane: its page, without its helper (tests/fixtures/catalog.ts)
   ...catalogFixture(),
   // the snippets are a plugin's: its build, as a vault holds it
-  ".atlas/plugins/snippets/plugin.toml": readFileSync(fileURLToPath(new URL("../plugins/beta/snippets/plugin.toml", import.meta.url)), "utf8"),
-  ".atlas/plugins/snippets/main.js": readFileSync(fileURLToPath(new URL("../plugins/beta/snippets/main.js", import.meta.url)), "utf8"),
-  ".atlas/plugins/snippets/words.txt": readFileSync(fileURLToPath(new URL("../plugins/beta/snippets/words.txt", import.meta.url)), "utf8"),
-  ".atlas/plugins/snippets/starter.js": readFileSync(fileURLToPath(new URL("../plugins/beta/snippets/starter.js", import.meta.url)), "utf8"),
-  ".atlas/config.toml": `log_dir = "log"\nfocus = "FOCUS.md"\nvim = true\n\n[ui]\nrestore_layout = false\n\n[latex]\nsnippets_file = "snippets/snips.js"\nvariables_file = "snippets/vars.js"\n\n[terminal]\nrenderer = "text"\n\n[lsp]\npython = "python3 ${FAKE_LS}"\nrust = "off"\nlatex = "off"\nc = "off"\n`,
+  ".kandinsky/plugins/snippets/plugin.toml": readFileSync(fileURLToPath(new URL("../plugins/beta/snippets/plugin.toml", import.meta.url)), "utf8"),
+  ".kandinsky/plugins/snippets/main.js": readFileSync(fileURLToPath(new URL("../plugins/beta/snippets/main.js", import.meta.url)), "utf8"),
+  ".kandinsky/plugins/snippets/words.txt": readFileSync(fileURLToPath(new URL("../plugins/beta/snippets/words.txt", import.meta.url)), "utf8"),
+  ".kandinsky/plugins/snippets/starter.js": readFileSync(fileURLToPath(new URL("../plugins/beta/snippets/starter.js", import.meta.url)), "utf8"),
+  ".kandinsky/config.toml": `log_dir = "log"\nfocus = "FOCUS.md"\nvim = true\n\n[ui]\nrestore_layout = false\n\n[latex]\nsnippets_file = "snippets/snips.js"\nvariables_file = "snippets/vars.js"\n\n[terminal]\nrenderer = "text"\n\n[lsp]\npython = "python3 ${FAKE_LS}"\nrust = "off"\nlatex = "off"\nc = "off"\n`,
   "data/sweep.tsv": "U\tE_kin\tZ\n3.0\t-1.25\t0.81\n5.5\t-0.90\t0.42\n4.0\t-1.10\t0.66\n",
   "themes/test-color-theme.json": '{\n  // VS Code themes are JSONC\n  "name": "Test Zed", "type": "dark",\n  "colors": { "editor.background": "#050505", "focusBorder": "#7de486", },\n  "tokenColors": [ { "scope": "keyword", "settings": { "foreground": "#c678dd" } }, { "scope": ["variable"], "settings": { "foreground": "#4cc2fb", "fontStyle": "bold" } } ]\n}\n',
   "snippets/snips.js": '[\n  { trigger: "mk", replacement: "$$0$", options: "tA" },\n  { trigger: "//", replacement: "\\\\frac{$0}{$1}$2", options: "mA" },\n  { trigger: "([A-Za-z])(\\\\d)", replacement: "[[0]]_{[[1]]}", options: "rmA" },\n  { trigger: "@${GREEK}", replacement: "\\\\[[0]]", options: "rmA" },\n  { trigger: "U", replacement: "\\\\underbrace{${VISUAL}}_{$0}", options: "mA" },\n  { trigger: "beg", replacement: "\\\\begin{$0}", options: "mA" },\n  { trigger: "sumk", replacement: "\\\\sum_{k=$0}^{$1}$2", options: "mA" },\n  { trigger: "sumq", replacement: "\\\\sum_{q}$0", options: "mA" },\n  { trigger: "kV", replacement: "\\\\text{kV}", options: "mA" },\n  { trigger: "VA", replacement: "\\\\text{VA}", options: "mA" },\n  { trigger: "kVA", replacement: "\\\\text{kVA}", options: "mA" },\n'
@@ -130,22 +130,22 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     extraHTTPHeaders: { authorization: `Bearer ${KEY}` },
-    storageState: { cookies: [{ name: "atlas_local", value: KEY, domain: "127.0.0.1", path: "/", expires: -1, httpOnly: true, secure: false, sameSite: "Strict" }], origins: [] },
+    storageState: { cookies: [{ name: "kandinsky_local", value: KEY, domain: "127.0.0.1", path: "/", expires: -1, httpOnly: true, secure: false, sameSite: "Strict" }], origins: [] },
     viewport: { width: 1500, height: 900 },
     colorScheme: "dark", // ui.theme follows the desktop by default; the tests look at the dark side
     reducedMotion: "reduce", // ui.motion is on by default; the tests check end states, not transitions
-    // Playwright's pinned browser may be newer than the cached one; ATLAS_PW_CHROME overrides.
-    launchOptions: process.env.ATLAS_PW_CHROME ? { executablePath: process.env.ATLAS_PW_CHROME } : {},
+    // Playwright's pinned browser may be newer than the cached one; KANDINSKY_PW_CHROME overrides.
+    launchOptions: process.env.KANDINSKY_PW_CHROME ? { executablePath: process.env.KANDINSKY_PW_CHROME } : {},
   },
   webServer: {
-    // ATLAS_SERVER_CMD runs another build of the CLI instead, e.g. the Windows one under Wine
-    // (`bash scripts/dev/windows.sh run atlas`; docs/design/DESIGN-desktop-ports.md)
-    command: process.env.ATLAS_SERVER_CMD
-      ? `${process.env.ATLAS_SERVER_CMD} serve ${WS} --port ${PORT}`
-      : `cargo build -q -p atlas-papers -p atlas-ssh && cargo run -q -p atlas -- serve ${WS} --port ${PORT}`,
+    // KANDINSKY_SERVER_CMD runs another build of the CLI instead, e.g. the Windows one under Wine
+    // (`bash scripts/dev/windows.sh run kandinsky`; docs/design/DESIGN-desktop-ports.md)
+    command: process.env.KANDINSKY_SERVER_CMD
+      ? `${process.env.KANDINSKY_SERVER_CMD} serve ${WS} --port ${PORT}`
+      : `cargo build -q -p kandinsky-papers -p kandinsky-ssh && cargo run -q -p kandinsky -- serve ${WS} --port ${PORT}`,
     cwd: "..",
     // the vault list and the secret store are the test's own, and "open a vault" starts nothing
-    env: { ...(process.env as Record<string, string>), ATLAS_VAULTS: `${WS}-vaults.toml`, ATLAS_SECRETS_DIR: `${WS}-secrets`, ATLAS_SERVER_CONFIG: `${WS}-server.toml`, ATLAS_SERVER_STATE: `${WS}-server.json`, ATLAS_AGENTS_FILE: `${WS}-agents.json`, ATLAS_APP: "true", ATLAS_LOCAL_LOCK: "1", ATLAS_LOCAL_KEY: KEY, ATLAS_SSH_BIN: FAKE_SSH, ATLAS_FAKE_SFTP_ROOT: SFTP_ROOT },
+    env: { ...(process.env as Record<string, string>), KANDINSKY_VAULTS: `${WS}-vaults.toml`, KANDINSKY_SECRETS_DIR: `${WS}-secrets`, KANDINSKY_SERVER_CONFIG: `${WS}-server.toml`, KANDINSKY_SERVER_STATE: `${WS}-server.json`, KANDINSKY_AGENTS_FILE: `${WS}-agents.json`, KANDINSKY_APP: "true", KANDINSKY_LOCAL_LOCK: "1", KANDINSKY_LOCAL_KEY: KEY, KANDINSKY_SSH_BIN: FAKE_SSH, KANDINSKY_FAKE_SFTP_ROOT: SFTP_ROOT },
     url: `http://127.0.0.1:${PORT}/`,
     timeout: 300_000,
     reuseExistingServer: false,

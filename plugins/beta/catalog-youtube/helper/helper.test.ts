@@ -2,7 +2,7 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { harness, Reply } from "atlas-helper/testing";
+import { harness, Reply } from "kandinsky-helper/testing";
 import "./helper";
 
 // [contributes.catalog] recognize, read from plugin.toml as the core reads it ((?i) → the `i` flag): every source's

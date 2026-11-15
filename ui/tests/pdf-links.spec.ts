@@ -6,10 +6,10 @@ import { join } from "node:path";
 import { WS } from "../playwright.config";
 
 // Places in a PDF are linked the Obsidian way: [[x.pdf#page=N]] opens that page; the PDF's "Copy link" gives such a link (lib/pdf-place.ts).
-const PAPERS = process.env.ATLAS_TEST_PAPERS ?? "";
+const PAPERS = process.env.KANDINSKY_TEST_PAPERS ?? "";
 const PAPER = join(PAPERS, "georges1996dynamical");
-test.skip(!existsSync(PAPER), `needs the paper georges1996dynamical in ${PAPERS} (set ATLAS_TEST_PAPERS)`);
-const H = { "x-atlas": "1" };
+test.skip(!existsSync(PAPER), `needs the paper georges1996dynamical in ${PAPERS} (set KANDINSKY_TEST_PAPERS)`);
+const H = { "x-kandinsky": "1" };
 
 test("a link to a PDF page opens there, and the PDF copies a link to where it is", async ({ page, request, context }) => {
   mkdirSync(join(WS, "pdfs"), { recursive: true });
@@ -40,5 +40,5 @@ test("a link to an annotation opens its page and points at it", async ({ page, r
   await openFile(page, "pdf-annot-link.md");
   await page.locator(".cm-content").getByText("p.3").click();
   await expect(page.getByRole("textbox", { name: "Page", exact: true })).toHaveValue("3", { timeout: 20_000 });
-  await expect(page.locator(`.pdf-pane .page[data-page-number="3"] [data-annotation-id="${made}R"].atlas-flash`)).toBeAttached();
+  await expect(page.locator(`.pdf-pane .page[data-page-number="3"] [data-annotation-id="${made}R"].kandinsky-flash`)).toBeAttached();
 });

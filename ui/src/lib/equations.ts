@@ -91,7 +91,7 @@ export const texKey = (display: string): string =>
     .split("\n").map((l) => l.replace(/^[ \t>]*/, "")).join("\n")
     .replace(/^\s*\$\$|\$\$\s*$/g, "").trim();
 
-/** TeX as KaTeX should draw it: labels out (they are Atlas's), and with a number, a numbered environment made its
+/** TeX as KaTeX should draw it: labels out (they are Kandinsky's), and with a number, a numbered environment made its
  *  unnumbered twin (KaTeX would count from 1 in each display) and `\tag{n}` added — before the closing `$$` when the
  *  text has them. */
 export function numberedTex(tex: string, n?: string): string {

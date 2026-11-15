@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 // "what is this this is confusing" (a wall of near-identical "Drafted for you" cards): the list is one
 // line until opened, says that nothing is written without Keep, and alike sibling folders are one
 // suggestion, not a card each.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("drafted tools: one line until opened; sibling folders are one suggestion", async ({ page, request }) => {
   for (const course of ["qm", "em", "topo"]) for (let i = 0; i < 4; i++) {

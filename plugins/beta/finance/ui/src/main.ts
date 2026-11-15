@@ -5,12 +5,12 @@ import type { PluginApi } from "./api";
 
 const BLOCKS: [Kind, string][] = [["balance", "Finance: balances"], ["spending", "Finance: this month"], ["register", "Finance: register"]];
 
-export function register(atlas: PluginApi) {
-  atlas.registerCommand({ id: "open", title: "Finance", run: () => atlas.openView(undefined, { title: "Finance", icon: "chart" }) });
-  atlas.registerCommand({ id: "review", title: "Finance: review", run: () => atlas.openView("review", { title: "Finance", icon: "chart" }) });
+export function register(kandinsky: PluginApi) {
+  kandinsky.registerCommand({ id: "open", title: "Finance", run: () => kandinsky.openView(undefined, { title: "Finance", icon: "chart" }) });
+  kandinsky.registerCommand({ id: "review", title: "Finance: review", run: () => kandinsky.openView("review", { title: "Finance", icon: "chart" }) });
   for (const [kind, title] of BLOCKS) {
-    atlas.registerBlock(`finance.${kind}`, (host, block) => {
-      const b = mount(Block, { target: host, props: { atlas, kind, options: block.options } });
+    kandinsky.registerBlock(`finance.${kind}`, (host, block) => {
+      const b = mount(Block, { target: host, props: { kandinsky, kind, options: block.options } });
       return () => unmount(b);
     }, {
       title,

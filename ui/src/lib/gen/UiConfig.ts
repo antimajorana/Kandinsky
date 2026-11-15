@@ -57,7 +57,7 @@ font_size: number,
  */
 gpu_rendering: GpuRendering, 
 /**
- * CSS snippets switched off. Every `.css` file in `.atlas/snippets/` restyles Atlas live (like
+ * CSS snippets switched off. Every `.css` file in `.kandinsky/snippets/` restyles Kandinsky live (like
  * Obsidian snippets) unless its name is here.
  */
 css_snippets_off: Array<string>, 
@@ -92,7 +92,7 @@ eink: Eink,
  */
 eink_refresh: EinkRefresh, 
 /**
- * Reopen the tabs of the last session when Atlas starts. Off: every start shows only the home
+ * Reopen the tabs of the last session when Kandinsky starts. Off: every start shows only the home
  * screen (reloading the window still keeps your tabs).
  */
 restore_layout: boolean, 

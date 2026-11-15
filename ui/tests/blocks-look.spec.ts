@@ -3,7 +3,7 @@ import { openFile } from "./open";
 
 // Blocks drawn inside a note look as they do on their own: the note's markdown styles stay out of them, and a block
 // lays itself out by its own width.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 async function openNote(page: Page, name: string) {
   await page.goto("/");
@@ -55,8 +55,8 @@ test("a search block in a note does not find its own query line", async ({ page,
 test("task lists in blocks tick the note's own checkbox, and a framed base gets no hover band", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/look-checks.md", text: "# C\n\n- [ ] a block task 📅 2026-10-12\n\n```view\ntype: list\n```\n\n![[all.base]]\n" } });
   await openNote(page, "look-checks");
-  const box = page.locator(".cm-content .atlas-block input[type=checkbox]").first();
-  await expect(box).toHaveClass(/atlas-check/);
+  const box = page.locator(".cm-content .kandinsky-block input[type=checkbox]").first();
+  await expect(box).toHaveClass(/kandinsky-check/);
   await expect(box).toHaveCSS("appearance", "none");
   const host = page.locator(".cm-content .cm-rendered-block", { has: page.locator(".base.embedded") });
   await host.hover();

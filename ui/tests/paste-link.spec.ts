@@ -1,6 +1,6 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import { openFile } from "./open";
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const text = (r: APIRequestContext, f: string) => r.get(`/api/file?path=${f}`, { headers: H }).then((x) => x.json()).then((j) => j.text as string);
 
 async function openWithClipboard(page: Page, request: APIRequestContext, f: string, body: string, clip: string) {

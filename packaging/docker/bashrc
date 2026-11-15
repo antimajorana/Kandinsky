@@ -1,4 +1,4 @@
-# The terminals' bash in the Atlas container (Dockerfile: sourced from /etc/bash.bashrc, so it holds for whatever
+# The terminals' bash in the Kandinsky container (Dockerfile: sourced from /etc/bash.bashrc, so it holds for whatever
 # `user:` runs the container). Interactive shells only.
 [[ $- == *i* ]] || return
 
@@ -7,10 +7,10 @@ export HISTFILE="${XDG_STATE_HOME:-$HOME}/bash_history" HISTSIZE=10000 HISTFILES
 shopt -s histappend checkwinsize globstar autocd cdspell 2>/dev/null
 PROMPT_COMMAND="history -a${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
 
-# a two-colour prompt: who@atlas, the folder, the git branch, a red status after a failure
-__atlas_git() { local b; b=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null) && printf ' (%s)' "$b"; }
-__atlas_status() { local s=$?; ((s)) && printf '\001\e[31m\002%s \001\e[0m\002' "$s"; }  # \001/\002: \[ \] in output
-PS1='$(__atlas_status)\[\e[1;36m\]\u@atlas\[\e[0m\] \[\e[1;34m\]\w\[\e[0;33m\]$(__atlas_git)\[\e[0m\] \$ '
+# a two-colour prompt: who@kandinsky, the folder, the git branch, a red status after a failure
+__kandinsky_git() { local b; b=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null) && printf ' (%s)' "$b"; }
+__kandinsky_status() { local s=$?; ((s)) && printf '\001\e[31m\002%s \001\e[0m\002' "$s"; }  # \001/\002: \[ \] in output
+PS1='$(__kandinsky_status)\[\e[1;36m\]\u@kandinsky\[\e[0m\] \[\e[1;34m\]\w\[\e[0;33m\]$(__kandinsky_git)\[\e[0m\] \$ '
 # \u is "I have no name!" for a uid with no passwd entry (compose `user: "1000:1000"`): show the number instead
 id -un >/dev/null 2>&1 || PS1=${PS1//\\u/$(id -u)}
 

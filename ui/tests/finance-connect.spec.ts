@@ -8,7 +8,7 @@ import { WS } from "../playwright.config";
 // of pickers and toasts. The engine is not run: its answers (an empty ledger, a country's banks, the consent and its
 // return) are given here, and the links asked of it are recorded.
 const PLUGIN = fileURLToPath(new URL("../../plugins/beta/finance", import.meta.url));
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const SUMMARY = {
   accounts: [], review: 0, transactions: 0, errors: 0, warnings: 0, months: [], income: [], net_worth: [], unit: "EUR", units: [],
   known: ["Assets:Bank", "Assets:Pocket USD", "Expenses:Food"], first_use: [], sources: [],
@@ -17,7 +17,7 @@ const SUMMARY = {
 const BANKS = [{ name: "Banco Uno", country: "ES", days: 180 }, { name: "Caja Dos", country: "ES", days: 90 }, { name: "Tercer Banco", country: "ES", days: null }];
 
 test.beforeAll(async ({ request }) => {
-  const dir = join(WS, ".atlas/plugins/finance");
+  const dir = join(WS, ".kandinsky/plugins/finance");
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   for (const f of ["view.js", "main.js", "ui-lib"]) cpSync(join(PLUGIN, f), join(dir, f), { recursive: true });
@@ -27,7 +27,7 @@ test.beforeAll(async ({ request }) => {
 test.afterAll(async ({ request }) => {
   await request.post("/api/plugins/finance/helper/stop", { headers: H });
   await request.delete("/api/plugins/finance/secrets/enable_banking_key", { headers: H });
-  rmSync(join(WS, ".atlas/plugins/finance"), { recursive: true, force: true });
+  rmSync(join(WS, ".kandinsky/plugins/finance"), { recursive: true, force: true });
 });
 
 /** Answers the engine's calls; returns the `bank_link` calls made. */

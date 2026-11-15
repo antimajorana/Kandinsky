@@ -86,7 +86,7 @@ pub fn render(kind: &Kind, m: &Merged, extra: &[String], template: Option<&str>,
     let yaml = serde_yaml::to_string(&map).unwrap_or_default();
     let block = format!("```view\ntype: {}\n```", kind.block);
     let body = match template {
-        // Atlas's one template language (docs/guides/TEMPLATES.md): `{{director | link}}`, `{{#if cast}}…{{/if}}`,
+        // Kandinsky's one template language (docs/guides/TEMPLATES.md): `{{director | link}}`, `{{#if cast}}…{{/if}}`,
         // dates; a field no source gave is simply absent
         Some(t) => {
             let mut values: serde_json::Map<String, Value> = m.fields.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
@@ -94,8 +94,8 @@ pub fn render(kind: &Kind, m: &Merged, extra: &[String], template: Option<&str>,
             let when = chrono::NaiveDateTime::parse_from_str(now, "%Y-%m-%d %H:%M").unwrap_or_default();
             let title = m.fields.get("title").map(crate::kind::text_of).unwrap_or_default();
             let none = |_: &str| None;
-            let ctx = atlas_template::Ctx { title: &title, now: when, values, include: &none, unknown: atlas_template::Unknown::Empty };
-            atlas_template::render(t, &ctx).text
+            let ctx = kandinsky_template::Ctx { title: &title, now: when, values, include: &none, unknown: kandinsky_template::Unknown::Empty };
+            kandinsky_template::render(t, &ctx).text
         }
         None => match kind.body.as_ref().and_then(|f| m.fields.get(f)).map(crate::kind::text_of).filter(|t| prose(t)) {
             Some(text) => format!("{block}\n\n{text}\n"),

@@ -1,7 +1,7 @@
 // New…: one list of everything that can be
 // made, each kind placing what it makes itself — a blank note (beside the note in use, else [notes] dir), a note from
-// each template (its `create_in:`), a drawing ([draw] dir), and what plugins add (`atlas.registerNew`: a lecture for a
-// course, a meeting…). The phone app's + opens it (native-shell `atlasShell.command("ui.new")`).
+// each template (its `create_in:`), a drawing ([draw] dir), and what plugins add (`kandinsky.registerNew`: a lecture for a
+// course, a meeting…). The phone app's + opens it (native-shell `kandinskyShell.command("ui.new")`).
 // The kinds used last come first ("better templates, chosen well", 2026-10-18), and each says where its note goes.
 import { pick, type PickItem } from "./palette.svelte";
 import { nameAndCreate, templateChoices, templateLabel } from "./notes-system";
@@ -12,14 +12,14 @@ import type { IconName } from "./panes";
 export interface NewKind { id: string; title: string; detail?: string; icon?: IconName; plugin: string; run(): void | Promise<void> }
 
 const kinds = new Map<string, NewKind>();
-/** plugins.svelte.ts (`atlas.registerNew`) → the remover. */
+/** plugins.svelte.ts (`kandinsky.registerNew`) → the remover. */
 export function addNewKind(k: NewKind): () => void {
   kinds.set(k.id, k);
   return () => { if (kinds.get(k.id) === k) kinds.delete(k.id); };
 }
 
 /** The values picked last, newest first (per device: a convenience, not vault state). */
-const RECENT_KEY = "atlas.new.recent", RECENT_SHOWN = 3;
+const RECENT_KEY = "kandinsky.new.recent", RECENT_SHOWN = 3;
 const recent = (): string[] => load<string[]>(RECENT_KEY, []).filter((v) => typeof v === "string");
 const used = (v: string): void => save(RECENT_KEY, [v, ...recent().filter((r) => r !== v)].slice(0, 12));
 

@@ -6,9 +6,9 @@ import { WS } from "../playwright.config";
 
 // "super + e opens a super comand bar that does commands actions and also searches and opens files":
 // one bar — commands, files, headings, and now the text of notes — on Super+E and F1. And Ctrl+Q cycles a line: text → list item → to-do → text.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
-const lastLine = (page: Page) => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string } | null } }).__atlas.editor()?.text.trimEnd().split("\n").pop() ?? "");
+const lastLine = (page: Page) => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } | null } }).__kandinsky.editor()?.text.trimEnd().split("\n").pop() ?? "");
 
 test.beforeAll(async ({ request }) => {
   await put(request, "notes/bar-note.md", "# Bar note\n\nthe zyqqa spectral function is discussed here\n\nlast\n");
@@ -91,7 +91,7 @@ test("the command bar also captures what was typed", async ({ page, request }) =
   await palette.getByText("Capture “a thought from the bar qqz”").click();
   await expect(page.getByText("Captured").first()).toBeVisible();
   const d = new Date(), day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const log = async () => ((await (await request.get(`/api/file?path=log/${day}.md`, { headers: { "x-atlas": "1" } })).json()).text ?? "") as string;
+  const log = async () => ((await (await request.get(`/api/file?path=log/${day}.md`, { headers: { "x-kandinsky": "1" } })).json()).text ?? "") as string;
   await expect.poll(log).toContain("a thought from the bar qqz");
 });
 
@@ -120,7 +120,7 @@ test("+ in the bar is a capture box with the box's completions; Enter captures",
   await page.keyboard.press("Enter"); // the list is closed now: the bar's Enter captures
   await expect(page.getByText("Captured").first()).toBeVisible();
   const d = new Date(), day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const log = await (await request.get(`/api/file?path=log/${day}.md`, { headers: { "x-atlas": "1" } })).json();
+  const log = await (await request.get(`/api/file?path=log/${day}.md`, { headers: { "x-kandinsky": "1" } })).json();
   expect(log.text).toMatch(/- \[ \] \d{2}:\d{2} water the qqplants 📅 \d{4}-\d{2}-\d{2}/);
   // Backspace on the empty box: back to the commands
   await page.keyboard.press("Meta+e");
@@ -131,8 +131,8 @@ test("+ in the bar is a capture box with the box's completions; Enter captures",
 
 test("a vault script with a built-in command's id does not blank the bar: the first wins, the clash is said", async ({ page }) => {
   // a past crash: a repeated id → Svelte each_key_duplicate → the bar and Settings → Commands drew nothing
-  mkdirSync(join(WS, ".atlas/commands"), { recursive: true });
-  const file = join(WS, ".atlas/commands/ui.today.toml");
+  mkdirSync(join(WS, ".kandinsky/commands"), { recursive: true });
+  const file = join(WS, ".kandinsky/commands/ui.today.toml");
   writeFileSync(file, 'title = "Shadowing home"\nrun = "true"\n');
   const errs: string[] = [];
   page.on("pageerror", (e) => errs.push(e.message));

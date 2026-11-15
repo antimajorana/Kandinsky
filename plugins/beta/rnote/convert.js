@@ -1,10 +1,10 @@
-// A folder's Rnote files converted to drawings in a dialog (atlas.openDialog with view "convert.js", the folder as
-// `atlas.arg`): a bar while it runs, then one line per file — made, made before, or why it failed — each drawing
+// A folder's Rnote files converted to drawings in a dialog (kandinsky.openDialog with view "convert.js", the folder as
+// `kandinsky.arg`): a bar while it runs, then one line per file — made, made before, or why it failed — each drawing
 // opened by a click.
 import { convertFolder } from "./main.js";
 
-export default function mount(host, atlas) {
-  const dir = String(atlas.arg ?? "");
+export default function mount(host, kandinsky) {
+  const dir = String(kandinsky.arg ?? "");
   const el = (tag, props = {}, kids = []) => {
     const e = Object.assign(document.createElement(tag), props);
     e.append(...kids);
@@ -30,18 +30,18 @@ export default function mount(host, atlas) {
   const bar = el("progress", { max: 1, value: 0 });
   const list = el("ul");
   const close = el("button", { textContent: "Close" });
-  close.addEventListener("click", () => atlas.pane.close());
+  close.addEventListener("click", () => kandinsky.pane.close());
   host.append(style, said, bar, list, el("div", { className: "rnc-go" }, [close]));
 
   let gone = false;
-  convertFolder(atlas, dir, ({ path, n, of, out, error }) => {
+  convertFolder(kandinsky, dir, ({ path, n, of, out, error }) => {
     if (gone) return;
     bar.max = of;
     bar.value = n;
     said.textContent = `Converting ${n} of ${of}…`;
     const what = error ? error : out.made ? "made" : "made before";
     const li = el("li", { className: error ? "err" : "open", title: error ? "" : out.path }, [el("span", { textContent: path.slice(dir ? dir.length + 1 : 0) }), el("span", { className: "what", textContent: what })]);
-    if (!error) li.addEventListener("click", () => atlas.open(out.path));
+    if (!error) li.addEventListener("click", () => kandinsky.open(out.path));
     list.append(li);
   }).then((r) => {
     if (gone) return;

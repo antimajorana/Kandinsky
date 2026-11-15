@@ -1,10 +1,10 @@
 target/
 node_modules/
 ui/dist/
-crates/atlas-app/gen/
+crates/kandinsky-app/gen/
 *.log
 # a vault's cache, wherever a test or a probe opened one
-**/.atlas/cache/
+**/.kandinsky/cache/
 *.html
 !ui/capture.html
 !ui/index.html
@@ -20,7 +20,7 @@ plugins/*/*/bin/
 plugins/*/*/ui/node_modules
 
 # the plugins' engines built for Android by build-apk.sh (packed into the APK, never committed)
-crates/atlas-android/helpers/*/
+crates/kandinsky-android/helpers/*/
 # this machine's real-data paths for the tests (scripts/dev/gate.sh sources it)
 scripts/dev/local.env
 # Claude Code's per-machine settings and locks

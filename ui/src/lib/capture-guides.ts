@@ -1,5 +1,5 @@
 // What every capture box says, the same words everywhere: the empty box's prompt, the short forms shown while it is
-// empty, and where a capture landed. Mirrors atlas_core::capture::{PROMPT, GUIDES} (atlas-capture's tests compare).
+// empty, and where a capture landed. Mirrors kandinsky_core::capture::{PROMPT, GUIDES} (kandinsky-capture's tests compare).
 import { shownName } from "./paths";
 import { localDay } from "./local-day";
 import type { CaptureResult } from "./gen/CaptureResult";

@@ -1,5 +1,5 @@
-// The LaTeX set, Snippets' own: the plugin keeps .atlas/snippets/latex.js equal to this file, and a new version of
-// the plugin replaces it (the copy it replaces goes to .atlas/trash). Switch any snippet or option on or off in
+// The LaTeX set, Snippets' own: the plugin keeps .kandinsky/snippets/latex.js equal to this file, and a new version of
+// the plugin replaces it (the copy it replaces goes to .kandinsky/trash). Switch any snippet or option on or off in
 // Settings → Snippets; snippets of your own go in another .js file in that folder. `{ on: false }` starts an option
 // off. README.md (Snippets) has the format.
 export default ({ math, text, visual, commands, vars, options }) => [

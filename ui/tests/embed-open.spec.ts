@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { openFile } from "./open";
 
 // From an embed to the original: the ↗ over the embed under the pointer, and Ctrl+click in it.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test.beforeAll(async ({ request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/embedder.md", text: "# Embedder\n\nfirst line\n\n![[Embedded note#Second]]\n\nlast line\n" } });

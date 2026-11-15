@@ -4,7 +4,7 @@ import { test, expect } from "@playwright/test";
 test("in fullscreen the sidebar button opens the bar and closes it", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await page.evaluate(() => (window as unknown as { __atlas: { commands(): { id: string }[] } }).__atlas.commands());
+  await page.evaluate(() => (window as unknown as { __kandinsky: { commands(): { id: string }[] } }).__kandinsky.commands());
   await page.keyboard.press("F1");
   await page.keyboard.type("fullscreen");
   await page.getByTestId("palette").getByText(/fullscreen/i).first().click();

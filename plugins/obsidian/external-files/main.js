@@ -171,41 +171,41 @@ function basenameOf(resolvedPath) {
   return (idx >= 0 ? trimmed.slice(idx + 1) : trimmed) || resolvedPath;
 }
 
-function openInSystemApp(atlas, resolvedPath) {
+function openInSystemApp(kandinsky, resolvedPath) {
   if (!resolvedPath) return false;
   // Primary API v28 call required by Kandinsky contract:
-  const tookNative = atlas.openNative(resolvedPath);
+  const tookNative = kandinsky.openNative(resolvedPath);
   if (tookNative) return true;
 
   // Desktop / WebView fallback when openNative returns false:
   if (/^https?:\/\//i.test(resolvedPath)) {
-    atlas.openLink?.(resolvedPath, { outside: true });
+    kandinsky.openLink?.(resolvedPath, { outside: true });
     return true;
   }
-  if (typeof atlas.openLink === "function") {
-    atlas.openLink(toFileUrl(resolvedPath));
+  if (typeof kandinsky.openLink === "function") {
+    kandinsky.openLink(toFileUrl(resolvedPath));
     return true;
   }
-  atlas.toast?.("External Files", `Path: ${resolvedPath}`, "info");
+  kandinsky.toast?.("External Files", `Path: ${resolvedPath}`, "info");
   return false;
 }
 
-export function register(atlas) {
-  const getRoot = () => String(atlas.plugin?.settings?.external_root ?? DEFAULT_EXTERNAL_ROOT).trim() || DEFAULT_EXTERNAL_ROOT;
+export function register(kandinsky) {
+  const getRoot = () => String(kandinsky.plugin?.settings?.external_root ?? DEFAULT_EXTERNAL_ROOT).trim() || DEFAULT_EXTERNAL_ROOT;
 
   // Track live CodeMirror views so Insert Card can insert right at the cursor when an editor is mounted
   const liveEditors = new Map();
   try {
-    const ViewPlugin = atlas.editor?.codemirror?.view?.ViewPlugin;
-    if (ViewPlugin && typeof atlas.editor?.extension === "function" && typeof atlas.editor?.path === "function") {
+    const ViewPlugin = kandinsky.editor?.codemirror?.view?.ViewPlugin;
+    if (ViewPlugin && typeof kandinsky.editor?.extension === "function" && typeof kandinsky.editor?.path === "function") {
       const ext = ViewPlugin.fromClass(class {
         constructor(view) {
           this.view = view;
-          this.path = atlas.editor.path(view);
+          this.path = kandinsky.editor.path(view);
           if (this.path) liveEditors.set(this.path, view);
         }
         update(u) {
-          const next = atlas.editor.path(u.view);
+          const next = kandinsky.editor.path(u.view);
           if (next !== this.path) {
             if (this.path && liveEditors.get(this.path) === u.view) liveEditors.delete(this.path);
             this.path = next;
@@ -216,7 +216,7 @@ export function register(atlas) {
           if (this.path && liveEditors.get(this.path) === this.view) liveEditors.delete(this.path);
         }
       });
-      atlas.editor.extension(ext);
+      kandinsky.editor.extension(ext);
     }
   } catch {
     // Headless or mocked environments without CodeMirror continue cleanly via readText/writeText
@@ -302,9 +302,9 @@ export function register(atlas) {
         e.stopPropagation();
         try {
           await navigator.clipboard.writeText(item.resolved);
-          atlas.toast("External Files", "Copied path to clipboard", "info", { timeout: 2200 });
+          kandinsky.toast("External Files", "Copied path to clipboard", "info", { timeout: 2200 });
         } catch {
-          atlas.toast("External Files", item.resolved, "info");
+          kandinsky.toast("External Files", item.resolved, "info");
         }
       };
 
@@ -317,7 +317,7 @@ export function register(atlas) {
       openBtn.append(svgEl("external-link", 13), el("span", "", "Open in System App"));
       openBtn.onclick = (e) => {
         e.stopPropagation();
-        openInSystemApp(atlas, item.resolved);
+        openInSystemApp(kandinsky, item.resolved);
       };
 
       actions.append(copyBtn, openBtn);
@@ -369,11 +369,11 @@ export function register(atlas) {
     host.replaceChildren(wrap);
   };
 
-  atlas.editor.registerFence("external", renderExternalFence(false));
-  atlas.editor.registerFence("external-embed", renderExternalFence(true));
+  kandinsky.editor.registerFence("external", renderExternalFence(false));
+  kandinsky.editor.registerFence("external-embed", renderExternalFence(true));
 
   // Inline Live Preview widget for `[Label](file:///...)` external links
-  atlas.editor.registerDecoration(/!?\[([^\]]*)\]\((file:\/\/\/[^)\r\n]+)\)/, (match) => {
+  kandinsky.editor.registerDecoration(/!?\[([^\]]*)\]\((file:\/\/\/[^)\r\n]+)\)/, (match) => {
     const rawLabel = match[1]?.trim() ?? "";
     const rawUrl = match[2]?.trim() ?? "";
     const resolved = resolveExternalPath(rawUrl, getRoot());
@@ -397,7 +397,7 @@ export function register(atlas) {
         chip.onclick = (e) => {
           e.preventDefault();
           e.stopPropagation();
-          openInSystemApp(atlas, resolved);
+          openInSystemApp(kandinsky, resolved);
         };
         host.append(chip);
       },
@@ -405,19 +405,19 @@ export function register(atlas) {
   });
 
   // Command 1: Insert external file card
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "insert-card",
     title: "External Files: Insert external file card…",
     run: async () => {
       const root = getRoot();
-      const entered = await atlas.input("Insert external file card", {
+      const entered = await kandinsky.input("Insert external file card", {
         hint: `Path relative to ${root}, absolute path, or file:/// URL`,
         ok: "Insert",
       });
       if (!entered || !entered.trim()) return;
       const snippet = `\n\`\`\`external\n${entered.trim()}\n\`\`\`\n`;
 
-      const activePath = atlas.context()?.active?.path ?? "";
+      const activePath = kandinsky.context()?.active?.path ?? "";
       const view = activePath ? liveEditors.get(activePath) : null;
       if (view) {
         const pos = view.state.selection.main.to;
@@ -432,29 +432,29 @@ export function register(atlas) {
       }
 
       if (activePath && /\.(md|markdown)$/i.test(activePath)) {
-        const current = await atlas.readText(activePath);
+        const current = await kandinsky.readText(activePath);
         const sep = current.endsWith("\n") || !current.length ? "" : "\n";
-        await atlas.writeText(activePath, `${current}${sep}\`\`\`external\n${entered.trim()}\n\`\`\`\n`);
-        atlas.toast("External Files", `Inserted external file card in ${activePath}`, "success", { timeout: 2500 });
+        await kandinsky.writeText(activePath, `${current}${sep}\`\`\`external\n${entered.trim()}\n\`\`\`\n`);
+        kandinsky.toast("External Files", `Inserted external file card in ${activePath}`, "success", { timeout: 2500 });
         return;
       }
 
       try {
         await navigator.clipboard.writeText(snippet.trim());
-        atlas.toast("External Files", "No active note — copied ```external snippet to clipboard", "info");
+        kandinsky.toast("External Files", "No active note — copied ```external snippet to clipboard", "info");
       } catch {
-        atlas.toast("External Files", "Open a Markdown note first to insert an external file card.", "error");
+        kandinsky.toast("External Files", "Open a Markdown note first to insert an external file card.", "error");
       }
     },
   });
 
   // Command 2: Open external attachments root folder
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "open-root",
     title: "External Files: Open external attachments root folder",
     run: () => {
       const root = resolveExternalPath(getRoot(), getRoot());
-      openInSystemApp(atlas, root);
+      openInSystemApp(kandinsky, root);
     },
   });
 }

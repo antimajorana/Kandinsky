@@ -1,54 +1,54 @@
 #!/usr/bin/env bash
-# Checks the desktop app's sign-in window (crates/atlas-app `signin_window`, docs/guides/PLUGIN-API.md `atlas.signIn`)
+# Checks the desktop app's sign-in window (crates/kandinsky-app `signin_window`, docs/guides/PLUGIN-API.md `kandinsky.signIn`)
 # without touching the user's screen: a headless KWin of its own (`kwin_wayland --virtual`) on a private
 # D-Bus, a throwaway vault, and a fake provider on 127.0.0.1 whose page signs in by itself and answers
-# with a redirect to https://localhost/?code=… — as Microsoft's does. A probe plugin calls atlas.signIn;
+# with a redirect to https://localhost/?code=… — as Microsoft's does. A probe plugin calls kandinsky.signIn;
 # what it got back is written to the vault. Screenshots of the window go to <out-dir>.
 #
-#   bash scripts/dev/signin-look.sh <atlas-app binary> <out-dir>
+#   bash scripts/dev/signin-look.sh <kandinsky-app binary> <out-dir>
 # Needs kwin_wayland, dbus-run-session, python3 (dbus) and ImageMagick (`magick`); the UI from ui/dist.
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-W=${ATLAS_LOOK_DIR:-${TMPDIR:-/tmp}/atlas-signin-look}
+W=${KANDINSKY_LOOK_DIR:-${TMPDIR:-/tmp}/kandinsky-signin-look}
 K=$W/kwin
 
-if [ -z "${ATLAS_LOOK_BUS:-}" ]; then
+if [ -z "${KANDINSKY_LOOK_BUS:-}" ]; then
   rm -rf "$W" && mkdir -p "$K/rt" "$K/cfg" "$K/data" "$K/state" "$K/cache" && chmod 700 "$K/rt"
   cat > "$K/bus.conf" <<EOF
 <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
 <busconfig><type>session</type><listen>unix:tmpdir=$K</listen>
 <policy context="default"><allow send_destination="*" eavesdrop="true"/><allow eavesdrop="true"/><allow own="*"/></policy></busconfig>
 EOF
-  V=$W/vault P=$V/.atlas/plugins/probe
+  V=$W/vault P=$V/.kandinsky/plugins/probe
   mkdir -p "$P" "$V/notes" && printf '# Home\n' > "$V/notes/Home.md"
   printf 'title = "Sign-in probe"\napi = 4\n' > "$P/plugin.toml"
   # the provider's port is known only inside; the plugin reads it from a file the script writes there
   cat > "$P/main.js" <<'EOF'
-export function register(atlas) {
+export function register(kandinsky) {
   // started outside `register` and without a click, as a sign-in started from a helper's answer would be
   setTimeout(async () => {
     try {
-      const port = (await atlas.readText("port.txt")).trim();
+      const port = (await kandinsky.readText("port.txt")).trim();
       const page = `http://127.0.0.1:${port}/authorize?client_id=x&redirect_uri=${encodeURIComponent("https://localhost")}&state=s1`;
-      await atlas.createFile("started.txt", page);
-      const url = await atlas.signIn(page, "https://localhost");
-      await atlas.createFile("got.txt", url);
-    } catch (e) { await atlas.createFile("got.txt", `failed: ${e.message ?? e}`); }
+      await kandinsky.createFile("started.txt", page);
+      const url = await kandinsky.signIn(page, "https://localhost");
+      await kandinsky.createFile("got.txt", url);
+    } catch (e) { await kandinsky.createFile("got.txt", `failed: ${e.message ?? e}`); }
   }, 1500);
 }
 EOF
   printf '[[vault]]\nname = "Probe"\npath = "%s"\nlast_opened = 1\n' "$V" > "$W/vaults.toml"
-  ATLAS_LOOK_BUS=1 exec dbus-run-session --config-file="$K/bus.conf" -- "$0" "$@"
+  KANDINSKY_LOOK_BUS=1 exec dbus-run-session --config-file="$K/bus.conf" -- "$0" "$@"
 fi
 export XDG_RUNTIME_DIR=$K/rt XDG_CONFIG_HOME=$K/cfg XDG_DATA_HOME=$K/data XDG_STATE_HOME=$K/state XDG_CACHE_HOME=$K/cache
-export ATLAS_VAULTS=$W/vaults.toml ATLAS_SECRETS_DIR=$W/secrets KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 KDE_DEBUG=1
+export KANDINSKY_VAULTS=$W/vaults.toml KANDINSKY_SECRETS_DIR=$W/secrets KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 KDE_DEBUG=1
 unset WAYLAND_DISPLAY DISPLAY
 
-if [ -n "${ATLAS_LOOK_INSIDE:-}" ]; then
+if [ -n "${KANDINSKY_LOOK_INSIDE:-}" ]; then
   # shellcheck disable=SC2064
   trap "[ \"\$(ps -p $PPID -o comm=)\" = kwin_wayland ] && kill $PPID" EXIT
-  export WAYLAND_DISPLAY=atlas-look
-  set -- $ATLAS_LOOK_ARGS
+  export WAYLAND_DISPLAY=kandinsky-look
+  set -- $KANDINSKY_LOOK_ARGS
   bin=$1 out=$2; mkdir -p "$out"
   shot() { python3 "$here/capture/shot.py" "$1" >/dev/null && echo "[look] $1"; }
   # the fake provider: a page that "signs in" after 2.5 s (a form POST), answered by a 302 to the return address
@@ -71,8 +71,8 @@ s.serve_forever()
 EOF
   prov=$!
   sleep 0.5
-  # this repository's build, never the installed UI an Atlas terminal names in $ATLAS_UI_DIR
-  ATLAS_UI_DIR=${ATLAS_LOOK_UI:-$here/../../ui/dist} "$bin" "$W/vault" > "$out/app.log" 2>&1 &
+  # this repository's build, never the installed UI an Kandinsky terminal names in $KANDINSKY_UI_DIR
+  KANDINSKY_UI_DIR=${KANDINSKY_LOOK_UI:-$here/../../ui/dist} "$bin" "$W/vault" > "$out/app.log" 2>&1 &
   app=$!
   sleep 6; shot "$out/1-window.png"
   for _ in $(seq 40); do [ -f "$W/vault/got.txt" ] && break; sleep 0.5; done
@@ -86,6 +86,6 @@ EOF
 fi
 
 touch "$K/started"
-ATLAS_LOOK_INSIDE=1 ATLAS_LOOK_ARGS="$*" timeout 120 kwin_wayland --virtual --socket atlas-look --width 1280 --height 800 \
+KANDINSKY_LOOK_INSIDE=1 KANDINSKY_LOOK_ARGS="$*" timeout 120 kwin_wayland --virtual --socket kandinsky-look --width 1280 --height 800 \
   --no-lockscreen --inputmethod "" "$0" > "$K/kwin.log" 2>&1
 grep -h '^\[look\]' "$K/kwin.log"

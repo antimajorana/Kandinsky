@@ -2,15 +2,15 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 
 // The apps at the top of the left bar: one vault list hides and orders every tile, built-in or plugin
 // (`[ui] apps_hidden` / `apps_order`), from the tile's right-click and from Settings → Appearance.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (request: APIRequestContext, path: string, text: string) => request.put("/api/file", { headers: H, data: { path, text } });
 const cfg = async (request: APIRequestContext) => (await (await request.get("/api/config", { headers: H })).json()).config;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/appdemo/plugin.toml", 'title = "App demo"\nrail = true\nicon = "chart"\n');
-  await put(request, ".atlas/plugins/appdemo/view.js", 'export default function mount(host) { host.innerHTML = "<p class=appdemo>demo</p>"; }\n');
+  await put(request, ".kandinsky/plugins/appdemo/plugin.toml", 'title = "App demo"\nrail = true\nicon = "chart"\n');
+  await put(request, ".kandinsky/plugins/appdemo/view.js", 'export default function mount(host) { host.innerHTML = "<p class=appdemo>demo</p>"; }\n');
 });
 
 // the config is shared by every spec of the run: leave the two lists as they were

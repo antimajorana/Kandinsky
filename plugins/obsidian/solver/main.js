@@ -1,20 +1,22 @@
-// Solver app commands & context-menu integration (main.js): note-to-Solver handoff and Solver-to-note derivation import.
+// Solver app commands & context-menu integration (main.js): note-to-Solver handoff and direct Solver-to-note cursor export.
 
-async function sendToSolver(atlas, opts = {}) {
-  const snap = atlas.context();
+import { insertLatestSolverDerivation } from "./view.js";
+
+async function sendToSolver(kandinsky, opts = {}) {
+  const snap = kandinsky.context();
   const path = opts.path || (snap && snap.selection && snap.selection.path) || (snap && snap.active && snap.active.path) || "";
   let prompt = (opts.selection || (snap && snap.selection && snap.selection.text) || "").trim();
 
   if (!prompt && path && /\.(md|tex|txt)$/i.test(path)) {
     try {
-      prompt = (await atlas.readText(path)).trim();
+      prompt = (await kandinsky.readText(path)).trim();
     } catch {
       prompt = "";
     }
   }
 
   if (!prompt) {
-    atlas.openView(undefined, { beside: Boolean(opts.beside) });
+    kandinsky.openView(undefined, { beside: Boolean(opts.beside) });
     return;
   }
 
@@ -22,12 +24,22 @@ async function sendToSolver(atlas, opts = {}) {
   try {
     await navigator.clipboard?.writeText(prompt);
   } catch {}
-  atlas.openView(JSON.stringify({ path, title, prompt }), { beside: true, title: "Solver" });
+  const payload = { target: "solver", path, title, prompt };
+  if (typeof window !== "undefined") {
+    window.__kandinskyPendingSolverPrompt = payload;
+  }
+  kandinsky.openView(JSON.stringify({ path, title, prompt }), { beside: true, title: "Solver" });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("kandinsky:solver-prefill", { detail: payload }));
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("kandinsky:solver-prefill", { detail: payload }));
+    }, 220);
+  }
 }
 
-function openImportDialog(atlas, targetPath = "") {
-  const active = targetPath || (atlas.context()?.active?.path ?? "");
-  void atlas.openDialog(JSON.stringify({ targetPath: active }), {
+function openImportDialog(kandinsky, targetPath = "") {
+  const active = targetPath || (kandinsky.context()?.active?.path ?? "");
+  void kandinsky.openDialog(JSON.stringify({ targetPath: active }), {
     title: "Import Solver Derivation to Note",
     width: 680,
     height: 540,
@@ -35,71 +47,82 @@ function openImportDialog(atlas, targetPath = "") {
   });
 }
 
-export function register(atlas) {
-  atlas.registerCommand({
+export function register(kandinsky) {
+  kandinsky.registerCommand({
     id: "beside",
     title: "Solver: Open Solver side-by-side with current note",
-    run: () => atlas.openView(undefined, { beside: true }),
+    run: () => kandinsky.openView(undefined, { beside: true }),
   });
 
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "send-note",
     title: "Solver: Send current selection or note to Solver",
-    run: () => sendToSolver(atlas, { beside: true }),
+    run: () => sendToSolver(kandinsky, { beside: true }),
   });
 
-  atlas.registerCommand({
+  kandinsky.registerCommand({
+    id: "insert-active-note",
+    title: "Solver: Insert latest derivation into active note at cursor",
+    run: () => insertLatestSolverDerivation(kandinsky),
+  });
+
+  kandinsky.registerCommand({
     id: "import-note",
     title: "Solver: Import Solver derivation into a Kandinsky note…",
-    run: () => openImportDialog(atlas),
+    run: () => openImportDialog(kandinsky),
   });
 
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "status",
     title: "Solver: Check local Solver service status",
     run: async () => {
-      const s = (atlas.plugin && atlas.plugin.settings) || {};
-      const st = await atlas.helper.call("status", {
+      const s = (kandinsky.plugin && kandinsky.plugin.settings) || {};
+      const st = await kandinsky.helper.call("status", {
         url: s.url || "http://localhost:4200",
         apiUrl: s.api_url || "http://127.0.0.1:3000",
       });
       if (st && st.running) {
-        atlas.toast("Solver is running", `Connected at ${st.url}`, "success", {
+        kandinsky.toast("Solver is running", `Connected at ${st.url}`, "success", {
           label: "Open Solver",
-          run: () => atlas.openView(),
+          run: () => kandinsky.openView(),
         });
       } else {
-        atlas.toast("Solver is currently offline", "Open the Solver app in Kandinsky to start its background services.", "info", {
+        kandinsky.toast("Solver is currently offline", "Open the Solver app in Kandinsky to start its background services.", "info", {
           label: "Start in Kandinsky",
-          run: () => atlas.openView(),
+          run: () => kandinsky.openView(),
         });
       }
     },
   });
 
-  atlas.shell.menu("editor", (target) => {
+  kandinsky.shell.menu("editor", (target) => {
     const sel = target && typeof target.selection === "string" ? target.selection.trim() : "";
     return [
       {
         label: sel ? "Send selection to Solver" : "Send note to Solver",
         icon: "sigma",
-        run: () => sendToSolver(atlas, { path: target?.path, selection: sel, beside: true }),
+        run: () => sendToSolver(kandinsky, { path: target?.path, selection: sel, beside: true }),
+      },
+      {
+        label: "Insert Solver derivation at cursor",
+        icon: "sigma",
+        run: () => insertLatestSolverDerivation(kandinsky),
       },
       {
         label: "Import Solver derivation into note…",
         icon: "sigma",
-        run: () => openImportDialog(atlas, target?.path || ""),
+        run: () => openImportDialog(kandinsky, target?.path || ""),
       },
     ];
   });
 
-  atlas.shell.menu("file", (target) => {
+  kandinsky.shell.menu("file", (target) => {
     if (!target || target.dir || !/\.(md|tex)$/i.test(target.path || "")) return null;
     return [
       {
         label: "Open beside Solver",
         icon: "sigma",
-        run: () => sendToSolver(atlas, { path: target.path, beside: true }),
+        run: () => sendToSolver(kandinsky, { path: target.path, beside: true }),
       },
     ];
   });

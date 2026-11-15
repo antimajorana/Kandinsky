@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// wordlists.mjs — the general word frequencies the core serves at /api/words/<lang> (crates/atlas-core/data/words/<lang>.words, words.rs),
+// wordlists.mjs — the general word frequencies the core serves at /api/words/<lang> (crates/kandinsky-core/data/words/<lang>.words, words.rs),
 // made from wordfreq's "large" lists (https://github.com/rspeer/wordfreq, data CC BY-SA 4.0: a blend of Wikipedia,
 // subtitles, news, books, web text and social media, frozen in 2021). Run again only to change the size or add a
 // language:
@@ -17,7 +17,7 @@ const TOP = topAt >= 0 ? Number(args.splice(topAt, 2)[1]) : 60000;
 const langs = args.length ? args : ["en", "es"];
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
 const cache = path.join(root, "target/wordfreq");
-const out = path.join(root, "crates/atlas-core/data/words");
+const out = path.join(root, "crates/kandinsky-core/data/words");
 
 /** The few MessagePack types wordfreq's cBpack uses: arrays, strings, a small map, integers. */
 function unpack(buf) {

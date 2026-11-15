@@ -1,5 +1,5 @@
 /* Vendored from dockview-core@8.4.0 (node_modules/dockview-core/dist/dockview-core.js, the injected <style> text).
-   The ESM build ships no stylesheet, so this is the base CSS; Atlas themes override it in src/styles/dockview-theme.css. */
+   The ESM build ships no stylesheet, so this is the base CSS; Kandinsky themes override it in src/styles/dockview-theme.css. */
 .dv-drop-target-container {
   position: absolute;
   z-index: 9999;

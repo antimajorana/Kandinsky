@@ -1,6 +1,6 @@
 # FreshRSS: the unread articles in a block; one into a note with a click. An example of a block fed by a JavaScript
 # helper (FreshRSS's Fever API, its key a form field the core fills in) whose methods are tools too. Copy into a
-# vault's .atlas/plugins/.
+# vault's .kandinsky/plugins/.
 title = "FreshRSS"
 description = "unread articles in a block, an article into a note"
 phone = true # runs in the phone apps too (only plugins marked so start there)

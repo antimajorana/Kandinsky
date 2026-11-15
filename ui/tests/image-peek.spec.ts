@@ -3,7 +3,7 @@ import { openFile } from "./open";
 
 // Pictures in a note: shown while their link is being written (caret inside), large while Ctrl is
 // held over them (lib/image-peek.ts), opened in a tab of their own by a click.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><rect width="200" height="120" fill="teal"/></svg>`;
 
 test("a picture shows while its link is written, grows with Ctrl, opens on a click", async ({ page, request }) => {

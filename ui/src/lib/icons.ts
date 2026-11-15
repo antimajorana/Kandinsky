@@ -104,7 +104,7 @@ const P: Record<IconName, string> = {
   more: '<circle cx="12" cy="5.5" r="0.9"/><circle cx="12" cy="12" r="0.9"/><circle cx="12" cy="18.5" r="0.9"/>',
   refresh: '<path d="M20 11.5A8 8 0 0 0 6 6.6L4 8.5M4 4v4.5h4.5M4 12.5A8 8 0 0 0 18 17.4l2-1.9M20 20v-4.5h-4.5"/>',
   zoom: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.3-4.3M8.5 11h5M11 8.5v5"/>',
-  // the readers' own (the Boox reader's bars draw the same, from atlas_capture::icons)
+  // the readers' own (the Boox reader's bars draw the same, from kandinsky_capture::icons)
   contents: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
   pages: '<rect x="7" y="3" width="13" height="15" rx="2"/><path d="M4 7v11.5A2.5 2.5 0 0 0 6.5 21H16"/>',
   bookmark: '<path d="M18 21l-6-4-6 4V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/>',

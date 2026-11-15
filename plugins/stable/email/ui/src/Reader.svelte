@@ -96,15 +96,15 @@
   async function openFile(m: Message, a: Attachment, beside = true) {
     try {
       const r = await mail.call<{ path: string }>("attachment", { id: m.id, part: a.part, name: a.name });
-      mail.atlas.open(r.path, undefined, { beside });
+      mail.kandinsky.open(r.path, undefined, { beside });
     } catch (e) { mail.toast(`Cannot open ${a.name}: ${(e as Error).message}`, "error"); }
   }
   async function saveFile(m: Message, a: Attachment) {
-    const to = await askLine(mail.atlas, `Save ${a.name} into which vault folder?`, "attachments");
+    const to = await askLine(mail.kandinsky, `Save ${a.name} into which vault folder?`, "attachments");
     if (!to) return;
     try {
       const r = await mail.call<{ path: string }>("attachment", { id: m.id, part: a.part, name: a.name, to });
-      mail.toast(`Saved ${r.path}`, "success", { action: { label: "Open", run: () => mail.atlas.open(r.path, undefined, { beside: true }) } });
+      mail.toast(`Saved ${r.path}`, "success", { action: { label: "Open", run: () => mail.kandinsky.open(r.path, undefined, { beside: true }) } });
     } catch (e) { mail.toast(`Cannot save ${a.name}: ${(e as Error).message}`, "error"); }
   }
   async function allow(m: Message) {
@@ -115,10 +115,10 @@
     mail.toast(`Pictures from ${addr} are shown from now on`);
   }
   async function unsubscribe() {
-    if (!unsub || !(await askYes(mail.atlas, `Unsubscribe from ${unsub.from[0]?.name || unsub.from[0]?.addr}?`, { ok: "Unsubscribe" }))) return;
+    if (!unsub || !(await askYes(mail.kandinsky, `Unsubscribe from ${unsub.from[0]?.name || unsub.from[0]?.addr}?`, { ok: "Unsubscribe" }))) return;
     try {
       const r = await mail.call<{ done?: string; open?: string }>("unsubscribe", { id: unsub.id });
-      if (r.open) mail.atlas.openLink ? mail.atlas.openLink(r.open) : window.open(r.open, "_blank"); // as Atlas opens any link
+      if (r.open) mail.kandinsky.openLink ? mail.kandinsky.openLink(r.open) : window.open(r.open, "_blank"); // as Kandinsky opens any link
       else mail.toast(r.done === "mail" ? "Unsubscribe mail sent" : "Unsubscribed", "success");
     } catch (e) { mail.toast(`Could not unsubscribe: ${(e as Error).message}`, "error"); }
   }
@@ -129,7 +129,7 @@
   {#if mail.reading && !t}
     <div class="loading"><div class="bar"></div><div class="bar short"></div><div class="bar"></div></div>
   {:else if mail.readError}
-    <div class="atlas-empty"><p>{mail.readError}</p><button class="atlas-btn" onclick={() => mail.openId && mail.read(mail.openId)}>Try again</button></div>
+    <div class="kandinsky-empty"><p>{mail.readError}</p><button class="kandinsky-btn" onclick={() => mail.openId && mail.read(mail.openId)}>Try again</button></div>
   {:else if t}
     <header class="top">
       <div class="tools" role="toolbar" aria-label="Conversation actions">
@@ -148,11 +148,11 @@
           <button class="tool" onclick={() => (menu = !menu)} aria-expanded={menu} title="More"><Icon name="more" /></button>
           {#if menu}
             <div class="menu" role="menu" tabindex="-1" onmouseleave={() => (menu = false)}>
-              {#if t.saved}<button role="menuitem" onclick={() => { menu = false; mail.atlas.open(t.saved!, undefined, { beside: true }); }}>Open the note</button>{/if}
+              {#if t.saved}<button role="menuitem" onclick={() => { menu = false; mail.kandinsky.open(t.saved!, undefined, { beside: true }); }}>Open the note</button>{/if}
               <button role="menuitem" onclick={() => { menu = false; mail.importance(true); }}>Mark important</button>
               <button role="menuitem" onclick={() => { menu = false; mail.importance(false); }}>Not important…</button>
               {#if unsub}<button role="menuitem" onclick={() => { menu = false; unsubscribe(); }}>Unsubscribe</button>{/if}
-              <button role="menuitem" onclick={() => { menu = false; mail.atlas.capture(`- [ ] ${t.subject} (mail from ${who(t.messages.at(-1)?.from[0], own)})`); mail.toast("Added a task to today's log"); }}>Make a task</button>
+              <button role="menuitem" onclick={() => { menu = false; mail.kandinsky.capture(`- [ ] ${t.subject} (mail from ${who(t.messages.at(-1)?.from[0], own)})`); mail.toast("Added a task to today's log"); }}>Make a task</button>
               <button role="menuitem" onclick={() => { menu = false; expandAll(true); }}>Expand all (;)</button>
             </div>
           {/if}
@@ -199,7 +199,7 @@
                 <span class="faint">{fullDate(m.date)}</span>
                 <span class="grow"></span>
                 <span class="acts">
-                {#if m.draft}<button class="atlas-btn" onclick={() => mail.editDraft(m.id)}>Edit the draft</button>
+                {#if m.draft}<button class="kandinsky-btn" onclick={() => mail.editDraft(m.id)}>Edit the draft</button>
                 {:else}
                   <button class="mini" onclick={() => mail.reply("reply", m.id)} title="Reply (r)"><Icon name="reply" size={15} /></button>
                   <button class="mini" onclick={() => mail.reply("all", m.id)} title="Reply all (a)"><Icon name="replyall" size={15} /></button>
@@ -209,7 +209,7 @@
                 </span>
               </div>
               {#if m.error}
-                <div class="atlas-notice error">{m.error}</div>
+                <div class="kandinsky-notice error">{m.error}</div>
               {:else if m.body}
                 {#if m.body.remote && !allowed}
                   <div class="remote" role="status">
@@ -220,18 +220,18 @@
                   </div>
                 {/if}
                 {#if m.body.invite}<InviteCard {mail} id={m.id} invite={m.body.invite} />{/if}
-                <MailFrame html={m.body.html} plain={m.body.plain} remote={allowed} atlas={mail.atlas} />
+                <MailFrame html={m.body.html} plain={m.body.plain} remote={allowed} kandinsky={mail.kandinsky} />
                 {#each m.body.forwarded as f, i (i)}
                   <div class="fwd">
                     <div class="fwdhead"><b>Forwarded:</b> {f.subject} · {f.from.map(display).join(", ")} · {when(f.date)}</div>
-                    <MailFrame html={f.html} plain={f.plain} remote={allowed} atlas={mail.atlas} />
+                    <MailFrame html={f.html} plain={f.plain} remote={allowed} kandinsky={mail.kandinsky} />
                   </div>
                 {/each}
                 {#if m.body.attachments.length}
                   <div class="files">
                     {#each m.body.attachments as a (a.part)}
                       <div class="file">
-                        <button class="fopen" onclick={() => openFile(m, a)} title="Open in Atlas"><Icon name={icon(a.mime)} /><span class="fname">{a.name}</span><span class="faint">{size(a.size)}</span></button>
+                        <button class="fopen" onclick={() => openFile(m, a)} title="Open in Kandinsky"><Icon name={icon(a.mime)} /><span class="fname">{a.name}</span><span class="faint">{size(a.size)}</span></button>
                         <button class="mini" onclick={() => saveFile(m, a)} title="Save into the vault…"><Icon name="save" size={14} /></button>
                       </div>
                     {/each}
@@ -251,15 +251,15 @@
         <Composer {mail} c={inline} inline />
       {:else}
         <div class="quick">
-          <button class="atlas-btn" onclick={() => mail.reply("reply")}><Icon name="reply" size={15} /> Reply</button>
-          <button class="atlas-btn" onclick={() => mail.reply("all")}><Icon name="replyall" size={15} /> Reply all</button>
-          <button class="atlas-btn" onclick={() => mail.reply("forward")}><Icon name="forward" size={15} /> Forward</button>
-          <button class="atlas-btn" onclick={() => mail.meeting()} title="A meeting with everyone in this conversation (the Calendar's editor)"><Icon name="calendar" size={15} /> Meeting</button>
+          <button class="kandinsky-btn" onclick={() => mail.reply("reply")}><Icon name="reply" size={15} /> Reply</button>
+          <button class="kandinsky-btn" onclick={() => mail.reply("all")}><Icon name="replyall" size={15} /> Reply all</button>
+          <button class="kandinsky-btn" onclick={() => mail.reply("forward")}><Icon name="forward" size={15} /> Forward</button>
+          <button class="kandinsky-btn" onclick={() => mail.meeting()} title="A meeting with everyone in this conversation (the Calendar's editor)"><Icon name="calendar" size={15} /> Meeting</button>
         </div>
       {/if}
     </div>
   {:else}
-    <div class="atlas-empty nothing">
+    <div class="kandinsky-empty nothing">
       <Icon name="inbox" size={40} />
       <p>{mail.rows.length ? "Choose a conversation to read it." : "Nothing here."}</p>
       <p class="faint">j / k to move, Enter to open, c to write, ? for every key.</p>
@@ -322,7 +322,7 @@
   .fopen .faint { white-space: nowrap; flex: none; font-size: 0.86em; }
   .answer { padding: 4px 16px 24px 16px; }
   .quick { display: flex; gap: 8px; flex-wrap: wrap; padding-left: 38px; }
-  .quick .atlas-btn { display: inline-flex; gap: 6px; align-items: center; }
+  .quick .kandinsky-btn { display: inline-flex; gap: 6px; align-items: center; }
   .nothing { margin: auto; display: grid; justify-items: center; gap: 6px; color: var(--text-faint); text-align: center; padding: 40px; }
   .nothing p { margin: 0; }
   .loading { padding: 24px; display: grid; gap: 12px; }

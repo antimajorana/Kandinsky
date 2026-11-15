@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -20,7 +20,7 @@ import java.util.List;
  *  the hardware gives (MotionEvent's historical points), the pen's eraser end (or its button) erasing whole strokes,
  *  and, once a stylus has touched it, fingers ignored (palm rejection). On a Boox the ink under the pen is drawn by
  *  Onyx's screen itself (Ink), so it shows with no e-ink lag; the canvas draws the lasting stroke. Saved as an Excalidraw
- *  scene of `freedraw` elements — the same mapping as the Rnote plugin (plugins/beta/rnote), so every Atlas opens it. */
+ *  scene of `freedraw` elements — the same mapping as the Rnote plugin (plugins/beta/rnote), so every Kandinsky opens it. */
 final class PenView extends View {
     /** One stroke: points in CSS pixels (px / density, as Excalidraw on the desktop measures), pressure 0–1. */
     private static final class Stroke {
@@ -236,7 +236,7 @@ final class PenView extends View {
                 .put("points", pts).put("pressures", pr).put("simulatePressure", false).put("lastCommittedPoint", JSONObject.NULL));
             i++;
         }
-        return new JSONObject().put("type", "excalidraw").put("version", 2).put("source", "atlas (pen)")
+        return new JSONObject().put("type", "excalidraw").put("version", 2).put("source", "kandinsky (pen)")
             .put("elements", els).put("appState", new JSONObject().put("viewBackgroundColor", "#ffffff")).put("files", new JSONObject())
             .toString();
     }

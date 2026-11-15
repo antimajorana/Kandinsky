@@ -113,7 +113,7 @@ export function lineBoxes(c: Chars, runs: readonly Run[], from: number, to: numb
   return out;
 }
 
-/** The characters as text pieces (lib/atlas-mark.ts quoteOf), one a character. */
+/** The characters as text pieces (lib/kandinsky-mark.ts quoteOf), one a character. */
 export function piecesOf(c: Chars): TextPiece[] {
   const out: TextPiece[] = [];
   for (let i = 0; i < c.codes.length; i++) {

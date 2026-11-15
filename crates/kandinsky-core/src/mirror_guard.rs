@@ -96,8 +96,14 @@ thread_local! {
 }
 
 /// Where the base of a path is kept: the last version both copies had, what a conflict copy is merged against (§4).
+/// Is `rel` inside the state folder's `sub` (`cache/`, `trash/`), in either spelling (`.atlas/` in a vault not yet
+/// migrated, state_dir.rs)?
+fn in_state(rel: &str, sub: &str) -> bool {
+    crate::state_dir::current_rel(rel).strip_prefix(crate::state_dir::STATE_DIR).and_then(|r| r.strip_prefix('/')).is_some_and(|r| r.starts_with(sub))
+}
+
 pub fn base_path(root: &Path, rel: &str) -> PathBuf {
-    root.join(".atlas/cache/sync-base").join(rel)
+    crate::state_dir::dir(root).join("cache/sync-base").join(rel)
 }
 
 /// Bases are kept for text-sized files only: the three-way merge is for notes, not for PDFs.
@@ -150,7 +156,7 @@ impl<L: LeaseLink> LeaseGuard<L> {
                     return Ok(());
                 }
                 Err(Unreachable(e)) => {
-                    eprintln!("atlas: mirror: no lease for {rel} ({e}); written here only, without asking for {}s", OFFLINE_FOR.as_secs());
+                    eprintln!("kandinsky: mirror: no lease for {rel} ({e}); written here only, without asking for {}s", OFFLINE_FOR.as_secs());
                     *self.offline_until.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now() + OFFLINE_FOR);
                     return Ok(());
                 }
@@ -225,7 +231,7 @@ impl<L: LeaseLink> LeaseGuard<L> {
             Err(_) => Carry::Gone,
             Ok(m) if !m.is_file() => Carry::Nothing,
             Ok(m) if m.len() > CARRY_MAX => {
-                eprintln!("atlas: mirror: {rel} ({} MB) is too large for the mirror to carry: Syncthing must", m.len() / (1024 * 1024));
+                eprintln!("kandinsky: mirror: {rel} ({} MB) is too large for the mirror to carry: Syncthing must", m.len() / (1024 * 1024));
                 Carry::Nothing
             }
             Ok(_) => std::fs::read(&abs).map_or(Carry::Nothing, |b| Carry::Bytes(base64::engine::general_purpose::STANDARD.encode(b))),
@@ -241,7 +247,7 @@ impl<L: LeaseLink> LeaseGuard<L> {
         let got = match self.link.fetch(rel) {
             Ok(got) => got,
             Err(Unreachable(e)) => {
-                eprintln!("atlas: mirror: could not bring {rel} from the server ({e})");
+                eprintln!("kandinsky: mirror: could not bring {rel} from the server ({e})");
                 return false;
             }
         };
@@ -260,7 +266,7 @@ impl<L: LeaseLink> LeaseGuard<L> {
                 true
             }
             Err(e) => {
-                eprintln!("atlas: mirror: could not write {rel} as the server has it: {e}");
+                eprintln!("kandinsky: mirror: could not write {rel} as the server has it: {e}");
                 false
             }
         }
@@ -276,7 +282,7 @@ impl<L: LeaseLink> LeaseGuard<L> {
         let Ok(recent) = self.link.versions() else { return 0 };
         let mut brought = 0;
         for r in recent {
-            if r.path.starts_with(".atlas/cache/") || self.granted.lock().unwrap_or_else(|e| e.into_inner()).contains_key(&r.path) {
+            if in_state(&r.path, "cache/") || self.granted.lock().unwrap_or_else(|e| e.into_inner()).contains_key(&r.path) {
                 continue;
             }
             let here = self.disk(&r.path);
@@ -296,11 +302,11 @@ impl<L: LeaseLink> LeaseGuard<L> {
 impl<L> LeaseGuard<L> {
     /// After a leased write the content here is the last version, which Syncthing carries to the server unopposed:
     /// the base of the next conflict, should one ever happen offline. Best effort — a lost base only means a merge asks.
-    /// Nothing in `.atlas/trash/` is merged, so it keeps none.
+    /// Nothing in `.kandinsky/trash/` is merged, so it keeps none.
     fn keep_base(&self, rel: &str) {
         let base = base_path(&self.root, rel);
         let now = self.root.join(rel);
-        let trashed = rel.starts_with(".atlas/trash/");
+        let trashed = in_state(rel, "trash/");
         let kept = match std::fs::metadata(&now) {
             Ok(_) if trashed => Ok(()),
             Ok(m) if m.is_file() && m.len() <= BASE_MAX => crate::vault_write::cache::copy(&now, &base),
@@ -310,7 +316,7 @@ impl<L> LeaseGuard<L> {
             _ => Ok(()),
         };
         if let Err(e) = kept {
-            eprintln!("atlas: mirror: no base kept for {rel}: {e}");
+            eprintln!("kandinsky: mirror: no base kept for {rel}: {e}");
         }
     }
 }
@@ -319,12 +325,12 @@ impl<L> LeaseGuard<L> {
     /// A rename takes its bases along (a folder's: every file's in it), so a moved note still merges against its base.
     fn move_bases(&self, from: &str, to: &str) {
         let (a, b) = (base_path(&self.root, from), base_path(&self.root, to));
-        if to.starts_with(".atlas/trash/") {
+        if in_state(to, "trash/") {
             return; // the source keeps no base once gone (`keep_base`): the trash is never merged
         }
         if a.exists() && !b.exists() {
             if let Err(e) = crate::vault_write::cache::rename(&a, &b) {
-                eprintln!("atlas: mirror: the base of {from} was not moved to {to}: {e}");
+                eprintln!("kandinsky: mirror: the base of {from} was not moved to {to}: {e}");
             }
         }
     }
@@ -333,7 +339,7 @@ impl<L> LeaseGuard<L> {
 /// The paths a change needs the lease of, and whether it only adds to them. Folders have no content to lease: their
 /// files' own changes are what Syncthing compares.
 fn leased(rel: &str, kind: &WriteKind) -> Vec<(String, bool)> {
-    if rel.starts_with(".atlas/cache/") {
+    if in_state(rel, "cache/") {
         return vec![]; // per device, never synced
     }
     match kind {
@@ -524,7 +530,7 @@ impl Remote {
                 })
                 .as_ref()
                 .map_err(|e| Unreachable(e.clone()))?;
-            let mut req = client.post(url).header("x-atlas", "1").json(&body);
+            let mut req = client.post(url).header("x-kandinsky", "1").json(&body);
             if let Some(c) = cookie {
                 req = req.header("cookie", c);
             }
@@ -554,7 +560,7 @@ impl LeaseLink for Remote {
     fn done_with(&self, path: &str, version: Option<ContentHash>, carry: Carry) {
         let carry = (carry != Carry::Nothing).then_some(carry);
         if let Err(Unreachable(e)) = self.post("done", DoneBody { path: path.into(), holder: self.holder.clone(), version, carry }) {
-            eprintln!("atlas: mirror: could not hand back the lease of {path} ({e}); it runs out by itself");
+            eprintln!("kandinsky: mirror: could not hand back the lease of {path} ({e}); it runs out by itself");
         }
     }
     fn fetch(&self, path: &str) -> std::result::Result<Option<Vec<u8>>, Unreachable> {
@@ -576,7 +582,7 @@ pub const SERVER: &str = "server";
 pub fn install_on_server(ws: &crate::Workspace, leases: Arc<Leases<ContentHash>>) {
     let link = Local { leases, root: ws.root().to_path_buf(), holder: SERVER.into() };
     ws.set_write_guard(Arc::new(LeaseGuard::new(ws.root(), link)));
-    eprintln!("atlas: mirror: {} is mirrored by a device; its writes take leases", ws.root().display());
+    eprintln!("kandinsky: mirror: {} is mirrored by a device; its writes take leases", ws.root().display());
 }
 
 /// The server copy of the local vault at `root` (the vault list's `mirror = …`), ending in `/`.
@@ -596,7 +602,7 @@ pub fn install_for_mirror(ws: &crate::Workspace) {
         Some(mirror) => {
             let bytes = Bytes::of(ws.root());
             if bytes == Bytes::Syncthing {
-                eprintln!("atlas: mirror: {} is shared by Syncthing: writes take leases, Syncthing alone carries the files", ws.root().display());
+                eprintln!("kandinsky: mirror: {} is shared by Syncthing: writes take leases, Syncthing alone carries the files", ws.root().display());
             }
             let link = Remote { mirror, holder: device_id(), store: crate::secrets::Store::for_vault(ws.root()), bytes };
             let guard = Arc::new(LeaseGuard::new(ws.root(), link));
@@ -617,19 +623,19 @@ fn catch_up_now_and_then<L: LeaseLink + 'static>(guard: std::sync::Weak<LeaseGua
         let Some(g) = guard.upgrade() else { return };
         let n = g.catch_up();
         if n > 0 {
-            eprintln!("atlas: mirror: brought {n} file(s) the server wrote");
+            eprintln!("kandinsky: mirror: brought {n} file(s) the server wrote");
         }
         drop(g);
         std::thread::sleep(CATCH_UP_EVERY);
     });
     if let Err(e) = spawned {
-        eprintln!("atlas: mirror: no catch-up thread: {e}");
+        eprintln!("kandinsky: mirror: no catch-up thread: {e}");
     }
 }
 
-/// This device's name in the lease table: stable across restarts (`~/.local/state/atlas/device-id`), made once.
+/// This device's name in the lease table: stable across restarts (`~/.local/state/kandinsky/device-id`), made once.
 pub fn device_id() -> Holder {
-    let file = crate::platform::dirs::atlas(crate::platform::dirs::Base::State).join("device-id");
+    let file = crate::platform::dirs::app_entry(crate::platform::dirs::Base::State, "device-id");
     if let Ok(id) = std::fs::read_to_string(&file) {
         if !id.trim().is_empty() {
             return id.trim().to_string();
@@ -640,7 +646,7 @@ pub fn device_id() -> Holder {
     let _ = getrandom::getrandom(&mut tag);
     let id = format!("{}-{}", if host.is_empty() { "device" } else { &host }, ContentHash::of(&tag).to_hex().get(..8).unwrap_or("0"));
     if let Err(e) = crate::vault_write::outside::write(&file, id.as_bytes()) {
-        eprintln!("atlas: mirror: could not keep the device id in {}: {e}", file.display());
+        eprintln!("kandinsky: mirror: could not keep the device id in {}: {e}", file.display());
     }
     id
 }
@@ -649,6 +655,16 @@ pub fn device_id() -> Holder {
 mod tests {
     use super::*;
     use std::sync::Mutex;
+
+    #[test]
+    fn the_state_folders_cache_and_trash_are_known_in_either_spelling() {
+        for rel in [".kandinsky/cache/x.json", ".atlas/cache/x.json"] {
+            assert!(in_state(rel, "cache/") && leased(rel, &WriteKind::Write).is_empty(), "{rel}: per device, never leased");
+        }
+        assert!(in_state(".atlas/trash/1/a.md", "trash/") && in_state(".kandinsky/trash/1/a.md", "trash/"));
+        assert!(!in_state("notes/.atlas/cache/x", "cache/") && !in_state(".kandinsky/cachex", "cache/"));
+        assert_eq!(leased(".atlas/config.toml", &WriteKind::Write).len(), 1, "the rest of the state folder is leased");
+    }
 
     /// Two devices on one table: the server's `Local`, and a "desktop" whose own disk is a second folder.
     struct Shared(Arc<Leases<ContentHash>>, PathBuf, &'static str, Arc<Mutex<bool>>);
@@ -832,12 +848,12 @@ mod tests {
         desk.before("log.md", &WriteKind::Write, now(desktop.path(), "log.md")).unwrap();
         desk.after("log.md", &WriteKind::Write, Some(ContentHash::of(b"v1\n")));
         assert!(base_path(desktop.path(), "log.md").exists());
-        let trash = WriteKind::Rename { to: ".atlas/trash/20261029-120000/log.md".into() };
+        let trash = WriteKind::Rename { to: ".kandinsky/trash/20261029-120000/log.md".into() };
         desk.before("log.md", &trash, now(desktop.path(), "log.md")).unwrap();
-        std::fs::create_dir_all(desktop.path().join(".atlas/trash/20261029-120000")).unwrap();
-        std::fs::rename(desktop.path().join("log.md"), desktop.path().join(".atlas/trash/20261029-120000/log.md")).unwrap();
+        std::fs::create_dir_all(desktop.path().join(".kandinsky/trash/20261029-120000")).unwrap();
+        std::fs::rename(desktop.path().join("log.md"), desktop.path().join(".kandinsky/trash/20261029-120000/log.md")).unwrap();
         desk.after("log.md", &trash, Some(ContentHash::of(b"v1\n")));
-        assert!(!base_path(desktop.path(), ".atlas/trash/20261029-120000/log.md").exists());
+        assert!(!base_path(desktop.path(), ".kandinsky/trash/20261029-120000/log.md").exists());
         assert!(!base_path(desktop.path(), "log.md").exists(), "nor is the source's kept");
     }
 

@@ -3,7 +3,7 @@
 //! Vault content goes through the top-level functions, which ask the vault's [`WriteGuard`] first (the mirror's
 //! lease, docs/design/DESIGN-mirror-v2.md §2) and tell it the new content's hash after. Per-device state that is
 //! never synced goes through [`cache`]; files outside every vault (~/.config, ~/.local/state, secrets) through
-//! [`outside`]. Neither asks the guard. Raw `std::fs` writes elsewhere are a clippy error (crates/atlas-core/clippy.toml).
+//! [`outside`]. Neither asks the guard. Raw `std::fs` writes elsewhere are a clippy error (crates/kandinsky-core/clippy.toml).
 #![allow(clippy::disallowed_methods)] // the funnel itself
 
 use crate::{Error, Result, Workspace};
@@ -235,7 +235,7 @@ pub fn write(abs: &Path, bytes: &[u8]) -> Result<()> {
     run(abs, |_| WriteKind::Write, Some(abs), || raw::atomic(abs, raw::Replace::Always, |f| Ok(f.write_all(bytes)?)).map(|_| ()))
 }
 
-/// A folder of Atlas's own that is not the vault's history (caches, local copies of remote files): it carries a
+/// A folder of Kandinsky's own that is not the vault's history (caches, local copies of remote files): it carries a
 /// `.gitignore` of `*`, written once, so git and the Git pane leave it out without the vault's own rules.
 pub fn ignored_folder(dir: &Path, why: &str) -> Result<()> {
     let ignore = dir.join(".gitignore");
@@ -309,7 +309,7 @@ pub fn remove_dir_all(abs: &Path) -> Result<()> {
     run(abs, |_| WriteKind::RemoveDir, None, || Ok(std::fs::remove_dir_all(abs)?))
 }
 
-/// Removes a link to a folder (a guest's `.atlas`, guest.rs), never what it points at. Windows keeps a folder link as
+/// Removes a link to a folder (a guest's `.kandinsky`, guest.rs), never what it points at. Windows keeps a folder link as
 /// a directory entry, which only `remove_dir` takes (`remove_file` is refused: "Access is denied").
 pub fn remove_link(abs: &Path) -> Result<()> {
     run(abs, |_| WriteKind::Remove, None, || {
@@ -359,7 +359,7 @@ mod raw {
             let mut f = std::fs::File::create(&tmp)?;
             fill(&mut f)?;
             f.sync_all()?;
-            // keep e.g. the executable bit of a script edited in Atlas; a file system without modes (Android's shared
+            // keep e.g. the executable bit of a script edited in Kandinsky; a file system without modes (Android's shared
             // storage) refuses chmod, and the file's bytes matter more than its bit there
             if let Some(meta) = &existing {
                 if std::fs::metadata(&tmp).map(|m| m.permissions()).ok().as_ref() != Some(&meta.permissions()) {
@@ -447,7 +447,7 @@ mod raw {
     }
 }
 
-/// Per-device state inside a vault that is never vault content: `.atlas/cache/**` (the index, thumbnails, PDF text,
+/// Per-device state inside a vault that is never vault content: `.kandinsky/cache/**` (the index, thumbnails, PDF text,
 /// logs, layouts, recovery copies). No guard: no other device ever reads it as the vault's.
 /// Content that arrives from the vault's other copy (the mirror bringing the server's last version,
 /// mirror_guard.rs): written as Syncthing would write it — atomically, never asking a guard, since it *is* the last
@@ -468,14 +468,14 @@ pub mod cache {
     use super::*;
 
     fn check(abs: &Path) {
-        debug_assert!(is_cache(abs), "{} is not under a vault's .atlas/cache/: write it with vault_write::write", abs.display());
+        debug_assert!(is_cache(abs), "{} is not under a vault's .kandinsky/cache/: write it with vault_write::write", abs.display());
     }
 
-    /// Whether `abs` is per-device state (under some `.atlas/cache/`).
+    /// Whether `abs` is per-device state (under some `.kandinsky/cache/`).
     pub fn is_cache(abs: &Path) -> bool {
         // by components, so `\` (Windows) counts as well as `/`
         let parts: Vec<_> = abs.components().map(|c| c.as_os_str()).collect();
-        parts.windows(2).any(|w| w[0] == ".atlas" && w[1] == "cache")
+        parts.windows(2).any(|w| w[0].to_str().is_some_and(crate::state_dir::is_name) && w[1] == "cache")
     }
 
     pub fn write(abs: &Path, bytes: &[u8]) -> Result<()> {
@@ -543,13 +543,13 @@ pub mod cache {
     }
 }
 
-/// Files outside every vault: Atlas's own config and state (~/.config/atlas, ~/.local/state/atlas), the secrets store,
+/// Files outside every vault: Kandinsky's own config and state (~/.config/kandinsky, ~/.local/state/kandinsky), the secrets store,
 /// and work folders in the system temp dir. No guard: they are not a vault's content.
 pub mod outside {
     use super::*;
 
     /// `f` run holding an exclusive lock on `<file>.lock` (made if missing), shared with every process of this machine:
-    /// a read-change-write of a file several Atlas windows keep (the vault list) never drops another's change.
+    /// a read-change-write of a file several Kandinsky windows keep (the vault list) never drops another's change.
     pub fn locked<T>(file: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
         check(file);
         let mut name = file.file_name().map(|n| n.to_os_string()).unwrap_or_default();
@@ -590,7 +590,7 @@ pub mod outside {
         check(abs);
         Ok(std::fs::create_dir_all(abs)?)
     }
-    /// `link` made a link to the folder `target` (a guest folder's `.atlas`, guest.rs). On Windows a junction would
+    /// `link` made a link to the folder `target` (a guest folder's `.kandinsky`, guest.rs). On Windows a junction would
     /// need no developer mode; a symlink is tried, and its refusal said.
     pub fn symlink_dir(target: &Path, link: &Path) -> Result<()> {
         check(link);

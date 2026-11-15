@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
@@ -16,7 +16,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** The desktop box's look (crates/atlas-capture/src/look.rs, from ui/src/styles/tokens.css): its palette, picked by the phone's night mode, and its shapes. */
+/** The desktop box's look (crates/kandinsky-capture/src/look.rs, from ui/src/styles/tokens.css): its palette, picked by the phone's night mode, and its shapes. */
 public final class Look {
     public final boolean dark;
     /** An e-ink screen (a Boox): black on white, no ripple or elevation — each change is a panel refresh. */
@@ -97,7 +97,7 @@ public final class Look {
     }
 
     /** Onyx's WebView injects its own e-ink CSS (`!important` colours from the per-app settings) into network pages, and
-     *  Atlas's page is one (127.0.0.1): off, so Atlas's own e-ink look is the one shown. Nothing on other devices. */
+     *  Kandinsky's page is one (127.0.0.1): off, so Kandinsky's own e-ink look is the one shown. Nothing on other devices. */
     static void noInjectedCss(android.webkit.WebView w) {
         try { android.webkit.WebView.class.getMethod("setCssInjectEnabled", boolean.class).invoke(w, false); } catch (ReflectiveOperationException | LinkageError e) { /* not Onyx's WebView */ }
     }
@@ -143,7 +143,7 @@ public final class Look {
     public Drawable icon(Context c, String name, int color) {
         int id = c.getResources().getIdentifier("ic_" + name, "drawable", c.getPackageName());
         if (id == 0) { // a name with no icon (phone.rs `every_icon_the_java_asks_for_is_drawn`): blank, never a crash
-            android.util.Log.w("AtlasLook", "no icon " + name);
+            android.util.Log.w("KandinskyLook", "no icon " + name);
             return new android.graphics.drawable.ColorDrawable(0);
         }
         Drawable d = c.getDrawable(id).mutate();

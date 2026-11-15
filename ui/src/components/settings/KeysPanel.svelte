@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Every command and its shortcut, rebindable in place (saved to .atlas/keys.toml).
+  // Every command and its shortcut, rebindable in place (saved to .kandinsky/keys.toml).
   import { onMount } from "svelte";
   import { allCommands, keymap, loadKeymap } from "../../lib/keymap.svelte";
   import ShortcutButton from "../ShortcutButton.svelte";

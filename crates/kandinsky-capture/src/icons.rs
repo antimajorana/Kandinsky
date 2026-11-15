@@ -30,7 +30,7 @@ pub enum Icon {
     Search,
     Settings,
     Today,
-    /// the phone app's shell (crates/atlas-android): Back, the menu, the open tabs
+    /// the phone app's shell (crates/kandinsky-android): Back, the menu, the open tabs
     Back,
     More,
     Tabs,
@@ -42,7 +42,7 @@ pub enum Icon {
     Music,
     /// the phone's capture box: Draw
     Pen,
-    /// the Boox pen screen's tools (the notepad, org.atlas.notepad)
+    /// the Boox pen screen's tools (the notepad, org.kandinsky.notepad)
     Undo,
     Redo,
     Eraser,
@@ -174,7 +174,7 @@ pub(crate) fn prims(icon: Icon) -> &'static [Prim] {
 }
 
 /// The icon as SVG path data, one string per stroke (24×24, stroke 1.75): the phone app's vector drawables are made
-/// from these (crates/atlas-android, `res`), so both boxes draw the same pictures.
+/// from these (crates/kandinsky-android, `res`), so both boxes draw the same pictures.
 pub fn svg(icon: Icon) -> Vec<String> {
     prims(icon)
         .iter()

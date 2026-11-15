@@ -12,9 +12,9 @@
   import Icon from "./Icon.svelte";
   import LibraryCover from "./LibraryCover.svelte";
 
-  let { atlas, source }: { atlas: PluginApi; source: LibrarySource } = $props();
-  const toast = (title: string, body?: string, kind: "info" | "error" = "info", timeout?: number) => atlas.toast(title, body, kind, { timeout });
-  const richTitle = (t: string) => atlas.richTitle(t);
+  let { kandinsky, source }: { kandinsky: PluginApi; source: LibrarySource } = $props();
+  const toast = (title: string, body?: string, kind: "info" | "error" = "info", timeout?: number) => kandinsky.toast(title, body, kind, { timeout });
+  const richTitle = (t: string) => kandinsky.richTitle(t);
   let items = $state<LibraryItem[]>([]);
   let error = $state("");
   let q = $state("");
@@ -83,7 +83,7 @@
   let form = $state<{ def: LibraryForm; values: Record<string, string> } | null>(null);
   async function act(a: LibraryAction) {
     if ("edit" in a) { form = { def: a.edit, values: Object.fromEntries(a.edit.fields.map((f) => [f.key, f.value])) }; return; }
-    if ("confirm" in a && !(await atlas.confirm(a.confirm.title, { hint: a.confirm.hint, ok: a.confirm.button, danger: true }))) return;
+    if ("confirm" in a && !(await kandinsky.confirm(a.confirm.title, { hint: a.confirm.hint, ok: a.confirm.button, danger: true }))) return;
     await run(a.run);
   }
   async function run(f: () => unknown) {
@@ -125,7 +125,7 @@
   }
 
   // items dragged onto a group at the side go there (source.regroup): the picked ones when the dragged card is one of them
-  const MOVE_TYPE = "text/x-atlas-library";
+  const MOVE_TYPE = "text/x-kandinsky-library";
   let dropOn = $state<string | null>(null);
   function dragItem(e: DragEvent, i: LibraryItem) {
     const ids = picked.length > 1 && pickedSet.has(i.id) ? picked : [i.id];
@@ -205,7 +205,7 @@
 
   /** The app's "Linked mentions" of `path`, as under a note. */
   function backlinks(host: HTMLElement, path: string) {
-    const off = atlas.mountBlock(host, { type: "backlinks", path });
+    const off = kandinsky.mountBlock(host, { type: "backlinks", path });
     return { destroy: off };
   }
 
@@ -291,7 +291,7 @@
       {#each sorted as i (i.id)}
         {#if layout === "covers"}
           <button class="card" class:sel={isPicked(i)} data-pick={i.id} draggable={source.regroup ? "true" : undefined} ondragstart={(e) => dragItem(e, i)} onclick={(e) => click(e, i)} ondblclick={() => source.open?.(i)} title={i.sub}>
-            <LibraryCover {atlas} cover={i.cover} title={i.title} />
+            <LibraryCover {kandinsky} cover={i.cover} title={i.title} />
             <span class="t">{@html richTitle(i.title)}</span>
             {#if i.sub}<span class="m">{i.sub}</span>{/if}
           </button>
@@ -326,7 +326,7 @@
             <div class="actions"><button class="btn primary">Save</button><button type="button" class="btn" onclick={() => (form = null)}>Cancel</button></div>
           </form>
         {/if}
-        {#if layout === "covers"}<LibraryCover {atlas} cover={sel.cover} title={sel.title} big />{/if}
+        {#if layout === "covers"}<LibraryCover {kandinsky} cover={sel.cover} title={sel.title} big />{/if}
         {#if detail.kind}<div class="kind">{detail.kind}</div>{/if}
         <h2>{@html richTitle(detail.title)}</h2>
         {#each detail.lines ?? [] as l, n (n)}<p class={l.muted ? "venue" : "authors"}>{l.text}</p>{/each}

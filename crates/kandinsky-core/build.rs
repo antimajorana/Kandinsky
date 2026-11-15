@@ -11,17 +11,17 @@ fn main() {
         std::fs::create_dir_all(&dist).expect("create ui/dist");
         std::fs::write(
             &index,
-            "<!doctype html><meta charset=utf-8><title>Atlas</title>\
-             <p>Atlas server is running, but the UI is not built yet: \
+            "<!doctype html><meta charset=utf-8><title>Kandinsky</title>\
+             <p>Kandinsky server is running, but the UI is not built yet: \
              <code>npm --prefix ui run build</code>.</p>\n",
         )
         .expect("write placeholder ui/dist/index.html");
     }
     println!("cargo:rerun-if-changed=../../ui/dist");
     let gen = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/src/lib/gen");
-    println!("cargo:rustc-env=ATLAS_CORE_TYPES={}", core_types(&gen));
+    println!("cargo:rustc-env=KANDINSKY_CORE_TYPES={}", core_types(&gen));
     println!("cargo:rerun-if-changed=../../ui/src/lib/gen");
-    println!("cargo:rustc-env=ATLAS_COMMIT={}", commit());
+    println!("cargo:rustc-env=KANDINSKY_COMMIT={}", commit());
 }
 
 /// The commit this core is built from, shown in Settings beside the version: `git rev-parse` in a checkout (rebuilt

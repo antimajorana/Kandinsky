@@ -1,8 +1,9 @@
 //! Where Linux, macOS and Windows differ (docs/design/DESIGN-desktop-ports.md): folders, processes, opening things
-//! outside Atlas, starting a command line, and (in a Flatpak) starting it on the host. Every caller goes through here; nothing else in the core branches on
+//! outside Kandinsky, starting a command line, and (in a Flatpak) starting it on the host. Every caller goes through here; nothing else in the core branches on
 //! the operating system.
 pub mod capture_key;
 pub mod dirs;
+pub mod dirs_migrate;
 pub mod host;
 pub mod open;
 pub mod proc;
@@ -10,7 +11,7 @@ pub mod run_line;
 pub mod trash;
 
 /// Where a core runs, as a plugin manifest names it (`[platforms]`): a desktop system, the phone app, or a server
-/// (`atlas serve`: no window, many devices, whatever the system under it).
+/// (`kandinsky serve`: no window, many devices, whatever the system under it).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]

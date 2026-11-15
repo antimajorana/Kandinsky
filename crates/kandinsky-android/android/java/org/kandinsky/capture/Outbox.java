@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
@@ -20,7 +20,7 @@ import org.json.JSONObject;
  * Sent oldest first — when the box or the app opens, and by a job Android runs once there is a network (OutboxJob).
  */
 final class Outbox {
-    private static final String TAG = "AtlasOutbox";
+    private static final String TAG = "KandinskyOutbox";
     private static final int JOB = 4242;
 
     private Outbox() {}

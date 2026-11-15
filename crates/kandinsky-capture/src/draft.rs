@@ -1,4 +1,4 @@
-//! The box's unsent text, kept per vault (`$XDG_STATE_HOME/atlas/capture-drafts/`). The box closes when it loses the
+//! The box's unsent text, kept per vault (`$XDG_STATE_HOME/kandinsky/capture-drafts/`). The box closes when it loses the
 //! focus, on Esc, or when its key starts a second box; what was typed comes back on the next open. Saved or emptied:
 //! gone. Written on every change (not on close), so a killed box loses nothing either. The chips are not kept.
 use std::path::{Path, PathBuf};
@@ -16,7 +16,7 @@ impl Drafts {
 
     /// The machine's draft folder (the box's main uses it; tests pass their own).
     pub fn default_dir() -> PathBuf {
-        atlas_core::platform::dirs::atlas(atlas_core::platform::dirs::Base::State).join("capture-drafts")
+        kandinsky_core::platform::dirs::app_entry(kandinsky_core::platform::dirs::Base::State, "capture-drafts")
     }
 
     /// One file per vault, named by its path (readable, and two vaults never share one).
@@ -50,7 +50,7 @@ impl Drafts {
         let wrote = std::fs::create_dir_all(&self.dir).and_then(|_| std::fs::write(&tmp, text)).and_then(|_| std::fs::rename(&tmp, &file));
         match wrote {
             Ok(()) => self.written = Some((file, text.to_string())),
-            Err(e) => eprintln!("atlas-capture: could not keep the draft in {}: {e}", self.dir.display()),
+            Err(e) => eprintln!("kandinsky-capture: could not keep the draft in {}: {e}", self.dir.display()),
         }
     }
 

@@ -3,6 +3,9 @@
 const DEFAULT_UI = "http://localhost:4200";
 const DEFAULT_API = "http://127.0.0.1:3000";
 const DEFAULT_DIR = "C:/Users/antimajorana/Documents/GitHub/re-Solver-Agent";
+// Solver's MongoDB runs natively in WSL Ubuntu as the systemd service mongod (no Docker).
+// serverSelectionTimeoutMS makes a stopped mongod fail in about 3 s instead of hanging.
+const MONGO_URI = "mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=3000";
 
 function cleanUrl(u, fallback) {
   const s = String(u || fallback).trim().replace(/\/+$/, "");
@@ -41,7 +44,7 @@ async function probeWithNode(uiUrl, apiUrl) {
       }));
     })();
   `;
-  const r = await atlas.exec("node", ["-e", script, uiUrl, apiUrl], { timeout: 6 });
+  const r = await kandinsky.exec("node", ["-e", script, uiUrl, apiUrl], { timeout: 6 });
   if (r.status === 0 && r.stdout) return JSON.parse(r.stdout.trim());
   throw new Error(r.stderr || "node probe failed");
 }
@@ -70,7 +73,7 @@ async function probeWithPowerShell(uiUrl, apiUrl) {
     } catch {}
     @{ running = ($fe -and $be); frontend = $fe; backend = $be; buildId = $bid } | ConvertTo-Json -Compress
   `;
-  const r = await atlas.exec("powershell", ["-NoProfile", "-NonInteractive", "-Command", ps], { timeout: 10 });
+  const r = await kandinsky.exec("powershell", ["-NoProfile", "-NonInteractive", "-Command", ps], { timeout: 10 });
   if (r.status === 0 && r.stdout) return JSON.parse(r.stdout.trim());
   return { running: false, frontend: false, backend: false, buildId: null };
 }
@@ -98,7 +101,7 @@ async function startServices(params = {}) {
   const baseDir = String(params.launcherDir || DEFAULT_DIR).trim().replace(/\\/g, "/").replace(/\/+$/, "");
   const scriptPath = `${baseDir}/local-launcher/Start-SolverAgent.ps1`;
 
-  const run = await atlas.exec(
+  const run = await kandinsky.exec(
     "powershell",
     ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath, "-NoBrowser", "-JsonProgress"],
     { timeout: 300 },
@@ -303,7 +306,7 @@ async function listConversations(params = {}) {
   const conversations = [];
   const seen = new Set();
 
-  // When Solver backend is running, WSL + solver-mongo are already awake: list conversations across ALL browser profiles!
+  // When the Solver backend is running, WSL and the native mongod service are awake: list conversations across ALL browser profiles.
   if (st.backend || params.forceMongo) {
     const mongoEval = `
       const dbs = db.adminCommand({listDatabases:1}).databases.map(d=>d.name).filter(n=>!['admin','config','local'].includes(n));
@@ -319,10 +322,11 @@ async function listConversations(params = {}) {
       print(JSON.stringify(out));
     `.replace(/\s+/g, " ").trim();
     try {
-      const mr = await atlas.exec(
+      const mr = await kandinsky.exec(
         "wsl",
-        ["-d", "Ubuntu", "--exec", "docker", "exec", "solver-mongo", "mongosh", "--quiet", "--eval", mongoEval],
-        { timeout: 6 },
+        ["-d", "Ubuntu", "--exec", "mongosh", "--quiet", "--norc", MONGO_URI, "--eval", mongoEval],
+        // mongosh itself takes about 5 s to start inside WSL, so 6 s was too tight.
+        { timeout: 20 },
       );
       if (mr.status === 0 && mr.stdout) {
         const lines = String(mr.stdout).trim().split(/\r?\n/);
@@ -368,7 +372,7 @@ async function listConversations(params = {}) {
       process.stdout.write(JSON.stringify(out.slice(0, 20)));
     `;
     try {
-      const zr = await atlas.exec("node", ["-e", scanScript], { timeout: 6 });
+      const zr = await kandinsky.exec("node", ["-e", scanScript], { timeout: 6 });
       if (zr.status === 0 && zr.stdout) exports = JSON.parse(zr.stdout.trim());
     } catch {}
   }
@@ -432,7 +436,7 @@ async function exportMarkdown(params = {}) {
       }
       throw new Error("No ledger.json found in ZIP bundle");
     `;
-    const zr = await atlas.exec("node", ["-e", zipScript, String(params.zipPath)], { timeout: 15 });
+    const zr = await kandinsky.exec("node", ["-e", zipScript, String(params.zipPath)], { timeout: 15 });
     if (zr.status !== 0 || !zr.stdout) {
       return { ok: false, error: String(zr.stderr || "Could not read ledger.json from ZIP archive.").trim() };
     }
@@ -466,14 +470,14 @@ async function exportMarkdown(params = {}) {
       }));
     })();
   `;
-  const fr = await atlas.exec("node", ["-e", fetchScript, apiUrl, cid], { timeout: 15 });
+  const fr = await kandinsky.exec("node", ["-e", fetchScript, apiUrl, cid], { timeout: 15 });
   if (fr.status !== 0 || !fr.stdout) {
     return { ok: false, error: String(fr.stderr || "Could not fetch conversation from Solver API. Make sure Solver is running.").trim() };
   }
   return buildSolverMarkdown(JSON.parse(fr.stdout), opts);
 }
 
-atlas.methods({
+kandinsky.methods({
   status: checkStatus,
   start: startServices,
   listConversations,

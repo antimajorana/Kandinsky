@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Settings → AI agents (crates/atlas-core/src/agents.rs, DESIGN-local-lock.md step 3): each agent `atlas mcp` serves
+  // Settings → AI agents (crates/kandinsky-core/src/agents.rs, DESIGN-local-lock.md step 3): each agent `kandinsky mcp` serves
   // gets a named token of its own, shown once in the MCP server entry any client reads; revoking one shuts out that
   // agent alone, at its next request. Per machine, kept outside the vault. Generic: how one agent registers it (its
   // own command) is that agent's plugin's (REFACTOR-agents-as-plugins.md).
@@ -43,19 +43,19 @@
   {#if st}
     <h3>Allowed agents</h3>
     {#if !st.locked}
-      <p class="warn">This Kandinsky is not locked: any program on this machine gets in, with or without a token. The tokens below take effect once it is (<code>ATLAS_LOCAL_LOCK=1</code>); make them now and the agents keep working then.</p>
+      <p class="warn">This Kandinsky is not locked: any program on this machine gets in, with or without a token. The tokens below take effect once it is (<code>KANDINSKY_LOCAL_LOCK=1</code>); make them now and the agents keep working then.</p>
     {/if}
-    <label class="check"><input type="checkbox" checked={st.terminals} onchange={(e) => void terminals(e.currentTarget.checked)} /> Agent terminals Kandinsky starts get a token <span class="muted">(shared by every such tab, as “{st.terminalAgent}”: <code>atlas mcp</code> inherits it, so a vault's synced <code>.mcp.json</code> never holds one; a revoke gives the next tab a new token)</span></label>
+    <label class="check"><input type="checkbox" checked={st.terminals} onchange={(e) => void terminals(e.currentTarget.checked)} /> Agent terminals Kandinsky starts get a token <span class="muted">(shared by every such tab, as “{st.terminalAgent}”: <code>kandinsky mcp</code> inherits it, so a vault's synced <code>.mcp.json</code> never holds one; a revoke gives the next tab a new token)</span></label>
     {#each st.agents as a (a.name)}
       <div class="agent"><strong>{a.name}</strong>{#if a.name === st.terminalAgent}<span class="tag">Kandinsky terminals</span>{/if}<span class="muted">allowed {when(a.created)} · last used {when(a.lastUsed)}</span><button class="btn danger-text" onclick={() => void revoke(a.name)}>Revoke</button></div>
-    {:else}<p class="muted">No agent allowed yet. On a locked Kandinsky, <code>atlas mcp</code> without a token of its own is turned away.</p>{/each}
+    {:else}<p class="muted">No agent allowed yet. On a locked Kandinsky, <code>kandinsky mcp</code> without a token of its own is turned away.</p>{/each}
 
     {#if shown}
       <div class="shown" role="status">
         <span>Token for <strong>{shown.name}</strong> — copy it now, it is not shown again. Add this MCP server to the agent's MCP config:</span>
         <pre><code>{shown.entry}</code></pre>
         <div class="actions"><button class="btn primary" onclick={() => copy(shown!.entry)}>Copy the MCP entry</button><button class="btn" onclick={() => copy(shown!.token)}>Copy the token only</button></div>
-        <span class="muted">That is <code>atlas mcp</code> with <code>ATLAS_AGENT_TOKEN</code> set to the token; an agent's plugin says how that agent takes it in.</span>
+        <span class="muted">That is <code>kandinsky mcp</code> with <code>KANDINSKY_AGENT_TOKEN</code> set to the token; an agent's plugin says how that agent takes it in.</span>
       </div>
     {/if}
     <div class="actions"><input placeholder="e.g. Claude on the laptop" title="Name it after the agent and the machine it is for" aria-label="Agent name" bind:value={name} onkeydown={(e) => e.key === "Enter" && name.trim() && void allow()} />

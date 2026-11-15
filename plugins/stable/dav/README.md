@@ -1,7 +1,7 @@
 # Calendar (the `dav` plugin)
 
 Your calendars and contacts over CalDAV and CardDAV, and Outlook / Microsoft 365 calendars over Exchange, from as many
-servers and accounts as you have, in a calendar pane inside Atlas: month, week, work week, day, agenda and year views;
+servers and accounts as you have, in a calendar pane inside Kandinsky: month, week, work week, day, agenda and year views;
 drag to create, move and resize; repeating events; meetings with guests; any calendar written to; read-only ICS
 subscriptions; invitations answered from the Email plugin; and tools for agents. The engine is Rust; the pane is Svelte. The plugin's id is `dav` (tools `dav_*`), its title "Calendar".
 
@@ -27,7 +27,7 @@ subscriptions; invitations answered from the Email plugin; and tools for agents.
   sends the invitations, the updates when you change it and the cancellation when you delete it; on a CalDAV server
   that schedules (RFC 6638: Nextcloud, for one) the server sends them; elsewhere the guests are written but nobody is
   told. A meeting someone else organises shows its guests, not editable. Email's **Meeting** button opens the new-event
-  dialog with the conversation's subject and people (the window event `atlas-calendar:new`).
+  dialog with the conversation's subject and people (the window event `kandinsky-calendar:new`).
 - **Answering and joining from the card**: a meeting you are invited to in an Exchange calendar shows *Going? Yes /
   Maybe / No* first on its card, under its time; the answer goes through Exchange, which tells the organiser (a series
   is answered as a whole; the `respond` method). A CalDAV meeting is answered from its invitation mail. An online
@@ -41,7 +41,7 @@ subscriptions; invitations answered from the Email plugin; and tools for agents.
   meeting already in an Exchange calendar is answered by Exchange itself — accept, tentative, decline — so it stays
   linked to the organiser's meeting, and Email sends no answer of its own), `invite_status` (is it
   in your calendar, does it overlap anything), `contacts` (CardDAV address books), `agenda`.
-- **Tools for agents** (`atlas mcp`): `dav_calendars`, `dav_events`, `dav_agenda`, `dav_add_event`,
+- **Tools for agents** (`kandinsky mcp`): `dav_calendars`, `dav_events`, `dav_agenda`, `dav_add_event`,
   `dav_remove_event`, `dav_import_invite`, `dav_invite_status`, `dav_contacts`, `dav_sync`. The plugin never reads
   mail or guesses dates from text: an agent reads them and calls `dav_add_event` with the source.
 - **Important notes** (opt-in): a note with `important: true` and `due:` or `event:` (+ `event_end:`) shows as an

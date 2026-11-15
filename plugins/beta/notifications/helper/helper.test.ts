@@ -3,7 +3,7 @@
 // topic captured, `send` through Apprise or ntfy; and the core's side through the harness.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { harness, Status } from "atlas-helper/testing";
+import { harness, Status } from "kandinsky-helper/testing";
 import { auth, muted, oneAtATime, sendWith, sourceOf, syncWith, yamlValue, type Message, type Net, type Vault } from "./helper";
 
 /** ntfy: each topic's messages, `since=<id>` honoured as the real one does; the POSTs made. */
@@ -99,12 +99,12 @@ test("the inbox is captured, and send goes through Apprise or ntfy", async () =>
   assert.equal((await sendWith(net, { text: "done", title: "Job", settings: { apprise: "https://apprise.example.org/notify/key" } })).through, "apprise");
   assert.deepEqual(JSON.parse(posts.at(-1)!.body), { title: "Job", body: "done" });
   assert.equal((await sendWith(net, { text: "done", settings: { server: "https://ntfy.example.org", phone_topic: "me" }, secrets: {} })).through, "ntfy");
-  assert.equal(posts.at(-1)!.url, "https://ntfy.example.org/me?title=Atlas");
+  assert.equal(posts.at(-1)!.url, "https://ntfy.example.org/me?title=Kandinsky");
   await assert.rejects(sendWith(net, { text: "x", settings: {} }), /phone's topic/);
 });
 
 test("through the core: the poll is fetched, the note written and the last id kept in the cache", async () => {
-  const files: Record<string, string> = { ".atlas/cache/plugins/test/since-server": "old1\n" };
+  const files: Record<string, string> = { ".kandinsky/cache/plugins/test/since-server": "old1\n" };
   harness.api = (verb, path, body) => {
     const p = decodeURIComponent(/path=([^&]*)/.exec(path)?.[1] ?? "");
     if (verb === "GET" && path.startsWith("/api/file?")) {
@@ -119,7 +119,7 @@ test("through the core: the poll is fetched, the note written and the last id ke
   assert.equal(r.new, 1, JSON.stringify(r));
   assert.ok(harness.asked[0].url.endsWith("/server/json?poll=1&since=old1"), "the Python helper's last id is carried over");
   assert.ok(files["notifications/server.md"].includes("hello"));
-  assert.deepEqual(JSON.parse(files[".atlas/cache/test.json"]), { since: { server: "n1" } });
+  assert.deepEqual(JSON.parse(files[".kandinsky/cache/test.json"]), { since: { server: "n1" } });
 });
 
 test("two syncs at once run one after the other, a failed one not stopping the next", async () => {

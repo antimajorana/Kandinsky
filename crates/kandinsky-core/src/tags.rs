@@ -53,7 +53,7 @@ pub(crate) fn tag_at(rest: &str) -> Option<&str> {
 fn inline_tags(text: &str, mut f: impl FnMut(usize, &str)) {
     let body = body_of(text);
     let base = text.len() - body.len(); // the body is the text's tail
-    let mut fences = atlas_text::fence::Fences::default();
+    let mut fences = kandinsky_text::fence::Fences::default();
     let mut at = 0;
     for raw in body.split_inclusive('\n') {
         let line_at = base + at;
@@ -62,8 +62,8 @@ fn inline_tags(text: &str, mut f: impl FnMut(usize, &str)) {
         if fences.code(line) {
             continue;
         }
-        // inline code is not text (atlas_text's one reader): the pieces between code spans are read
-        let code = atlas_text::fence::code_spans(line);
+        // inline code is not text (kandinsky_text's one reader): the pieces between code spans are read
+        let code = kandinsky_text::fence::code_spans(line);
         let gaps = std::iter::once(0).chain(code.iter().map(|c| c.end)).zip(code.iter().map(|c| c.start).chain(std::iter::once(line.len())));
         for (piece_at, piece_end) in gaps {
             let piece = &line[piece_at..piece_end];
@@ -104,7 +104,7 @@ pub fn rename_in(text: &str, from: &str, to: &str) -> (String, usize) {
         }
     });
     // the frontmatter's tag list: `tags: [a, b]`, `tags: a, b`, or one `- a` per line under it
-    if let Some(r) = atlas_text::frontmatter::yaml_range(text) {
+    if let Some(r) = kandinsky_text::frontmatter::yaml_range(text) {
         let (yaml, mut at) = (&text[r.clone()], r.start);
         let mut in_tags = false;
         for raw in yaml.split_inclusive('\n') {
@@ -166,7 +166,7 @@ pub fn rename(ws: &crate::workspace::Workspace, from: &str, to: &str) -> crate::
 
 /// The text after the frontmatter block.
 fn body_of(text: &str) -> &str {
-    atlas_text::frontmatter::split(text).1
+    kandinsky_text::frontmatter::split(text).1
 }
 
 /// `tag` itself and each of its parents: `a/b/c` → `a`, `a/b`, `a/b/c`.

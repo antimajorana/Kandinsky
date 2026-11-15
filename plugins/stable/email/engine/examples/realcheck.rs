@@ -1,5 +1,5 @@
 //! A read-only check on a real account (EXAMINE / BODY.PEEK only; no rules, nothing written to the server):
-//! `cargo run --release -p atlas-email --example realcheck -- <params.json> <index dir> [prefetch]`, where params.json
+//! `cargo run --release -p kandinsky-email --example realcheck -- <params.json> <index dir> [prefetch]`, where params.json
 //! holds { settings: { accounts: [...] }, secrets: {...} } for password accounts. Prints counts, never mail content
 //! beyond subjects of the biggest conversations.
 use email::{index::Index, mail::Mail, sync};

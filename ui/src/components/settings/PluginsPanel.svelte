@@ -145,7 +145,7 @@
     const names = unnecessaryObsidian.map((o) => o.name).join(", ");
     const ok = await confirmDialog(
       `Move ${unnecessaryObsidian.length} unnecessary Obsidian plugins to Trash?`,
-      `${names} — moved safely to .atlas/trash/ so nothing is permanently deleted.`,
+      `${names} — moved safely to .kandinsky/trash/ so nothing is permanently deleted.`,
       "Move to Trash",
       false,
     );
@@ -154,7 +154,7 @@
     try {
       const r = await api.removeObsidianPlugins(unnecessaryObsidian.map((o) => o.id));
       await refreshCatalog();
-      toast(`Moved ${r.moved.length} plugin${r.moved.length === 1 ? "" : "s"} to Trash`, "Saved under .atlas/trash/.", "success", 8000);
+      toast(`Moved ${r.moved.length} plugin${r.moved.length === 1 ? "" : "s"} to Trash`, "Saved under .kandinsky/trash/.", "success", 8000);
     } catch (e) {
       toast("Could not move plugins", errText(e), "error", 9000);
     } finally {
@@ -289,8 +289,8 @@
             {#if pluginOn(p) && p.view}<button class="icon-btn" title="Open" aria-label="Open {p.title}" onclick={() => open(pluginSpec(p))}><Icon name="panel-right" size={13} /></button>{/if}
             {#if p.fields.length}<button class="btn small" aria-label="Settings of {p.title}" onclick={() => void openPluginSettings(p.id)}>Settings…</button>{/if}
             {#if p.from}<button class="icon-btn" title="Update from {p.from}" aria-label="Update {p.title}" onclick={() => void updatePlugin(p).then(refreshCatalog)}><Icon name="refresh" size={13} /></button>{/if}
-            {#if p.fields.length}<button class="icon-btn" title="Its settings file (.atlas/plugin-settings/{p.id}.toml)" aria-label="Edit {p.title} settings file" onclick={() => void openPluginSettingsText(p)}><Icon name="file-text" size={13} /></button>{/if}
-            <button class="icon-btn" title="Remove from this vault (to .atlas/trash/)" aria-label="Remove {p.title}" onclick={() => void handleRemove(p.id)}><Icon name="close" size={13} /></button>
+            {#if p.fields.length}<button class="icon-btn" title="Its settings file (.kandinsky/plugin-settings/{p.id}.toml)" aria-label="Edit {p.title} settings file" onclick={() => void openPluginSettingsText(p)}><Icon name="file-text" size={13} /></button>{/if}
+            <button class="icon-btn" title="Remove from this vault (to .kandinsky/trash/)" aria-label="Remove {p.title}" onclick={() => void handleRemove(p.id)}><Icon name="close" size={13} /></button>
           </span>
         </li>
       {:else}

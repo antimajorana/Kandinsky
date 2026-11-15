@@ -1,5 +1,5 @@
 <script lang="ts">
-  // CSS snippets (rung 2): every .atlas/snippets/*.css restyles Atlas live; a switch per file.
+  // CSS snippets (rung 2): every .kandinsky/snippets/*.css restyles Kandinsky live; a switch per file.
   import Icon from "../Icon.svelte";
   import { openPath } from "../../lib/dock";
   import { settings, updateSettings } from "../../lib/settings.svelte";
@@ -18,7 +18,7 @@
 
 <section class="settings-panel snippets">
   <h3>CSS snippets</h3>
-  <p class="desc">Files in <code>.atlas/snippets/</code> restyle Kandinsky live when saved — the step between settings and plugins.</p>
+  <p class="desc">Files in <code>.kandinsky/snippets/</code> restyle Kandinsky live when saved — the step between settings and plugins.</p>
   {#each cssSnippets.list as s (s.name)}
     <label class="snip"><input type="checkbox" checked={on(s.name)} onchange={(e) => toggle(s.name, e.currentTarget.checked)} aria-label="Snippet {s.name}" />
       <span class="nm">{s.name}</span>

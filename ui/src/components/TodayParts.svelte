@@ -422,7 +422,7 @@
               {#if !fixedDay}<button class="icon-btn" title="Git" aria-label="Git" onclick={() => open({ kind: "git" })}><Icon name="git" size={15} /></button>{/if}
             </span>
           </div>
-          <div class="act-tabs atlas-seg" role="tablist" aria-label="Activity">
+          <div class="act-tabs kandinsky-seg" role="tablist" aria-label="Activity">
             <button role="tab" class:on={tab === "created"} aria-selected={tab === "created"} onclick={() => (actTab = "created")}>Created <span class="count">{created.length}</span></button>
             <button role="tab" class:on={tab === "changed"} aria-selected={tab === "changed"} onclick={() => (actTab = "changed")}>Changed <span class="count">{dayAct?.changed.length ?? 0}</span></button>
             {#if hasCommits}

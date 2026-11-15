@@ -5,6 +5,7 @@
   import { openSide, toggleSidePanel } from "../../lib/dock";
   import { atPointer, below } from "../../lib/menu";
   import { keysOf, tipFor } from "../../lib/keymap.svelte";
+  import { openWorkspacesMenu, workspaceState } from "../../lib/workspaces";
   import { paneIcon, paneTitle, type IconName } from "../../lib/panes";
   import { SIDE_KINDS, sideInBar, sidePanel, placeSidePanel, type SideId } from "../../lib/side-panel.svelte";
   import { sideTools, toolId } from "../../lib/side-tools.svelte";
@@ -77,6 +78,12 @@
     {/each}
   </div>
   {#if hidden.length}<button class="icon-btn add tipped" onclick={moreMenu} aria-haspopup="menu" aria-label="More tools" data-tip="More tools ({hidden.length})"><Icon name="plus" size={15} /></button>{/if}
+  {#if !inBar}
+    <button class="icon-btn small-btn tipped" class:off={Boolean(workspaceState.active)} onclick={(e) => void openWorkspacesMenu(e)}
+      aria-haspopup="menu" aria-label="Workspaces and layout presets"
+      data-tip={tipFor(workspaceState.active ? `Workspaces · ${workspaceState.active}` : "Workspaces & 1-click presets", "ui.workspace.switch")}
+      data-testid="sidehead-workspaces-menu"><Icon name="grid" size={13} /></button>
+  {/if}
   <button class="icon-btn small-btn tipped" class:off={!shown} onclick={toggleSidePanel} aria-label="{shown ? 'Hide' : 'Show'} the side panel"
     data-tip={tipFor(`${shown ? "Hide" : "Show"} the side panel`, "ui.sidePanel")}><Icon name={shown ? "minus" : "chevron-down"} size={13} /></button>
   {#if inBar}

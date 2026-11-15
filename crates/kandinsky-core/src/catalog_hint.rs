@@ -69,7 +69,7 @@ mod tests {
     #[test]
     fn the_catalogs_patterns_say_what_a_capture_will_be() {
         let d = tempfile::tempdir().unwrap();
-        let p = d.path().join(".atlas/plugins");
+        let p = d.path().join(".kandinsky/plugins");
         std::fs::create_dir_all(p.join("catalog")).unwrap();
         std::fs::create_dir_all(p.join("catalog-letterboxd")).unwrap();
         std::fs::write(p.join("catalog/plugin.toml"), "title = \"Catalog\"\n").unwrap();
@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn no_hint_while_the_catalog_files_nothing_from_captures() {
         let d = tempfile::tempdir().unwrap();
-        let p = d.path().join(".atlas/plugins/catalog");
+        let p = d.path().join(".kandinsky/plugins/catalog");
         std::fs::create_dir_all(&p).unwrap();
         std::fs::write(p.join("plugin.toml"), "title = \"Catalog\"\nprovides = [\"catalog\"]\n[settings]\non_capture = false\n").unwrap();
         assert_eq!(kind_of(d.path(), &Config::default(), "https://example.org/post"), None);

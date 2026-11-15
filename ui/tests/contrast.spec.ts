@@ -2,7 +2,7 @@ import { test, expect, type APIRequestContext, type Page } from "@playwright/tes
 
 // High contrast (`[ui] contrast`): any scheme on black or white paper, full-strength text, and the scheme's accent
 // pushed to a bright tone of its own hue that stands at 8:1 on black by night and 7:1 on white by day.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const cfg = async (request: APIRequestContext) => (await (await request.get("/api/config", { headers: H })).json()).config;
 
 test.describe.configure({ mode: "serial" });

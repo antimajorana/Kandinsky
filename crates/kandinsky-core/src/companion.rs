@@ -17,7 +17,7 @@ use chrono::NaiveDateTime;
 use serde_yaml::{Mapping, Value};
 use std::path::Path;
 
-/// The name an entry's note had before 2026-10-14 (the Zotero import, older Atlas).
+/// The name an entry's note had before 2026-10-14 (the Zotero import, older Kandinsky).
 pub const LEGACY: &str = "notes.md";
 /// The vault's template for these notes, in `[notes] templates`, when it has one.
 pub(crate) const TEMPLATE: &str = "literature";
@@ -218,7 +218,7 @@ fn entry_note(root: &Path, cfg: &Config, dir_rel: &str, stem: &str, shape: &Shap
     let legacy = dir.join(LEGACY);
     let old = std::fs::read_to_string(&legacy).ok();
     let template = template(root, cfg, dir_rel, &rel, &shape.title, now)?;
-    if old.as_deref().is_some_and(|t| atlas_text::frontmatter::split(t).0.is_some()) {
+    if old.as_deref().is_some_and(|t| kandinsky_text::frontmatter::split(t).0.is_some()) {
         vault_write::rename(&legacy, &path)?;
     } else {
         let text = match old.as_deref().filter(|t| !t.trim().is_empty()) {
@@ -307,7 +307,7 @@ fn frontmatter(s: &Shape, template: Option<&str>, stamp: &(String, String)) -> S
     text
 }
 
-/// A property under the template's own name for it (Atlas's writers follow the vault's spec): the
+/// A property under the template's own name for it (Kandinsky's writers follow the vault's spec): the
 /// template's `sources` takes `source` as a list; a template with a `date` keeps that as the one creation stamp
 /// (no `created` beside it). None: the template already has the thing under its own name.
 fn their_key(k: &str, v: Value, have: &Mapping) -> Option<(String, Value)> {
@@ -344,8 +344,8 @@ fn new_text(s: &Shape, template: Option<&str>, stamp: &(String, String)) -> Stri
     }
 }
 
-/// (frontmatter without its fences, the body after it): atlas-text's one reader.
-pub(crate) use atlas_text::frontmatter::split;
+/// (frontmatter without its fences, the body after it): kandinsky-text's one reader.
+pub(crate) use kandinsky_text::frontmatter::split;
 
 #[cfg(test)]
 mod tests {

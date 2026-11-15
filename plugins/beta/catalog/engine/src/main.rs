@@ -1,19 +1,19 @@
-//! The catalog plugin's helper: the engine served over the helper pipe, with Atlas reached back through the same pipe
-//! (docs/guides/PLUGIN-API.md, "Calling Atlas back"). Methods: `recognize`, `preview`, `add`, `refresh`, `kinds`.
-use atlas_catalog::engine::{Engine, Fail, Host, Pick};
-use atlas_catalog::model::{Fields, Ids, KindName, Narration, PluginId};
-use atlas_plugin::{q, serve, Atlas, Methods};
+//! The catalog plugin's helper: the engine served over the helper pipe, with Kandinsky reached back through the same pipe
+//! (docs/guides/PLUGIN-API.md, "Calling Kandinsky back"). Methods: `recognize`, `preview`, `add`, `refresh`, `kinds`.
+use kandinsky_catalog::engine::{Engine, Fail, Host, Pick};
+use kandinsky_catalog::model::{Fields, Ids, KindName, Narration, PluginId};
+use kandinsky_plugin::{q, serve, Kandinsky, Methods};
 use serde_json::{json, Map, Value};
 
-struct Core(Atlas);
+struct Core(Kandinsky);
 
-fn why(e: atlas_plugin::Error) -> Fail {
+fn why(e: kandinsky_plugin::Error) -> Fail {
     e.why
 }
 
 /// The frontmatter of a note's text as fields (none: an empty set).
 fn frontmatter(text: &str) -> Fields {
-    let Some(yaml) = atlas_text::frontmatter::split(text).0 else { return Fields::new() };
+    let Some(yaml) = kandinsky_text::frontmatter::split(text).0 else { return Fields::new() };
     serde_yaml::from_str::<serde_json::Value>(yaml).ok().and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default()
 }
 
@@ -32,7 +32,7 @@ impl Host for Core {
     }
 
     fn vault_kinds(&self) -> Result<Vec<(String, String)>, Fail> {
-        let entries = match self.0.tree(atlas_catalog::kind::KINDS_DIR) {
+        let entries = match self.0.tree(kandinsky_catalog::kind::KINDS_DIR) {
             Ok(v) => v,
             Err(e) if e.status == Some(404) => return Ok(Vec::new()),
             Err(e) => return Err(e.why),
@@ -53,7 +53,7 @@ impl Host for Core {
 
     fn api(&self, path: &str, input: Value) -> Result<Value, Fail> {
         if !path.starts_with("/api/") {
-            return Err(format!("{path}: a source's api must be a path of Atlas's own API (/api/…)"));
+            return Err(format!("{path}: a source's api must be a path of Kandinsky's own API (/api/…)"));
         }
         self.0.post(path, &input).map_err(why)
     }
@@ -61,11 +61,11 @@ impl Host for Core {
     fn clip(&self, input: Value) -> Result<Value, Fail> {
         // a page read here (the catalog's own page source), fetched through the core's fetch
         let url = input.get("url").and_then(Value::as_str).ok_or("clip: no url")?;
-        let clip = atlas_catalog::clip::fetch(url, |u, cookie| {
+        let clip = kandinsky_catalog::clip::fetch(url, |u, cookie| {
             let mut headers = json!({ "accept": "text/html,application/xhtml+xml,*/*;q=0.8" });
             if !cookie.is_empty() { headers["cookie"] = json!(cookie); }
             let r = self.0.post("/api/plugins/catalog/fetch", &json!({ "url": u, "headers": headers, "timeout_secs": 20 })).map_err(why)?;
-            Ok(atlas_catalog::clip::Page {
+            Ok(kandinsky_catalog::clip::Page {
                 status: r.get("status").and_then(Value::as_u64).unwrap_or(0) as u16,
                 url: r.get("url").and_then(Value::as_str).unwrap_or(u).to_string(),
                 text: r.get("text").and_then(Value::as_str).unwrap_or_default().to_string(),
@@ -115,15 +115,15 @@ impl Host for Core {
     fn set_property(&self, path: &str, key: &str, value: &Value) -> Result<(), Fail> {
         // the core's property edit takes what a user would type: a list comma-separated
         let (text, list) = match value {
-            Value::Array(a) => (a.iter().map(atlas_catalog::kind::text_of).collect::<Vec<_>>().join(", "), true),
-            v => (atlas_catalog::kind::text_of(v), false),
+            Value::Array(a) => (a.iter().map(kandinsky_catalog::kind::text_of).collect::<Vec<_>>().join(", "), true),
+            v => (kandinsky_catalog::kind::text_of(v), false),
         };
         self.0.put("/api/property", &json!({ "path": path, "key": key, "text": text, "list": list })).map(drop).map_err(why)
     }
 }
 
-fn text_param(p: &Value, key: &str) -> Result<String, atlas_plugin::Error> {
-    p.get(key).and_then(Value::as_str).map(str::to_string).ok_or_else(|| atlas_plugin::Error { status: None, why: format!("{key:?} is needed") })
+fn text_param(p: &Value, key: &str) -> Result<String, kandinsky_plugin::Error> {
+    p.get(key).and_then(Value::as_str).map(str::to_string).ok_or_else(|| kandinsky_plugin::Error { status: None, why: format!("{key:?} is needed") })
 }
 
 /// The card's choice: `kind`, and `ids` of one of several search results.
@@ -136,12 +136,12 @@ fn pick_param(p: &Value) -> Pick {
     }
 }
 
-fn answer<T: serde::Serialize>(r: Result<T, Fail>) -> atlas_plugin::Result<Value> {
-    r.and_then(|v| serde_json::to_value(v).map_err(|e| format!("the answer could not be written as JSON: {e}"))).map_err(|why| atlas_plugin::Error { status: None, why })
+fn answer<T: serde::Serialize>(r: Result<T, Fail>) -> kandinsky_plugin::Result<Value> {
+    r.and_then(|v| serde_json::to_value(v).map_err(|e| format!("the answer could not be written as JSON: {e}"))).map_err(|why| kandinsky_plugin::Error { status: None, why })
 }
 
 fn main() {
-    let engine = || Engine::new(Core(Atlas::new()));
+    let engine = || Engine::new(Core(Kandinsky::new()));
     let mut m = Methods::new();
     m.add("recognize", move |p| answer(Ok(engine().recognize(&text_param(&p, "text")?))));
     m.add("preview", move |p| answer(engine().preview(&text_param(&p, "text")?, &pick_param(&p))));
@@ -157,11 +157,11 @@ fn main() {
         if e.recognize(&text).result.candidates.is_empty() {
             return Ok(json!({ "skipped": "no link or identifier" }));
         }
-        let added = e.add(&text, &Pick::default()).map_err(|why| atlas_plugin::Error { status: None, why })?;
-        use atlas_catalog::engine::Outcome;
+        let added = e.add(&text, &Pick::default()).map_err(|why| kandinsky_plugin::Error { status: None, why })?;
+        use kandinsky_catalog::engine::Outcome;
         let done = if matches!(added.result.outcome, Outcome::Created | Outcome::Delegated) { "Filed" } else { "Already filed" };
         let notice = format!("{done}: {}", added.result.path.trim_end_matches(".md"));
-        let mut v = serde_json::to_value(&added).map_err(|e| atlas_plugin::Error { status: None, why: e.to_string() })?;
+        let mut v = serde_json::to_value(&added).map_err(|e| kandinsky_plugin::Error { status: None, why: e.to_string() })?;
         v["notice"] = json!(notice);
         Ok(v)
     });

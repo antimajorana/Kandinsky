@@ -1,10 +1,10 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 import { openFile } from "./open";
 
-// Settings as pages (docs/guides/SETTINGS.md): an overview of what Atlas can do, a page per area with
+// Settings as pages (docs/guides/SETTINGS.md): an overview of what Kandinsky can do, a page per area with
 // features to try and options, search across pages, modified/reset, look options applied live,
 // a page as a block in a .page file, and plugins switched off from Settings.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const cfg = async (request: APIRequestContext) => (await (await request.get("/api/config", { headers: H })).json()).config;
 const nav = (page: Page) => page.getByRole("navigation", { name: "Settings pages" });
 
@@ -93,8 +93,8 @@ test("a settings page is a block in a .page file", async ({ page, request }) => 
 });
 
 test("a plugin switched off in Settings loses its command and button", async ({ page, request }) => {
-  await request.put("/api/file", { headers: H, data: { path: ".atlas/plugins/offable/plugin.toml", text: 'title = "Offable"\nicon = "table"\nrail = true\n' } });
-  await request.put("/api/file", { headers: H, data: { path: ".atlas/plugins/offable/view.js", text: "export default (host) => { host.textContent = 'offable'; };\n" } });
+  await request.put("/api/file", { headers: H, data: { path: ".kandinsky/plugins/offable/plugin.toml", text: 'title = "Offable"\nicon = "table"\nrail = true\n' } });
+  await request.put("/api/file", { headers: H, data: { path: ".kandinsky/plugins/offable/view.js", text: "export default (host) => { host.textContent = 'offable'; };\n" } });
   await openSettings(page);
   await expect(page.getByRole("button", { name: "Offable", exact: true })).toBeVisible(); // rail
   await nav(page).getByRole("button", { name: /^Plugins( \d+)?$/ }).click();

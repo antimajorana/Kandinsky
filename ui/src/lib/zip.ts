@@ -1,4 +1,4 @@
-// Zip archives read in the page (`atlas.zip`, plugin API 20): the central directory once, then each entry inflated on
+// Zip archives read in the page (`kandinsky.zip`, plugin API 20): the central directory once, then each entry inflated on
 // demand (DecompressionStream). For the readers that open a zip they fetched (Books' EPUB, Manga's CBZ) without a
 // round trip per page; the core reads zips for helpers natively (js_native.rs `zip.list` / `zip.read`).
 // Stored (0) and deflated (8) entries; ZIP64 is not read (an EPUB or a chapter is never 4 GB).

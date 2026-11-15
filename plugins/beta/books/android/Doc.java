@@ -1,4 +1,4 @@
-package org.atlas.plugins.books;
+package org.kandinsky.plugins.books;
 
 import java.io.Closeable;
 import java.io.IOException;

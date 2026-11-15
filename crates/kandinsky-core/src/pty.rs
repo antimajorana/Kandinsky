@@ -42,12 +42,16 @@ fn command(ws: &Workspace, q: &PtyQuery) -> anyhow::Result<CommandBuilder> {
             );
             let mut cmd = CommandBuilder::new(program);
             cmd.args(args);
-            for (k, v) in env {
+            // each `KANDINSKY_*` under its earlier name too (env.rs): scripts written for an earlier build read those
+            let env: Vec<(String, std::ffi::OsString)> = env.into_iter().map(|(k, v)| (k, v.into())).collect();
+            for (k, v) in crate::env::with_legacy(&env) {
                 cmd.env(k, v);
             }
-            // an agent terminal: `atlas mcp`, started by the agent, inherits its token (agents.rs)
+            // an agent terminal: `kandinsky mcp`, started by the agent, inherits its token (agents.rs)
             if let Some(token) = crate::agents::Agents::here().terminal_token() {
-                cmd.env("ATLAS_AGENT_TOKEN", token);
+                for name in crate::env::both("AGENT_TOKEN") {
+                    cmd.env(name, &token);
+                }
             }
             cmd
         }
@@ -62,7 +66,7 @@ fn command(ws: &Workspace, q: &PtyQuery) -> anyhow::Result<CommandBuilder> {
             cmd
         }
     };
-    // Atlas launched from inside a Claude Code session would hand its session markers to every
+    // Kandinsky launched from inside a Claude Code session would hand its session markers to every
     // terminal; a `claude` started there then thinks it is a child session (no transcript, wrong
     // account/socket). Terminals must look like a fresh login shell.
     for (k, _) in std::env::vars_os() {
@@ -70,7 +74,7 @@ fn command(ws: &Workspace, q: &PtyQuery) -> anyhow::Result<CommandBuilder> {
             cmd.env_remove(&k);
         }
     }
-    // the desktop app preloads its web-tab hook into WebKit through LD_PRELOAD (atlas-app main.rs `frames_preload`); a
+    // the desktop app preloads its web-tab hook into WebKit through LD_PRELOAD (kandinsky-app main.rs `frames_preload`); a
     // program takes it out of its own copy, but a shell keeps what it inherited and would pass it to every command
     if let Some(pre) = std::env::var_os("LD_PRELOAD") {
         let rest = without_frames_hook(&pre.to_string_lossy());
@@ -79,7 +83,9 @@ fn command(ws: &Workspace, q: &PtyQuery) -> anyhow::Result<CommandBuilder> {
     cmd.cwd(cwd);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
-    cmd.env("ATLAS_ROOT", ws.root());
+    for name in crate::env::both("ROOT") {
+        cmd.env(name, ws.root());
+    }
     on_host(cmd)
 }
 
@@ -121,7 +127,7 @@ fn login_shell() -> String {
 }
 
 /// What words a terminal tab's shell reads (`posix`, `powershell` or `cmd`), for a plugin that types a command into it
-/// (`atlas.terminal.shell()`): quoting and paths differ.
+/// (`kandinsky.terminal.shell()`): quoting and paths differ.
 pub fn shell_kind() -> &'static str {
     let shell = login_shell().to_ascii_lowercase();
     let name = shell.rsplit(['/', '\\']).next().unwrap_or(&shell);
@@ -301,7 +307,7 @@ impl Sessions {
 
 pub async fn session(socket: WebSocket, ws: Workspace, q: PtyQuery, sessions: Sessions) {
     if let Err(e) = run(socket, ws, q, sessions).await {
-        eprintln!("atlas: pty session ended with error: {e:#}");
+        eprintln!("kandinsky: pty session ended with error: {e:#}");
     }
 }
 
@@ -327,7 +333,7 @@ async fn run(socket: WebSocket, ws: Workspace, q: PtyQuery, sessions: Sessions) 
             Ok(p) => p,
             Err(e) => {
                 // Show the failure in the terminal itself; the user is looking there.
-                let _ = sink.send(Message::Binary(format!("atlas: could not start terminal: {e}\r\n").into_bytes().into())).await;
+                let _ = sink.send(Message::Binary(format!("kandinsky: could not start terminal: {e}\r\n").into_bytes().into())).await;
                 return Err(e);
             }
         },
@@ -434,16 +440,16 @@ mod tests {
     }
 }
 
-/// LD_PRELOAD without the desktop app's web-tab hook (`libatlas-webkit-frames.so`), the rest as it was.
+/// LD_PRELOAD without the desktop app's web-tab hook (`libkandinsky-webkit-frames.so`), the rest as it was.
 fn without_frames_hook(list: &str) -> String {
-    list.split([':', ' ']).filter(|p| !p.is_empty() && !p.contains("atlas-webkit-frames")).collect::<Vec<_>>().join(":")
+    list.split([':', ' ']).filter(|p| !p.is_empty() && !p.contains("kandinsky-webkit-frames")).collect::<Vec<_>>().join(":")
 }
 
 #[cfg(test)]
 mod frames_hook_tests {
     #[test]
     fn a_terminal_never_inherits_the_web_tab_hook() {
-        assert_eq!(super::without_frames_hook("/c/libatlas-webkit-frames.so:/usr/lib/libx.so"), "/usr/lib/libx.so");
-        assert_eq!(super::without_frames_hook("/c/libatlas-webkit-frames.so"), "");
+        assert_eq!(super::without_frames_hook("/c/libkandinsky-webkit-frames.so:/usr/lib/libx.so"), "/usr/lib/libx.so");
+        assert_eq!(super::without_frames_hook("/c/libkandinsky-webkit-frames.so"), "");
     }
 }

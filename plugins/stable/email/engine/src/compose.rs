@@ -37,7 +37,7 @@ pub struct Draft {
     /// the message answered or forwarded, quoted under the body: (who wrote it, when (unix), its HTML, its text, forward?)
     pub quote: Option<Quote>,
     pub files: Vec<File>,
-    /// send at this time (unix seconds): kept in Drafts until then (X-Atlas-Send-At)
+    /// send at this time (unix seconds): kept in Drafts until then (X-Kandinsky-Send-At)
     pub send_at: Option<i64>,
 }
 
@@ -109,7 +109,7 @@ fn when(t: i64) -> String {
 }
 
 /// Whether a link may keep its address: a web, mail, phone or attachment (`cid:`) one, or one with no scheme. A quoted
-/// mail's `[x](javascript:…)` would otherwise be a script link in the preview, which is Atlas's own page. Browsers drop
+/// mail's `[x](javascript:…)` would otherwise be a script link in the preview, which is Kandinsky's own page. Browsers drop
 /// whitespace and control characters inside a scheme, so they are dropped before it is read.
 fn safe_link(dest: &str) -> bool {
     let clean: String = dest.chars().filter(|c| !c.is_ascii_whitespace() && !c.is_control()).collect::<String>().to_ascii_lowercase();
@@ -140,7 +140,7 @@ pub fn markdown(md: &str) -> String {
 
 /// A fresh Message-ID on the sender's domain.
 pub fn message_id(from: &str) -> String {
-    let domain = from.rsplit('@').next().filter(|d| d.contains('.')).unwrap_or("atlas.local");
+    let domain = from.rsplit('@').next().filter(|d| d.contains('.')).unwrap_or("kandinsky.local");
     format!("{:x}.{:x}@{domain}", chrono::Utc::now().timestamp_millis(), rand::random::<u64>())
 }
 
@@ -150,7 +150,7 @@ pub fn build(d: &Draft) -> Result<(Vec<u8>, String, Vec<String>), String> {
         return Err("the account has no address to send from".into());
     }
     let id = message_id(&d.from.addr);
-    let sig_html = if d.signature.trim().is_empty() { String::new() } else { format!("<div class=\"atlas-signature\">-- <br>{}</div>", escape(d.signature.trim()).replace('\n', "<br>")) };
+    let sig_html = if d.signature.trim().is_empty() { String::new() } else { format!("<div class=\"kandinsky-signature\">-- <br>{}</div>", escape(d.signature.trim()).replace('\n', "<br>")) };
     let sig_text = if d.signature.trim().is_empty() { String::new() } else { format!("\n\n-- \n{}", d.signature.trim()) };
     let (quote_html, quote_text) = match &d.quote {
         None => (String::new(), String::new()),
@@ -168,7 +168,7 @@ pub fn build(d: &Draft) -> Result<(Vec<u8>, String, Vec<String>), String> {
                 )
             };
             (
-                format!("<div class=\"atlas-forward\"><p>---------- Forwarded message ----------<br>{}</p>{}</div>", head(true), q.html.clone().unwrap_or_else(|| crate::render::text_html(&q.text, false))),
+                format!("<div class=\"kandinsky-forward\"><p>---------- Forwarded message ----------<br>{}</p>{}</div>", head(true), q.html.clone().unwrap_or_else(|| crate::render::text_html(&q.text, false))),
                 format!("\n\n---------- Forwarded message ----------\n{}\n{}", head(false), q.text),
             )
         }
@@ -178,16 +178,16 @@ pub fn build(d: &Draft) -> Result<(Vec<u8>, String, Vec<String>), String> {
             let body_html = q.html.clone().unwrap_or_else(|| crate::render::text_html(&q.text, false));
             let quoted_text: String = q.text.lines().map(|l| if l.starts_with('>') { format!(">{l}\n") } else { format!("> {l}\n") }).collect();
             (
-                format!("<div class=\"atlas-quote\"><p>{}</p><blockquote type=\"cite\" style=\"margin:0 0 0 .8ex;border-left:2px solid #ccc;padding-left:1ex\">{body_html}</blockquote></div>", escape(&intro)),
+                format!("<div class=\"kandinsky-quote\"><p>{}</p><blockquote type=\"cite\" style=\"margin:0 0 0 .8ex;border-left:2px solid #ccc;padding-left:1ex\">{body_html}</blockquote></div>", escape(&intro)),
                 format!("\n\n{intro}\n{quoted_text}"),
             )
         }
     };
-    let html = format!("<!doctype html><html><head><meta charset=\"utf-8\"></head><body><div class=\"atlas-body\">{}</div>{sig_html}{quote_html}</body></html>", markdown(&d.body));
+    let html = format!("<!doctype html><html><head><meta charset=\"utf-8\"></head><body><div class=\"kandinsky-body\">{}</div>{sig_html}{quote_html}</body></html>", markdown(&d.body));
     let shown = inline_names(&d.body);
     let text = format!("{}{sig_text}{quote_text}", CID_IMAGE.replace_all(d.body.trim_end(), "[image: $1]"));
     let from = if d.from.name.is_empty() { Address::new_address(None::<String>, d.from.addr.clone()) } else { Address::new_address(Some(d.from.name.clone()), d.from.addr.clone()) };
-    let mut m = MessageBuilder::new().from(from).subject(d.subject.clone()).message_id(id.clone()).date(chrono::Utc::now().timestamp()).header("X-Mailer", Raw::new("Atlas"));
+    let mut m = MessageBuilder::new().from(from).subject(d.subject.clone()).message_id(id.clone()).date(chrono::Utc::now().timestamp()).header("X-Mailer", Raw::new("Kandinsky"));
     if !d.to.is_empty() {
         m = m.to(addresses(&d.to));
     }
@@ -207,7 +207,7 @@ pub fn build(d: &Draft) -> Result<(Vec<u8>, String, Vec<String>), String> {
         m = m.references(refs);
     }
     if let Some(t) = d.send_at {
-        m = m.header("X-Atlas-Send-At", Raw::new(t.to_string()));
+        m = m.header("X-Kandinsky-Send-At", Raw::new(t.to_string()));
     }
     let mime = |f: &File| if f.mime.is_empty() { mime_of(&f.name).to_string() } else { f.mime.clone() };
     let (inline, attached): (Vec<&File>, Vec<&File>) = d.files.iter().partition(|f| shown.contains(&f.name));
@@ -247,7 +247,8 @@ pub fn without_bcc(raw: &[u8]) -> Vec<u8> {
     for line in head.split("\r\n") {
         let cont = line.starts_with(' ') || line.starts_with('\t');
         if !cont {
-            skipping = line.to_lowercase().starts_with("bcc:") || line.to_lowercase().starts_with("x-atlas-send-at:");
+            let l = line.to_lowercase();
+            skipping = l.starts_with("bcc:") || l.starts_with("x-kandinsky-send-at:") || l.starts_with(&format!("{}:", crate::send::LEGACY_SEND_AT.to_lowercase()));
         }
         if !skipping {
             out.push_str(line);

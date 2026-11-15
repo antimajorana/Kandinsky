@@ -183,8 +183,8 @@ export async function convert(bytes, { encodePng }) {
   const bg = snap.document?.background ?? {};
   const appState = { viewBackgroundColor: color(bg.color)[0] };
   if (bg.pattern === "grid") Object.assign(appState, { gridSize: Math.round(num(bg.pattern_size?.[0], 32)), gridModeEnabled: true });
-  return { type: "excalidraw", version: 2, source: "atlas (from Rnote)", elements, appState, files,
-    atlas: { from: "rnote", rnote_version: root.version ?? null, skipped } };
+  return { type: "excalidraw", version: 2, source: "kandinsky (from Rnote)", elements, appState, files,
+    kandinsky: { from: "rnote", rnote_version: root.version ?? null, skipped } };
 }
 
 /** Writes the drawing for `rnote` beside it, never over another file (`name (2).excalidraw`); one made from this very
@@ -195,7 +195,7 @@ export async function writeBeside(rnote, text, { create, read }) {
   for (let n = 1; ; n++) {
     const cand = n === 1 ? `${stem}.excalidraw` : `${stem} (${n}).excalidraw`;
     if (await create(cand, text)) return { path: cand, made: true };
-    try { if (JSON.parse(await read(cand))?.atlas?.from === "rnote") return { path: cand, made: false }; } catch { /* not ours */ }
+    try { if (JSON.parse(await read(cand))?.kandinsky?.from === "rnote") return { path: cand, made: false }; } catch { /* not ours */ }
   }
 }
 
@@ -207,23 +207,23 @@ async function canvasPng(w, h, rgba) {
 }
 
 /** Converts `path` into the drawing beside it, or finds the one made from it before: `{ path, made, skipped }`. */
-async function convertBeside(atlas, path) {
-  const bytes = new Uint8Array(await (await fetch(await atlas.fileUrl(path))).arrayBuffer());
+async function convertBeside(kandinsky, path) {
+  const bytes = new Uint8Array(await (await fetch(await kandinsky.fileUrl(path))).arrayBuffer());
   const scene = await convert(bytes, { encodePng: canvasPng });
-  const out = await writeBeside(path, JSON.stringify(scene), { create: atlas.createFile, read: atlas.readText });
-  return { ...out, skipped: scene.atlas.skipped };
+  const out = await writeBeside(path, JSON.stringify(scene), { create: kandinsky.createFile, read: kandinsky.readText });
+  return { ...out, skipped: scene.kandinsky.skipped };
 }
 
 /** Converts and opens the drawing (one made from it before is reused); the .rnote is never written. True once opened. */
-export async function openAsDrawing(atlas, path) {
+export async function openAsDrawing(kandinsky, path) {
   try {
-    const out = await convertBeside(atlas, path);
+    const out = await convertBeside(kandinsky, path);
     const left = out.skipped;
-    if (out.made) atlas.toast("Rnote", `${path.split("/").pop()} → ${out.path.split("/").pop()}${left ? ` (${left} item${left > 1 ? "s" : ""} it could not convert)` : ""}`);
-    atlas.open(out.path);
+    if (out.made) kandinsky.toast("Rnote", `${path.split("/").pop()} → ${out.path.split("/").pop()}${left ? ` (${left} item${left > 1 ? "s" : ""} it could not convert)` : ""}`);
+    kandinsky.open(out.path);
     return true;
   } catch (e) {
-    atlas.toast("Rnote", `${path}: ${e instanceof Error ? e.message : String(e)}`, "error");
+    kandinsky.toast("Rnote", `${path}: ${e instanceof Error ? e.message : String(e)}`, "error");
     return false;
   }
 }
@@ -231,20 +231,20 @@ export async function openAsDrawing(atlas, path) {
 /** Every `.rnote` under `dir` (its folders too), each converted beside itself, nothing opened; the .rnote files stay.
  *  `report({ path, n, of, out?, error? })` after each file (`n` of `of`; `out` = `{ path, made }`). Without `report`
  *  (an app without dialogs) what was made, found made before, and failed is said once at the end in a toast. */
-export async function convertFolder(atlas, dir, report) {
+export async function convertFolder(kandinsky, dir, report) {
   const todo = [], walk = async (d) => {
-    for (const e of await atlas.list(d)) {
+    for (const e of await kandinsky.list(d)) {
       if (e.dir) await walk(e.path);
       else if (/\.rnote$/i.test(e.path)) todo.push(e.path);
     }
   };
   await walk(dir);
-  if (!todo.length && !report) return atlas.toast("Rnote", `No Rnote files in ${dir || "the vault"}.`);
+  if (!todo.length && !report) return kandinsky.toast("Rnote", `No Rnote files in ${dir || "the vault"}.`);
   let made = 0, again = 0;
   const failed = [];
   for (const [i, p] of todo.entries()) {
     try {
-      const out = await convertBeside(atlas, p);
+      const out = await convertBeside(kandinsky, p);
       out.made ? made++ : again++;
       report?.({ path: p, n: i + 1, of: todo.length, out });
     } catch (e) {
@@ -254,20 +254,20 @@ export async function convertFolder(atlas, dir, report) {
     }
   }
   const said = [`${made} drawing${made === 1 ? "" : "s"} made`, again ? `${again} made before` : "", failed.length ? `${failed.length} failed` : ""].filter(Boolean).join(", ");
-  if (!report) atlas.toast(`Rnote: ${dir || "the vault"}`, failed.length ? `${said}\n${failed.join("\n")}` : said, failed.length ? "error" : "success");
+  if (!report) kandinsky.toast(`Rnote: ${dir || "the vault"}`, failed.length ? `${said}\n${failed.join("\n")}` : said, failed.length ? "error" : "success");
   return { of: todo.length, made, again, failed: failed.length, said };
 }
 
-export function register(atlas) {
+export function register(kandinsky) {
   const isRnote = (p) => typeof p === "string" && /\.rnote$/i.test(p);
   // the palette: the open file (a click on an .rnote goes through the view, which claims the type)
-  atlas.registerCommand({ id: "convert", title: "Open the Rnote file as a drawing", run: (arg) => {
-    const path = typeof arg === "string" ? arg : atlas.context().active?.path;
-    if (!isRnote(path)) return atlas.toast("Rnote", "Open or pick an .rnote file first.");
-    return openAsDrawing(atlas, path);
+  kandinsky.registerCommand({ id: "convert", title: "Open the Rnote file as a drawing", run: (arg) => {
+    const path = typeof arg === "string" ? arg : kandinsky.context().active?.path;
+    if (!isRnote(path)) return kandinsky.toast("Rnote", "Open or pick an .rnote file first.");
+    return openAsDrawing(kandinsky, path);
   } });
-  atlas.shell.menu("file", (t) => (isRnote(t.path) && !t.dir ? [{ label: "Open as a drawing (Excalidraw)", icon: "edit", run: () => openAsDrawing(atlas, t.path) }]
-    : t.dir ? [{ label: "Convert the Rnote files here to drawings", icon: "edit", run: () => (atlas.version ?? 0) >= 23
-      ? atlas.openDialog(t.path, { title: `Rnote files in ${t.path || "the vault"}`, width: 560, height: 440, view: "convert.js" })
-      : convertFolder(atlas, t.path) }] : []));
+  kandinsky.shell.menu("file", (t) => (isRnote(t.path) && !t.dir ? [{ label: "Open as a drawing (Excalidraw)", icon: "edit", run: () => openAsDrawing(kandinsky, t.path) }]
+    : t.dir ? [{ label: "Convert the Rnote files here to drawings", icon: "edit", run: () => (kandinsky.version ?? 0) >= 23
+      ? kandinsky.openDialog(t.path, { title: `Rnote files in ${t.path || "the vault"}`, width: 560, height: 440, view: "convert.js" })
+      : convertFolder(kandinsky, t.path) }] : []));
 }

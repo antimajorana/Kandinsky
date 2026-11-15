@@ -1,4 +1,4 @@
-//! Which template a note gets, for every way Atlas makes one (docs/design/DESIGN-templates-automation.md): a new note,
+//! Which template a note gets, for every way Kandinsky makes one (docs/design/DESIGN-templates-automation.md): a new note,
 //! a capture made a note, the day's log, a file's companion note, a property set on a note. The one place that
 //! answers; `notes.rs`, `capture.rs` and `companion.rs` ask here instead of choosing on their own.
 //!
@@ -87,7 +87,7 @@ pub fn choose(root: &Path, cfg: &Config, moment: &Moment) -> Option<Chosen> {
 }
 
 /// A rule's template can be used: it is there; a Templater rule's template is not built on a script (`<%* … %>`:
-/// Atlas runs none, and the note would hold the script's text).
+/// Kandinsky runs none, and the note would hold the script's text).
 fn usable(root: &Path, cfg: &Config, r: &Rule) -> bool {
     crate::notes::template_text(root, cfg, &r.template).is_ok_and(|t| r.source != Source::Templater || !t.contains("<%*"))
 }
@@ -182,7 +182,7 @@ pub fn apply_when(template: &str) -> Vec<When> {
 
 /// The lines of a frontmatter key and what is indented under it (`key:` then `  - …`), as YAML text.
 pub(crate) fn own_block(template: &str, key: &str) -> Option<String> {
-    let head = atlas_text::frontmatter::split(template).0?;
+    let head = kandinsky_text::frontmatter::split(template).0?;
     let mut lines = head.lines().skip_while(|l| !l.starts_with(&format!("{key}:")));
     let first = lines.next()?;
     let rest: Vec<&str> = lines.take_while(|l| l.starts_with([' ', '\t', '-'])).collect();

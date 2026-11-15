@@ -1,4 +1,4 @@
-//! The desktop's global key for Atlas Capture (docs/guides/CAPTURE.md, "The global key"): what it is now, and setting
+//! The desktop's global key for Kandinsky Capture (docs/guides/CAPTURE.md, "The global key"): what it is now, and setting
 //! it from Settings → Desktop app, which a package (unlike install.sh) cannot do itself. KDE Plasma keeps it in
 //! `kglobalshortcutsrc` (the same rules as packaging/kde-shortcut.sh: a key the user chose is kept, a key another
 //! shortcut uses is not taken); GNOME in its custom keybindings; Windows' installer puts it on the Start-menu shortcut
@@ -8,9 +8,9 @@ use std::process::Command;
 /// The key offered when there is none (KDE's spelling; Super on screen).
 pub const DEFAULT_KEY: &str = "Meta+Shift+C";
 const KDE_FILE: &str = "kglobalshortcutsrc";
-const KDE_ENTRY: &str = "atlas-capture.desktop";
+const KDE_ENTRY: &str = "kandinsky-capture.desktop";
 const GNOME_SCHEMA: &str = "org.gnome.settings-daemon.plugins.media-keys";
-const GNOME_PATH: &str = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/atlas-capture/";
+const GNOME_PATH: &str = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/kandinsky-capture/";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
@@ -24,7 +24,7 @@ pub enum KeyDesktop {
     Other,
 }
 
-/// What Settings shows: the key now (KDE's spelling), whether Atlas can set one here, and what to do otherwise.
+/// What Settings shows: the key now (KDE's spelling), whether Kandinsky can set one here, and what to do otherwise.
 #[derive(Clone, Debug, serde::Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct CaptureKey {
@@ -37,15 +37,15 @@ pub struct CaptureKey {
 
 pub fn state() -> CaptureKey {
     match desktop() {
-        KeyDesktop::Windows => fixed(KeyDesktop::Windows, "Ctrl+Alt+Shift+C", "The installer puts it on the Atlas Capture shortcut in the Start menu (its Properties change it)."),
-        KeyDesktop::Macos => fixed(KeyDesktop::Macos, "Control+Super+C", "Atlas listens for it while it runs, in the tray too (ATLAS_CAPTURE_KEY changes it)."),
+        KeyDesktop::Windows => fixed(KeyDesktop::Windows, "Ctrl+Alt+Shift+C", "The installer puts it on the Kandinsky Capture shortcut in the Start menu (its Properties change it)."),
+        KeyDesktop::Macos => fixed(KeyDesktop::Macos, "Control+Super+C", "Kandinsky listens for it while it runs, in the tray too (KANDINSKY_CAPTURE_KEY changes it)."),
         KeyDesktop::Kde => kde_state(),
         KeyDesktop::Gnome => gnome_state(),
-        KeyDesktop::Other => CaptureKey { desktop: KeyDesktop::Other, key: None, can_set: false, note: "Bind a key to the program atlas-capture in your desktop's keyboard shortcuts.".into() },
+        KeyDesktop::Other => CaptureKey { desktop: KeyDesktop::Other, key: None, can_set: false, note: "Bind a key to the program kandinsky-capture in your desktop's keyboard shortcuts.".into() },
     }
 }
 
-/// Binds `key` (KDE's spelling) to Atlas Capture where Atlas can, and says what is bound after.
+/// Binds `key` (KDE's spelling) to Kandinsky Capture where Kandinsky can, and says what is bound after.
 pub fn set(key: &str) -> Result<CaptureKey, String> {
     let key = key.trim();
     if !plausible_key(key) {
@@ -54,7 +54,7 @@ pub fn set(key: &str) -> Result<CaptureKey, String> {
     match desktop() {
         KeyDesktop::Kde => kde_set(key)?,
         KeyDesktop::Gnome => gnome_set(key)?,
-        _ => return Err("this desktop's key is not set from Atlas".into()),
+        _ => return Err("this desktop's key is not set from Kandinsky".into()),
     }
     Ok(state())
 }
@@ -117,14 +117,14 @@ fn kde_state() -> CaptureKey {
         Ok(key) => CaptureKey {
             desktop: KeyDesktop::Kde,
             can_set: kde_entry_installed(),
-            note: if kde_entry_installed() { "Kept by KDE (System Settings → Shortcuts → Atlas Capture).".into() } else { "Atlas Capture's menu entry (atlas-capture.desktop) is not installed, so KDE has nothing to bind it to.".into() },
+            note: if kde_entry_installed() { "Kept by KDE (System Settings → Shortcuts → Kandinsky Capture).".into() } else { "Kandinsky Capture's menu entry (kandinsky-capture.desktop) is not installed, so KDE has nothing to bind it to.".into() },
             key,
         },
         Err(e) => CaptureKey { desktop: KeyDesktop::Kde, key: None, can_set: false, note: format!("KDE's shortcuts could not be read ({e}).") },
     }
 }
 
-/// KDE binds a key to a menu entry: the packages and install.sh put `atlas-capture.desktop` among the applications.
+/// KDE binds a key to a menu entry: the packages and install.sh put `kandinsky-capture.desktop` among the applications.
 fn kde_entry_installed() -> bool {
     let mut dirs = vec![super::dirs::base(super::dirs::Base::Data)];
     let system = std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
@@ -134,22 +134,28 @@ fn kde_entry_installed() -> bool {
 
 fn kde_set(key: &str) -> Result<(), String> {
     if !kde_entry_installed() {
-        return Err("atlas-capture.desktop is not installed: reinstall Atlas's package".into());
+        return Err("kandinsky-capture.desktop is not installed: reinstall Kandinsky's package".into());
     }
     let path = super::dirs::base(super::dirs::Base::Config).join(KDE_FILE);
     let text = std::fs::read_to_string(&path).unwrap_or_default();
     if let Some(by) = kde_taken_by(&text, key) {
         return Err(format!("{key} is already used by {by}: pick another"));
     }
-    for (k, v) in [("_k_friendly_name", "Atlas Capture"), ("_launch", &format!("{key},none,Atlas Capture"))] {
+    for (k, v) in [("_k_friendly_name", "Kandinsky Capture"), ("_launch", &format!("{key},none,Kandinsky Capture"))] {
         run("kwriteconfig6", &["--file", KDE_FILE, "--group", "services", "--group", KDE_ENTRY, "--key", k, v])?;
+    }
+    // the entry an earlier build bound would keep claiming its key (a missing one is no error)
+    if text.contains(crate::legacy::CAPTURE_KDE_ENTRY) {
+        for k in ["_k_friendly_name", "_launch"] {
+            let _ = run("kwriteconfig6", &["--file", KDE_FILE, "--group", "services", "--group", crate::legacy::CAPTURE_KDE_ENTRY, "--key", k, "--delete"]);
+        }
     }
     // kglobalaccel reads the file when it starts; a restart takes the new key at once (a missing unit is no error)
     let _ = run("systemctl", &["--user", "try-restart", "plasma-kglobalaccel.service"]);
     Ok(())
 }
 
-/// The group whose shortcut (or default) is `key` already, Atlas Capture's own aside.
+/// The group whose shortcut (or default) is `key` already, Kandinsky Capture's own aside.
 fn kde_taken_by(text: &str, key: &str) -> Option<String> {
     let mut group = String::new();
     for line in text.lines() {
@@ -158,7 +164,8 @@ fn kde_taken_by(text: &str, key: &str) -> Option<String> {
             group = line.to_string();
             continue;
         }
-        if group.contains(KDE_ENTRY) || line.starts_with('#') {
+        // its own entry, and the one an earlier build bound (kde_set removes it)
+        if group.contains(KDE_ENTRY) || group.contains(crate::legacy::CAPTURE_KDE_ENTRY) || line.starts_with('#') {
             continue;
         }
         let Some((_, value)) = line.split_once('=') else { continue };
@@ -186,35 +193,50 @@ fn gnome_state() -> CaptureKey {
         desktop: KeyDesktop::Gnome,
         key,
         can_set: found,
-        note: if found { "Kept by GNOME (Settings → Keyboard → Custom Shortcuts).".into() } else { "The program atlas-capture is not on the PATH, so there is nothing to bind.".into() },
+        note: if found { "Kept by GNOME (Settings → Keyboard → Custom Shortcuts).".into() } else { "The program kandinsky-capture is not on the PATH, so there is nothing to bind.".into() },
     }
 }
 
 fn gnome_set(key: &str) -> Result<(), String> {
-    let program = which_capture().ok_or("atlas-capture is not on the PATH")?;
+    let program = which_capture().ok_or("kandinsky-capture is not on the PATH")?;
     let at = format!("{GNOME_SCHEMA}.custom-keybinding:{GNOME_PATH}");
-    for (k, v) in [("name", "'Atlas Capture'".to_string()), ("command", format!("'{}'", program.display())), ("binding", format!("'{}'", to_gnome(key)))] {
+    for (k, v) in [("name", "'Kandinsky Capture'".to_string()), ("command", format!("'{}'", program.display())), ("binding", format!("'{}'", to_gnome(key)))] {
         run("gsettings", &["set", &at, k, &v])?;
     }
     let listed = run("gsettings", &["get", GNOME_SCHEMA, "custom-keybindings"])?;
-    if !listed.contains(GNOME_PATH) {
-        run("gsettings", &["set", GNOME_SCHEMA, "custom-keybindings", &with_path(&listed, GNOME_PATH)])?;
+    // the binding an earlier build made would keep claiming its key: out of the list, this one in
+    let wanted = with_path(&without_path(&listed, crate::legacy::CAPTURE_GNOME_PATH), GNOME_PATH);
+    if wanted != listed.trim() {
+        run("gsettings", &["set", GNOME_SCHEMA, "custom-keybindings", &wanted])?;
     }
     Ok(())
 }
 
-/// The keybindings list (`@as []` or `['/a/', '/b/']`) with `path` added.
+/// The keybindings list (`@as []` or `['/a/', '/b/']`) without `path`.
+fn without_path(listed: &str, path: &str) -> String {
+    let inner = listed.trim().trim_start_matches("@as").trim().trim_start_matches('[').trim_end_matches(']').trim();
+    let kept: Vec<&str> = inner.split(',').map(str::trim).filter(|p| !p.is_empty() && p.trim_matches('\'') != path).collect();
+    if kept.is_empty() { "@as []".into() } else { format!("[{}]", kept.join(", ")) }
+}
+
+/// The keybindings list (`@as []` or `['/a/', '/b/']`) with `path` added (once).
 fn with_path(listed: &str, path: &str) -> String {
     let inner = listed.trim().trim_start_matches("@as").trim().trim_start_matches('[').trim_end_matches(']').trim();
-    if inner.is_empty() { format!("['{path}']") } else { format!("[{inner}, '{path}']") }
+    if inner.split(',').any(|p| p.trim().trim_matches('\'') == path) {
+        format!("[{inner}]")
+    } else if inner.is_empty() {
+        format!("['{path}']")
+    } else {
+        format!("[{inner}, '{path}']")
+    }
 }
 
 fn which_capture() -> Option<std::path::PathBuf> {
-    let beside = std::env::current_exe().ok()?.with_file_name("atlas-capture");
+    let beside = std::env::current_exe().ok()?.with_file_name("kandinsky-capture");
     if beside.is_file() {
         return Some(beside);
     }
-    std::env::var_os("PATH").and_then(|p| std::env::split_paths(&p).map(|d| d.join("atlas-capture")).find(|f| f.is_file()))
+    std::env::var_os("PATH").and_then(|p| std::env::split_paths(&p).map(|d| d.join("kandinsky-capture")).find(|f| f.is_file()))
 }
 
 /// `Meta+Shift+C` → `<Super><Shift>c`.
@@ -246,11 +268,23 @@ mod tests {
 
     #[test]
     fn a_kde_key_another_shortcut_uses_is_not_taken() {
-        let file = "[services][atlas-capture.desktop]\n_launch=Meta+Shift+C,none,Atlas Capture\n\n[kwin]\nExpose=Ctrl+F9\\tMeta+Shift+X,Ctrl+F9,Toggle Present Windows\nOther=none,Meta+Shift+D,Defaults count\n";
+        let file = "[services][kandinsky-capture.desktop]\n_launch=Meta+Shift+C,none,Kandinsky Capture\n\n[kwin]\nExpose=Ctrl+F9\\tMeta+Shift+X,Ctrl+F9,Toggle Present Windows\nOther=none,Meta+Shift+D,Defaults count\n";
         assert_eq!(kde_taken_by(file, "Meta+Shift+C"), None); // its own entry
         assert_eq!(kde_taken_by(file, "meta+shift+x").as_deref(), Some("kwin"));
         assert_eq!(kde_taken_by(file, "Meta+Shift+D").as_deref(), Some("kwin"));
         assert_eq!(kde_taken_by(file, "Toggle Present Windows"), None); // a name is not a key
+        // the entry an earlier build bound does not block the same key (setting it removes that entry)
+        let old = "[services][atlas-capture.desktop]\n_launch=Meta+Shift+C,none,Atlas Capture\n";
+        assert_eq!(kde_taken_by(old, "Meta+Shift+C"), None);
+    }
+
+    #[test]
+    fn the_gnome_binding_of_an_earlier_build_leaves_the_list() {
+        let old = "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/atlas-capture/', '/a/']";
+        assert_eq!(without_path(old, crate::legacy::CAPTURE_GNOME_PATH), "['/a/']");
+        assert_eq!(with_path(&without_path(old, crate::legacy::CAPTURE_GNOME_PATH), GNOME_PATH), format!("['/a/', '{GNOME_PATH}']"));
+        assert_eq!(without_path("['/x/']", "/x/"), "@as []");
+        assert_eq!(with_path("['/x/']", "/x/"), "['/x/']", "never twice");
     }
 
     #[test]

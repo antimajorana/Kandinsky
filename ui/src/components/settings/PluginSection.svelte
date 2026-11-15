@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A section a plugin draws on its Settings page (`atlas.plugin.registerSettingsSection`): a titled card whose body
+  // A section a plugin draws on its Settings page (`kandinsky.plugin.registerSettingsSection`): a titled card whose body
   // the plugin mounts; its settings reach the file through `ctx.save` (the form's own save path).
   import { api } from "../../lib/api";
   import { plugins, type Plugin } from "../../lib/plugins.svelte";

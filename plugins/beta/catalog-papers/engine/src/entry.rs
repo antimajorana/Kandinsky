@@ -2,7 +2,7 @@
 //! the crate sees Zotero-shaped mappings, as `info.yaml` had them; an `info.yaml` not folded yet is still read, and the
 //! first write folds it into the note. Moved out of
 //! the core with the rest of References (REFACTOR-references-plugin.md).
-use atlas_text::frontmatter::{remove_property, set_property};
+use kandinsky_text::frontmatter::{remove_property, set_property};
 use serde_yaml::{Mapping, Value};
 use std::path::Path;
 
@@ -19,7 +19,7 @@ pub fn note_file(key: &str) -> String {
 
 /// The file every entry had before 2026-10-18.
 pub const LEGACY: &str = "info.yaml";
-/// The name every entry's note had before 2026-10-14 (the Zotero import, older Atlas).
+/// The name every entry's note had before 2026-10-14 (the Zotero import, older Kandinsky).
 pub const LEGACY_NOTE: &str = "notes.md";
 /// The block that draws the paper inside its note (the UI's `library.paper` block).
 pub const BLOCK: &str = "```view\ntype: library.paper\n```\n";
@@ -77,7 +77,7 @@ pub fn append_note(dir: &Path, text: &str) -> Result<(), String> {
     if old.contains(text.trim()) {
         return Ok(());
     }
-    atlas_plugin::write_file(&path, format!("{}\n\n{}\n", old.trim_end(), text.trim()).as_bytes()).map_err(|e| e.to_string())
+    kandinsky_plugin::write_file(&path, format!("{}\n\n{}\n", old.trim_end(), text.trim()).as_bytes()).map_err(|e| e.to_string())
 }
 
 /// (Zotero's name, the note's): the note's `type` is its kind of note (literature), `date` when it was made, `tags`
@@ -99,7 +99,7 @@ pub fn key_of(dir: &Path) -> String {
 
 /// The note's frontmatter as a mapping (None: no note, or no properties).
 fn note_props(text: &str) -> Option<Mapping> {
-    serde_yaml::from_str::<Value>(atlas_text::frontmatter::split(text).0?).ok()?.as_mapping().cloned()
+    serde_yaml::from_str::<Value>(kandinsky_text::frontmatter::split(text).0?).ok()?.as_mapping().cloned()
 }
 
 /// The entry in `dir`, Zotero-shaped. None when the folder holds no entry: no `info.yaml`, and no note naming a
@@ -148,7 +148,7 @@ pub fn write(made: &dyn Companion, dir: &Path, m: &Mapping) -> Result<(), String
         text = remove_property(&text, note_name(k));
     }
     if text != before {
-        atlas_plugin::write_file(&path, text.as_bytes()).map_err(|e| e.to_string())?;
+        kandinsky_plugin::write_file(&path, text.as_bytes()).map_err(|e| e.to_string())?;
     }
     match std::fs::remove_file(dir.join(LEGACY)) {
         Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("{}: {e}", dir.join(LEGACY).display())),
@@ -156,7 +156,7 @@ pub fn write(made: &dyn Companion, dir: &Path, m: &Mapping) -> Result<(), String
     }
 }
 
-/// Folds the entry's `info.yaml` into its note (`atlas refs fold`); false when there was none to fold.
+/// Folds the entry's `info.yaml` into its note (`kandinsky refs fold`); false when there was none to fold.
 pub fn fold(made: &dyn Companion, dir: &Path) -> Result<bool, String> {
     if !dir.join(LEGACY).is_file() {
         return Ok(false);

@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.content.Context;
 import java.io.File;
@@ -10,7 +10,7 @@ import java.net.URLEncoder;
 import java.nio.file.Files;
 import org.json.JSONObject;
 
-/** An Atlas server as the destination (docs/guides/SERVER.md): a vault's address (`https://host/v/notes`) and a device token, `capture` scope. */
+/** An Kandinsky server as the destination (docs/guides/SERVER.md): a vault's address (`https://host/v/notes`) and a device token, `capture` scope. */
 final class Server {
     private Server() {}
 
@@ -30,7 +30,7 @@ final class Server {
     }
 
     /**
-     * What this phone sends a server: Atlas's token in `x-atlas-token` (and as `Authorization: Bearer` for a server from
+     * What this phone sends a server: Kandinsky's token in `x-kandinsky-token` (and as `Authorization: Bearer` for a server from
      * before that header), the gate's session (a browser sign-in) and the WebView sign-in's cookies, the optional header.
      */
     static void headers(Context c, String server, HttpURLConnection h) {
@@ -42,7 +42,7 @@ final class Server {
         java.util.Map<String, String> h = new java.util.LinkedHashMap<>();
         Vaults v = new Vaults(c);
         String token = v.token(server);
-        if (!token.isEmpty()) h.put("x-atlas-token", token);
+        if (!token.isEmpty()) h.put("x-kandinsky-token", token);
         String cookie = v.gate(server); // the gate's session from a browser sign-in, then the WebView's own cookies
         if (v.cookies(server)) {
             String web = android.webkit.CookieManager.getInstance().getCookie(server);
@@ -51,7 +51,7 @@ final class Server {
         if (!cookie.isEmpty()) h.put("Cookie", cookie);
         // Bearer only with no gate in front: a sign-in in front (Authelia) reads `Authorization` as its own credentials and
         // refuses the request whatever its session cookie says
-        else if (!token.isEmpty()) h.put("Authorization", "Bearer " + token); // a server from before x-atlas-token
+        else if (!token.isEmpty()) h.put("Authorization", "Bearer " + token); // a server from before x-kandinsky-token
         String extra = v.header(server);
         int colon = extra.indexOf(':');
         if (colon > 0) h.put(extra.substring(0, colon).trim(), extra.substring(colon + 1).trim());
@@ -59,7 +59,7 @@ final class Server {
     }
 
     /** Whether this phone now gets past what stands in front of `server` (off the main thread): said in a toast and the log
-     *  (tag AtlasSignIn) right after a sign-in, so a way in that does not work says so at once, with the cookies' names. */
+     *  (tag KandinskySignIn) right after a sign-in, so a way in that does not work says so at once, with the cookies' names. */
     static void verify(Context ctx, String server) {
         Context a = ctx.getApplicationContext(); // the sign-in's screen is gone by the time the answer comes
         new Thread(() -> {
@@ -68,9 +68,9 @@ final class Server {
             String names = cookieNames(v.gate(server)) + (v.cookies(server) ? " + WebView " + cookieNames(String.valueOf(android.webkit.CookieManager.getInstance().getCookie(server))) : "");
             String say = p.front == SignIn.Front.OPEN ? "Signed in: the server lets this phone in"
                 : p.front == SignIn.Front.PROXY ? "The sign-in in front (" + p.host + ") still sends this phone to sign in — cookies: " + names
-                : p.front == SignIn.Front.ATLAS ? "Past the sign-in in front, but Atlas refused the token"
+                : p.front == SignIn.Front.KANDINSKY ? "Past the sign-in in front, but Kandinsky refused the token"
                 : "The server did not answer: " + p.why;
-            android.util.Log.i("AtlasSignIn", server + ": " + p.front + " · " + say);
+            android.util.Log.i("KandinskySignIn", server + ": " + p.front + " · " + say);
             new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> android.widget.Toast.makeText(a, say, android.widget.Toast.LENGTH_LONG).show());
         }).start();
     }
@@ -108,7 +108,7 @@ final class Server {
         m.flush();
     }
 
-    /** POST with this phone's sign-in and Atlas's header → the answer as JSON, or {error}; `retry: true` on an error that
+    /** POST with this phone's sign-in and Kandinsky's header → the answer as JSON, or {error}; `retry: true` on an error that
      *  passes by itself or by signing in again (no connection, a sign-in in front) — the capture then waits (Outbox). */
     static JSONObject post(String base, String token, String path, String type, byte[] body) {
         HttpURLConnection c = null;
@@ -121,7 +121,7 @@ final class Server {
             c.setDoOutput(true);
             c.setInstanceFollowRedirects(false); // a redirect is a sign-in in front, never followed with the data
             if (app != null) headers(app, base, c); else c.setRequestProperty("Authorization", "Bearer " + token);
-            c.setRequestProperty("x-atlas", "1");
+            c.setRequestProperty("x-kandinsky", "1"); c.setRequestProperty("x-atlas", "1"); // and a server from before the rename
             c.setRequestProperty("Content-Type", type);
             try (OutputStream o = c.getOutputStream()) { o.write(body); }
             wrote = true;
@@ -133,7 +133,7 @@ final class Server {
             if (code == 504) return maybe("the server took too long (504)");
             if (code == 502 || code == 503) return retry("the server is not answering (" + code + ")");
             if (code >= 400) return new JSONObject().put("error", "the server answered " + code + (text.isEmpty() ? "" : ": " + text));
-            return text.startsWith("{") ? new JSONObject(text) : retry("a sign-in page answered instead of Atlas: Settings → the server → sign in");
+            return text.startsWith("{") ? new JSONObject(text) : retry("a sign-in page answered instead of Kandinsky: Settings → the server → sign in");
         } catch (java.io.IOException e) {
             // sent, then no answer: the server may have done it — never done again elsewhere (a capture twice: two
             // writers of the day's log)

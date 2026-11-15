@@ -1,5 +1,5 @@
 /* Touch screens: targets a finger hits — 40 px
-   buttons, taller rows, no hover-only controls hidden. `data-touch` (lib/touch.ts): the main pointer is a finger, or KDE is in tablet mode (atlas-app tablet.rs); a desktop with a mouse is untouched. The phone
+   buttons, taller rows, no hover-only controls hidden. `data-touch` (lib/touch.ts): the main pointer is a finger, or KDE is in tablet mode (kandinsky-app tablet.rs); a desktop with a mouse is untouched. The phone
    app's own layout (phone.svelte.ts) already sizes its bars; this covers everything else, tablets and the Boox. */
 :where(:root[data-touch]) .icon-btn, :where(:root[data-touch]) .side-tool, :where(:root[data-touch]) .app, :where(:root[data-touch]) .pin { min-width: 40px; min-height: 40px; }
 :where(:root[data-touch]) .tab.side-row, :where(:root[data-touch]) .side-row, :where(:root[data-touch]) .mail-row, :where(:root[data-touch]) .row, :where(:root[data-touch]) .item { min-height: 44px; }

@@ -68,7 +68,7 @@ pub async fn send(acc: &Account, token: Option<String>, from: &str, to: &[String
     if code != 220 {
         return Err(format!("{host} will not take mail now: {code} {}", text.join(" ")));
     }
-    let me = "atlas.localdomain";
+    let me = "kandinsky.localdomain";
     let mut caps = c.expect(&format!("EHLO {me}"), 250, "EHLO").await?;
     if acc.smtp.security == Security::StartTls {
         c.expect("STARTTLS", 220, "STARTTLS").await?;

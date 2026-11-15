@@ -26,6 +26,7 @@ import { vaultActions } from "./vaults";
 import { sidebarActions } from "./sidebar.svelte";
 import { notesActions } from "./notes-system";
 import { paperActions } from "./papers";
+import { applyWorkspacePreset, askManageWorkspaces, askSaveWorkspace } from "./workspaces";
 import type { IconName, PaneSpec } from "./panes";
 import { openSettingsAt } from "./settings-nav.svelte";
 import { setHomeSpec } from "./apps.svelte";
@@ -298,8 +299,8 @@ export const actions: Action[] = [
   { id: "ui.explorer", title: "Files: the explorer (vault, SSH hosts, servers)", icon: "folder-open", label: "Explorer", run: () => { open({ kind: "explorer", source: "vault", place: "" }); } },
   { id: "ui.properties", title: "Properties: show / hide the panel beside notes", icon: "table", run: () => toggleProperties() },
   { id: "ui.search", title: "Search in workspace", icon: "search", label: "Search", keys: "Ctrl+Shift+F", run: () => { open({ kind: "search" }); } },
-  { id: "ui.replace", title: "Replace in files", keys: "Ctrl+Shift+H", run: () => { searchRequest.replace = true; open({ kind: "search" }); window.dispatchEvent(new Event("atlas-search-replace")); } },
-  // Super+Q is Atlas's key (also from a terminal, which keeps Ctrl+W for the shell); Ctrl+W stays
+  { id: "ui.replace", title: "Replace in files", keys: "Ctrl+Shift+H", run: () => { searchRequest.replace = true; open({ kind: "search" }); window.dispatchEvent(new Event("kandinsky-search-replace")); } },
+  // Super+Q is Kandinsky's key (also from a terminal, which keeps Ctrl+W for the shell); Ctrl+W stays
   { id: "ui.close", title: "Close tab", keys: "Super+Q", alsoKeys: ["Ctrl+W"], run: () => closeActive() },
   { id: "ui.reload", title: "Reload the interface", run: () => { void reloadInterface(); } },
   { id: "ui.vim", title: "Toggle vim mode", run: () => { toggleVim(); toast(`Vim mode ${app.vimEnabled ? "off" : "on"}`); } },
@@ -328,6 +329,11 @@ export const actions: Action[] = [
   { id: "ui.web", title: "Open web page…", run: () => openPalette("url") },
   { id: "ui.openWith", title: "Open with… (this file in another view)", keys: "Ctrl+Alt+O", run: () => openWith() },
   { id: "ui.focusFile", title: "Edit FOCUS.md", run: () => openPath(app.workspace?.config.focus ?? "FOCUS.md") },
+  { id: "ui.workspace.preset.quad", title: "Workspace: Research Quad (PDF + Note + Solver + Antigravity)", icon: "grid", label: "Research Quad", run: () => void applyWorkspacePreset("research-quad") },
+  { id: "ui.workspace.preset.derivation", title: "Workspace: Derivation Studio (Note + Notebook + Terminal)", icon: "sigma", label: "Derivation Studio", run: () => void applyWorkspacePreset("derivation-studio") },
+  { id: "ui.workspace.preset.focus", title: "Workspace: Focus Sheet (Distraction-free writing)", icon: "file-text", label: "Focus Sheet", run: () => void applyWorkspacePreset("focus-sheet") },
+  { id: "ui.workspace.save", title: "Workspace: Save current layout…", icon: "panel-left", run: () => askSaveWorkspace() },
+  { id: "ui.workspace.switch", title: "Workspace: Load / manage saved workspaces…", keys: "Ctrl+Alt+W", icon: "grid", run: () => askManageWorkspaces() },
   { id: "ui.resetLayout", title: "Reset layout", run: () => resetLayout() },
   { id: "ui.python.env", title: "Python: choose the environment (for the Python server and new terminals)", icon: "terminal", run: () => void import("./python-env").then((m) => m.choosePythonEnv()) },
   { id: "ui.glance", title: "Glance: follow another device (what it shows, full screen)", icon: "eye", run: () => void import("./where.svelte").then((m) => m.followDevice()) },

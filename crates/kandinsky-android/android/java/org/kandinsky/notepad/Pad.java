@@ -1,4 +1,4 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -11,8 +11,8 @@ import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.PenInput;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.PenInput;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -120,7 +120,7 @@ final class Pad extends View {
         this.n = n;
         penIn = new PenInput(n.host.activity());
         painter.files(n.scene.files);
-        painter.linked((file, page, px) -> org.atlas.capture.PageSource.page(n.host, file, page, px, this::ink)); // linked PDF pages, drawn on the fly
+        painter.linked((file, page, px) -> org.kandinsky.capture.PageSource.page(n.host, file, page, px, this::ink)); // linked PDF pages, drawn on the fly
         live.setStyle(Paint.Style.STROKE);
         live.setStrokeCap(Paint.Cap.ROUND);
         live.setStrokeJoin(Paint.Join.ROUND);
@@ -140,7 +140,7 @@ final class Pad extends View {
         rulerLine.setStyle(Paint.Style.STROKE);
         rulerLine.setColor(n.look.eink ? Color.BLACK : 0xff495057);
         quick = n.host.quickInk(this);
-        org.atlas.capture.PenPressure.start(); // the stylus read from evdev, on a Boox
+        org.kandinsky.capture.PenPressure.start(); // the stylus read from evdev, on a Boox
         pinch = new ScaleGestureDetector(n.host.activity(), new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override public boolean onScale(ScaleGestureDetector d) {
                 float k = k(), sx = ox + d.getFocusX() / k, sy = oy + d.getFocusY() / k; // the scene point under the fingers stays there
@@ -370,7 +370,7 @@ final class Pad extends View {
             postDelayed(hold, HOLD_MS);
         }
         // the device's own pressure (evdev, linear, as Boox's engine reads it), else the MotionEvent's uncurved
-        float p = org.atlas.capture.PenPressure.at(h < 0 ? e.getEventTime() : e.getHistoricalEventTime(h), h < 0 ? e.getPressure() : e.getHistoricalPressure(h));
+        float p = org.kandinsky.capture.PenPressure.at(h < 0 ? e.getEventTime() : e.getHistoricalEventTime(h), h < 0 ? e.getPressure() : e.getHistoricalPressure(h));
         // tilt: the pen's angle from upright, split along its direction (degrees), as openink takes it
         float tilt = (float) Math.toDegrees(h < 0 ? e.getAxisValue(MotionEvent.AXIS_TILT) : e.getHistoricalAxisValue(MotionEvent.AXIS_TILT, h));
         float dir = h < 0 ? e.getAxisValue(MotionEvent.AXIS_ORIENTATION) : e.getHistoricalAxisValue(MotionEvent.AXIS_ORIENTATION, h);
@@ -449,7 +449,7 @@ final class Pad extends View {
             snapWith = null;
             snap.remove(n.scene, s);
             snap.add(n.scene, snapped);
-            snap.snapRecord = n.dataset.snap(s.samples, Stroke.SAMPLE, n.openinkShapes ? "openink" : "atlas", snapWire == null ? new float[0] : snapWire, Host.PENS[n.pen]);
+            snap.snapRecord = n.dataset.snap(s.samples, Stroke.SAMPLE, n.openinkShapes ? "openink" : "kandinsky", snapWire == null ? new float[0] : snapWire, Host.PENS[n.pen]);
             n.dataset.keep(snap.snapRecord, "kept");
             snapped = null;
             n.done(snap);

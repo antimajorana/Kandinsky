@@ -1,5 +1,5 @@
 # Jellyfin: what was watched lately, in a block. An example of a block over a media server's API.
-# Copy into a vault's .atlas/plugins/.
+# Copy into a vault's .kandinsky/plugins/.
 title = "Jellyfin"
 description = "what you watched lately"
 phone = true # runs in the phone apps too (only plugins marked so start there)

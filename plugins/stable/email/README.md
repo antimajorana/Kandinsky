@@ -1,6 +1,6 @@
 # Email
 
-A mail client inside Atlas: conversations, search, triage from the keyboard, a composer, rules, invitations — over your
+A mail client inside Kandinsky: conversations, search, triage from the keyboard, a composer, rules, invitations — over your
 own IMAP/SMTP accounts (a password) or Outlook / Microsoft 365 (OAuth2), several at once. The engine is Rust
 (`engine/`), the pane Svelte (`ui/`). The servers are the store; a mail becomes a note only when you ask.
 
@@ -46,10 +46,10 @@ own IMAP/SMTP accounts (a password) or Outlook / Microsoft 365 (OAuth2), several
   **Rules…**), in Settings → Email, by hand or by an agent.
 - **Elsewhere**: the `email.inbox` block (a triage card for Home), a side tool, the unread count in the status bar,
   notices of new mail, "Email: send this note…", Thunderbird import (accounts; a POP account's local mail put back on its server, after asking).
-- **Tools for agents** (`atlas mcp`): `email_inbox`, `email_read`, `email_attachment`, `email_send` (only a mail the
+- **Tools for agents** (`kandinsky mcp`): `email_inbox`, `email_read`, `email_attachment`, `email_send` (only a mail the
   user asked for), `email_mark`, `email_rules`, `email_add_rule`, `email_remove_rule`, `email_accounts`,
   `email_thunderbird`, `email_thunderbird_mail`, `email_open` (shows one mail in the Email pane, by uid or Message-ID;
-  it answers once the window has shown it, and fails when no Atlas window is open). Each account says whether an agent
+  it answers once the window has shown it, and fails when no Kandinsky window is open). Each account says whether an agent
   may read it: ask, always or never (`email_open` asks nothing: it reads nothing back).
 
 ## Settings
@@ -60,7 +60,7 @@ own IMAP/SMTP accounts (a password) or Outlook / Microsoft 365 (OAuth2), several
   - with a password: **Password** (a secret; an app password where the provider has them), **IMAP server / port**,
     **SMTP server / port** (465 TLS, otherwise STARTTLS), **Security** (ssl, starttls, none);
   - with Outlook: **Application (client) ID** (empty: Thunderbird's public id), **Sign-in flow** (automatic: the
-    system browser; window: a window of Atlas; code: a device code), **Tenant** (`common`), and the kept sign-in
+    system browser; window: a window of Kandinsky; code: a device code), **Tenant** (`common`), and the kept sign-in
     (set by "Sign in to Outlook");
   - **Other addresses** (identities, one per line), **Signature**, **Claude may read it** (ask, always, never).
   - Under the cards: **Import from Thunderbird…**.
@@ -86,6 +86,6 @@ Linux works; the others are untested.
 
 ## Status
 
-Beta, and the strongest candidate for stable: `cargo test -p atlas-email` (against an IMAP + SMTP stand-in,
+Beta, and the strongest candidate for stable: `cargo test -p kandinsky-email` (against an IMAP + SMTP stand-in,
 `engine/src/fake.rs`) and the specs `ui/tests/example-email-pane.spec.ts`, `example-email.spec.ts`. What it still
-needs: saved notes, rules and attachments written through Atlas's API instead of directly to disk.
+needs: saved notes, rules and attachments written through Kandinsky's API instead of directly to disk.

@@ -10,9 +10,9 @@ import { updateSettings } from "./settings.svelte";
 export type { Plugin };
 
 /** Inside the phone app (its bridge, as native-shell.svelte.ts reads it; not imported: that module imports this one). */
-/** The id of `.atlas/init.js`, run as a plugin without a folder (plugins.svelte.ts). */
+/** The id of `.kandinsky/init.js`, run as a plugin without a folder (plugins.svelte.ts). */
 export const INIT_ID = "init";
-export const inPhoneApp = !!(globalThis as unknown as { AtlasNative?: unknown }).AtlasNative;
+export const inPhoneApp = !!(globalThis as unknown as { KandinskyNative?: unknown }).KandinskyNative;
 
 export const plugins = $state({ list: [] as Plugin[], loaded: false, /** main.js failures, by plugin id */ errors: {} as Record<string, string> });
 
@@ -50,11 +50,11 @@ export function paneScope(): { hold: (undo: () => void) => () => void; release: 
   const list: (() => void)[] = [];
   return {
     hold: (undo) => { list.push(undo); return () => { const i = list.indexOf(undo); if (i >= 0) list.splice(i, 1); undo(); }; },
-    release: () => { for (const undo of list.splice(0).reverse()) { try { undo(); } catch (e) { console.error("[atlas] plugin pane", e); } } },
+    release: () => { for (const undo of list.splice(0).reverse()) { try { undo(); } catch (e) { console.error("[kandinsky] plugin pane", e); } } },
   };
 }
 export function disposeAll(id: string): void {
-  for (const undo of (owned.get(id) ?? []).splice(0).reverse()) { try { undo(); } catch (e) { console.error("[atlas] plugin", id, e); } }
+  for (const undo of (owned.get(id) ?? []).splice(0).reverse()) { try { undo(); } catch (e) { console.error("[kandinsky] plugin", id, e); } }
 }
 /** The plugins that registered something (a deleted plugin's registrations are undone by its id). */
 export const ownerIds = (): string[] => [...owned.keys()];

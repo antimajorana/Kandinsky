@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import java.util.Arrays;
 import java.util.List;
@@ -21,7 +21,7 @@ public final class OnscreenTest {
     private static Onscreen.Found read(String pkg, Onscreen.Node... n) { return Onscreen.read(pkg, Arrays.asList(n)); }
 
     public static void main(String[] a) {
-        // the core's rule takes tracking parameters off (Core.untracked, tested in atlas-text links.rs): no native
+        // the core's rule takes tracking parameters off (Core.untracked, tested in kandinsky-text links.rs): no native
         // library on the desktop JVM, so a stand-in that leaves addresses as they are
         Onscreen.untrack = s -> s;
         // Chrome on YouTube's mobile site: the bar without a scheme, the share's `si` and YouTube's `pp` gone

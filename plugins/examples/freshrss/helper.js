@@ -5,18 +5,18 @@
 
 const baseOf = (s) => {
   const base = String(s?.server ?? "").trim().replace(/\/+$/, "");
-  if (!base) throw new atlas.AtlasError("set the FreshRSS server in Settings → Plugins → FreshRSS", 400);
+  if (!base) throw new kandinsky.KandinskyError("set the FreshRSS server in Settings → Plugins → FreshRSS", 400);
   return base;
 };
 async function fever(settings, query) {
-  const res = await atlas.fetchResponse({ url: `${baseOf(settings)}/api/fever.php?api&${query}`, method: "POST", form: { api_key: { secret: "api_key" } }, timeout_secs: 30 });
-  if (!res.ok) throw new atlas.AtlasError(`FreshRSS answered ${res.status}`, 502);
+  const res = await kandinsky.fetchResponse({ url: `${baseOf(settings)}/api/fever.php?api&${query}`, method: "POST", form: { api_key: { secret: "api_key" } }, timeout_secs: 30 });
+  if (!res.ok) throw new kandinsky.KandinskyError(`FreshRSS answered ${res.status}`, 502);
   const j = JSON.parse(res.text || "{}");
-  if (j.auth === 0) throw new atlas.AtlasError("FreshRSS did not accept the API key", 403);
+  if (j.auth === 0) throw new kandinsky.KandinskyError("FreshRSS did not accept the API key", 403);
   return j;
 }
 const fileName = (t) => String(t).replace(/[\\/:*?"<>|#^[\]]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "Article";
-const textOf = (html) => (atlas.html.select(`<body>${html ?? ""}</body>`, "body")[0]?.text ?? "").trim();
+const textOf = (html) => (kandinsky.html.select(`<body>${html ?? ""}</body>`, "body")[0]?.text ?? "").trim();
 
 /** The unread articles, newest first: [{ id, title, url, feed }] (at most `limit`, 15 by default). */
 async function unread(p) {
@@ -31,15 +31,15 @@ async function unread(p) {
  *  note was there already; it is not written over). */
 async function save(p) {
   const id = String(p.id ?? "").replace(/\D/g, "");
-  if (!id) throw new atlas.AtlasError("which article: an id from freshrss_unread", 400);
+  if (!id) throw new kandinsky.KandinskyError("which article: an id from freshrss_unread", 400);
   const it = ((await fever(p.settings, `items&with_ids=${id}`)).items ?? [])[0];
-  if (!it) throw new atlas.AtlasError(`FreshRSS has no article ${id}`, 404);
+  if (!it) throw new kandinsky.KandinskyError(`FreshRSS has no article ${id}`, 404);
   const folder = String(p.settings?.folder || "notes/reading").replace(/\/+$/, "");
   const path = `${folder}/${fileName(it.title)}.md`;
-  try { await atlas.read(path); return { path, made: false }; } catch (e) { if (e.status !== 404) throw e; }
+  try { await kandinsky.read(path); return { path, made: false }; } catch (e) { if (e.status !== 404) throw e; }
   const day = new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD, the local day (not UTC's)
-  await atlas.write(path, `---\ntype: article\nsource: ${JSON.stringify(it.url ?? "")}\nsaved: ${day}\n---\n# ${it.title}\n\n${textOf(it.html)}\n`);
+  await kandinsky.write(path, `---\ntype: article\nsource: ${JSON.stringify(it.url ?? "")}\nsaved: ${day}\n---\n# ${it.title}\n\n${textOf(it.html)}\n`);
   return { path, made: true };
 }
 
-atlas.methods({ unread, save });
+kandinsky.methods({ unread, save });

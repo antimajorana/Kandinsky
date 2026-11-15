@@ -93,12 +93,12 @@ pub(crate) enum LineKind<'a> {
     Text,
 }
 
-/// A note's frontmatter as the one fence reader sees it (atlas_text::frontmatter: a BOM, CRLF, a `...` closer; an
+/// A note's frontmatter as the one fence reader sees it (kandinsky_text::frontmatter: a BOM, CRLF, a `...` closer; an
 /// opening `---` never closed is a rule, not frontmatter): the YAML's byte range and where the body starts (0, 0..0
 /// without one).
 fn front_matter(text: &str) -> (std::ops::Range<usize>, usize) {
-    match atlas_text::frontmatter::split(text) {
-        (Some(_), body) => (atlas_text::frontmatter::yaml_range(text).unwrap_or(0..0), text.len() - body.len()),
+    match kandinsky_text::frontmatter::split(text) {
+        (Some(_), body) => (kandinsky_text::frontmatter::yaml_range(text).unwrap_or(0..0), text.len() - body.len()),
         (None, _) => (0..0, 0),
     }
 }
@@ -106,7 +106,7 @@ fn front_matter(text: &str) -> (std::ops::Range<usize>, usize) {
 /// Each line of a markdown text that may hold links, with its 1-based number and its byte offset in `text`; fenced
 /// code is skipped. The one walk over a note both the index ([`parse`]) and the link rewrite on a move use.
 pub(crate) fn link_lines<'a>(text: &'a str, mut f: impl FnMut(u32, usize, &'a str, LineKind<'_>)) {
-    let mut fences = atlas_text::fence::Fences::default();
+    let mut fences = kandinsky_text::fence::Fences::default();
     let (yaml, body) = front_matter(text);
     let mut key = String::new();
     let mut at = 0;
@@ -197,12 +197,12 @@ pub(crate) fn link_spans(line: &str) -> Vec<Span> {
             out.push(Span { start: start + lead, end: start + lead + t.len(), wiki, embed });
         }
     };
-    let mut code = atlas_text::fence::code_spans(line).into_iter().peekable();
+    let mut code = kandinsky_text::fence::code_spans(line).into_iter().peekable();
     let mut i = 0;
     let mut wiki_closes = true;
     while i < b.len() {
         match b[i] {
-            // inline code (atlas_text's one reader): skipped whole; a backtick that opens none is text
+            // inline code (kandinsky_text's one reader): skipped whole; a backtick that opens none is text
             b'`' => {
                 while code.next_if(|c| c.start < i).is_some() {} // spans a link stepped over
                 i = code.next_if(|c| c.start == i).map_or(i + 1, |c| c.end);
@@ -412,7 +412,7 @@ impl Names {
 
 /// The frontmatter mapping at the top of a note (empty when absent or malformed).
 pub(crate) fn frontmatter(text: &str) -> serde_yaml::Mapping {
-    atlas_text::frontmatter::mapping(text)
+    kandinsky_text::frontmatter::mapping(text)
 }
 
 /// The vault's index, current: the walk is done on every call, and only the notes whose mtime changed are read again.
@@ -986,7 +986,7 @@ mod tests {
         assert!(walked, "no watcher: always walked");
     }
 
-    /// With a real watcher: an outside edit is seen once its event arrives, Atlas's own write at once.
+    /// With a real watcher: an outside edit is seen once its event arrives, Kandinsky's own write at once.
     #[test]
     fn a_watched_vault_follows_outside_edits_and_its_own_writes() {
         let d = tempfile::tempdir().unwrap();
@@ -999,7 +999,7 @@ mod tests {
         let count = || backlinks(&root, &cfg, "notes/target.md").links.len();
         assert_eq!(count(), 0);
         crate::vault_write::write(&root.join("a.md"), b"see [[target]]\n").unwrap();
-        assert_eq!(count(), 1, "Atlas's own write: seen by the very next request");
+        assert_eq!(count(), 1, "Kandinsky's own write: seen by the very next request");
         std::thread::sleep(std::time::Duration::from_millis(20));
         std::fs::create_dir_all(root.join("new")).unwrap();
         std::fs::write(root.join("new/b.md"), "[[target]] too\n").unwrap();

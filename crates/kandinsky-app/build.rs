@@ -10,11 +10,11 @@ fn frames_library() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("linux") {
         return;
     }
-    let out = std::path::PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR")).join("libatlas-webkit-frames.so");
+    let out = std::path::PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR")).join("libkandinsky-webkit-frames.so");
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
     let target = std::env::var("TARGET").expect("TARGET");
     let status = std::process::Command::new(rustc)
-        .args(["--edition", "2021", "--crate-type", "cdylib", "--crate-name", "atlas_webkit_frames", "-C", "opt-level=2", "-C", "panic=abort", "-C", "strip=symbols", "--target", &target, "-o"])
+        .args(["--edition", "2021", "--crate-type", "cdylib", "--crate-name", "kandinsky_webkit_frames", "-C", "opt-level=2", "-C", "panic=abort", "-C", "strip=symbols", "--target", &target, "-o"])
         .arg(&out)
         .arg("frames/frames.rs")
         .status()

@@ -1,7 +1,7 @@
-// An older PDF companion drawing (`x.pdf.excalidraw`) built for the migration's tests: Atlas no longer writes these,
+// An older PDF companion drawing (`x.pdf.excalidraw`) built for the migration's tests: Kandinsky no longer writes these,
 // it only reads them back as the PDF's marks (lib/pdf-ink-to-marks.ts, lib/pdf-migrate.ts). The layout is the Boox's
 // (InkStore.java `addPage`: four pages a row, A4's width); marks are pdf.js's serialized editors.
-import { markId, quoteOf, type AtlasMark, type Quad, type TextPiece } from "../../src/lib/kandinsky-mark";
+import { markId, quoteOf, type KandinskyMark, type Quad, type TextPiece } from "../../src/lib/kandinsky-mark";
 import type { El } from "../../src/lib/pdf-ink-scene";
 
 /** InkStore.java's layout, so a page added here sits where the Boox would have put it. */
@@ -44,15 +44,15 @@ export function addPageFrame(els: El[], pdf: string, n: number, box: PageBox): E
   const stamp = `${Date.now().toString(36)}-${n}`, name = pdf.split("/").pop()!;
   const frame = { ...base("frame", `page-${stamp}`, x, y, PAGE_W, h, null), name: `Page ${n}`, strokeColor: "#bbb", locked: true };
   const picture = {
-    ...base("image", `picture-${stamp}`, x, y, PAGE_W, h, frame.id), fileId: `atlas-page-${(javaHash(pdf) >>> 0).toString(16)}-${n}`, status: "saved",
-    scale: [1, 1], crop: null, customData: { atlasPage: { file: pdf, page: n } }, link: `[[${name}#page=${n}]]`, locked: true,
+    ...base("image", `picture-${stamp}`, x, y, PAGE_W, h, frame.id), fileId: `kandinsky-page-${(javaHash(pdf) >>> 0).toString(16)}-${n}`, status: "saved",
+    scale: [1, 1], crop: null, customData: { kandinskyPage: { file: pdf, page: n } }, link: `[[${name}#page=${n}]]`, locked: true,
   };
   els.push(frame, picture);
   return frame;
 }
 
 /** The marks as elements over their pages' frames (`frames`: page n → its frame), PDF points to the frame's units; each
- *  mark's elements carry its `atlasMark` (lib/atlas-mark.ts), a highlight's with the words of `texts` (page n → its
+ *  mark's elements carry its `kandinskyMark` (lib/kandinsky-mark.ts), a highlight's with the words of `texts` (page n → its
  *  text) under it. */
 export function marksToElements(marks: readonly Mark[], frames: Map<number, El>, boxes: Map<number, PageBox>, texts = new Map<number, TextPiece[]>()): El[] {
   const out: El[] = [];
@@ -60,12 +60,12 @@ export function marksToElements(marks: readonly Mark[], frames: Map<number, El>,
     const n = m.pageIndex + 1, f = frames.get(n), box = boxes.get(n);
     if (!f || !box) continue;
     const s = f.width! / (box[2] - box[0]);
-    const mark = (kind: AtlasMark["kind"], color: string, more: Partial<AtlasMark> = {}): AtlasMark =>
+    const mark = (kind: KandinskyMark["kind"], color: string, more: Partial<KandinskyMark> = {}): KandinskyMark =>
       ({ id: markId(), kind, page: n, color, device: "desktop", created: Date.now(), ...more });
     const X = (px: number) => f.x! + (px - box[0]) * s, Y = (py: number) => f.y! + (box[3] - py) * s;
     if (m.annotationType === 15) {
       // ink: one freedraw per line, its points relative to its first; the lines one mark
-      const atlasMark = mark("ink", hex(m.color, "#000000"));
+      const kandinskyMark = mark("ink", hex(m.color, "#000000"));
       const pressures = m.paths?.pressures;
       for (const [li, line] of (m.paths?.points ?? []).entries()) {
         const pts: [number, number][] = [];
@@ -76,30 +76,30 @@ export function marksToElements(marks: readonly Mark[], frames: Map<number, El>,
         out.push({
           ...base("freedraw", uid("pen"), ox, oy, Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), f.id),
           strokeColor: hex(m.color, "#000000"), strokeWidth: Math.max(0.5, ((m.thickness ?? 1) * s) / 3), opacity: Math.round((m.opacity ?? 1) * 100),
-          points: rel, pressures: pressures?.[li] ? Array.from(pressures[li]) : [], simulatePressure: !pressures?.[li], lastCommittedPoint: null, customData: { atlasMark },
+          points: rel, pressures: pressures?.[li] ? Array.from(pressures[li]) : [], simulatePressure: !pressures?.[li], lastCommittedPoint: null, customData: { kandinskyMark },
         });
       }
     } else if (m.annotationType === 9) {
       // highlight: a see-through box over each quad of the passage, the boxes one mark with the passage's words.
-      // `atlasHighlight` stays for scripts/vault/pdf_annotations.py until the core's marks writer replaces it.
+      // `kandinskyHighlight` stays for scripts/vault/pdf_annotations.py until the core's marks writer replaces it.
       const q = m.quadPoints ?? [], quads: Quad[] = [];
       for (let i = 0; i + 7 < q.length; i += 8) {
         const px = [q[i], q[i + 2], q[i + 4], q[i + 6]], py = [q[i + 1], q[i + 3], q[i + 5], q[i + 7]];
         quads.push([Math.min(...px), Math.min(...py), Math.max(...px), Math.max(...py)]);
       }
       const color = hex(m.color, "#FFE066"), quote = quoteOf(texts.get(n) ?? [], quads);
-      const atlasMark = mark("highlight", color, { quads, ...(quote ? { quote } : {}) });
+      const kandinskyMark = mark("highlight", color, { quads, ...(quote ? { quote } : {}) });
       for (const r of quads) {
         const x = X(r[0]), y = Y(r[3]);
         out.push({ ...base("rectangle", uid("highlight"), x, y, X(r[2]) - x, Y(r[1]) - y, f.id), strokeColor: "transparent",
-          backgroundColor: color, opacity: 40, customData: { atlasMark, atlasHighlight: { page: n, mark: atlasMark.id, rect: r } } });
+          backgroundColor: color, opacity: 40, customData: { kandinskyMark, kandinskyHighlight: { page: n, mark: kandinskyMark.id, rect: r } } });
       }
     } else if (m.annotationType === 3 && m.value?.trim() && m.rect) {
       const size = (m.fontSize ?? 10) * s, x = X(m.rect[0]), y = Y(m.rect[3]);
       const text = m.value.trim();
       out.push({ ...base("text", uid("note"), x, y, (m.rect[2] - m.rect[0]) * s, (m.rect[3] - m.rect[1]) * s, f.id), strokeColor: hex(m.color, "#000000"),
         text, originalText: text, fontSize: size, fontFamily: 1, textAlign: "left", verticalAlign: "top", containerId: null, autoResize: true, lineHeight: 1.25,
-        customData: { atlasMark: mark("comment", hex(m.color, "#000000")) } });
+        customData: { kandinskyMark: mark("comment", hex(m.color, "#000000")) } });
     }
   }
   return out;

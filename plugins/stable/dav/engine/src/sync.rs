@@ -75,7 +75,7 @@ pub fn is_mail(m: &serde_yaml::Mapping) -> bool {
 
 /// A note's frontmatter (an empty map when it has none or it is not YAML).
 pub fn frontmatter(text: &str) -> serde_yaml::Mapping {
-    atlas_text::frontmatter::mapping(text)
+    kandinsky_text::frontmatter::mapping(text)
 }
 
 /// A property as text: a scalar as written, a list's first item.
@@ -122,7 +122,7 @@ pub fn dated_events(path: &str, text: &str) -> (Vec<Event>, Vec<Skip>) {
     }
     let title = title_of(path, text, &m);
     let source = path.to_string();
-    let description = format!("From the note {path} in Atlas");
+    let description = format!("From the note {path} in Kandinsky");
     for (key, prefix) in [("due", "Due: "), ("event", "")] {
         let Some(raw) = prop(&m, key) else { continue };
         let start = match When::parse(&raw) {
@@ -292,7 +292,7 @@ mod tests {
             pub fn new() -> Dir {
                 use std::sync::atomic::{AtomicU32, Ordering};
                 static N: AtomicU32 = AtomicU32::new(0);
-                let p = std::env::temp_dir().join(format!("atlas-dav-test-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
+                let p = std::env::temp_dir().join(format!("kandinsky-dav-test-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
                 std::fs::create_dir_all(&p).unwrap();
                 Dir(p)
             }
@@ -354,7 +354,7 @@ mod tests {
             ("notes/Rapport.md", NOTE),
             ("notes/old.md", &past),
             ("notes/invite.ics", ICS),
-            (".atlas/x.md", NOTE),
+            (".kandinsky/x.md", NOTE),
         ]);
         let s = scan(&v.0, &everywhere(), None, day("2026-10-21"));
         let found: Vec<&str> = s.found.iter().map(|f| f.note.as_str()).collect();
@@ -371,7 +371,7 @@ mod tests {
         let f = vec!["notes".to_string(), "/projects/dates/".into()];
         assert!(in_scope("notes/a.md", &f) && in_scope("projects/dates/x.md", &f) && in_scope("./notes/a.md", &f));
         assert!(!in_scope("notesbox/a.md", &f) && !in_scope("projects/a.md", &f));
-        assert!(in_scope("anything/a.md", &[]) && !in_scope(".atlas/a.md", &[]), "no folders: the vault, hidden ones out");
+        assert!(in_scope("anything/a.md", &[]) && !in_scope(".kandinsky/a.md", &[]), "no folders: the vault, hidden ones out");
         assert_eq!(summary(&[], 0, 0), "no important dates found");
         let r = |o: &str| Report { title: String::new(), start: String::new(), uid: String::new(), path: String::new(), outcome: o.into(), why: None };
         assert_eq!(summary(&[r("added"), r("added"), r("unchanged"), r("failed")], 2, 1), "2 added, 1 unchanged, 2 skipped, 2 failed");

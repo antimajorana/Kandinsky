@@ -1,27 +1,27 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import { openFile } from "./open";
 
-// Plugins v4, shell hooks (docs/refactor/REFACTOR-plugins-v4.md, 3.2): `atlas.shell.menu(where, fn)` adds rows
+// Plugins v4, shell hooks (docs/refactor/REFACTOR-plugins-v4.md, 3.2): `kandinsky.shell.menu(where, fn)` adds rows
 // to the app's right-click menus, after the app's own; a builder that throws loses only its rows.
-// `atlas.shell.statusItem` puts a cell in the status bar.
-const H = { "x-atlas": "1" };
+// `kandinsky.shell.statusItem` puts a cell in the status bar.
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
-const MAIN = `export function register(atlas) {
-  atlas.shell.menu("tab", (t) => t.path ? [{ label: "Demo: say the path", icon: "link", detail: "from a plugin", run: () => atlas.toast("tab " + t.path) }] : []);
-  atlas.shell.menu("editor", (t) => [{ label: "Demo: selection", run: () => atlas.toast("selected [" + t.selection + "] in " + t.path) }]);
-  atlas.shell.menu("file", () => { throw new Error("broken builder"); });
-  atlas.shell.menu("file", (t) => [{ label: t.dir ? "Demo: a folder" : "Demo: a file", run: () => atlas.toast("file " + t.path) }]);
-  atlas.shell.menu("tab", () => [{ label: "Demo: breaks", run: () => { throw new Error("boom in a row"); } }]);
+const MAIN = `export function register(kandinsky) {
+  kandinsky.shell.menu("tab", (t) => t.path ? [{ label: "Demo: say the path", icon: "link", detail: "from a plugin", run: () => kandinsky.toast("tab " + t.path) }] : []);
+  kandinsky.shell.menu("editor", (t) => [{ label: "Demo: selection", run: () => kandinsky.toast("selected [" + t.selection + "] in " + t.path) }]);
+  kandinsky.shell.menu("file", () => { throw new Error("broken builder"); });
+  kandinsky.shell.menu("file", (t) => [{ label: t.dir ? "Demo: a folder" : "Demo: a file", run: () => kandinsky.toast("file " + t.path) }]);
+  kandinsky.shell.menu("tab", () => [{ label: "Demo: breaks", run: () => { throw new Error("boom in a row"); } }]);
   let n = 0;
-  const cell = atlas.shell.statusItem({ id: "count", text: "clicks 0", title: "a plugin's cell", run: () => cell.set("clicks " + ++n) });
+  const cell = kandinsky.shell.statusItem({ id: "count", text: "clicks 0", title: "a plugin's cell", run: () => cell.set("clicks " + ++n) });
 }\n`;
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/menus/plugin.toml", 'title = "Menus"\n');
-  await put(request, ".atlas/plugins/menus/main.js", MAIN);
+  await put(request, ".kandinsky/plugins/menus/plugin.toml", 'title = "Menus"\n');
+  await put(request, ".kandinsky/plugins/menus/main.js", MAIN);
 });
 // the vault is shared by the specs: leave no rows behind
-test.afterAll(async ({ request }) => { await put(request, ".atlas/plugins/menus/main.js", "export function register() {}\n"); });
+test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/menus/main.js", "export function register() {}\n"); });
 
 test("a plugin's rows in the tab, editor and file menus, and its cell in the status bar", async ({ page }) => {
   await page.goto("/");
@@ -70,9 +70,9 @@ test("a plugin's rows in the tab, editor and file menus, and its cell in the sta
   await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click();
   await page.getByRole("button", { name: /^Plugins( \d+)?$/ }).first().click();
   // the list counts them; the plugin's own page lists them
-  await page.getByRole("button", { name: "2 problems since Atlas started" }).click();
+  await page.getByRole("button", { name: "2 problems since Kandinsky started" }).click();
   const log = page.locator('[data-plugin-log="menus"]');
-  await expect(log.locator("summary")).toHaveText("2 problems since Atlas started");
+  await expect(log.locator("summary")).toHaveText("2 problems since Kandinsky started");
   await log.locator("summary").click();
   await expect(log).toContainText("boom in a row");
   await expect(log).toContainText("broken builder");

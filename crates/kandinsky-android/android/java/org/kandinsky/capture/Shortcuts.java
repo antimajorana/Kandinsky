@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.content.Context;
 import android.content.Intent;
@@ -17,8 +17,8 @@ import java.util.List;
 final class Shortcuts {
     private Shortcuts() {}
 
-    /** The extra naming the place an `AtlasActivity` intent opens: "search", "files", "home", or "new" (New…). */
-    static final String PLACE = "org.atlas.place";
+    /** The extra naming the place an `KandinskyActivity` intent opens: "search", "files", "home", or "new" (New…). */
+    static final String PLACE = "org.kandinsky.place";
 
     static void publish(Context c, Look look) {
         ShortcutManager sm = c.getSystemService(ShortcutManager.class);
@@ -33,7 +33,7 @@ final class Shortcuts {
     }
 
     private static Intent place(Context c, String where) {
-        return new Intent(c, AtlasActivity.class).putExtra(PLACE, where)
+        return new Intent(c, KandinskyActivity.class).putExtra(PLACE, where)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP); // the running one gets onNewIntent
     }
 

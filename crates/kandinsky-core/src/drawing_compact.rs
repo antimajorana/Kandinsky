@@ -1,6 +1,6 @@
 //! Drawings kept small on disk. The rules of
 //! every writer (the web's draw-compact.ts, the notepad's DrawingSize.java): JSON without indentation, pen points to
-//! 0.1 px, pressures to 0.01, pictures at most 2000 px. Here, for the drawings already written (`atlas drawings`): the
+//! 0.1 px, pressures to 0.01, pictures at most 2000 px. Here, for the drawings already written (`kandinsky drawings`): the
 //! core has no lossy WebP encoder, so pictures become lossless WebP (the 22.9 MB page's PDF pages: 11.8 MB of PNG →
 //! 5.3 MB, nothing lost, transparency kept).
 //! docs/design/DESIGN-drawing-size.md.
@@ -81,12 +81,12 @@ pub struct Compacted {
 }
 
 /// Every `.excalidraw` of the vault made small. A dry run (`apply` false) says the sizes; applied, each original is
-/// first copied to `.atlas/trash/<time>-drawings-before-compact/<its path>`.
+/// first copied to `.kandinsky/trash/<time>-drawings-before-compact/<its path>`.
 pub fn compact_all(root: &Path, cfg: &Config, apply: bool) -> Result<Compacted> {
-    let snap = format!(".atlas/trash/{}-drawings-before-compact", chrono::Local::now().format("%Y%m%d-%H%M%S"));
+    let snap = format!(".kandinsky/trash/{}-drawings-before-compact", chrono::Local::now().format("%Y%m%d-%H%M%S"));
     let mut drawings = Vec::new();
     for (path, rel) in walk::files(root, cfg).filter(|(_, rel)| rel.ends_with(".excalidraw")) {
-        // through `modify`: a drawing open in Atlas saves on its own, and a save between the read and the write is kept
+        // through `modify`: a drawing open in Kandinsky saves on its own, and a save between the read and the write is kept
         let mut sizes = None;
         let done = crate::vault_write::modify(&path, |text| {
             let Some(small) = compact(text) else { return Ok(text.to_string()) };
@@ -94,7 +94,7 @@ pub fn compact_all(root: &Path, cfg: &Config, apply: bool) -> Result<Compacted> 
             if !apply {
                 return Ok(text.to_string());
             }
-            crate::vault_write::copy(&path, &root.join(&snap).join(&rel))?;
+            crate::vault_write::copy(&path, &crate::state_dir::join(root, &snap).join(&rel))?;
             Ok(small)
         });
         match (done, sizes) {
@@ -145,9 +145,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "reads a real drawing: ATLAS_TEST_DRAWING=<a .excalidraw with a PDF page> cargo test -- --ignored drawing_compact"]
+    #[ignore = "reads a real drawing: KANDINSKY_TEST_DRAWING=<a .excalidraw with a PDF page> cargo test -- --ignored drawing_compact"]
     fn a_22_mb_drawing_page_shrinks() {
-        let Some(path) = std::env::var_os("ATLAS_TEST_DRAWING") else { return };
+        let Some(path) = std::env::var_os("KANDINSKY_TEST_DRAWING") else { return };
         let Ok(text) = std::fs::read_to_string(path) else { return };
         let v: Value = serde_json::from_str(&text).unwrap();
         let url = v["files"].as_object().unwrap().values().next().unwrap()["dataURL"].as_str().unwrap().to_string();

@@ -1,12 +1,12 @@
 # Security
 
-Atlas runs a local server for its window, can serve a vault to the network (`atlas serve --listen`), runs plugins with their own permissions, and keeps secrets outside the vault. A weakness in any of these matters.
+Kandinsky runs a local server for its window, can serve a vault to the network (`kandinsky serve --listen`), runs plugins with their own permissions, and keeps secrets outside the vault. A weakness in any of these matters.
 
 ## Reporting a vulnerability
 Please **do not open a public issue**. Report it privately through GitHub's "Report a vulnerability" (Security → Advisories) on the repository, with:
 - what an attacker can do, and from where (the same machine, the network, a plugin, a vault file);
 - the steps or a proof of concept;
-- the version (`atlas --version`) or the commit.
+- the version (`kandinsky --version`) or the commit.
 
 You will get an answer within a week. A fix is released before the details are made public, and the report is credited unless you ask otherwise.
 

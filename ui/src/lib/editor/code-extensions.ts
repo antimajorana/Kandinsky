@@ -13,7 +13,7 @@ import { showMinimap } from "@replit/codemirror-minimap";
 import type { WorkspaceConfig } from "../types";
 import type { Problems } from "../state.svelte";
 import { gitGutter } from "./git-gutter";
-import { atlasHighlight } from "./highlight-style";
+import { kandinskyHighlight } from "./highlight-style";
 import { codeCompletionTab } from "./tab-keys";
 import { codeIndent } from "./indent";
 
@@ -36,7 +36,7 @@ export function codeExtensions(lang: Compartment, opts: Compartment, lsp: Compar
     opts.of(codeOptions(cfg)),
     foldGutter({ openText: "▾", closedText: "▸" }),
     lang.of([]),
-    syntaxHighlighting(atlasHighlight),
+    syntaxHighlighting(kandinskyHighlight),
     bracketMatching(),
     closeBrackets(),
     autocompletion(),

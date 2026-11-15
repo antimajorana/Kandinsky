@@ -1,4 +1,4 @@
-//! The full app's core (docs/guides/ANDROID.md, "The full app"): Atlas's own server, run inside the app on 127.0.0.1 for the vault
+//! The full app's core (docs/guides/ANDROID.md, "The full app"): Kandinsky's own server, run inside the app on 127.0.0.1 for the vault
 //! in use, with the web UI it carries (rust-embed of ui/dist). The app's WebView shows that UI — the editor, LaTeX, Bases,
 //! PDFs, plugin blocks — exactly as the desktop window shows its own; one implementation of each, not a second for the phone.
 use serde_json::{json, Value};
@@ -8,18 +8,18 @@ use std::sync::{Mutex, OnceLock};
 
 fn runtime() -> &'static tokio::runtime::Runtime {
     static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-    RT.get_or_init(|| tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().thread_name("atlas-core").build().expect("a runtime"))
+    RT.get_or_init(|| tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().thread_name("kandinsky-core").build().expect("a runtime"))
 }
 
 /// The servers running, by vault: started once, kept for the app's life (the watcher and the index stay warm).
-fn running() -> &'static Mutex<HashMap<PathBuf, (u16, atlas_core::server::ServerHandle)>> {
-    static R: OnceLock<Mutex<HashMap<PathBuf, (u16, atlas_core::server::ServerHandle)>>> = OnceLock::new();
+fn running() -> &'static Mutex<HashMap<PathBuf, (u16, kandinsky_core::server::ServerHandle)>> {
+    static R: OnceLock<Mutex<HashMap<PathBuf, (u16, kandinsky_core::server::ServerHandle)>>> = OnceLock::new();
     R.get_or_init(Default::default)
 }
 
 /// `{port, open, key}` of the vault's server (started now if it is not running), or `{error}`. The server is locked to
 /// this app (local_lock.rs: every app on a phone reaches 127.0.0.1); `open` is a fresh one-time address that gives the
-/// app's WebView the key's cookie, `key` what the app's native screens send (`x-atlas-token`) on their own calls. `home`: the app's own folder, Atlas's
+/// app's WebView the key's cookie, `key` what the app's native screens send (`x-kandinsky-token`) on their own calls. `home`: the app's own folder, Kandinsky's
 /// home there (its settings, the list of vaults, caches) — a phone has no `$HOME` an app may write. `env`: what the
 /// plugin helpers the core starts need (PATH with the plugin engines; the app's Helpers.java).
 pub fn serve(vault: &Path, home: &Path, env: &Value) -> Value {
@@ -44,8 +44,8 @@ pub fn serve(vault: &Path, home: &Path, env: &Value) -> Value {
             }
         }
     });
-    let locked = atlas_core::server::Listen::Local(0, atlas_core::local_lock::Lock::Locked { fixed: None });
-    match runtime().block_on(atlas_core::server::serve_on(vault.to_path_buf(), locked)) {
+    let locked = kandinsky_core::server::Listen::Local(0, kandinsky_core::local_lock::Lock::Locked { fixed: None });
+    match runtime().block_on(kandinsky_core::server::serve_on(vault.to_path_buf(), locked)) {
         Ok(h) => {
             let (port, open, key) = (h.port(), h.open_url(), h.key().map(String::from));
             running().lock().unwrap().insert(vault.to_path_buf(), (port, h));
@@ -61,8 +61,8 @@ mod tests {
 
     #[test]
     fn the_vault_is_served_with_its_interface() {
-        let d = std::env::temp_dir().join(format!("atlas-phone-serve-{}", std::process::id()));
-        std::fs::create_dir_all(d.join(".atlas")).unwrap();
+        let d = std::env::temp_dir().join(format!("kandinsky-phone-serve-{}", std::process::id()));
+        std::fs::create_dir_all(d.join(".kandinsky")).unwrap();
         std::fs::write(d.join("note.md"), "# Hi\n").unwrap();
         let a = serve(&d, &d.join("home"), &json!({}));
         let port = a["port"].as_u64().unwrap_or_else(|| panic!("{a}"));
@@ -70,7 +70,7 @@ mod tests {
         let get = |path: &str, extra: &str| {
             use std::io::{Read, Write};
             let mut s = std::net::TcpStream::connect(("127.0.0.1", port as u16)).unwrap();
-            write!(s, "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nx-atlas: 1\r\n{extra}connection: close\r\n\r\n").unwrap();
+            write!(s, "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nx-kandinsky: 1\r\n{extra}connection: close\r\n\r\n").unwrap();
             let mut out = String::new();
             s.read_to_string(&mut out).unwrap();
             out
@@ -95,14 +95,14 @@ mod tests {
 /// (its environment says where the list and the sign-ins live). `mirror` empty: unlinked.
 pub fn mirror(vault: &Path, mirror: &str, cookies: &str) -> Value {
     let run = || -> anyhow::Result<()> {
-        let list = atlas_core::vaults::list_file();
-        atlas_core::vaults::remember(&list, vault, chrono::Utc::now().timestamp_millis())?;
+        let list = kandinsky_core::vaults::list_file();
+        kandinsky_core::vaults::remember(&list, vault, chrono::Utc::now().timestamp_millis())?;
         let path = vault.canonicalize()?.to_string_lossy().into_owned();
-        atlas_core::vaults::set_mirror(&list, &path, Some(mirror).filter(|m| !m.trim().is_empty()))?;
+        kandinsky_core::vaults::set_mirror(&list, &path, Some(mirror).filter(|m| !m.trim().is_empty()))?;
         keep_cookies(vault, mirror, cookies)?;
         // the running core's writes ask the server for leases from now on (DESIGN-mirror-v2.md §2, step 6): serve ran
         // before the list had the mirror
-        atlas_core::mirror_guard::install_for_mirror(&atlas_core::Workspace::open(vault)?);
+        kandinsky_core::mirror_guard::install_for_mirror(&kandinsky_core::Workspace::open(vault)?);
         Ok(())
     };
     match run() {
@@ -116,14 +116,14 @@ pub fn mirror(vault: &Path, mirror: &str, cookies: &str) -> Value {
 fn keep_cookies(vault: &Path, url: &str, cookies: &str) -> anyhow::Result<()> {
     let Some(host) = reqwest::Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_string)) else { return Ok(()) };
     let domain = gate_domain(&host);
-    let jar: Vec<atlas_core::service_signin::Cookie> = cookies
+    let jar: Vec<kandinsky_core::service_signin::Cookie> = cookies
         .split(';')
         .filter_map(|kv| kv.split_once('='))
-        .map(|(k, v)| atlas_core::service_signin::Cookie { name: k.trim().into(), value: v.trim().into(), domain: domain.clone(), host_only: false, path: "/".into(), secure: true, expires: None })
+        .map(|(k, v)| kandinsky_core::service_signin::Cookie { name: k.trim().into(), value: v.trim().into(), domain: domain.clone(), host_only: false, path: "/".into(), secure: true, expires: None })
         .filter(|c| !c.name.is_empty())
         .collect();
     if !jar.is_empty() {
-        atlas_core::service_signin::keep(&atlas_core::secrets::Store::for_vault(vault), &host, jar)?;
+        kandinsky_core::service_signin::keep(&kandinsky_core::secrets::Store::for_vault(vault), &host, jar)?;
     }
     Ok(())
 }
@@ -136,7 +136,7 @@ pub fn keep_signin(vault: &Path, url: &str, cookies: &str) -> Value {
     }
 }
 
-/// `atlas.example.org` → `example.org`: where a sign-in in front keeps its session (as Web.java takes it).
+/// `kandinsky.example.org` → `example.org`: where a sign-in in front keeps its session (as Web.java takes it).
 fn gate_domain(host: &str) -> String {
     let parts: Vec<&str> = host.split('.').collect();
     if parts.len() <= 2 { host.to_string() } else { parts[parts.len() - 2..].join(".") }
@@ -150,18 +150,18 @@ mod mirror_tests {
     fn a_folder_gets_its_mirror_and_the_phones_sign_in_for_that_server() {
         let home = tempfile::tempdir().unwrap();
         let vault = home.path().join("Work");
-        std::fs::create_dir_all(vault.join(".atlas")).unwrap();
+        std::fs::create_dir_all(vault.join(".kandinsky")).unwrap();
         // the list and the sign-ins where serve's environment puts them
         unsafe {
-            std::env::set_var("ATLAS_VAULTS", home.path().join("vaults.toml"));
-            std::env::set_var("ATLAS_SECRETS_DIR", home.path().join("secrets"));
+            std::env::set_var("KANDINSKY_VAULTS", home.path().join("vaults.toml"));
+            std::env::set_var("KANDINSKY_SECRETS_DIR", home.path().join("secrets"));
         }
-        let r = mirror(&vault, "https://atlas.example.org/v/work/", "authelia_session=abc; other=1");
+        let r = mirror(&vault, "https://kandinsky.example.org/v/work/", "authelia_session=abc; other=1");
         assert_eq!(r, json!({ "ok": true }), "{r}");
-        let listed = atlas_core::vaults::list(&atlas_core::vaults::list_file());
-        assert_eq!(listed[0].mirror.as_deref(), Some("https://atlas.example.org/v/work/"));
-        let url = reqwest::Url::parse("https://atlas.example.org/v/work/api/file").unwrap();
-        let sent = atlas_core::service_signin::cookie_header(&atlas_core::secrets::Store::for_vault(&vault), &url).unwrap();
+        let listed = kandinsky_core::vaults::list(&kandinsky_core::vaults::list_file());
+        assert_eq!(listed[0].mirror.as_deref(), Some("https://kandinsky.example.org/v/work/"));
+        let url = reqwest::Url::parse("https://kandinsky.example.org/v/work/api/file").unwrap();
+        let sent = kandinsky_core::service_signin::cookie_header(&kandinsky_core::secrets::Store::for_vault(&vault), &url).unwrap();
         assert_eq!(sent.as_deref(), Some("authelia_session=abc; other=1"));
         assert_eq!(gate_domain("manga.example.org"), "example.org");
     }

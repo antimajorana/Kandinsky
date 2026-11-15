@@ -3,7 +3,7 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 // Plugins v4, the helper (docs/guides/PLUGINS.md "v4"): a program of the plugin's own that the core keeps
 // running and talks to in JSON lines. One process answers many calls, pushes events to the page, and
 // stops when the plugin is switched off.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const HELPER = `import json, sys
 n = 0
@@ -15,24 +15,24 @@ for line in sys.stdin:
         print(json.dumps({"event": "news", "data": {"text": "hello from the helper"}}), flush=True)
         print(json.dumps({"id": m["id"], "result": True}), flush=True)
 `;
-const MAIN = `export function register(atlas) {
-  const cell = atlas.shell.statusItem({ id: "out", text: "idle" });
-  atlas.helper.on("news", (d) => cell.set("event: " + d.text));
-  atlas.registerCommand({ id: "add", title: "Helper demo: add", run: async () => {
-    const a = await atlas.helper.call("add", [1, 2, 3]);
-    const b = await atlas.helper.call("add", [10, 20]);
-    cell.set(a.sum + " then " + b.sum + ", call " + b.calls + ", " + (await atlas.helper.state()));
+const MAIN = `export function register(kandinsky) {
+  const cell = kandinsky.shell.statusItem({ id: "out", text: "idle" });
+  kandinsky.helper.on("news", (d) => cell.set("event: " + d.text));
+  kandinsky.registerCommand({ id: "add", title: "Helper demo: add", run: async () => {
+    const a = await kandinsky.helper.call("add", [1, 2, 3]);
+    const b = await kandinsky.helper.call("add", [10, 20]);
+    cell.set(a.sum + " then " + b.sum + ", call " + b.calls + ", " + (await kandinsky.helper.state()));
   } });
-  atlas.registerCommand({ id: "tell", title: "Helper demo: ask for an event", run: () => atlas.helper.call("tell") });
+  kandinsky.registerCommand({ id: "tell", title: "Helper demo: ask for an event", run: () => kandinsky.helper.call("tell") });
 }\n`;
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/helpy/helper.py", HELPER);
-  await put(request, ".atlas/plugins/helpy/main.js", MAIN);
-  await put(request, ".atlas/plugins/helpy/plugin.toml", 'title = "Helpy"\n\n[helper]\nrun = "python3 -u \\"$ATLAS_PLUGIN_DIR/helper.py\\""\n');
+  await put(request, ".kandinsky/plugins/helpy/helper.py", HELPER);
+  await put(request, ".kandinsky/plugins/helpy/main.js", MAIN);
+  await put(request, ".kandinsky/plugins/helpy/plugin.toml", 'title = "Helpy"\n\n[helper]\nrun = "python3 -u \\"$KANDINSKY_PLUGIN_DIR/helper.py\\""\n');
 });
 test.afterAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/helpy/main.js", "export function register() {}\n");
+  await put(request, ".kandinsky/plugins/helpy/main.js", "export function register() {}\n");
   await request.post("/api/plugins/helpy/helper/stop", { headers: H });
 });
 

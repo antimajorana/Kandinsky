@@ -1,4 +1,4 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.graphics.Color;
 import android.graphics.PointF;
@@ -14,11 +14,12 @@ import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.PageSource;
-import org.atlas.capture.Props;
-import org.atlas.capture.Look;
-import org.atlas.capture.NativePlugin;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.Legacy;
+import org.kandinsky.capture.PageSource;
+import org.kandinsky.capture.Props;
+import org.kandinsky.capture.Look;
+import org.kandinsky.capture.NativePlugin;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -82,7 +83,7 @@ final class NotepadView extends LinearLayout implements NativePlugin.Back {
     final boolean snap;
     /** The user's snaps, kept to train recognisers (Dataset). */
     final Dataset dataset;
-    /** Which recogniser snaps it (the setting `shapes`): openink's (the default), or Atlas's earlier one. */
+    /** Which recogniser snaps it (the setting `shapes`): openink's (the default), or Kandinsky's earlier one. */
     final boolean openinkShapes;
     /** A scribble over strokes erases them (the setting `scribble`). */
     final boolean scribble;
@@ -129,7 +130,7 @@ final class NotepadView extends LinearLayout implements NativePlugin.Back {
         snap = settings.optBoolean("snap", true);
         dataset = new Dataset(host);
         if (Figure.hand == null) Figure.hand = host.font("excalifont");
-        openinkShapes = !"atlas".equals(settings.optString("shapes", "openink"));
+        openinkShapes = !Legacy.ownShapes(settings.optString("shapes", "openink"));
         scribble = settings.optBoolean("scribble", true);
         pageMode = settings.optBoolean("page_mode", true);
         holdScreen();
@@ -325,7 +326,7 @@ final class NotepadView extends LinearLayout implements NativePlugin.Back {
             String p = vaultPathOf.getOrDefault(name, name);
             new Thread(() -> {
                 byte[] bytes = null;
-                try (java.io.InputStream in = host.read(p)) { bytes = org.atlas.capture.Bytes.all(in); } catch (Exception e) { /* below */ }
+                try (java.io.InputStream in = host.read(p)) { bytes = org.kandinsky.capture.Bytes.all(in); } catch (Exception e) { /* below */ }
                 byte[] got = bytes;
                 host.activity().runOnUiThread(() -> { if (got != null) insertPicture(got, low.endsWith(".png") ? "image/png" : "image/jpeg", target); else host.toast("Not read: " + name); });
             }, "link-picture").start();
@@ -570,7 +571,7 @@ final class NotepadView extends LinearLayout implements NativePlugin.Back {
 
     /** The papers as small previews of themselves (Page.drawPaper on a tile), wrapping; the page's own framed. */
     private View paperPicker(Page page) {
-        org.atlas.capture.Look l = look;
+        org.kandinsky.capture.Look l = look;
         android.widget.GridLayout g = new android.widget.GridLayout(host.activity());
         g.setColumnCount(4);
         g.setPadding(l.dp(8), 0, l.dp(8), l.dp(8));
@@ -690,13 +691,13 @@ final class NotepadView extends LinearLayout implements NativePlugin.Back {
         host.toast("Copied " + link);
     }
 
-    /** The drawing's companion note (`x.excalidraw` → `x.md`, atlas_core::drawing_note), when it is Atlas's own (it
+    /** The drawing's companion note (`x.excalidraw` → `x.md`, kandinsky_core::drawing_note), when it is Kandinsky's own (it
      *  carries the marker): it goes where the drawing goes. Null when there is none, or it is someone else's note. */
     private String companion(String drawing) {
         if (!drawing.endsWith(".excalidraw")) return null;
         String note = drawing.substring(0, drawing.length() - ".excalidraw".length()) + ".md";
         String text = host.exists(note) ? host.readText(note) : null;
-        return text != null && text.contains("<!-- atlas:drawing") ? note : null;
+        return Legacy.isDrawingNote(text) ? note : null;
     }
 
     /** The drawing's properties — its note's tags, project and topics — which the Library's Drawings filter by (the
@@ -1100,7 +1101,7 @@ final class NotepadView extends LinearLayout implements NativePlugin.Back {
 
     // ---- live: the other devices with this drawing open (a vault on a server: LiveSocket; the web side draw-live.ts) ----
 
-    private org.atlas.capture.LiveSocket live;
+    private org.kandinsky.capture.LiveSocket live;
     /** The page and the islands over it (full immersion adds its corner here). */
     private FrameLayout stage;
     /** The others' pens: where (scene units) and whether down, by device; their names. */
@@ -1111,7 +1112,7 @@ final class NotepadView extends LinearLayout implements NativePlugin.Back {
 
     private void joinLive() {
         scene.onLiveChange = () -> { removeCallbacks(sendLive); postDelayed(sendLive, 150); };
-        live = host.live(path, new org.atlas.capture.LiveSocket.Listener() {
+        live = host.live(path, new org.kandinsky.capture.LiveSocket.Listener() {
             @Override public void joined(int peer, String name) {
                 peerNames.put(peer, name);
                 try { live.send(new JSONObject().put("t", "els").put("els", scene.allElements()).put("name", "Boox")); } catch (JSONException e) { /* next change */ }
@@ -1168,7 +1169,7 @@ final class NotepadView extends LinearLayout implements NativePlugin.Back {
                 .put("roughness", 0).put("opacity", 100).put("points", points).put("pressures", pressures).put("simulatePressure", false)
                 .put("version", 1).put("versionNonce", 1).put("isDeleted", false).put("locked", true).put("groupIds", new org.json.JSONArray())
                 .put("frameId", JSONObject.NULL).put("boundElements", JSONObject.NULL).put("link", JSONObject.NULL).put("seed", 1)
-                .put("customData", new JSONObject().put("atlasPen", "fountain"));
+                .put("customData", new JSONObject().put("kandinskyPen", "fountain"));
             live.send(new JSONObject().put("t", "draft").put("el", el).put("name", "Boox"));
             drafted = true;
         } catch (JSONException e) { /* the next one */ }

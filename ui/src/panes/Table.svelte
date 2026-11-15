@@ -73,7 +73,7 @@
 
   // --- this device's view of the file: widths, hidden, frozen, order (by column name, so edits keep them) ---------
   type Prefs = { widths: Record<string, number>; hidden: string[]; frozen: number; order: string[] };
-  const prefKey = () => `atlas.table.view:${spec.path}`;
+  const prefKey = () => `kandinsky.table.view:${spec.path}`;
   let prefs = $state<Prefs>({ widths: {}, hidden: [], frozen: 0, order: [] });
   function loadPrefs() { prefs = { ...prefs, ...prefsStore.load(prefKey(), {}) }; }
   function savePrefs() { prefsStore.save(prefKey(), prefs); }

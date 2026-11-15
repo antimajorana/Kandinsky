@@ -1,8 +1,8 @@
-// Atlas's own TeX for other TeX readers: the macros KaTeX gets from Atlas (`\ket`, `\Tr`, `\mbox`…) as definitions a
+// Kandinsky's own TeX for other TeX readers: the macros KaTeX gets from Kandinsky (`\ket`, `\Tr`, `\mbox`…) as definitions a
 // document can carry. math.ts draws with the table; the Export plugin puts the
 // definitions in each document (the formulas keep `\ket` as written).
 
-/** The macros every formula in Atlas may use, as KaTeX's `macros` option writes them (`#1` for an argument). */
+/** The macros every formula in Kandinsky may use, as KaTeX's `macros` option writes them (`#1` for an argument). */
 export const MACROS: Record<string, string> = {
   "\\R": "\\mathbb{R}",
   "\\C": "\\mathbb{C}",

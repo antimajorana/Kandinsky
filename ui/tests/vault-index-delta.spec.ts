@@ -3,7 +3,7 @@ import { openFile } from "./open";
 
 // The page's list of every file (lib/vault.ts, what links resolve against) follows file events without fetching the
 // whole list again: a new file or folder is asked for alone (`/api/files?under=`), a removal drops what was under it.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const trash = (r: APIRequestContext, path: string) => r.post(`/api/fs/trash?path=${encodeURIComponent(path)}`, { headers: H });
 
 test("a new file, a new folder and a removal reach the links without listing the whole vault again", async ({ page, request }) => {

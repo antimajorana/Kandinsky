@@ -2,7 +2,7 @@
 //   catalog.library      a collection's index page: its base on the library page, shelves at the side (drag to move)
 //   catalog.item         the top of a catalogued note: cover, key fields, shelf chips, rating, the services holding it
 //   catalog.collections  every collection as a tile, and a box to capture into them (preview first, then add)
-// Rows come from Atlas's Bases engine (atlas.query over the collection's .base), so the files stay Obsidian's.
+// Rows come from Kandinsky's Bases engine (kandinsky.query over the collection's .base), so the files stay Obsidian's.
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 const linkText = (s) => String(s ?? "").replace(/^\[\[|\]\]$/g, "").split("|").pop();
@@ -26,13 +26,13 @@ function cellText(c) {
 }
 
 // An <img> address for a cover: a vault file through the core's thumbnails, an address as it is.
-async function coverUrl(atlas, c) {
+async function coverUrl(kandinsky, c) {
   if (!c) return null;
-  if (c.t === "link" && c.path) return atlas.thumbUrl(c.path, 360);
+  if (c.t === "link" && c.path) return kandinsky.thumbUrl(c.path, 360);
   const t = cellText(c).trim();
   if (!t) return null;
   if (isUrl(t)) return t;
-  return atlas.thumbUrl(linkText(t), 360);
+  return kandinsky.thumbUrl(linkText(t), 360);
 }
 
 // The services a note's properties point at: any address is a button (shape-based), and known IDs become addresses.
@@ -67,8 +67,8 @@ function services(props) {
 
 // The kinds the catalog knows (their library look), asked once per page and again when a kind file changes.
 let kindsAsk = null;
-function kinds(atlas) {
-  kindsAsk ??= atlas.helper.call("kinds").then((r) => (r?.kinds ?? []).map((k) => k.kind)).catch((e) => { kindsAsk = null; throw e; });
+function kinds(kandinsky) {
+  kindsAsk ??= kandinsky.helper.call("kinds").then((r) => (r?.kinds ?? []).map((k) => k.kind)).catch((e) => { kindsAsk = null; throw e; });
   return kindsAsk;
 }
 const titleOf = (k) => k.library?.title ?? String(k.folder).replace(/\/+$/, "").split("/").pop();
@@ -123,13 +123,13 @@ const COVER_KEYS = ["cover", "poster", "image", "thumbnail", "artwork"];
 const EMBEDDED = /!\[\[([^\]|#]+?\.(?:png|jpe?g|gif|webp|avif|bmp))(?:[|#][^\]]*)?\]\]|!\[[^\]]*\]\((\S+?\.(?:png|jpe?g|gif|webp|avif|bmp)(?:\?\S*)?)\)/i;
 // A note's cover when its kind's property is empty: another of the usual properties, else the first picture shown in
 // it
-async function noteCover(atlas, path) {
-  const props = await atlas.noteProps(path).catch(() => ({}));
+async function noteCover(kandinsky, path) {
+  const props = await kandinsky.noteProps(path).catch(() => ({}));
   for (const k of COVER_KEYS) {
     const v = Array.isArray(props[k]) ? props[k][0] : props[k];
     if (v !== null && v !== undefined && String(v).trim() && String(v) !== "null") return { t: "text", value: String(v) };
   }
-  const text = await atlas.readText(path).catch(() => "");
+  const text = await kandinsky.readText(path).catch(() => "");
   const m = EMBEDDED.exec(text);
   if (m) return { t: "text", value: m[1] ?? m[2] };
   // only its PDF (a paper, a scanned book): the page draws the PDF's first page
@@ -140,7 +140,7 @@ async function noteCover(atlas, path) {
 
 // A cover: the picture when it loads, else a tile tinted by the title with its initial (no empty frame for the many
 // items without a picture, or one that does not load). `path`: the note, asked when `cell` holds nothing.
-function coverBox(atlas, cell, title, path) {
+function coverBox(kandinsky, cell, title, path) {
   const t = String(title ?? "").trim();
   const box = el("div", "cat-cover cat-initial", t[0]?.toUpperCase() ?? "·");
   const hue = [...t].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
@@ -148,7 +148,7 @@ function coverBox(atlas, cell, title, path) {
   box.style.color = `hsl(${hue} 40% 42%)`;
   box.setAttribute("aria-hidden", "true");
   const empty = !cell || !cellText(cell).trim() || cellText(cell).trim() === "null";
-  void (empty && path ? noteCover(atlas, path) : Promise.resolve(cell)).then((c) => coverUrl(atlas, c)).then((src) => {
+  void (empty && path ? noteCover(kandinsky, path) : Promise.resolve(cell)).then((c) => coverUrl(kandinsky, c)).then((src) => {
     if (!src) return;
     const img = el("img", "cat-cover");
     img.alt = t;
@@ -165,24 +165,24 @@ function coverBox(atlas, cell, title, path) {
 // it reads the same files Obsidian does and needs no helper. The block's options say which property is the shelf
 // (`group`, in the order of `shelves`), the cover and the key fields; a card dragged onto a shelf at the side, or
 // the shelf chosen in its card, is written to the note as a link.
-function libraryBlock(atlas) {
+function libraryBlock(kandinsky) {
   return (host, block) => {
     const o = block.options ?? {};
     const base = String(o.base ?? "").trim();
     if (!base) { style(); host.replaceChildren(el("p", "cat-err", "This library has no base: add `base: Films/Films.base` to its options.")); return; }
-    return libraryPage(host, baseSource(atlas, base, block.note, o), atlas);
+    return libraryPage(host, baseSource(kandinsky, base, block.note, o), kandinsky);
   };
 }
 
 /** The library page (this plugin's view.js, built from ui/: the one every library of the vault is drawn with) over
  *  `source` in `host`, loaded when first drawn; returns the cleanup. */
-function libraryPage(host, source, atlas) {
+function libraryPage(host, source, kandinsky) {
   let off = null, gone = false;
-  import("./view.js").then((m) => { if (!gone) off = m.mountLibrary(host, source, atlas); }, (e) => { style(); host.replaceChildren(el("p", "cat-err", `The library page did not load: ${e?.message ?? e}`)); });
+  import("./view.js").then((m) => { if (!gone) off = m.mountLibrary(host, source, kandinsky); }, (e) => { style(); host.replaceChildren(el("p", "cat-err", `The library page did not load: ${e?.message ?? e}`)); });
   return () => { gone = true; off?.(); };
 }
 
-function baseSource(atlas, base, note, o) {
+function baseSource(kandinsky, base, note, o) {
   const group = o.group ? String(o.group) : null;
   const shelves = (Array.isArray(o.shelves) ? o.shelves : []).map(String);
   const keys = (Array.isArray(o.key) ? o.key : []).map(String);
@@ -193,11 +193,11 @@ function baseSource(atlas, base, note, o) {
   const cell = (row, key) => { const i = key ? at(key) : -1; return i >= 0 ? cellText(row.cells[i]) : ""; };
   const rows = new Map(); // a note's path → its row
   const raw = (shelf) => shelves.find((sh) => human(sh) === shelf) ?? shelf;
-  const move = (path, shelf) => atlas.writeProperty(path, group, `[[${raw(shelf)}]]`);
+  const move = (path, shelf) => kandinsky.writeProperty(path, group, `[[${raw(shelf)}]]`);
   return {
     id: `catalog.base.${slug(base)}`, title: name, icon: "library", noun: "items",
     async load() {
-      view = (await atlas.query(await atlas.readText(base), note)).views[0];
+      view = (await kandinsky.query(await kandinsky.readText(base), note)).views[0];
       rows.clear();
       return view.rows.map((row) => {
         rows.set(row.path, row);
@@ -209,7 +209,7 @@ function baseSource(atlas, base, note, o) {
         return {
           id: row.path, note: row.path, title,
           sub: keys.slice(0, 2).map((k) => cell(row, k)).filter(Boolean).join(" · "),
-          cover: async () => { const x = set ? c : await noteCover(atlas, row.path); return !x ? null : x.t === "link" && x.path ? x.path : cellText(x).trim() || null; },
+          cover: async () => { const x = set ? c : await noteCover(kandinsky, row.path); return !x ? null : x.t === "link" && x.path ? x.path : cellText(x).trim() || null; },
           flags: rating > 0 ? [{ label: `★ ${rating}` }] : [],
           groups: shelf ? [human(shelf)] : [],
           text: [row.path, ...row.cells.map(cellText)].join(" "),
@@ -231,7 +231,7 @@ function baseSource(atlas, base, note, o) {
         title: item.title,
         lines: item.sub ? [{ text: item.sub }] : [],
         fields: view.columns.map((c, i) => [c, cellText(row.cells[i])]).slice(1).filter(([c, v]) => v && ![cover, group].includes(c.key) && !keys.slice(0, 2).includes(c.key)).map(([c, v]) => [c.label, v]),
-        actions: [{ label: "Open note", icon: "edit", primary: true, run: () => atlas.open(item.id) }],
+        actions: [{ label: "Open note", icon: "edit", primary: true, run: () => kandinsky.open(item.id) }],
         choice: group && shelves.length ? { label: "Shelf", options: shelves.map((sh) => ({ label: human(sh), on: sh === now, run: () => move(item.id, human(sh)) })) } : undefined,
       };
     },
@@ -239,26 +239,26 @@ function baseSource(atlas, base, note, o) {
     // the collection's folder changed (a capture, an edit, another program)
     watch: (reload) => {
       const folder = base.split("/").slice(0, -1).join("/");
-      return atlas.onFilesChanged((paths) => { if (!paths.length || paths.some((p) => p === base || p.startsWith(`${folder}/`))) reload(); });
+      return kandinsky.onFilesChanged((paths) => { if (!paths.length || paths.some((p) => p === base || p.startsWith(`${folder}/`))) reload(); });
     },
-    open: (item) => atlas.open(item.id),
+    open: (item) => kandinsky.open(item.id),
   };
 }
 
 // ---- catalog.item -------------------------------------------------------------------------------------------------
-function itemBlock(atlas) {
+function itemBlock(kandinsky) {
   return (host, block) => {
     style();
     let gone = false;
     const draw = async () => {
       const props = (await block.props()) ?? {};
-      const list = await kinds(atlas).catch(() => []);
+      const list = await kinds(kandinsky).catch(() => []);
       const kind = kindFor(list, String(props.type ?? ""));
       const lib = kind?.library ?? {};
       const root = own(el("div", "cat-item"));
       const title = String(props.title ?? block.note.split("/").pop().replace(/\.md$/, ""));
       const cover = lib.cover ? props[lib.cover] : null;
-      root.append(coverBox(atlas, cover ? { t: "text", value: String(Array.isArray(cover) ? cover[0] : cover) } : null, title, block.note));
+      root.append(coverBox(kandinsky, cover ? { t: "text", value: String(Array.isArray(cover) ? cover[0] : cover) } : null, title, block.note));
 
       const main = el("div");
       const h = el("h2", "", title);
@@ -271,7 +271,7 @@ function itemBlock(atlas) {
         const line = el("div", "cat-line");
         for (const s of lib.shelves) {
           const chip = el("button", `cat-chip${now === s ? " on" : ""}`, human(s));
-          chip.onclick = () => void atlas.writeProperty(block.note, lib.group, `[[${s}]]`).then(draw);
+          chip.onclick = () => void kandinsky.writeProperty(block.note, lib.group, `[[${s}]]`).then(draw);
           line.append(chip);
         }
         main.append(line);
@@ -282,7 +282,7 @@ function itemBlock(atlas) {
       for (let i = 1; i <= 5; i++) {
         const b = el("button", i <= rating ? "on" : "", i <= rating ? "★" : "☆");
         b.title = `${i} / 5`;
-        b.onclick = () => void atlas.writeProperty(block.note, "rating", rating === i ? "" : String(i)).then(draw);
+        b.onclick = () => void kandinsky.writeProperty(block.note, "rating", rating === i ? "" : String(i)).then(draw);
         stars.append(b);
       }
       main.append(stars);
@@ -306,13 +306,13 @@ function itemBlock(atlas) {
         refresh.disabled = true;
         refresh.textContent = "Refreshing…";
         try {
-          const r = await atlas.helper.call("refresh", { path: block.note }, { timeout: 120 });
-          atlas.toast("Refreshed", r?.result?.outcome ? `${title}: ${r.result.outcome}` : title, "success");
-        } catch (e) { atlas.toast("Not refreshed", String(e?.message ?? e), "error"); }
+          const r = await kandinsky.helper.call("refresh", { path: block.note }, { timeout: 120 });
+          kandinsky.toast("Refreshed", r?.result?.outcome ? `${title}: ${r.result.outcome}` : title, "success");
+        } catch (e) { kandinsky.toast("Not refreshed", String(e?.message ?? e), "error"); }
         if (!gone) void draw();
       };
       actions.append(refresh);
-      if (kind) { const open = el("button", "cat-btn", `Open ${titleOf(kind)}`); open.onclick = () => atlas.open(indexOf(kind)); actions.append(open); }
+      if (kind) { const open = el("button", "cat-btn", `Open ${titleOf(kind)}`); open.onclick = () => kandinsky.open(indexOf(kind)); actions.append(open); }
       main.append(actions);
       root.append(main);
       if (!gone) host.replaceChildren(root);
@@ -326,7 +326,7 @@ function itemBlock(atlas) {
 /** The look-up-and-add form: what is pasted or typed recognised, its card (cover, collection, the sources asked),
  *  several matches offered as chips, then Add (or Open, when it is already in). The collections block and the Add
  *  dialog (add.js) are this one form. `ondone(path)`: the note added, or the one already there. */
-export function addBox(atlas, { ondone, text = "" }) {
+export function addBox(kandinsky, { ondone, text = "" }) {
   style();
   const box = el("div", "cat-add");
   const capture = el("form", "cat-capture");
@@ -354,11 +354,11 @@ export function addBox(atlas, { ondone, text = "" }) {
   const look = async (text, pick = {}) => {
     preview.replaceChildren(el("p", "cat-empty", "Recognising and asking the sources…"));
     try {
-      const r = await atlas.helper.call("preview", { text, ...pick }, { timeout: 120 });
+      const r = await kandinsky.helper.call("preview", { text, ...pick }, { timeout: 120 });
       const p = r.result ?? r;
       const f = p.merged?.fields ?? {};
       const card = el("div", "cat-preview");
-      card.append(coverBox(atlas, f.cover || f.poster ? { t: "text", value: String(f.cover || f.poster) } : null, f.title));
+      card.append(coverBox(kandinsky, f.cover || f.poster ? { t: "text", value: String(f.cover || f.poster) } : null, f.title));
       const info = el("div");
       info.append(el("b", "", `${p.exists ? "Already in" : "Add to"} ${p.label}: ${f.title ?? text}`), el("div", "cat-empty", p.path));
       const add = el("button", "cat-btn", p.exists ? "Open" : "Add");
@@ -366,11 +366,11 @@ export function addBox(atlas, { ondone, text = "" }) {
         if (p.exists) return ondone(p.path);
         add.disabled = true;
         try {
-          const done = await atlas.helper.call("add", { text, kind: p.candidate?.kind, ids: p.searched ? p.candidate?.ids : undefined }, { timeout: 120 });
+          const done = await kandinsky.helper.call("add", { text, kind: p.candidate?.kind, ids: p.searched ? p.candidate?.ids : undefined }, { timeout: 120 });
           preview.replaceChildren();
           input.value = "";
           ondone(done.result?.path ?? p.path);
-        } catch (err) { atlas.toast("Not added", String(err?.message ?? err), "error"); add.disabled = false; }
+        } catch (err) { kandinsky.toast("Not added", String(err?.message ?? err), "error"); add.disabled = false; }
       };
       const steps = el("ul", "steps");
       (r.steps ?? []).slice(-6).forEach((s) => steps.append(el("li", "", s.explanation ?? String(s))));
@@ -395,34 +395,34 @@ export function addBox(atlas, { ondone, text = "" }) {
   return box;
 }
 
-function collectionsBlock(atlas) {
+function collectionsBlock(kandinsky) {
   return (host, block) => {
     style();
     let gone = false;
     const root = own(el("div", "cat"));
-    const box = addBox(atlas, { ondone: (path) => { atlas.open(path); void tilesDraw(); } });
+    const box = addBox(kandinsky, { ondone: (path) => { kandinsky.open(path); void tilesDraw(); } });
     const tiles = el("div", "cat-tiles");
     root.append(box, tiles);
     host.replaceChildren(root);
 
     const tilesDraw = async () => {
       let list;
-      try { list = await kinds(atlas); } catch (e) { tiles.replaceChildren(el("p", "cat-err", `The catalog is not running: ${e?.message ?? e}`)); return; }
+      try { list = await kinds(kandinsky); } catch (e) { tiles.replaceChildren(el("p", "cat-err", `The catalog is not running: ${e?.message ?? e}`)); return; }
       const made = [];
       for (const k of list) {
         const folder = String(k.folder).replace(/\/+$/, "");
         const cover = k.library?.cover;
         const yaml = `filters:\n  and:\n    - file.inFolder(${JSON.stringify(folder)})\n    - type == ${JSON.stringify(k.type ?? k.name)}\nviews:\n  - type: table\n    name: Latest\n    order: [file.name${cover ? `, ${cover}` : ""}]\n    sort:\n      - property: file.ctime\n        direction: DESC\n    limit: 5\n`;
-        const r = await atlas.query(yaml, block.note).catch(() => null);
+        const r = await kandinsky.query(yaml, block.note).catch(() => null);
         const view = r?.views?.[0];
         if (!view?.count) continue;
         const tile = el("div", "cat-tile");
         const h = el("h4", "", titleOf(k));
         h.append(el("span", "", String(view.count)));
         const strip = el("div", "cat-strip");
-        view.rows.forEach((row) => strip.append(coverBox(atlas, cover ? row.cells[1] : null, cellText(row.cells[0]), row.path)));
+        view.rows.forEach((row) => strip.append(coverBox(kandinsky, cover ? row.cells[1] : null, cellText(row.cells[0]), row.path)));
         tile.append(h, strip);
-        tile.onclick = () => atlas.open(indexOf(k));
+        tile.onclick = () => kandinsky.open(indexOf(k));
         made.push(tile);
       }
       if (!gone) tiles.replaceChildren(...(made.length ? made : [el("p", "cat-empty", "No collections yet: capture something above.")]));
@@ -465,7 +465,7 @@ const names = (c) => (c?.t === "list" ? c.items ?? [] : c ? [c] : []).map((x) =>
 
 /** The library of the catalog's kinds whose `libraryOf` is `title`; every kind when `title` is null (the Library
  *  app block). Each kind with notes is a tab; genres, topics and tags are the filters beside the shelves. */
-function librarySource(atlas, title = null) {
+function librarySource(kandinsky, title = null) {
   let data = null; // { at, kinds: [{ k, rows }] }, from the last load
   const found = new Map(); // a note's path → { k, row }
   const value = (row, prop) => { const i = data.at(prop); return i >= 0 ? row.cells[i] : null; };
@@ -476,7 +476,7 @@ function librarySource(atlas, title = null) {
   const coverOf = (k, row) => async () => {
     const cell = k.library?.cover ? value(row, vaultName(k, k.library.cover)) : null;
     const set = cell && cellText(cell).trim() && cellText(cell).trim() !== "null";
-    const c = set ? cell : await noteCover(atlas, row.path);
+    const c = set ? cell : await noteCover(kandinsky, row.path);
     if (!c) return null;
     return c.t === "link" && c.path ? c.path : cellText(c).trim() || null;
   };
@@ -485,10 +485,10 @@ function librarySource(atlas, title = null) {
     id: title === null ? "catalog" : `catalog.${slug(title)}`, title: title ?? "Library", icon: "library", noun: "items",
     // one query for every note with a type; each kind takes the notes of its type (a kind's `type`, else its name)
     async load() {
-      const list = (await kinds(atlas)).filter(mine);
+      const list = (await kinds(kandinsky)).filter(mine);
       const props = [...new Set(["type", ...FACETS, ...EXTRA, ...list.flatMap(propsOf)])];
       const yaml = `filters:\n  and:\n    - file.hasProperty("type")\nviews:\n  - type: table\n    name: all\n    order:\n${["file.name", "file.ctime", ...props].map((p) => `      - ${JSON.stringify(p)}`).join("\n")}\n`;
-      const view = (await atlas.query(yaml)).views[0];
+      const view = (await kandinsky.query(yaml)).views[0];
       const at = (key) => view.columns.findIndex((c) => c.key === key || c.id === key || c.id === `note.${key}`);
       const byType = new Map();
       for (const row of view.rows) {
@@ -528,7 +528,7 @@ function librarySource(atlas, title = null) {
       for (const i of items) {
         const { k } = found.get(i.id) ?? {};
         const g = k?.library?.group;
-        if (g) await atlas.writeProperty(i.id, vaultName(k, g), `[[${(k.library.shelves ?? []).find((sh) => human(sh) === shelf) ?? shelf}]]`);
+        if (g) await kandinsky.writeProperty(i.id, vaultName(k, g), `[[${(k.library.shelves ?? []).find((sh) => human(sh) === shelf) ?? shelf}]]`);
       }
     },
     layouts: ["covers", "list"],
@@ -538,12 +538,12 @@ function librarySource(atlas, title = null) {
     async detail(item) {
       const { k, row } = found.get(item.id);
       // the services it is in, from all its properties (the note's own, not only the shown ones)
-      const props = await atlas.noteProps(item.id).catch(() => ({}));
+      const props = await kandinsky.noteProps(item.id).catch(() => ({}));
       const cover = vaultName(k, k.library?.cover ?? "");
       const g = k.library?.group;
       const now = g ? linkText(props[vaultName(k, g)]) : "";
       // what it is about: the note's text after its blocks (the kind's `body`, a film's description)
-      const about = await atlas.readText(item.id).then(plainAbout, () => "");
+      const about = await kandinsky.readText(item.id).then(plainAbout, () => "");
       const name = item.id.split("/").pop().replace(/\.md$/, "");
       // the fields Edit offers: the kind's own, as the note names them
       // (single values only: a list of links — genres, cast — is edited in the note, where its links stay links)
@@ -555,18 +555,18 @@ function librarySource(atlas, title = null) {
         lines: (k.library?.key ?? []).map((p) => cellText(value(row, vaultName(k, p)))).filter(Boolean).length ? [{ text: item.sub ?? "" }] : [],
         fields: propsOf(k).filter((p) => p !== "title" && p !== cover && !(k.library?.key ?? []).map((x) => vaultName(k, x)).includes(p)).map((p) => [human(p), cellText(value(row, p))]).filter(([, v]) => v),
         actions: [
-          { label: "Open note", icon: "edit", primary: true, run: () => atlas.open(item.id) },
-          ...links.slice(0, 1).map((l) => ({ label: `Open on ${l.label}`, icon: "link", run: () => (atlas.openLink ? atlas.openLink(l.url) : window.open(l.url, "_blank", "noopener")) })), // as Atlas opens any link
-          { label: "Copy link", icon: "copy", title: `[[${name}]]: to link it from a note`, run: () => navigator.clipboard.writeText(`[[${name}]]`).then(() => atlas.toast("Copied", `[[${name}]]`)) },
-          { label: "Update", icon: "refresh", title: "Fetch its details again from the services it is in (your own text is kept)", run: () => atlas.helper.call("refresh", { path: item.id }, { timeout: 120 }) },
+          { label: "Open note", icon: "edit", primary: true, run: () => kandinsky.open(item.id) },
+          ...links.slice(0, 1).map((l) => ({ label: `Open on ${l.label}`, icon: "link", run: () => (kandinsky.openLink ? kandinsky.openLink(l.url) : window.open(l.url, "_blank", "noopener")) })), // as Kandinsky opens any link
+          { label: "Copy link", icon: "copy", title: `[[${name}]]: to link it from a note`, run: () => navigator.clipboard.writeText(`[[${name}]]`).then(() => kandinsky.toast("Copied", `[[${name}]]`)) },
+          { label: "Update", icon: "refresh", title: "Fetch its details again from the services it is in (your own text is kept)", run: () => kandinsky.helper.call("refresh", { path: item.id }, { timeout: 120 }) },
           // as References' Edit: its fields in place, each written to the note's property
-          { label: "Edit", edit: { fields: editable.map((p) => ({ key: p, label: human(p), value: fieldText(props[p]), half: editable.length > 3 })), save: async (v) => { for (const p of editable) if (v[p] !== fieldText(props[p])) await atlas.writeProperty(item.id, p, v[p]); } } },
-          ...(atlas.trash ? [{ label: "Delete…", danger: true, confirm: { title: `Move ${item.title} to the Trash?`, hint: "Its note goes to .atlas/trash/, where it can be taken back.", button: "Delete" }, run: () => atlas.trash(item.id) }] : []),
+          { label: "Edit", edit: { fields: editable.map((p) => ({ key: p, label: human(p), value: fieldText(props[p]), half: editable.length > 3 })), save: async (v) => { for (const p of editable) if (v[p] !== fieldText(props[p])) await kandinsky.writeProperty(item.id, p, v[p]); } } },
+          ...(kandinsky.trash ? [{ label: "Delete…", danger: true, confirm: { title: `Move ${item.title} to the Trash?`, hint: "Its note goes to .kandinsky/trash/, where it can be taken back.", button: "Delete" }, run: () => kandinsky.trash(item.id) }] : []),
         ],
         links: links,
         // its shelf, changed in place (the kind's `group` property, as a link like the catalog writes it)
         choice: g && (k.library?.shelves ?? []).length
-          ? { label: "Shelf", options: k.library.shelves.map((sh) => ({ label: human(sh), on: sh === now, run: () => atlas.writeProperty(item.id, vaultName(k, g), `[[${sh}]]`) })) }
+          ? { label: "Shelf", options: k.library.shelves.map((sh) => ({ label: human(sh), on: sh === now, run: () => kandinsky.writeProperty(item.id, vaultName(k, g), `[[${sh}]]`) })) }
           : undefined,
         body: about ? { title: "About", text: about.length > 1200 ? `${about.slice(0, 1200)}…` : about } : undefined,
       };
@@ -574,16 +574,16 @@ function librarySource(atlas, title = null) {
     add: {
       placeholder: `Add ${first === "Library" ? "a" : `to ${first.toLowerCase()}:`} link, ISBN or title`, busy: "Adding…",
       async run(text) {
-        const path = await addChoosing(atlas, text);
-        if (path) atlas.toast("Added", path, "success");
+        const path = await addChoosing(kandinsky, text);
+        if (path) kandinsky.toast("Added", path, "success");
         return path;
       },
     },
-    watch: (reload) => atlas.onFilesChanged((paths) => {
-      if (!paths.length || paths.some((p) => p.startsWith(".atlas/kinds/"))) kindsAsk = null;
-      if (!paths.length || paths.some((p) => p.endsWith(".md") || p.startsWith(".atlas/kinds/"))) reload();
+    watch: (reload) => kandinsky.onFilesChanged((paths) => {
+      if (!paths.length || paths.some((p) => p.startsWith(".kandinsky/kinds/"))) kindsAsk = null;
+      if (!paths.length || paths.some((p) => p.endsWith(".md") || p.startsWith(".kandinsky/kinds/"))) reload();
     }),
-    open: (item) => atlas.open(item.id),
+    open: (item) => kandinsky.open(item.id),
   };
 }
 
@@ -592,13 +592,13 @@ const fieldText = (v) => (Array.isArray(v) ? v.map((x) => linkText(String(x))).j
 
 /** Adds what `text` names. Words several things match are offered to choose from first (the collections box's
  *  choice, as a picker), then the one picked is added by its IDs. The added note's path; null: nothing chosen. */
-async function addChoosing(atlas, text) {
-  const r = await atlas.helper.call("preview", { text }, { timeout: 120 });
+async function addChoosing(kandinsky, text) {
+  const r = await kandinsky.helper.call("preview", { text }, { timeout: 120 });
   const p = r.result ?? r;
   let pick = {};
   if (p.searched && (p.others ?? []).length) {
     const all = [p.candidate, ...p.others];
-    const at = await new Promise((done) => atlas.pick({
+    const at = await new Promise((done) => kandinsky.pick({
       placeholder: `Several things match “${text}” — which one?`, tag: "Catalog", icon: "library",
       items: all.map((c, i) => ({ value: String(i), title: c.label ?? human(c.kind), detail: `${human(c.kind)} · ${Object.entries(c.ids ?? {}).map(([k, v]) => `${k} ${v}`).join(", ")}` })),
       onpick: (v) => done(v == null ? null : all[Number(v)]),
@@ -607,7 +607,7 @@ async function addChoosing(atlas, text) {
     if (!at) return null;
     pick = { kind: at.kind, ids: at.ids };
   }
-  const done = await atlas.helper.call("add", { text, ...pick }, { timeout: 120 });
+  const done = await kandinsky.helper.call("add", { text, ...pick }, { timeout: 120 });
   if (!done.result?.path) throw new Error("nothing was recognised in it");
   return done.result.path;
 }
@@ -624,34 +624,34 @@ function plainAbout(text) {
  *  or Music tab; the first one of a kind is added with the catalog's Add command, and its library appears then.
  *  Registered as the kinds are known, again when a kind file changes, and (settled) when notes change. References'
  *  kinds (papers) are left to References. */
-function registerLibraries(atlas) {
+function registerLibraries(kandinsky) {
   let gone = [], shown = "", timer = 0;
-  const make = () => kinds(atlas).then(async (list) => {
+  const make = () => kinds(kandinsky).then(async (list) => {
     const titles = [...new Set(list.map(libraryOf))].filter((t) => t !== "References");
-    const sources = titles.map((t) => ({ t, src: librarySource(atlas, t) }));
+    const sources = titles.map((t) => ({ t, src: librarySource(kandinsky, t) }));
     const held = await Promise.all(sources.map(({ src }) => src.load().then((items) => items.length > 0, () => false)));
     const keep = sources.filter((_, i) => held[i]);
     const key = keep.map((x) => x.t).join("\n");
     if (key === shown) return; // the same libraries: nothing redrawn
     shown = key;
     gone.forEach((f) => f());
-    gone = keep.map(({ t, src }) => atlas.registerLibrary({ ...src, icon: list.find((k) => libraryOf(k) === t)?.library?.icon ?? "library" }));
+    gone = keep.map(({ t, src }) => kandinsky.registerLibrary({ ...src, icon: list.find((k) => libraryOf(k) === t)?.library?.icon ?? "library" }));
   }, () => {});
   void make();
-  atlas.onFilesChanged((paths) => {
-    if (!paths.length || paths.some((p) => p.startsWith(".atlas/kinds/"))) { kindsAsk = null; void make(); return; }
+  kandinsky.onFilesChanged((paths) => {
+    if (!paths.length || paths.some((p) => p.startsWith(".kandinsky/kinds/"))) { kindsAsk = null; void make(); return; }
     if (paths.some((p) => p.endsWith(".md"))) { clearTimeout(timer); timer = setTimeout(() => void make(), 3000); } // a note of a new kind
   });
 }
 
-function appBlock(atlas) {
+function appBlock(kandinsky) {
   return (host) => {
-    return libraryPage(own(host), librarySource(atlas), atlas);
+    return libraryPage(own(host), librarySource(kandinsky), kandinsky);
   };
 }
 
-export function register(atlas) {
-  atlas.registerBlock("catalog.library", libraryBlock(atlas), {
+export function register(kandinsky) {
+  kandinsky.registerBlock("catalog.library", libraryBlock(kandinsky), {
     title: "Catalog: a collection",
     options: [
       { key: "base", label: "Base file", kind: "text" },
@@ -660,23 +660,23 @@ export function register(atlas) {
       { key: "cover", label: "Cover property", kind: "text" },
     ],
   });
-  atlas.registerBlock("catalog.item", itemBlock(atlas), { title: "Catalog: this item" });
-  atlas.registerBlock("catalog.collections", collectionsBlock(atlas), { title: "Catalog: all collections" });
-  atlas.registerBlock("catalog.app", appBlock(atlas), { title: "Catalog: the Library app (every kind)" });
+  kandinsky.registerBlock("catalog.item", itemBlock(kandinsky), { title: "Catalog: this item" });
+  kandinsky.registerBlock("catalog.collections", collectionsBlock(kandinsky), { title: "Catalog: all collections" });
+  kandinsky.registerBlock("catalog.app", appBlock(kandinsky), { title: "Catalog: the Library app (every kind)" });
   // the vault's libraries: a tab of the Libraries page (this plugin's pane; the phone's Library) per group of kinds,
   // known from the helper (none without one: a vault that only shows the page)
-  if (atlas.plugin.has_helper) registerLibraries(atlas);
+  if (kandinsky.plugin.has_helper) registerLibraries(kandinsky);
   // from anywhere: a link, DOI, arXiv id or ISBN into its library (what Clip's "Clip a web page…" did, for every kind)
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "add", title: "Add to the catalog…",
-    run: () => (atlas.version ?? 0) >= 23 ? atlas.openDialog(undefined, { title: "Add to the catalog", width: 640, height: 460, view: "add.js" }) : atlas.pick({
+    run: () => (kandinsky.version ?? 0) >= 23 ? kandinsky.openDialog(undefined, { title: "Add to the catalog", width: 640, height: 460, view: "add.js" }) : kandinsky.pick({
       placeholder: "A link, DOI, arXiv id, ISBN or title…", tag: "Catalog", icon: "library", items: [], typed: (t) => `Add ${t}`,
       onpick: async (text) => {
         if (!text?.trim()) return;
         try {
-          const path = await addChoosing(atlas, text.trim());
-          if (path) { atlas.open(path); atlas.toast("Added", path, "success"); }
-        } catch (err) { atlas.toast("Not added", String(err?.message ?? err), "error"); }
+          const path = await addChoosing(kandinsky, text.trim());
+          if (path) { kandinsky.open(path); kandinsky.toast("Added", path, "success"); }
+        } catch (err) { kandinsky.toast("Not added", String(err?.message ?? err), "error"); }
       },
     }),
   });

@@ -3,7 +3,7 @@ import type { WebLinks } from "./WebLinks";
 import type { WebTabView } from "./WebTabView";
 
 /**
- * The web: links, and ad blocking in Atlas's browsing windows (docs/design/WEB-WINDOWS.md).
+ * The web: links, and ad blocking in Kandinsky's browsing windows (docs/design/WEB-WINDOWS.md).
  */
 export type WebConfig = { 
 /**
@@ -11,7 +11,7 @@ export type WebConfig = {
  */
 open_links: WebLinks, 
 /**
- * Block ads and trackers in Atlas's browsing windows: WebKit's own content blocker, fed from the lists below.
+ * Block ads and trackers in Kandinsky's browsing windows: WebKit's own content blocker, fed from the lists below.
  */
 block_ads: boolean, 
 /**

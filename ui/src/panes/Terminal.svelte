@@ -21,7 +21,7 @@
   /** This window, the same across a reload of it (sessionStorage), another in a second window or test. */
   function windowKey(): string {
     try {
-      const at = vaultScoped("atlas-window");
+      const at = vaultScoped("kandinsky-window");
       let k = sessionStorage.getItem(at);
       if (!k) { k = crypto.randomUUID(); sessionStorage.setItem(at, k); }
       return k;
@@ -147,7 +147,7 @@
     // DEC mode 2031 (Contour's colour-palette updates): a program that sets it is told when the theme flips
     // (`CSI ? 997 ; 1|2 n`, dark|light) and asks OSC 11 again — Claude Code since 2.1.30x asks only then.
     // Kept per tab across a window reload, since the replayed output may no longer hold the `?2031h`.
-    const notifyKey = `atlas-theme-notify/${windowKey()}/${panel.id}`;
+    const notifyKey = `kandinsky-theme-notify/${windowKey()}/${panel.id}`;
     let themeNotify = (() => { try { return sessionStorage.getItem(notifyKey) === "1"; } catch { return false; } })();
     const setThemeNotify = (on: boolean) => {
       themeNotify = on;
@@ -204,11 +204,11 @@
     const ro = new ResizeObserver(() => {
       clearTimeout(settle);
       settle = setTimeout(() => {
-        if (host.offsetWidth > 0 && !document.body.classList.contains("atlas-resizing")) { try { fit.fit(); } catch { /* hidden */ } }
+        if (host.offsetWidth > 0 && !document.body.classList.contains("kandinsky-resizing")) { try { fit.fit(); } catch { /* hidden */ } }
       }, 120);
     });
     const onResizeEnd = () => { clearTimeout(settle); settle = setTimeout(() => { if (host.offsetWidth > 0) { try { fit.fit(); } catch { /* hidden */ } } }, 30); };
-    window.addEventListener("atlas-resize-end", onResizeEnd);
+    window.addEventListener("kandinsky-resize-end", onResizeEnd);
 
     // Measure with the real font, or xterm's cell grid is computed for the fallback.
     void Promise.all([document.fonts.load('13px "JetBrains Mono"'), document.fonts.load('13px "Kandinsky Term Symbols"', "⎿")]).finally(() => {
@@ -268,7 +268,7 @@
       offSettings();
       window.removeEventListener(PANE_ZOOM_EVENT, onZoom);
       clearTimeout(settle);
-      window.removeEventListener("atlas-resize-end", onResizeEnd);
+      window.removeEventListener("kandinsky-resize-end", onResizeEnd);
       themeObs.disconnect();
       ro.disconnect();
       // the tab closed: its program ends; still in the dock (moved, redrawn): the next mount takes it over

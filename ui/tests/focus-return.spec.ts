@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 // What opens over the page gives the focus back when it closes: the keys typed next go to the note again, not nowhere.
 test("the command bar and the capture popup give the focus back to the note when they close", async ({ page, request }) => {
-  const H = { "x-atlas": "1" };
+  const H = { "x-kandinsky": "1" };
   await request.put("/api/file", { headers: H, data: { path: "notes/focus-return.md", text: "start\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();

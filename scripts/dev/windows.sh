@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# windows.sh — Atlas for Windows, built and run from Linux (docs/design/DESIGN-desktop-ports.md).
+# windows.sh — Kandinsky for Windows, built and run from Linux (docs/design/DESIGN-desktop-ports.md).
 # Builds with cargo-xwin (the x86_64-pc-windows-msvc target, Microsoft's CRT and SDK fetched into local/xwin) and runs
 # the programs under Wine in a prefix of the repo's own (local/wine), never ~/.wine. Every build goes through heavy.sh.
 #   bash scripts/dev/windows.sh build [-p crate …]    default: the core, the CLI and the desktop app
@@ -15,7 +15,7 @@ export WINEPREFIX="$root/local/wine" WINEDEBUG="${WINEDEBUG:--all}" WINEARCH=win
 # cargo test runs each test binary through Wine
 export CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER=wine
 mkdir -p "$XWIN_CACHE_DIR"
-unset ATLAS_UI_DIR # an Atlas terminal points it at the installed (Linux) UI
+unset KANDINSKY_UI_DIR # an Kandinsky terminal points it at the installed (Linux) UI
 
 prefix() {
   [ -d "$WINEPREFIX/drive_c" ] && return
@@ -26,13 +26,13 @@ prefix() {
 cmd="${1:-}"; shift || true
 case "$cmd" in
   build)
-    [ $# -gt 0 ] || set -- -p atlas-core -p atlas -p atlas-app
+    [ $# -gt 0 ] || set -- -p kandinsky-core -p kandinsky -p kandinsky-app
     echo "[windows] cargo xwin build --target $target $*" >&2
     exec bash "$root/scripts/dev/heavy.sh" cargo xwin build --locked --target "$target" "$@"
     ;;
   test)
     prefix
-    [ $# -gt 0 ] || set -- -p atlas-core
+    [ $# -gt 0 ] || set -- -p kandinsky-core
     echo "[windows] cargo xwin test --target $target $* (under Wine)" >&2
     exec bash "$root/scripts/dev/heavy.sh" cargo xwin test --locked --target "$target" "$@"
     ;;

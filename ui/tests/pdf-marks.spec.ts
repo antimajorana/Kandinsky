@@ -3,7 +3,7 @@ import { quoteOf, type TextPiece } from "../src/lib/kandinsky-mark";
 import { addPageFrame, marksToElements, type PageBox } from "./fixtures/old-pdf-drawing";
 import type { El } from "../src/lib/pdf-ink-scene";
 
-// A PDF's marks carry `atlasMark` (lib/atlas-mark.ts): a highlight's boxes in PDF points and its words, found from the
+// A PDF's marks carry `kandinskyMark` (lib/kandinsky-mark.ts): a highlight's boxes in PDF points and its words, found from the
 // page's text, so any engine can anchor it again. Two lines of 10-pt-wide characters, as pdf.js's getTextContent gives.
 const line = (str: string, y: number, hasEOL = true): TextPiece => ({ str, transform: [10, 0, 0, 10, 0, y], width: str.length * 10, height: 10, hasEOL });
 const TEXT = [line("The quick brown fox", 100), line("jumps over the lazy dog", 85, false)];

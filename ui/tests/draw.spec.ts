@@ -13,12 +13,12 @@ test.beforeAll(() => {
   mkdirSync(join(WS, "notes/drawings"), { recursive: true });
   mkdirSync(join(WS, "fixtures"), { recursive: true });
   writeRnote();
-  const plugin = join(WS, ".atlas/plugins/rnote");
+  const plugin = join(WS, ".kandinsky/plugins/rnote");
   mkdirSync(plugin, { recursive: true });
   for (const f of ["plugin.toml", "main.js", "view.js", "convert.js"]) copyFileSync(new URL(`../../plugins/beta/rnote/${f}`, import.meta.url), join(plugin, f));
 });
 
-test.afterAll(() => rmSync(join(WS, ".atlas/plugins/rnote"), { recursive: true, force: true }));
+test.afterAll(() => rmSync(join(WS, ".kandinsky/plugins/rnote"), { recursive: true, force: true }));
 
 function writeRnote() {
   const stroke = { brushstroke: { path: { start: { pos: [10, 20], pressure: 0.2 }, segments: [{ lineto: { end: { pos: [60, 80], pressure: 0.6 } } }] },
@@ -87,7 +87,7 @@ test("New drawing: draw a rectangle, autosave writes .excalidraw + .svg, fonts s
 // autosave looked like someone else's change — "This drawing changed on disk" while drawing. Same text = our write.
 test("an mtime that moves under the same content is not a conflict: autosave goes on, no banner", async ({ page }) => {
   const file = join(WS, "notes/drawings/drift.excalidraw");
-  writeFileSync(file, JSON.stringify({ type: "excalidraw", version: 2, source: "atlas", elements: [], appState: {}, files: {} }));
+  writeFileSync(file, JSON.stringify({ type: "excalidraw", version: 2, source: "kandinsky", elements: [], appState: {}, files: {} }));
   const t = track(page);
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
@@ -114,8 +114,8 @@ test("an mtime that moves under the same content is not a conflict: autosave goe
 });
 
 test("a drawing converted from the Obsidian vault opens with its strokes", async ({ page }) => {
-  const converted = process.env.ATLAS_TEST_DRAWINGS ?? "";
-  test.skip(!converted || !existsSync(converted), "set ATLAS_TEST_DRAWINGS to a folder of drawings converted from an Obsidian vault");
+  const converted = process.env.KANDINSKY_TEST_DRAWINGS ?? "";
+  test.skip(!converted || !existsSync(converted), "set KANDINSKY_TEST_DRAWINGS to a folder of drawings converted from an Obsidian vault");
   const src = readdirSync(converted).find((f) => f.endsWith(".excalidraw"))!;
   copyFileSync(join(converted, src), join(WS, "notes/drawings/from-vault.excalidraw"));
   const n = JSON.parse(readFileSync(join(converted, src), "utf8")).elements.length;
@@ -170,11 +170,11 @@ test("a pen's folded moves all reach the stroke: one event carrying 20 samples d
     await new Promise((r) => requestAnimationFrame(r));
     window.dispatchEvent(new PointerEvent("pointerup", { ...base, ...at(20), buttons: 0, button: 0 }));
     await new Promise((r) => setTimeout(r, 1500)); // the autosave
-    const tree = await fetch("/api/tree?path=notes/drawings", { headers: { "x-atlas": "1" } }).then((r) => r.json());
+    const tree = await fetch("/api/tree?path=notes/drawings", { headers: { "x-kandinsky": "1" } }).then((r) => r.json());
     let most = 0, width = 0;
     for (const e of tree as { path: string }[]) {
       if (!e.path.endsWith(".excalidraw")) continue;
-      const f = await fetch(`/api/file?path=${encodeURIComponent(e.path)}`, { headers: { "x-atlas": "1" } }).then((r) => r.json());
+      const f = await fetch(`/api/file?path=${encodeURIComponent(e.path)}`, { headers: { "x-kandinsky": "1" } }).then((r) => r.json());
       for (const el of JSON.parse(f.text).elements) if (el.type === "freedraw" && el.points.length > most) { most = el.points.length; width = el.width; }
     }
     return [most, width];
@@ -197,7 +197,7 @@ test("a new drawing asks its page format, then its paper, and starts with that p
   await expect(page.locator(".draw-pane canvas.interactive")).toBeVisible({ timeout: 15_000 });
   const dir = join(WS, "notes/drawings");
   const newest = () => readdirSync(dir).filter((f) => /^\d{4}-.*\.excalidraw$/.test(f)).map((f) => join(dir, f)).sort().pop()!; // the dated ones: new drawings
-  await expect.poll(() => { const s = JSON.parse(readFileSync(newest(), "utf8")); const f = s.elements.find((e: { type: string }) => e.type === "frame"); return f ? [f.width, f.height, f.locked, f.customData?.atlasTemplate] : null; }).toEqual([1059, 794, true, "lines"]);
+  await expect.poll(() => { const s = JSON.parse(readFileSync(newest(), "utf8")); const f = s.elements.find((e: { type: string }) => e.type === "frame"); return f ? [f.width, f.height, f.locked, f.customData?.kandinskyTemplate] : null; }).toEqual([1059, 794, true, "lines"]);
 });
 
 // A canvas with a corner: it opens at its corner, and the view never goes left of
@@ -226,7 +226,7 @@ test("a page's stroke running past the page's edge is drawn beyond it", async ({
   const base = { angle: 0, strokeColor: "#000000", backgroundColor: "transparent", fillStyle: "solid", strokeWidth: 4, strokeStyle: "solid", roughness: 0, opacity: 100, groupIds: [], roundness: null, seed: 1, version: 1, versionNonce: 1, isDeleted: false, boundElements: null, updated: 1, link: null, locked: false };
   const frame = { ...base, strokeWidth: 1, id: "p1", type: "frame", x: 0, y: 0, width: 400, height: 500, name: "Page 1", frameId: null, locked: true };
   const stroke = { ...base, id: "s1", type: "freedraw", x: 300, y: 100, width: 300, height: 0, points: [[0, 0], [100, 0], [200, 0], [300, 0]], pressures: [], simulatePressure: false, lastCommittedPoint: null, frameId: "p1" };
-  await page.request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "draw-edge/edge.excalidraw", text: JSON.stringify({ type: "excalidraw", version: 2, elements: [frame, stroke], appState: {}, files: {} }) } });
+  await page.request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "draw-edge/edge.excalidraw", text: JSON.stringify({ type: "excalidraw", version: 2, elements: [frame, stroke], appState: {}, files: {} }) } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Control+p"); await page.keyboard.type("edge.excalidraw");

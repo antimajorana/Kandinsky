@@ -22,7 +22,7 @@ const known = new Set<string>(); // ids that resolved (the chip is plain); other
 const missing = new Set<string>();
 let watched = false;
 function mark(id: string) {
-  return Decoration.mark({ class: `atlas-mention${missing.has(id) ? " is-missing" : ""}`, attributes: { "data-mention": id } });
+  return Decoration.mark({ class: `kandinsky-mention${missing.has(id) ? " is-missing" : ""}`, attributes: { "data-mention": id } });
 }
 
 function build(view: EditorView): DecorationSet {
@@ -64,7 +64,7 @@ const chips = ViewPlugin.fromClass(class {
   decorations: (v) => v.decorations,
   eventHandlers: {
     mousedown(e) {
-      const el = (e.target as HTMLElement).closest<HTMLElement>(".atlas-mention");
+      const el = (e.target as HTMLElement).closest<HTMLElement>(".kandinsky-mention");
       if (!el || e.altKey || e.button !== 0) return false; // Alt+click: edit the text
       e.preventDefault();
       void resolveEntity(el.dataset.mention!).then((x) => x?.open());
@@ -83,7 +83,7 @@ const card = hoverTooltip(async (view, pos) => {
       pos: start, end, above: true,
       create: () => {
         const dom = document.createElement("div");
-        dom.className = "atlas-mention-card";
+        dom.className = "kandinsky-mention-card";
         const h = Object.assign(document.createElement("div"), { className: "t", textContent: x ? x.title : `@${m[2]}` });
         const s = Object.assign(document.createElement("div"), { className: "s", textContent: x ? x.subtitle ?? "" : "Not in the Library (or any provider) — a typo, or a paper to add." });
         dom.append(h, s);

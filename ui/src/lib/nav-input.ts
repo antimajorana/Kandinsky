@@ -26,11 +26,11 @@ function ownsWheel(el: Element | null): boolean {
   return !!el?.closest?.("[data-wheel], .excalidraw");
 }
 
-/** Back / forward offered first to the pane under the pointer (`atlas-nav`, cancelable, detail: -1 | 1): the explorer
+/** Back / forward offered first to the pane under the pointer (`kandinsky-nav`, cancelable, detail: -1 | 1): the explorer
  *  moves through its own folders; a pane that cancels it has used it. */
 function paneTakes(target: EventTarget | null, step: -1 | 1): boolean {
   const el = target instanceof Element ? target : null;
-  return !!el && !el.dispatchEvent(new CustomEvent("atlas-nav", { detail: step, bubbles: true, cancelable: true }));
+  return !!el && !el.dispatchEvent(new CustomEvent("kandinsky-nav", { detail: step, bubbles: true, cancelable: true }));
 }
 
 export function installNavInput(): () => void {

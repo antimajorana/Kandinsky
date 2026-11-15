@@ -1,6 +1,6 @@
 //! A plugin's media — an audiobook, a film, a podcast — played by the page from a server that wants the plugin's secret
 //! on every request (Audiobookshelf's token), without the secret ever reaching the page (docs/design/DESIGN-audiobooks.md;
-//! PLUGIN-API.md `atlas.media`). The plugin asks for an address (`POST /api/plugins/<id>/media`): the core checks the
+//! PLUGIN-API.md `kandinsky.media`). The plugin asks for an address (`POST /api/plugins/<id>/media`): the core checks the
 //! address against the plugin's `[permissions] net`, fills its headers in (secrets, a kept sign-in's cookie) and keeps
 //! them in memory under a random ticket; `<audio src>` then asks `/media/<ticket>`, which the core answers by asking the
 //! server with those headers, the page's `Range` passed through (seeking) and the bytes streamed as they come.
@@ -124,7 +124,7 @@ fn client() -> &'static reqwest::Client {
     static C: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
     C.get_or_init(|| {
         reqwest::Client::builder().use_preconfigured_tls(crate::tls_chain::config())
-            .user_agent(concat!("Atlas/", env!("CARGO_PKG_VERSION"), " (plugin media)"))
+            .user_agent(concat!("Kandinsky/", env!("CARGO_PKG_VERSION"), " (plugin media)"))
             .connect_timeout(Duration::from_secs(15))
             .redirect(reqwest::redirect::Policy::none()) // a redirect is a sign-in in front: said, never followed
             .build()
@@ -138,7 +138,7 @@ mod tests {
     use std::io::{Read, Write};
 
     fn plugin(vault: &Path, toml: &str) {
-        let d = vault.join(".atlas/plugins/abs");
+        let d = vault.join(".kandinsky/plugins/abs");
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("plugin.toml"), toml).unwrap();
     }
@@ -180,7 +180,7 @@ mod tests {
         assert_eq!(media.plugin_of(&ticket).as_deref(), Some("abs"));
         let mut page = HeaderMap::new();
         page.insert("range", "bytes=2-".parse().unwrap());
-        page.insert("cookie", "atlas-page=1".parse().unwrap()); // the page's own: never passed on
+        page.insert("cookie", "kandinsky-page=1".parse().unwrap()); // the page's own: never passed on
         let res = media.play(&ticket, &page).await;
         assert_eq!(res.status(), 206);
         assert_eq!(res.headers().get("content-range").unwrap(), "bytes 2-11/100");
@@ -190,7 +190,7 @@ mod tests {
         let asked = asked.recv().unwrap().to_ascii_lowercase();
         assert!(asked.contains("authorization: bearer tok-abs"), "{asked}");
         assert!(asked.contains("range: bytes=2-"), "{asked}");
-        assert!(!asked.contains("atlas-page"), "{asked}");
+        assert!(!asked.contains("kandinsky-page"), "{asked}");
         // unknown tickets and hosts the plugin may not reach
         assert_eq!(media.play("nope", &HeaderMap::new()).await.status(), 404);
         let far = MediaRequest { url: "http://example.org/a.mp3".into(), headers: BTreeMap::new() };

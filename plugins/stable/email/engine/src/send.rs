@@ -1,7 +1,7 @@
 //! Sending, drafts and sending later (DESIGN-mail-ui §3 "Composer"). The page holds a message a few seconds before
 //! calling `send` (its Undo); drafts live in the server's Drafts (saved by themselves while typing), so they follow
-//! the user to every client; a message to send later is a draft carrying `X-Atlas-Send-At` and the keyword
-//! `$atlas-send-later`, sent by whichever Atlas engine runs when its time comes (the server's, through the mirror) —
+//! the user to every client; a message to send later is a draft carrying `X-Kandinsky-Send-At` and the keyword
+//! `$kandinsky-send-later`, sent by whichever Kandinsky engine runs when its time comes (the server's, through the mirror) —
 //! the one that takes the keyword off on the server first (`claim`), so two engines never both send it.
 
 use crate::account::{Account, Auth};
@@ -12,7 +12,7 @@ use base64::Engine;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-pub const SEND_LATER: &str = "$atlas-send-later";
+pub const SEND_LATER: &str = "$kandinsky-send-later";
 /// What Outlook and Gmail take in one message, attachments included.
 const SEND_LIMIT: usize = 25 * 1024 * 1024;
 
@@ -326,7 +326,7 @@ pub async fn open_draft(m: &Mail, id: i64) -> Result<Value, String> {
     let typed = b.text.split("\n\n-- \n").next().unwrap_or(&b.text);
     let typed = typed.split("\n\nOn ").next().unwrap_or(typed).split("\n\n---------- Forwarded message").next().unwrap_or(typed);
     let parsed = parse::parser().parse(&raw[..]);
-    let send_at = parsed.as_ref().and_then(|p| p.header_raw("X-Atlas-Send-At").and_then(|v| v.trim().parse::<i64>().ok()));
+    let send_at = parsed.as_ref().and_then(send_at);
     let bcc: Vec<String> = parsed.as_ref().and_then(|p| p.bcc()).map(|b| b.iter().filter_map(|a| a.address().map(String::from)).collect()).unwrap_or_default();
     let parent = x.in_reply_to.first().and_then(|irt| m.index.by_message_id(&x.account, irt).into_iter().next()).map(|p| p.id);
     let list = |ps: &[Person]| ps.iter().map(Person::display).collect::<Vec<_>>().join(", ");
@@ -356,7 +356,7 @@ pub async fn open_draft(m: &Mail, id: i64) -> Result<Value, String> {
     }))
 }
 
-/// Drafts whose time has come (X-Atlas-Send-At ≤ now): sent, then taken out of Drafts.
+/// Drafts whose time has come (X-Kandinsky-Send-At ≤ now): sent, then taken out of Drafts.
 pub async fn send_due(m: &Mail, acc: &Account) -> Result<usize, String> {
     let Some(drafts) = m.index.role(&acc.name, "drafts") else { return Ok(0) };
     let now = chrono::Utc::now().timestamp();
@@ -367,7 +367,7 @@ pub async fn send_due(m: &Mail, acc: &Account) -> Result<usize, String> {
         }
         let raw = crate::sync::body(m, id).await?;
         let Some(p) = parse::parser().parse(&raw[..]) else { continue };
-        let Some(at) = p.header_raw("X-Atlas-Send-At").and_then(|v| v.trim().parse::<i64>().ok()) else { continue };
+        let Some(at) = send_at(&p) else { continue };
         if at > now {
             continue;
         }
@@ -380,7 +380,7 @@ pub async fn send_due(m: &Mail, acc: &Account) -> Result<usize, String> {
         // the desktop's engine and the server's both look every minute: only the one that takes the keyword sends
         match claim(m, acc, &drafts.path, id).await {
             Ok(true) => {}
-            Ok(false) => continue, // sent by another Atlas, or no longer scheduled
+            Ok(false) => continue, // sent by another Kandinsky, or no longer scheduled
             Err(err) => {
                 m.event("status", json!({ "account": acc.name, "state": "error", "error": format!("sending “{}” later: {err}", e.subject) }));
                 continue;
@@ -459,8 +459,25 @@ fn fresh_date(raw: &[u8]) -> Vec<u8> {
     v
 }
 
+/// The header a mail queued before the rename carries its send time in (now `X-Kandinsky-Send-At`): still read.
+pub const LEGACY_SEND_AT: &str = "X-Atlas-Send-At";
+
+/// When a queued mail is to be sent (Unix seconds), from its header under the current name or the old one.
+fn send_at(p: &mail_parser::Message<'_>) -> Option<i64> {
+    p.header_raw("X-Kandinsky-Send-At").or_else(|| p.header_raw(LEGACY_SEND_AT)).and_then(|v| v.trim().parse::<i64>().ok())
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_queued_mails_send_time_is_read_under_either_name() {
+        for name in ["X-Kandinsky-Send-At", "X-Atlas-Send-At"] {
+            let raw = format!("From: a@example.org\r\nTo: b@example.org\r\nSubject: s\r\n{name}: 1790000000\r\n\r\nbody\r\n");
+            let p = crate::parse::parser().parse(raw.as_bytes()).unwrap();
+            assert_eq!(super::send_at(&p), Some(1_790_000_000), "{name}");
+        }
+    }
+
     #[test]
     fn exchange_sends_when_smtp_signin_is_off() {
         assert!(super::smtp_refused_signin("smtp.office365.com refused the sign-in: 535 5.7.3 Authentication unsuccessful [X]"));
@@ -549,7 +566,7 @@ mod tests {
         let st = s.store.lock().unwrap();
         assert!(st.folders["Drafts"].msgs.is_empty());
         assert_eq!(st.sent, 1);
-        assert!(!String::from_utf8_lossy(&st.folders["Sent"].msgs[0].raw).contains("X-Atlas-Send-At"));
+        assert!(!String::from_utf8_lossy(&st.folders["Sent"].msgs[0].raw).contains("X-Kandinsky-Send-At"));
     }
 
     #[test]

@@ -1,32 +1,50 @@
-/* The `paper` shape (Settings → Appearance → Shape, `ui.shape`; lib/settings.svelte.ts sets <html data-shape>): the
-   window is one flat sheet instead of cards on a ground. Panes sit flush, divided by hairlines (the dock's gap is 1 px
-   there, lib/dock.ts, and the dock's own colour is the line); corners are square; a selected tab or row is marked by a
-   bar at its edge instead of a raised pill; the left bar is a slightly darker margin of the same paper. Every rule here
-   starts with `:root[data-shape="paper"]`, so it outranks the components' scoped styles and is gone with the setting. */
+/* The `paper` shape (default Bauhaus × Notion gallery sheet; Settings → Appearance → Shape, `ui.shape`):
+   the window is one flush architectural sheet divided by crisp `1px` Bauhaus hairlines (lib/dock.ts gap = 1).
+   Left rail, Explorer side-panes, and status bar sit on `--bg-side`, while document sheets sit on `--bg`. */
 
 :root[data-shape="paper"] {
-  --radius-sm: 3px; --radius: 4px; --radius-lg: 5px; --radius-xl: 6px;
-  --bg-app: var(--bg-alt);
+  --radius-sm: 5px; --radius: 6px; --radius-lg: 8px; --radius-xl: 10px;
+  --bg-app: var(--bg-side, var(--bg-alt));
   --shadow-sm: none;
 }
 
-/* the dock: flush to the left bar and the window's edges, its 1 px gaps drawn as rules */
-:root[data-shape="paper"] .dock-wrap > .dock { inset: 0; }
-:root[data-shape="paper"] .dockview-theme-atlas .dv-dockview { background-color: var(--border); }
-:root[data-shape="paper"] .dockview-theme-atlas .dv-groupview,
-:root[data-shape="paper"] .dockview-theme-atlas .dv-groupview.dv-active-group { border: 0; border-radius: 0; box-shadow: none; }
-:root[data-shape="paper"] .dockview-theme-atlas .dv-render-overlay { border-radius: 0; }
-:root[data-shape="paper"] .sidebar { border-right: 1px solid var(--border); }
-:root[data-shape="paper"] footer.status { background: var(--bg); border-top: 1px solid var(--border); }
+/* the dock: flush to the left bar and the window's edges, its 1 px gaps drawn as Bauhaus hairline rules */
+:root[data-shape="paper"] .dock-wrap > .dock,
+:root[data-shape="paper"] .vtabs .dock-wrap > .dock { inset: 0; }
+:root[data-shape="paper"] .dockview-theme-kandinsky .dv-dockview { background-color: var(--border); }
+:root[data-shape="paper"] .dockview-theme-kandinsky .dv-groupview,
+:root[data-shape="paper"] .dockview-theme-kandinsky .dv-groupview.dv-active-group {
+  border: 0; border-radius: 0; box-shadow: none;
+}
+:root[data-shape="paper"] .dockview-theme-kandinsky .dv-render-overlay { border-radius: 0; }
+:root[data-shape="paper"] .sidebar { background: var(--bg-side, var(--bg-alt)); border-right: 1px solid var(--border); }
+:root[data-shape="paper"] .side-pane,
+:root[data-shape="paper"] .dockview-theme-kandinsky .kandinsky-side-group,
+:root[data-shape="paper"] .dockview-theme-kandinsky .dv-groupview:has(.side-pane) {
+  background: var(--bg-side, var(--bg-alt));
+  --dv-group-view-background-color: var(--bg-side, var(--bg-alt));
+}
+:root[data-shape="paper"] footer.status {
+  background: var(--bg-side, var(--bg-alt));
+  border-top: 1px solid var(--border);
+}
 
 /* tabs in the left bar: a line of text, the open one marked by an accent bar, not a raised card */
-:root[data-shape="paper"] .tabs-list .tab { border-radius: 0 var(--radius) var(--radius) 0; }
+:root[data-shape="paper"] .tabs-list .tab { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 :root[data-shape="paper"] .tabs-list .tab.active { background: var(--bg-active); border-color: transparent; box-shadow: inset 2px 0 0 var(--accent); }
 :root[data-shape="paper"] .tabs-list .tab.active .tab-title { font-weight: 600; }
 
-/* horizontal tabs: the open one underlined in the accent */
-:root[data-shape="paper"] .dockview-theme-atlas .dv-tab.dv-active-tab { box-shadow: none; }
-:root[data-shape="paper"] .dockview-theme-atlas .dv-active-group .dv-tab.dv-active-tab::after { background: var(--accent); left: 0; right: 0; border-radius: 0; }
+/* horizontal tabs: crisp 2px Ultramarine top hairline + seamless blend into the note sheet below */
+:root[data-shape="paper"] .dockview-theme-kandinsky .dv-tab.dv-active-tab { box-shadow: none; background: var(--bg); }
+:root[data-shape="paper"] .dockview-theme-kandinsky .dv-groupview:has(.side-pane) .dv-tab.dv-active-tab {
+  background: var(--bg-side, var(--bg-alt));
+}
+:root[data-shape="paper"] .dockview-theme-kandinsky .dv-groupview:has(.side-pane) .dv-tab.dv-active-tab::after {
+  background: var(--bg-side, var(--bg-alt));
+}
+:root[data-shape="paper"] .dockview-theme-kandinsky .dv-active-group .dv-tab.dv-active-tab::before {
+  background: var(--accent); left: 0; right: 0; top: 0; height: 2px; border-radius: 0;
+}
 
 /* section labels: small capitals followed by a hairline rule across the column */
 /* (the label is `.side-title`, or the heading's first bare <span> in the left bar's groups and bookmarks) */

@@ -1,17 +1,17 @@
 //! The UI from disk, so a new interface needs no new program: `packaging/install.sh` copies the
-//! built UI to `~/.local/share/atlas/ui` (or `$ATLAS_UI_DIR`), the server serves it from there, and
+//! built UI to `~/.local/share/kandinsky/ui` (or `$KANDINSKY_UI_DIR`), the server serves it from there, and
 //! an open window reloads itself when its build changes (`GET /api/ui/build`; ui/src/lib/ui-reload.ts).
-//! Only when `$ATLAS_UI_DIR` names it: the desktop app sets it (to the installed folder, when there
-//! is one); `atlas serve` and the tests keep the UI built into the program, the one being tested.
+//! Only when `$KANDINSKY_UI_DIR` names it: the desktop app sets it (to the installed folder, when there
+//! is one); `kandinsky serve` and the tests keep the UI built into the program, the one being tested.
 use std::path::{Component, Path, PathBuf};
 
 /// The stamp of the types this core speaks (build.rs); an interface built against others is not served.
-pub const CORE_TYPES: &str = env!("ATLAS_CORE_TYPES");
+pub const CORE_TYPES: &str = env!("KANDINSKY_CORE_TYPES");
 
-/// The folder `$ATLAS_UI_DIR` names, when it holds an `index.html` built for this core: an interface installed for a
+/// The folder `$KANDINSKY_UI_DIR` names, when it holds an `index.html` built for this core: an interface installed for a
 /// newer (or older) core would misread its answers, so the window keeps the one built into the program until restarted.
 pub fn dir() -> Option<PathBuf> {
-    let d = PathBuf::from(std::env::var_os("ATLAS_UI_DIR")?);
+    let d = PathBuf::from(crate::env::var_os("UI_DIR")?);
     (d.join("index.html").is_file() && fits(&d)).then_some(d)
 }
 
@@ -21,9 +21,9 @@ fn fits(d: &Path) -> bool {
     std::fs::read_to_string(d.join("core-types")).map_or(true, |s| s.trim() == CORE_TYPES)
 }
 
-/// Where `packaging/install.sh` puts the UI: `$XDG_DATA_HOME/atlas/ui` (`~/.local/share/atlas/ui`).
+/// Where `packaging/install.sh` puts the UI: `$XDG_DATA_HOME/kandinsky/ui` (`~/.local/share/kandinsky/ui`).
 pub fn installed() -> Option<PathBuf> {
-    let d = crate::platform::dirs::atlas(crate::platform::dirs::Base::Data).join("ui");
+    let d = crate::platform::dirs::app(crate::platform::dirs::Base::Data).join("ui");
     d.join("index.html").is_file().then_some(d)
 }
 

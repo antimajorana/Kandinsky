@@ -8,12 +8,12 @@ import {
 } from "./folder-note-utils.js";
 import { mountGenkanGrid } from "./genkan-grid.js";
 
-async function listVaultFolders(atlas) {
+async function listVaultFolders(kandinsky) {
   const folders = [""];
   const queue = [""];
   while (queue.length) {
     const batch = queue.splice(0, 12);
-    const lists = await Promise.all(batch.map((d) => atlas.list(d).catch(() => [])));
+    const lists = await Promise.all(batch.map((d) => kandinsky.list(d).catch(() => [])));
     for (const entries of lists) {
       for (const e of entries) {
         if (e.dir && !e.ignored && !e.name.startsWith(".")) {
@@ -26,19 +26,19 @@ async function listVaultFolders(atlas) {
   return folders.sort((a, b) => a.localeCompare(b));
 }
 
-export function register(atlas) {
-  atlas.registerCommand({
+export function register(kandinsky) {
+  kandinsky.registerCommand({
     id: "open-folder-note",
     title: "Folder Notes: Open or create folder note for active note's folder",
     run: async () => {
-      const activePath = atlas.context().active?.path;
+      const activePath = kandinsky.context().active?.path;
       if (activePath) {
         const folder = parentFolder(activePath);
-        await openOrCreateFolderNote(atlas, folder);
+        await openOrCreateFolderNote(kandinsky, folder);
         return;
       }
-      const folders = await listVaultFolders(atlas);
-      atlas.pick({
+      const folders = await listVaultFolders(kandinsky);
+      kandinsky.pick({
         placeholder: "Choose a folder to open or create its folder note…",
         tag: "Folder Note",
         icon: "folder-open",
@@ -47,34 +47,34 @@ export function register(atlas) {
           title: f || "/ (Vault root)",
           icon: "folder",
         })),
-        onpick: (chosen) => openOrCreateFolderNote(atlas, chosen),
+        onpick: (chosen) => openOrCreateFolderNote(kandinsky, chosen),
       });
     },
   });
 
-  atlas.shell.menu("file", (target) => {
+  kandinsky.shell.menu("file", (target) => {
     if (target.path === undefined) return;
     const folder = target.dir ? cleanFolder(target.path) : parentFolder(target.path);
     return [
       {
         label: "Open Folder Note",
         icon: "folder-open",
-        run: () => openOrCreateFolderNote(atlas, folder),
+        run: () => openOrCreateFolderNote(kandinsky, folder),
       },
     ];
   });
 
   const renderFence = (host, fence) => {
     const opts = parseFenceOptions(fence.source, fence.info);
-    return mountGenkanGrid(host, atlas, fence.path, opts);
+    return mountGenkanGrid(host, kandinsky, fence.path, opts);
   };
 
-  atlas.editor.registerFence("genkan", renderFence);
-  atlas.editor.registerFence("folder-notes", renderFence);
+  kandinsky.editor.registerFence("genkan", renderFence);
+  kandinsky.editor.registerFence("folder-notes", renderFence);
 
-  atlas.registerBlock(
+  kandinsky.registerBlock(
     "folder-notes.grid",
-    (host, block) => mountGenkanGrid(host, atlas, block.note, block.options ?? {}),
+    (host, block) => mountGenkanGrid(host, kandinsky, block.note, block.options ?? {}),
     {
       title: "Folder Notes & Genkan Grid",
       options: [

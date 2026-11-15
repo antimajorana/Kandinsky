@@ -1,4 +1,4 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -9,7 +9,7 @@ import org.json.JSONObject;
 
 /** A page of the notebook: an Excalidraw frame of A4 proportions (the web notebook's, ui/src/lib/draw-pages.ts), and
  *  its paper — blank, lined, squared, dotted, fine, graph or music staves, as Boox Notes' templates — kept in the frame's
- *  `customData.atlasTemplate`, so the desktop draws the same paper. */
+ *  `customData.kandinskyTemplate`, so the desktop draws the same paper. */
 final class Page {
     /** A4 portrait at 96 dpi and the gap between pages (draw-pages.ts PAGE). */
     static final float W = 794, H = 1123, GAP = 48;
@@ -24,7 +24,7 @@ final class Page {
 
         Paper(String label) { this.label = label; }
 
-        /** The file's word for it (`customData.atlasTemplate`); blank is no word at all. */
+        /** The file's word for it (`customData.kandinskyTemplate`); blank is no word at all. */
         String key() { return this == BLANK ? null : name().toLowerCase(java.util.Locale.ROOT); }
 
         static Paper of(String key) {
@@ -48,12 +48,12 @@ final class Page {
         float x = (float) e.optDouble("x"), y = (float) e.optDouble("y");
         JSONObject custom = e.optJSONObject("customData");
         return new Page(e.optString("id"), new RectF(x, y, x + (float) e.optDouble("width"), y + (float) e.optDouble("height")),
-            e.isNull("name") ? null : e.optString("name", null), Paper.of(custom != null ? custom.optString("atlasTemplate", null) : null), e);
+            e.isNull("name") ? null : e.optString("name", null), Paper.of(custom != null ? custom.optString("kandinskyTemplate", null) : null), e);
     }
 
     JSONObject element() throws JSONException {
         JSONObject custom = source != null && source.optJSONObject("customData") != null ? new JSONObject(source.optJSONObject("customData").toString()) : new JSONObject();
-        if (paper.key() != null) custom.put("atlasTemplate", paper.key()); else custom.remove("atlasTemplate");
+        if (paper.key() != null) custom.put("kandinskyTemplate", paper.key()); else custom.remove("kandinskyTemplate");
         JSONObject o = Figure.base(source, "frame", id, r.left, r.top, r.width(), r.height(), null).put("name", name == null ? JSONObject.NULL : name);
         if (source == null) o.put("strokeColor", "#bbb");
         if (custom.length() > 0) o.put("customData", custom); else o.remove("customData");

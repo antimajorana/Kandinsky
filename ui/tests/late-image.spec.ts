@@ -6,7 +6,7 @@ import { openFile } from "./open";
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420"><rect width="300" height="420" fill="teal"/></svg>`;
 
 test("fold arrows stay on their lines when a picture loads late", async ({ page, request }) => {
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "notes/late-image.md", text: `# Clip\n\n![poster](https://pictures.test/poster.svg)\n\n## One\n\ntext\n\n## Two\n\ntext\n\n## Three\n\ntext\n` } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "notes/late-image.md", text: `# Clip\n\n![poster](https://pictures.test/poster.svg)\n\n## One\n\ntext\n\n## Two\n\ntext\n\n## Three\n\ntext\n` } });
   let served = false;
   await page.route("https://pictures.test/**", async (route) => {
     await new Promise((r) => setTimeout(r, 1200));

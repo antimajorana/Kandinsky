@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -8,7 +8,7 @@ import android.widget.Toast;
 
 /**
  * Where the browser comes back to the app after a sign-in (`<package>://signed-in?token=…&gate=…` from the server's
- * `/auth/app`): keeps Atlas's token and, behind a gate (Authelia…), the gate's session the browser got with the
+ * `/auth/app`): keeps Kandinsky's token and, behind a gate (Authelia…), the gate's session the browser got with the
  * security key — so the app passes the gate as the browser does. Then shows the app again.
  */
 public final class SignedInActivity extends Activity {
@@ -16,7 +16,7 @@ public final class SignedInActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         Uri u = getIntent().getData();
-        String server = getSharedPreferences("atlas", MODE_PRIVATE).getString("signin:server", "");
+        String server = getSharedPreferences("kandinsky", MODE_PRIVATE).getString("signin:server", "");
         if (u == null || server.isEmpty()) { finish(); return; }
         Vaults vaults = new Vaults(this);
         if ("signed-in".equals(u.getHost()) && u.getQueryParameter("token") != null) {
@@ -32,8 +32,8 @@ public final class SignedInActivity extends Activity {
 
     private void done(String say) {
         Toast.makeText(this, say, Toast.LENGTH_LONG).show();
-        Intent i = new Intent(this, Edition.of(this).full() ? AtlasActivity.class : SettingsActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK)
-            .putExtra(AtlasActivity.RELOAD, true);
+        Intent i = new Intent(this, Edition.of(this).full() ? KandinskyActivity.class : SettingsActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(KandinskyActivity.RELOAD, true);
         startActivity(i);
         finish();
     }

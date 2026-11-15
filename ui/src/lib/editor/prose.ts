@@ -1,6 +1,6 @@
 // Prose in a note: the ranges a reader reads as sentences (not math, code, links, tags, HTML or the front matter),
 // its words, and the language it is written in. Pure: plugins pass the syntax tree's nodes from the app's own
-// CodeMirror (`atlas.editor.codemirror`), so this module bundles without a second copy of the library.
+// CodeMirror (`kandinsky.editor.codemirror`), so this module bundles without a second copy of the library.
 
 /** Nodes whose text is never prose: checked, counted or predicted by nobody. */
 const NOT_PROSE = new Set([

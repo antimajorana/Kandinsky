@@ -18,7 +18,7 @@ show_hidden: boolean,
  */
 git_status: boolean, 
 /**
- * The view each file extension opens in, when not Atlas's usual one (`tsv = "editor"`,
+ * The view each file extension opens in, when not Kandinsky's usual one (`tsv = "editor"`,
  * `dat = "table"`, `json = "plugin:runs"`). Set from "Open with… → always".
  */
 open_with: { [key in string]: string }, };

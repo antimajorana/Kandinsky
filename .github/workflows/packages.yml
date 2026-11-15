@@ -1,5 +1,5 @@
 # Every package, in one place: on Linux the AppImage, deb, rpm (Tauri's bundler) and a Flatpak (packaging/flatpak),
-# plus the `atlas` CLI; on macOS an ad-hoc-signed .dmg, on Windows an NSIS installer (unsigned:
+# plus the `kandinsky` CLI; on macOS an ad-hoc-signed .dmg, on Windows an NSIS installer (unsigned:
 # docs/decisions/PORTING-windows-macos.md); the three Android APKs; the plugins as archives, their engines built
 # for every desktop (scripts/dev/plugin-pack.mjs). CI calls it on every push and pull request (its
 # artifacts), release.yml on a tag `v*` (the draft release); it can also be started by hand.
@@ -49,18 +49,18 @@ jobs:
         run: npm --prefix ui ci --no-audit --no-fund && npm --prefix ui run build
       # the CLI and the capture box: in the deb and rpm beside the app (tauri.conf.json `files`), and loose
       - name: The CLI and the capture box
-        run: cargo build --release --locked -p atlas -p atlas-capture && strip target/release/atlas target/release/atlas-capture
+        run: cargo build --release --locked -p kandinsky -p kandinsky-capture && strip target/release/kandinsky target/release/kandinsky-capture
       # the same pinned bundler on every system, installed fresh: npx's cache can hold it without its native binary
       # (npm's optional-dependency bug, npm/cli#4828), which broke a Windows rerun
       - name: The desktop app's packages
         run: |
           npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/tauri" @tauri-apps/cli@2.12.4
-          cd crates/atlas-app
+          cd crates/kandinsky-app
           node "$RUNNER_TEMP/tauri/node_modules/@tauri-apps/cli/tauri.js" build --ci --bundles appimage,deb,rpm --config '{"bundle":{"active":true}}'
       - name: Collect
         run: |
           mkdir -p dist
-          cp target/release/atlas target/release/atlas-app target/release/atlas-capture dist/
+          cp target/release/kandinsky target/release/kandinsky-app target/release/kandinsky-capture dist/
           cp target/release/bundle/appimage/*.AppImage target/release/bundle/deb/*.deb target/release/bundle/rpm/*.rpm dist/
       - uses: actions/upload-artifact@v7
         with:
@@ -94,20 +94,20 @@ jobs:
       - name: The CLI and the capture box
         shell: bash
         run: |
-          cargo build --release --locked -p atlas -p atlas-capture
+          cargo build --release --locked -p kandinsky -p kandinsky-capture
           triple=$(rustc -vV | sed -n 's/^host: //p')
           ext=$([ "$RUNNER_OS" = Windows ] && echo .exe || true)
-          for b in atlas atlas-capture; do cp "target/release/$b$ext" "target/release/$b-$triple$ext"; done
+          for b in kandinsky kandinsky-capture; do cp "target/release/$b$ext" "target/release/$b-$triple$ext"; done
       - name: The desktop app's package
         shell: bash
         run: |
           npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/tauri" @tauri-apps/cli@2.12.4
-          cd crates/atlas-app
+          cd crates/kandinsky-app
           node "$RUNNER_TEMP/tauri/node_modules/@tauri-apps/cli/tauri.js" build --ci \
-            --config '{"bundle":{"externalBin":["../../target/release/atlas","../../target/release/atlas-capture"]}}'
+            --config '{"bundle":{"externalBin":["../../target/release/kandinsky","../../target/release/kandinsky-capture"]}}'
       - uses: actions/upload-artifact@v7
         with:
-          name: atlas-${{ runner.os }}
+          name: kandinsky-${{ runner.os }}
           path: |
             target/release/bundle/dmg/*.dmg
             target/release/bundle/nsis/*.exe
@@ -125,11 +125,11 @@ jobs:
         with:
           name: linux
           path: dist
-      - run: chmod +x dist/atlas dist/atlas-app dist/atlas-capture
+      - run: chmod +x dist/kandinsky dist/kandinsky-app dist/kandinsky-capture
       - uses: flathub-infra/flatpak-github-actions/flatpak-builder@master
         with:
-          bundle: atlas.flatpak
-          manifest-path: packaging/flatpak/io.github.alneb.Atlas.yml
+          bundle: kandinsky.flatpak
+          manifest-path: packaging/flatpak/io.github.alneb.Kandinsky.yml
           cache-key: flatpak-${{ github.sha }}
 
   # every plugin's Rust engine, built on each desktop platform (scripts/dev/plugin-pack.mjs); a platform an engine
@@ -187,7 +187,7 @@ jobs:
             plugins/*/*/bin/
           if-no-files-found: warn
 
-  # one atlas-plugin-<id>.tar.gz per plugin, every platform's engine inside, and plugins.json
+  # one kandinsky-plugin-<id>.tar.gz per plugin, every platform's engine inside, and plugins.json
   plugins:
     needs: plugin-engines
     # the engines that did build: an engine job that failed or got no runner leaves its platform out of the archives.
@@ -240,7 +240,7 @@ jobs:
       # the NDK, build-tools and a platform (checked against Google's sums), and PDFium for the PDF reader (pinned)
       - name: The toolchain
         run: |
-          bash crates/atlas-android/get-toolchain.sh
+          bash crates/kandinsky-android/get-toolchain.sh
           bash scripts/dev/fetch-pdfium.sh
       # The project's signing key, where build-apk.sh looks for one: an APK from any run then installs over the last.
       # Without the secret (a fork, a Dependabot pull request) the script makes a key for the run; a release refuses.
@@ -249,7 +249,7 @@ jobs:
           KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_B64 }}
         run: |
           if [ -n "$KEYSTORE" ]; then
-            mkdir -p local/toolchains && echo "$KEYSTORE" | base64 -d > local/toolchains/atlas-debug.keystore
+            mkdir -p local/toolchains && echo "$KEYSTORE" | base64 -d > local/toolchains/kandinsky-debug.keystore
             echo "signing with the project's key"
           elif [ "${{ inputs.release }}" = true ]; then
             echo "::error::a release needs the secret ANDROID_KEYSTORE_B64 (docs/guides/ANDROID.md, signing)"; exit 1
@@ -257,7 +257,7 @@ jobs:
             echo "::warning::no ANDROID_KEYSTORE_B64: the APKs are signed with a key made for this run"
           fi
       - name: The APKs
-        run: bash crates/atlas-android/build-apk.sh
+        run: bash crates/kandinsky-android/build-apk.sh
       - uses: actions/upload-artifact@v7
         with:
           name: android-apks

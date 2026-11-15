@@ -47,13 +47,13 @@ export function natural(a, b) {
 /** Library.name: a chapter's key in reading.json, its last path segment (a folder keeps its "/"). */
 export const nameOf = (ch) => ch.slice(ch.lastIndexOf("/", ch.length - 2) + 1);
 // ---- a .cbz, read in the page: the central directory, then each picture inflated on demand -----------------
-/** The zip's pictures, in reading order → [{ name, method, size, at }]; `index` is `atlas.zip.index(buf)`. */
+/** The zip's pictures, in reading order → [{ name, method, size, at }]; `index` is `kandinsky.zip.index(buf)`. */
 export function zipEntries(index) {
   return [...index].filter(([name]) => PICTURE.test(name) && !name.includes("__MACOSX")).map(([name, e]) => ({ name, ...e })).sort((a, b) => natural(a.name, b.name));
 }
 
-export default function mount(host, atlas) {
-  const S = atlas.plugin.settings ?? {};
+export default function mount(host, kandinsky) {
+  const S = kandinsky.plugin.settings ?? {};
   const folder = String(S.folder || "manga").replace(/^\/+|\/+$/g, "");
   const root = el("div", "manga");
   root.tabIndex = 0;
@@ -64,27 +64,27 @@ export default function mount(host, atlas) {
 
   const show = (draw) => { leave(); leave = () => {}; root.replaceChildren(); leave = draw() ?? (() => {}); root.focus({ preventScroll: true }); };
   const push = (screen) => { stack.push(screen); show(screen); };
-  const toLibrary = () => atlas.openLibrary("comics");
+  const toLibrary = () => kandinsky.openLibrary("comics");
   const back = () => { if (stack.length > 1) { stack.pop(); show(stack.at(-1)); } else toLibrary(); };
 
   // ---- the library on disk ------------------------------------------------------------------------------
-  const entries = (dir) => atlas.list(dir).catch(() => []);
-  const chapters = (path) => chaptersOf(atlas, path);
-  const suw = suwayomi(atlas, S.suwayomi);
+  const entries = (dir) => kandinsky.list(dir).catch(() => []);
+  const chapters = (path) => chaptersOf(kandinsky, path);
+  const suw = suwayomi(kandinsky, S.suwayomi);
   let remoteTrouble = "";
   /** The folder's series, then the user's Suwayomi library (its chapters asked when a series is opened). */
   async function scan() {
-    const out = await seriesIn(atlas, folder);
+    const out = await seriesIn(kandinsky, folder);
     remoteTrouble = "";
     if (suw.on) try { out.push(...(await suw.library()).sort((a, b) => natural(a.title, b.title))); remoteTrouble = suw.offline; } catch (e) { remoteTrouble = String(e.message ?? e); }
     return out;
   }
   /** A Suwayomi series' chapters and where you are, asked of the server once it is opened. */
   const ready = (s) => (s.remote && !s.chapters ? suw.chapters(s) : Promise.resolve());
-  // the series' note: the core says which (its folder's own note); an Atlas without `companion`: `<series>/<name>.md`
+  // the series' note: the core says which (its folder's own note); an Kandinsky without `companion`: `<series>/<name>.md`
   const notes = new Map();
   const noteOf = (s) => {
-    if (!notes.has(s.path)) notes.set(s.path, Promise.resolve(atlas.companion ? atlas.companion(`${s.path}/`, { find: true }) : `${s.path}/${s.path.split("/").pop()}.md`).catch(() => `${s.path}/${s.path.split("/").pop()}.md`));
+    if (!notes.has(s.path)) notes.set(s.path, Promise.resolve(kandinsky.companion ? kandinsky.companion(`${s.path}/`, { find: true }) : `${s.path}/${s.path.split("/").pop()}.md`).catch(() => `${s.path}/${s.path.split("/").pop()}.md`));
     return notes.get(s.path);
   };
   const migrated = new Set();
@@ -92,12 +92,12 @@ export default function mount(host, atlas) {
     if (s.remote) return s.reading ?? {};
     if (!s.dir) return {};
     try {
-      const p = await atlas.noteProps(await noteOf(s));
+      const p = await kandinsky.noteProps(await noteOf(s));
       if (p.chapter_progress != null || p.reading_chapter != null) return readingOf(p);
     } catch { /* no note yet */ }
     let old;
-    try { old = JSON.parse(await atlas.readText(`${s.path}/${READING}`)); } catch { return {}; }
-    if (!migrated.has(s.path)) { migrated.add(s.path); void saveReading(s, (r) => Object.assign(r, old)); } // into the note once; `atlas companions` then retires the file
+    try { old = JSON.parse(await kandinsky.readText(`${s.path}/${READING}`)); } catch { return {}; }
+    if (!migrated.has(s.path)) { migrated.add(s.path); void saveReading(s, (r) => Object.assign(r, old)); } // into the note once; `kandinsky companions` then retires the file
     return old;
   }
   /** Library.mark / setRead: read again just before writing, so what the phone wrote meanwhile is kept. */
@@ -109,7 +109,7 @@ export default function mount(host, atlas) {
       change(r);
       const was = JSON.parse(before);
       writes = writes.then(() => Promise.all(s.chapters.filter((ch) => JSON.stringify(r.chapters[nameOf(ch)]) !== JSON.stringify(was[nameOf(ch)])).map((ch) => suw.mark(ch, r.chapters[nameOf(ch)]?.page ?? 0, !!r.chapters[nameOf(ch)]?.read))))
-        .catch((e) => atlas.toast("Manga", `Not saved on Suwayomi: ${e.message ?? e}`, "error"));
+        .catch((e) => kandinsky.toast("Manga", `Not saved on Suwayomi: ${e.message ?? e}`, "error"));
       return writes;
     }
     if (!s.dir) return Promise.resolve();
@@ -118,9 +118,9 @@ export default function mount(host, atlas) {
       r.chapters ??= {};
       change(r);
       const note = await noteOf(s), title = s.title ?? s.path.split("/").pop();
-      await atlas.createFile(note, `---\ntitle: ${JSON.stringify(title)}\n---\n# ${title}\n`); // false when it is there
-      for (const [k, v] of Object.entries(readingProps(r))) if (v != null) await atlas.writeProperty(note, k, v);
-    }).catch((e) => atlas.toast("Manga", `Not saved: ${e.message ?? e}`, "error"));
+      await kandinsky.createFile(note, `---\ntitle: ${JSON.stringify(title)}\n---\n# ${title}\n`); // false when it is there
+      for (const [k, v] of Object.entries(readingProps(r))) if (v != null) await kandinsky.writeProperty(note, k, v);
+    }).catch((e) => kandinsky.toast("Manga", `Not saved: ${e.message ?? e}`, "error"));
     return writes;
   }
   const isRead = (r, ch) => !!r.chapters?.[nameOf(ch)]?.read;
@@ -132,19 +132,19 @@ export default function mount(host, atlas) {
     if (isRemote(ch)) return suw.pages(ch);
     if (ch.endsWith("/")) {
       const pics = (await entries(ch.slice(0, -1))).filter((e) => !e.dir && PICTURE.test(e.name)).map((e) => e.path).sort(natural);
-      return { count: pics.length, url: (i) => atlas.thumbUrl(pics[i], PAGE_W), done() {} };
+      return { count: pics.length, url: (i) => kandinsky.thumbUrl(pics[i], PAGE_W), done() {} };
     }
-    const cbz = CBZ.test(ch) ? ch : (await atlas.helper.call("as_cbz", { path: ch }, { timeout: 600 })).path;
-    const buf = await (await fetch(await atlas.fileUrl(cbz))).arrayBuffer();
-    const list = zipEntries(atlas.zip.index(buf)), made = new Map();
+    const cbz = CBZ.test(ch) ? ch : (await kandinsky.helper.call("as_cbz", { path: ch }, { timeout: 600 })).path;
+    const buf = await (await fetch(await kandinsky.fileUrl(cbz))).arrayBuffer();
+    const list = zipEntries(kandinsky.zip.index(buf)), made = new Map();
     return {
       count: list.length,
-      url(i) { if (!made.has(i)) made.set(i, atlas.zip.blob(buf, list[i]).then((b) => URL.createObjectURL(b))); return made.get(i); },
+      url(i) { if (!made.has(i)) made.set(i, kandinsky.zip.blob(buf, list[i]).then((b) => URL.createObjectURL(b))); return made.get(i); },
       done() { for (const p of made.values()) void p.then((u) => URL.revokeObjectURL(u)); made.clear(); },
     };
   }
   /** A cover: the series' cover.* picture (Mihon's convention), else its first chapter's first page. */
-  const cover = (s) => (s.remote ? suw.cover(s) : coverOf(atlas, s));
+  const cover = (s) => (s.remote ? suw.cover(s) : coverOf(kandinsky, s));
   const covers = new Map(); // series path → Promise<url | null>
   const coverFor = (s) => { if (!covers.has(s.path)) covers.set(s.path, cover(s).catch(() => null)); return covers.get(s.path); };
 
@@ -158,7 +158,7 @@ export default function mount(host, atlas) {
   }
   function series(s) {
     const head = el("div", "m-bar");
-    const backBtn = el("button", "atlas-btn", "‹ Library");
+    const backBtn = el("button", "kandinsky-btn", "‹ Library");
     backBtn.title = "The comics, on the Libraries page";
     backBtn.onclick = toLibrary;
     head.append(backBtn, el("div", "m-title", s.title));
@@ -166,22 +166,22 @@ export default function mount(host, atlas) {
     img.alt = "";
     pic.append(img);
     void coverFor(s).then((u) => { if (u) img.src = u; });
-    const count = el("div", "m-count"), go = el("button", "atlas-btn primary");
+    const count = el("div", "m-count"), go = el("button", "kandinsky-btn primary");
     side.append(el("h2", "", s.title), count, go);
     if (s.remote) {
-      const fresh = el("button", "atlas-btn", "New chapters?");
+      const fresh = el("button", "kandinsky-btn", "New chapters?");
       fresh.title = "Ask Suwayomi to look for new chapters at this series' source";
       fresh.onclick = async () => {
         fresh.disabled = true; fresh.textContent = "Looking…";
         try {
           const n = await suw.refresh(s);
-          atlas.toast("Manga", n ? `${n} new chapter${n === 1 ? "" : "s"} of ${s.title}` : `No new chapters of ${s.title}`, n ? "success" : undefined);
+          kandinsky.toast("Manga", n ? `${n} new chapter${n === 1 ? "" : "s"} of ${s.title}` : `No new chapters of ${s.title}`, n ? "success" : undefined);
           if (n) { show(() => series(s)); return; }
-        } catch (e) { atlas.toast("Manga", String(e.message ?? e), "error"); }
+        } catch (e) { kandinsky.toast("Manga", String(e.message ?? e), "error"); }
         fresh.disabled = false; fresh.textContent = "New chapters?";
       };
       // the next unread chapters fetched now into the plugin's cache, so they read with the server out of reach
-      const keep = el("button", "atlas-btn", `Keep ${KEEP} for offline`);
+      const keep = el("button", "kandinsky-btn", `Keep ${KEEP} for offline`);
       keep.title = `Fetch the pages of the next ${KEEP} unread chapters now: they open without the server`;
       keep.onclick = async () => {
         keep.disabled = true;
@@ -195,8 +195,8 @@ export default function mount(host, atlas) {
             for (let i = 0; i < all.length; i += 4) await Promise.all(all.slice(i, i + 4).map((j) => pg.url(j)));
             done++;
           }
-          atlas.toast("Manga", done ? `${done} chapter${done === 1 ? "" : "s"} of ${s.title} kept for offline` : "Nothing unread to keep", done ? "success" : undefined);
-        } catch (e) { atlas.toast("Manga", `Kept ${done} of ${next.length}: ${e.message ?? e}`, "error"); }
+          kandinsky.toast("Manga", done ? `${done} chapter${done === 1 ? "" : "s"} of ${s.title} kept for offline` : "Nothing unread to keep", done ? "success" : undefined);
+        } catch (e) { kandinsky.toast("Manga", `Kept ${done} of ${next.length}: ${e.message ?? e}`, "error"); }
         keep.disabled = false; keep.textContent = `Keep ${KEEP} for offline`;
       };
       side.append(fresh, keep);
@@ -236,14 +236,14 @@ export default function mount(host, atlas) {
   /** On the phone the app's own reader takes the chapter (the pen, e-ink paging; it keeps its place itself); here, the
    *  page's. A folder chapter is handed with its trailing slash, which is how the app tells it from any other path. */
   function read(s, i, page) {
-    if (!atlas.openNative?.(s.chapters[i])) push(() => reader(s, i, page));
+    if (!kandinsky.openNative?.(s.chapters[i])) push(() => reader(s, i, page));
   }
   function reader(s, index, start) {
     const mode = String(S.mode || "right to left"), webtoon = mode === "webtoon", rtl = mode === "right to left";
     const fit = String(S.scale || "fit screen").replace(/\s+/g, "-");
     const view = el("div", `m-reader ${webtoon ? "webtoon" : "paged"} ${fit} bg-${String(S.background || "automatic")}`);
     const bar = el("div", "m-bar m-over");
-    const backBtn = el("button", "atlas-btn", "‹ " + s.title);
+    const backBtn = el("button", "kandinsky-btn", "‹ " + s.title);
     backBtn.onclick = back;
     const where = el("div", "m-title");
     bar.append(backBtn, where);
@@ -266,35 +266,35 @@ export default function mount(host, atlas) {
     const every = Number(S.flash_every ?? 1);
     const shown = () => {
       num.textContent = `${page + 1} / ${ch.count}`; where.textContent = label(); remember();
-      if (!webtoon && atlas.eink?.on && every > 0 && ++turns % every === 0) atlas.eink.refresh(); // webtoon: eink.ts refreshes when a scroll rests
+      if (!webtoon && kandinsky.eink?.on && every > 0 && ++turns % every === 0) kandinsky.eink.refresh(); // webtoon: eink.ts refreshes when a scroll rests
     };
 
     async function open(i, at) {
       flush();
       ch?.done();
       index = i;
-      view.replaceChildren(el("div", "atlas-empty", "Opening the chapter…"));
-      try { ch = await pages(s.chapters[i]); } catch (e) { view.replaceChildren(el("div", "atlas-notice error", `This chapter did not open: ${e.message ?? e}`)); return; }
+      view.replaceChildren(el("div", "kandinsky-empty", "Opening the chapter…"));
+      try { ch = await pages(s.chapters[i]); } catch (e) { view.replaceChildren(el("div", "kandinsky-notice error", `This chapter did not open: ${e.message ?? e}`)); return; }
       if (gone) return ch.done();
-      if (!ch.count) { view.replaceChildren(el("div", "atlas-notice", "This chapter has no pictures.")); return; }
+      if (!ch.count) { view.replaceChildren(el("div", "kandinsky-notice", "This chapter has no pictures.")); return; }
       page = Math.max(0, Math.min(at === -1 ? ch.count - 1 : at, ch.count - 1));
       ink = webtoon ? [] : await readInk();
       view.replaceChildren();
       if (webtoon) strip(); else void draw();
     }
     // the pen's ink over the page (written on the phone: the app's PageInk), kept by the core in the series' note (a
-    // block per chapter, pages from 1) and drawn as Atlas draws a PDF's marks; an Atlas before API 14: none
+    // block per chapter, pages from 1) and drawn as Kandinsky draws a PDF's marks; an Kandinsky before API 14: none
     const over = el("div", "m-ink");
     let ink = [], inkNote = null;
-    const readInk = () => (isRemote(s.chapters[index]) || !atlas.marks ? Promise.resolve({ note: null, marks: [] }) : atlas.marks(s.chapters[index]))
+    const readInk = () => (isRemote(s.chapters[index]) || !kandinsky.marks ? Promise.resolve({ note: null, marks: [] }) : kandinsky.marks(s.chapters[index]))
       .then((r) => { inkNote = r.note; return r.marks; }, () => []);
     function drawInk() {
       over.replaceChildren();
-      if (webtoon || !img.naturalWidth || !atlas.marksSvg) return;
+      if (webtoon || !img.naturalWidth || !kandinsky.marksSvg) return;
       Object.assign(over.style, { left: `${img.offsetLeft}px`, top: `${img.offsetTop}px`, width: `${img.offsetWidth}px`, height: `${img.offsetHeight}px` });
-      if (ink.some((m) => m.page === page + 1)) over.append(atlas.marksSvg(ink, page + 1));
+      if (ink.some((m) => m.page === page + 1)) over.append(kandinsky.marksSvg(ink, page + 1));
     }
-    const offInk = atlas.onFilesChanged((paths) => { if (ch && inkNote && paths.includes(inkNote)) void readInk().then((k) => { ink = k; drawInk(); }); });
+    const offInk = kandinsky.onFilesChanged((paths) => { if (ch && inkNote && paths.includes(inkNote)) void readInk().then((k) => { ink = k; drawInk(); }); });
     const sized = new ResizeObserver(() => drawInk());
     // paged: one picture, the next one fetched ahead
     const img = el("img", "m-page");
@@ -315,7 +315,7 @@ export default function mount(host, atlas) {
       if (p >= 0 && p < ch.count) { page = p; void draw(); return; }
       if (p < 0 && index > 0) void open(index - 1, -1);
       else if (p >= ch.count && index + 1 < s.chapters.length) void open(index + 1, 0);
-      else atlas.toast("Manga", p < 0 ? "This is the first chapter." : "That was the last chapter.");
+      else kandinsky.toast("Manga", p < 0 ? "This is the first chapter." : "That was the last chapter.");
     }
     // webtoon: every picture under the other, the page in view is where you are (one that failed asked again a moment
     // later, while it is still near the view)
@@ -332,7 +332,7 @@ export default function mount(host, atlas) {
       }
       const goto = view.children[page];
       if (goto) requestAnimationFrame(() => goto.scrollIntoView());
-      const next = el("button", "atlas-btn m-next", index + 1 < s.chapters.length ? "Next chapter ›" : "The last chapter");
+      const next = el("button", "kandinsky-btn m-next", index + 1 < s.chapters.length ? "Next chapter ›" : "The last chapter");
       next.disabled = index + 1 >= s.chapters.length;
       next.onclick = () => void open(index + 1, 0);
       view.append(next);
@@ -383,24 +383,24 @@ export default function mount(host, atlas) {
   });
 
   // what the pane was opened on: a .cbz ("Open with…") reads it at once, its series under it
-  if (atlas.path && ZIP.test(atlas.path)) {
-    const dir = atlas.path.slice(0, atlas.path.lastIndexOf("/"));
+  if (kandinsky.path && ZIP.test(kandinsky.path)) {
+    const dir = kandinsky.path.slice(0, kandinsky.path.lastIndexOf("/"));
     void chapters(dir).then((list) => {
-      const inSeries = list.includes(atlas.path);
-      const s = inSeries ? { path: dir, title: dir.split("/").pop(), chapters: list, dir: true } : { path: atlas.path, title: atlas.path.split("/").pop().replace(ZIP, ""), chapters: [atlas.path], dir: false };
+      const inSeries = list.includes(kandinsky.path);
+      const s = inSeries ? { path: dir, title: dir.split("/").pop(), chapters: list, dir: true } : { path: kandinsky.path, title: kandinsky.path.split("/").pop().replace(ZIP, ""), chapters: [kandinsky.path], dir: false };
       stack.push(() => series(s));
-      void reading(s).then((r) => push(() => reader(s, s.chapters.indexOf(atlas.path), isRead(r, atlas.path) ? 0 : pageOf(r, atlas.path))));
+      void reading(s).then((r) => push(() => reader(s, s.chapters.indexOf(kandinsky.path), isRead(r, kandinsky.path) ? 0 : pageOf(r, kandinsky.path))));
     });
-  } else if (atlas.arg) { // a series of the Libraries page's Comics
+  } else if (kandinsky.arg) { // a series of the Libraries page's Comics
     void scan().then((all) => {
-      const s = all.find((x) => x.path === atlas.arg);
+      const s = all.find((x) => x.path === kandinsky.arg);
       if (s) void ready(s).then(() => push(() => series(s)));
-      else root.append(el("div", "atlas-notice", remoteTrouble ? `Suwayomi: ${remoteTrouble}` : `No series “${atlas.arg}” any more.`));
+      else root.append(el("div", "kandinsky-notice", remoteTrouble ? `Suwayomi: ${remoteTrouble}` : `No series “${kandinsky.arg}” any more.`));
     });
   } else {
     // no series (a tab kept from an older version): the library is the Libraries page's
     toLibrary();
-    atlas.pane?.close();
+    kandinsky.pane?.close();
   }
   return () => { gone = true; leave(); };
 }
@@ -437,15 +437,15 @@ function style() {
   .manga .m-over { position: absolute; left: 0; right: 0; top: 0; visibility: hidden; }
   .manga .m-over.on { visibility: visible; }
   .manga .m-num { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); padding: 1px 8px; border-radius: 6px; background: var(--bg-elev); color: var(--text-muted); font-size: .9em; pointer-events: none; }
-  .manga .atlas-notice { margin: 18px; }
+  .manga .kandinsky-notice { margin: 18px; }
   .manga .m-offline { color: var(--text-muted); font-size: .85em; max-width: 42ch; }
   `;
   return s;
 }
 
 /** A series' chapters: its .cbz files and picture folders; a folder of pictures alone is one chapter. */
-export async function chaptersOf(atlas, path) {
-  const list = await atlas.list(path).catch(() => []), out = [];
+export async function chaptersOf(kandinsky, path) {
+  const list = await kandinsky.list(path).catch(() => []), out = [];
   let pictures = false;
   for (const e of list) {
     if (e.dir) out.push(e.path + "/");
@@ -459,21 +459,21 @@ export async function chaptersOf(atlas, path) {
 /** The library folder's series: each folder holding chapters, and each loose .cbz. */
 /** A vault series' cover: its folder's own cover picture, else its first chapter's first page (a .cbz's drawn by the
  *  core's thumbnails). */
-export async function coverOf(atlas, s) {
-  const list = (dir) => atlas.list(dir).catch(() => []);
+export async function coverOf(kandinsky, s) {
+  const list = (dir) => kandinsky.list(dir).catch(() => []);
   const own = s.dir && (await list(s.path)).find((e) => !e.dir && /^cover\.(jpe?g|png|webp)$/i.test(e.name));
-  if (own) return atlas.thumbUrl(own.path, 300);
+  if (own) return kandinsky.thumbUrl(own.path, 300);
   const ch = s.chapters[0];
-  if (!ch.endsWith("/")) return CBZ.test(ch) ? atlas.thumbUrl(ch, 300) : null;
+  if (!ch.endsWith("/")) return CBZ.test(ch) ? kandinsky.thumbUrl(ch, 300) : null;
   const first = (await list(ch.slice(0, -1))).filter((e) => !e.dir && PICTURE.test(e.name)).map((e) => e.path).sort(natural)[0];
-  return first ? atlas.thumbUrl(first, 300) : null;
+  return first ? kandinsky.thumbUrl(first, 300) : null;
 }
 
-export async function seriesIn(atlas, folder) {
+export async function seriesIn(kandinsky, folder) {
   const out = [];
-  if (atlas.exists && !(await atlas.exists(folder))) return out; // a vault with only Suwayomi: no 404 for the folder
-  for (const e of await atlas.list(folder).catch(() => [])) {
-    if (e.dir) { const ch = await chaptersOf(atlas, e.path); if (ch.length) out.push({ path: e.path, title: e.name, chapters: ch, dir: true }); }
+  if (kandinsky.exists && !(await kandinsky.exists(folder))) return out; // a vault with only Suwayomi: no 404 for the folder
+  for (const e of await kandinsky.list(folder).catch(() => [])) {
+    if (e.dir) { const ch = await chaptersOf(kandinsky, e.path); if (ch.length) out.push({ path: e.path, title: e.name, chapters: ch, dir: true }); }
     else if (ZIP.test(e.name)) out.push({ path: e.path, title: e.name.replace(ZIP, ""), chapters: [e.path], dir: false });
   }
   return out.sort((a, b) => natural(a.title, b.title));

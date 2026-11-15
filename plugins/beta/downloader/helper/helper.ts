@@ -1,9 +1,9 @@
 // Downloader: the `send` tool, the catalog's link. One request per captured thing, shaped by a preset — `custom` (the
-// address, method, body and token header set by hand), `MeTube` or `TubeArchivist` — through Atlas's core, which adds
+// address, method, body and token header set by hand), `MeTube` or `TubeArchivist` — through Kandinsky's core, which adds
 // the token and, behind a gate, the kept sign-in: the helper never holds either. The answer is one property on the
 // note; a note that has it already is not sent again (a catalog Update must not queue the same thing twice).
 // Tests: helper.test.ts, tubearchivist.test.ts.
-import type { Params } from "atlas-helper";
+import type { Params } from "kandinsky-helper";
 
 type Headers = Record<string, string | { secret: string; prefix?: string }>;
 interface Request { url: string; method: string; headers: Headers; body?: string }
@@ -17,7 +17,7 @@ function fill(template: string, values: Record<string, unknown>, quote: (v: stri
 /** A value inside a JSON string: its escapes, without the quotes. */
 const jsonInner = (v: string) => JSON.stringify(v).slice(1, -1);
 /** Every reserved character escaped (an address's query part). */
-const urlPart = (v: string) => atlas.url.quote(v, "");
+const urlPart = (v: string) => kandinsky.url.quote(v, "");
 const JSON_HEADERS = { "Content-Type": "application/json", Accept: "application/json" };
 
 export function presetOf(s: Record<string, unknown>): Preset {
@@ -34,7 +34,7 @@ interface Thing { url: string; kind: string; title?: string; artist?: string; yo
 /** The request a preset makes for `t` (null: it cannot take this thing), and the value the note keeps. */
 async function requestFor(s: Record<string, unknown>, t: Thing): Promise<{ req: Request; value: string } | { skipped: string }> {
   const address = String(s.address ?? "").trim(), base = address.replace(/\/+$/, "");
-  const hasToken = Boolean(await atlas.secret("token"));
+  const hasToken = Boolean(await kandinsky.secret("token"));
   switch (presetOf(s)) {
     case "TubeArchivist": {
       if (!t.youtube) return { skipped: "TubeArchivist takes only YouTube videos" };
@@ -78,10 +78,10 @@ async function send(params: Params) {
   if (!url || !String(s.address ?? "").trim()) return { fields: {}, skipped: "no address to send, or no download service set" };
   const made = await requestFor(s, { url, kind, title: props.title, artist: props.artist, youtube: ids.youtube ?? "" });
   if ("skipped" in made) return { fields: {}, skipped: made.skipped };
-  const res = await atlas.fetchResponse(made.req);
+  const res = await kandinsky.fetchResponse(made.req);
   if (res.signin) return { signin: res.signin };
   if (!res.ok) throw new Error(`the download service answered ${res.status}: ${String(res.text ?? "").slice(0, 200)}`);
   return { fields: { [answer]: made.value } };
 }
 
-atlas.methods({ send });
+kandinsky.methods({ send });

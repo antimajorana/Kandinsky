@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.job.JobParameters;
 import android.app.job.JobService;

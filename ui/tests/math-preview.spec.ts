@@ -72,7 +72,7 @@ test("display math is drawn in the text under it, inline math floats above its l
   expect(await z(".cm-tooltip-autocomplete"), "the list over the drawing").toBeGreaterThan(await z(".cm-tooltip.cm-math-preview"));
 
   // a .tex file: \[ … \] is drawn in the text too
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "notes/eq.tex", text: "Text.\n\\[\n  a^2 + b^2\n\\]\nMore.\n" } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "notes/eq.tex", text: "Text.\n\\[\n  a^2 + b^2\n\\]\nMore.\n" } });
   await page.keyboard.press("Escape"); await page.keyboard.press("Escape");
   await openFile(page, "eq.tex");
   await page.locator(".cm-content:visible").first().getByText("a^2").click();

@@ -7,11 +7,12 @@ use walkdir::WalkDir;
 
 /// The vault's own pages that are kept out of its root (the starter kit's Inbox, Next, Projects):
 /// the one dot-folder the walks enter, so links, quick open and embeds still find them.
-pub const PAGES: &str = ".atlas/pages";
+pub const PAGES: &str = ".kandinsky/pages";
 
 /// Whether a walk should descend into / report `rel` (root itself is always kept).
 pub fn keep(cfg: &Config, rel: &str) -> bool {
-    let pages = rel == ".atlas" || rel == PAGES || rel.strip_prefix(PAGES).is_some_and(|r| r.starts_with('/') && !r[1..].split('/').any(|s| s.starts_with('.')));
+    let rel = &*crate::state_dir::current_rel(rel); // `.atlas/pages` in a vault not yet migrated
+    let pages = rel == ".kandinsky" || rel == PAGES || rel.strip_prefix(PAGES).is_some_and(|r| r.starts_with('/') && !r[1..].split('/').any(|s| s.starts_with('.')));
     rel.is_empty() || pages || (!rel.split('/').any(|s| s.starts_with('.')) && !cfg.is_ignored(rel))
 }
 
@@ -27,11 +28,17 @@ pub fn files_under(root: &Path, start: &Path, cfg: &Config) -> Vec<(PathBuf, Str
     let mut up = String::new();
     for part in rel.split('/') {
         up = if up.is_empty() { part.to_string() } else { format!("{up}/{part}") };
-        if !keep(cfg, &up) {
+        if !keep_in(root, cfg, &up) {
             return vec![];
         }
     }
     files_from(root, start, cfg).collect()
+}
+
+/// [`keep`] in `root`, where the state folder of an earlier build left beside the one in use is skipped (its paths mean
+/// the other folder: `state_dir::stale_twin`).
+fn keep_in(root: &Path, cfg: &Config, rel: &str) -> bool {
+    keep(cfg, rel) && !crate::state_dir::names_stale_twin(root, rel)
 }
 
 fn files_from<'a>(root: &'a Path, start: &Path, cfg: &Config) -> impl Iterator<Item = (PathBuf, String)> + 'a {
@@ -39,7 +46,7 @@ fn files_from<'a>(root: &'a Path, start: &Path, cfg: &Config) -> impl Iterator<I
     WalkDir::new(start)
         .follow_links(false)
         .into_iter()
-        .filter_entry(move |e| rel_path(root, e.path()).is_some_and(|r| keep(&cfg, &r)))
+        .filter_entry(move |e| rel_path(root, e.path()).is_some_and(|r| keep_in(root, &cfg, &r)))
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .filter_map(move |e| {
@@ -53,7 +60,7 @@ pub fn dirs(root: &Path, start: &Path, cfg: &Config) -> Vec<PathBuf> {
     WalkDir::new(start)
         .follow_links(false)
         .into_iter()
-        .filter_entry(|e| rel_path(root, e.path()).is_some_and(|r| keep(cfg, &r)))
+        .filter_entry(|e| rel_path(root, e.path()).is_some_and(|r| keep_in(root, cfg, &r)))
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_dir())
         .map(|e| e.into_path())
@@ -67,13 +74,13 @@ mod tests {
     #[test]
     fn dot_folders_are_skipped_except_the_vaults_pages() {
         let d = tempfile::tempdir().unwrap();
-        for f in ["notes/a.md", ".atlas/pages/Inbox.page", ".atlas/pages/.hidden/x.page", ".atlas/config.toml", ".atlas/cache/layout.json", ".git/HEAD"] {
+        for f in ["notes/a.md", ".kandinsky/pages/Inbox.page", ".kandinsky/pages/.hidden/x.page", ".kandinsky/config.toml", ".kandinsky/cache/layout.json", ".git/HEAD"] {
             std::fs::create_dir_all(d.path().join(f).parent().unwrap()).unwrap();
             std::fs::write(d.path().join(f), "x").unwrap();
         }
         let mut got: Vec<String> = files(d.path(), &Config::default()).map(|(_, rel)| rel).collect();
         got.sort();
-        assert_eq!(got, [".atlas/pages/Inbox.page", "notes/a.md"]);
+        assert_eq!(got, [".kandinsky/pages/Inbox.page", "notes/a.md"]);
     }
 
     #[test]

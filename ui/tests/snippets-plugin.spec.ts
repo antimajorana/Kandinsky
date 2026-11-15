@@ -11,7 +11,7 @@ import { rank } from "../../plugins/beta/snippets/ui/src/rank";
 
 // The Snippets plugin (plugins/beta/snippets): what must not fire, what comes back, a module of the new format beside the
 // old file (the fixture's, playwright.config.ts).
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 async function math(page: Page, name: string, typed: string, pre = "mk") {
   await page.request.put("/api/file", { headers: H, data: { path: `snip/${name}.md`, text: `# ${name}\n` } });
@@ -36,7 +36,7 @@ test("nothing fires inside a text-like argument, at any depth", async ({ page })
 
 test("an ordinary word stays as typed; the same letters before another key are the snippet", async ({ page }) => {
   // the fixture's old file has no `pi`: the test brings its own
-  await page.request.put("/api/file", { headers: H, data: { path: ".atlas/snippets/zz-pi.js", text: 'export default ({ math }) => [math("pi", "\\\\pi")];\n' } });
+  await page.request.put("/api/file", { headers: H, data: { path: ".kandinsky/snippets/zz-pi.js", text: 'export default ({ math }) => [math("pi", "\\\\pi")];\n' } });
   const last = await math(page, "words", "photon number ");
   await expect(last).toHaveText("$photon number $");
   await page.keyboard.type("kpi+");
@@ -53,13 +53,13 @@ test("Backspace right after an expansion gives back what was typed", async ({ pa
 });
 
 test("a { typed by habit after _ adds nothing", async ({ page }) => {
-  await page.request.put("/api/file", { headers: H, data: { path: ".atlas/snippets/zz-under.js", text: 'export default ({ math }) => [math("zqu", "_{$1}$0")];\n' } });
+  await page.request.put("/api/file", { headers: H, data: { path: ".kandinsky/snippets/zz-under.js", text: 'export default ({ math }) => [math("zqu", "_{$1}$0")];\n' } });
   const last = await math(page, "brace", "Gzqu{ij");
   await expect(last).toHaveText("$G_{ij}$");
 });
 
 test("a module of the new format works beside the old file: a place, a computed body, code by its language", async ({ page }) => {
-  await page.request.put("/api/file", { headers: H, data: { path: ".atlas/snippets/zz-mod.js", text: `export default ({ math, text, code, std }) => [
+  await page.request.put("/api/file", { headers: H, data: { path: ".kandinsky/snippets/zz-mod.js", text: `export default ({ math, text, code, std }) => [
   math(/(\\d)(\\d)zqm/, (m) => std.matrix(+m[1], +m[2], "b")),
   text("zqt", "written $1 here", { auto: true }),
   code("py", "zqp", "print($1)$0", { auto: true }),
@@ -178,7 +178,7 @@ test("the list finds a snippet by its whole trigger first, then its trigger's st
 });
 
 test("a space typed after an expanded command stays, and the next letter keeps it (\\partial q, not \\partialq)", async ({ page }) => {
-  await page.request.put("/api/file", { headers: H, data: { path: ".atlas/snippets/zz-part.js", text: 'export default ({ math, commands }) => [math("part", "\\\\partial"), commands(["partial"], { digit: "space" })];\n' } });
+  await page.request.put("/api/file", { headers: H, data: { path: ".kandinsky/snippets/zz-part.js", text: 'export default ({ math, commands }) => [math("part", "\\\\partial"), commands(["partial"], { digit: "space" })];\n' } });
   const last = await math(page, "partial", "part q");
   await expect(last).toHaveText("$\\partial q$");
 });
@@ -235,7 +235,7 @@ test("a longer command is also typed with one letter inside it dropped, where no
 });
 
 test("a misspelt command becomes the command, but not where the misspelling is a word", async ({ page }) => {
-  await page.request.put("/api/file", { headers: H, data: { path: ".atlas/snippets/zz-typo.js", text: 'export default ({ commands }) => [commands(["lambda", "rangle"])];\n' } });
+  await page.request.put("/api/file", { headers: H, data: { path: ".kandinsky/snippets/zz-typo.js", text: 'export default ({ commands }) => [commands(["lambda", "rangle"])];\n' } });
   const last = await math(page, "typo", "lamda x ");
   await expect(last).toHaveText("$\\lambda x $");
   await page.keyboard.type("range ");
@@ -243,7 +243,7 @@ test("a misspelt command becomes the command, but not where the misspelling is a
 });
 
 test("a trigger typed from its first letter fires at once; Space after it adds nothing; Undo leaves the trigger; ^ takes no space before it", async ({ page }) => {
-  await page.request.put("/api/file", { headers: H, data: { path: ".atlas/snippets/zz-now.js", text: 'export default ({ math }) => [math("zfrac", "\\\\frac{$1}{$2}$0"), math("zket", "\\\\ket{$1} $0")];\n' } });
+  await page.request.put("/api/file", { headers: H, data: { path: ".kandinsky/snippets/zz-now.js", text: 'export default ({ math }) => [math("zfrac", "\\\\frac{$1}{$2}$0"), math("zket", "\\\\ket{$1} $0")];\n' } });
   const last = await math(page, "now", "zfrac a");
   await expect(last).toHaveText("$\\frac{a}{}$");
   await page.keyboard.press("End");

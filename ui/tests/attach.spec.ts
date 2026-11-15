@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { openFile } from "./open";
 
 test("pasting an image saves it beside the note and embeds it", async ({ page, request }) => {
-  const h = { "x-atlas": "1" };
+  const h = { "x-kandinsky": "1" };
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "paste.md");
@@ -27,7 +27,7 @@ test("pasting an image saves it beside the note and embeds it", async ({ page, r
 });
 
 test("a paste that hands over nothing (WebKitGTK's paste-as-plain-text of a picture) takes the clipboard's picture from the core", async ({ page, request }) => {
-  const h = { "x-atlas": "1" };
+  const h = { "x-kandinsky": "1" };
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
   // the desktop's clipboard stands in: a test never reads the real one
   await page.route("**/api/clipboard/image", (r) => r.fulfill({ status: 200, contentType: "image/png", body: png }));

@@ -2,7 +2,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 /* the interface's scale: Settings → font size (--ui-scale-set), larger on a phone for fingers (lib/phone.svelte.ts) */
 :root { --ui-scale: calc(var(--ui-scale-set, 1) * var(--eink-scale, 1)); }
-/* No browser "back" from a sideways two-finger swipe, anywhere: Atlas has its own (nav-input.ts), which stays out of
+/* No browser "back" from a sideways two-finger swipe, anywhere: Kandinsky has its own (nav-input.ts), which stays out of
    drawings; the browser's, on top, was a second back. */
 html, body { overscroll-behavior-x: none; }
 html.phone { --ui-scale: calc(var(--ui-scale-set, 1) * var(--eink-scale, 1) * 1.15); }
@@ -62,12 +62,12 @@ button.btn.primary:disabled { opacity: .45; cursor: default; }
 /* One choice among a few lists or scopes (Home's Activity, the Captures view, a Base's filter): a segmented control —
    one sunken track, the chosen one raised; the line (`--card-border`) for e-ink, which has no shadow or tint. A
    component adds only its layout (full width, its place). */
-.atlas-seg { display: flex; flex-wrap: wrap; gap: 2px; /* too narrow for its labels: a second row, never labels over each other */ width: fit-content; max-width: 100%; padding: 2px; background: var(--bg-app); border-radius: var(--radius-sm); }
-.atlas-seg > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; white-space: nowrap; font: inherit;
+.kandinsky-seg { display: flex; flex-wrap: wrap; gap: 2px; /* too narrow for its labels: a second row, never labels over each other */ width: fit-content; max-width: 100%; padding: 2px; background: var(--bg-app); border-radius: var(--radius-sm); }
+.kandinsky-seg > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; white-space: nowrap; font: inherit;
   font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text-muted); background: transparent; border: none; border-radius: calc(var(--radius-sm) - 2px); padding: 3px 10px; cursor: pointer; }
-.atlas-seg > button:hover { color: var(--text); }
-.atlas-seg > button.on { color: var(--heading); background: var(--bg-elev); box-shadow: var(--shadow-sm); outline: 1px solid var(--card-border); }
-.atlas-seg .n, .atlas-seg .count { font-variant-numeric: tabular-nums; color: var(--text-faint); background: transparent; padding: 0; }
+.kandinsky-seg > button:hover { color: var(--text); }
+.kandinsky-seg > button.on { color: var(--heading); background: var(--bg-elev); box-shadow: var(--shadow-sm); outline: 1px solid var(--card-border); }
+.kandinsky-seg .n, .kandinsky-seg .count { font-variant-numeric: tabular-nums; color: var(--text-faint); background: transparent; padding: 0; }
 .link:hover { text-decoration: underline; }
 
 .pane-empty { padding: 48px 24px; text-align: center; }
@@ -96,8 +96,8 @@ button.btn.primary:disabled { opacity: .45; cursor: default; }
 @keyframes pulse { 50% { opacity: .35; } }
 
 /* while a pane divider is dragged: no selection, and iframes/terminals do not eat the pointer */
-body.atlas-resizing, body.atlas-resizing * { user-select: none !important; -webkit-user-select: none !important; }
-body.atlas-resizing iframe, body.atlas-resizing .xterm { pointer-events: none; }
+body.kandinsky-resizing, body.kandinsky-resizing * { user-select: none !important; -webkit-user-select: none !important; }
+body.kandinsky-resizing iframe, body.kandinsky-resizing .xterm { pointer-events: none; }
 
 /* Motion (ui.motion): "full" by default (≈120 ms, subtle); "instant" (also on e-ink and under the system's reduced motion, settings.svelte.ts) — no transitions or fades, the interface
    changes at once. What shows progress or travel keeps moving: spinners, the swipe and
@@ -109,18 +109,19 @@ body.atlas-resizing iframe, body.atlas-resizing .xterm { pointer-events: none; }
 }
 
 /* Shared by plugins (docs/guides/PLUGIN-API.md, "Looks"): a message in place of content — empty, loading or an error —
-   and a button, so every plugin's states look like Atlas's own. An error is a calm box with a red edge and the way
+   and a button, so every plugin's states look like Kandinsky's own. An error is a calm box with a red edge and the way
    out beside it, never a paragraph of red text. */
-.atlas-notice { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 4px 0; padding: 9px 11px; border-radius: var(--radius-sm);
+/* `.atlas-*`: the same looks under the names from before the rename, which plugins built then still use. */
+.kandinsky-notice, .atlas-notice { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 4px 0; padding: 9px 11px; border-radius: var(--radius-sm);
   background: var(--bg-alt); border: 1px solid var(--border); color: var(--text-muted); font-size: calc(12.5px * var(--ui-scale, 1)); line-height: 1.45; overflow-wrap: anywhere; }
-.atlas-notice.error { border-left: 3px solid var(--red); }
-.atlas-notice strong { color: var(--text); font-weight: 600; }
-.atlas-notice .actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.atlas-empty { color: var(--text-faint); font-size: calc(12.5px * var(--ui-scale, 1)); padding: 6px 0; }
-.atlas-btn { font: inherit; font-size: calc(12.5px * var(--ui-scale, 1)); padding: 3px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); cursor: pointer; }
-.atlas-btn:hover { background: var(--bg-hover); }
-.atlas-btn.primary { background: var(--accent); border-color: transparent; color: var(--accent-fg); }
-.atlas-btn.primary:hover { background: var(--accent-strong); }
+.kandinsky-notice.error, .atlas-notice.error { border-left: 3px solid var(--red); }
+.kandinsky-notice strong, .atlas-notice strong { color: var(--text); font-weight: 600; }
+.kandinsky-notice .actions, .atlas-notice .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.kandinsky-empty, .atlas-empty { color: var(--text-faint); font-size: calc(12.5px * var(--ui-scale, 1)); padding: 6px 0; }
+.kandinsky-btn, .atlas-btn { font: inherit; font-size: calc(12.5px * var(--ui-scale, 1)); padding: 3px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); cursor: pointer; }
+.kandinsky-btn:hover, .atlas-btn:hover { background: var(--bg-hover); }
+.kandinsky-btn.primary, .atlas-btn.primary { background: var(--accent); border-color: transparent; color: var(--accent-fg); }
+.kandinsky-btn.primary:hover, .atlas-btn.primary:hover { background: var(--accent-strong); }
 
 /* E-ink (ui.eink): every change is a panel refresh, so nothing moves — not even what ui.motion keeps moving (spinners,
    the swipe signs) — nothing blurs, and links are underlined since their colour is black like the text. */

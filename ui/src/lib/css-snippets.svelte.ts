@@ -1,4 +1,4 @@
-// CSS snippets (docs/guides/MALLEABLE.md, rung 2): every `.atlas/snippets/*.css` applies live — on save,
+// CSS snippets (docs/guides/MALLEABLE.md, rung 2): every `.kandinsky/snippets/*.css` applies live — on save,
 // with no reload — unless `[ui] css_snippets_off` names it. Settings lists them with switches.
 import { api } from "./api";
 import { reloadOnChange } from "./reload-on-change";
@@ -9,12 +9,12 @@ export const cssSnippets = $state({ list: [] as CssSnippet[] });
 
 const off = () => new Set(settings.config?.ui.css_snippets_off ?? []);
 function apply(): void {
-  document.querySelectorAll("style[data-atlas-snippet]").forEach((el) => el.remove());
+  document.querySelectorAll("style[data-kandinsky-snippet]").forEach((el) => el.remove());
   const skip = off();
   for (const s of cssSnippets.list) {
     if (skip.has(s.name)) continue;
     const el = document.createElement("style");
-    el.dataset.atlasSnippet = s.name;
+    el.dataset.kandinskySnippet = s.name;
     el.textContent = s.css;
     document.head.append(el); // after the app's own styles: snippets win ties
   }
@@ -27,7 +27,7 @@ export async function reloadCssSnippets(): Promise<void> {
 
 export function initCssSnippets(): void {
   void reloadCssSnippets();
-  reloadOnChange(() => void reloadCssSnippets(), { wait: 150, wants: (p) => p.startsWith(".atlas/snippets/") });
+  reloadOnChange(() => void reloadCssSnippets(), { wait: 150, wants: (p) => p.startsWith(".kandinsky/snippets/") });
   onSettings(() => apply());
 }
 
@@ -35,6 +35,6 @@ export const SNIPPET_TEMPLATE = `/* A CSS snippet: it restyles Kandinsky as soon
    Switch it off in Settings → CSS snippets. Useful hooks:
    colours  var(--accent) var(--bg) var(--bg-alt) var(--text) var(--heading) var(--border)
    notes    .markdown (the live-preview editor)   headings  .cm-header-1 … .cm-header-6
-   panes    .atlas-pane-<kind> (editor, today, library…)   status bar  .status            */
+   panes    .kandinsky-pane-<kind> (editor, today, library…)   status bar  .status            */
 
 `;

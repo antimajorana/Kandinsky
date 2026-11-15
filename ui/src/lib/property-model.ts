@@ -14,7 +14,7 @@ export const WIKI = /^\[\[([^\]|]+)(?:\|([^\]]+))?\]\]$/;
 const isTagKey = (k: string) => /^(tags?|aliases?|cssclasses)$/i.test(k);
 
 /** The note's frontmatter (`---` on the first line, after a BOM, to the next `---` / `...` alone), or null. The core
- *  reads it the same way (atlas-text `frontmatter::split`). */
+ *  reads it the same way (kandinsky-text `frontmatter::split`). */
 export function frontmatterOf(text: string): Frontmatter | null {
   const s = frontmatterSpan(text);
   return s && { ...s, data: parseYaml(s.yaml) };

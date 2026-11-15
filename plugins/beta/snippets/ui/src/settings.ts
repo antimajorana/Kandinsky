@@ -90,7 +90,7 @@ function mountTry(host: HTMLElement, engine: ReturnType<typeof makeEngine>) {
   host.append(el("div", TITLE, "Try"), row, out);
 }
 
-export function mountSection(host: HTMLElement, o: { atlas: PluginApi; engine: ReturnType<typeof makeEngine>; ctx: SettingsSectionContext; read(): Read; reload(): Promise<Read>; convert(): Promise<void> }) {
+export function mountSection(host: HTMLElement, o: { kandinsky: PluginApi; engine: ReturnType<typeof makeEngine>; ctx: SettingsSectionContext; read(): Read; reload(): Promise<Read>; convert(): Promise<void> }) {
   const { engine, ctx } = o;
   const top = el("div"), tryBox = el("div"), packs = el("div"), problems = el("div"), list = el("div");
   host.append(top, tryBox, problems, packs, list);
@@ -108,7 +108,7 @@ export function mountSection(host: HTMLElement, o: { atlas: PluginApi; engine: R
       row.append(b);
       top.append(row);
     } else if (!read.modules.length) {
-      top.append(el("div", MUTED, "No snippets yet: put a JavaScript module in .atlas/snippets/."));
+      top.append(el("div", MUTED, "No snippets yet: put a JavaScript module in .kandinsky/snippets/."));
     } else {
       top.append(el("div", MUTED, `From ${read.modules.join(", ")}: the vault's own files, the one place snippets come from. A switch here turns one off (or on) without touching the file.`));
     }
@@ -182,7 +182,7 @@ export function mountSection(host: HTMLElement, o: { atlas: PluginApi; engine: R
         const body = typeof s.body === "string" ? s.body : null;
         if (body && s.math && !s.regex) {
           // a preview that cannot be drawn is left blank, never a red error: the source beside it says what it gives
-          try { o.atlas.editor.drawMath(drawn, preview(body), false); } catch { drawn.replaceChildren(); }
+          try { o.kandinsky.editor.drawMath(drawn, preview(body), false); } catch { drawn.replaceChildren(); }
           if (drawn.querySelector(".katex-error")) drawn.replaceChildren();
         }
         const what = el("div", "min-width:0;overflow:hidden;");

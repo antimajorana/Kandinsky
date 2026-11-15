@@ -1,4 +1,4 @@
-// A note (Obsidian/Atlas Markdown) → pandoc Markdown, the same for every format: a paper linked as [[citekey]] is a
+// A note (Obsidian/Kandinsky Markdown) → pandoc Markdown, the same for every format: a paper linked as [[citekey]] is a
 // pandoc citation [@citekey] (each writer renders it its own way: biblatex, Typst's #cite, citeproc), other wikilinks
 // their alias or name, a picture with an italic line under it a captioned figure, an embedded note its text (three
 // deep), callouts quotes with a bold title, ==marks== highlights; comments, block ids and query blocks go. Pure: the
@@ -28,7 +28,7 @@ import { expandAlign } from "../../../../ui/src/lib/math-align";
 import { equationTarget, linkText, noteEquations, numberedTex, refOf, type Equations } from "../../../../ui/src/lib/equations";
 
 const IMAGE = /\.(png|jpe?g|gif|svg|webp|pdf|eps)$/i;
-// fenced blocks Atlas or Obsidian draw from a query: nothing to print
+// fenced blocks Kandinsky or Obsidian draw from a query: nothing to print
 const QUERY_FENCES = new Set(["view", "base", "tasks", "dataview", "dataviewjs", "query"]);
 
 export const dirname = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
@@ -89,7 +89,7 @@ function segments(md: string): [boolean, string, string][] {
 }
 
 /** Display math as every writer takes it: on lines of its own, a `$$align` block (and a whole `\begin{align}` in `$$`)
- *  as pandoc's `aligned`, valid inside display math everywhere. Atlas's macros stay as written: each road carries their
+ *  as pandoc's `aligned`, valid inside display math everywhere. Kandinsky's macros stay as written: each road carries their
  *  definitions (helper.ts). */
 export const mathPortable = (text: string) => text.replace(/\$\$([\s\S]+?)\$\$/g, (_, tex: string) =>
   `$$\n${expandAlign(tex.trim()).replace(/^\\begin\{align\*?\}([\s\S]*)\\end\{align\*?\}$/, "\\begin{aligned}$1\\end{aligned}")}\n$$`);

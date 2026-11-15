@@ -6,7 +6,7 @@ import { openFile } from "./open";
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="teal"/></svg>`;
 
 test("holding a picture in a note shows it alone; two fingers zoom it; a tap closes it", async ({ page, request }) => {
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "notes/held-image.md", text: "# Held\n\n![poster](https://pictures.test/poster.svg)\n" } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "notes/held-image.md", text: "# Held\n\n![poster](https://pictures.test/poster.svg)\n" } });
   await page.route("https://pictures.test/**", (route) => route.fulfill({ contentType: "image/svg+xml", body: SVG }));
   await page.goto("/");
   await openFile(page, "held-image.md");

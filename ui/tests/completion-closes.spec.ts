@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { openFile } from "./open";
 
 // A completion list goes as soon as nothing can complete at the caret: not when typing pauses, not when the core answers.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("a note's list closes at the key that ends the word, however slow the core and however fast the typing", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/closes.md", text: "# Closes\n\nprose\n" } });

@@ -3,7 +3,7 @@
 import { extractNoteInfo } from "./tag-engine.js";
 import { buildIndexFromNotes, promptRenameTag, scanVaultTags, sortedChildren } from "./tag-index.js";
 
-const STYLE_ID = "atlas-tag-wrangler-styles";
+const STYLE_ID = "kandinsky-tag-wrangler-styles";
 const CSS = `
 .tw-root { display:flex; flex-direction:column; height:100%; min-height:0; color:var(--text); font-size:13px; user-select:none; }
 .tw-bar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px 10px; border-bottom:1px solid var(--border); background:var(--bg); position:sticky; top:0; z-index:2; }
@@ -63,10 +63,10 @@ const h = (tag, cls, text) => {
 };
 
 /** Mount Tag Wrangler into `host`. Returns cleanup function. */
-export function mountTagWrangler(host, atlas, opts = {}) {
+export function mountTagWrangler(host, kandinsky, opts = {}) {
   ensureStyles();
   const compact = !!opts.compact;
-  let sortMode = atlas.plugin.settings?.sort === "name" ? "name" : "count";
+  let sortMode = kandinsky.plugin.settings?.sort === "name" ? "name" : "count";
   let query = "";
   let selectedTag = opts.initialTag || "";
   let index = null;
@@ -86,7 +86,7 @@ export function mountTagWrangler(host, atlas, opts = {}) {
   if (compact) {
     const paneBtn = h("button", "tw-btn tw-btn-accent", "Tactician");
     paneBtn.title = "Open full Tag Wrangler & Tactician pane";
-    paneBtn.onclick = () => atlas.openView(selectedTag || undefined);
+    paneBtn.onclick = () => kandinsky.openView(selectedTag || undefined);
     bar.append(paneBtn);
   }
 
@@ -98,7 +98,7 @@ export function mountTagWrangler(host, atlas, opts = {}) {
   root.append(bar, body);
   host.replaceChildren(root);
 
-  const openNote = (path, ev) => atlas.open(path, undefined, { beside: !!(ev?.ctrlKey || ev?.metaKey) });
+  const openNote = (path, ev) => kandinsky.open(path, undefined, { beside: !!(ev?.ctrlKey || ev?.metaKey) });
 
   const matchesFilter = (node, q) => {
     if (!q) return true;
@@ -111,7 +111,7 @@ export function mountTagWrangler(host, atlas, opts = {}) {
   };
 
   const doRename = async (tag) => {
-    const next = await promptRenameTag(atlas, tag, index);
+    const next = await promptRenameTag(kandinsky, tag, index);
     if (next) {
       if (selectedTag === tag) selectedTag = next;
       if (openNoteLists.delete(tag)) openNoteLists.add(next);
@@ -168,8 +168,8 @@ export function mountTagWrangler(host, atlas, opts = {}) {
         const nb = h("button", "tw-note-btn");
         nb.title = path;
         nb.append(h("span", "tw-note-title", info?.title ?? path), h("span", "tw-note-path", path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "/"));
-        nb.onmouseenter = () => atlas.hover(path);
-        nb.onmouseleave = () => atlas.hover(null);
+        nb.onmouseenter = () => kandinsky.hover(path);
+        nb.onmouseleave = () => kandinsky.hover(null);
         nb.onclick = (ev) => openNote(path, ev);
         list.append(nb);
       }
@@ -224,8 +224,8 @@ export function mountTagWrangler(host, atlas, opts = {}) {
         }
         card.append(chips);
       }
-      card.onmouseenter = () => atlas.hover(path);
-      card.onmouseleave = () => atlas.hover(null);
+      card.onmouseenter = () => kandinsky.hover(path);
+      card.onmouseleave = () => kandinsky.hover(null);
       card.onclick = (ev) => openNote(path, ev);
       detailPane.append(card);
     }
@@ -265,7 +265,7 @@ export function mountTagWrangler(host, atlas, opts = {}) {
   async function fullScan() {
     loading = !index;
     if (loading) render();
-    index = await scanVaultTags(atlas);
+    index = await scanVaultTags(kandinsky);
     loading = false;
     if (!selectedTag && !compact) {
       const first = sortedChildren(index.root, sortMode)[0];
@@ -281,8 +281,8 @@ export function mountTagWrangler(host, atlas, opts = {}) {
     if (mdPaths.length > 25) return fullScan();
     const nextNotes = new Map(index.notes);
     await Promise.all(mdPaths.map(async (p) => {
-      if (await atlas.exists(p)) {
-        try { nextNotes.set(p, extractNoteInfo(p, await atlas.readText(p))); }
+      if (await kandinsky.exists(p)) {
+        try { nextNotes.set(p, extractNoteInfo(p, await kandinsky.readText(p))); }
         catch { nextNotes.delete(p); }
       } else {
         nextNotes.delete(p);
@@ -301,11 +301,11 @@ export function mountTagWrangler(host, atlas, opts = {}) {
   refreshBtn.onclick = () => void fullScan();
 
   let timer;
-  const offFs = atlas.onFilesChanged((paths) => {
+  const offFs = kandinsky.onFilesChanged((paths) => {
     clearTimeout(timer);
     timer = setTimeout(() => void incrementalUpdate(paths), 220);
   });
 
   void fullScan();
-  return () => { clearTimeout(timer); offFs(); atlas.hover(null); };
+  return () => { clearTimeout(timer); offFs(); kandinsky.hover(null); };
 }

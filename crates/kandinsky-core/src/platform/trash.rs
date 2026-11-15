@@ -1,6 +1,6 @@
 //! The desktop's own Trash, where a deleted file stays recoverable from the file manager: on Linux `gio trash` (the
 //! freedesktop Trash every desktop shows), on macOS the Finder's Trash and on Windows the Recycle Bin (the `trash`
-//! crate's native calls). A phone has none: the caller then uses the vault's `.atlas/trash/` (files.rs `trash`).
+//! crate's native calls). A phone has none: the caller then uses the vault's `.kandinsky/trash/` (files.rs `trash`).
 use std::path::Path;
 
 /// Moves `p` to the system Trash; an error when there is none or it refused (the caller falls back).

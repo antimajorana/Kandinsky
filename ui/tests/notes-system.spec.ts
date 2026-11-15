@@ -3,7 +3,7 @@ import { shownName } from "../src/lib/paths";
 
 // The generic pieces of a note system (docs/guides/NOTES-SYSTEM.md): a review queue kept in the notes'
 // own properties, next actions, typed links, a tree by a property — and the starter kit built on them.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (page: Page, path: string, text: string) => page.request.put("/api/file", { headers: H, data: { path, text } });
 const read = (page: Page, path: string) => page.request.get(`/api/file?path=${path}`, { headers: H }).then((r) => r.json()).then((j) => String(j.text ?? ""));
 
@@ -57,7 +57,7 @@ test("next actions, a tree by `up`, and typed backlinks come from the notes' own
   await openFile(page, "Work.page");
 
   // one row per project: its first open task, the dated one first; a project that starts later is not shown
-  const rows = page.locator(".atlas-block .list li");
+  const rows = page.locator(".kandinsky-block .list li");
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText("ask for the template");
   await expect(rows.nth(0)).toContainText("Thesis");
@@ -65,7 +65,7 @@ test("next actions, a tree by `up`, and typed backlinks come from the notes' own
   await expect(rows.nth(1)).toContainText("2026-11-01"); // the note's due date stands in for the task's
 
   // the tree nests notes under the note their `up` names
-  const tree = page.locator(".atlas-block .tree");
+  const tree = page.locator(".kandinsky-block .tree");
   await expect(tree.locator("> ul > li")).toHaveCount(1);
   await expect(tree.locator("> ul > li > .row .title")).toHaveText("Thesis");
   await expect(tree.locator("ul ul .title")).toHaveText(["Paper", "Someday"]);
@@ -91,18 +91,18 @@ test("the starter kit adds only missing files after a confirm; a note from a tem
   await expect(palette.getByRole("textbox")).toBeFocused();
   await page.keyboard.type("Starter kit");
   await palette.getByText("Starter kit: add the note system's files").click();
-  await expect(palette.getByText(".atlas/pages/Next.page", { exact: true })).toBeVisible();
+  await expect(palette.getByText(".kandinsky/pages/Next.page", { exact: true })).toBeVisible();
   await expect(palette.locator(".item, [role=option]", { hasText: "Next.page" })).toContainText("kept as it is");
   expect(await read(page, "templates/project.md")).toBe(""); // listed, nothing written yet
   await palette.getByText(/Add the \d+ missing files/).click();
   await expect(page.locator(".cm-content")).toContainText("The four kinds of notes");
   await expect.poll(() => read(page, "templates/project.md")).toContain("type: project");
   expect(await read(page, "Next.page")).toContain("My own next page"); // an existing file is never replaced…
-  expect(await read(page, ".atlas/pages/Next.page"), "…nor doubled in the kit's own folder").toBe("");
-  // the kit's pages go to .atlas/pages/, out of the vault's root, and its links still find them
-  expect(await read(page, ".atlas/pages/Projects.base")).toContain("type");
+  expect(await read(page, ".kandinsky/pages/Next.page"), "…nor doubled in the kit's own folder").toBe("");
+  // the kit's pages go to .kandinsky/pages/, out of the vault's root, and its links still find them
+  expect(await read(page, ".kandinsky/pages/Projects.base")).toContain("type");
   const listed = (await (await page.request.get("/api/files", { headers: H })).json()) as string[];
-  expect(listed, "the core lists .atlas/pages/, so links and quick open find the pages").toContain(".atlas/pages/Projects.base");
+  expect(listed, "the core lists .kandinsky/pages/, so links and quick open find the pages").toContain(".kandinsky/pages/Projects.base");
   await expect(page.locator(".cm-content .is-unresolved"), "[[Inbox.page|Inbox]] in Start here resolves").toHaveCount(0);
 
   // New note from a template: the template is filled in

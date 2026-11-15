@@ -76,11 +76,11 @@
       <div class="answer" role="group" aria-label="Going?">
         <span>Going?</span>
         {#each ANSWERS as [ps, label] (ps)}
-          <button class="atlas-btn" class:chosen={answer === ps} aria-pressed={answer === ps} onclick={() => void answerWith(ps)}>{label}</button>
+          <button class="kandinsky-btn" class:chosen={answer === ps} aria-pressed={answer === ps} onclick={() => void answerWith(ps)}>{label}</button>
         {/each}
       </div>
     {/if}
-    {#if join}<a class="atlas-btn join" href={join} target="_blank" rel="noreferrer" data-outside title="Opens in your browser (Teams, Zoom… take it from there)"><Icon name="video" size={14} />Join the meeting</a>{/if}
+    {#if join}<a class="kandinsky-btn join" href={join} target="_blank" rel="noreferrer" data-outside title="Opens in your browser (Teams, Zoom… take it from there)"><Icon name="video" size={14} />Join the meeting</a>{/if}
     {#if e.location}<p class="line"><Icon name="pin" size={14} />{#if /^https?:\/\//.test(e.location)}<a href={e.location} target="_blank" rel="noreferrer">{e.location}</a>{:else}{e.location}{/if}</p>{/if}
     {#if e.organizer || e.attendees?.length}
       <div class="line people"><Icon name="people" size={14} />
@@ -93,7 +93,7 @@
     {/if}
     {#if e.description}<p class="line desc"><Icon name="text" size={14} /><span>{e.description}</span></p>{/if}
     <p class="line faint"><Icon name="calendar" size={14} />{e.calendar_name}{e.writable ? "" : " · read-only"}</p>
-    {#if note}<button class="atlas-btn" onclick={() => { cal.atlas.open(note); onclose(); }}><Icon name="note" size={14} />Open the note</button>{/if}
+    {#if note}<button class="kandinsky-btn" onclick={() => { cal.kandinsky.open(note); onclose(); }}><Icon name="note" size={14} />Open the note</button>{/if}
     {#if e.url}<p class="line"><Icon name="link" size={14} /><a href={e.url} target="_blank" rel="noreferrer">{e.url}</a></p>{/if}
   {:else if draft}
     <div class="bar"><button class="tool" onclick={onclose} title="Close (Esc)"><Icon name="x" size={15} /></button></div>
@@ -102,8 +102,8 @@
     <p class="when">{draftWhen}</p>
     <div class="line faint"><Icon name="calendar" size={14} />{#if target}<CalendarPicker {cal} bind:value={target} />{:else}No calendar to write to{/if}</div>
     <div class="acts">
-      <button class="atlas-btn" onclick={() => onmore(title, target)}>More options</button>
-      <button class="atlas-btn primary" onclick={save} disabled={!target}>Save</button>
+      <button class="kandinsky-btn" onclick={() => onmore(title, target)}>More options</button>
+      <button class="kandinsky-btn primary" onclick={save} disabled={!target}>Save</button>
     </div>
   {/if}
 </div>
@@ -133,7 +133,7 @@
   .ps-declined { color: var(--red); }
   .ps-tentative { color: var(--yellow); }
   a { color: var(--accent); }
-  .atlas-btn { display: inline-flex; align-items: center; gap: 6px; justify-self: start; }
+  .kandinsky-btn { display: inline-flex; align-items: center; gap: 6px; justify-self: start; }
   .title { all: unset; font-size: 1.15em; font-weight: 600; color: var(--heading); border-bottom: 2px solid var(--accent); padding: 4px 0; }
   .title::placeholder { color: var(--text-faint); font-weight: 400; }
   .join { text-decoration: none; }

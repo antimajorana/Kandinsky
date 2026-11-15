@@ -119,9 +119,9 @@ impl Client {
     /// Email's token for this mailbox (it keeps and renews the sign-in).
     fn token(user: &str) -> Result<String> {
         if !crate::conf::serving() {
-            return Err(DavError::Setup("an Exchange calendar needs Atlas running (its sign-in is the Email plugin's)".into()));
+            return Err(DavError::Setup("an Exchange calendar needs Kandinsky running (its sign-in is the Email plugin's)".into()));
         }
-        let a = atlas_plugin::Atlas::new()
+        let a = kandinsky_plugin::Kandinsky::new()
             .post("/api/plugins/@mail/helper", &json!({ "method": "calendar_token", "params": { "user": user }, "timeout_secs": 60 }))
             .map_err(|e| DavError::Setup(format!("Exchange sign-in through Email: {e}")))?;
         a["token"].as_str().map(str::to_string).ok_or_else(|| DavError::Setup(format!("Exchange sign-in through Email: {}", a["error"].as_str().unwrap_or("no token"))))
@@ -384,7 +384,7 @@ impl Client {
         Ok(self.fetch(&href)?.map(|(etag, text)| (href, etag, text)))
     }
 
-    /// As the CalDAV client's: added under `<uid>.ics`, or kept, or updated when its X-ATLAS-HASH differs.
+    /// As the CalDAV client's: added under `<uid>.ics`, or kept, or updated when its X-KANDINSKY-HASH differs.
     pub fn upsert(&self, cal: &Url, uid: &str, text: &str, hash: Option<&str>, existing: Existing) -> Result<(Outcome, Url)> {
         let href = crate::caldav::as_dir(cal.clone()).join(&resource_name(uid)).map_err(|e| DavError::Setup(e.to_string()))?;
         match self.fetch(&href)? {
@@ -393,7 +393,7 @@ impl Client {
                 Ok((Outcome::Added, href))
             }
             Some((etag, old)) => {
-                if existing == Existing::Keep || hash.is_some_and(|h| ics::unfold(&old).contains(&format!("X-ATLAS-HASH:{h}"))) {
+                if existing == Existing::Keep || hash.is_some_and(|h| ics::has_hash(&old, h)) {
                     return Ok((Outcome::Unchanged, href));
                 }
                 self.write(&href, text, etag.as_deref().or(Some("*")))?;

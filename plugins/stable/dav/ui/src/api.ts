@@ -37,9 +37,9 @@ export interface Quick { title: string; all_day: boolean; start: string; end: st
 export const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /** A helper call with the plugin's settings and the page's zone; the error stripped of the transport's prefix. */
-export async function call<T>(atlas: PluginApi, method: string, params: Record<string, unknown> = {}, timeout = 120): Promise<T> {
+export async function call<T>(kandinsky: PluginApi, method: string, params: Record<string, unknown> = {}, timeout = 120): Promise<T> {
   try {
-    return (await atlas.helper.call(method, { tz: TZ, ...params, settings: atlas.plugin.settings }, { timeout })) as T;
+    return (await kandinsky.helper.call(method, { tz: TZ, ...params, settings: kandinsky.plugin.settings }, { timeout })) as T;
   } catch (e) {
     throw new Error(String((e as Error)?.message ?? e).replace(/^.*?plugin [\w-]+: \w+: /s, "").replace(/^.*?(method|error): /i, ""));
   }
@@ -113,7 +113,7 @@ export function hueColor(s: string): string {
   return `hsl(${h} 62% 52%)`;
 }
 
-/** A vault note an event came from (X-ATLAS-SOURCE): a path, not a Message-ID. */
+/** A vault note an event came from (X-KANDINSKY-SOURCE): a path, not a Message-ID. */
 export const notePath = (e: Ev) => (e.source && !e.source.includes("@") && /\.md$/i.test(e.source) ? e.source : null);
 
 /** The repeat choices of the editor, from the occurrence's day. */
@@ -144,7 +144,7 @@ export function ruleText(r: string | undefined): string {
 
 /** The pane's arg that opens the new-event editor alone, in a dialog (view.ts). */
 export const NEW_EVENT_DIALOG = JSON.stringify({ dialog: "new-event" });
-/** What a new-event dialog starts with: a meeting from a mail (Email asks with `atlas-calendar:new`). */
+/** What a new-event dialog starts with: a meeting from a mail (Email asks with `kandinsky-calendar:new`). */
 export interface NewEventSeed { title?: string; guests?: string[]; description?: string }
 /** The dialog's arg for a seeded new event. */
 export const newEventDialog = (seed: NewEventSeed = {}) => JSON.stringify({ dialog: "new-event", ...seed });

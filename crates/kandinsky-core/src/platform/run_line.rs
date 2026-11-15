@@ -1,6 +1,6 @@
 //! A `run =` line (a plugin's helper or data script, a vault command) turned into a process, without a shell when it
 //! can be: a program and its arguments, quoted with `"…"` or `'…'`, `\` escapes, `$VAR`, `${VAR}`, `${VAR:-default}`
-//! and a leading `~/` — the shape every plugin line has. Windows has no `sh`, so this is how Atlas starts them there;
+//! and a leading `~/` — the shape every plugin line has. Windows has no `sh`, so this is how Kandinsky starts them there;
 //! one parser serves every OS. A line using more of the shell (pipes, `&&`, `if`, redirects, `$(…)`) is
 //! [`Launch::Shell`]: `sh -c` on Unix, and on Windows the `sh` of Git for Windows when it is on the PATH. [`plan`] is the
 //! one decision; processes (`command`) and terminal tabs (pty.rs) are both built from it.
@@ -167,7 +167,10 @@ pub fn plan(line: &str, cwd: &Path, env: &[(String, OsString)]) -> Result<Plan, 
 }
 
 /// A process for `line` ([`plan`]), run in `cwd`, with `env` set.
+/// Each `KANDINSKY_<NAME>` in `env` is set (and expanded in the line) as `ATLAS_<NAME>` too, the name installed
+/// manifests from before the rename use (`$ATLAS_PLUGIN_DIR`).
 pub fn command(line: &str, cwd: &Path, env: &[(String, OsString)]) -> Result<tokio::process::Command, String> {
+    let env = &crate::env::with_legacy(env);
     let Plan { program, args } = plan(line, cwd, env)?;
     let mut cmd = std::process::Command::new(program);
     cmd.args(args).current_dir(cwd).envs(env.iter().map(|(k, v)| (k, v)));
@@ -214,8 +217,8 @@ mod tests {
 
     fn vars(name: &str) -> Option<String> {
         match name {
-            "ATLAS_PLUGIN_DIR" => Some("/v/.atlas/plugins/my plugin".into()),
-            "ATLAS_PLUGIN_TARGET" => Some("x86_64-linux".into()),
+            "KANDINSKY_PLUGIN_DIR" => Some("/v/.kandinsky/plugins/my plugin".into()),
+            "KANDINSKY_PLUGIN_TARGET" => Some("x86_64-linux".into()),
             "EMPTY" => Some(String::new()),
             _ => None,
         }
@@ -229,11 +232,27 @@ mod tests {
     }
 
     #[test]
+    fn a_manifest_from_before_the_rename_finds_its_variables_under_the_old_names() {
+        // what `command` gives the line: the core's KANDINSKY_* and, beside each, the old name (env.rs)
+        let env = crate::env::with_legacy(&[
+            ("KANDINSKY_PLUGIN_DIR".to_string(), OsString::from("/v/.kandinsky/plugins/p")),
+            ("KANDINSKY_PLUGIN_TARGET".to_string(), OsString::from("x86_64-linux")),
+        ]);
+        let var = |n: &str| env.iter().find(|(k, _)| k == n).map(|(_, v)| v.to_string_lossy().into_owned());
+        let run = |line: &str| match parse(line, &var) {
+            Launch::Direct { program, args } => (program, args),
+            other => panic!("{line:?} → {other:?}"),
+        };
+        assert_eq!(run(r#""$ATLAS_PLUGIN_DIR/bin/$ATLAS_PLUGIN_TARGET/ocr" --serve"#), ("/v/.kandinsky/plugins/p/bin/x86_64-linux/ocr".into(), vec!["--serve".into()]));
+        assert_eq!(run(r#""${ATLAS_PLUGIN_BIN:-$ATLAS_PLUGIN_DIR/bin/$ATLAS_PLUGIN_TARGET}/catalog""#).0, "/v/.kandinsky/plugins/p/bin/x86_64-linux/catalog");
+    }
+
+    #[test]
     fn plugin_lines_are_direct() {
-        assert_eq!(direct(r#"python3 -u "$ATLAS_PLUGIN_DIR/helper.py""#), ("python3".into(), vec!["-u".into(), "/v/.atlas/plugins/my plugin/helper.py".into()]));
-        assert_eq!(direct(r#""$ATLAS_PLUGIN_DIR/bin/$ATLAS_PLUGIN_TARGET/ocr""#).0, "/v/.atlas/plugins/my plugin/bin/x86_64-linux/ocr");
-        assert_eq!(direct(r#""${ATLAS_PLUGIN_BIN:-$ATLAS_PLUGIN_DIR/bin/$ATLAS_PLUGIN_TARGET}/catalog""#).0, "/v/.atlas/plugins/my plugin/bin/x86_64-linux/catalog");
-        assert_eq!(direct("python3 .atlas/plugins/runs/poll.py --root runs").1, [".atlas/plugins/runs/poll.py", "--root", "runs"]);
+        assert_eq!(direct(r#"python3 -u "$KANDINSKY_PLUGIN_DIR/helper.py""#), ("python3".into(), vec!["-u".into(), "/v/.kandinsky/plugins/my plugin/helper.py".into()]));
+        assert_eq!(direct(r#""$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET/ocr""#).0, "/v/.kandinsky/plugins/my plugin/bin/x86_64-linux/ocr");
+        assert_eq!(direct(r#""${KANDINSKY_PLUGIN_BIN:-$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET}/catalog""#).0, "/v/.kandinsky/plugins/my plugin/bin/x86_64-linux/catalog");
+        assert_eq!(direct("python3 .kandinsky/plugins/runs/poll.py --root runs").1, [".kandinsky/plugins/runs/poll.py", "--root", "runs"]);
     }
 
     #[test]
@@ -248,7 +267,7 @@ mod tests {
         assert_eq!(direct(r#"echo "" $EMPTY $UNSET x"#).1, ["", "x"]);
         assert_eq!(direct("echo ${EMPTY:-fallback}").1, ["fallback"]);
         // a variable is one word, spaces and all
-        assert_eq!(direct("ls $ATLAS_PLUGIN_DIR").1, ["/v/.atlas/plugins/my plugin"]);
+        assert_eq!(direct("ls $KANDINSKY_PLUGIN_DIR").1, ["/v/.kandinsky/plugins/my plugin"]);
     }
 
     #[test]

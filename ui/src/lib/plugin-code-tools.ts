@@ -1,4 +1,4 @@
-// Tools a plugin adds to the bar above a code file (`atlas.editor.toolbar(fn)`): run, build, test —
+// Tools a plugin adds to the bar above a code file (`kandinsky.editor.toolbar(fn)`): run, build, test —
 // whatever the file's language wants. One list; the bar asks it for the file it shows.
 import { guard } from "./plugin-log.svelte";
 

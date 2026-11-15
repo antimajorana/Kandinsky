@@ -37,10 +37,10 @@ export interface PluginApi {
    *  Only in a pane (view.js); undefined in main.js and blocks. */
   pane?: PluginPane;
   /** Open the plugin's pane (view.js) in a tab, or focus it when one is open on the same `arg`. Each `arg`
-   *  (a string: JSON-encode more) is a tab of its own, kept in the layout; the pane reads it as `atlas.arg`. */
+   *  (a string: JSON-encode more) is a tab of its own, kept in the layout; the pane reads it as `kandinsky.arg`. */
   openView(arg?: string, opts?: { title?: string; icon?: string; beside?: boolean }): void;
   /** (v20) The plugin's pane (view.js) in a popup over the app instead of a tab — a dialog (Export, Print): the same
-   *  module and API, `atlas.arg` = `arg`, `atlas.pane.close()` closes it, as do Escape, Back and its ✕. Resolves when it
+   *  module and API, `kandinsky.arg` = `arg`, `kandinsky.pane.close()` closes it, as do Escape, Back and its ✕. Resolves when it
    *  closes; asked again while it is open, the same one. `width`/`height` in px (shrunk to the window). (v23) `view`:
    *  another module of the plugin's folder (`signin.js`), shaped as view.js, so each dialog is a small module of its own. */
   openDialog(arg?: string, opts?: { title?: string; width?: number; height?: number; view?: string }): Promise<void>;
@@ -61,7 +61,7 @@ export interface PluginApi {
   openNative(path: string): boolean;
   /** Open a table file in the table viewer (any `.tsv`/`.csv`). */
   openTable(path: string): void;
-  /** (v28) A web link opened as Atlas opens any link (`[web] open_links`: a tab of Atlas, its window, the browser);
+  /** (v28) A web link opened as Kandinsky opens any link (`[web] open_links`: a tab of Kandinsky, its window, the browser);
    *  `outside`: the system's browser whatever that says — what a Shift+click means. A pane that draws foreign HTML (a
    *  mail) sends its links here instead of letting the frame open them. */
   openLink(url: string, opts?: { outside?: boolean }): void;
@@ -106,7 +106,7 @@ export interface PluginApi {
   context(): ContextSnapshot;
   /** Called on every context change (with a snapshot); returns the unsubscribe function. */
   onContext(fn: (c: ContextSnapshot) => void): () => void;
-  /** Point at a note (or clear with null): other panes highlight it, as Atlas's own views do. */
+  /** Point at a note (or clear with null): other panes highlight it, as Kandinsky's own views do. */
   hover(path: string | null, line?: number): void;
   /** Rewrite one frontmatter property of a note (only that key; lists from arrays). */
   writeProperty(path: string, key: string, value: string | string[]): Promise<void>;
@@ -142,7 +142,7 @@ export interface PluginApi {
   other(id: string): { settings: Record<string, unknown>; data(args?: unknown): Promise<unknown> } | null;
   /** One of the vault's libraries: a tab of the Libraries page (the phone's Library), shown as the vault's
    *  `[ui] libraries` says (docs/design/DESIGN-libraries-everywhere.md). The page that draws it is a plugin's (the
-   *  Catalog's, `provides = ["libraries"]`); Atlas keeps only the list. Returns its removal. */
+   *  Catalog's, `provides = ["libraries"]`); Kandinsky keeps only the list. Returns its removal. */
   registerLibrary(source: LibrarySource): () => void;
   /** (v24) The vault's libraries for the plugin whose pane is the Libraries page: `list()` those the vault shows, in its
    *  order (each made by `source()` when first shown), `onChange(fn)` called with the list now and whenever it changes
@@ -152,11 +152,11 @@ export interface PluginApi {
   mountBlock(host: HTMLElement, block: string | Record<string, unknown>, notePath?: string): () => void;
   /** A TSV/CSV file parsed (header sniffed, any size). */
   table(path: string): Promise<Table>;
-  /** Atlas's plot (zoom, hover, ≤ 3000 drawn points): x and one or more y series. Returns the cleanup. */
+  /** Kandinsky's plot (zoom, hover, ≤ 3000 drawn points): x and one or more y series. Returns the cleanup. */
   plot(host: HTMLElement, d: { x: number[]; ys: number[][]; xLabel?: string; yLabels?: string[] }): () => void;
   /** A note's frontmatter as an object ({} when none). */
   noteProps(path: string): Promise<Record<string, unknown>>;
-  /** (v10) A file to the vault's Trash (`.atlas/trash/`, taken back from there): what a library's Delete… does. */
+  /** (v10) A file to the vault's Trash (`.kandinsky/trash/`, taken back from there): what a library's Delete… does. */
   trash(path: string): Promise<void>;
   /** The one note of file `path` (a paper's PDF: the paper's note; else `<name>.md` beside it): its path, made by the
    *  core when missing — the vault's template rules, the file's block, `properties` — as on every device. `find`:
@@ -165,7 +165,7 @@ export interface PluginApi {
   /** (v14) The marks of a PDF or a book of pictures (a manga chapter: an archive, or a folder ending in `/`) — kept
    *  by the core in the file's note (a chapter's in its series' note, a block each) — and that note, to watch. */
   marks(file: string): Promise<{ note: string | null; marks: import("./gen/Mark").Mark[] }>;
-  /** (v14) A page's marks drawn as Atlas draws them (ink with its pressure, highlights, post-its…), to lay over the
+  /** (v14) A page's marks drawn as Kandinsky draws them (ink with its pressure, highlights, post-its…), to lay over the
    *  page: an `<svg>` filling its positioned parent. `size`: the page in the marks' space, PDF points (default: a
    *  picture page, 1000 × 1000 — its fractions). */
   marksSvg(marks: readonly import("./gen/Mark").Mark[], page: number, size?: [number, number]): SVGSVGElement;
@@ -182,7 +182,7 @@ export interface PluginApi {
   capture(text: string): Promise<{ path: string; line: number }>;
   /** Write a new file; false (and nothing written) when it already exists. */
   createFile(path: string, text: string): Promise<boolean>;
-  /** Ask the user to choose (or type) a value in the palette: Atlas's one chooser. Returns a function that
+  /** Ask the user to choose (or type) a value in the palette: Kandinsky's one chooser. Returns a function that
    *  closes it if it is still showing (the answer came another way). */
   pick(req: PickRequest): () => void;
   /** Open a sign-in page (OAuth) whose answer comes back to `back`, a localhost address such as
@@ -197,7 +197,7 @@ export interface PluginApi {
    *  shown under the note, inserted only when the user accepts (Alt+Enter). */
   registerSuggestion(p: SuggestionProvider): () => void;
   // --- v4 (docs/refactor/REFACTOR-plugins-v4.md): events, and hooks into the frame grouped by area ---
-  /** Something done in Atlas: `file:open` (a new tab on a file), `file:save`, `file:create` (a new note),
+  /** Something done in Kandinsky: `file:open` (a new tab on a file), `file:save`, `file:create` (a new note),
    *  `file:rename` (`from`, `to`), `file:delete`, `capture` (`path`, `text`), `command` (`id`). Returns the unsubscribe function. */
   on<T extends PluginEventType>(type: T, fn: (e: Extract<PluginEvent, { type: T }>) => void | Promise<void>): () => void;
   /** The network, through the core: no CORS, a timeout, and only the hosts listed in the manifest
@@ -247,7 +247,7 @@ export interface PluginApi {
     line(shell: "posix" | "powershell" | "cmd", program: string, ...args: (string | undefined)[]): string;
   };
   /** The file explorer (lib/file-sources.svelte.ts). `source(def)`: this plugin's places (hosts, servers) in it, one
-   *  source per plugin, its local copies in `.atlas/remote/<plugin id>/`; `explore({ source?, place?, path? })` opens it
+   *  source per plugin, its local copies in `.kandinsky/remote/<plugin id>/`; `explore({ source?, place?, path? })` opens it
    *  there (default: this plugin's source). `list` / `local`: any source's folder, and a vault path to open one of its
    *  files (a local copy of a remote one) — another plugin's server read as the explorer reads it (Books' remote folders). */
   files: {
@@ -276,10 +276,10 @@ export interface PluginApi {
     registerDecoration(pattern: RegExp, render: (m: RegExpExecArray) => DecorationSpec | null | undefined | void): () => void;
     /** Buttons in the bar above a code file: `fn({ path })` → `[{ label, title?, run }]` for that file (run, build, test). */
     toolbar(fn: (file: { path: string }) => CodeTool[] | null | undefined | void): () => void;
-    /** A raw CodeMirror 6 extension: it follows the editor library, not Atlas.
+    /** A raw CodeMirror 6 extension: it follows the editor library, not Kandinsky.
      *  Build it from `codemirror` below — the app's own copies of the library, the only ones the editor accepts. */
     extension(ext: unknown): () => void;
-    /** The editor library's modules as Atlas loaded them. */
+    /** The editor library's modules as Kandinsky loaded them. */
     codemirror: { state: typeof import("@codemirror/state"); view: typeof import("@codemirror/view"); language: { syntaxTree: typeof import("@codemirror/language").syntaxTree } };
     /** (v22) Tab has a job of the plugin's here: `overList` with a completion list on screen, `whileAsking` with one on its way. */
     claimTab(claim: import("./editor/plugin-hooks").TabClaim): () => void;
@@ -315,7 +315,7 @@ export interface PluginApi {
   tikz: {
     png(source: string, scale?: number): Promise<{ png: Blob; width: number }>;
   };
-  /** (v8) The core's pen recogniser (atlas-pen, the phone's own): a held stroke as `[x, y, t, …]` (null breaks a line) →
+  /** (v8) The core's pen recogniser (kandinsky-pen, the phone's own): a held stroke as `[x, y, t, …]` (null breaks a line) →
    *  the shape's wire (`[]`: none), as the drawings snap a held stroke (lib/pen-shapes.ts). */
   pen: {
     shape(xyt: (number | null)[]): Promise<{ wire: number[] }>;
@@ -336,7 +336,7 @@ export interface PluginApi {
     greetingItem(it: { id: string; text: string; icon?: string; title?: string; order?: number; run?: () => void | Promise<void> }): { set(text: string, title?: string): void; remove(): void };
   };
 }
-/** A cell of the status bar (`atlas.shell.statusItem`). */
+/** A cell of the status bar (`kandinsky.shell.statusItem`). */
 export interface StatusItem {
   id: string;
   text: string;
@@ -391,7 +391,7 @@ export interface SettingsSectionContext {
 export type PluginCommand = { id: string; title: string; keys?: string; run(arg?: unknown): void | Promise<void> };
 export interface PluginFetchInit {
   method?: string; headers?: Record<string, string | { secret: string; prefix?: string } | { oauth: string }>; body?: string | object; /** seconds (default 30) */ timeout?: number; saveTo?: string;
-  /** where `saveTo` is: "cache" (default) or "remote" — the local copy of a remote file, `.atlas/remote/<plugin>/` (the explorer opens it) */
+  /** where `saveTo` is: "cache" (default) or "remote" — the local copy of a remote file, `.kandinsky/remote/<plugin>/` (the explorer opens it) */
   saveIn?: "cache" | "remote";
   /** send this vault file's bytes as the body (an upload) */
   bodyFile?: string;
@@ -400,7 +400,7 @@ export interface PluginFetchInit {
 }
 export interface PluginResponse {
   status: number; ok: boolean; headers: Record<string, string>; url: string; saved?: string;
-  /** A sign-in stands in front of the service (Authelia, Authentik…): Atlas has offered it; retry once `signedin`. */
+  /** A sign-in stands in front of the service (Authelia, Authentik…): Kandinsky has offered it; retry once `signedin`. */
   signin?: import("./gen/Needed").Needed;
   text(): Promise<string>; json(): Promise<unknown>;
 }
@@ -529,7 +529,7 @@ export interface LibrarySource {
   many?(items: LibraryItem[]): LibraryAction[];
 }
 
-/** A library as the vault lists it (`atlas.libraries`): who gives it, and its source, made when first shown. */
+/** A library as the vault lists it (`kandinsky.libraries`): who gives it, and its source, made when first shown. */
 export interface LibraryEntry {
   id: string;
   title: string;

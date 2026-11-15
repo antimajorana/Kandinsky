@@ -1,5 +1,5 @@
 // A held stroke snapped to a shape in the web drawing, as Notepad does it: the pen held still at a stroke's
-// end asks the core's recogniser (POST /api/pen/shape → atlas-pen, the phone's own) and its answer becomes
+// end asks the core's recogniser (POST /api/pen/shape → kandinsky-pen, the phone's own) and its answer becomes
 // Excalidraw elements the way Notepad's Figure.snapped makes them. Pure functions here; draw-excalidraw.ts calls them.
 
 /** A sample in scene units with its time (ms since the stroke began). */
@@ -36,7 +36,7 @@ export type Skeleton = {
   points?: [number, number][]; startArrowhead?: "arrow" | null; endArrowhead?: "arrow" | null;
 };
 
-/** The recogniser's wire (atlas-pen shape.rs: 1 line, 2 rectangle, 3 ellipse, 4 triangle, 5 path) as an element, or
+/** The recogniser's wire (kandinsky-pen shape.rs: 1 line, 2 rectangle, 3 ellipse, 4 triangle, 5 path) as an element, or
  *  null for `[0]` / an answer it cannot read. Notepad's Figure.snapped, the same shapes. */
 export function wireToSkeleton(s: readonly number[]): Skeleton | null {
   const box = (pts: [number, number][]) => {

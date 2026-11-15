@@ -1,18 +1,18 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 
-// Plugins v4, shell hooks: `atlas.shell.sideTool({ id, title, icon, mount })` — a plugin's tool in
+// Plugins v4, shell hooks: `kandinsky.shell.sideTool({ id, title, icon, mount })` — a plugin's tool in
 // the side panel, beside Files / Search / Outline / Git, in both homes of the panel.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
-const MAIN = `export function register(atlas) {
-  atlas.shell.sideTool({ id: "party", title: "Party", icon: "table", mount: (host) => { host.innerHTML = '<p class="party-tool">Mira, Brok</p>'; } });
+const MAIN = `export function register(kandinsky) {
+  kandinsky.shell.sideTool({ id: "party", title: "Party", icon: "table", mount: (host) => { host.innerHTML = '<p class="party-tool">Mira, Brok</p>'; } });
 }\n`;
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/sidey/plugin.toml", 'title = "Sidey"\n');
-  await put(request, ".atlas/plugins/sidey/main.js", MAIN);
+  await put(request, ".kandinsky/plugins/sidey/plugin.toml", 'title = "Sidey"\n');
+  await put(request, ".kandinsky/plugins/sidey/main.js", MAIN);
 });
-test.afterAll(async ({ request }) => { await put(request, ".atlas/plugins/sidey/main.js", "export function register() {}\n"); });
+test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/sidey/main.js", "export function register() {}\n"); });
 
 test("a plugin's tool opens in the side column, and in the left bar when the panel lives there", async ({ page }) => {
   await page.goto("/");

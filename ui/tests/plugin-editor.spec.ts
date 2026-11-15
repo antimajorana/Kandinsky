@@ -3,11 +3,11 @@ import { openFile } from "./open";
 
 // Plugins v4, editor hooks (docs/guides/PLUGINS.md "v4"): a completion, a key, a paste handler, decorations
 // for a pattern, and the raw escape hatch — and a hook that throws costs nothing but a log line.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
-const lastLine = (page: Page) => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string } | null } }).__atlas.editor()?.text.trimEnd().split("\n").pop() ?? "");
-const MAIN = `export function register(atlas) {
-  const e = atlas.editor;
+const lastLine = (page: Page) => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } | null } }).__kandinsky.editor()?.text.trimEnd().split("\n").pop() ?? "");
+const MAIN = `export function register(kandinsky) {
+  const e = kandinsky.editor;
   e.registerCompletion({ where: "note", trigger: /@npc:\\w*/, complete: ({ word }) => ["Mira", "Brok"].filter((n) => n.toLowerCase().startsWith(word.slice(5).toLowerCase())).map((n) => ({ label: n, detail: "character", insert: "[[" + n + "]]" })) });
   e.registerCompletion({ complete: () => { throw new Error("a source that breaks"); } });
   e.registerKey("Ctrl+Alt+J", (t) => { t.insert("<" + (t.selection || "none") + "@" + t.line + ">"); });
@@ -21,11 +21,11 @@ const MAIN = `export function register(atlas) {
 }\n`;
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/edhooks/plugin.toml", 'title = "Editor hooks"\n');
-  await put(request, ".atlas/plugins/edhooks/main.js", MAIN);
+  await put(request, ".kandinsky/plugins/edhooks/plugin.toml", 'title = "Editor hooks"\n');
+  await put(request, ".kandinsky/plugins/edhooks/main.js", MAIN);
   await put(request, "notes/hooks-note.md", "# Hooks\n\nroll 2d6 with a :sword: here\n\nend\n");
 });
-test.afterAll(async ({ request }) => { await put(request, ".atlas/plugins/edhooks/main.js", "export function register() {}\n"); });
+test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/edhooks/main.js", "export function register() {}\n"); });
 
 test("a plugin's completion, key, paste handler, decorations and raw extension in the editor", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);

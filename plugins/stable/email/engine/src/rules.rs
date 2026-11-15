@@ -121,7 +121,7 @@ pub fn save(m: &Mail, rules: &[Rule]) -> Result<String, String> {
     let rules = &rules[..];
     let p = path(m);
     let was = std::fs::read_to_string(&p).unwrap_or_default();
-    atlas_plugin::write_file(&p, write(&was, rules).as_bytes()).map_err(|e| e.to_string())?;
+    kandinsky_plugin::write_file(&p, write(&was, rules).as_bytes()).map_err(|e| e.to_string())?;
     Ok(p.strip_prefix(&m.root).unwrap_or(&p).to_string_lossy().into_owned())
 }
 

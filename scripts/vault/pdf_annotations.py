@@ -8,11 +8,11 @@ in its companion drawing `x.pdf.excalidraw`, where every device writes them now 
 
 Target: the paper's reading note `<citekey>.md` when the PDF lives in a Library paper folder (its note names a
 citekey, or an `info.yaml` not folded yet — shape-based, so any `[refs] dir` works; a legacy `notes.md` is renamed first: reading_note.py),
-else `<name>.notes.md`. The export sits between `<!-- atlas:annotations -->` markers and is replaced on
+else `<name>.notes.md`. The export sits between `<!-- kandinsky:annotations -->` markers and is replaced on
 re-export, so the user's own writing in the same file is never touched. Each entry starts with a link to its
 place, `[[<pdf>#page=N&annotation=<id>|p.N]]` (pdf.js's annotation id: object number + "R"): it opens the PDF there
 and flashes the highlight (ui/src/lib/pdf-place.ts).
-Usage: pdf_annotations.py PDF        (or JSON {"path": ...} on stdin, as an Atlas command)
+Usage: pdf_annotations.py PDF        (or JSON {"path": ...} on stdin, as an Kandinsky command)
 """
 from __future__ import annotations
 import json, re, sys
@@ -21,7 +21,17 @@ import fitz  # PyMuPDF
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import reading_note  # noqa: E402  (beside this script)
 
-START, END = "<!-- atlas:annotations -->", "<!-- /atlas:annotations -->"
+START, END = "<!-- kandinsky:annotations -->", "<!-- /kandinsky:annotations -->"
+# the same markers and drawing keys as written before the project was renamed (crates/kandinsky-core/src/legacy.rs):
+# read as the current ones, so an older export is replaced in place and an older drawing reads the same
+OLD_START, OLD_END = "<!-- atlas:annotations -->", "<!-- /atlas:annotations -->"
+OLD_KEY = re.compile(r"^atlas(?=[A-Z])")
+
+def current_keys(custom: dict) -> dict:
+    """`customData` with its keys from before the rename (`atlasPage`…) under the current names; a current key wins."""
+    for k in [k for k in custom if OLD_KEY.match(k)]:
+        custom.setdefault(OLD_KEY.sub("kandinsky", k), custom.pop(k))
+    return custom
 
 def highlighted_text(page, annot) -> str:
     """Text under a highlight's quads (vertices come in groups of 4 points per quad)."""
@@ -49,13 +59,16 @@ def companion_marks(doc, pdf: Path, link_path: str) -> list[str]:
     except (OSError, ValueError):
         return []
     els = [e for e in els if isinstance(e, dict) and not e.get("isDeleted")]
-    # a frame's page: the PDF page picture in it (`customData.atlasPage`)
-    page_of = {e.get("frameId"): (e.get("customData") or {}).get("atlasPage", {}).get("page")
-               for e in els if e.get("type") == "image" and (e.get("customData") or {}).get("atlasPage")}
+    for e in els:
+        if isinstance(e.get("customData"), dict):
+            current_keys(e["customData"])
+    # a frame's page: the PDF page picture in it (`customData.kandinskyPage`)
+    page_of = {e.get("frameId"): (e.get("customData") or {}).get("kandinskyPage", {}).get("page")
+               for e in els if e.get("type") == "image" and (e.get("customData") or {}).get("kandinskyPage")}
     link = lambda n: f"p.{n}" if any(c in link_path for c in "[]|#^") else f"[[{link_path}#page={n}|p.{n}]]"
     out, passages, inked = [], {}, set()
     for e in els:
-        hl = (e.get("customData") or {}).get("atlasHighlight")
+        hl = (e.get("customData") or {}).get("kandinskyHighlight")
         if isinstance(hl, dict) and hl.get("rect") and hl.get("page"):
             passages.setdefault((hl["page"], hl.get("mark") or e.get("id")), []).append(hl["rect"])
         elif e.get("type") == "text" and page_of.get(e.get("frameId")):
@@ -100,6 +113,7 @@ def export(pdf: Path, link_path: str | None = None) -> tuple[Path, int]:
     target = reading_note.note_path(pdf.parent) if paper else pdf.with_suffix(".notes.md")
     block = f"{START}\n## Annotations — {pdf.name}\n\n" + ("\n".join(lines) or "_none yet_") + f"\n{END}\n"
     old = target.read_text(encoding="utf-8") if target.exists() else (reading_note.new_text(pdf.parent) if paper else "")
+    old = old.replace(OLD_START, START).replace(OLD_END, END)
     if START in old and END in old:
         new = old[: old.index(START)] + block + old[old.index(END) + len(END):].lstrip("\n")
     else:
@@ -112,7 +126,7 @@ def main() -> int:
         path = sys.argv[1]
     else:
         path = json.load(sys.stdin)["path"]
-    # a vault-relative path (the Atlas command, run in the vault) is what a link in the vault names
+    # a vault-relative path (the Kandinsky command, run in the vault) is what a link in the vault names
     target, n = export(Path(path), None if Path(path).is_absolute() else path)
     print(f"{n} annotations → {target}")
     return 0

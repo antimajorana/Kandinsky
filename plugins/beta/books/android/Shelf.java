@@ -1,7 +1,7 @@
-package org.atlas.plugins.books;
+package org.kandinsky.plugins.books;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.Props;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.Props;
 import org.json.JSONArray;
 import org.json.JSONObject;
 

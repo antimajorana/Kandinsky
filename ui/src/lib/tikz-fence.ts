@@ -3,7 +3,7 @@
 // the block draws it again. A TeX error shows TeX's own message in place of the picture.
 import { registerFence } from "./fences";
 
-registerFence("atlas", "tikz", (host, fence) => {
+registerFence("kandinsky", "tikz", (host, fence) => {
   let gone = false;
   const box = document.createElement("div");
   box.className = "tikz-figure";

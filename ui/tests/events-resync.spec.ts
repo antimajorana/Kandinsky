@@ -2,8 +2,8 @@ import { test, expect, type Page } from "@playwright/test";
 
 // A page that missed file events (its socket was down, or it fell behind the core's bus) looks at everything again
 // once it is back: an `fs` event naming nothing (bus.ts `touches`).
-const H = { "x-atlas": "1" };
-const text = (page: Page) => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string } | null } }).__atlas.editor()?.text);
+const H = { "x-kandinsky": "1" };
+const text = (page: Page) => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } | null } }).__kandinsky.editor()?.text);
 
 test("an open note shows a change made while the events socket was down", async ({ page }) => {
   let pass = true;

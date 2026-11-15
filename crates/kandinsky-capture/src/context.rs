@@ -49,7 +49,7 @@ pub enum Clip {
 
 /// Where this box keeps what it takes (the screen, a copied picture): the session's runtime folder, removed on exit.
 pub fn scratch() -> PathBuf {
-    atlas_core::platform::dirs::base(atlas_core::platform::dirs::Base::Runtime).join(format!("atlas-capture-{}", std::process::id()))
+    kandinsky_core::platform::dirs::base(kandinsky_core::platform::dirs::Base::Runtime).join(format!("kandinsky-capture-{}", std::process::id()))
 }
 
 /// What is playing (MPRIS: a music player, a browser's video through Plasma's integration): the first player that
@@ -126,13 +126,13 @@ pub fn window_under() -> Option<Window> {
         r#"const pick = (w) => w && w.pid !== {pid} && w.normalWindow && !w.minimized;
 let w = workspace.activeWindow;
 if (!pick(w)) {{ w = null; const s = workspace.stackingOrder; for (let i = s.length - 1; i >= 0; i--) if (pick(s[i])) {{ w = s[i]; break; }} }}
-callDBus("{me}", "/", "org.atlas.Capture", "window", w ? String(w.caption) : "", w ? String(w.resourceClass) : "", w ? String(w.internalId) : "");"#
+callDBus("{me}", "/", "org.kandinsky.Capture", "window", w ? String(w.caption) : "", w ? String(w.resourceClass) : "", w ? String(w.internalId) : "");"#
     );
     let dir = scratch();
     std::fs::create_dir_all(&dir).ok()?;
     let file = dir.join("window.js");
     std::fs::write(&file, script).ok()?;
-    let name = format!("atlas-capture-{pid}");
+    let name = format!("kandinsky-capture-{pid}");
     let got: Arc<Mutex<Option<Window>>> = Arc::default();
     let put = got.clone();
     conn.start_receive(
@@ -188,7 +188,7 @@ pub fn browser_app(class: &str) -> Option<String> {
 }
 
 fn application_dirs() -> Vec<PathBuf> {
-    let data = atlas_core::platform::dirs::base(atlas_core::platform::dirs::Base::Data);
+    let data = kandinsky_core::platform::dirs::base(kandinsky_core::platform::dirs::Base::Data);
     let mut dirs = vec![data.join("applications"), data.join("flatpak/exports/share/applications")];
     let system = std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
     dirs.extend(system.split(':').filter(|d| !d.is_empty()).map(|d| Path::new(d).join("applications")));
@@ -197,7 +197,7 @@ fn application_dirs() -> Vec<PathBuf> {
 }
 
 fn home() -> PathBuf {
-    atlas_core::platform::dirs::home().unwrap_or_default()
+    kandinsky_core::platform::dirs::home().unwrap_or_default()
 }
 
 /// The page a browser window shows: the newest visit in that browser's history whose title the window's caption holds
@@ -525,7 +525,7 @@ pub fn last_screenshot(within: Duration) -> Option<PathBuf> {
 
 /// Spectacle's save folder (its `imageSaveLocation`), else Pictures/Screenshots.
 fn screenshots_dir() -> PathBuf {
-    let config = atlas_core::platform::dirs::base(atlas_core::platform::dirs::Base::Config);
+    let config = kandinsky_core::platform::dirs::base(kandinsky_core::platform::dirs::Base::Config);
     if let Ok(text) = std::fs::read_to_string(config.join("spectaclerc")) {
         if let Some(url) = text.lines().find_map(|l| l.strip_prefix("imageSaveLocation=")) {
             return PathBuf::from(url.trim_start_matches("file://"));
@@ -541,7 +541,7 @@ fn screenshots_dir() -> PathBuf {
 
 /// A picture of that window as it is (KWin's ScreenShot2 `CaptureWindow`): KWin draws the window on its own, so the box —
 /// whether already on screen or not — is never in it, and it is taken the moment the box opens. KWin allows it to programs whose
-/// desktop file lists `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2` (packaging/atlas-capture.desktop);
+/// desktop file lists `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2` (packaging/kandinsky-capture.desktop);
 /// refused, the box falls back to `take_screen`.
 #[cfg(target_os = "linux")]
 pub fn window_shot(w: &Window) -> Result<PathBuf> {
@@ -642,7 +642,7 @@ mod tests {
 
     #[test]
     fn copied_files_are_the_local_ones_that_exist() {
-        let dir = std::env::temp_dir().join(format!("atlas-uri-list-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kandinsky-uri-list-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("a b")).unwrap();
         let file = dir.join("a b").join("Ré sumé.pdf");
         std::fs::write(&file, b"%PDF").unwrap();
@@ -672,7 +672,7 @@ mod tests {
 
     #[test]
     fn histories_are_found_by_shape() {
-        let home = std::env::temp_dir().join(format!("atlas-hist-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("kandinsky-hist-{}", std::process::id()));
         let zen = home.join(".var/app/app.zen_browser.zen/.zen/ab12.Default (release)");
         let chromium = home.join(".config/chromium/Default");
         std::fs::create_dir_all(&zen).unwrap();
@@ -692,7 +692,7 @@ mod tests {
 
     #[test]
     fn a_firefox_history_is_read() {
-        let dir = std::env::temp_dir().join(format!("atlas-places-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kandinsky-places-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let db = dir.join("places.sqlite");
         let c = rusqlite::Connection::open(&db).unwrap();

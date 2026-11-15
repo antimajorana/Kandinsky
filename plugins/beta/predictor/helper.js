@@ -81,11 +81,11 @@
 	//#endregion
 	//#region ui/src/lib/editor/dictionaries.ts
 	/** The vault's folder of dictionaries (synced with the vault, unlike the machine's). */
-	const VAULT_DICTIONARIES = ".atlas/dictionaries";
-	/** The vault, through a helper's `atlas`. */
-	const vaultFiles = (atlas) => ({
-		list: (dir) => atlas.tree(dir).then((t) => t.filter((e) => e.kind === "file").map((e) => e.name), () => null),
-		read: (path) => atlas.read(path)
+	const VAULT_DICTIONARIES = ".kandinsky/dictionaries";
+	/** The vault, through a helper's `kandinsky`. */
+	const vaultFiles = (kandinsky) => ({
+		list: (dir) => kandinsky.tree(dir).then((t) => t.filter((e) => e.kind === "file").map((e) => e.name), () => null),
+		read: (path) => kandinsky.read(path)
 	});
 	/** The machine, through `ls` and `cat` (none on the phone: nothing found there). */
 	const machineFiles = (exec) => ({
@@ -207,12 +207,12 @@
 	const packSentences = (sents) => sents.map((s) => s.join(" ")).join("\n");
 	//#endregion
 	//#region plugins/beta/predictor/helper/helper.ts
-	const exec = (cmd, args, opts) => atlas.exec(cmd, args, opts);
-	const vault = vaultFiles(atlas);
+	const exec = (cmd, args, opts) => kandinsky.exec(cmd, args, opts);
+	const vault = vaultFiles(kandinsky);
 	const machine = machineFiles(exec);
 	/** The notes to count, in order (the page asks for them in chunks). */
 	async function notes() {
-		return (await atlas.files(true)).filter((p) => /\.md$/i.test(p) && !p.startsWith(".atlas/"));
+		return (await kandinsky.files(true)).filter((p) => /\.md$/i.test(p) && !p.startsWith(".kandinsky/"));
 	}
 	/** path → { lang, text: its sentences packed }; a note that is not the owner's writing (a kept mail) left out. */
 	async function count(p) {
@@ -222,7 +222,7 @@
 		for (const path of p.paths ?? []) {
 			let text;
 			try {
-				text = withoutLongRuns(await atlas.read(path), false);
+				text = withoutLongRuns(await kandinsky.read(path), false);
 			} catch {
 				continue;
 			}
@@ -241,7 +241,7 @@
 		for (const name of names) for (const w of dicStems(await dictionaryFile(vault, machine, p.folder, name, "dic"))) words.add(w);
 		return [...words].join("\n");
 	}
-	atlas.methods({
+	kandinsky.methods({
 		notes,
 		count,
 		lexicon

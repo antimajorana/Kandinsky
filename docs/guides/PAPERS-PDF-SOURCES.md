@@ -26,13 +26,13 @@ The tool is called with `{ key, doi, arxiv, title, year, authors, settings }` an
 "<where>" }` when it attached a PDF, else `{ "skipped": "<why>" }`. Attaching is one call of the Python SDK:
 
 ```python
-atlas.attach_pdf(params["key"], url, "My index")   # True when the paper now has the PDF
+kandinsky.attach_pdf(params["key"], url, "My index")   # True when the paper now has the PDF
 ```
 
 It downloads `url` into the plugin's own cache through the core (the plugin's `net` permission applies), then
 `POST /api/refs/attach { key, file, from }` moves it into the paper's folder (`refs/papers/<key>/<key>.pdf`), records
 `pdfFrom: "<from>: <url>"` in `info.yaml` and rewrites refs.bib. The core keeps it only when the file is a PDF, comes from
-a plugin's cache (`.atlas/cache/plugins/<id>/…`) and the paper has no PDF yet (`refs::attach_pdf`).
+a plugin's cache (`.kandinsky/cache/plugins/<id>/…`) and the paper has no PDF yet (`refs::attach_pdf`).
 
 A source that fails (an exception, an index down) is noted and the next one asked; the add never fails because of a source.
 
@@ -55,5 +55,5 @@ copies before it failed (`remote::open_access_pdfs`, lazy; test
 
 These three were the `papers-open-access` plugin (Python helper), folded into the engine
 when science became one subplugin of the catalog. A
-vault that had it installed removes it (`atlas plugin remove papers-open-access`); its settings were the defaults.
+vault that had it installed removes it (`kandinsky plugin remove papers-open-access`); its settings were the defaults.
 A new source is still a plugin of its own, on the contract above.

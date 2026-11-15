@@ -1,9 +1,9 @@
-// Atlas chrome for CodeMirror as a *theme* extension: CM's built-in base theme (light gutters,
+// Kandinsky chrome for CodeMirror as a *theme* extension: CM's built-in base theme (light gutters,
 // `font-family: monospace`, …) outranks plain stylesheet rules, but not a theme. Values are CSS
 // variables, so one theme serves dark and light and follows the settings live.
 import { EditorView } from "@codemirror/view";
 
-export const atlasTheme = EditorView.theme({
+export const kandinskyTheme = EditorView.theme({
   "&": { height: "100%", backgroundColor: "var(--bg)", color: "var(--text)", fontSize: "var(--code-size, 14px)" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--code-font, var(--font-mono))", lineHeight: "1.5" },
@@ -33,9 +33,11 @@ export const atlasTheme = EditorView.theme({
   ".cm-git-changed": { backgroundColor: "var(--accent)" },
   ".cm-git-removed": { boxShadow: "inset 0 3px 0 var(--red)" },
   // the formula under the caret, drawn while it is typed (math-preview.ts)
-  ".cm-math-preview": { padding: "8px 12px", borderRadius: "var(--radius)", maxWidth: "min(640px, 80vw)", overflowX: "auto", fontSize: "1.05em", boxShadow: "var(--shadow-pop)" },
-  // a display formula's drawing in the text (math-preview.ts): no box, no shadow — part of the page, under its source
-  ".cm-math-preview.cm-math-preview-block": { boxShadow: "none", borderRadius: "0", maxWidth: "none", padding: "6px 0 10px", textAlign: "center", borderLeft: "2px solid var(--accent-soft)" },
+  ".cm-math-preview": { padding: "8px 14px", borderRadius: "var(--radius)", maxWidth: "min(640px, 82vw)", overflowX: "auto", fontSize: "1.05em", boxShadow: "var(--shadow-pop)" },
+  // a display formula's drawing in the text (math-preview.ts): Notion/Bauhaus floating card right below the block (0 margin on outer block for CM measurement!)
+  ".cm-math-preview.cm-math-preview-block": { background: "transparent", border: "0", boxShadow: "none", borderRadius: "0", maxWidth: "none", padding: "6px 0 8px", textAlign: "center" },
+  ".cm-math-preview-card": { display: "inline-block", minWidth: "min(280px, 100%)", maxWidth: "100%", padding: "10px 18px", borderRadius: "6px", backgroundColor: "var(--bg-elev)", border: "1px solid var(--border-strong)", borderLeft: "3px solid var(--accent)", boxShadow: "var(--shadow-sm)", textAlign: "center", boxSizing: "border-box" },
+  ".cm-math-preview-meta": { fontSize: ".72em", fontFamily: "var(--font-mono)", color: "var(--text-faint)", textAlign: "right", marginBottom: "2px" },
   // the completion list (snippets, commands) is always over a formula's floating drawing, never under it
   ".cm-tooltip.cm-tooltip-autocomplete": { zIndex: "600" }, // CodeMirror gives every tooltip 500
   ".cm-math-preview .stale": { opacity: ".45" },

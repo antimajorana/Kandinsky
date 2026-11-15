@@ -76,7 +76,7 @@
   function mirrorRefusal(current: VaultEntry | undefined): string {
     if (!current) return "This window shows a vault on a server. A mirror is the link from a vault on this machine to its copy on a server: open the local folder in Kandinsky and link it there.";
     if (current.kind !== "folder") return "This vault is on a server already: a mirror links a folder on this machine to it. Open the local folder and link it there.";
-    return "This vault is served by a program that does not keep Kandinsky's vault list (`atlas serve`, or another Kandinsky), so its mirror cannot be set from this window. Open the folder in the Kandinsky desktop app and link it there.";
+    return "This vault is served by a program that does not keep Kandinsky's vault list (`kandinsky serve`, or another Kandinsky), so its mirror cannot be set from this window. Open the folder in the Kandinsky desktop app and link it there.";
   }
 
   async function startLinking(e: VaultEntry) {
@@ -149,7 +149,7 @@
             <form class="link" onsubmit={(ev) => { ev.preventDefault(); void saveMirror(linking!.address); }}>
               <p>Its copy on a server, kept in step by Syncthing. While the server answers, files of this vault open, save and edit live there — one writer, so the two copies never conflict. Offline, the folder here is used as before.</p>
               <!-- svelte-ignore a11y_autofocus -->
-              <input bind:value={linking.address} placeholder="https://atlas.example.org/v/{e.name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-')}/" spellcheck="false" autofocus aria-label="Mirror address" />
+              <input bind:value={linking.address} placeholder="https://kandinsky.example.org/v/{e.name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-')}/" spellcheck="false" autofocus aria-label="Mirror address" />
               {#if linking.offers.length}
                 <div class="offers">
                   {#each linking.offers as o (o.address)}<button type="button" class="chip" class:on={linking.address === o.address} onclick={() => (linking!.address = o.address)}>{o.name} · {hostOf(o.address)}</button>{/each}

@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Activity;
 import android.content.Context;
@@ -26,8 +26,8 @@ final class CaptureOverlay implements CaptureBox.Frame {
     /** The app under the box: another app coming up (home, a switch) closes it. */
     final String under;
 
-    static boolean on(Context c) { return Build.VERSION.SDK_INT >= 30 && c.getSharedPreferences("atlas", Context.MODE_PRIVATE).getBoolean(KEY, true); }
-    static void set(Context c, boolean on) { c.getSharedPreferences("atlas", Context.MODE_PRIVATE).edit().putBoolean(KEY, on).apply(); }
+    static boolean on(Context c) { return Build.VERSION.SDK_INT >= 30 && c.getSharedPreferences("kandinsky", Context.MODE_PRIVATE).getBoolean(KEY, true); }
+    static void set(Context c, boolean on) { c.getSharedPreferences("kandinsky", Context.MODE_PRIVATE).edit().putBoolean(KEY, on).apply(); }
 
     /** Floats the box from the service; false when it cannot (off, an older Android), and the activity opens instead. */
     static boolean open(ScreenService s, Intent i) {

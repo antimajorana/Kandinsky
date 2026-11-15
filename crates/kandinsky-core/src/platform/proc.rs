@@ -1,5 +1,5 @@
 //! Processes and machine facts that differ per OS: whether a pid lives, a child in a group of its own (so a timeout
-//! or a stop takes its children with it), a program started to outlive Atlas, the host name, and a file's identity.
+//! or a stop takes its children with it), a program started to outlive Kandinsky, the host name, and a file's identity.
 
 /// Windows creation flags (winbase.h), written out so the core needs no more of the Windows API than it uses.
 #[cfg(windows)]

@@ -1,6 +1,6 @@
 // Places in a PDF, linked the Obsidian way: `[[paper.pdf#page=3]]`, and a passage as `[[paper.pdf#page=3|the words]]`:
 // the link opens the page and selects its words there. A passage link from Obsidian or PDF++,
-// `[[paper.pdf#page=3&selection=12,4,15,20|the words]]`, counts pdf.js's text pieces, which Atlas no longer has
+// `[[paper.pdf#page=3&selection=12,4,15,20|the words]]`, counts pdf.js's text pieces, which Kandinsky no longer has
 // (docs/refactor/REFACTOR-pdfium-reader.md): it is read by its words too, and opens only the page without them. An
 // annotation, as PDF++ links it: `[[paper.pdf#page=3&annotation=47R]]` — a PDF annotation's object number + "R";
 // the link opens the page and flashes it. "Highlights → note" writes one per highlight (scripts/vault/pdf_annotations.py).

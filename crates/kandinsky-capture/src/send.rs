@@ -1,5 +1,5 @@
-//! Writing a capture: through the Atlas open on that vault (its window updates, and one core runs the
-//! vault's schedules), else straight to the files — what `atlas capture` does.
+//! Writing a capture: through the Kandinsky open on that vault (its window updates, and one core runs the
+//! vault's schedules), else straight to the files — what `kandinsky capture` does.
 use anyhow::{anyhow, Context, Result};
 use std::io::{Read, Write};
 use std::path::Path;
@@ -9,7 +9,7 @@ use std::path::Path;
 pub enum NotSaved {
     /// nothing was written: it can be sent again
     No(anyhow::Error),
-    /// the request reached the open Atlas but no answer came back: it may be in the log already
+    /// the request reached the open Kandinsky but no answer came back: it may be in the log already
     Unsure(anyhow::Error),
 }
 
@@ -28,17 +28,17 @@ impl From<anyhow::Error> for NotSaved {
     }
 }
 
-impl From<atlas_core::Error> for NotSaved {
-    fn from(e: atlas_core::Error) -> Self {
+impl From<kandinsky_core::Error> for NotSaved {
+    fn from(e: kandinsky_core::Error) -> Self {
         NotSaved::No(e.into())
     }
 }
 
-/// → (path, line) of what was written. An Atlas that is listed as serving the vault but takes no connection (it
+/// → (path, line) of what was written. An Kandinsky that is listed as serving the vault but takes no connection (it
 /// crashed, or is closing) is passed by: the files are written directly, so the capture is never lost. Once the
-/// request is sent, a failure is `Unsure` instead — the open Atlas may have written it already.
+/// request is sent, a failure is `Unsure` instead — the open Kandinsky may have written it already.
 pub fn capture(root: &Path, text: &str) -> std::result::Result<(String, u64), NotSaved> {
-    if let Some(base) = atlas_core::vaults::running_server(root) {
+    if let Some(base) = kandinsky_core::vaults::running_server(root) {
         let body = serde_json::json!({ "args": { "text": text } }).to_string();
         match post(&base, "/api/cmd/capture", &body) {
             Err(Post::Unreachable) => {} // to the files below
@@ -52,23 +52,23 @@ pub fn capture(root: &Path, text: &str) -> std::result::Result<(String, u64), No
             }
         }
     }
-    let ws = atlas_core::Workspace::open(root)?;
-    let r = atlas_core::capture::capture_unserved(ws.root(), &ws.config()?, text)?;
+    let ws = kandinsky_core::Workspace::open(root)?;
+    let r = kandinsky_core::capture::capture_unserved(ws.root(), &ws.config()?, text)?;
     Ok((r.path.to_string(), r.line as u64))
 }
 
 /// Copies a file (the screen, a picture, a shared file) beside today's log note, where captures go → (path, embed).
 /// The desktop box and the phone app both attach through here.
 pub fn attach(root: &Path, name: &str, source: &Path) -> Result<(String, String)> {
-    let ws = atlas_core::Workspace::open(root)?;
+    let ws = kandinsky_core::Workspace::open(root)?;
     let cfg = ws.config()?;
-    let note = atlas_core::capture::attach_note(&cfg, "", chrono::Local::now().date_naive());
+    let note = kandinsky_core::capture::attach_note(&cfg, "", chrono::Local::now().date_naive());
     let bytes = std::fs::read(source).with_context(|| source.display().to_string())?;
-    let a = atlas_core::files::attach(&ws, &note, name, &bytes)?;
+    let a = kandinsky_core::files::attach(&ws, &note, name, &bytes)?;
     Ok((a.path, a.embed))
 }
 
-/// Why a POST to the open Atlas did not answer.
+/// Why a POST to the open Kandinsky did not answer.
 #[derive(Debug)]
 enum Post {
     /// no connection: nothing reached it
@@ -83,7 +83,7 @@ fn post(base: &str, path: &str, body: &str) -> std::result::Result<serde_json::V
     let rest = base.trim_start_matches("http://");
     let host = rest.split('/').next().unwrap_or(rest);
     let prefix = rest[host.len()..].trim_end_matches('/');
-    let key = atlas_core::auth::local_key_header(host);
+    let key = kandinsky_core::auth::local_key_header(host);
     let s = std::net::TcpStream::connect_timeout(&host.parse().map_err(|e| Post::Failed(anyhow!("{host}: {e}")))?, std::time::Duration::from_secs(2))
         .map_err(|_| Post::Unreachable)?;
     exchange(s, host, prefix, &key, path, body).map_err(Post::Failed)
@@ -91,7 +91,7 @@ fn post(base: &str, path: &str, body: &str) -> std::result::Result<serde_json::V
 
 fn exchange(mut s: std::net::TcpStream, host: &str, prefix: &str, key: &str, path: &str, body: &str) -> Result<serde_json::Value> {
     s.set_read_timeout(Some(std::time::Duration::from_secs(10)))?;
-    write!(s, "POST {prefix}{path} HTTP/1.1\r\nHost: {host}\r\nx-atlas: 1\r\n{key}content-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len())?;
+    write!(s, "POST {prefix}{path} HTTP/1.1\r\nHost: {host}\r\nx-kandinsky: 1\r\nx-atlas: 1\r\n{key}content-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len())?;
     let mut raw = Vec::new();
     s.read_to_end(&mut raw)?;
     let text = String::from_utf8_lossy(&raw);

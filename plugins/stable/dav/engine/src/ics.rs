@@ -4,7 +4,17 @@ use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, Utc};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-pub const PRODID: &str = "-//Atlas//DAV plugin//EN";
+pub const PRODID: &str = "-//Kandinsky//DAV plugin//EN";
+
+/// The properties events written before the rename carry (`X-ATLAS-*`; now `X-KANDINSKY-*`): still read.
+pub const LEGACY_SOURCE: &str = "X-ATLAS-SOURCE";
+pub const LEGACY_HASH: &str = "X-ATLAS-HASH";
+
+/// Whether the stored object `text` carries content hash `h`, under the current property or the old one.
+pub fn has_hash(text: &str, h: &str) -> bool {
+    let t = unfold(text);
+    t.contains(&format!("X-KANDINSKY-HASH:{h}")) || t.contains(&format!("{LEGACY_HASH}:{h}"))
+}
 
 /// When an event starts or ends: a whole day, a wall-clock time (floating: shown at that hour wherever the user is),
 /// or an instant.
@@ -117,7 +127,7 @@ pub struct Event {
     pub end: Option<When>,
     pub description: Option<String>,
     pub location: Option<String>,
-    /// where it came from (a vault path, a Message-ID), kept as X-ATLAS-SOURCE
+    /// where it came from (a vault path, a Message-ID), kept as X-KANDINSKY-SOURCE
     pub source: Option<String>,
 }
 
@@ -126,7 +136,7 @@ impl Event {
         self.end.unwrap_or_else(|| self.start.default_end())
     }
 
-    /// What the event says, hashed: kept as X-ATLAS-HASH so a sync can tell "nothing changed" (also when the user moved
+    /// What the event says, hashed: kept as X-KANDINSKY-HASH so a sync can tell "nothing changed" (also when the user moved
     /// the event in a calendar app, which keeps the property) from "the note changed".
     pub fn hash(&self) -> String {
         let (_, s) = self.start.ical();
@@ -167,9 +177,9 @@ impl Event {
             lines.push("TRANSP:TRANSPARENT".into()); // a deadline does not make the user busy all day
         }
         if let Some(s) = &self.source {
-            lines.push(format!("X-ATLAS-SOURCE:{}", escape(s)));
+            lines.push(format!("X-KANDINSKY-SOURCE:{}", escape(s)));
         }
-        lines.push(format!("X-ATLAS-HASH:{}", self.hash()));
+        lines.push(format!("X-KANDINSKY-HASH:{}", self.hash()));
         lines.extend(["END:VEVENT".to_string(), "END:VCALENDAR".into()]);
         lines.iter().map(|l| fold(l)).collect::<Vec<_>>().join("\r\n") + "\r\n"
     }
@@ -180,7 +190,7 @@ pub fn hex(bytes: &[u8]) -> String {
 }
 
 // the text-level pieces (escaping, folding, one content line) are shared with the mail engine's invitations
-pub use atlas_text::ical::{escape, fold, unescape, unfold, Line};
+pub use kandinsky_text::ical::{escape, fold, unescape, unfold, Line};
 
 /// A component (`VCALENDAR`, `VEVENT`, `VTIMEZONE`…): its properties in order and the components inside it.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -318,8 +328,8 @@ pub fn events_of(text: &str) -> Result<Vec<Listed>, String> {
                 location: ev.text("LOCATION"),
                 description: ev.text("DESCRIPTION"),
                 recurring: ev.prop("RRULE").is_some() || ev.prop("RDATE").is_some(),
-                source: ev.text("X-ATLAS-SOURCE"),
-                hash: ev.prop("X-ATLAS-HASH").map(|l| l.value.trim().to_string()),
+                source: ev.text("X-KANDINSKY-SOURCE").or_else(|| ev.text(LEGACY_SOURCE)),
+                hash: ev.prop("X-KANDINSKY-HASH").or_else(|| ev.prop(LEGACY_HASH)).map(|l| l.value.trim().to_string()),
             });
         }
     }
@@ -360,7 +370,7 @@ pub fn split_invite(text: &str) -> Result<Vec<Invite>, String> {
             .map(|ev| {
                 (
                     ev.text("UID")
-                        .unwrap_or_else(|| format!("atlas-ics-{}", &hex(&Sha256::digest(ev.write().as_bytes()))[..24])),
+                        .unwrap_or_else(|| format!("{}ics-{}", crate::uid::PREFIX, &hex(&Sha256::digest(ev.write().as_bytes()))[..24])),
                     ev,
                 )
             })
@@ -426,6 +436,17 @@ pub fn split_invite(text: &str) -> Result<Vec<Invite>, String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn events_written_before_the_rename_keep_their_source_and_hash() {
+        let old = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:atlas-0123\r\nDTSTART;VALUE=DATE:20261103\r\nSUMMARY:x\r\nX-ATLAS-SOURCE:notes/a.md\r\nX-ATLAS-HASH:abc\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        let ev = &events_of(old).unwrap()[0];
+        assert_eq!((ev.source.as_deref(), ev.hash.as_deref()), (Some("notes/a.md"), Some("abc")));
+        assert!(has_hash(old, "abc") && !has_hash(old, "abd"));
+        let new = old.replace("X-ATLAS-", "X-KANDINSKY-");
+        assert!(has_hash(&new, "abc"));
+        assert_eq!(events_of(&new).unwrap()[0].source.as_deref(), Some("notes/a.md"));
+    }
+
     fn stamp() -> DateTime<Utc> {
         DateTime::parse_from_rfc3339("2026-10-21T10:00:00Z").unwrap().with_timezone(&Utc)
     }
@@ -445,7 +466,7 @@ mod tests {
     #[test]
     fn an_event_becomes_a_calendar_object_that_reads_back() {
         let ev = Event {
-            uid: "atlas-1".into(),
+            uid: "kandinsky-1".into(),
             summary: "Due: thesis chapter, draft; v2".into(),
             start: When::parse("2026-11-03").unwrap(),
             end: None,
@@ -461,7 +482,7 @@ mod tests {
         assert!(ics.contains("DTSTAMP:20261021T100000Z"));
         assert!(!ics.replace("\r\n", "").contains('\n'), "only CRLF line ends");
         let back = &events_of(&ics).unwrap()[0];
-        assert_eq!(back.uid, "atlas-1");
+        assert_eq!(back.uid, "kandinsky-1");
         assert_eq!(back.summary, ev.summary);
         assert_eq!(back.description.as_deref(), ev.description.as_deref());
         assert_eq!(back.location.as_deref(), Some("Room 204, Main Building"));
@@ -527,7 +548,7 @@ mod tests {
     fn an_event_without_uid_gets_the_same_one_every_time() {
         let t = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:x\nDTSTART:20261101T090000Z\nEND:VEVENT\nEND:VCALENDAR\n";
         let (a, b) = (split_invite(t).unwrap(), split_invite(t).unwrap());
-        assert!(a[0].uid.starts_with("atlas-ics-"));
+        assert!(a[0].uid.starts_with("kandinsky-ics-"));
         assert_eq!(a[0].uid, b[0].uid);
         assert!(a[0].ics.contains(&format!("UID:{}", a[0].uid)));
         assert!(a[0].ics.contains("DTSTAMP:"), "a required DTSTAMP is added");

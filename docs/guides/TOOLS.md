@@ -2,8 +2,8 @@
 
 Each tool is a single file runnable with `uv run --script scripts/vault/<x>.py` (PEP 723 inline deps, no
 venv to manage). Each one reads plain files, writes plain files, narrates on stderr, and is safe to
-re-run. They are exposed in a workspace as Atlas script commands (`.atlas/commands/*.toml`), so
-they appear in the palette without recompiling Atlas.
+re-run. They are exposed in a workspace as Kandinsky script commands (`.kandinsky/commands/*.toml`), so
+they appear in the palette without recompiling Kandinsky.
 
 | tool | what | safety |
 |---|---|---|
@@ -12,7 +12,7 @@ they appear in the palette without recompiling Atlas.
 | `zotero_sync.py ZOTERO_DIR DEST [--apply]` | Zotero → `DEST/<citekey>/info.yaml` with **every** field (no fixed schema), creators by role, tags, collections, `zotero_key`; PDFs hard-linked; Zotero notes → the reading note `<citekey>.md` via pandoc (`reading_note.py`; ZOTERO.md section 4); standalone PDFs become entries | sqlite opened `mode=ro&immutable=1`; idempotent by `zotero_key` |
 | `excalidraw_convert.py SRC OUT_DIR` | Obsidian `.excalidraw.md` (LZString `compressed-json` or `json` block) → plain `.excalidraw` scene JSON | source read-only; never overwrites; per-file failures reported, batch continues |
 | `runs_index.py RUNS OUT.json [--md OUT.md]` | any directory holding `.tsv` tables is a run; per run: name tokens, tables (rows/cols; `x.clean.tsv` preferred over `x.tsv`), **parameters = columns constant across rows**, **sweeps = varying numeric columns (min→max)**, figures, reports | read-only on the runs tree; tables sampled to 20k rows |
-| `pdf_annotations.py PDF` | highlights (with the text under them), text notes, ink → the paper's reading note `<citekey>.md` (`refs/papers/<key>/`, made with its head if missing) or `<name>.notes.md`, inside `<!-- atlas:annotations -->` markers | replaces only its own block |
+| `pdf_annotations.py PDF` | highlights (with the text under them), text notes, ink → the paper's reading note `<citekey>.md` (`refs/papers/<key>/`, made with its head if missing) or `<name>.notes.md`, inside `<!-- kandinsky:annotations -->` markers | replaces only its own block |
 | `refs_bib.py REFS OUT.bib` | BibTeX from `info.yaml` (type + field maps) | derived file, header says do-not-edit |
 
 ## Measured on real data
@@ -40,10 +40,10 @@ they appear in the palette without recompiling Atlas.
   extracts the year, so harmless.
 
 
-> `refs_bib.py` is superseded by Atlas's library (`refs.rs` writes the same BibTeX after every add; verified identical on the 54 real entries). Kept for scripting without the app.
+> `refs_bib.py` is superseded by Kandinsky's library (`refs.rs` writes the same BibTeX after every add; verified identical on the 54 real entries). Kept for scripting without the app.
 
 
-`runs_index.py` was removed: the indexer now lives with the research workspace as the Runs plugin's `<vault>/.atlas/plugins/runs/index.py` (same rules, series sampling, cache; `--md` for the table) — see [PLUGINS.md](PLUGINS.md). The rows above document its rules.
+`runs_index.py` was removed: the indexer now lives with the research workspace as the Runs plugin's `<vault>/.kandinsky/plugins/runs/index.py` (same rules, series sampling, cache; `--md` for the table) — see [PLUGINS.md](PLUGINS.md). The rows above document its rules.
 
 
 
@@ -51,8 +51,8 @@ they appear in the palette without recompiling Atlas.
 One-way **sync**, Zotero → `refs/papers` (Zotero is only read; a locked database is read from a checked copy).
 Finds the library by Zotero's own `extensions.zotero.dataDir` (desktop and flatpak profiles; the real one can live in a custom folder, not the stale copy in
 `<vault>/refs/zotero` the importer used). Per field, a
-three-way rule against the state of the last sync (`.atlas/cache/zotero-sync.json`): changed only in Zotero →
-updated; only in Atlas → kept; in both → Atlas's kept and listed in `refs/ZOTERO-SYNC.md`. Zotero notes live in
+three-way rule against the state of the last sync (`.kandinsky/cache/zotero-sync.json`): changed only in Zotero →
+updated; only in Kandinsky → kept; in both → Kandinsky's kept and listed in `refs/ZOTERO-SYNC.md`. Zotero notes live in
 the reading note `<citekey>.md` (a legacy `notes.md` is renamed first) between `<!-- zotero:note KEY -->` markers (text around them is the vault owner's); items in Zotero's trash
 are reported, never deleted; a run with an unchanged database exits at once. Workspace command
 `refs.sync-zotero` (schedule `every 10m`, then `refs_bib.py`). Tests: `scripts/vault/tests/test_zotero_sync.py`, `scripts/vault/tests/test_pdf_annotations.py` (`cd tools && uv run --with pyyaml --with pymupdf python -m unittest discover -s tests`)

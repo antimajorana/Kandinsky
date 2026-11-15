@@ -1,7 +1,7 @@
-//! What the core asks of the desktop shell around it (atlas-app), through hooks the shell sets once at start: bring its
+//! What the core asks of the desktop shell around it (kandinsky-app), through hooks the shell sets once at start: bring its
 //! window forward (a notification's click, a second launch, the tray), and hear that a vault's settings were saved.
-//! A core with no window around it (`atlas serve`, tests, the phone) leaves them unset and every call is a no-op.
-//! docs/design/DESIGN-tray-background.md, "One way to bring Atlas forward".
+//! A core with no window around it (`kandinsky serve`, tests, the phone) leaves them unset and every call is a no-op.
+//! docs/design/DESIGN-tray-background.md, "One way to bring Kandinsky forward".
 use crate::config::Config;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;

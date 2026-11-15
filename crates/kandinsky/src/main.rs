@@ -1,8 +1,8 @@
-//! `atlas`: the CLI face of the command registry. Talks to a running server when there is one
-//! (so the UI updates live), otherwise works on the files directly — Atlas never has to run.
+//! `kandinsky`: the CLI face of the command registry. Talks to a running server when there is one
+//! (so the UI updates live), otherwise works on the files directly — Kandinsky never has to run.
 use anyhow::{bail, Context, Result};
-use atlas_core::api::{CaptureResult, ServerFile, Today};
-use atlas_core::{capture, commands, today, workspace, Workspace};
+use kandinsky_core::api::{CaptureResult, ServerFile, Today};
+use kandinsky_core::{capture, commands, today, workspace, Workspace};
 use clap::{Parser, Subcommand};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ mod mcp;
 #[derive(Parser)]
 #[command(name = "kandinsky", version, about = "Kandinsky workspace: serve, capture, run commands, open files")]
 struct Cli {
-    /// Workspace folder (default: nearest ancestor with `.atlas/`, else the current dir).
+    /// Workspace folder (default: nearest ancestor with `.kandinsky/`, else the current dir).
     #[arg(long, global = true)]
     workspace: Option<PathBuf>,
     #[command(subcommand)]
@@ -51,7 +51,7 @@ enum Action {
         dir: Option<PathBuf>,
         #[arg(long, default_value_t = 7717)]
         port: u16,
-        /// Server mode: listen on this address (e.g. 0.0.0.0:7700), with the sign-in of `atlas server`.
+        /// Server mode: listen on this address (e.g. 0.0.0.0:7700), with the sign-in of `kandinsky server`.
         #[arg(long)]
         listen: Option<std::net::SocketAddr>,
         /// Server mode, several vaults: every folder in DIR is a vault at /v/<folder>/ (a container's /vaults).
@@ -61,16 +61,16 @@ enum Action {
         #[arg(long = "vault", value_name = "NAME=PATH", requires = "listen", conflicts_with = "dir")]
         vaults: Vec<String>,
     },
-    /// Server mode's sign-in: the password, device tokens, sessions (kept in ~/.config/atlas and ~/.local/state/atlas).
+    /// Server mode's sign-in: the password, device tokens, sessions (kept in ~/.config/kandinsky and ~/.local/state/kandinsky).
     Server {
         #[command(subcommand)]
         action: ServerAction,
     },
     /// Append a timestamped line to today's log (reads stdin when no text is given).
     Capture { text: Vec<String> },
-    /// Run a command by id, e.g. `atlas cmd notify '{"title":"done"}'`.
+    /// Run a command by id, e.g. `kandinsky cmd notify '{"title":"done"}'`.
     Cmd { id: String, args: Option<String> },
-    /// Open a file in the running Atlas UI.
+    /// Open a file in the running Kandinsky UI.
     Open {
         path: PathBuf,
         #[arg(long)]
@@ -80,23 +80,23 @@ enum Action {
     Today,
     /// Make the note (`<paper>/<citekey>.md`) of every reference that has none, so every paper is a file `[[citekey]]`
     /// links to; the vault's `literature` template shapes them, notes already there are never touched. The same as
-    /// `atlas plugin call catalog-papers notes` (the Zotero sync command runs it after each sync).
+    /// `kandinsky plugin call catalog-papers notes` (the Zotero sync command runs it after each sync).
     PaperNotes,
     /// Run an MCP server on stdio for Claude Code (register in `.mcp.json`).
     Mcp,
-    /// Print the guide to extending Atlas from inside a vault (pages, commands, plugins) — for
-    /// people and for AI agents; `--develop` prints the guide to changing Atlas itself.
+    /// Print the guide to extending Kandinsky from inside a vault (pages, commands, plugins) — for
+    /// people and for AI agents; `--develop` prints the guide to changing Kandinsky itself.
     Guide {
         #[arg(long)]
         develop: bool,
     },
-    /// Plugins of this vault: install (copied into .atlas/plugins/), update, remove, list.
+    /// Plugins of this vault: install (copied into .kandinsky/plugins/), update, remove, list.
     Plugin {
         #[command(subcommand)]
         action: PluginAction,
     },
     /// Drawings made small (docs/design/DESIGN-drawing-size.md): compact JSON, pen points rounded, pictures at most
-    /// 2000 px (opaque ones as JPEG). Says what it would do; `--apply` does it, originals copied to .atlas/trash/ first.
+    /// 2000 px (opaque ones as JPEG). Says what it would do; `--apply` does it, originals copied to .kandinsky/trash/ first.
     Drawings {
         #[arg(long)]
         apply: bool,
@@ -123,13 +123,13 @@ enum PluginAction {
         #[arg(long)]
         off: bool,
     },
-    /// Install again from where the plugin came; the vault's own settings are kept, the old copy goes to .atlas/trash/.
+    /// Install again from where the plugin came; the vault's own settings are kept, the old copy goes to .kandinsky/trash/.
     Update { id: String },
-    /// Move a plugin's folder to .atlas/trash/.
+    /// Move a plugin's folder to .kandinsky/trash/.
     Remove { id: String },
     /// The plugins of this vault, whether they are on, and what each may do.
     List,
-    /// Ask a plugin's helper, in the running Atlas: `atlas plugin call catalog-papers import '{"path": "x.pdf"}'`.
+    /// Ask a plugin's helper, in the running Kandinsky: `kandinsky plugin call catalog-papers import '{"path": "x.pdf"}'`.
     /// The answer is printed as JSON.
     Call {
         id: String,
@@ -140,7 +140,7 @@ enum PluginAction {
 }
 
 /// What a plugin asks to be allowed, in plain words (the same sentence Settings shows).
-fn may(p: &atlas_core::plugins::Permissions, helper: bool) -> String {
+fn may(p: &kandinsky_core::plugins::Permissions, helper: bool) -> String {
     let mut parts = Vec::new();
     if p.net.iter().any(|h| h == "*") {
         parts.push("talk to any server on the network".into());
@@ -157,7 +157,7 @@ fn may(p: &atlas_core::plugins::Permissions, helper: bool) -> String {
 }
 
 fn plugin_action(ws: &Workspace, action: PluginAction) -> Result<()> {
-    use atlas_core::plugin_install::{self as inst, Source};
+    use kandinsky_core::plugin_install::{self as inst, Source};
     let root = ws.root();
     let report = |verb: &str, r: &inst::Installed| {
         println!("{verb} {} — {}{}", r.id, r.title, r.version.as_deref().map(|v| format!(" v{v}")).unwrap_or_default());
@@ -186,10 +186,10 @@ fn plugin_action(ws: &Workspace, action: PluginAction) -> Result<()> {
             println!("  {}", if r.on { "still switched on" } else { "still switched off" });
         }
         PluginAction::Remove { id } => println!("removed {id}: its folder is in {}", inst::remove(root, &id)?),
-        PluginAction::Call { .. } => unreachable!("answered by the running Atlas, before"),
+        PluginAction::Call { .. } => unreachable!("answered by the running Kandinsky, before"),
         PluginAction::List => {
             let off = ws.config()?.plugins.off;
-            for p in atlas_core::plugins::list(root) {
+            for p in kandinsky_core::plugins::list(root) {
                 let state = if p.error.is_some() { "broken" } else if off.contains(&p.id) { "off" } else { "on" };
                 println!("{:<8}{} — {}{}", state, p.id, p.title, p.version.as_deref().map(|v| format!(" v{v}")).unwrap_or_default());
                 match &p.error {
@@ -197,7 +197,7 @@ fn plugin_action(ws: &Workspace, action: PluginAction) -> Result<()> {
                     None => {
                         println!("        may: {}", may(&p.permissions, p.has_helper));
                         if let Some(from) = &p.from {
-                            println!("        from: {from}  (atlas plugin update {})", p.id);
+                            println!("        from: {from}  (kandinsky plugin update {})", p.id);
                         }
                     }
                 }
@@ -219,17 +219,19 @@ fn workspace_root(flag: Option<PathBuf>) -> Result<PathBuf> {
     Ok(workspace::find_root(&cwd).unwrap_or(cwd))
 }
 
-/// The folder `atlas serve` serves when none is named: the vault around the current folder, or the current folder —
-/// never the home folder itself, which a newcomer's first `atlas serve` would otherwise index whole and write into.
+/// The folder `kandinsky serve` serves when none is named: the vault around the current folder, or the current folder —
+/// never the home folder itself, which a newcomer's first `kandinsky serve` would otherwise index whole and write into.
 fn serve_root(flag: Option<PathBuf>) -> Result<PathBuf> {
     let root = workspace_root(flag.clone())?;
     let home = std::env::var_os("HOME").map(PathBuf::from).and_then(|h| h.canonicalize().ok());
     let is_home = home.is_some_and(|h| root.canonicalize().is_ok_and(|r| r == h));
-    if flag.is_none() && is_home && !root.join(".atlas").is_dir() {
-        anyhow::bail!("no vault here: name the folder to serve, e.g. `atlas serve ~/Notes` (a new folder becomes a new vault)");
+    // a vault from before the rename has `.atlas/`: the core renames it when it serves the vault (state_dir.rs)
+    let is_vault = workspace::is_vault(&root);
+    if flag.is_none() && is_home && !is_vault {
+        anyhow::bail!("no vault here: name the folder to serve, e.g. `kandinsky serve ~/Notes` (a new folder becomes a new vault)");
     }
-    if !root.join(".atlas").is_dir() {
-        eprintln!("atlas: {} is not a vault yet: Atlas adds its .atlas/ folder and a Home.page there", root.display());
+    if !is_vault {
+        eprintln!("kandinsky: {} is not a vault yet: Kandinsky adds its .kandinsky/ folder and a Home.page there", root.display());
     }
     Ok(root)
 }
@@ -248,7 +250,7 @@ pub(crate) enum Reach {
     Absent,
 }
 
-/// Who this program is to the core (`x-atlas-client`): "mcp" while `atlas mcp` runs, so a server can refuse agents.
+/// Who this program is to the core (`x-kandinsky-client`): "mcp" while `kandinsky mcp` runs, so a server can refuse agents.
 pub(crate) static CLIENT: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
 
 impl Server {
@@ -266,7 +268,7 @@ impl Server {
         };
         let base = format!("http://127.0.0.1:{}{}", sf.port, sf.path);
         let Some(http) = Self::client(sf.port) else { return Reach::Absent };
-        let Ok(resp) = http.get(format!("{base}/api/workspace")).header("x-atlas", "1").timeout(Duration::from_millis(800)).send().await else {
+        let Ok(resp) = http.get(format!("{base}/api/workspace")).header("x-kandinsky", "1").header(kandinsky_core::legacy::HEADER, "1").timeout(Duration::from_millis(800)).send().await else {
             return Reach::Absent;
         };
         if matches!(resp.status(), reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN) {
@@ -279,28 +281,28 @@ impl Server {
         }
     }
 
-    /// A client that signs in as this program: `atlas mcp` as its agent (ATLAS_AGENT_TOKEN, put in the agent's MCP
+    /// A client that signs in as this program: `kandinsky mcp` as its agent (KANDINSKY_AGENT_TOKEN, put in the agent's MCP
     /// config by Settings → Agents), anything else with this machine's key (auth.rs `local_key_file`).
     fn client(port: u16) -> Option<reqwest::Client> {
         let mut h = reqwest::header::HeaderMap::new();
-        let agent = (CLIENT.get() == Some(&"mcp")).then(|| std::env::var("ATLAS_AGENT_TOKEN").ok()).flatten().filter(|t| !t.trim().is_empty());
-        if let Some(key) = agent.or_else(|| atlas_core::auth::local_key(port)) {
+        let agent = (CLIENT.get() == Some(&"mcp")).then(|| kandinsky_core::env::var("AGENT_TOKEN")).flatten().filter(|t| !t.trim().is_empty());
+        if let Some(key) = agent.or_else(|| kandinsky_core::auth::local_key(port)) {
             h.insert(reqwest::header::AUTHORIZATION, format!("Bearer {}", key.trim()).parse().ok()?);
         }
         if let Some(c) = CLIENT.get() {
-            h.insert(atlas_core::auth::CLIENT_HEADER, reqwest::header::HeaderValue::from_static(c));
+            h.insert(kandinsky_core::auth::CLIENT_HEADER, reqwest::header::HeaderValue::from_static(c));
         }
-        reqwest::Client::builder().use_preconfigured_tls(atlas_core::tls_chain::config()).timeout(Duration::from_secs(40)).default_headers(h).build().ok()
+        reqwest::Client::builder().use_preconfigured_tls(kandinsky_core::tls_chain::config()).timeout(Duration::from_secs(40)).default_headers(h).build().ok()
     }
 
     pub(crate) async fn get(&self, path: &str) -> Result<Value> {
-        let resp = self.http.get(format!("{}{path}", self.base)).header("x-atlas", "1").send().await?;
+        let resp = self.http.get(format!("{}{path}", self.base)).header("x-kandinsky", "1").header(kandinsky_core::legacy::HEADER, "1").send().await?;
         Ok(resp.error_for_status()?.json().await?)
     }
 
     /// A JSON body to `path`, waiting up to `timeout` for the answer; a refused request carries the core's own words.
     pub(crate) async fn post(&self, path: &str, body: &Value, timeout: Duration) -> Result<Value> {
-        let resp = self.http.post(format!("{}{path}", self.base)).header("x-atlas", "1").json(body).timeout(timeout).send().await?;
+        let resp = self.http.post(format!("{}{path}", self.base)).header("x-kandinsky", "1").header(kandinsky_core::legacy::HEADER, "1").json(body).timeout(timeout).send().await?;
         if !resp.status().is_success() {
             let status = resp.status();
             return Err(anyhow::anyhow!("{status}: {}", resp.text().await.unwrap_or_default()));
@@ -314,7 +316,7 @@ impl Server {
         let resp: Value = self
             .http
             .post(format!("{}/api/cmd/{id}", self.base))
-            .header("x-atlas", "1")
+            .header("x-kandinsky", "1").header(kandinsky_core::legacy::HEADER, "1")
             .json(&json!({ "args": args }))
             .send()
             .await?
@@ -326,22 +328,22 @@ impl Server {
 }
 
 /// Every folder of `dir` (hidden ones aside) as a vault named after it, in name order.
-fn vaults_in_dir(dir: &Path) -> Result<Vec<atlas_core::server::Served>> {
+fn vaults_in_dir(dir: &Path) -> Result<Vec<kandinsky_core::server::Served>> {
     let mut out: Vec<_> = std::fs::read_dir(dir)
         .with_context(|| format!("--vaults-in {}", dir.display()))?
         .flatten()
         .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()) && !e.file_name().to_string_lossy().starts_with('.'))
-        .map(|e| atlas_core::server::Served { name: e.file_name().to_string_lossy().into_owned(), root: e.path() })
+        .map(|e| kandinsky_core::server::Served { name: e.file_name().to_string_lossy().into_owned(), root: e.path() })
         .collect();
     out.sort_by(|a, b| a.name.cmp(&b.name));
     anyhow::ensure!(!out.is_empty(), "no vault folders in {}", dir.display());
     Ok(out)
 }
 
-/// `atlas server …`: the same Auth the server and Settings → Server use (a running server reads the password at once,
+/// `kandinsky server …`: the same Auth the server and Settings → Server use (a running server reads the password at once,
 /// tokens when it starts again — or make them in Settings, which changes the running one).
 fn server_action(action: &ServerAction) -> Result<()> {
-    use atlas_core::auth::{Auth, Scope};
+    use kandinsky_core::auth::{Auth, Scope};
     let auth = Auth::load()?;
     match action {
         ServerAction::Status => {
@@ -350,7 +352,7 @@ fn server_action(action: &ServerAction) -> Result<()> {
             for t in auth.tokens() {
                 println!("  token {:<16} {:?}, last used {}", t.name, t.scope, t.last_used.map_or("never".into(), |u| chrono::DateTime::from_timestamp(u as i64, 0).map_or(u.to_string(), |d| d.with_timezone(&chrono::Local).format("%Y-%m-%d").to_string())));
             }
-            println!("{} browser session(s); files: {} and {}", auth.session_count(), atlas_core::auth::settings_file().display(), atlas_core::auth::state_file().display());
+            println!("{} browser session(s); files: {} and {}", auth.session_count(), kandinsky_core::auth::settings_file().display(), kandinsky_core::auth::state_file().display());
             if let Some(why) = auth.not_ready() {
                 println!("not ready to serve: {why}");
             }
@@ -362,7 +364,7 @@ fn server_action(action: &ServerAction) -> Result<()> {
                 anyhow::bail!("the two differ: nothing changed");
             }
             auth.set_password(current.as_deref(), &new)?;
-            println!("password set ({})", atlas_core::auth::settings_file().display());
+            println!("password set ({})", kandinsky_core::auth::settings_file().display());
         }
         ServerAction::Token { name, scope } => {
             let scope = match scope {
@@ -442,7 +444,7 @@ fn print_today(t: &Today) {
     }
 }
 
-/// `atlas open` takes paths relative to the cwd; the API wants them relative to the workspace.
+/// `kandinsky open` takes paths relative to the cwd; the API wants them relative to the workspace.
 fn to_workspace_rel(ws: &Workspace, path: &Path) -> Result<String> {
     let abs = std::env::current_dir()?.join(path);
     let abs = abs.canonicalize().with_context(|| format!("{}", abs.display()))?;
@@ -458,7 +460,7 @@ async fn main() -> Result<()> {
         return server_action(action);
     }
     if let Action::Serve { dir, port, listen, vaults_in, vaults } = &cli.action {
-        use atlas_core::server::{Listen, Served, Vaults};
+        use kandinsky_core::server::{Listen, Served, Vaults};
         let what = if let Some(dir) = vaults_in {
             Vaults::Many(vaults_in_dir(dir)?)
         } else if !vaults.is_empty() {
@@ -475,22 +477,22 @@ async fn main() -> Result<()> {
         };
         if let Vaults::Many(list) = &what {
             for v in list {
-                eprintln!("atlas: vault “{}” at /v/{}/ ({})", v.name, v.name, v.root.display());
+                eprintln!("kandinsky: vault “{}” at /v/{}/ ({})", v.name, v.name, v.root.display());
             }
         }
         let handle = match listen {
-            None => atlas_core::server::serve_vaults(what, Listen::Local(*port, atlas_core::local_lock::Lock::from_env())).await?,
+            None => kandinsky_core::server::serve_vaults(what, Listen::Local(*port, kandinsky_core::local_lock::Lock::from_env())).await?,
             Some(addr) => {
-                let auth = atlas_core::auth::Auth::load()?;
-                eprintln!("atlas: server mode, sign-in: {:?} ({})", auth.settings().auth, atlas_core::auth::settings_file().display());
-                atlas_core::server::serve_vaults(what, Listen::Server { addr: *addr, auth: Box::new(auth) }).await?
+                let auth = kandinsky_core::auth::Auth::load()?;
+                eprintln!("kandinsky: server mode, sign-in: {:?} ({})", auth.settings().auth, kandinsky_core::auth::settings_file().display());
+                kandinsky_core::server::serve_vaults(what, Listen::Server { addr: *addr, auth: Box::new(auth) }).await?
             }
         };
-        // locked (ATLAS_LOCAL_LOCK=1): the address with a one-time code, the only way a browser gets in
+        // locked (KANDINSKY_LOCAL_LOCK=1): the address with a one-time code, the only way a browser gets in
         let at = listen.map_or_else(|| handle.open_url(), |a| format!("http://{a}/ (and this machine: {})", handle.url()));
-        eprintln!("atlas: serving {} at {at}", handle.info().root.display());
+        eprintln!("kandinsky: serving {} at {at}", handle.info().root.display());
         tokio::signal::ctrl_c().await?;
-        eprintln!("atlas: shutting down");
+        eprintln!("kandinsky: shutting down");
         return handle.shutdown().await;
     }
 
@@ -501,12 +503,12 @@ async fn main() -> Result<()> {
     let ws = Workspace::open(workspace_root(cli.workspace)?)?;
     // this process writes the vault too (drawings, companions, plugins, a capture with no core running, MCP): a mirrored
     // vault's writes take the server's lease here as they do in the serving core
-    atlas_core::mirror_guard::install_for_mirror(&ws);
+    kandinsky_core::mirror_guard::install_for_mirror(&ws);
     if let Action::Mcp = cli.action {
         return mcp::serve(ws).await;
     }
     if let Action::Drawings { apply } = cli.action {
-        let r = tokio::task::block_in_place(|| atlas_core::drawing_compact::compact_all(ws.root(), &ws.config()?, apply))?;
+        let r = tokio::task::block_in_place(|| kandinsky_core::drawing_compact::compact_all(ws.root(), &ws.config()?, apply))?;
         let mb = |b: u64| b as f64 / 1e6;
         for (path, before, after) in &r.drawings {
             println!("{} {path}: {:.1} MB → {:.1} MB", if apply { "compacted" } else { "would compact" }, mb(*before), mb(*after));
@@ -520,7 +522,7 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     if let Action::Companions { apply } = cli.action {
-        let plan = atlas_core::companion_tidy::plan(ws.root(), &ws.config()?)?;
+        let plan = kandinsky_core::companion_tidy::plan(ws.root(), &ws.config()?)?;
         for t in &plan {
             println!("{} {}", if apply { "done:" } else { "would tidy" }, t.what());
         }
@@ -528,7 +530,7 @@ async fn main() -> Result<()> {
             (_, true) => println!("nothing to tidy: one note per thing"),
             (false, false) => println!("{} to tidy — run again with --apply", plan.len()),
             (true, false) => {
-                let snap = tokio::task::block_in_place(|| atlas_core::companion_tidy::apply(&ws, &plan))?;
+                let snap = tokio::task::block_in_place(|| kandinsky_core::companion_tidy::apply(&ws, &plan))?;
                 println!("{} tidied; copies of everything touched: {}", plan.len(), snap.unwrap_or_default());
             }
         }
@@ -544,8 +546,8 @@ async fn main() -> Result<()> {
             Some(p) => serde_json::from_str(&p).context("params must be JSON")?,
             None => json!({}),
         };
-        // a helper calls back into its vault's core, so it runs in the running Atlas (the window's or `atlas serve`'s)
-        let Some(s) = Server::find(&ws).await else { bail!("Atlas is not running for {}: open the vault (or `atlas serve` it) first", ws.root().display()) };
+        // a helper calls back into its vault's core, so it runs in the running Kandinsky (the window's or `kandinsky serve`'s)
+        let Some(s) = Server::find(&ws).await else { bail!("Kandinsky is not running for {}: open the vault (or `kandinsky serve` it) first", ws.root().display()) };
         let v = s.post(&format!("/api/plugins/{id}/helper"), &json!({ "method": method, "params": params, "timeout_secs": 3600 }), Duration::from_secs(3605)).await?;
         print_value(&v);
         return Ok(());
@@ -555,12 +557,12 @@ async fn main() -> Result<()> {
             PluginAction::Update { id } | PluginAction::Remove { id } => Some(id.clone()),
             _ => None,
         };
-        plugin_action(&ws, action)?; // files only: works with or without a running Atlas
-        // a running Atlas would go on calling the old helper program: stop it, the next call starts the new one
+        plugin_action(&ws, action)?; // files only: works with or without a running Kandinsky
+        // a running Kandinsky would go on calling the old helper program: stop it, the next call starts the new one
         if let (Some(id), Some(s)) = (replaced, Server::find(&ws).await) {
             match s.post(&format!("/api/plugins/{id}/helper/stop"), &json!({}), Duration::from_secs(5)).await {
-                Ok(_) => println!("  the running Atlas starts its new helper on the next call"),
-                Err(e) => println!("  the running Atlas still has the old helper ({e}): restart the plugin in Settings"),
+                Ok(_) => println!("  the running Kandinsky starts its new helper on the next call"),
+                Err(e) => println!("  the running Kandinsky still has the old helper ({e}): restart the plugin in Settings"),
             }
         }
         return Ok(());
@@ -585,14 +587,14 @@ async fn main() -> Result<()> {
                 Some(s) => s.cmd(&id, args).await?,
                 // No UI: run locally; UI-only commands (open/notify/focus) then report no listener.
                 None => {
-                    let bus = atlas_core::events::EventBus::default();
+                    let bus = kandinsky_core::events::EventBus::default();
                     commands::run(&ws, &bus, commands::Command::resolve(ws.root(), &id, args)?).await?
                 }
             };
             print_value(&v);
         }
         Action::Open { path, line } => {
-            let Some(s) = &server else { bail!("Atlas is not running for {}", ws.root().display()) };
+            let Some(s) = &server else { bail!("Kandinsky is not running for {}", ws.root().display()) };
             let rel = to_workspace_rel(&ws, &path)?;
             s.cmd("open", json!({ "path": rel, "line": line })).await?;
         }

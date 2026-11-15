@@ -1,6 +1,6 @@
 //! Image thumbnails (`GET /api/thumb?path=&w=`): a figure gallery must not make the UI decode
 //! 4368×2301 PNGs to show them 160 px wide (the runs view froze WebKit that way). Downscaled once,
-//! cached in `.atlas/cache/thumbs/` until the source changes. JPEG XL (manga covers and pages) is always turned into
+//! cached in `.kandinsky/cache/thumbs/` until the source changes. JPEG XL (manga covers and pages) is always turned into
 //! PNG here: WebKit's own decoder can hang the page on one, and Android has none.
 use crate::error::{Error, Result};
 use crate::workspace::Workspace;
@@ -274,7 +274,7 @@ fn jxl_head(b: &[u8]) -> bool {
     b.starts_with(&[0xff, 0x0a]) || b.starts_with(b"\0\0\0\x0cJXL \r\n\x87\n")
 }
 
-/// A JPEG XL's first frame in sRGB, as RGBA (the phone's native plugins use it too: atlas-android `image.rs`).
+/// A JPEG XL's first frame in sRGB, as RGBA (the phone's native plugins use it too: kandinsky-android `image.rs`).
 pub fn decode_jxl(bytes: &[u8]) -> Result<image::RgbaImage> {
     let fail = |what: &str, e: &dyn std::fmt::Display| Error::BadRequest(format!("{what}: {e}"));
     let mut jxl = jxl_oxide::JxlImage::builder().read(std::io::Cursor::new(bytes)).map_err(|e| fail("not a JPEG XL picture", &e))?;
@@ -386,7 +386,7 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let pdf = d.path().join("paper.pdf");
         std::fs::write(&pdf, "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 300]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n").unwrap();
-        let cache = d.path().join(".atlas/cache");
+        let cache = d.path().join(".kandinsky/cache");
         let cover = pdf_cover(&cache, "paper.pdf", &pdf).unwrap();
         assert_eq!(image::image_dimensions(&cover).unwrap(), (PDF_COVER_W, PDF_COVER_W * 3 / 2), "page 1 at the cover's width");
         let drawn = std::fs::metadata(&cover).unwrap().modified().unwrap();
@@ -418,7 +418,7 @@ mod tests {
         std::fs::write(&pdf, "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 300]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n").unwrap();
         let jpg = pdfium_cover(&pdf).unwrap();
         assert_eq!(image::load_from_memory(&jpg).unwrap().height(), PDF_COVER_W * 3 / 2, "page 1 at the cover's width");
-        let cover = pdf_cover(&d.path().join(".atlas/cache"), "paper.pdf", &pdf).unwrap();
+        let cover = pdf_cover(&d.path().join(".kandinsky/cache"), "paper.pdf", &pdf).unwrap();
         assert!(cover.is_file());
         assert!(pdfium_cover(&d.path().join("missing.pdf")).is_err());
     }
@@ -433,7 +433,7 @@ mod tests {
         assert_eq!(mime, "image/png");
         let t = image::load_from_memory(&b).unwrap();
         assert_eq!((t.width(), t.height()), (320, 160), "rounded up to the 64 px step, aspect kept");
-        assert_eq!(std::fs::read_dir(d.path().join(".atlas/cache/thumbs")).unwrap().count(), 1);
+        assert_eq!(std::fs::read_dir(d.path().join(".kandinsky/cache/thumbs")).unwrap().count(), 1);
         assert_eq!(thumbnail(&ws, "big.png", 300).unwrap().0, b, "served from the cache");
         let (s, _) = thumbnail(&ws, "small.png", 300).unwrap();
         assert_eq!(s, std::fs::read(d.path().join("small.png")).unwrap(), "small enough: unchanged");

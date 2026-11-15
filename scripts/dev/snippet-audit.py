@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Audit a LaTeX Suite snippet file (the `snippets.coffee` of Obsidian's plugin, which Atlas reads too).
+"""Audit a LaTeX Suite snippet file (the `snippets.coffee` of Obsidian's plugin, which Kandinsky reads too).
 
-    python3 scripts/dev/snippet-audit.py ~/Notes/.atlas/snippets/snippets.coffee
+    python3 scripts/dev/snippet-audit.py ~/Notes/.kandinsky/snippets/snippets.coffee
 
 Read-only. It prints: how many snippets are live (commented-out lines are left out), the ones that
 need a selection (`${VISUAL}`), triggers defined twice for the same mode, and every automatic math
-trigger that is the beginning of a longer one (`kV` / `kVA`): Atlas waits for the longer one, the
+trigger that is the beginning of a longer one (`kV` / `kVA`): Kandinsky waits for the longer one, the
 Obsidian plugin expands the short one first, so there the long one can never be typed.
 """
 import collections

@@ -1,4 +1,4 @@
-// `atlas.openDialog(arg, opts)` (plugin API 20): a plugin's pane mounted in a popup over the app
+// `kandinsky.openDialog(arg, opts)` (plugin API 20): a plugin's pane mounted in a popup over the app
 // (components/PluginDialog.svelte) instead of a tab — for a moment rather than a place (Export's and Print's dialogs).
 // One open per plugin and arg: a second call while it is open resolves with it.
 import { mount, unmount } from "svelte";

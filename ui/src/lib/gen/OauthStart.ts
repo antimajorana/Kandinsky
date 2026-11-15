@@ -26,7 +26,7 @@ client_id?: string,
  */
 scopes?: Array<string>, 
 /**
- * The redirect address registered with the provider for this client (`https://localhost/atlas`).
+ * The redirect address registered with the provider for this client (`https://localhost/kandinsky`).
  * Default: the vault's `[plugins] oidc_redirect`.
  */
 redirect?: string, };

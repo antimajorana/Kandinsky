@@ -1,4 +1,4 @@
-//! Atlas's own template language, a superset of Obsidian's core Templates syntax: no
+//! Kandinsky's own template language, a superset of Obsidian's core Templates syntax: no
 //! Templater, no scripts — a template can only read, never run code. docs/guides/TEMPLATES.md has the
 //! full reference.
 //!
@@ -24,7 +24,7 @@ use serde_json::{Map, Value};
 const CURSOR: char = '\u{E000}';
 const MAX_INCLUDE_DEPTH: u8 = 8;
 
-/// What a tag Atlas cannot fill becomes.
+/// What a tag Kandinsky cannot fill becomes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unknown {
     /// Left as written, so a typo shows (a note the user asked for).

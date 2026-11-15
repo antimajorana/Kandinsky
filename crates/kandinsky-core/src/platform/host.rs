@@ -1,4 +1,4 @@
-//! Atlas inside a Flatpak. What a vault runs (plugin helpers, vault commands, `atlas.exec`, terminal tabs, language
+//! Kandinsky inside a Flatpak. What a vault runs (plugin helpers, vault commands, `kandinsky.exec`, terminal tabs, language
 //! servers) is the user's, installed on the host, not in the sandbox's runtime, so it is started there through
 //! `flatpak-spawn --host` (the manifest's `--talk-name=org.freedesktop.Flatpak`). Outside a Flatpak nothing here
 //! changes a command.
@@ -63,7 +63,7 @@ fn spawn_args(program: &OsStr, args: &[OsString], cwd: Option<&Path>) -> Vec<OsS
 /// `sh -c script` with `env` in a private file as its first argument and `spawn` (flatpak-spawn's) after it.
 fn with_env_file(script: &str, env: &[(OsString, OsString)], spawn: Vec<OsString>) -> std::io::Result<(OsString, Vec<OsString>)> {
     let file = env_file(env)?;
-    let mut out: Vec<OsString> = vec!["-c".into(), script.into(), "atlas-host".into(), file.into_os_string()];
+    let mut out: Vec<OsString> = vec!["-c".into(), script.into(), "kandinsky-host".into(), file.into_os_string()];
     out.extend(spawn);
     Ok(("sh".into(), out))
 }
@@ -71,7 +71,7 @@ fn with_env_file(script: &str, env: &[(OsString, OsString)], spawn: Vec<OsString
 /// `env` in `env -0` form (`NAME=value\0`), in a new file only this user can read.
 fn env_file(env: &[(OsString, OsString)]) -> std::io::Result<PathBuf> {
     static N: AtomicU64 = AtomicU64::new(0);
-    let path = std::env::temp_dir().join(format!("atlas-env-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
+    let path = std::env::temp_dir().join(format!("kandinsky-env-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
     let mut bytes = Vec::new();
     for (k, v) in env {
         bytes.extend_from_slice(k.as_encoded_bytes());
@@ -83,10 +83,10 @@ fn env_file(env: &[(OsString, OsString)]) -> std::io::Result<PathBuf> {
     Ok(path)
 }
 
-/// `cmd` as it starts on the host when Atlas is sandboxed, else `cmd` unchanged. Only the program, arguments, folder
+/// `cmd` as it starts on the host when Kandinsky is sandboxed, else `cmd` unchanged. Only the program, arguments, folder
 /// and the variables `cmd` sets carry over: build `cmd` with those, then set stdio and the rest on what comes back.
 /// On Windows it starts without a console window ([`super::proc::no_window`]): these runs are in the background, their
-/// output read by Atlas, and a console program started by the windowed app would otherwise flash a black window each
+/// output read by Kandinsky, and a console program started by the windowed app would otherwise flash a black window each
 /// time (`git status` runs whenever a page asks for the vault's changes, in a git repository or not).
 pub fn std_command(mut cmd: std::process::Command) -> std::io::Result<std::process::Command> {
     if !sandboxed() {
@@ -108,7 +108,7 @@ pub fn std_command(mut cmd: std::process::Command) -> std::io::Result<std::proce
     Ok(out)
 }
 
-/// Atlas run from an AppImage: its launcher (AppRun) puts the bundle's folders first in `PATH`, `LD_LIBRARY_PATH`,
+/// Kandinsky run from an AppImage: its launcher (AppRun) puts the bundle's folders first in `PATH`, `LD_LIBRARY_PATH`,
 /// `PYTHONPATH`… for the app's own libraries. A program of the user's started with them loads the bundle's copies (the
 /// system's `ssh` took the bundle's older libcrypto and failed). What to change for such a program: every variable that
 /// names the bundle, its list without the bundle's entries, unset when nothing else was in it. Empty outside an AppImage.
@@ -191,7 +191,7 @@ mod tests {
     /// What AppRun sets (an AppImage's linuxdeploy launcher): the user's programs get the variables as they were.
     #[test]
     fn a_program_started_from_an_appimage_gets_the_systems_libraries_not_the_bundles() {
-        let d = "/tmp/.mount_AtlasX";
+        let d = "/tmp/.mount_KandinskyX";
         let vars = [
             ("LD_LIBRARY_PATH", format!("{d}/usr/lib/:{d}/usr/lib64/:")),
             ("PATH", format!("{d}/usr/bin/:{d}/bin/:/usr/bin:/home/u/.local/bin")),
@@ -200,7 +200,7 @@ mod tests {
             ("GIO_MODULE_DIR", format!("{d}//usr/lib/gio/modules")),
             ("XDG_DATA_DIRS", format!("{d}/usr/share:/usr/share:/usr/local/share")),
             ("HOME", "/home/u".to_string()),
-            ("OTHER", "/tmp/.mount_AtlasXY/not-it".to_string()),
+            ("OTHER", "/tmp/.mount_KandinskyXY/not-it".to_string()),
         ];
         let got: std::collections::HashMap<String, Option<String>> = strip_bundle(d, vars.into_iter().map(|(k, v)| (k.to_string(), v)))
             .into_iter()
@@ -215,15 +215,15 @@ mod tests {
 
     #[test]
     fn a_command_with_variables_reads_them_from_a_private_file_and_only_its_name_is_on_the_line() {
-        let env = [(OsString::from("ATLAS_PLUGIN_KEY"), OsString::from("k-secret"))];
+        let env = [(OsString::from("KANDINSKY_PLUGIN_KEY"), OsString::from("k-secret"))];
         let (program, args) = wrap(OsStr::new("python3"), &["-u".into(), "helper.py".into()], Some(Path::new("/home/u/vault")), &env).unwrap();
         assert_eq!(program, "sh");
         let line: Vec<String> = args.iter().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(line[..3], ["-c", WITH_ENV, "atlas-host"]);
+        assert_eq!(line[..3], ["-c", WITH_ENV, "kandinsky-host"]);
         assert_eq!(line[4..], ["--host", "--watch-bus", "--directory=/home/u/vault", "--", "python3", "-u", "helper.py"]);
         assert!(!line.iter().any(|a| a.contains("k-secret")), "the key is not on the command line");
         let file = PathBuf::from(&line[3]);
-        assert_eq!(std::fs::read(&file).unwrap(), b"ATLAS_PLUGIN_KEY=k-secret\0");
+        assert_eq!(std::fs::read(&file).unwrap(), b"KANDINSKY_PLUGIN_KEY=k-secret\0");
         #[cfg(unix)]
         assert_eq!(std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&file).unwrap().permissions()) & 0o777, 0o600);
         std::fs::remove_file(file).unwrap();
@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn a_terminal_is_led_by_timeout_so_no_shell_in_the_sandbox_takes_its_pty() {
-        let env = [(OsString::from("ATLAS_ROOT"), OsString::from("/home/u/vault"))];
+        let env = [(OsString::from("KANDINSKY_ROOT"), OsString::from("/home/u/vault"))];
         let (program, args) = wrap_terminal(&["/usr/bin/zsh".into(), "-l".into()], None, &env).unwrap();
         assert_eq!(program, "timeout");
         let line: Vec<String> = args.iter().map(|a| a.to_string_lossy().into_owned()).collect();

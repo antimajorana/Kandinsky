@@ -3,7 +3,7 @@
 // by the words of their names under it (a walk of at most WALK folders, nearest first); `file` hands a file's address
 // to the catalog, which files it as it files any link (a PDF: downloaded, read for its identifiers or its first page,
 // a paper or a book with its file). Tests: helper.test.ts.
-import type { Params } from "atlas-helper";
+import type { Params } from "kandinsky-helper";
 
 interface Server { name: string; url: string }
 interface Entry { name: string; kind: "dir" | "file"; size?: number; path: string }
@@ -32,8 +32,8 @@ export const fileUrl = (s: Server, path: string) => `${s.url}${enc(abs(path))}`;
 
 async function ls(s: Server, dir: string): Promise<Entry[]> {
   const at = abs(dir).replace(/\/*$/, "/");
-  const pw = (await atlas.secret(`servers.${s.name}.password`)) ? { pw: { secret: `servers.${s.name}.password` } } : undefined;
-  const text = await atlas.fetch(`${s.url}${enc(at)}?ls&dots`, { headers: { accept: "application/json", ...pw }, timeout: 60 });
+  const pw = (await kandinsky.secret(`servers.${s.name}.password`)) ? { pw: { secret: `servers.${s.name}.password` } } : undefined;
+  const text = await kandinsky.fetch(`${s.url}${enc(at)}?ls&dots`, { headers: { accept: "application/json", ...pw }, timeout: 60 });
   let j: { dirs?: { href?: string; sz?: number }[]; files?: { href?: string; sz?: number }[] };
   try { j = JSON.parse(text ?? ""); } catch { throw new Error(`${s.name}: ${at} did not answer with a folder listing (a sign-in in front of it?)`); }
   const name = (href = "") => { const h = href.split("?")[0].replace(/\/+$/, ""); const last = h.slice(h.lastIndexOf("/") + 1); try { return decodeURIComponent(last); } catch { return last; } };
@@ -73,8 +73,8 @@ async function file(params: Params) {
   const s = serverOf(params);
   if (typeof params.path !== "string" || !params.path.trim()) throw new Error("`path`: the file on the server, as `list` shows it");
   const url = fileUrl(s, params.path);
-  const r = await atlas.post<{ path?: string; outcome?: string; kind?: string; steps?: unknown }>("/api/plugins/catalog/tools/add", { text: url });
+  const r = await kandinsky.post<{ path?: string; outcome?: string; kind?: string; steps?: unknown }>("/api/plugins/catalog/tools/add", { text: url });
   return { url, note: r.path, kind: r.kind, outcome: r.outcome, steps: r.steps };
 }
 
-atlas.methods({ list, file });
+kandinsky.methods({ list, file });

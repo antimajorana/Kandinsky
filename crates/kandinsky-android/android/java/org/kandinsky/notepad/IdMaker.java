@@ -1,4 +1,4 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 /** New element ids: unique in the drawing, readable in the file ("pen-…", "shape-…", "page-…"). */
 final class IdMaker {

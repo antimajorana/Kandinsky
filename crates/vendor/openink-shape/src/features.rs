@@ -96,7 +96,7 @@ impl Norm {
 }
 
 /// Two passes of a [1, 2, 1] / 4 filter (≈ one step of blur), ends kept: removes sample-level zigzag
-/// (pen jitter, Atlas's `wobble()`) that otherwise reads as curvature, while corners stay sharp at the
+/// (pen jitter, Kandinsky's `wobble()`) that otherwise reads as curvature, while corners stay sharp at the
 /// 2-step scale the features use.
 fn smooth(r: &[Pt]) -> Vec<Pt> {
     let mut a = r.to_vec();

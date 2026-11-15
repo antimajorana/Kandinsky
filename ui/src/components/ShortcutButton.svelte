@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A command's shortcut: click, press the new keys (saved to .atlas/keys.toml); a clash moves the
+  // A command's shortcut: click, press the new keys (saved to .kandinsky/keys.toml); a clash moves the
   // chord here and clears it on the other command; ⟲ goes back to the default. Shared by the
   // Commands pane and Settings → Keyboard.
   import { errText } from "../lib/text";

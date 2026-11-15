@@ -47,7 +47,7 @@
 	}
 	/** The page's short description and its external links (IMDb, Letterboxd, MusicBrainz…), redirects followed. */
 	function queryUrl(lang, title) {
-		return `https://${lang}.wikipedia.org/w/api.php?action=query&prop=description%7Cextlinks&titles=${atlas.url.quote(unquote(title), "")}&ellimit=500&redirects=1&format=json&formatversion=2`;
+		return `https://${lang}.wikipedia.org/w/api.php?action=query&prop=description%7Cextlinks&titles=${kandinsky.url.quote(unquote(title), "")}&ellimit=500&redirects=1&format=json&formatversion=2`;
 	}
 	async function recognize(params) {
 		const m = PAGE.exec(String(params.url ?? params.text ?? ""));
@@ -58,10 +58,10 @@
 			m[2]
 		];
 		const contact = String(params.settings?.contact ?? "").trim();
-		const agent = `Atlas/0.1 (personal notes app${contact ? `; ${contact}` : ""}) catalog-wikipedia`;
+		const agent = `Kandinsky/0.1 (personal notes app${contact ? `; ${contact}` : ""}) catalog-wikipedia`;
 		let page = {};
 		try {
-			const pages = (await atlas.fetchJson(queryUrl(lang, title), {
+			const pages = (await kandinsky.fetchJson(queryUrl(lang, title), {
 				headers: { "User-Agent": agent },
 				every: .5
 			}))?.query?.pages ?? [{}];
@@ -83,7 +83,7 @@
 			label: `${page.title ?? unquote(title).replaceAll("_", " ")} — ${page.description ?? qualifier(title)}`
 		}] };
 	}
-	atlas.methods({ recognize });
+	kandinsky.methods({ recognize });
 	//#endregion
 	exports.kindOf = kindOf;
 	exports.qualifier = qualifier;

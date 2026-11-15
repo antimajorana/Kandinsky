@@ -4,9 +4,9 @@ import type { ServerEvent } from "./types";
 type Handlers = { [K in ServerEvent["type"]]: Set<(e: Extract<ServerEvent, { type: K }>) => void> };
 const handlers: Handlers = { fs: new Set(), gone: new Set(), open: new Set(), notify: new Set(), focus: new Set(), signin: new Set(), signinneeded: new Set(), signedin: new Set(), plugin: new Set() };
 
-/** Atlas's own bookkeeping (`.atlas/cache/`: the layout, recent files; `.atlas/trash/`): written all the time, never
+/** Kandinsky's own bookkeeping (`.kandinsky/cache/`: the layout, recent files; `.kandinsky/trash/`): written all the time, never
  *  a file a note, the tree, Today or git review shows — `fs` listeners skip it. */
-export const isBookkeeping = (path: string): boolean => /^\.atlas\/(cache|trash)\//.test(path);
+export const isBookkeeping = (path: string): boolean => /^\.kandinsky\/(cache|trash)\//.test(path);
 
 /** Whether an `fs` event's paths include one `test` picks. No paths at all means "anything may have changed": the page
  *  may have missed events (it reconnected, or fell behind the core's bus), so every listener looks again. */
@@ -21,10 +21,10 @@ export function on<K extends ServerEvent["type"]>(type: K, fn: (e: Extract<Serve
 export function emit(e: ServerEvent): void {
   const set = handlers[e.type] as Set<(e: ServerEvent) => void> | undefined;
   if (!set) {
-    console.warn("[atlas] unknown server event", e);
+    console.warn("[kandinsky] unknown server event", e);
     return;
   }
   for (const fn of set) {
-    try { fn(e); } catch (err) { console.error("[atlas] event handler failed", e.type, err); }
+    try { fn(e); } catch (err) { console.error("[kandinsky] event handler failed", e.type, err); }
   }
 }

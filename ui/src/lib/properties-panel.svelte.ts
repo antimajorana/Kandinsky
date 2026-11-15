@@ -3,7 +3,7 @@
 // YAML. Remembered in this browser; `panel` in the setting keeps it always open.
 import { load, save } from "./prefs";
 
-const KEY = "atlas.propertiesPanel";
+const KEY = "kandinsky.propertiesPanel";
 export const propsPanel = $state({ open: load<boolean>(KEY, false) });
 
 export function toggleProperties(open = !propsPanel.open): void {
@@ -12,4 +12,4 @@ export function toggleProperties(open = !propsPanel.open): void {
 }
 
 // the "Properties N" line in a note (lib/properties.ts propertiesChip) asks for it this way
-if (typeof window !== "undefined") window.addEventListener("atlas-properties-toggle", () => toggleProperties());
+if (typeof window !== "undefined") window.addEventListener("kandinsky-properties-toggle", () => toggleProperties());

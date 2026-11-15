@@ -1,4 +1,4 @@
-"""zotero_sync.py on a minimal Zotero schema: new items, Zotero-side edits, Atlas-side edits kept,
+"""zotero_sync.py on a minimal Zotero schema: new items, Zotero-side edits, Kandinsky-side edits kept,
 both-sides conflicts reported, notes as marked blocks, trash reported. Run: uv run --with pyyaml python -m unittest"""
 import importlib.util, json, sqlite3, sys, tempfile, unittest
 from pathlib import Path
@@ -85,21 +85,21 @@ class SyncTest(unittest.TestCase):
         self.assertIn("```view\ntype: library.paper\n```", note)
         self.assertEqual(self.run_sync()[0].get("skipped"), "no change in Zotero since the last sync")
 
-    def test_zotero_edit_flows_atlas_edit_stays_both_is_a_conflict(self):
+    def test_zotero_edit_flows_kandinsky_edit_stays_both_is_a_conflict(self):
         self.run_sync()
-        info = self.info(); info["DOI"] = "10.1/atlas"; info["date"] = "1963-11"   # edited in Atlas
+        info = self.info(); info["DOI"] = "10.1/kandinsky"; info["date"] = "1963-11"   # edited in Kandinsky
         self.save(info)
         self.z.field(1, "title", "Electron correlations in narrow energy bands")    # Zotero: title
         self.z.field(1, "date", "1963-12"); self.z.commit()                            # Zotero: date too
         c, report = self.run_sync()
         i = self.info()
         self.assertEqual(i["title"], "Electron correlations in narrow energy bands")  # Zotero's edit arrives
-        self.assertEqual(i["DOI"], "10.1/atlas")                                       # Atlas-only edit stays
-        self.assertEqual(i["date"], "1963-11")                                         # both: Atlas kept…
+        self.assertEqual(i["DOI"], "10.1/kandinsky")                                       # Kandinsky-only edit stays
+        self.assertEqual(i["date"], "1963-11")                                         # both: Kandinsky kept…
         self.assertEqual(c["conflicts"], 1)                                            # …and reported
         self.assertTrue(any("**date**" in r for r in report))
 
-    def test_notes_keep_atlas_text_and_update_untouched_blocks(self):
+    def test_notes_keep_kandinsky_text_and_update_untouched_blocks(self):
         self.run_sync()
         notes = self.dest / "hubbard1963electron" / "hubbard1963electron.md"
         notes.write_text(notes.read_text() + "\nMy own thoughts.\n")  # below the properties: they are the entry

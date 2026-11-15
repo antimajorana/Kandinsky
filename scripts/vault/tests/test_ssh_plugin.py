@@ -1,15 +1,15 @@
-"""The SSH plugin's helper (plugins/stable/ssh/engine, the `atlas-ssh` binary; session.py before 0.7.0): `terminal`, the agent's "open me an ssh
+"""The SSH plugin's helper (plugins/stable/ssh/engine, the `kandinsky-ssh` binary; session.py before 0.7.0): `terminal`, the agent's "open me an ssh
 terminal" (ssh_terminal); and the Files pane's sftp calls (sftp.py), against the machine's own sftp-server
 started by a stand-in ssh on a local folder. The helper asks the page for a tab (a `tab` event) and answers only once the
 page says the tab is open (`tab_opened`); with no page answering it fails instead of claiming a tab.
-A stand-in ssh (ATLAS_SSH_BIN) keeps it off the network; HOME is a temporary folder, so no real config.
+A stand-in ssh (KANDINSKY_SSH_BIN) keeps it off the network; HOME is a temporary folder, so no real config.
 Long-lived sessions (`open` / `run` / `read`) against a stand-in ssh that runs a local shell.
-Run: cargo build -p atlas-ssh && python3 -m unittest discover -s scripts/vault/tests -p 'test_ssh*'
-(ATLAS_SSH_HELPER: another build of the helper)."""
+Run: cargo build -p kandinsky-ssh && python3 -m unittest discover -s scripts/vault/tests -p 'test_ssh*'
+(KANDINSKY_SSH_HELPER: another build of the helper)."""
 import json, os, queue, shutil, subprocess, sys, tempfile, threading, time, unittest
 from pathlib import Path
 
-HELPER = Path(os.environ.get("ATLAS_SSH_HELPER") or Path(__file__).parents[3] / "target/debug/atlas-ssh")
+HELPER = Path(os.environ.get("KANDINSKY_SSH_HELPER") or Path(__file__).parents[3] / "target/debug/kandinsky-ssh")
 # `ssh -O check` (is a connection up?) says no; `ssh -G` (the config) says nothing; anything else is fine
 FAKE_SSH = """#!/bin/sh
 for a in "$@"; do [ "$a" = "-O" ] && exit 255; done
@@ -35,7 +35,7 @@ SFTP_SERVER = next((s for s in ("/usr/libexec/openssh/sftp-server", "/usr/lib/op
 
 
 class Helper:
-    """The helper as Atlas runs it: JSON lines in, answers and events out."""
+    """The helper as Kandinsky runs it: JSON lines in, answers and events out."""
 
     def __init__(self, tab_wait, fake_ssh=FAKE_SSH):
         self.dir = tempfile.mkdtemp()
@@ -44,7 +44,7 @@ class Helper:
         os.chmod(fake, 0o755)
         self.vault = os.path.join(self.dir, "vault")
         os.makedirs(self.vault)
-        env = {**os.environ, "HOME": self.dir, "ATLAS_SSH_BIN": fake, "ATLAS_SSH_TAB_WAIT": str(tab_wait), "ATLAS_PLUGIN_CACHE": os.path.join(self.dir, "cache"), "ATLAS_ROOT": self.vault}
+        env = {**os.environ, "HOME": self.dir, "KANDINSKY_SSH_BIN": fake, "KANDINSKY_SSH_TAB_WAIT": str(tab_wait), "KANDINSKY_PLUGIN_CACHE": os.path.join(self.dir, "cache"), "KANDINSKY_ROOT": self.vault}
         self.proc = subprocess.Popen([str(HELPER)], cwd=self.vault, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         self.ids = 100
         self.lines = queue.Queue()
@@ -82,7 +82,7 @@ exec sh
 
 
 class SessionTest(unittest.TestCase):
-    """atlas mcp's ssh_open / ssh_run / ssh_read: one shell kept between calls."""
+    """kandinsky mcp's ssh_open / ssh_run / ssh_read: one shell kept between calls."""
 
     def setUp(self):
         self.h = Helper(tab_wait=2, fake_ssh=FAKE_SHELL_SSH)
@@ -149,7 +149,7 @@ class TerminalTest(unittest.TestCase):
     def test_no_window_or_a_failed_tab_is_an_error_not_a_claimed_tab(self):
         self.h.send(1, "terminal", {"host": "iq", "settings": {}})
         self.h.next(lambda l: l.get("event") == "tab")  # asked, and nobody answers
-        self.assertIn("no Atlas window opened the tab", self.h.next(lambda l: l.get("id") == 1)["error"])
+        self.assertIn("no Kandinsky window opened the tab", self.h.next(lambda l: l.get("id") == 1)["error"])
         self.h.send(2, "terminal", {"host": "iq", "settings": {}})
         ev = self.h.next(lambda l: l.get("event") == "tab")["data"]
         self.h.send(3, "tab_opened", {"id": ev["id"], "ok": False})
@@ -160,7 +160,7 @@ class TerminalTest(unittest.TestCase):
 
 @unittest.skipUnless(SFTP_SERVER and shutil.which("sftp"), "needs sftp and sftp-server (openssh)")
 class FilesTest(unittest.TestCase):
-    """The explorer's calls (main.js `atlas.files.source`): a real sftp client and server, over a pipe, on a local folder."""
+    """The explorer's calls (main.js `kandinsky.files.source`): a real sftp client and server, over a pipe, on a local folder."""
 
     def setUp(self):
         self.h = Helper(tab_wait=2, fake_ssh=FAKE_SFTP_SSH)
@@ -209,7 +209,7 @@ class FilesTest(unittest.TestCase):
         self.assertEqual(self.ok("files_list", path=f"{root}/to-notes"), {"not_dir": True, "path": f"{root}/to-notes"}, "a link to a file: opened as a file")
         # opened from a local copy, binary or not; a save goes back, unless the file there changed meanwhile
         copy = self.ok("files_edit", host="iq", path=f"{root}/data run/out [1].txt")["local"]
-        self.assertEqual(copy, f".atlas/remote/ssh/iq{root}/data run/out [1].txt")
+        self.assertEqual(copy, f".kandinsky/remote/ssh/iq{root}/data run/out [1].txt")
         self.assertEqual(Path(self.h.vault, copy).read_text(), "E = -1.25\n")
         blob = self.ok("files_edit", host="iq", path=f"{root}/blob.bin")["local"]
         self.assertEqual(Path(self.h.vault, blob).read_bytes(), b"\0\1\2")

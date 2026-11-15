@@ -3,8 +3,8 @@ import { openFile } from "./open";
 
 // "it takes too long to write the task syntax": Ctrl+L makes the line a to-do, then done, then open;
 // and a capture typed as `[] …` or `todo …` is a task in the day's log, not a timed line.
-const H = { "x-atlas": "1" };
-// fixture notes with open tasks carry <!-- atlas:no-tasks -->: the shared test vault's Home list must not grow (smoke, page-arrange)
+const H = { "x-kandinsky": "1" };
+// fixture notes with open tasks carry <!-- kandinsky:no-tasks -->: the shared test vault's Home list must not grow (smoke, page-arrange)
 
 test("Ctrl+L cycles a line through to-do and done; a quick capture can be a task", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/todo-keys.md", text: "# Keys\n\nbuy milk\n- call Ana\n" } });
@@ -12,7 +12,7 @@ test("Ctrl+L cycles a line through to-do and done; a quick capture can be a task
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "todo-keys.md");
   await page.locator(".cm-content").getByText("buy milk").click();
-  const text = () => page.evaluate(() => (window as any).__atlas.editor().text as string);
+  const text = () => page.evaluate(() => (window as any).__kandinsky.editor().text as string);
   await page.keyboard.press("Control+l");
   await expect.poll(text).toContain("- [ ] buy milk\n");
   await page.keyboard.press("Control+l");
@@ -48,13 +48,13 @@ test("Ctrl+L cycles a line through to-do and done; a quick capture can be a task
 // list does — `✅ day` on a line with the Tasks fields, the next occurrence of a recurring one; opened again, the
 // date goes; Ctrl+L on a to-do does the same.
 test("a task's box in a note ticks as on Home: done date, next occurrence, and back", async ({ page, request }) => {
-  await request.put("/api/file", { headers: H, data: { path: "notes/tick-box.md", text: "# Ticks\n\n- [ ] pay 📅 2026-10-20\n- [ ] water 🔁 every day\n- [ ] plain\n\n<!-- atlas:no-tasks -->\n" } });
+  await request.put("/api/file", { headers: H, data: { path: "notes/tick-box.md", text: "# Ticks\n\n- [ ] pay 📅 2026-10-20\n- [ ] water 🔁 every day\n- [ ] plain\n\n<!-- kandinsky:no-tasks -->\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.request.post("/api/cmd/open", { headers: H, data: { args: { path: "notes/tick-box.md" } } });
   const ed = page.locator(".dv-active-group .cm-editor").first();
   await ed.waitFor();
-  const text = () => page.evaluate(() => (window as any).__atlas.editor().text as string);
+  const text = () => page.evaluate(() => (window as any).__kandinsky.editor().text as string);
   const day = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
   const box = (label: string) => ed.locator(".cm-line", { hasText: label }).locator(".cm-task-mark");
 
@@ -75,7 +75,7 @@ test("a task's box in a note ticks as on Home: done date, next occurrence, and b
 // "render the emojis in a nicer way": the chips were drawn with their text over their own icon ("Tue📅sday") —
 // a list line's hanging text-indent (-28px) was inherited by the inline-flex chip. A done task is never "late".
 test("a task's fields are chips with their text after the icon; a done task's dates are not late", async ({ page, request }) => {
-  await request.put("/api/file", { headers: H, data: { path: "notes/chip-look.md", text: "# Chips\n\n- [ ] pay 📅 2026-01-20 ⏫\n- [x] sent 📅 2026-01-10 ✅ 2026-01-11\n\n<!-- atlas:no-tasks -->\n" } });
+  await request.put("/api/file", { headers: H, data: { path: "notes/chip-look.md", text: "# Chips\n\n- [ ] pay 📅 2026-01-20 ⏫\n- [x] sent 📅 2026-01-10 ✅ 2026-01-11\n\n<!-- kandinsky:no-tasks -->\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.request.post("/api/cmd/open", { headers: H, data: { args: { path: "notes/chip-look.md" } } });

@@ -1,5 +1,5 @@
 // Every command the user can run — UI actions, server built-ins, workspace scripts — with its
-// effective shortcut: `.atlas/keys.toml` overrides first, then the command's own default.
+// effective shortcut: `.kandinsky/keys.toml` overrides first, then the command's own default.
 // The global key handler, the palette and the Commands pane all read this one list.
 import { emitPluginEvent } from "./plugin-events";
 import { builtinOn } from "./builtin-plugins";
@@ -13,7 +13,7 @@ export interface Cmd {
   id: string;
   title: string;
   description?: string;
-  /** "ui": a UI action; "builtin": an Atlas server command; "script": a workspace script. */
+  /** "ui": a UI action; "builtin": an Kandinsky server command; "script": a workspace script. */
   source: "ui" | "builtin" | "script";
   defaultKeys?: string;
   keys?: string;
@@ -67,7 +67,7 @@ const withShift = (k: string) => (parseChord(k)?.shift ? k : k.replace(/\+([^+]+
 
 /** The keys as this system types them (keys.ts `onThisSystem`: Super is Ctrl+Cmd on a Mac, Ctrl+Alt on Windows). On
  *  Windows a default already on Ctrl+Alt that a Super key now takes (Super+P open file over Ctrl+Alt+P pin tab) moves
- *  to Ctrl+Alt+Shift: the everyday app keys keep the shorter form. A key set by hand (`.atlas/keys.toml`) never moves. */
+ *  to Ctrl+Alt+Shift: the everyday app keys keep the shorter form. A key set by hand (`.kandinsky/keys.toml`) never moves. */
 export function forThisSystem(list: Cmd[], sys: KeySystem = keySystem()): Cmd[] {
   if (sys === "linux") return list;
   const keysOf = (c: Cmd) => [c.keys, ...(c.alsoKeys ?? [])].filter((k): k is string => !!k);

@@ -1,6 +1,6 @@
 // Marking passages in a chapter's text — the one implementation for both book readers (the web reader imports this
 // file; the native reader carries it in the app, NativePlugins.shared, and puts it in each chapter). A classic script:
-// it sets globalThis.atlasMarks = { textMap, wrap, markPassages, occurrences, markFound }.
+// it sets globalThis.kandinskyMarks = { textMap, wrap, markPassages, occurrences, markFound }.
 (function (g) {
 const squash = (t) => t.replace(/\s+/g, " ").trim();
 /** A chapter's text with whitespace collapsed (as `squash` does), and for each of its characters the text node and
@@ -47,11 +47,11 @@ function wrap(doc, map, stretches, cls) {
   }
   return first;
 }
-/** Marks each passage in `doc` (`<mark class="atlas-hl">`), also across elements; whitespace counts as one space. */
+/** Marks each passage in `doc` (`<mark class="kandinsky-hl">`), also across elements; whitespace counts as one space. */
 function markPassages(doc, passages) {
   const map = textMap(doc);
   const found = passages.filter(Boolean).map((p) => ({ k: map.text.indexOf(p), len: p.length })).filter((s) => s.k >= 0);
-  return wrap(doc, map, found, "atlas-hl").filter(Boolean).length;
+  return wrap(doc, map, found, "kandinsky-hl").filter(Boolean).length;
 }
 /** Every place `query` occurs in `text` (any case, whitespace as one space) → [{ k, len, snippet: [before, hit, after] }]. */
 function occurrences(text, query, max = 200) {
@@ -66,13 +66,13 @@ function occurrences(text, query, max = 200) {
   }
   return out;
 }
-/** Marks the `nth` occurrence of `query` in `doc` as the search's find (`mark.atlas-found`) → that mark, or null. */
+/** Marks the `nth` occurrence of `query` in `doc` as the search's find (`mark.kandinsky-found`) → that mark, or null. */
 function markFound(doc, query, nth) {
-  for (const m of doc.querySelectorAll("mark.atlas-found")) m.replaceWith(...m.childNodes);
+  for (const m of doc.querySelectorAll("mark.kandinsky-found")) m.replaceWith(...m.childNodes);
   doc.body.normalize();
   const map = textMap(doc), hit = occurrences(map.text, query)[nth];
-  return hit ? wrap(doc, map, [hit], "atlas-found")[0] : null;
+  return hit ? wrap(doc, map, [hit], "kandinsky-found")[0] : null;
 }
 
-g.atlasMarks = { textMap, wrap, markPassages, occurrences, markFound, squash };
+g.kandinskyMarks = { textMap, wrap, markPassages, occurrences, markFound, squash };
 })(globalThis);

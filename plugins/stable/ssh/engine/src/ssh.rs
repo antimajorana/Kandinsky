@@ -11,22 +11,22 @@ use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 /// When the ssh config sets no ControlPath of its own.
-const FALLBACK_SOCKET: &str = "~/.ssh/atlas-%C";
+const FALLBACK_SOCKET: &str = "~/.ssh/kandinsky-%C";
 /// How long the user has to answer the passphrase / 2FA in the login tab before it is asked again.
 const LOGIN_WAIT: Duration = Duration::from_secs(300);
 
-/// ssh itself: `ATLAS_SSH_BIN` (the tests' stand-in) or `ssh`.
+/// ssh itself: `KANDINSKY_SSH_BIN` (the tests' stand-in) or `ssh`.
 pub fn ssh_bin() -> String {
-    std::env::var("ATLAS_SSH_BIN").unwrap_or_else(|_| "ssh".into())
+    kandinsky_plugin::env_var_os("SSH_BIN").and_then(|v| v.into_string().ok()).unwrap_or_else(|| "ssh".into())
 }
 
 pub fn sftp_bin() -> String {
-    std::env::var("ATLAS_SFTP_BIN").unwrap_or_else(|_| "sftp".into())
+    kandinsky_plugin::env_var_os("SFTP_BIN").and_then(|v| v.into_string().ok()).unwrap_or_else(|| "sftp".into())
 }
 
-/// The plugin's cache folder (`ATLAS_PLUGIN_CACHE`, set by the core).
+/// The plugin's cache folder (`KANDINSKY_PLUGIN_CACHE`, set by the core).
 pub fn cache_dir() -> PathBuf {
-    absolute(Path::new(&std::env::var("ATLAS_PLUGIN_CACHE").unwrap_or_else(|_| ".atlas/cache/plugins/ssh".into())))
+    absolute(Path::new(&std::env::var("KANDINSKY_PLUGIN_CACHE").unwrap_or_else(|_| kandinsky_plugin::live_rel(Path::new("."), ".kandinsky/cache/plugins/ssh"))))
 }
 
 pub fn absolute(p: &Path) -> PathBuf {
@@ -228,8 +228,8 @@ pub fn login(s: &Settings, host: &str, wait: Duration, asker: Asker) -> bool {
     };
     if let Some(event) = event {
         match login_script(s, host, why) {
-            Ok(path) => atlas_plugin::event(event, json!({ "host": host, "why": why, "command": format!("sh {}", shell::quote(&path.to_string_lossy())) })),
-            Err(e) => eprintln!("atlas-ssh: the login script could not be written: {e}"),
+            Ok(path) => kandinsky_plugin::event(event, json!({ "host": host, "why": why, "command": format!("sh {}", shell::quote(&path.to_string_lossy())) })),
+            Err(e) => eprintln!("kandinsky-ssh: the login script could not be written: {e}"),
         }
     }
     let end = Instant::now() + wait;

@@ -53,7 +53,7 @@ hint = "what you send to this topic from the phone is captured into today's log;
 key = "apprise"
 label = "Apprise address"
 kind = "text"
-hint = "the Apprise API's notify address (…/notify/<key>): Atlas's own messages go out through it; empty: ntfy"
+hint = "the Apprise API's notify address (…/notify/<key>): Kandinsky's own messages go out through it; empty: ntfy"
 
 [[setting]]
 key = "user"
@@ -83,7 +83,7 @@ timeout_secs = 60
 [[tool]]
 name = "send"
 description = "Send a short message to the user's phone (through Apprise when set, else their ntfy topic). Use it when the user asks to be told or reminded on their phone, e.g. when a long job ends."
-input = { text = "string", title = { type = "string", description = "the notification's title (default: Atlas)", optional = true } }
+input = { text = "string", title = { type = "string", description = "the notification's title (default: Kandinsky)", optional = true } }
 secrets = ["token", "password"]
 timeout_secs = 40
 

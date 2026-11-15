@@ -20,7 +20,7 @@ async function inTurn<T>(fn: () => Promise<T>): Promise<T> {
   try { return await fn(); } finally { running--; waiting.shift()?.(); }
 }
 
-/** A source's picture of one file outside the explorer (a library's cover: `atlas.files.thumb`). */
+/** A source's picture of one file outside the explorer (a library's cover: `kandinsky.files.thumb`). */
 export const sourcePicture = (src: FileSource, place: string, path: string): Promise<string | null> =>
   picture(src, place, path, {} as Entry, () => true).then((d) => (typeof d === "string" ? d : null));
 

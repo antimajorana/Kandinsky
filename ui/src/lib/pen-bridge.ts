@@ -1,13 +1,13 @@
 // The desktop app on Linux: WebKitGTK hands a Wacom pen to the page as a mouse, without pressure. The app tells the
-// page, just before each of the pen's events, its pressure and tilt (`atlasPen`, atlas-app main.rs `pen_as_pen`);
+// page, just before each of the pen's events, its pressure and tilt (`kandinskyPen`, kandinsky-app main.rs `pen_as_pen`);
 // here the mouse's pointer event that follows is replaced by the same event as a pen's, so the drawings
 // (draw-excalidraw.ts, draw-notepad.ts) see a pen. Mouse events (mousedown, click) are left alone: buttons still work.
 type Pen = { pressure: number; tiltX: number; tiltY: number; eraser: boolean };
 let pen: Pen | null = null;
 
 export function attachPenBridge(): void {
-  const w = window as unknown as { atlasPen?: (p: number | null, tx?: number, ty?: number, eraser?: boolean) => void };
-  w.atlasPen = (p, tiltX = 0, tiltY = 0, eraser = false) => { pen = p === null ? null : { pressure: p, tiltX, tiltY, eraser }; };
+  const w = window as unknown as { kandinskyPen?: (p: number | null, tx?: number, ty?: number, eraser?: boolean) => void };
+  w.kandinskyPen = (p, tiltX = 0, tiltY = 0, eraser = false) => { pen = p === null ? null : { pressure: p, tiltX, tiltY, eraser }; };
   for (const type of ["pointerdown", "pointermove", "pointerup", "pointerover", "pointerenter", "pointerout", "pointerleave"] as const) {
     window.addEventListener(type, (ev: Event) => {
       const e = ev as PointerEvent;

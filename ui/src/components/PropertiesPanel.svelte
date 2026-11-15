@@ -127,7 +127,7 @@
   .body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 16px; }
   /* one line per property, the name left and its value right (a name above each value
      took two screens for a film's 17 properties) */
-  .row { display: grid; grid-template-columns: calc(96px * var(--ui-scale, 1)) minmax(0, 1fr); align-items: start; column-gap: 6px; padding: 2px 4px; border-radius: var(--radius-sm); }
+  .row { display: grid; grid-template-columns: calc(112px * var(--ui-scale, 1)) minmax(0, 1fr); align-items: start; column-gap: 8px; padding: 3px 6px; border-radius: var(--radius-sm); }
   .row > .key { min-height: calc(28px * var(--ui-scale, 1)); position: relative; }
   .row > .key :global(.rm) { position: absolute; right: 0; background: var(--bg-alt); } /* over the name's end: no width kept for it */
   .row > :global(:not(.key)) { min-width: 0; }
@@ -135,7 +135,7 @@
   .props-panel :global(input[type="number"]::-webkit-inner-spin-button), .props-panel :global(input[type="number"]::-webkit-outer-spin-button) { -webkit-appearance: none; margin: 0; }
   .row:hover { background: var(--bg-hover); }
   .row.missing .name { color: var(--text-faint); }
-  .key { display: flex; align-items: center; gap: 6px; min-height: calc(20px * var(--ui-scale, 1)); padding-left: 3px; color: var(--text-muted); font-size: calc(11.5px * var(--ui-scale, 1)); }
+  .key { display: flex; align-items: center; gap: 6px; min-height: calc(22px * var(--ui-scale, 1)); padding-left: 3px; color: var(--text-muted); font-size: calc(12.5px * var(--ui-scale, 1)); }
   .icon { display: inline-grid; place-items: center; flex: none; opacity: .75; }
   .icon :global(svg) { width: calc(13px * var(--ui-scale, 1)); height: calc(13px * var(--ui-scale, 1)); }
   .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-weight: 550; }

@@ -10,7 +10,7 @@ import type { StartShape } from "./StartShape";
 import type { TextSize } from "./TextSize";
 
 /**
- * Drawing: Excalidraw (in Atlas). An `.rnote` is an input the Rnote plugin converts into one.
+ * Drawing: Excalidraw (in Kandinsky). An `.rnote` is an input the Rnote plugin converts into one.
  */
 export type DrawConfig = { 
 /**
@@ -41,7 +41,7 @@ paper: NotepadPaper,
 snap: boolean, 
 /**
  * Shape recogniser. openink: boox_5c_re's trained one (lines, boxes, ellipses, triangles, polygons, arcs,
- * arrows); atlas: the earlier one (lines, boxes, ellipses, triangles).
+ * arrows); kandinsky: the earlier one (lines, boxes, ellipses, triangles).
  */
 shapes: ShapeRecogniser, 
 /**

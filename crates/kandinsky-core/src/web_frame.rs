@@ -1,5 +1,5 @@
-//! Whether a web page lets itself be shown inside Atlas, as a tab. A site says no with `X-Frame-Options` or a CSP `frame-ancestors`; WebKit obeys that, so
-//! such a page goes to Atlas's browsing window instead (ui lib/web-links.ts). `GET /api/web/frameable?url=`.
+//! Whether a web page lets itself be shown inside Kandinsky, as a tab. A site says no with `X-Frame-Options` or a CSP `frame-ancestors`; WebKit obeys that, so
+//! such a page goes to Kandinsky's browsing window instead (ui lib/web-links.ts). `GET /api/web/frameable?url=`.
 use reqwest::header::HeaderMap;
 
 /// Whether these response headers let any page frame the document.
@@ -26,7 +26,7 @@ pub async fn check(url: &str) -> bool {
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return false;
     }
-    let Ok(client) = reqwest::Client::builder().use_preconfigured_tls(crate::tls_chain::config()).timeout(std::time::Duration::from_secs(5)).user_agent(concat!("Mozilla/5.0 (X11; Linux x86_64) Atlas/", env!("CARGO_PKG_VERSION"))).build() else {
+    let Ok(client) = reqwest::Client::builder().use_preconfigured_tls(crate::tls_chain::config()).timeout(std::time::Duration::from_secs(5)).user_agent(concat!("Mozilla/5.0 (X11; Linux x86_64) Kandinsky/", env!("CARGO_PKG_VERSION"))).build() else {
         return false;
     };
     match client.get(url).send().await {

@@ -3,7 +3,7 @@
 #
 #   bash scripts/dev/gate.sh            # all stages
 #   bash scripts/dev/gate.sh rust ui    # only some: sync | scan | tidy | rust | clippy | py | ui | build | e2e
-#   bash scripts/dev/gate.sh audit      # Obsidian fidelity: every note of a COPY of $ATLAS_VAULT rendered and
+#   bash scripts/dev/gate.sh audit      # Obsidian fidelity: every note of a COPY of $KANDINSKY_VAULT rendered and
 #                                        # checked (minutes; run after editor / markdown / embed changes)
 #
 # The verdict is the printed PASS/FAIL table (and this script's exit status, which is the
@@ -13,14 +13,17 @@ set -uo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # in a memory-capped scope of its own: systemd-oomd then kills a build, never the terminal running it (heavy.sh)
-[ -z "${ATLAS_HEAVY:-}" ] && exec bash "$here/heavy.sh" bash "$here/gate.sh" "$@"
+[ -z "${KANDINSKY_HEAVY:-}" ] && exec bash "$here/heavy.sh" bash "$here/gate.sh" "$@"
 root="$(git -C "$here" rev-parse --show-toplevel)"
-logs="${TMPDIR:-/tmp}/atlas-gate"
+logs="${TMPDIR:-/tmp}/kandinsky-gate"
 mkdir -p "$logs"
 cd "$root"
-# machine-local settings: a real vault for the tests and audits that use one (ATLAS_TEST_VAULT, ATLAS_TEST_PAPERS,
-# ATLAS_VAULT…; docs/guides/DEVELOPING.md). Without the file those tests use fixtures or skip, and say so.
+# machine-local settings: a real vault for the tests and audits that use one (KANDINSKY_TEST_VAULT, KANDINSKY_TEST_PAPERS,
+# KANDINSKY_VAULT…; docs/guides/DEVELOPING.md). Without the file those tests use fixtures or skip, and say so.
 [ -f "$root/scripts/dev/local.env" ] && { set -a; . "$root/scripts/dev/local.env"; set +a; echo "[gate] local settings: scripts/dev/local.env"; }
+# a local.env written before the project was renamed uses ATLAS_* names: each one also under its KANDINSKY_* name,
+# unless that is set
+while IFS="=" read -r k v; do n="KANDINSKY_${k#ATLAS_}"; [ -n "${!n+x}" ] || export "$n=$v"; done < <(env | grep "^ATLAS_[A-Z0-9_]*=" || true)
 
 stages=("$@")
 [ ${#stages[@]} -eq 0 ] && stages=(scan tidy rust clippy py ui build e2e)

@@ -2,13 +2,13 @@
 // The plugins as release archives (docs/guides/PLUGIN-API.md, "Compiled helpers and release archives").
 //   node scripts/dev/plugin-pack.mjs engines [--target <arch>-<os>] [--only id,id] [--keep-going]
 //       builds every plugin's Rust engine (plugins/*/<id>/engine/Cargo.toml) for one platform into
-//       plugins/*/<id>/bin/<arch>-<os>/ — the folder a plugin's `run` line finds through $ATLAS_PLUGIN_TARGET.
+//       plugins/*/<id>/bin/<arch>-<os>/ — the folder a plugin's `run` line finds through $KANDINSKY_PLUGIN_TARGET.
 //       Default target: this machine. --keep-going builds the others when one fails, and still exits non-zero.
 //   node scripts/dev/plugin-pack.mjs pack [--out target/dist/plugins] [--bins <dir>]
-//       one atlas-plugin-<id>.tar.gz per plugin of plugins/stable and plugins/beta: its tracked files without the
+//       one kandinsky-plugin-<id>.tar.gz per plugin of plugins/stable and plugins/beta: its tracked files without the
 //       sources (engine/, ui/, helper/), plus every platform's bin/ found (in the repo, or under --bins, laid out as
 //       <tier>/<id>/bin/<target>/, as CI's engine artifacts are), and plugins.json, the index of them all.
-// Atlas installs such an archive from a file or its web address (plugin_install.rs).
+// Kandinsky installs such an archive from a file or its web address (plugin_install.rs).
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, chmodSync } from "node:fs";
@@ -18,9 +18,9 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const log = (m) => console.log(`[plugin-pack] ${m}`);
 
-// Atlas's platform name (plugins.rs `target()`: Rust's ARCH-OS) → the Rust target an engine is built for. Linux
+// Kandinsky's platform name (plugins.rs `target()`: Rust's ARCH-OS) → the Rust target an engine is built for. Linux
 // engines are static (musl) so one file runs on any distribution and in the server's container, unless the crate
-// says `[package.metadata.atlas] libc = "gnu"` (C++ dependencies musl cannot build): those are built on an old glibc.
+// says `[package.metadata.kandinsky] libc = "gnu"` (C++ dependencies musl cannot build): those are built on an old glibc.
 const TARGETS = {
   "x86_64-linux": { musl: "x86_64-unknown-linux-musl", gnu: "x86_64-unknown-linux-gnu" },
   "aarch64-linux": { musl: "aarch64-unknown-linux-musl", gnu: "aarch64-unknown-linux-gnu" },
@@ -74,7 +74,7 @@ function engineOf(p) {
   const run = readFileSync(join(p.dir, "plugin.toml"), "utf8");
   const bin = bins.length === 1 ? bins[0] : bins.find((b) => new RegExp(`/${b}\\\\?"`).test(run));
   if (!bin) throw new Error(`${p.id}: which of ${bins.join(", ")} does plugin.toml run?`);
-  return { crate: pkg.name, bin, manifest, targetDir: meta.target_directory, libc: pkg.metadata?.atlas?.libc ?? "musl" };
+  return { crate: pkg.name, bin, manifest, targetDir: meta.target_directory, libc: pkg.metadata?.kandinsky?.libc ?? "musl" };
 }
 
 function installedRustTargets() {
@@ -196,7 +196,7 @@ function pack(o) {
       }
     }
     const engine = existsSync(join(p.dir, "engine", "Cargo.toml"));
-    const file = `atlas-plugin-${p.id}.tar.gz`;
+    const file = `kandinsky-plugin-${p.id}.tar.gz`;
     execFileSync("tar", ["-czf", join(out, file), "-C", stage, p.id]);
     const text = readFileSync(join(p.dir, "plugin.toml"), "utf8");
     index.push({

@@ -1,7 +1,7 @@
 // AniList's and MangaDex's answers (cut down, in their real shapes).
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { harness } from "atlas-helper/testing";
+import { harness } from "kandinsky-helper/testing";
 import "./helper";
 import { plain } from "./helper";
 

@@ -3,7 +3,7 @@ import { openFile } from "./open";
 
 // Syncthing kept another device's version beside a note and the core could not merge it (no base here: as when both
 // changed the same lines; core sync_merge.rs, DESIGN-mirror-v2.md §4): the note says so, and settles it either way.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const NOTE = "notes/apart.md";
 const COPY = "notes/apart.sync-conflict-20261020-231529-H3IIIUW.md";
 const read = async (request: import("@playwright/test").APIRequestContext, path: string) => {

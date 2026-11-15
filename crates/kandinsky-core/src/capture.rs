@@ -7,7 +7,7 @@ use chrono::NaiveDateTime;
 use std::path::Path;
 
 /// Every capture box's empty-box prompt. Mirrored in `ui/src/lib/capture-guides.ts` and `CaptureBox.java`
-/// (atlas-capture's tests fail when a mirror differs).
+/// (kandinsky-capture's tests fail when a mirror differs).
 pub const PROMPT: &str = "Capture a thought, a to-do, a link…";
 
 /// One short form a capture can start with, as the boxes show it while they are empty.
@@ -34,20 +34,20 @@ pub fn capture(root: &Path, cfg: &Config, text: &str) -> Result<CaptureResult> {
     capture_at(root, cfg, text, chrono::Local::now().naive_local())
 }
 
-/// Captures written while no Atlas served their vault, waiting for its capture hooks (capture_hooks.rs): the next
+/// Captures written while no Kandinsky served their vault, waiting for its capture hooks (capture_hooks.rs): the next
 /// core to serve the vault runs them first, so a link captured offline is still filed, a screenshot still read.
-/// Synced with the vault (not in `.atlas/cache`, which stays per machine): a capture on the phone reaches the desktop.
+/// Synced with the vault (not in `.kandinsky/cache`, which stays per machine): a capture on the phone reaches the desktop.
 /// One file per device, so two machines never append to the same file; every file here is taken (conflict copies too).
-pub const PENDING_DIR: &str = ".atlas/pending";
+pub const PENDING_DIR: &str = ".kandinsky/pending";
 
 /// This device's file in [`PENDING_DIR`]: its host name, letters and digits only.
 fn pending_file(root: &Path) -> std::path::PathBuf {
     let host = crate::platform::proc::hostname();
     let host: String = host.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
-    root.join(PENDING_DIR).join(format!("{}.jsonl", if host.is_empty() { "device" } else { &host }))
+    crate::state_dir::join(root, PENDING_DIR).join(format!("{}.jsonl", if host.is_empty() { "device" } else { &host }))
 }
 
-/// A capture by a door that found no Atlas serving the vault (the CLI, the desktop box, a capture into another
+/// A capture by a door that found no Kandinsky serving the vault (the CLI, the desktop box, a capture into another
 /// vault): written now, and kept for the hooks. Keeping it never fails the capture (said on stderr instead).
 pub fn capture_unserved(root: &Path, cfg: &Config, text: &str) -> Result<CaptureResult> {
     let r = capture(root, cfg, text)?;
@@ -56,7 +56,7 @@ pub fn capture_unserved(root: &Path, cfg: &Config, text: &str) -> Result<Capture
         // the phone runs no hooks without its core: those it could run are lost as before, the rest go to a desktop
         keep_for_others(root, cfg, c);
     } else if let Err(e) = remember(root, &c) {
-        eprintln!("atlas: the capture is written, but not kept for the capture hooks: {e}");
+        eprintln!("kandinsky: the capture is written, but not kept for the capture hooks: {e}");
     }
     Ok(r)
 }
@@ -69,7 +69,7 @@ pub fn keep_for_others(root: &Path, cfg: &Config, c: crate::events::Captured) {
         return;
     }
     if let Err(e) = remember(root, &crate::events::Captured { only: Some(others), ..c }) {
-        eprintln!("atlas: the capture is written, but not kept for the other devices' hooks: {e}");
+        eprintln!("kandinsky: the capture is written, but not kept for the other devices' hooks: {e}");
     }
 }
 
@@ -104,11 +104,11 @@ fn near(dir: &Path, name: &str, depth: u8) -> bool {
 /// A pending capture whose files are not here yet, back in line for the next sweep; after a day it is given up.
 pub fn wait_longer(root: &Path, c: crate::events::Captured) {
     if c.waits >= MAX_WAITS {
-        eprintln!("atlas: a capture in {} never arrived whole; its hooks were not run", c.path);
+        eprintln!("kandinsky: a capture in {} never arrived whole; its hooks were not run", c.path);
         return;
     }
     if let Err(e) = remember(root, &crate::events::Captured { waits: c.waits + 1, ..c }) {
-        eprintln!("atlas: a pending capture could not be kept: {e}");
+        eprintln!("kandinsky: a pending capture could not be kept: {e}");
     }
 }
 
@@ -118,9 +118,19 @@ fn remember(root: &Path, c: &crate::events::Captured) -> Result<()> {
 }
 
 /// The captures kept for the hooks, from every device, each file's in order; the files are removed (each capture is
-/// acted on once).
+/// acted on once). Also those an earlier build (a phone app not yet updated, through a sync tool) queued in its state
+/// folder left beside the one in use (`state_dir::stale_twin`): only the queue's files are taken, nothing else there.
 pub fn take_pending(root: &Path) -> Vec<crate::events::Captured> {
-    let Ok(dir) = std::fs::read_dir(root.join(PENDING_DIR)) else { return vec![] };
+    let mut out = take_pending_in(&crate::state_dir::join(root, PENDING_DIR));
+    if let Some(twin) = crate::state_dir::stale_twin(root) {
+        let rest = PENDING_DIR.strip_prefix(crate::state_dir::STATE_DIR).unwrap_or_default().trim_start_matches('/');
+        out.extend(take_pending_in(&root.join(twin).join(rest)));
+    }
+    out
+}
+
+fn take_pending_in(pending: &Path) -> Vec<crate::events::Captured> {
+    let Ok(dir) = std::fs::read_dir(pending) else { return vec![] };
     // the devices' files (`<host>.jsonl`, a conflict copy too) and one an interrupted take left (`.taking`) — never a
     // sync tool's file still arriving (Syncthing's `.syncthing.<name>.tmp`): read half and removed, its captures were lost
     let ours = |p: &Path| {
@@ -168,7 +178,7 @@ pub fn starts_as_task(text: &str) -> bool {
 }
 
 /// The day a capture's `@word` names: `today`, `tomorrow`, `mon`…`sun` (the next such day), `+3d`.
-/// Also used by the quick-capture box to say when a to-do is due (crates/atlas-capture).
+/// Also used by the quick-capture box to say when a to-do is due (crates/kandinsky-capture).
 pub fn day_of(word: &str, today: chrono::NaiveDate) -> Option<chrono::NaiveDate> {
     use chrono::Duration;
     let w = word.to_ascii_lowercase();
@@ -281,9 +291,9 @@ pub fn format_entry(text: &str, now: NaiveDateTime) -> Result<String> {
     Ok(out)
 }
 
-/// Every door's capture ends here: its addresses lose their share-tracking parameters first (`atlas_text::links`).
+/// Every door's capture ends here: its addresses lose their share-tracking parameters first (`kandinsky_text::links`).
 pub fn capture_at(root: &Path, cfg: &Config, text: &str, now: NaiveDateTime) -> Result<CaptureResult> {
-    let text = &atlas_text::links::untracked(text);
+    let text = &kandinsky_text::links::untracked(text);
     match cfg.notes.capture {
         CaptureMode::Log => append_to_log(root, cfg, text, now),
         // a task is a line among the day's tasks, never a note of its own
@@ -412,7 +422,7 @@ fn first_line(entry: &str) -> String {
     entry.split('\n').next().unwrap_or_default().to_string()
 }
 
-/// The heading of a day's log section, in the date names Atlas writes.
+/// The heading of a day's log section, in the date names Kandinsky writes.
 const LOG_HEADING: &str = r"(?i)^##\s+(log|registro|bit[aá]cora)\s*$";
 
 /// Whether `line` is that heading (captures.rs reads a log's captures under it).
@@ -661,7 +671,7 @@ mod tests {
     }
 
     #[test]
-    fn a_capture_with_no_atlas_serving_is_kept_for_the_hooks_once() {
+    fn a_capture_with_no_kandinsky_serving_is_kept_for_the_hooks_once() {
         let d = tempfile::tempdir().unwrap();
         let cfg = Config::default();
         let r = capture_unserved(d.path(), &cfg, "https://letterboxd.com/film/the-realm-2018/").unwrap();
@@ -670,11 +680,11 @@ mod tests {
         assert!(take_pending(d.path()).is_empty(), "acted on once");
         // the phone's file, synced in beside this machine's (a Syncthing conflict copy is read too)
         let other = crate::events::Captured::new("from the phone".into(), "log/x.md".into(), 3);
-        std::fs::create_dir_all(d.path().join(PENDING_DIR)).unwrap();
-        std::fs::write(d.path().join(PENDING_DIR).join("phone.sync-conflict-1.jsonl"), format!("{}\n", serde_json::to_string(&other).unwrap())).unwrap();
+        std::fs::create_dir_all(crate::state_dir::join(d.path(), PENDING_DIR)).unwrap();
+        std::fs::write(crate::state_dir::join(d.path(), PENDING_DIR).join("phone.sync-conflict-1.jsonl"), format!("{}\n", serde_json::to_string(&other).unwrap())).unwrap();
         assert_eq!(take_pending(d.path()), vec![other]);
         // a file Syncthing is still bringing in is left to it
-        let arriving = d.path().join(PENDING_DIR).join(".syncthing.phone.jsonl.tmp");
+        let arriving = crate::state_dir::join(d.path(), PENDING_DIR).join(".syncthing.phone.jsonl.tmp");
         std::fs::write(&arriving, "{\"text\": \"half").unwrap();
         assert!(take_pending(d.path()).is_empty());
         assert!(arriving.exists());
@@ -684,8 +694,8 @@ mod tests {
             crate::events::Captured::new("captured since".into(), "log/x.md".into(), 5),
         );
         let line = |c: &crate::events::Captured| format!("{}\n", serde_json::to_string(c).unwrap());
-        std::fs::write(d.path().join(PENDING_DIR).join("phone.taking"), line(&old)).unwrap();
-        std::fs::write(d.path().join(PENDING_DIR).join("phone.jsonl"), line(&new)).unwrap();
+        std::fs::write(crate::state_dir::join(d.path(), PENDING_DIR).join("phone.taking"), line(&old)).unwrap();
+        std::fs::write(crate::state_dir::join(d.path(), PENDING_DIR).join("phone.jsonl"), line(&new)).unwrap();
         assert_eq!(take_pending(d.path()), vec![old, new]);
     }
 }

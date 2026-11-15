@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 // "completely separate claude notes from the rest of the notes … and this includes the links system":
 // the agent's files (editor.index_exclude, by default docs/memory) are in the file tree only — not in
 // search, quick open, `[[` completion or a link by name — unless the Search pane's switch asks.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("the agent's files are found only when the Search pane is asked to include them", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "docs/memory/zebra-agent.md", text: "# Agent memory\n\nquagga-token in a session log\n" } });

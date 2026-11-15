@@ -2,7 +2,7 @@
 // opened, then every tab closed, the page process's memory (PSS) read before, with them open, and 20 s after closing.
 // Same harness as webkit-longday.mjs (a COPY of a vault):
 //
-//   ATLAS_URL=http://127.0.0.1:7791/ ATLAS_PROBE_COPY=1 node scripts/dev/webkit-probe.mjs --dist ui/dist scripts/dev/webkit-kinds.mjs
+//   KANDINSKY_URL=http://127.0.0.1:7791/ KANDINSKY_PROBE_COPY=1 node scripts/dev/webkit-probe.mjs --dist ui/dist scripts/dev/webkit-kinds.mjs
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
@@ -17,18 +17,18 @@ const pss = () => {
 };
 
 export default async ({ page }) => {
-  const atlas = (f, ...a) => page.evaluate(([f, a]) => window.__atlas[f](...a), [f, a]);
-  const closeAll = async () => { for (const p of await atlas("panes")) await atlas("close", p.id); };
-  const files = await page.evaluate(async () => (await (await fetch("/api/files", { headers: { "x-atlas": "1" } })).json()));
+  const kandinsky = (f, ...a) => page.evaluate(([f, a]) => window.__kandinsky[f](...a), [f, a]);
+  const closeAll = async () => { for (const p of await kandinsky("panes")) await kandinsky("close", p.id); };
+  const files = await page.evaluate(async () => (await (await fetch("/api/files", { headers: { "x-kandinsky": "1" } })).json()));
   await closeAll();
   await page.waitForTimeout(5000);
   for (const [kind, re] of KINDS) {
-    const list = files.filter((f) => re.test(f) && !/^(mail|\.atlas)\//.test(f));
+    const list = files.filter((f) => re.test(f) && !/^(mail|\.kandinsky)\//.test(f));
     const pick = list.filter((_, i) => i % Math.max(1, Math.floor(list.length / N)) === 0).slice(0, N);
     if (!pick.length) continue;
     const before = pss();
-    for (const f of pick) { await atlas("open", f); await page.waitForTimeout(1200); }
-    for (const f of pick) { await atlas("open", f); await page.waitForTimeout(300); } // shown again, as switching does
+    for (const f of pick) { await kandinsky("open", f); await page.waitForTimeout(1200); }
+    for (const f of pick) { await kandinsky("open", f); await page.waitForTimeout(300); } // shown again, as switching does
     const open = pss();
     await closeAll();
     await page.waitForTimeout(20_000);

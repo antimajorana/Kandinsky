@@ -1,7 +1,7 @@
-# Export a note: "Export…" opens a dialog with the options beside a preview. PDF through Typst (in Atlas's core: fast,
+# Export a note: "Export…" opens a dialog with the options beside a preview. PDF through Typst (in Kandinsky's core: fast,
 # no TeX) or through LaTeX (latexmk), LaTeX or Typst source, Word; pandoc writes each format. A paper linked as
 # [[citekey]] is cited from the vault's .bib; ```tikz pictures are drawn by the LaTeX road, ```typst ones by both.
-# Copy into a vault's .atlas/plugins/. The settings are the dialog's starting choices; the dialog saves them back.
+# Copy into a vault's .kandinsky/plugins/. The settings are the dialog's starting choices; the dialog saves them back.
 title = "Export"
 description = "a note to PDF (Typst or LaTeX), LaTeX, Typst or Word, in a dialog with a preview"
 icon = "file"
@@ -10,7 +10,7 @@ api = 20
 provides = ["pdf-export"]           # Print asks for a note's PDF by this role, not by this id
 
 [permissions]
-exec = ["pandoc", "latexmk"]       # run by the core (atlas.exec)
+exec = ["pandoc", "latexmk"]       # run by the core (kandinsky.exec)
 
 [helper]
 js = "helper.js"                   # run in the core (QuickJS), built from helper/helper.ts
@@ -94,7 +94,7 @@ group = "Page"
 key = "font"
 label = "Font"
 kind = "text"
-hint = "a font installed on the machine running Atlas; empty: the format's own (Libertinus for Typst, Latin Modern for LaTeX)"
+hint = "a font installed on the machine running Kandinsky; empty: the format's own (Libertinus for Typst, Latin Modern for LaTeX)"
 group = "Page"
 
 [[setting]]

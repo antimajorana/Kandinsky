@@ -461,7 +461,7 @@ mod tests {
 
     #[test]
     fn a_jpeg_and_a_webp_get_a_thumbnail() {
-        let dir = std::env::temp_dir().join(format!("atlas-thumb-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kandinsky-thumb-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let img = image::RgbImage::from_pixel(200, 100, image::Rgb([200, 40, 40]));
         for name in ["shot.jpg", "shot.webp"] {

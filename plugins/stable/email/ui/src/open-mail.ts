@@ -2,8 +2,8 @@
 import type { PluginApi } from "./api";
 
 /** `detail`: `{ search }`, `{ compose }`… The pane opened now reads it when it mounts; one already open hears it. */
-export function openMail(atlas: PluginApi, detail: Record<string, unknown> = {}): void {
-  (window as unknown as { __atlasEmailOpen?: unknown }).__atlasEmailOpen = detail;
-  atlas.openView(undefined, { title: "Email", icon: "mail" });
-  setTimeout(() => window.dispatchEvent(new CustomEvent("atlas-email:open", { detail })), 0);
+export function openMail(kandinsky: PluginApi, detail: Record<string, unknown> = {}): void {
+  (window as unknown as { __kandinskyEmailOpen?: unknown }).__kandinskyEmailOpen = detail;
+  kandinsky.openView(undefined, { title: "Email", icon: "mail" });
+  setTimeout(() => window.dispatchEvent(new CustomEvent("kandinsky-email:open", { detail })), 0);
 }

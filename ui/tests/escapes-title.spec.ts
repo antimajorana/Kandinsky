@@ -5,7 +5,7 @@ import { openFile } from "./open";
 // long name wraps in the inline title instead of being cut off (a phone showed "A Brief History of Tru").
 test("escapes show their character; a long inline title wraps", async ({ page, request }) => {
   const name = "A Brief History of True Names and Magic in Folklore and Fantasy";
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: `notes/${name}.md`, text: "first line\n\nhe \\*invented\\* it \\# not a heading\n" } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: `notes/${name}.md`, text: "first line\n\nhe \\*invented\\* it \\# not a heading\n" } });
   await page.setViewportSize({ width: 420, height: 800 });
   await page.goto("/");
   await openFile(page, `${name}.md`);

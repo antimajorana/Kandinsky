@@ -3,7 +3,7 @@ import { openFile, runCommand } from "./open";
 
 // Renaming the open file: the box starts with its name, which offers nothing to do; a new name offers the rename itself
 // (not a "New" row), and the note keeps its .md.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("rename this file: the name as it is offers nothing, a new one renames it", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/renamee.md", text: "# Renamee\n" } });

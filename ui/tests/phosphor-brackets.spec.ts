@@ -3,7 +3,7 @@ import { openFile } from "./open";
 
 // Phosphor: black on white and white on black at full strength (the former Contrast scheme), its own green as accent;
 // and a formula's source with its brackets coloured by depth and the caret's pair ringed — shot in both themes.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const cfg = async (request: APIRequestContext) => (await (await request.get("/api/config", { headers: H })).json()).config;
 const set = async (request: APIRequestContext, ui: Record<string, string>) => {
   const c = await cfg(request);

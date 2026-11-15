@@ -48,15 +48,15 @@ test("e-ink: black on white, nothing moving, and a calm refresh after a tab chan
   // and it's strident"): a browser has none and puts up no veil; the phone app's bridge is asked — stubbed here after
   // the start, so the shell stays the desktop's
   await page.evaluate(() => {
-    const w = window as unknown as { calm: number; AtlasNative: unknown };
+    const w = window as unknown as { calm: number; KandinskyNative: unknown };
     w.calm = 0;
-    w.AtlasNative = { einkRefresh: () => { w.calm++; } };
+    w.KandinskyNative = { einkRefresh: () => { w.calm++; } };
   });
   const calm = () => page.evaluate(() => (window as unknown as { calm: number }).calm);
   await page.waitForTimeout(5_100); // the start's own refresh counts towards the 5 s too
   const before = await flashes(page);
   // a note long enough to scroll at any window height (the fixtures' notes fit the window)
-  await page.request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "eink-long.md", text: Array.from({ length: 200 }, (_, i) => `Line ${i + 1}`).join("\n\n") } });
+  await page.request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "eink-long.md", text: Array.from({ length: 200 }, (_, i) => `Line ${i + 1}`).join("\n\n") } });
   await openNote(page, "eink-long.md");
   await expect.poll(calm, { message: "a refresh once the new tab has drawn" }).toBeGreaterThan(0);
   expect(await flashes(page), "calm: no veil").toBe(before);
@@ -75,7 +75,7 @@ test("e-ink, refresh by hand only: no veil on a tab change, one from the command
   await open(page, "manual");
   const before = await flashes(page);
   // a note long enough to scroll at any window height (the fixtures' notes fit the window)
-  await page.request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "eink-long.md", text: Array.from({ length: 200 }, (_, i) => `Line ${i + 1}`).join("\n\n") } });
+  await page.request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "eink-long.md", text: Array.from({ length: 200 }, (_, i) => `Line ${i + 1}`).join("\n\n") } });
   await openNote(page, "eink-long.md");
   await page.waitForTimeout(600);
   expect(await flashes(page)).toBe(before);
@@ -103,11 +103,11 @@ test("e-ink: a drawing opens as a notepad — its own toolbar with the fine pen,
   // this drawing's strokes only: other tests' drawings share the folder (one changing meanwhile moved the count)
   const mine = /[^\s/]+\.excalidraw/.exec(await page.locator(".dv-tab.dv-active-tab").innerText())![0];
   const strokes = () => page.evaluate(async (mine) => {
-    const r = await fetch("/api/tree?path=notes/drawings", { headers: { "x-atlas": "1" } }).then((r) => r.json());
+    const r = await fetch("/api/tree?path=notes/drawings", { headers: { "x-kandinsky": "1" } }).then((r) => r.json());
     const out: string[] = [];
     for (const e of (Array.isArray(r) ? r : r.entries) as { path: string }[]) {
       if (!e.path.endsWith(`/${mine}`)) continue;
-      const t = await fetch(`/api/file?path=${encodeURIComponent(e.path)}`, { headers: { "x-atlas": "1" } }).then((r) => r.json());
+      const t = await fetch(`/api/file?path=${encodeURIComponent(e.path)}`, { headers: { "x-kandinsky": "1" } }).then((r) => r.json());
       for (const el of JSON.parse(t.text).elements) if (el.type === "freedraw") out.push([el.strokeWidth, el.roughness, el.strokeColor].join(" "));
     }
     return out;
@@ -130,12 +130,12 @@ test("e-ink: a drawing opens as a notepad — its own toolbar with the fine pen,
 
 test("e-ink in the Boox app: Onyx's instant ink is placed over the drawing while the pen tool is on, and taken off", async ({ page }) => {
   await open(page, "manual");
-  // the app's bridge (AtlasActivity.Bridge), recording what the page asks of it — put in after the start, so the page
+  // the app's bridge (KandinskyActivity.Bridge), recording what the page asks of it — put in after the start, so the page
   // stays the desktop's (with the bridge from the start it is the phone app's shell); a drawing reads it when it opens
   await page.evaluate(() => {
     const calls: number[][] = [];
     (window as unknown as { inkCalls: number[][] }).inkCalls = calls;
-    (window as unknown as { AtlasNative: unknown }).AtlasNative = { ink: (...a: number[]) => calls.push(a) };
+    (window as unknown as { KandinskyNative: unknown }).KandinskyNative = { ink: (...a: number[]) => calls.push(a) };
   });
   await page.keyboard.press("Meta+Shift+d"); await page.getByTestId("palette").getByText("Infinite canvas", { exact: true }).click(); // the format asked first (draw-new.ts)
   await expect(page.locator(".draw-pane canvas.interactive")).toBeVisible({ timeout: 15_000 });
@@ -161,7 +161,7 @@ test("e-ink in the Boox app: the toolbar's menus take the pen's taps — the ins
   await page.evaluate(() => {
     const calls: number[][] = [];
     (window as unknown as { inkCalls: number[][] }).inkCalls = calls;
-    (window as unknown as { AtlasNative: unknown }).AtlasNative = { ink: (...a: number[]) => calls.push(a) };
+    (window as unknown as { KandinskyNative: unknown }).KandinskyNative = { ink: (...a: number[]) => calls.push(a) };
   });
   await page.keyboard.press("Meta+Shift+d"); await page.getByTestId("palette").getByText("Infinite canvas", { exact: true }).click();
   await expect(page.locator(".draw-pane canvas.interactive")).toBeVisible({ timeout: 15_000 });
@@ -177,7 +177,7 @@ test("e-ink in the Boox app: the toolbar's menus take the pen's taps — the ins
   await page.getByRole("menuitemcheckbox", { name: /Pages held in place/ }).click();
   await bar.getByRole("button", { name: "More tools" }).click();
   await expect(page.getByRole("menuitemcheckbox", { name: /Pages held in place/ })).toHaveAttribute("aria-checked", "false");
-  expect(await page.evaluate(() => localStorage.getItem("atlas.draw.pages-held"))).toBe("off");
+  expect(await page.evaluate(() => localStorage.getItem("kandinsky.draw.pages-held"))).toBe("off");
 });
 
 // Zen mode hides the tab: the page alone, a corner button back
@@ -220,11 +220,11 @@ test("e-ink: fingers move the page — two of them pinch-zoom it, the pen still 
   await page.mouse.move(cx + 80, cy, { steps: 8 });
   await page.mouse.up();
   const widths = () => page.evaluate(async () => {
-    const r = await fetch("/api/tree?path=notes/drawings", { headers: { "x-atlas": "1" } }).then((r) => r.json());
+    const r = await fetch("/api/tree?path=notes/drawings", { headers: { "x-kandinsky": "1" } }).then((r) => r.json());
     const out: number[] = [];
     for (const e of (Array.isArray(r) ? r : r.entries) as { path: string }[]) {
       if (!e.path.endsWith(".excalidraw")) continue;
-      const t = await fetch(`/api/file?path=${encodeURIComponent(e.path)}`, { headers: { "x-atlas": "1" } }).then((r) => r.json());
+      const t = await fetch(`/api/file?path=${encodeURIComponent(e.path)}`, { headers: { "x-kandinsky": "1" } }).then((r) => r.json());
       for (const el of JSON.parse(t.text).elements) if (el.type === "freedraw") out.push(Math.round(el.width));
     }
     return out;
@@ -242,7 +242,7 @@ test("e-ink: the notepad's pens and paper — a highlighter is wide and see-thro
   await expect(bar.getByRole("button", { name: "Highlighter" })).toHaveClass(/\bon\b/);
   await bar.getByRole("button", { name: "Paper" }).click();
   await page.getByRole("menuitemradio", { name: "Lines" }).click();
-  const host = page.locator(".draw-pane .host .atlas-paper"); // the paper's own layer (on the pages only, when there are pages)
+  const host = page.locator(".draw-pane .host .kandinsky-paper"); // the paper's own layer (on the pages only, when there are pages)
   await expect(host).toHaveCSS("background-image", /linear-gradient/);
   const box = (await canvas.boundingBox())!;
   await page.mouse.move(box.x + 100, box.y + 200);
@@ -250,11 +250,11 @@ test("e-ink: the notepad's pens and paper — a highlighter is wide and see-thro
   await page.mouse.move(box.x + 260, box.y + 200, { steps: 8 });
   await page.mouse.up();
   const marks = () => page.evaluate(async () => {
-    const r = await fetch("/api/tree?path=notes/drawings", { headers: { "x-atlas": "1" } }).then((r) => r.json());
+    const r = await fetch("/api/tree?path=notes/drawings", { headers: { "x-kandinsky": "1" } }).then((r) => r.json());
     const out: string[] = [];
     for (const e of (Array.isArray(r) ? r : r.entries) as { path: string }[]) {
       if (!e.path.endsWith(".excalidraw")) continue;
-      const t = await fetch(`/api/file?path=${encodeURIComponent(e.path)}`, { headers: { "x-atlas": "1" } }).then((r) => r.json());
+      const t = await fetch(`/api/file?path=${encodeURIComponent(e.path)}`, { headers: { "x-kandinsky": "1" } }).then((r) => r.json());
       const scene = JSON.parse(t.text);
       for (const el of scene.elements) if (el.type === "freedraw") out.push(`${el.strokeWidth} ${el.opacity} ${scene.appState?.viewBackgroundColor}`);
     }
@@ -283,12 +283,12 @@ test("e-ink: a palm while the pen writes neither undoes nor moves the page; pen 
   const box = (await canvas.boundingBox())!;
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
   const pens = () => page.evaluate(async () => {
-    const r = await fetch("/api/tree?path=notes/drawings", { headers: { "x-atlas": "1" } }).then((r) => r.json());
+    const r = await fetch("/api/tree?path=notes/drawings", { headers: { "x-kandinsky": "1" } }).then((r) => r.json());
     const out: string[] = [];
     for (const e of (Array.isArray(r) ? r : r.entries) as { path: string }[]) {
       if (!e.path.endsWith(".excalidraw")) continue;
-      const t = await fetch(`/api/file?path=${encodeURIComponent(e.path)}`, { headers: { "x-atlas": "1" } }).then((r) => r.json());
-      for (const el of JSON.parse(t.text).elements) if (el.type === "freedraw" && !el.isDeleted) out.push(String(el.customData?.atlasPen ?? "none"));
+      const t = await fetch(`/api/file?path=${encodeURIComponent(e.path)}`, { headers: { "x-kandinsky": "1" } }).then((r) => r.json());
+      for (const el of JSON.parse(t.text).elements) if (el.type === "freedraw" && !el.isDeleted) out.push(String(el.customData?.kandinskyPen ?? "none"));
     }
     return out;
   });
@@ -311,7 +311,7 @@ test("e-ink: a palm while the pen writes neither undoes nor moves the page; pen 
   await expect.poll(async () => (await pens()).length, { timeout: 10_000 }).toBe(before + 1); // kept, not undone
   // marked for the crisp outline (other tests' drawings share the folder: count, do not take "the last")
   await expect.poll(async () => (await pens()).filter((p) => p === "fountain").length, { timeout: 10_000 }).toBe(fountains + 1);
-  expect(await page.evaluate(() => typeof (globalThis as unknown as { __atlasInk?: unknown }).__atlasInk)).toBe("function");
+  expect(await page.evaluate(() => typeof (globalThis as unknown as { __kandinskyInk?: unknown }).__kandinskyInk)).toBe("function");
 });
 
 // A notebook of pages ("pages are very important"): frames under one another, moved between from the bar.

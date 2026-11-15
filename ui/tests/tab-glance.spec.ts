@@ -3,8 +3,8 @@ import { shownName } from "../src/lib/paths";
 
 // "make ctrl + tab like a glance view, and only for the focused tab": Ctrl+Tab shows the focused
 // split's tabs, most recent first; letting go of Ctrl switches, Esc keeps the tab you were on.
-const H = { "x-atlas": "1" };
-const title = (page: Page) => page.evaluate(() => (window as any).__atlas.editor()?.path as string | undefined);
+const H = { "x-kandinsky": "1" };
+const title = (page: Page) => page.evaluate(() => (window as any).__kandinsky.editor()?.path as string | undefined);
 
 async function openNote(page: Page, name: string) {
   await page.keyboard.press("Control+p");

@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.content.Context;
 import android.os.Handler;
@@ -98,7 +98,7 @@ public final class LiveSocket {
                 retry = 1000;
                 read();
             } catch (Exception e) {
-                android.util.Log.i("AtlasLive", path + ": " + e.getMessage());
+                android.util.Log.i("KandinskyLive", path + ": " + e.getMessage());
             }
             drop();
             for (Integer p : peers) main.post(() -> on.left(p));
@@ -126,7 +126,7 @@ public final class LiveSocket {
             .append("Host: ").append(u.getHost()).append(u.getPort() > 0 ? ":" + u.getPort() : "").append("\r\n")
             .append("Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\n")
             .append("Sec-WebSocket-Key: ").append(android.util.Base64.encodeToString(nonce, android.util.Base64.NO_WRAP)).append("\r\n")
-            .append("x-atlas: 1\r\n");
+            .append("x-kandinsky: 1\r\nx-atlas: 1\r\n"); // and a server from before the rename
         for (Map.Entry<String, String> h : Server.headerMap(c, vault).entrySet()) req.append(h.getKey()).append(": ").append(h.getValue()).append("\r\n");
         req.append("\r\n");
         OutputStream o = s.getOutputStream();

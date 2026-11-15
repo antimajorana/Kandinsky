@@ -1,4 +1,4 @@
-// Atlas's own marking tools over the PDFium reader (docs/refactor/REFACTOR-pdfium-reader.md): highlight, underline or
+// Kandinsky's own marking tools over the PDFium reader (docs/refactor/REFACTOR-pdfium-reader.md): highlight, underline or
 // strike the selected text, write with the pen (pressure, tilt and time kept), put a text box or a post-it (on a
 // highlight when put over one), clip an area, stamp, bookmark the page. Each mark is saved as it is made
 // into the PDF's note (lib/pdf-marks.ts, core pdf_marks.rs), which every device writes; the PDF itself is never
@@ -66,13 +66,13 @@ export function attachTools(container: HTMLElement, reader: Reader, store: Marks
   container.append(pickedStyle);
   function select(id: string | null): void {
     picked = id;
-    pickedStyle.textContent = id ? `.atlas-marks [data-mark="${id}"] { filter: drop-shadow(0 0 1px var(--accent)) drop-shadow(0 0 3px var(--accent)); }` : "";
+    pickedStyle.textContent = id ? `.kandinsky-marks [data-mark="${id}"] { filter: drop-shadow(0 0 1px var(--accent)) drop-shadow(0 0 3px var(--accent)); }` : "";
     on.selected?.(id ? was(id) ?? null : null);
   }
   /** The movable mark drawn under a client point, topmost first (found from what is drawn: no wait, so the press can
    *  still be kept from starting a text selection). A clip is taken by its edge, so the text inside stays selectable. */
   function movableAt(x: number, y: number): SVGGElement | null {
-    const gs = [...container.querySelectorAll<SVGGElement>("svg.atlas-marks > g[data-mark]")].reverse();
+    const gs = [...container.querySelectorAll<SVGGElement>("svg.kandinsky-marks > g[data-mark]")].reverse();
     return gs.find((g) => {
       if (!MOVABLE.has(g.dataset.kind as Mark["kind"])) return false;
       const b = g.getBoundingClientRect(), pad = 4, inside = x >= b.left - pad && x <= b.right + pad && y >= b.top - pad && y <= b.bottom + pad;
@@ -182,10 +182,10 @@ export function attachTools(container: HTMLElement, reader: Reader, store: Marks
   const liveSvg = (n: number): SVGSVGElement | null => {
     const layer = reader.pageLayer(n);
     if (!layer) return null;
-    let svg = layer.querySelector<SVGSVGElement>(":scope > svg.atlas-live-ink");
+    let svg = layer.querySelector<SVGSVGElement>(":scope > svg.kandinsky-live-ink");
     if (!svg) {
       svg = document.createElementNS(SVG, "svg");
-      svg.classList.add("atlas-live-ink");
+      svg.classList.add("kandinsky-live-ink");
       svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5;overflow:visible";
       layer.append(svg);
     }
@@ -272,7 +272,7 @@ export function attachTools(container: HTMLElement, reader: Reader, store: Marks
     if (!at || !layer) return;
     e.preventDefault();
     const postit = tool === "postit";
-    const box = Object.assign(document.createElement("textarea"), { className: "atlas-note-input", rows: 1, placeholder: postit ? "A post-it…" : "A note…" });
+    const box = Object.assign(document.createElement("textarea"), { className: "kandinsky-note-input", rows: 1, placeholder: postit ? "A post-it…" : "A note…" });
     box.style.cssText = `position:absolute;left:calc(var(--s) * ${at.X}px);top:calc(var(--s) * ${at.Y}px);font-size:calc(var(--s) * ${NOTE_PT}px);`
       + `z-index:6;min-width:12em;resize:both;color:${color === COLORS.yellow ? "#000" : color};background:#fffbe6;border:1px solid #c9a227;border-radius:3px;padding:2px 4px;line-height:1.25`;
     layer.append(box);

@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 // Settings → Keyboard says when two commands claim the same key in the same place (only one of
 // them would ever run). The defaults must have no such clash.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("the default keys do not clash; a clash made by hand is shown on both commands", async ({ page, request }) => {
   await page.goto("/");

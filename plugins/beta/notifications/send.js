@@ -1,8 +1,8 @@
-// "Send to my phone" in a dialog (atlas.openDialog with view "send.js", the active note's name as `atlas.arg`): a title
-// (that name, or "Atlas"), the text in a box of its own lines, then whether it went and through what.
+// "Send to my phone" in a dialog (kandinsky.openDialog with view "send.js", the active note's name as `kandinsky.arg`): a title
+// (that name, or "Kandinsky"), the text in a box of its own lines, then whether it went and through what.
 import { sendToPhone } from "./main.js";
 
-export default function mount(host, atlas) {
+export default function mount(host, kandinsky) {
   const el = (tag, props = {}, kids = []) => {
     const e = Object.assign(document.createElement(tag), props);
     e.append(...kids);
@@ -23,14 +23,14 @@ export default function mount(host, atlas) {
     .ntp-go button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text, #fff); }
     .ntp-go button:disabled { opacity: .5; cursor: default; }
   ` });
-  const title = el("input", { value: String(atlas.arg || "Atlas") });
+  const title = el("input", { value: String(kandinsky.arg || "Kandinsky") });
   const text = el("textarea", { placeholder: "What to send…" });
   const said = el("p", { ariaLive: "polite" });
   const send = el("button", { className: "primary", textContent: "Send", disabled: true });
   const close = el("button", { textContent: "Close" });
   host.append(style, el("label", {}, ["Title", title]), el("label", {}, ["Text", text]), said, el("div", { className: "ntp-go" }, [close, send]));
   text.addEventListener("input", () => { send.disabled = !text.value.trim(); });
-  close.addEventListener("click", () => atlas.pane.close());
+  close.addEventListener("click", () => kandinsky.pane.close());
   let gone = false;
   async function go() {
     if (!text.value.trim()) return;
@@ -38,7 +38,7 @@ export default function mount(host, atlas) {
     said.className = "";
     said.textContent = "Sending…";
     try {
-      const through = await sendToPhone(atlas, text.value.trim(), title.value.trim());
+      const through = await sendToPhone(kandinsky, text.value.trim(), title.value.trim());
       if (gone) return;
       said.className = "ok";
       said.textContent = `Sent, through ${through}.`;

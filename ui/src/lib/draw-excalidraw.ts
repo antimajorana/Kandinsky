@@ -18,6 +18,7 @@ import { fillLinked, isLinkedFile } from "./linked-pages";
 import { extent, heldAtEnd, SNAP_MIN, wireToSkeleton } from "./pen-shapes";
 import { fingerGestures, paperCss, remember, remembered, startColor, startWidth, webPen, PAPERS, PENS, TOOL, type NoteTool, type Paper, type PenKind } from "./draw-notepad";
 import type { DrawConfig } from "./gen/DrawConfig";
+import { parseDrawing } from "./legacy-names";
 
 (window as unknown as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH = new URL("excalidraw/", document.baseURI).toString();
 
@@ -141,7 +142,7 @@ type InkState = { activeTool: { type: string }; currentItemStrokeWidth: number; 
  *  while the pen tool is picked and the drawing shows; the strip with Excalidraw's toolbar left out (a tap there is
  *  not ink). → sync, off. */
 function nativeInk(host: HTMLElement, pen: () => PenKind, take: (s: NativeSample[]) => void, draft: (s: NativeSample[] | null) => void): { sync(st: InkState): void; off(): void } {
-  console.info(`drawing on e-ink: instant ink ${nativePen() ? "available" : "not in this app"}`); // logcat AtlasPage
+  console.info(`drawing on e-ink: instant ink ${nativePen() ? "available" : "not in this app"}`); // logcat KandinskyPage
   let state: InkState = null;
   const over = penOver(host, take, {
     active: () => state?.activeTool.type === "freedraw",
@@ -156,14 +157,14 @@ function nativeInk(host: HTMLElement, pen: () => PenKind, take: (s: NativeSample
 /** `onEdit` fires only when elements change (not on pan/zoom/selection), so it is the dirty signal. */
 export async function mountDrawing(host: HTMLElement, json: string, theme: "dark" | "light", onEdit: () => void, opts: DrawOptions = {}): Promise<Drawing> {
   const lib: Lib = await import("@excalidraw/excalidraw");
-  const parsed = json.trim() ? JSON.parse(json) : {};
+  const parsed = json.trim() ? parseDrawing(json) : {}; // a drawing from before the rename reads the same
   const initial = lib.restore(parsed, null, null);
   let api: Api | null = null;
   let version = lib.getSceneVersion(initial.elements);
   let current = theme;
   // the paper is a layer of its own behind the drawing, so it can lie on the pages only; the drawing renders over it, see-through
   const paperLayer = document.createElement("div");
-  paperLayer.className = "atlas-paper";
+  paperLayer.className = "kandinsky-paper";
   paperLayer.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:0";
   const stageEl = document.createElement("div");
   stageEl.style.cssText = "position:absolute;inset:0;z-index:1";
@@ -245,11 +246,11 @@ export async function mountDrawing(host: HTMLElement, json: string, theme: "dark
     };
     paperLayer.style.clipPath = pages.length ? `path("${pages.map(rect).join("")}")` : "";
   };
-  /** The paper page `n` (1-based) carries itself — `customData.atlasTemplate` on its frame, as the Boox's Notepad
-   *  writes it (org.atlas.notepad Page.java) — or null for none. */
+  /** The paper page `n` (1-based) carries itself — `customData.kandinskyTemplate` on its frame, as the Boox's Notepad
+   *  writes it (org.kandinsky.notepad Page.java) — or null for none. */
   const pagePaper = (n: number): Paper | null => {
     const id = api && n > 0 ? pagesOf(api.getSceneElements() as never)[n - 1]?.id : undefined;
-    const t = id ? (api!.getSceneElements().find((e) => e.id === id)?.customData as { atlasTemplate?: string } | undefined)?.atlasTemplate : undefined;
+    const t = id ? (api!.getSceneElements().find((e) => e.id === id)?.customData as { kandinskyTemplate?: string } | undefined)?.kandinskyTemplate : undefined;
     return t && (PAPERS as string[]).includes(t) ? (t as Paper) : null;
   };
   /** A paper picked here: this device's for drawings without pages, and the page on screen's own (so a Boox shows it). */
@@ -262,8 +263,8 @@ export async function mountDrawing(host: HTMLElement, json: string, theme: "dark
       const at = pageAt(pages, st.width / 2 / st.zoom.value - st.scrollX, st.height / 2 / st.zoom.value - st.scrollY);
       const frame = at >= 0 ? els.find((e) => e.id === pages[at].id) : undefined;
       if (frame) {
-        const { atlasTemplate: _, ...rest } = (frame.customData ?? {}) as Record<string, unknown>;
-        const customData = p === "blank" ? rest : { ...rest, atlasTemplate: p };
+        const { kandinskyTemplate: _, ...rest } = (frame.customData ?? {}) as Record<string, unknown>;
+        const customData = p === "blank" ? rest : { ...rest, kandinskyTemplate: p };
         api.updateScene({ elements: els.map((e) => (e === frame ? lib.newElementWith(frame, { customData }) : e)) });
       }
       note(api.getAppState() as unknown as Seen);
@@ -284,7 +285,7 @@ export async function mountDrawing(host: HTMLElement, json: string, theme: "dark
     const els = api.getSceneElements(), last = els[els.length - 1];
     if (!last || last.type !== "freedraw" || last.updated < since) { console.info(`pen: no stroke of Excalidraw's for ${samples.length} samples (tool or timing)`); return; }
     if (samples.length < 3 || samples.length <= last.points.length) {
-      if (opts.pen && last.customData?.atlasPen !== kind) api.updateScene({ elements: els.map((e) => (e === last ? lib.newElementWith(last, { customData: { ...last.customData, atlasPen: kind } }) : e)) });
+      if (opts.pen && last.customData?.kandinskyPen !== kind) api.updateScene({ elements: els.map((e) => (e === last ? lib.newElementWith(last, { customData: { ...last.customData, kandinskyPen: kind } }) : e)) });
       return;
     }
     const st = api.getAppState();
@@ -297,7 +298,7 @@ export async function mountDrawing(host: HTMLElement, json: string, theme: "dark
     const done = lib.newElementWith(last, {
       x, y, points: points as never, width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys),
       pressures: pressured ? samples.map((p) => p.pressure) : [], simulatePressure: !pressured && !opts.pen && last.simulatePressure,
-      ...(opts.pen ? { customData: { ...last.customData, atlasPen: kind } } : {}), // outlined crisply (draw-ink.ts)
+      ...(opts.pen ? { customData: { ...last.customData, kandinskyPen: kind } } : {}), // outlined crisply (draw-ink.ts)
     });
     api.updateScene({ elements: els.map((e) => (e === last ? done : e)) });
   });
@@ -312,7 +313,7 @@ export async function mountDrawing(host: HTMLElement, json: string, theme: "dark
     return {
       type: "freedraw", x, y, width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys), angle: 0,
       points, pressures: pressured ? samples.map((p) => penPressure(p.pressure)) : [], simulatePressure: false, lastCommittedPoint: null,
-      customData: { atlasPen: kind },
+      customData: { kandinskyPen: kind },
     };
   }
   /** The stroke so far as an element for the other devices (draw-live.ts `drafting`): the pen's colour and width. */
@@ -345,7 +346,7 @@ export async function mountDrawing(host: HTMLElement, json: string, theme: "dark
     // the pen held still at the end: a shape, as Notepad snaps it (pen-shapes.ts; the core's recogniser, the phone's own)
     const timed = pts.map((p, i) => ({ x: p.x, y: p.y, t: samples[i].t }));
     if (draw?.snap !== false && heldAtEnd(timed, st.zoom.value) && extent(timed) * st.zoom.value >= SNAP_MIN) {
-      void server.penShape(timed.flatMap((p) => [p.x, p.y, p.t]), draw?.shapes !== "atlas").then(({ wire }) => {
+      void server.penShape(timed.flatMap((p) => [p.x, p.y, p.t]), draw?.shapes !== "kandinsky").then(({ wire }) => {
         const shape = wireToSkeleton(wire);
         if (!shape) return ink();
         put({ ...shape, lastCommittedPoint: null, startBinding: null, endBinding: null, startArrowhead: shape.startArrowhead ?? null, endArrowhead: shape.endArrowhead ?? null });
@@ -416,7 +417,7 @@ export async function mountDrawing(host: HTMLElement, json: string, theme: "dark
         theme: current,
         autoFocus: true, // keyboard-first: R / P / T work as soon as the pane opens
         excalidrawAPI: (a: Api) => (api = a),
-        // `[[note]]` on an element (Obsidian's Excalidraw plugin): the note in Atlas, resolved from the drawing's folder
+        // `[[note]]` on an element (Obsidian's Excalidraw plugin): the note in Kandinsky, resolved from the drawing's folder
         onLinkOpen: (el: { link: string | null }, ev: CustomEvent<unknown>) => {
           const target = wikiTarget(el.link);
           if (!target) return; // a web address: Excalidraw opens it
@@ -437,7 +438,7 @@ export async function mountDrawing(host: HTMLElement, json: string, theme: "dark
         onPointerUpdate: live ? (p: Parameters<typeof live.pointer>[0]) => live.pointer(p) : undefined,
         UIOptions: { canvasActions: { loadScene: false, saveToActiveFile: false, export: { saveFileToDisk: true } } },
         renderTopRightUI: opts.onFullscreen
-          ? () => createElement("button", { className: "atlas-draw-full", title: `Fullscreen (${keyText("Super+F")})`, "aria-label": "Fullscreen", onClick: opts.onFullscreen }, "⛶")
+          ? () => createElement("button", { className: "kandinsky-draw-full", title: `Fullscreen (${keyText("Super+F")})`, "aria-label": "Fullscreen", onClick: opts.onFullscreen }, "⛶")
           : undefined,
       }),
     );
@@ -456,7 +457,7 @@ export async function mountDrawing(host: HTMLElement, json: string, theme: "dark
   const scene = () => {
     if (!api) throw new Error("drawing not ready");
     // another device's stroke still being drawn (draw-live.ts) is shown, never kept
-    const elements = api.getSceneElements().filter((e) => !(e.customData as { atlasDraft?: boolean } | undefined)?.atlasDraft);
+    const elements = api.getSceneElements().filter((e) => !(e.customData as { kandinskyDraft?: boolean } | undefined)?.kandinskyDraft);
     return { elements, appState: api.getAppState(), files: api.getFiles() };
   };
   return {
@@ -481,7 +482,7 @@ export async function mountDrawing(host: HTMLElement, json: string, theme: "dark
     others: () => live?.others() ?? 0,
     writes: () => live?.writes() ?? true,
     merge(json) {
-      const data = JSON.parse(json);
+      const data = parseDrawing(json);
       const els = (lib.restore(data, null, null).elements ?? []) as never;
       // its pictures too (a PDF page or a photo put in on the Boox), the ones not here yet
       const files = api?.getFiles() ?? {};
@@ -584,7 +585,7 @@ export async function writeSceneInto(original: string, json: string): Promise<st
   return original.slice(0, m.index) + m[1] + m[2] + m[3] + body + m[5] + original.slice(m.index + m[0].length);
 }
 
-/** A scene file's JSON: Atlas's `.excalidraw` is JSON; the Obsidian Excalidraw plugin's `.excalidraw.md`
+/** A scene file's JSON: Kandinsky's `.excalidraw` is JSON; the Obsidian Excalidraw plugin's `.excalidraw.md`
  *  keeps it in a ```compressed-json (LZString base64) or ```json block under "## Drawing". */
 export async function sceneJson(text: string): Promise<string> {
   const block = /```(compressed-json|json)\r?\n([\s\S]*?)\r?\n```/.exec(text.slice(text.indexOf("## Drawing") + 1 || 0));
@@ -600,7 +601,7 @@ export async function sceneJson(text: string): Promise<string> {
 /** The scene as an SVG; with `page` (what an embed names after `#`: frameRef) only that page, cut at its edges. */
 export async function sceneSvg(json: string, dark: boolean, page?: string): Promise<SVGSVGElement> {
   const lib: Lib = await import("@excalidraw/excalidraw");
-  const s = lib.restore(JSON.parse(json), null, null);
+  const s = lib.restore(parseDrawing(json), null, null);
   const frame = page ? frameRef(s.elements as never, page) : null;
   if (page && !frame) throw new Error(`no page “${page}” in this drawing`);
   const elements = frame ? s.elements.filter((e) => e.id === frame.id || (e as { frameId?: string | null }).frameId === frame.id) : s.elements;

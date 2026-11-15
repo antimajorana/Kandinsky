@@ -12,7 +12,7 @@ test("a file row dragged from the tree carries the path, a file:// URI and a dow
   const got = await row.evaluate((el) => {
     const dt = new DataTransfer();
     el.dispatchEvent(new DragEvent("dragstart", { dataTransfer: dt, bubbles: true, cancelable: true }));
-    return { path: dt.getData("application/x-atlas-path"), text: dt.getData("text/plain"), uri: dt.getData("text/uri-list"), dl: dt.getData("DownloadURL") };
+    return { path: dt.getData("application/x-kandinsky-path"), text: dt.getData("text/plain"), uri: dt.getData("text/uri-list"), dl: dt.getData("DownloadURL") };
   });
   expect(got.path).toBe("notes/hubbard.md");
   expect(got.text).toBe("notes/hubbard.md");

@@ -43,22 +43,22 @@ export { getDock, kindOf } from "./dock-instance";
 export { dockTerminal, nextTerminalN } from "./dock-panels";
 
 /** Tab: kind icon, title, unsaved dot that turns into the close button on hover. */
-class AtlasTab implements ITabRenderer {
+class KandinskyTab implements ITabRenderer {
   readonly element = document.createElement("div");
   private off: (() => void)[] = [];
   private stopDirty: (() => void) | null = null;
   init(p: TabPartInitParameters): void {
     const spec = p.params as PaneSpec;
-    this.element.className = "atlas-tab";
+    this.element.className = "kandinsky-tab atlas-tab"; // the old name too: user CSS written before the rename
     this.element.title = "path" in spec && spec.path ? spec.path : "url" in spec ? spec.url : paneTitle(spec);
     const icon = document.createElement("span");
-    icon.className = "atlas-tab-icon";
+    icon.className = "kandinsky-tab-icon atlas-tab-icon";
     icon.innerHTML = iconSvg(paneIcon(spec));
     const title = document.createElement("span");
-    title.className = "atlas-tab-title";
+    title.className = "kandinsky-tab-title atlas-tab-title";
     title.textContent = p.api.title ?? paneTitle(spec);
     const close = document.createElement("button");
-    close.className = "atlas-tab-close";
+    close.className = "kandinsky-tab-close atlas-tab-close";
     close.title = `Close (${keyText("Super+Q")}, Ctrl+W)`;
     close.innerHTML = iconSvg("close");
     close.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -84,7 +84,7 @@ class AtlasTab implements ITabRenderer {
  *  Escape cancels, an empty name goes back to the default. */
 function renameTab(api: DockviewPanelApi, title: HTMLElement, spec: SpecOf<"terminal">): void {
   const input = document.createElement("input");
-  input.className = "atlas-tab-rename";
+  input.className = "kandinsky-tab-rename";
   input.value = api.title ?? "";
   input.setAttribute("aria-label", "Terminal name");
   title.replaceWith(input);
@@ -120,7 +120,7 @@ class GroupActions implements IHeaderActionsRenderer {
   readonly element = document.createElement("div");
   private subs: { dispose(): void }[] = [];
   init(p: IGroupHeaderProps): void {
-    this.element.className = "atlas-group-actions";
+    this.element.className = "kandinsky-group-actions";
     const add = document.createElement("button");
     add.className = "icon-btn";
     add.title = "New terminal";
@@ -145,7 +145,7 @@ class SideHeadActions implements IHeaderActionsRenderer {
   private side = false;
   private loading = false;
   init(p: IGroupHeaderProps): void {
-    this.element.className = "atlas-side-head";
+    this.element.className = "kandinsky-side-head";
     const sync = () => {
       this.side = p.group.panels.length > 0 && panelZone(p.group.panels[0]) === "side";
       if (this.side && !this.instance && !this.loading) {
@@ -178,8 +178,8 @@ export function setDirty(id: string, dirty: boolean): void {
 class Watermark implements IWatermarkRenderer {
   readonly element = document.createElement("div");
   constructor() {
-    this.element.className = "atlas-watermark";
-    this.element.innerHTML = `<div class="atlas-watermark-inner"><div class="wm-mark">Kandinsky</div>
+    this.element.className = "kandinsky-watermark";
+    this.element.innerHTML = `<div class="kandinsky-watermark-inner"><div class="wm-mark">Kandinsky</div>
       <div class="wm-row"><span>Command palette</span><span class="kbd-group"><kbd>Ctrl</kbd><kbd>K</kbd></span></div>
       <div class="wm-row"><span>Open file</span><span class="kbd-group"><kbd>Ctrl</kbd><kbd>P</kbd></span></div>
       <div class="wm-row"><span>Capture</span><span class="kbd-group"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>C</kbd></span></div>
@@ -190,15 +190,15 @@ class Watermark implements IWatermarkRenderer {
 
 // the space between groups: cards float 6 px apart; on the paper shape (shape-paper.css) groups are flush and their
 // 1 px gap, showing the dock's colour, is the rule between them
-const dockTheme = (shape: string) => ({ name: "atlas", className: "dockview-theme-atlas", gap: shape === "paper" ? 1 : 6,
+const dockTheme = (shape: string) => ({ name: "kandinsky", className: "dockview-theme-kandinsky", gap: shape === "paper" ? 1 : 6,
   dndOverlayMounting: "relative" as const, dndPanelOverlay: "group" as const, dndTabIndicator: "line" as const });
 
 export function initDock(el: HTMLElement, components: PaneComponents): DockviewApi {
   const dock = createDockview(el, {
     theme: dockTheme(""),
     createComponent: (o) => new SveltePane(components[o.name as PaneKind] as AnyLoader, o.name as PaneKind),
-    createTabComponent: () => new AtlasTab(),
-    defaultTabComponent: "atlas",
+    createTabComponent: () => new KandinskyTab(),
+    defaultTabComponent: "kandinsky",
     createWatermarkComponent: () => new Watermark(),
     createRightHeaderActionComponent: () => new GroupActions(),
     createPrefixHeaderActionComponent: () => new SideHeadActions(),
@@ -209,11 +209,11 @@ export function initDock(el: HTMLElement, components: PaneComponents): DockviewA
   // terminals wait for the drop to refit (see Terminal.svelte).
   el.addEventListener("pointerdown", (e) => {
     if (!(e.target as HTMLElement).closest?.(".dv-sash")) return;
-    document.body.classList.add("atlas-resizing");
+    document.body.classList.add("kandinsky-resizing");
     const end = () => {
-      document.body.classList.remove("atlas-resizing");
+      document.body.classList.remove("kandinsky-resizing");
       window.getSelection()?.removeAllRanges();
-      window.dispatchEvent(new Event("atlas-resize-end"));
+      window.dispatchEvent(new Event("kandinsky-resize-end"));
       window.removeEventListener("pointerup", end, true);
       window.removeEventListener("pointercancel", end, true);
     };
@@ -273,7 +273,7 @@ export function onLayoutChange(fn: () => void): () => void {
   return () => sub?.dispose();
 }
 
-type SavedPanel = { id: string; contentComponent?: string; title?: string; params?: { kind?: string }; renderer?: string };
+type SavedPanel = { id: string; contentComponent?: string; tabComponent?: string; title?: string; params?: { kind?: string }; renderer?: string };
 type SavedNode = { type: string; data: SavedNode[] | { views: string[]; activeView?: string } };
 type SavedLayout = { grid?: { root?: SavedNode }; panels?: Record<string, SavedPanel> };
 
@@ -281,6 +281,7 @@ type SavedLayout = { grid?: { root?: SavedNode }; panels?: Record<string, SavedP
 export function migrateLayout<T>(layout: T): T {
   const l = layout as SavedLayout | null;
   if (!l?.panels) return layout;
+  for (const p of Object.values(l.panels)) if (p.tabComponent === "atlas") p.tabComponent = "kandinsky";
   keepOnlyTerminalsRendered(l.panels);
   librariesAsPluginPane(l);
   return layout;
@@ -331,10 +332,10 @@ export function applyLayout(layout: unknown): boolean {
     }
     moveSidePanel();
     keepShape();
-    window.dispatchEvent(new Event("atlas-layout"));
+    window.dispatchEvent(new Event("kandinsky-layout"));
     return true;
   } catch (err) {
-    console.warn("[atlas] layout unusable, starting fresh", err);
+    console.warn("[kandinsky] layout unusable, starting fresh", err);
     dock.clear();
     return false;
   }
@@ -391,7 +392,7 @@ export function open(spec: PaneSpec, opts: { activate?: boolean; beside?: boolea
     if (opts.activate !== false) {
       reveal(existing.group); existing.api.setActive(); paneFocus.get(id)?.();
       // the file asked for again: the tree scrolls back to it (the active file did not change, so nothing else says so)
-      if (spec.kind !== "explorer" && "path" in spec && spec.path) window.dispatchEvent(new CustomEvent("atlas-active-file", { detail: spec.path }));
+      if (spec.kind !== "explorer" && "path" in spec && spec.path) window.dispatchEvent(new CustomEvent("kandinsky-active-file", { detail: spec.path }));
     }
     if (spec.kind === "editor" && spec.line !== undefined) editors.get(id)?.gotoLine(spec.line);
     if (spec.kind === "pdf" && spec.page !== undefined) pdfPages.get(id)?.(spec.page, { quote: spec.quote, annotation: spec.annotation });
@@ -404,7 +405,7 @@ export function open(spec: PaneSpec, opts: { activate?: boolean; beside?: boolea
   const panel = dock.addPanel({
     id,
     component: spec.kind,
-    tabComponent: "atlas",
+    tabComponent: "kandinsky",
     title: paneTitle(spec),
     params: spec,
     // only terminals stay in the page in the background (a shell's screen must keep up); every other pane
@@ -441,7 +442,7 @@ export function setNativeOpener(fn: ((path: string) => boolean) | null): void { 
 /** `path` handed to the phone app's native plugin that opens it (a reader): false off the phone, or none opens it. */
 export const openNative = (path: string): boolean => nativeOpener?.(path) ?? false;
 
-/** `anchor`: the link's `#…` (`Chapter 3`), handed to a plugin's pane that shows the file (`atlas.anchor`). */
+/** `anchor`: the link's `#…` (`Chapter 3`), handed to a plugin's pane that shows the file (`kandinsky.anchor`). */
 export function openPath(path: string, line?: number, opts: { beside?: boolean; anchor?: string } = {}): void {
   if (openNative(path)) return;
   openIntent.path = path;

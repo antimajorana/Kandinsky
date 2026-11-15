@@ -8,14 +8,14 @@ static ON: AtomicBool = AtomicBool::new(false);
 
 /// The script that tells a page the current mode (run at each page load and at each change).
 pub fn script() -> String {
-    format!("document.documentElement.toggleAttribute('data-tablet', {}); dispatchEvent(new Event('atlas-tablet'));", ON.load(Ordering::SeqCst))
+    format!("document.documentElement.toggleAttribute('data-tablet', {}); dispatchEvent(new Event('kandinsky-tablet'));", ON.load(Ordering::SeqCst))
 }
 
 /// Follows KWin's tablet mode on a thread of its own, telling every window when it changes.
 pub fn watch(app: AppHandle) {
     let _ = std::thread::Builder::new().name("tablet-mode".into()).spawn(move || {
         if let Err(e) = follow(&app) {
-            eprintln!("atlas-app: KDE's tablet mode is not followed: {e}");
+            eprintln!("kandinsky-app: KDE's tablet mode is not followed: {e}");
         }
     });
 }

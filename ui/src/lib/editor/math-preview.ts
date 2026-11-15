@@ -6,23 +6,41 @@
 // never covers it. A formula that does not parse yet shows the last good drawing dimmed, with KaTeX's
 // message — so the drawing does not flicker while typing.
 import { errText } from "../text";
-import { StateField, type EditorState, type Extension } from "@codemirror/state";
+import { StateEffect, StateField, type EditorState, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType, showTooltip, type DecorationSet, type Tooltip } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
-import { renderMathInto } from "../math";
+import { katexNow, loadMath, renderMathInto } from "../math";
 
-interface Formula { from: number; to: number; source: string; block: boolean }
+interface Formula { from: number; to: number; source: string; block: boolean; label?: string }
 
 const isMath = (name: string) => name === "InlineMath" || name === "BlockMath";
+
+function normalizePreviewTex(raw: string, block: boolean): { source: string; label?: string } {
+  let s = raw;
+  if (block) {
+    s = s.replace(/[ \t]*\^[A-Za-z0-9:_-]+[ \t]*$/, "");
+    s = s.replace(/^\s*(\$\$|\\\[)|(\$\$|\\\])\s*$/g, "");
+  } else if (s.startsWith("$") && s.endsWith("$") && s.length >= 2) {
+    s = s.slice(1, -1);
+  }
+  const label = /\\label\{([^}]+)\}/.exec(s)?.[1]?.trim();
+  s = s.replace(/\\label\{[^}]*\}/g, "");
+  if (block) {
+    s = s.replace(/\\(begin|end)\{(equation|align|gather|multline|eqnarray)(\*?)\}/g, (_m, be: string, env: string) =>
+      env === "equation" || env === "multline" ? "" : `\\${be}{${env === "align" || env === "eqnarray" ? "aligned" : "gathered"}}`);
+  }
+  return { source: s.trim(), label };
+}
+
 function formulaOf(state: EditorState, n: { name: string; from: number; to: number }): Formula | null {
-  const block = n.name === "BlockMath", marks = block ? 2 : 1;
-  const source = state.sliceDoc(n.from + marks, n.to - marks).trim();
-  return source ? { from: n.from, to: n.to, source, block } : null;
+  const block = n.name === "BlockMath";
+  const { source, label } = normalizePreviewTex(state.sliceDoc(n.from, n.to), block);
+  return source ? { from: n.from, to: n.to, source, block, label } : null;
 }
 
 /** In a note: the formula whose source the editor shows — the one the caret touches, its dollars included, the rule the
- *  live preview reveals by (live-preview.js `revealed`) — from the markdown tree; else an inline one still being typed
- *  (no closing `$` yet). The preview follows as soon as the caret reaches the formula's line, block or inline. */
+ *  live preview reveals by (live-preview.js `revealed`) — from the markdown tree; else an unclosed environment / inline
+ *  formula still being typed. */
 function noteFormulaAt(state: EditorState): Formula | null {
   const sel = state.selection.main;
   if (!sel.empty) return null;
@@ -37,7 +55,7 @@ function noteFormulaAt(state: EditorState): Formula | null {
       return false;
     },
   });
-  return found ?? typedInline(state, pos);
+  return found ?? texFormulaAt(state) ?? typedInline(state, pos);
 }
 
 function typedInline(state: EditorState, pos: number): Formula | null {
@@ -83,7 +101,8 @@ function texFormulaAt(state: EditorState): Formula | null {
       const inner = (before.slice(body) + (end >= 0 ? after.slice(0, end) : after.split("\n")[0])).trim();
       if (at > bestAt && inner) {
         bestAt = at;
-        best = { from: start + at, to: end >= 0 ? pos + end + closer.length : pos, source: d.wrap(inner, m), block: d.block };
+        const { source, label } = normalizePreviewTex(d.wrap(inner, m), d.block);
+        if (source) best = { from: start + at, to: end >= 0 ? pos + end + closer.length : pos, source, block: d.block, label };
       }
     }
   }
@@ -92,20 +111,37 @@ function texFormulaAt(state: EditorState): Formula | null {
 
 // one drawing per editor state would redraw (and flicker) at every key: the last good one is kept here
 let lastGood = "";
-function draw(f: Formula): HTMLElement {
+const refreshMathPreview = StateEffect.define<null>();
+
+function draw(f: Formula, view?: EditorView): HTMLElement {
   const dom = document.createElement("div");
   dom.className = "cm-math-preview";
-  const body = dom.appendChild(document.createElement("div"));
+  const card = f.block ? dom.appendChild(document.createElement("div")) : dom;
+  if (f.block) card.className = "cm-math-preview-card";
+  if (f.block && f.label) {
+    const meta = card.appendChild(document.createElement("div"));
+    meta.className = "cm-math-preview-meta";
+    meta.textContent = `\\label{${f.label}}`;
+  }
+  const body = card.appendChild(document.createElement("div"));
+  body.className = "cm-math-preview-body";
+  const resolved = f.source.replace(/\\eqref\{([^}]+)\}/g, (_m, id: string) => `\\text{(${id.trim()})}`);
   let failed: string | null = null;
   try {
-    renderMathInto(body, f.source, f.block);
+    renderMathInto(body, resolved, f.block);
+    if (!katexNow()) {
+      void loadMath().then(() => {
+        renderMathInto(body, resolved, f.block);
+        view?.dispatch({ effects: refreshMathPreview.of(null) });
+      });
+    }
     // the renderer does not throw on a formula it cannot read: it draws the source in red, with the reason as its title
     failed = body.querySelector<HTMLElement>(".katex-error")?.title ?? null;
   } catch (e) { failed = errText(e); }
   if (failed === null) { lastGood = body.innerHTML; return dom; }
   body.innerHTML = lastGood; // what it looked like before this keystroke broke it
   body.classList.add("stale");
-  const why = dom.appendChild(document.createElement("div"));
+  const why = card.appendChild(document.createElement("div"));
   why.className = "why";
   why.textContent = failed.replace(/^(KaTeX parse error|ParseError):\s*/, "");
   return dom;
@@ -114,8 +150,8 @@ function draw(f: Formula): HTMLElement {
 /** A display formula's drawing, in the text under its last line. */
 class BlockPreview extends WidgetType {
   constructor(readonly f: Formula) { super(); }
-  eq(o: BlockPreview) { return o.f.source === this.f.source; }
-  toDOM() { const d = draw(this.f); d.classList.add("cm-math-preview-block"); return d; }
+  eq(o: BlockPreview) { return o.f.source === this.f.source && o.f.label === this.f.label && Boolean(katexNow()); }
+  toDOM(view: EditorView) { const d = draw(this.f, view); d.classList.add("cm-math-preview-block"); return d; }
   ignoreEvent() { return true; }
 }
 
@@ -130,7 +166,7 @@ function shown(state: EditorState, at: (s: EditorState) => Formula | null, on: (
     const end = state.doc.lineAt(f.to).to;
     return { tip: null, block: Decoration.set([Decoration.widget({ widget: new BlockPreview(f), block: true, side: 1 }).range(end)]) };
   }
-  return { tip: { pos: f.from, above: true, arrow: false, create: () => ({ dom: draw(f) }) }, block: Decoration.none };
+  return { tip: { pos: f.from, above: true, arrow: false, create: (view) => ({ dom: draw(f, view) }) }, block: Decoration.none };
 }
 
 /** `tex`: a .tex file (its own delimiters); otherwise a note. */
@@ -138,7 +174,7 @@ export function mathPreview(on: () => boolean, tex = false): Extension {
   const at = tex ? texFormulaAt : noteFormulaAt;
   return StateField.define<Shown>({
     create: (state) => shown(state, at, on),
-    update: (value, tr) => (tr.docChanged || tr.selection ? shown(tr.state, at, on) : value),
+    update: (value, tr) => (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(refreshMathPreview)) ? shown(tr.state, at, on) : value),
     provide: (f) => [showTooltip.from(f, (v) => v.tip), EditorView.decorations.from(f, (v) => v.block)],
   });
 }

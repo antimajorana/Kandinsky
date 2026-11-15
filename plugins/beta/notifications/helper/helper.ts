@@ -6,11 +6,11 @@
 //        the pages as a `synced` event.
 // send — a message to the phone: through the Apprise API when its address is set, else to the phone's ntfy topic.
 // The logic takes its transport, so helper.test.ts runs it against a stand-in ntfy.
-import type { Params } from "atlas-helper";
+import type { Params } from "kandinsky-helper";
 
-const STATE = `.atlas/cache/${atlas.id}.json`;
+const STATE = `.kandinsky/cache/${kandinsky.id}.json`;
 /** Where the Python helper kept a topic's last id (one file per topic), read once so an upgrade files nothing twice. */
-const OLD_SINCE = (topic: string) => `.atlas/cache/plugins/${atlas.id}/since-${topic.replace(/[^\w.-]/g, "_")}`;
+const OLD_SINCE = (topic: string) => `.kandinsky/cache/plugins/${kandinsky.id}/since-${topic.replace(/[^\w.-]/g, "_")}`;
 const MARK: Record<number, string> = { 5: "🔴", 4: "🟠" }; // ntfy priorities: 5 urgent, 4 high, 3 default, 2 low, 1 min
 
 export interface Message { id?: string; event?: string; time?: number; title?: string; message?: string; tags?: unknown[]; priority?: number; click?: string }
@@ -161,7 +161,7 @@ export async function syncWith(net: Net, vault: Vault, p: Params) {
 
 export async function sendWith(net: Net, p: Params) {
   const s = p.settings ?? {};
-  const text = String(p.text ?? ""), title = String(p.title || "Atlas");
+  const text = String(p.text ?? ""), title = String(p.title || "Kandinsky");
   if (!text.trim()) throw new Error("nothing to send");
   const apprise = str(s.apprise);
   if (apprise) {
@@ -170,7 +170,7 @@ export async function sendWith(net: Net, p: Params) {
   }
   const topic = str(s.phone_topic);
   if (!topic) throw new Error("set the Apprise address or your phone's topic first: Settings → Notifications");
-  await net.post(`${(str(s.server) || "https://ntfy.sh").replace(/\/+$/, "")}/${encodeURIComponent(topic)}?${atlas.qs({ title })}`, text, auth(p));
+  await net.post(`${(str(s.server) || "https://ntfy.sh").replace(/\/+$/, "")}/${encodeURIComponent(topic)}?${kandinsky.qs({ title })}`, text, auth(p));
   return { sent: true, through: "ntfy" };
 }
 
@@ -178,13 +178,13 @@ export async function sendWith(net: Net, p: Params) {
 
 const net: Net = {
   // `missing: []`: a 404 (a topic that is not there) is an error said in the answer, not an empty topic
-  get: async (url, headers) => (await atlas.fetch(url, { headers, timeout: 30, missing: [] })) ?? "",
-  post: (url, body, headers) => atlas.fetch(url, { method: "POST", body, headers, timeout: 30, missing: [] }),
+  get: async (url, headers) => (await kandinsky.fetch(url, { headers, timeout: 30, missing: [] })) ?? "",
+  post: (url, body, headers) => kandinsky.fetch(url, { method: "POST", body, headers, timeout: 30, missing: [] }),
 };
 
 async function readOrNull(path: string): Promise<string | null> {
   try {
-    return await atlas.read(path);
+    return await kandinsky.read(path);
   } catch (e) {
     if ((e as { status?: number }).status === 404) return null;
     throw e;
@@ -194,8 +194,8 @@ async function readOrNull(path: string): Promise<string | null> {
 let kept: Record<string, string> | null = null;
 const vault: Vault = {
   read: readOrNull,
-  write: (path, text) => atlas.write(path, text),
-  capture: (text) => atlas.capture(text),
+  write: (path, text) => kandinsky.write(path, text),
+  capture: (text) => kandinsky.capture(text),
   async since(topic) {
     kept ??= JSON.parse((await readOrNull(STATE)) ?? "{}").since ?? {};
     return kept![topic] ?? str(await readOrNull(OLD_SINCE(topic)));
@@ -203,7 +203,7 @@ const vault: Vault = {
   async keep(topic, id) {
     (kept ??= {})[topic] = id;
     try {
-      await atlas.write(STATE, JSON.stringify({ since: kept }));
+      await kandinsky.write(STATE, JSON.stringify({ since: kept }));
     } catch (e) {
       console.warn(`notifications: cannot keep the last id of ${topic}: ${(e as Error).message}`);
     }
@@ -225,11 +225,11 @@ export function oneAtATime<A, R>(fn: (a: A) => Promise<R>): (a: A) => Promise<R>
   };
 }
 
-atlas.methods({
+kandinsky.methods({
   // the pages hear what a sync found, whoever started it (the schedule, mostly): they toast it and count the bell
   sync: oneAtATime(async (p: Params) => {
     const r = await syncWith(net, vault, p);
-    if (r.new) atlas.event("synced", { new: r.new, loud: r.loud });
+    if (r.new) kandinsky.event("synced", { new: r.new, loud: r.loud });
     return r;
   }),
   send: (p) => sendWith(net, p),

@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
-// A phone's Back (lib/back.ts): what is open over the page closes first, then Atlas goes back a place, and only then
-// does Back leave — in a phone's browser (its history) and in the phone app (AtlasActivity asks atlasShell.dismiss()).
+// A phone's Back (lib/back.ts): what is open over the page closes first, then Kandinsky goes back a place, and only then
+// does Back leave — in a phone's browser (its history) and in the phone app (KandinskyActivity asks kandinskyShell.dismiss()).
 test.use({ viewport: { width: 390, height: 760 }, hasTouch: true });
 
 const openNote = async (page: Page, name: string) => {
@@ -18,8 +18,8 @@ const openNote = async (page: Page, name: string) => {
   await expect(page.locator(".phone-top .title")).toContainText(name.replace(/\.md$/, ""));
 };
 
-test("in a phone's browser, Back closes the palette, then returns to the previous note, before leaving Atlas", async ({ page, request }) => {
-  for (const n of ["kestrel", "osprey"]) await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: `notes/${n}.md`, text: `# ${n}\n\nbody\n` } });
+test("in a phone's browser, Back closes the palette, then returns to the previous note, before leaving Kandinsky", async ({ page, request }) => {
+  for (const n of ["kestrel", "osprey"]) await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: `notes/${n}.md`, text: `# ${n}\n\nbody\n` } });
   await page.goto("/");
   await expect(page.locator(".phone-bar")).toBeVisible();
   const app = page.url();
@@ -38,10 +38,10 @@ test("in a phone's browser, Back closes the palette, then returns to the previou
 });
 
 test("in the phone app, the system Back asks the page first: the palette, a Settings area, then nothing", async ({ page }) => {
-  await page.addInitScript(() => { (window as unknown as { AtlasNative: unknown }).AtlasNative = { ready() {}, tabs() {} }; });
+  await page.addInitScript(() => { (window as unknown as { KandinskyNative: unknown }).KandinskyNative = { ready() {}, tabs() {} }; });
   await page.goto("/");
-  await page.waitForFunction(() => "atlasShell" in window);
-  const dismiss = () => page.evaluate(() => (window as unknown as { atlasShell: { dismiss(): boolean } }).atlasShell.dismiss());
+  await page.waitForFunction(() => "kandinskyShell" in window);
+  const dismiss = () => page.evaluate(() => (window as unknown as { kandinskyShell: { dismiss(): boolean } }).kandinskyShell.dismiss());
   expect(await dismiss()).toBe(false); // nothing open: the app goes back a place itself
 
   await page.keyboard.press("Control+p");
@@ -49,7 +49,7 @@ test("in the phone app, the system Back asks the page first: the palette, a Sett
   expect(await dismiss()).toBe(true);
   await expect(page.getByTestId("palette")).toBeHidden();
 
-  await page.evaluate(() => (window as unknown as { atlasShell: { view(k: string): void } }).atlasShell.view("settings"));
+  await page.evaluate(() => (window as unknown as { kandinskyShell: { view(k: string): void } }).kandinskyShell.view("settings"));
   const areas = page.locator(".settings nav");
   await expect(areas).toBeVisible();
   await areas.locator("button").nth(1).click();
@@ -60,7 +60,7 @@ test("in the phone app, the system Back asks the page first: the palette, a Sett
 });
 
 test("in a phone's browser, a sideways swipe on the top bar shows the next tab, and back", async ({ page, request }) => {
-  for (const n of ["heron", "plover"]) await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: `notes/${n}.md`, text: `# ${n}\n` } });
+  for (const n of ["heron", "plover"]) await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: `notes/${n}.md`, text: `# ${n}\n` } });
   await page.goto("/");
   await expect(page.locator(".phone-bar")).toBeVisible();
   await openNote(page, "heron.md");
@@ -78,7 +78,7 @@ test("in a phone's browser, a sideways swipe on the top bar shows the next tab, 
   await expect(page.locator(".phone-top .title")).toContainText("plover");
 });
 
-// An app (Home, Library) is not one of the groups' tabs: the top bar names it all the same, not "Atlas".
+// An app (Home, Library) is not one of the groups' tabs: the top bar names it all the same, not "Kandinsky".
 test("the phone's top bar names an open app as it names a note", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator(".phone-bar")).toBeVisible();

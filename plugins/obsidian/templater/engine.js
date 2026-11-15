@@ -224,7 +224,7 @@ export function isEmptyOrFrontmatterOnly(text) {
 
 /** Build the Templater `tp` helper object for a target file. */
 export function buildTpContext({
-  atlas,
+  kandinsky,
   targetPath,
   title,
   now = new Date(),
@@ -269,7 +269,7 @@ export function buildTpContext({
         return String(selection ?? "");
       },
       async exists(filepath) {
-        return atlas ? atlas.exists(normPath(filepath)) : false;
+        return kandinsky ? kandinsky.exists(normPath(filepath)) : false;
       },
       find_tfile(filename) {
         const p = normPath(String(filename ?? "").replace(/^\[\[|\]\]$/g, ""));
@@ -314,8 +314,8 @@ export function buildTpContext({
     },
     system: {
       async prompt(promptText = "Enter value", defaultValue = "", throwOnCancel = false) {
-        if (!atlas?.input) return defaultValue ?? "";
-        const ans = await atlas.input(String(promptText), { value: String(defaultValue ?? "") });
+        if (!kandinsky?.input) return defaultValue ?? "";
+        const ans = await kandinsky.input(String(promptText), { value: String(defaultValue ?? "") });
         if (ans === null) {
           if (throwOnCancel) throw new Error("Prompt cancelled");
           return null;
@@ -324,9 +324,9 @@ export function buildTpContext({
       },
       async suggester(textItems, items, throwOnCancel = false, placeholder = "Choose an option…") {
         const vals = Array.isArray(items) ? items : [];
-        if (!atlas?.pick || !vals.length) return vals[0] ?? null;
+        if (!kandinsky?.pick || !vals.length) return vals[0] ?? null;
         return new Promise((resolve, reject) => {
-          atlas.pick({
+          kandinsky.pick({
             placeholder: String(placeholder || "Choose an option…"),
             tag: "Templater",
             icon: "file-code",

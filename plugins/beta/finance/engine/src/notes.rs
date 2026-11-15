@@ -233,11 +233,11 @@ impl Notes {
 }
 
 /// `s` as a property's value that reads back as this very text (an account `Expenses:Food #1` written plain would read
-/// back as `Expenses:Food`): atlas-text's, as every property line.
-pub use atlas_text::frontmatter::inline_string as yaml_str;
+/// back as `Expenses:Food`): kandinsky-text's, as every property line.
+pub use kandinsky_text::frontmatter::inline_string as yaml_str;
 
 pub fn frontmatter(text: &str) -> Option<&str> {
-    atlas_text::frontmatter::split(text).0
+    kandinsky_text::frontmatter::split(text).0
 }
 
 /// A top-level property's values (one or a list), as `set_property` finds it.

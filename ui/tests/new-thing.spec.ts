@@ -1,21 +1,21 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 
 // New… (lib/new-thing.ts, — the phone's +): a blank note, a note per template, a drawing, and the kinds
-// plugins add with atlas.registerNew, each placing what it makes itself.
-const H = { "x-atlas": "1" };
+// plugins add with kandinsky.registerNew, each placing what it makes itself.
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
-const MAIN = `export function register(atlas) {
-  atlas.registerNew({ id: "meeting", title: "Meeting note", detail: "in meetings/", run: async () => {
-    await atlas.createFile("meetings/standup.md", "# Standup\\n");
-    atlas.open("meetings/standup.md");
+const MAIN = `export function register(kandinsky) {
+  kandinsky.registerNew({ id: "meeting", title: "Meeting note", detail: "in meetings/", run: async () => {
+    await kandinsky.createFile("meetings/standup.md", "# Standup\\n");
+    kandinsky.open("meetings/standup.md");
   } });
 }\n`;
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/newkind/plugin.toml", 'title = "Meetings"\n');
-  await put(request, ".atlas/plugins/newkind/main.js", MAIN);
+  await put(request, ".kandinsky/plugins/newkind/plugin.toml", 'title = "Meetings"\n');
+  await put(request, ".kandinsky/plugins/newkind/main.js", MAIN);
 });
-test.afterAll(async ({ request }) => { await put(request, ".atlas/plugins/newkind/main.js", "export function register() {}\n"); });
+test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/newkind/main.js", "export function register() {}\n"); });
 
 async function newThing(page: Page) {
   await page.keyboard.press("F1");

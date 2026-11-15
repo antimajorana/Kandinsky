@@ -3,24 +3,24 @@
   // realised per year; the money-weighted return (XIRR); the money held in other currencies with what the rate's
   // moves made of it and the rate's history; the prices in use, and fetching new ones (`prices`, also run daily).
   import { call, label, money, num, type Invest, type PluginApi } from "./api";
-  let { atlas, cur }: { atlas: PluginApi; cur: string } = $props();
+  let { kandinsky, cur }: { kandinsky: PluginApi; cur: string } = $props();
   let data = $state<Invest | null>(null);
   let error = $state("");
   let busy = $state(false);
   let open = $state<string | null>(null);
 
   export async function load() {
-    try { data = await call<Invest>(atlas, "invest"); error = ""; } catch (e) { error = (e as Error).message; }
+    try { data = await call<Invest>(kandinsky, "invest"); error = ""; } catch (e) { error = (e as Error).message; }
   }
   load();
 
   async function update() {
     busy = true;
     try {
-      const r = await call<{ summary: string; errors: string[] }>(atlas, "prices", {});
-      atlas.toast("Prices", r.errors.length ? `${r.summary}: ${r.errors.join("; ")}` : r.summary, r.errors.length ? "error" : undefined);
+      const r = await call<{ summary: string; errors: string[] }>(kandinsky, "prices", {});
+      kandinsky.toast("Prices", r.errors.length ? `${r.summary}: ${r.errors.join("; ")}` : r.summary, r.errors.length ? "error" : undefined);
       await load();
-    } catch (e) { atlas.toast("Prices not fetched", (e as Error).message, "error"); } finally { busy = false; }
+    } catch (e) { kandinsky.toast("Prices not fetched", (e as Error).message, "error"); } finally { busy = false; }
   }
 
   const value = $derived(data?.holdings.reduce((t, h) => t + num(h.value), 0) ?? 0);
@@ -30,14 +30,14 @@
   const age = (d: string) => Math.round((Date.now() - new Date(`${d}T12:00:00`).getTime()) / 86400000);
   function plot(host: HTMLElement, h: [string, string][]) {
     const xs = h.map((_, i) => i - (h.length - 1));
-    return { destroy: atlas.plot(host, { x: xs, ys: [h.map(([, r]) => num(r))], xLabel: `months before ${h.at(-1)?.[0] ?? ""}`, yLabels: [cur] }) };
+    return { destroy: kandinsky.plot(host, { x: xs, ys: [h.map(([, r]) => num(r))], xLabel: `months before ${h.at(-1)?.[0] ?? ""}`, yLabels: [cur] }) };
   }
 </script>
 
 {#if error}
-  <div class="atlas-notice error">{error}<div class="actions"><button class="atlas-btn" onclick={load}>Try again</button></div></div>
+  <div class="kandinsky-notice error">{error}<div class="actions"><button class="kandinsky-btn" onclick={load}>Try again</button></div></div>
 {:else if !data}
-  <div class="atlas-empty">Reading the lots…</div>
+  <div class="kandinsky-empty">Reading the lots…</div>
 {:else}
   <div class="grid">
     <section class="card tiles wide">
@@ -64,7 +64,7 @@
           </table>
         {/if}
       {:else}
-        <div class="atlas-empty">Nothing held in lots now (funds, stocks). Gains realised before are below.</div>
+        <div class="kandinsky-empty">Nothing held in lots now (funds, stocks). Gains realised before are below.</div>
       {/each}
       {#if data.realised.length}
         <div class="realised">{#each data.realised as r (r.year)}<span><b>{r.year}</b> {money(num(r.gain), cur, { sign: true })}</span>{/each}<span class="faint">realised gains (the booked Income:Gains)</span></div>
@@ -84,7 +84,7 @@
           {#if c.history.length > 1}{#key c.history}<div class="plot" use:plot={c.history}></div>{/key}{/if}
         </div>
       {:else}
-        <div class="atlas-empty">Everything is in {cur}.</div>
+        <div class="kandinsky-empty">Everything is in {cur}.</div>
       {/each}
     </section>
 
@@ -93,7 +93,7 @@
       <div class="quotes">
         {#each data.prices as q (q.base + q.quote)}<span title="{q.base} in {q.quote}"><b>{q.base}</b> {num(q.price).toLocaleString(undefined, { maximumFractionDigits: 4 })} {q.quote} <span class="faint">{q.date}</span></span>{/each}
       </div>
-      <button class="atlas-btn" disabled={busy} onclick={update}>{busy ? "Fetching…" : "Update prices"}</button>
+      <button class="kandinsky-btn" disabled={busy} onclick={update}>{busy ? "Fetching…" : "Update prices"}</button>
     </section>
   </div>
 {/if}

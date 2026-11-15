@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=Atlas Capture
+Name=Kandinsky Capture
 Comment=A small box to capture a thought into today's log (bind a global shortcut to it)
-Exec=atlas-app --capture
-Icon=io.github.alneb.Atlas
+Exec=kandinsky-app --capture
+Icon=io.github.alneb.Kandinsky
 Categories=Office;

@@ -18,7 +18,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   # gate.sh runs itself in a memory-capped systemd scope on a desktop; a CI runner has none to spare
-  ATLAS_HEAVY: "1"
+  KANDINSKY_HEAVY: "1"
 
 jobs:
   gate:
@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 60
     steps:
       # the debug build, its tests and the browsers fill the runner's 14 GB once a version bump rebuilds every crate
-      # beside the restored cache: the preinstalled toolchains Atlas never uses go first (about 20 GB)
+      # beside the restored cache: the preinstalled toolchains Kandinsky never uses go first (about 20 GB)
       - name: Disk space
         run: |
           df -h / | tail -1
@@ -77,7 +77,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: gate-logs
-          path: /tmp/atlas-gate/
+          path: /tmp/kandinsky-gate/
           if-no-files-found: ignore
 
   port:
@@ -109,10 +109,10 @@ jobs:
           npm --prefix ui ci --no-audit --no-fund
           npm --prefix ui run build
       - name: Build the core, the CLI and the capture box
-        run: node scripts/dev/ci-annotate.mjs cargo build --locked -p atlas-core -p atlas -p atlas-capture -p atlas-app
+        run: node scripts/dev/ci-annotate.mjs cargo build --locked -p kandinsky-core -p kandinsky -p kandinsky-capture -p kandinsky-app
       # Git for Windows' sh, Python and tar are on the runners: the tests that start them run here, unlike under Wine
       - name: The core's tests
-        run: node scripts/dev/ci-annotate.mjs cargo test --locked -p atlas-core
+        run: node scripts/dev/ci-annotate.mjs cargo test --locked -p kandinsky-core
 
   # every package (Linux, macOS, Windows, the APKs) as this run's artifacts
   packages:

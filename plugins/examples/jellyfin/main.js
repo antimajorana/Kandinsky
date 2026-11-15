@@ -4,18 +4,18 @@
 //   limit: 10
 //   ```
 // One GET of the user's played items, newest first; the key goes in as `X-Emby-Token`, put in by
-// Atlas's core. Written from Jellyfin's 10.x API; check it against your server's version.
+// Kandinsky's core. Written from Jellyfin's 10.x API; check it against your server's version.
 const el = (tag, style, text) => { const e = document.createElement(tag); if (style) e.style.cssText = style; if (text !== undefined) e.textContent = text; return e; };
 
-export function register(atlas) {
-  atlas.registerBlock("jellyfin.watched", (host, block) => {
-    const s = atlas.plugin.settings, base = String(s.server ?? "").trim().replace(/\/+$/, ""), user = String(s.user ?? "").trim();
+export function register(kandinsky) {
+  kandinsky.registerBlock("jellyfin.watched", (host, block) => {
+    const s = kandinsky.plugin.settings, base = String(s.server ?? "").trim().replace(/\/+$/, ""), user = String(s.user ?? "").trim();
     if (!base || !user) { host.textContent = "Set the Jellyfin server and user in Settings → Plugins → Jellyfin."; return; }
     let gone = false;
     void (async () => {
       try {
         const q = `Filters=IsPlayed&SortBy=DatePlayed&SortOrder=Descending&Recursive=true&IncludeItemTypes=Movie,Episode&Fields=UserData&Limit=${Number(block.options.limit ?? 10)}`;
-        const res = await atlas.fetch(`${base}/Users/${encodeURIComponent(user)}/Items?${q}`, { headers: { "X-Emby-Token": { secret: "token" } } });
+        const res = await kandinsky.fetch(`${base}/Users/${encodeURIComponent(user)}/Items?${q}`, { headers: { "X-Emby-Token": { secret: "token" } } });
         if (!res.ok) throw new Error(`Jellyfin answered ${res.status}`);
         const items = (await res.json()).Items ?? [];
         if (gone) return;

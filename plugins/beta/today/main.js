@@ -4,9 +4,9 @@
 import { registerDaily } from "./daily.js";
 import { registerHome } from "./home.js";
 
-export function register(atlas) {
+export function register(kandinsky) {
   /** The setting's language, or this device's for `auto`. */
-  const lang = () => { const l = String(atlas.plugin.settings.language ?? "auto"); return l === "auto" ? navigator.language : l; };
-  registerDaily(atlas, lang);
-  registerHome(atlas, lang);
+  const lang = () => { const l = String(kandinsky.plugin.settings.language ?? "auto"); return l === "auto" ? navigator.language : l; };
+  registerDaily(kandinsky, lang);
+  registerHome(kandinsky, lang);
 }

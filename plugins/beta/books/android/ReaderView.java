@@ -1,4 +1,4 @@
-package org.atlas.plugins.books;
+package org.kandinsky.plugins.books;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
@@ -19,12 +19,12 @@ import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.Look;
-import org.atlas.capture.NativePlugin;
-import org.atlas.capture.PageInk;
-import org.atlas.capture.PenBar;
-import org.atlas.capture.ReaderBars;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.Look;
+import org.kandinsky.capture.NativePlugin;
+import org.kandinsky.capture.PageInk;
+import org.kandinsky.capture.PenBar;
+import org.kandinsky.capture.ReaderBars;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -109,7 +109,7 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
         web.getSettings().setAllowContentAccess(false);
         web.getSettings().setTextZoom(100); // the reader's size is the size
         web.setWebViewClient(new Pages());
-        web.addJavascriptInterface(new Bridge(), "AtlasBook");
+        web.addJavascriptInterface(new Bridge(), "KandinskyBook");
         web.setVisibility(INVISIBLE);
         column.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
 
@@ -330,7 +330,7 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
     void turn(int dir) {
         if (doc == null) return;
         if (!Typeset.paged(options, eink)) {
-            web.evaluateJavascript("atlasPager.scrollBy(" + dir + ")", r -> {
+            web.evaluateJavascript("kandinskyPager.scrollBy(" + dir + ")", r -> {
                 if ("\"next\"".equals(r)) next();
                 else if ("\"prev\"".equals(r) && spine > 0) open(spine - 1, -1, "");
             });
@@ -340,7 +340,7 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
         if (n >= pages) { next(); return; }
         if (n < 0) { if (spine > 0) open(spine - 1, -1, ""); else host.toast("This is the beginning of the book."); return; }
         page = n;
-        web.evaluateJavascript("atlasPager.go(" + n + ")", null);
+        web.evaluateJavascript("kandinskyPager.go(" + n + ")", null);
         refreshed();
         shown();
     }
@@ -439,13 +439,13 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
     private int wantChar = -1;
 
     private void goToChar(int k) {
-        if (!Typeset.paged(options, eink)) { web.evaluateJavascript("(function(){var p=atlasInk.where([" + k + "]).at[0]; if(p) document.documentElement.scrollTop += p[1] - innerHeight/3;})()", r -> post(this::placeInk)); return; }
-        web.evaluateJavascript("(function(){var p=atlasInk.where([" + k + "]).at[0]; return p ? Math.floor((p[0] + document.documentElement.scrollLeft) / innerWidth) : -1;})()", r -> {
+        if (!Typeset.paged(options, eink)) { web.evaluateJavascript("(function(){var p=kandinskyInk.where([" + k + "]).at[0]; if(p) document.documentElement.scrollTop += p[1] - innerHeight/3;})()", r -> post(this::placeInk)); return; }
+        web.evaluateJavascript("(function(){var p=kandinskyInk.where([" + k + "]).at[0]; return p ? Math.floor((p[0] + document.documentElement.scrollLeft) / innerWidth) : -1;})()", r -> {
             int n;
             try { n = Integer.parseInt(r.trim()); } catch (Exception e) { return; }
             if (n < 0) return;
             page = Math.max(0, Math.min(pages - 1, n));
-            web.evaluateJavascript("atlasPager.go(" + page + ")", x -> shown());
+            web.evaluateJavascript("kandinskyPager.go(" + page + ")", x -> shown());
         });
     }
 
@@ -482,7 +482,7 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
         if (ks.length == 0) { ink.clear(); return; }
         StringBuilder a = new StringBuilder();
         for (int k : ks) { if (a.length() > 0) a.append(','); a.append(k); }
-        web.evaluateJavascript("window.atlasInk ? JSON.stringify(atlasInk.where([" + a + "])) : null", r -> {
+        web.evaluateJavascript("window.kandinskyInk ? JSON.stringify(kandinskyInk.where([" + a + "])) : null", r -> {
             try { String json = new JSONArray("[" + r + "]").optString(0, null); if (json != null) ink.placedAt(s, json); } catch (Exception e) { /* not laid out */ }
         });
     }
@@ -623,14 +623,14 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
     private void find(int s, String query, int nth) {
         if (s != spine) { wantFind = query; wantNth = nth; open(s, 0, ""); return; }
         boolean paged = Typeset.paged(options, eink);
-        web.evaluateJavascript("(function(){var m=atlasMarks.markFound(document," + JSONObject.quote(query) + "," + nth + "); if(!m) return -1; var r=m.getBoundingClientRect();"
+        web.evaluateJavascript("(function(){var m=kandinskyMarks.markFound(document," + JSONObject.quote(query) + "," + nth + "); if(!m) return -1; var r=m.getBoundingClientRect();"
             + (paged ? "return Math.floor((r.left + document.documentElement.scrollLeft) / innerWidth);" : "document.documentElement.scrollTop += r.top - innerHeight/3; return 0;") + "})()", r -> {
             if (!paged) { post(this::placeInk); return; }
             int n;
             try { n = Integer.parseInt(r.trim()); } catch (Exception e) { return; }
             if (n < 0) return;
             page = Math.max(0, Math.min(pages - 1, n));
-            web.evaluateJavascript("atlasPager.go(" + page + ")", x -> shown());
+            web.evaluateJavascript("kandinskyPager.go(" + page + ")", x -> shown());
         });
     }
 
@@ -732,8 +732,8 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
     /** Where the words under (x, y) (view px) are: {k, em, at: [x, y, h], quote} in CSS px, to `got` (null: none). */
     private void anchor(float x, float y, java.util.function.Consumer<JSONObject> got) {
         float d = getResources().getDisplayMetrics().density;
-        web.evaluateJavascript("(function(){var k=atlasInk.at(" + x / d + "," + y / d + "); if(k<0) return null; var w=atlasInk.where([k]);"
-            + " return JSON.stringify({k:k, em:w.em, at:w.at[0], quote:atlasInk.quote(k)});})()", r -> {
+        web.evaluateJavascript("(function(){var k=kandinskyInk.at(" + x / d + "," + y / d + "); if(k<0) return null; var w=kandinskyInk.where([k]);"
+            + " return JSON.stringify({k:k, em:w.em, at:w.at[0], quote:kandinskyInk.quote(k)});})()", r -> {
             JSONObject o = null;
             try { String json = new JSONArray("[" + r + "]").optString(0, null); if (json != null && !"null".equals(json)) o = new JSONObject(json); } catch (Exception e) { /* none */ }
             got.accept(o);
@@ -791,7 +791,7 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
 
     /** The selection kept in the book's note (made the first time with the book's properties) and marked here. */
     private void highlightSelection() {
-        web.evaluateJavascript("(function(){ var t = String(window.getSelection()).replace(/\\s+/g, ' ').trim(); if (t && window.atlasMarks) atlasMarks.markPassages(document, [t]); window.getSelection().removeAllRanges(); return t; })()", r -> {
+        web.evaluateJavascript("(function(){ var t = String(window.getSelection()).replace(/\\s+/g, ' ').trim(); if (t && window.kandinskyMarks) kandinskyMarks.markPassages(document, [t]); window.getSelection().removeAllRanges(); return t; })()", r -> {
             String text;
             try { text = new org.json.JSONArray("[" + r + "]").optString(0, ""); } catch (Exception e) { text = ""; }
             if (text.isEmpty()) return;
@@ -843,8 +843,8 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
         String head = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src https://book.local data: blob:; script-src 'nonce-" + nonce
             + "'; style-src https://book.local 'unsafe-inline'; img-src https://book.local data: blob:; font-src https://book.local data:\"/>"
             + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no\"/>"
-            + "<style id=\"atlas-type\">/*<![CDATA[*/\n" + css + "\n/*]]>*/</style>"
-            + "<script nonce=\"" + nonce + "\">//<![CDATA[\n" + marks() + "\nwindow.atlasPassages = " + passages + ";\n" + PAGER.replace("%PAGED%", String.valueOf(paged)) + "\n" + INK_JS + "\n//]]></script>";
+            + "<style id=\"kandinsky-type\">/*<![CDATA[*/\n" + css + "\n/*]]>*/</style>"
+            + "<script nonce=\"" + nonce + "\">//<![CDATA[\n" + marks() + "\nwindow.kandinskyPassages = " + passages + ";\n" + PAGER.replace("%PAGED%", String.valueOf(paged)) + "\n" + INK_JS + "\n//]]></script>";
         Matcher m = HEAD.matcher(html);
         if (m.find()) return html.substring(0, m.end()) + head + html.substring(m.end());
         m = HTML.matcher(html);
@@ -869,7 +869,7 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
         "function root(){ return document.documentElement; }",
         "function pages(){ return P ? Math.max(1, Math.round(root().scrollWidth / W())) : 1; }",
         "function page(){ return P ? Math.round(root().scrollLeft / W()) : 0; }",
-        "window.atlasPager = {",
+        "window.kandinskyPager = {",
         "  go: function(n){ root().scrollLeft = n * W(); return page(); },",
         "  pages: pages,",
         "  toFrag: function(id){ var e = document.getElementById(id); if (!e) return -1; if (P) return Math.floor((e.getBoundingClientRect().left + root().scrollLeft) / W()); e.scrollIntoView(); return 0; },",
@@ -883,36 +883,36 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
         "function noteText(h){ var i = h.indexOf('#'); if (i < 0) return null; var f = h.slice(0, i); if (f && location.pathname.split('/').pop() !== f.split('/').pop()) return null;",
         "  var el = document.getElementById(decodeURIComponent(h.slice(i + 1))); if (!el) return null; var box = el.closest('aside, li, p, dd, div') || el;",
         "  return (box.textContent || '').replace(/\\s+/g, ' ').trim(); }",
-        "function ready(){ try { if (window.atlasMarks && window.atlasPassages) atlasMarks.markPassages(document, atlasPassages); } catch (e) {} AtlasBook.ready(pages()); }",
+        "function ready(){ try { if (window.kandinskyMarks && window.kandinskyPassages) kandinskyMarks.markPassages(document, kandinskyPassages); } catch (e) {} KandinskyBook.ready(pages()); }",
         "window.addEventListener('load', function(){ (document.fonts ? document.fonts.ready : Promise.resolve()).then(function(){ requestAnimationFrame(ready); }); });",
         "document.addEventListener('click', function(e){",
         "  var a = e.target.closest ? e.target.closest('a[href]') : null;",
-        "  if (a) { e.preventDefault(); var h = a.getAttribute('href'); if (isNote(a)) AtlasBook.note(h, noteText(h) || ''); else AtlasBook.link(h); return; }",
+        "  if (a) { e.preventDefault(); var h = a.getAttribute('href'); if (isNote(a)) KandinskyBook.note(h, noteText(h) || ''); else KandinskyBook.link(h); return; }",
         "  var s = window.getSelection(); if (s && String(s).length) return;",
-        "  AtlasBook.tap(e.clientX / W(), e.clientY / innerHeight);",
+        "  KandinskyBook.tap(e.clientX / W(), e.clientY / innerHeight);",
         "}, true);",
         "var x0 = 0, y0 = 0, t0 = 0;",
         "document.addEventListener('touchstart', function(e){ var t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); }, { passive: true });",
         "document.addEventListener('touchend', function(e){ var t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;",
-        "  if (Math.abs(dx) > 50 && Math.abs(dx) > 2 * Math.abs(dy) && Date.now() - t0 < 800 && !String(window.getSelection())) AtlasBook.swipe(dx < 0 ? 1 : -1); }, { passive: true });",
-        "if (!P) { var tm = 0; window.addEventListener('scroll', function(){ clearTimeout(tm); tm = setTimeout(function(){ AtlasBook.scrolled(window.atlasPager.fraction()); }, 300); }, { passive: true }); }",
+        "  if (Math.abs(dx) > 50 && Math.abs(dx) > 2 * Math.abs(dy) && Date.now() - t0 < 800 && !String(window.getSelection())) KandinskyBook.swipe(dx < 0 ? 1 : -1); }, { passive: true });",
+        "if (!P) { var tm = 0; window.addEventListener('scroll', function(){ clearTimeout(tm); tm = setTimeout(function(){ KandinskyBook.scrolled(window.kandinskyPager.fraction()); }, 300); }, { passive: true }); }",
         "})();");
 
     /** The pinned notes' side (EpubInk): a character's index `k` in the chapter's text (marks.js textMap) under a point,
      *  where characters are now (viewport CSS px: left, top, line height) with the text's em, the words around one. */
     private static final String INK_JS = String.join("\n",
-        "window.atlasInk = {",
+        "window.kandinskyInk = {",
         "  at: function(x, y){ var r = document.caretRangeFromPoint(x, y); if (!r) return -1; var n = r.startContainer, o = r.startOffset;",
         "    if (n.nodeType !== 3) { var w = document.createTreeWalker(n.childNodes[o] || n, 4); var t = w.nextNode(); if (!t) return -1; n = t; o = 0; }",
-        "    var m = atlasMarks.textMap(document), ni = m.nodes.indexOf(n); if (ni < 0) return -1;",
+        "    var m = kandinskyMarks.textMap(document), ni = m.nodes.indexOf(n); if (ni < 0) return -1;",
         "    for (var k = 0; k < m.at.length; k++) if (m.at[k][0] > ni || (m.at[k][0] === ni && m.at[k][1] >= o)) return k;",
         "    return m.at.length - 1; },",
-        "  where: function(ks){ var m = atlasMarks.textMap(document), em = parseFloat(getComputedStyle(document.body).fontSize) || 16, out = [];",
+        "  where: function(ks){ var m = kandinskyMarks.textMap(document), em = parseFloat(getComputedStyle(document.body).fontSize) || 16, out = [];",
         "    for (var i = 0; i < ks.length; i++) { var k = ks[i]; if (k < 0 || k >= m.at.length) { out.push(null); continue; }",
         "      var a = m.at[k], node = m.nodes[a[0]], r = document.createRange(); r.setStart(node, a[1]); r.setEnd(node, Math.min(a[1] + 1, node.data.length));",
         "      var b = r.getClientRects()[0] || r.getBoundingClientRect(); out.push([b.left, b.top, b.height || em]); }",
         "    return { em: em, at: out }; },",
-        "  quote: function(k){ var t = atlasMarks.textMap(document).text, a = Math.max(0, t.lastIndexOf(' ', Math.max(0, k - 40)) + 1), b = t.indexOf(' ', Math.min(t.length, k + 60));",
+        "  quote: function(k){ var t = kandinskyMarks.textMap(document).text, a = Math.max(0, t.lastIndexOf(' ', Math.max(0, k - 40)) + 1), b = t.indexOf(' ', Math.min(t.length, k + 60));",
         "    return t.slice(a, b < 0 ? t.length : b); }",
         "};");
 
@@ -933,7 +933,7 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
         if (wantChar >= 0) { int k = wantChar; wantChar = -1; showAt(0, Typeset.paged(options, eink)); post(() -> goToChar(k)); return; }
         boolean paged = Typeset.paged(options, eink);
         if (!wantFrag.isEmpty()) {
-            web.evaluateJavascript("atlasPager.toFrag(" + JSONObject.quote(wantFrag) + ")", r -> {
+            web.evaluateJavascript("kandinskyPager.toFrag(" + JSONObject.quote(wantFrag) + ")", r -> {
                 int p = 0;
                 try { p = Math.max(0, Integer.parseInt(r.trim())); } catch (Exception e) { /* the start */ }
                 showAt(paged ? Math.min(p, pages - 1) : 0, paged);
@@ -943,13 +943,13 @@ final class ReaderView extends FrameLayout implements NativePlugin.Back {
         if (paged) showAt(wantAt < 0 ? pages - 1 : (int) Math.round(Math.max(0, Math.min(1, wantAt)) * (pages - 1)), true);
         else {
             scrolledAt = wantAt < 0 ? 1 : Math.max(0, Math.min(1, wantAt));
-            web.evaluateJavascript("atlasPager.scrollTo(" + scrolledAt + ")", r -> showAt(0, false));
+            web.evaluateJavascript("kandinskyPager.scrollTo(" + scrolledAt + ")", r -> showAt(0, false));
         }
     }
 
     private void showAt(int p, boolean paged) {
         page = p;
-        if (paged) web.evaluateJavascript("atlasPager.go(" + p + ")", r -> reveal());
+        if (paged) web.evaluateJavascript("kandinskyPager.go(" + p + ")", r -> reveal());
         else reveal();
     }
 

@@ -3,15 +3,15 @@ import { openFile } from "./open";
 
 // Obsidian Tasks' "Create or
 // edit task" dialog on any note's line: a plain line becomes a task, a task's fields are edited in place.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("the task dialog edits a task's fields in a plain note, and makes a task of a plain line", async ({ page, request }) => {
-  // <!-- atlas:no-tasks -->: the shared test vault's Home list must not grow
-  await request.put("/api/file", { headers: H, data: { path: "notes/task-dialog.md", text: "# Plain\n\n<!-- atlas:no-tasks -->\n- [ ] pay rent ⏫ 📅 2026-11-01 #home\nwater the plants\n" } });
+  // <!-- kandinsky:no-tasks -->: the shared test vault's Home list must not grow
+  await request.put("/api/file", { headers: H, data: { path: "notes/task-dialog.md", text: "# Plain\n\n<!-- kandinsky:no-tasks -->\n- [ ] pay rent ⏫ 📅 2026-11-01 #home\nwater the plants\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "task-dialog.md");
-  const text = () => page.evaluate(() => (window as any).__atlas.editor().text as string);
+  const text = () => page.evaluate(() => (window as any).__kandinsky.editor().text as string);
 
   // an existing task: its fields are in the form
   await page.locator(".cm-content").getByText("pay rent").click({ button: "right" });

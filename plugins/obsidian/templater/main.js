@@ -13,7 +13,7 @@ import {
 } from "./engine.js";
 
 const OBSIDIAN_TEMPLATER_JSON = ".obsidian/plugins/templater-obsidian/data.json";
-const FALLBACK_TEMPLATE_DIRS = ["zMeta/Templates", "Templates", "templates", ".atlas/templates"];
+const FALLBACK_TEMPLATE_DIRS = ["zMeta/Templates", "Templates", "templates", ".kandinsky/templates"];
 
 function humanLabel(templatePath, baseDir) {
   const clean = normPath(templatePath);
@@ -21,17 +21,17 @@ function humanLabel(templatePath, baseDir) {
   return rel.replace(/\.md$/i, "");
 }
 
-async function listMarkdownRecursive(atlas, dir, out = []) {
+async function listMarkdownRecursive(kandinsky, dir, out = []) {
   let entries = [];
   try {
-    entries = await atlas.list(dir);
+    entries = await kandinsky.list(dir);
   } catch {
     return out;
   }
   for (const e of entries) {
-    if (e.ignored && !e.path.startsWith(".atlas/templates")) continue;
+    if (e.ignored && !e.path.startsWith(".kandinsky/templates")) continue;
     if (e.dir) {
-      await listMarkdownRecursive(atlas, e.path, out);
+      await listMarkdownRecursive(kandinsky, e.path, out);
     } else if (/\.md$/i.test(e.name)) {
       out.push(e);
     }
@@ -39,13 +39,13 @@ async function listMarkdownRecursive(atlas, dir, out = []) {
   return out;
 }
 
-async function fileDates(atlas, targetPath, fallback = new Date()) {
+async function fileDates(kandinsky, targetPath, fallback = new Date()) {
   const clean = normPath(targetPath);
   const dir = clean.includes("/") ? clean.slice(0, clean.lastIndexOf("/")) : "";
   const name = clean.includes("/") ? clean.slice(clean.lastIndexOf("/") + 1) : clean;
   try {
-    if (dir && !(await atlas.exists(dir))) return { ctime: fallback, mtime: fallback };
-    const entries = await atlas.list(dir);
+    if (dir && !(await kandinsky.exists(dir))) return { ctime: fallback, mtime: fallback };
+    const entries = await kandinsky.list(dir);
     const hit = entries.find((e) => e.name === name || normPath(e.path) === clean);
     if (hit?.mtime) {
       const d = new Date(hit.mtime * 1000);
@@ -63,8 +63,8 @@ function splitFrontmatter(text) {
   return m ? { frontmatterBlock: m[1], body: m[2] } : { frontmatterBlock: "", body: s };
 }
 
-export function register(atlas) {
-  const settings = atlas.plugin.settings ?? {};
+export function register(kandinsky) {
+  const settings = kandinsky.plugin.settings ?? {};
   const recentlyWritten = new Set();
   let cachedObsidianConfig = null;
 
@@ -78,8 +78,8 @@ export function register(atlas) {
     if (cachedObsidianConfig) return cachedObsidianConfig;
     const cfg = { templatesFolder: "", folderTemplates: [], ignoreFolders: [] };
     try {
-      if (await atlas.exists(OBSIDIAN_TEMPLATER_JSON)) {
-        const raw = await atlas.readText(OBSIDIAN_TEMPLATER_JSON);
+      if (await kandinsky.exists(OBSIDIAN_TEMPLATER_JSON)) {
+        const raw = await kandinsky.readText(OBSIDIAN_TEMPLATER_JSON);
         const parsed = JSON.parse(raw);
         if (typeof parsed?.templates_folder === "string" && parsed.templates_folder.trim()) {
           cfg.templatesFolder = normPath(parsed.templates_folder);
@@ -106,7 +106,7 @@ export function register(atlas) {
     return cfg;
   }
 
-  atlas.onFilesChanged((paths) => {
+  kandinsky.onFilesChanged((paths) => {
     if (!paths.length || paths.some((p) => normPath(p) === OBSIDIAN_TEMPLATER_JSON)) {
       cachedObsidianConfig = null;
     }
@@ -136,11 +136,11 @@ export function register(atlas) {
     const clean = normPath(templateRef);
     if (!clean) return null;
     const withMd = /\.md$/i.test(clean) ? clean : `${clean}.md`;
-    if (await atlas.exists(withMd)) return withMd;
+    if (await kandinsky.exists(withMd)) return withMd;
     const dirs = await candidateTemplateDirs();
     for (const dir of dirs) {
       const candidate = `${dir}/${withMd}`;
-      if (await atlas.exists(candidate)) return candidate;
+      if (await kandinsky.exists(candidate)) return candidate;
     }
     return null;
   }
@@ -152,8 +152,8 @@ export function register(atlas) {
     const list = [];
 
     for (const dir of dirs) {
-      if (!(await atlas.exists(dir))) continue;
-      const files = await listMarkdownRecursive(atlas, dir);
+      if (!(await kandinsky.exists(dir))) continue;
+      const files = await listMarkdownRecursive(kandinsky, dir);
       for (const f of files) {
         const p = normPath(f.path);
         if (seen.has(p)) continue;
@@ -177,13 +177,13 @@ export function register(atlas) {
   }
 
   async function renderTemplateForNote(templatePath, targetPath, opts = {}) {
-    const rawTemplate = await atlas.readText(templatePath);
+    const rawTemplate = await kandinsky.readText(templatePath);
     const now = new Date();
-    const { ctime, mtime } = await fileDates(atlas, targetPath, now);
+    const { ctime, mtime } = await fileDates(kandinsky, targetPath, now);
     let frontmatter = {};
     try {
-      if (await atlas.exists(targetPath)) {
-        frontmatter = await atlas.noteProps(targetPath);
+      if (await kandinsky.exists(targetPath)) {
+        frontmatter = await kandinsky.noteProps(targetPath);
       }
     } catch {
       frontmatter = {};
@@ -192,11 +192,11 @@ export function register(atlas) {
     const nestedSeen = new Set([normPath(templatePath)]);
     const expandNested = async (nestedTplPath) => {
       const np = normPath(nestedTplPath);
-      if (nestedSeen.has(np) || !(await atlas.exists(np))) return "";
+      if (nestedSeen.has(np) || !(await kandinsky.exists(np))) return "";
       nestedSeen.add(np);
-      const subRaw = await atlas.readText(np);
+      const subRaw = await kandinsky.readText(np);
       const subRes = await expandTemplateText(subRaw, {
-        atlas,
+        kandinsky,
         targetPath,
         title: opts.title,
         now,
@@ -212,7 +212,7 @@ export function register(atlas) {
     };
 
     return expandTemplateText(rawTemplate, {
-      atlas,
+      kandinsky,
       targetPath,
       title: opts.title,
       now,
@@ -227,16 +227,16 @@ export function register(atlas) {
   }
 
   async function insertOrApplyTemplate(touch) {
-    const activePath = normPath(touch?.path ?? atlas.context()?.active?.path ?? "");
+    const activePath = normPath(touch?.path ?? kandinsky.context()?.active?.path ?? "");
     if (!activePath || !/\.md$/i.test(activePath)) {
-      atlas.toast("Templater", "Open a Markdown note first, or use New → Note from Templater template…", "info");
+      kandinsky.toast("Templater", "Open a Markdown note first, or use New → Note from Templater template…", "info");
       return;
     }
 
-    const currentText = await atlas.readText(activePath).catch(() => "");
+    const currentText = await kandinsky.readText(activePath).catch(() => "");
     const hasUnexpandedTags = /<%[\s*_-]?[\s\S]*?%>/.test(currentText);
 
-    atlas.pick({
+    kandinsky.pick({
       placeholder: `Template to insert into ${noteTitleFromPath(activePath)}…`,
       tag: "Templater",
       icon: "file-code",
@@ -265,7 +265,7 @@ export function register(atlas) {
           items.push({
             value: "",
             title: "No templates found",
-            detail: "Place .md templates in zMeta/Templates/, Templates/, or .atlas/templates/",
+            detail: "Place .md templates in zMeta/Templates/, Templates/, or .kandinsky/templates/",
           });
         }
         return items;
@@ -275,10 +275,10 @@ export function register(atlas) {
         try {
           if (chosen === "__expand_current__") {
             const now = new Date();
-            const { ctime, mtime } = await fileDates(atlas, activePath, now);
-            const frontmatter = await atlas.noteProps(activePath).catch(() => ({}));
+            const { ctime, mtime } = await fileDates(kandinsky, activePath, now);
+            const frontmatter = await kandinsky.noteProps(activePath).catch(() => ({}));
             const { text: expanded } = await expandTemplateText(currentText, {
-              atlas,
+              kandinsky,
               targetPath: activePath,
               now,
               ctime,
@@ -289,8 +289,8 @@ export function register(atlas) {
               resolveTemplate: resolveTemplatePath,
             });
             markRecent(activePath);
-            await atlas.writeText(activePath, expanded);
-            atlas.toast("Templater", `Expanded tags in ${noteTitleFromPath(activePath)}`, "success", { timeout: 2500 });
+            await kandinsky.writeText(activePath, expanded);
+            kandinsky.toast("Templater", `Expanded tags in ${noteTitleFromPath(activePath)}`, "success", { timeout: 2500 });
             return;
           }
 
@@ -305,13 +305,13 @@ export function register(atlas) {
               touch.replace(expanded);
             } else {
               markRecent(activePath);
-              await atlas.writeText(activePath, expanded);
+              await kandinsky.writeText(activePath, expanded);
             }
             return;
           }
           if (isEmptyOrFrontmatterOnly(currentText)) {
             markRecent(activePath);
-            await atlas.writeText(activePath, expanded);
+            await kandinsky.writeText(activePath, expanded);
             return;
           }
 
@@ -327,10 +327,10 @@ export function register(atlas) {
           } else {
             markRecent(activePath);
             const sep = currentText.endsWith("\n") ? "" : "\n";
-            await atlas.writeText(activePath, `${currentText}${sep}${toInsert}`);
+            await kandinsky.writeText(activePath, `${currentText}${sep}${toInsert}`);
           }
         } catch (err) {
-          atlas.toast("Templater", err?.message ? String(err.message) : String(err), "error");
+          kandinsky.toast("Templater", err?.message ? String(err.message) : String(err), "error");
         }
       },
     });
@@ -339,11 +339,11 @@ export function register(atlas) {
   async function createNoteFromTemplate() {
     const templates = await discoverTemplates();
     if (!templates.length) {
-      atlas.toast("Templater", "No templates found in zMeta/Templates/, Templates/, or .atlas/templates/.", "error");
+      kandinsky.toast("Templater", "No templates found in zMeta/Templates/, Templates/, or .kandinsky/templates/.", "error");
       return;
     }
 
-    atlas.pick({
+    kandinsky.pick({
       placeholder: "Choose a Templater template…",
       tag: "Template",
       icon: "file-code",
@@ -357,13 +357,13 @@ export function register(atlas) {
         if (!tplPath) return;
         const tpl = templates.find((t) => t.path === tplPath);
         const mappedFolder = tpl?.folders?.[0] && tpl.folders[0] !== "/" ? tpl.folders[0] : "";
-        const activePath = normPath(atlas.context()?.active?.path ?? "");
+        const activePath = normPath(kandinsky.context()?.active?.path ?? "");
         const activeDir = /\.md$/i.test(activePath) ? folderFromPath(activePath, true) : "";
         const defaultFolder = mappedFolder || (activeDir && activeDir !== "/" ? activeDir : "");
         const isDaily = /daily/i.test(tpl?.title ?? "");
         const todaySeed = isDaily ? new Date().toLocaleDateString("sv-SE") : "";
 
-        atlas.pick({
+        kandinsky.pick({
           placeholder: defaultFolder ? `Note title (created in ${defaultFolder}/)…` : "Note title (or folder/Title)…",
           tag: tpl?.title ?? "New Note",
           icon: "file-text",
@@ -382,7 +382,7 @@ export function register(atlas) {
             // Find an unused file path without overwriting existing notes
             let targetPath = basePath;
             let suffix = 2;
-            while (await atlas.exists(targetPath)) {
+            while (await kandinsky.exists(targetPath)) {
               targetPath = `${basePath.replace(/\.md$/i, "")} ${suffix}.md`;
               suffix++;
             }
@@ -391,15 +391,15 @@ export function register(atlas) {
               const { text: expanded, movedPath } = await renderTemplateForNote(tplPath, targetPath, {
                 title: noteTitleFromPath(targetPath),
               });
-              const finalPath = movedPath && !(await atlas.exists(movedPath)) ? movedPath : targetPath;
+              const finalPath = movedPath && !(await kandinsky.exists(movedPath)) ? movedPath : targetPath;
               markRecent(finalPath);
-              const created = await atlas.createFile(finalPath, expanded);
+              const created = await kandinsky.createFile(finalPath, expanded);
               if (!created) {
-                await atlas.writeText(finalPath, expanded);
+                await kandinsky.writeText(finalPath, expanded);
               }
-              atlas.open(finalPath);
+              kandinsky.open(finalPath);
             } catch (err) {
-              atlas.toast("Templater", err?.message ? String(err.message) : String(err), "error");
+              kandinsky.toast("Templater", err?.message ? String(err.message) : String(err), "error");
             }
           },
         });
@@ -408,19 +408,19 @@ export function register(atlas) {
   }
 
   // Palette command: Templater: Insert or apply template…
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "insert",
     title: "Templater: Insert or apply template…",
     run: () => insertOrApplyTemplate(null),
   });
 
   // Editor key: Alt+E inside Markdown notes
-  atlas.editor.registerKey("Alt+E", (touch) => {
+  kandinsky.editor.registerKey("Alt+E", (touch) => {
     void insertOrApplyTemplate(touch);
   }, "note");
 
   // New… menu integration
-  atlas.registerNew({
+  kandinsky.registerNew({
     id: "from-template",
     title: "Note from Templater template…",
     detail: "Choose a Templater template and expand <% tp.* %> tags",
@@ -429,7 +429,7 @@ export function register(atlas) {
   });
 
   // Auto-apply folder templates on newly created empty (or frontmatter-only) Markdown notes
-  atlas.on("file:create", async (ev) => {
+  kandinsky.on("file:create", async (ev) => {
     if (settings.auto_folder_templates === false) return;
     const createdPath = normPath(ev.path);
     if (!createdPath || !/\.md$/i.test(createdPath) || recentlyWritten.has(createdPath)) return;
@@ -448,7 +448,7 @@ export function register(atlas) {
 
     let existingText = "";
     try {
-      existingText = await atlas.readText(createdPath);
+      existingText = await kandinsky.readText(createdPath);
     } catch {
       return;
     }
@@ -461,10 +461,10 @@ export function register(atlas) {
         content: existingText,
       });
       markRecent(createdPath);
-      await atlas.writeText(createdPath, expanded);
-      atlas.toast("Templater", `Applied ${noteTitleFromPath(tplPath)} template`, "info", { timeout: 2200 });
+      await kandinsky.writeText(createdPath, expanded);
+      kandinsky.toast("Templater", `Applied ${noteTitleFromPath(tplPath)} template`, "info", { timeout: 2200 });
     } catch (err) {
-      atlas.toast("Templater", err?.message ? String(err.message) : String(err), "error");
+      kandinsky.toast("Templater", err?.message ? String(err.message) : String(err), "error");
     }
   });
 }

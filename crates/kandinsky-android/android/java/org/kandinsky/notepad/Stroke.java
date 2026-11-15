@@ -1,10 +1,10 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.graphics.Canvas;
 import android.graphics.Path;
 import android.graphics.RectF;
 
-import org.atlas.capture.Host;
+import org.kandinsky.capture.Host;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -16,7 +16,7 @@ import java.util.List;
 /** A pen stroke drawn by openink (Host.penInk): its samples (x, y, pressure, tiltX, tiltY, tMs), its pen and config,
  *  its colour; its ink made from them, so it is a pure function of what the file keeps. Saved as an Excalidraw
  *  `freedraw` (points + pressures, which every Excalidraw draws) with `customData.openink` = { pen, config, tilt, t }
- *  (which a Boox redraws exactly) and `customData.atlasPen`, the web notepad's closest pen. */
+ *  (which a Boox redraws exactly) and `customData.kandinskyPen`, the web notepad's closest pen. */
 final class Stroke extends Item {
     static final int SAMPLE = 6;
     /** When its pen came down (event time, ms; 0 for a stroke read from the file): the clock its samples' t counts from. */
@@ -38,7 +38,7 @@ final class Stroke extends Item {
         return samples.length == 0 ? 0.5f : sum / (samples.length / SAMPLE);
     }
 
-    /** The web notepad's pen closest to openink's (its `customData.atlasPen`). */
+    /** The web notepad's pen closest to openink's (its `customData.kandinskyPen`). */
     static String webPen(int pen) { return pen == 0 ? "ballpoint" : pen == HIGHLIGHTER ? "highlighter" : "fountain"; }
 
     int pen;
@@ -229,7 +229,7 @@ final class Stroke extends Item {
 
     /** A freedraw as a stroke: its openink samples and config when a Boox wrote it; its openink pen at that pen's
      *  defaults when only the pen is named (imported from Boox Notes); else its points and pressures with the closest
-     *  pen (a stroke from Excalidraw or Atlas's web notepad, approximated). Null when it has no points. */
+     *  pen (a stroke from Excalidraw or Kandinsky's web notepad, approximated). Null when it has no points. */
     static Stroke from(JSONObject e, Host host, float density) {
         JSONArray pts = e.optJSONArray("points");
         if (pts == null || pts.length() == 0) return null;
@@ -263,7 +263,7 @@ final class Stroke extends Item {
             for (int i = 0; i < s.cfg.length; i++) s.cfg[i] = (float) cfg.optDouble(i);
         } else {
             // the pen named (the Boox Notes importer writes openink's pen and times, no config), else the web pen's nearest
-            String web = custom != null ? custom.optString("atlasPen") : "";
+            String web = custom != null ? custom.optString("kandinskyPen") : "";
             s.pen = oi != null && oi.has("pen") ? Math.max(0, Math.min(Host.PENS.length - 1, oi.optInt("pen", 1)))
                 : "ballpoint".equals(web) ? 0 : "highlighter".equals(web) ? HIGHLIGHTER : 1;
             s.cfg = sceneDefaults(host, s.pen, density);
@@ -294,7 +294,7 @@ final class Stroke extends Item {
         }
         for (float c : cfg) cfgs.put(Math.round(c * 10000) / 10000.0);
         JSONObject custom = source != null && source.optJSONObject("customData") != null ? new JSONObject(source.optJSONObject("customData").toString()) : new JSONObject();
-        custom.put("atlasPen", webPen(pen)).put("openink", new JSONObject().put("pen", pen).put("config", cfgs).put("tilt", tilt).put("t", t));
+        custom.put("kandinskyPen", webPen(pen)).put("openink", new JSONObject().put("pen", pen).put("config", cfgs).put("tilt", tilt).put("t", t));
         return Figure.base(source, "freedraw", id, x0, y0, maxX - minX, maxY - minY, frame)
             .put("strokeColor", color).put("strokeWidth", Geometry.r2(cfg[0] / outline())).put("opacity", pen == HIGHLIGHTER ? 50 : 100)
             .put("link", link == null ? JSONObject.NULL : link)

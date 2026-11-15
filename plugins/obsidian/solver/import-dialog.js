@@ -1,7 +1,7 @@
 // Solver-to-Note Import Dialog (import-dialog.js): browse local Solver derivations or .zip exports and import into Kandinsky notes.
 
-function getSettings(atlas) {
-  const s = (atlas.plugin && atlas.plugin.settings) || {};
+function getSettings(kandinsky) {
+  const s = (kandinsky.plugin && kandinsky.plugin.settings) || {};
   return {
     url: String(s.url || "http://localhost:4200").trim().replace(/\/+$/, ""),
     apiUrl: String(s.api_url || "http://127.0.0.1:3000").trim().replace(/\/+$/, ""),
@@ -9,17 +9,17 @@ function getSettings(atlas) {
   };
 }
 
-async function pickUniqueNotePath(atlas, folder, fileName) {
+async function pickUniqueNotePath(kandinsky, folder, fileName) {
   const stem = fileName.replace(/\.md$/i, "") || "Solver Derivation";
   for (let n = 1; n <= 99; n++) {
     const leaf = n === 1 ? `${stem}.md` : `${stem} (${n}).md`;
     const candidate = folder ? `${folder}/${leaf}` : leaf;
-    if (!(await atlas.exists(candidate))) return candidate;
+    if (!(await kandinsky.exists(candidate))) return candidate;
   }
   return folder ? `${folder}/${stem}-${Date.now()}.md` : `${stem}-${Date.now()}.md`;
 }
 
-export default function mountImportDialog(host, atlas) {
+export default function mountImportDialog(host, kandinsky) {
   let disposed = false;
   let loading = true;
   let importing = false;
@@ -33,12 +33,12 @@ export default function mountImportDialog(host, atlas) {
   let includeCode = true;
   let errorMsg = "";
 
-  const cfg = getSettings(atlas);
+  const cfg = getSettings(kandinsky);
   let argObj = null;
   try {
-    if (atlas.arg) argObj = JSON.parse(atlas.arg);
+    if (kandinsky.arg) argObj = JSON.parse(kandinsky.arg);
   } catch {}
-  const targetNotePath = (argObj && argObj.targetPath) || (atlas.context()?.active?.path ?? "");
+  const targetNotePath = (argObj && argObj.targetPath) || (kandinsky.context()?.active?.path ?? "");
   const canAppend = Boolean(targetNotePath && /\.md$/i.test(targetNotePath));
 
   host.style.display = "flex";
@@ -87,10 +87,10 @@ export default function mountImportDialog(host, atlas) {
     errorMsg = "";
     render();
     try {
-      const res = await atlas.helper.call(
+      const res = await kandinsky.helper.call(
         "listConversations",
         { url: cfg.url, apiUrl: cfg.apiUrl, scanDownloads },
-        { timeout: 15 },
+        { timeout: 35 },
       );
       if (disposed) return;
       backendOnline = Boolean(res && res.backendOnline);
@@ -127,7 +127,7 @@ export default function mountImportDialog(host, atlas) {
     errorMsg = "";
     render();
     try {
-      const res = await atlas.helper.call(
+      const res = await kandinsky.helper.call(
         "exportMarkdown",
         { apiUrl: cfg.apiUrl, conversationId, zipPath, includeCode, onlyVerified },
         { timeout: 25 },
@@ -138,18 +138,18 @@ export default function mountImportDialog(host, atlas) {
       }
 
       if (mode === "append" && canAppend) {
-        const existing = await atlas.readText(targetNotePath);
+        const existing = await kandinsky.readText(targetNotePath);
         const sep = existing.endsWith("\n") ? "\n---\n\n" : "\n\n---\n\n";
-        await atlas.writeText(targetNotePath, existing + sep + res.bodyOnly);
-        atlas.toast("Appended Solver derivation", `Added ${res.stepCount} step(s) to ${targetNotePath}`, "success");
-        atlas.open(targetNotePath);
-        atlas.pane?.close();
+        await kandinsky.writeText(targetNotePath, existing + sep + res.bodyOnly);
+        kandinsky.toast("Appended Solver derivation", `Added ${res.stepCount} step(s) to ${targetNotePath}`, "success");
+        kandinsky.open(targetNotePath);
+        kandinsky.pane?.close();
       } else {
-        const dest = await pickUniqueNotePath(atlas, cfg.notesFolder, res.suggestedFileName || "Solver Derivation.md");
-        await atlas.writeText(dest, res.markdown);
-        atlas.toast("Imported Solver note", `Saved ${dest} (${res.stepCount} step(s))`, "success");
-        atlas.open(dest, undefined, { beside: true });
-        atlas.pane?.close();
+        const dest = await pickUniqueNotePath(kandinsky, cfg.notesFolder, res.suggestedFileName || "Solver Derivation.md");
+        await kandinsky.writeText(dest, res.markdown);
+        kandinsky.toast("Imported Solver note", `Saved ${dest} (${res.stepCount} step(s))`, "success");
+        kandinsky.open(dest, undefined, { beside: true });
+        kandinsky.pane?.close();
       }
     } catch (e) {
       errorMsg = String((e && e.message) || e);

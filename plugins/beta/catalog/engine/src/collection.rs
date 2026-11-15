@@ -40,13 +40,13 @@ pub struct Library {
     /// the fields under each cover and at the top of the item's note
     #[serde(default)]
     pub key: Vec<String>,
-    /// an Atlas icon name for the collection's tile and page
+    /// an Kandinsky icon name for the collection's tile and page
     #[serde(default)]
     pub icon: Option<String>,
     /// make the index page and `.base` with the first note (`false`: the vault has its own bases)
     #[serde(default = "yes")]
     pub index: bool,
-    /// the library of Atlas's Library page this kind is a tab of (`in: Music`); none: one of its own (main.js `libraryOf`)
+    /// the library of Kandinsky's Library page this kind is a tab of (`in: Music`); none: one of its own (main.js `libraryOf`)
     #[serde(default, rename = "in", skip_serializing_if = "Option::is_none")]
     pub within: Option<String>,
 }
@@ -90,7 +90,7 @@ pub fn base(kind: &Kind) -> String {
     cols.extend(lib.group.iter().cloned());
     cols.dedup();
     let order = format!("[{}]", cols.join(", "));
-    // the cards carry the picture as a column too: Obsidian reads `image`, Atlas's block reads the column
+    // the cards carry the picture as a column too: Obsidian reads `image`, Kandinsky's block reads the column
     let mut card_cols = cols.clone();
     card_cols.splice(1..1, lib.cover.iter().cloned());
     let cards = format!("[{}]", card_cols.join(", "));

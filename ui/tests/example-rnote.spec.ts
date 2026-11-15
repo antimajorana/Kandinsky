@@ -33,7 +33,7 @@ test("every kind in the user's Rnote files becomes its Excalidraw element", asyn
   const s = await convert(new Uint8Array(sample()), { encodePng: rawPng });
   const els = s.elements;
   expect(els.map((e: { type: string }) => e.type)).toEqual(["freedraw", "line", "text", "image", "image"]);
-  expect(s.atlas.skipped, "the unknown kind is counted, not dropped silently").toBe(1);
+  expect(s.kandinsky.skipped, "the unknown kind is counted, not dropped silently").toBe(1);
 
   const pen = els[0];
   expect([pen.x, pen.y]).toEqual([10, 20]);
@@ -68,7 +68,7 @@ test("the drawing goes beside the .rnote, never over another file, and one made 
     create: async (p: string, text: string) => (p in files ? false : ((files[p] = text), true)),
     read: async (p: string) => { if (!(p in files)) throw new Error(`asked for a missing file: ${p}`); return files[p]; },
   };
-  const ours = JSON.stringify({ type: "excalidraw", atlas: { from: "rnote" } });
+  const ours = JSON.stringify({ type: "excalidraw", kandinsky: { from: "rnote" } });
   expect(await writeBeside("lec.rnote", ours, io)).toEqual({ path: "lec (2).excalidraw", made: true });
   expect(files["lec.excalidraw"], "the user's own drawing is untouched").toBe('{"type":"excalidraw","elements":[]}');
   expect(await writeBeside("lec.rnote", ours, io)).toEqual({ path: "lec (2).excalidraw", made: false });

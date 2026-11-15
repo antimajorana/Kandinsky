@@ -140,7 +140,7 @@ async function compile(src: TikzSource, key: string): Promise<TikzResult> {
 
 const memory = new Map<string, string>(); // the pictures drawn this run (a diagram being edited leaves one per version)
 const MEMORY_KEPT = 200;
-const DB = "atlas-tikz";
+const DB = "kandinsky-tikz";
 
 async function hashOf(text: string): Promise<string> {
   const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));

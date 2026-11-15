@@ -5,9 +5,9 @@
 //!   - else it says it was skipped and passes.
 //!
 //! Each run makes calendars of its own (random names) in the account's home, and removes them.
-use atlas_dav::caldav::{Account, Client, DavError, Existing, Outcome};
-use atlas_dav::ics::{self, Event, When};
-use atlas_dav::uid;
+use kandinsky_dav::caldav::{Account, Client, DavError, Existing, Outcome};
+use kandinsky_dav::ics::{self, Event, When};
+use kandinsky_dav::uid;
 use chrono::{Duration, Local, NaiveDate, Utc};
 use serde_json::{json, Value};
 use std::io::Write;
@@ -37,7 +37,7 @@ impl Drop for Server {
 
 fn scratch(tag: &str) -> PathBuf {
     let dir =
-        std::env::temp_dir().join(format!("atlas-dav-{tag}-{}-{}", std::process::id(), Utc::now().timestamp_micros()));
+        std::env::temp_dir().join(format!("kandinsky-dav-{tag}-{}-{}", std::process::id(), Utc::now().timestamp_micros()));
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -127,7 +127,7 @@ fn day(s: &str) -> NaiveDate {
 fn cli(root: &Path, method: &str, params: Value) -> Value {
     let mut child = Command::new(env!("CARGO_BIN_EXE_dav"))
         .arg(method)
-        .env("ATLAS_ROOT", root)
+        .env("KANDINSKY_ROOT", root)
         .current_dir(root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -177,7 +177,7 @@ fn caldav_against_a_real_server() {
         summary: "Due: rapport, v2; final".into(),
         start: When::parse("2026-11-15").unwrap(),
         end: None,
-        description: Some("From the note mail/a.md in Atlas\nline two".into()),
+        description: Some("From the note mail/a.md in Kandinsky\nline two".into()),
         location: Some("Room 204, Main Building".into()),
         source: Some("mail/a.md".into()),
     };
@@ -191,7 +191,7 @@ fn caldav_against_a_real_server() {
     let got = &listed[0].event;
     assert_eq!((got.summary.as_str(), got.start.as_str(), got.all_day), ("Due: rapport final", "2026-11-15", true));
     assert_eq!(got.location.as_deref(), Some("Room 204, Main Building"), "escaping survives the server");
-    assert_eq!(got.description.as_deref(), Some("From the note mail/a.md in Atlas\nline two"));
+    assert_eq!(got.description.as_deref(), Some("From the note mail/a.md in Kandinsky\nline two"));
     assert!(c.events(&cal, day("2026-12-01"), day("2026-12-31")).unwrap().is_empty(), "the range is honoured");
 
     // an invite: kept as the server has it; its UID (with @) found again; a cancelled meeting is not this module's job

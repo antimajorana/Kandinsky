@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -14,14 +14,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** The pages of a vault document drawn on the fly (memory `project_paper_core.md`). A drawing over a PDF holds, per page, an image element with no file — `fileId` `fileId(path, n)`,
- *  `customData.atlasPage = {file, page}` — and whoever paints it (Notepad's Painter, the book reader) asks here. Pages
+ *  `customData.kandinskyPage = {file, page}` — and whoever paints it (Notepad's Painter, the book reader) asks here. Pages
  *  are rendered by PDFium when the APK carries it (Pdfium.java, the desktop's engine), else Android's PdfRenderer, off the UI thread at the width they are drawn (in steps, so a zoom reuses
  *  them), kept in a shared cache; `ready` runs on the UI thread when a page asked for is there. */
 public final class PageSource {
     private PageSource() {}
 
     /** The element's file id for page `page` (1-based) of `path`: the same on every device and on the web. */
-    public static String fileId(String path, int page) { return "atlas-page-" + Integer.toHexString(path.hashCode()) + "-" + page; }
+    public static String fileId(String path, int page) { return "kandinsky-page-" + Integer.toHexString(path.hashCode()) + "-" + page; }
 
     private static final ExecutorService render = Executors.newSingleThreadExecutor();
     private static final Handler ui = new Handler(Looper.getMainLooper());
@@ -58,7 +58,7 @@ public final class PageSource {
                     try {
                         Bitmap got = draw(host, path, page, w);
                         if (got != null) cache.put(key, got);
-                    } catch (Exception | OutOfMemoryError e) { android.util.Log.w("AtlasPages", path + " page " + page + ": " + e); }
+                    } catch (Exception | OutOfMemoryError e) { android.util.Log.w("KandinskyPages", path + " page " + page + ": " + e); }
                     java.util.List<Runnable> told;
                     synchronized (asked) { told = asked.remove(key); }
                     if (told != null) for (Runnable r : told) ui.post(r);
@@ -101,7 +101,7 @@ public final class PageSource {
                 if (page < 1 || page > s.length) return null;
                 int h = Math.max(1, Math.round(width * s[page - 1][1] / Math.max(1f, s[page - 1][0])));
                 return Pdfium.render(host.local(path).getAbsolutePath(), page, width, h, 0); // on white already
-            } catch (IllegalArgumentException e) { android.util.Log.w("AtlasPages", "PDFium: " + e.getMessage() + "; PdfRenderer instead"); }
+            } catch (IllegalArgumentException e) { android.util.Log.w("KandinskyPages", "PDFium: " + e.getMessage() + "; PdfRenderer instead"); }
         }
         PdfRenderer r;
         try { r = renderer(host, path); } catch (Exception e) { closeOpen(); throw e; }
@@ -126,7 +126,7 @@ public final class PageSource {
             Bitmap got = render.submit(() -> draw(host, path, page, w)).get();
             if (got != null) cache.put(key, got);
             return got;
-        } catch (Exception e) { android.util.Log.w("AtlasPages", path + " page " + page + ": " + e); return null; }
+        } catch (Exception e) { android.util.Log.w("KandinskyPages", path + " page " + page + ": " + e); return null; }
     }
 
     /** Pages `from`..`to` rendered ahead at about `px` wide (the next turn is then instant); nothing returned. */

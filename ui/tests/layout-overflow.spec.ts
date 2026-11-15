@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // The shell never scrolls; panes scroll inside (lib/diagnostics.ts writes "layout overflow" to
-// .atlas/cache/ui.log when it does). Found there: a terminal tab restored but not yet shown had no
+// .kandinsky/cache/ui.log when it does). Found there: a terminal tab restored but not yet shown had no
 // position, sat under the dock and made the dock twice as tall as its box.
 const SHELL = ".main, .dock-wrap, .dock, .dv-dockview, .dv-grid-view, .dv-view";
 const overflowing = (page: import("@playwright/test").Page) => page.evaluate((sel) =>

@@ -8,7 +8,7 @@ from Xlib.ext import xtest
 
 d = display.Display()
 g = d.screen().root.get_geometry()
-if f"{g.width}x{g.height}" not in os.environ.get("ATLAS_LOOK_SCREEN", "1280x800").split():
+if f"{g.width}x{g.height}" not in os.environ.get("KANDINSKY_LOOK_SCREEN", "1280x800").split():
     sys.exit(f"refusing: {d.get_display_name()} is {g.width}x{g.height}, not look.sh's nested screen")
 
 def press(keysym, shift=False):

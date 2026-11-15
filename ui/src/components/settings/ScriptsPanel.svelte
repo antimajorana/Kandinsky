@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Workspace commands (.atlas/commands/*.toml): what exists, what runs by itself, who added it.
+  // Workspace commands (.kandinsky/commands/*.toml): what exists, what runs by itself, who added it.
   import { onMount } from "svelte";
   import { allCommands, keymap, loadKeymap } from "../../lib/keymap.svelte";
   import { open, openPath } from "../../lib/dock";
@@ -19,7 +19,7 @@
 
 <section class="settings-panel scripts">
   <h3>Workspace commands <span class="n">{scripts.length}</span></h3>
-  <p class="desc">Shell lines saved as commands in <code>.atlas/commands/</code>: in the palette, with a shortcut, optionally on a schedule.</p>
+  <p class="desc">Shell lines saved as commands in <code>.kandinsky/commands/</code>: in the palette, with a shortcut, optionally on a schedule.</p>
   <ul>
     {#each scripts as c (c.id)}
       <li>

@@ -1136,7 +1136,7 @@ var W = (e, t) => `${e}_1 ${t} ${e}_2 ${t} \\cdots ${t} ${e}_{\${1:n}}$0`, G = {
 			name: "Flip the first letter's case"
 		})
 	], e)
-}, K = ".atlas/snippets", q = `${K}/converted.js`, J = `${K}/latex.js`, Y = {
+}, K = ".kandinsky/snippets", q = `${K}/converted.js`, J = `${K}/latex.js`, Y = {
 	...i,
 	std: z,
 	options: G
@@ -1178,7 +1178,7 @@ async function fe(e) {
 }
 async function pe(e, t = !0) {
 	let n = [], r = [], i = [];
-	await e.exists(".atlas/snippets").catch(() => !1) && (i = (await e.list(K).catch(() => [])).filter((e) => !e.dir && e.name.endsWith(".js")).map((e) => e.path).sort());
+	await e.exists(".kandinsky/snippets").catch(() => !1) && (i = (await e.list(K).catch(() => [])).filter((e) => !e.dir && e.name.endsWith(".js")).map((e) => e.path).sort());
 	let a = /* @__PURE__ */ new Map(), o = [];
 	for (let t of i) if (/\bexport\s+default\b/.test(await e.readText(t).catch(() => ""))) {
 		o.push(t);
@@ -1328,7 +1328,7 @@ function Se(e, t) {
 			e.append(Z("div", "flex:1;", "These come from the old snippet file ([latex] snippets_file in the settings file). Converting writes a JavaScript module beside it, with the known misfires mended and listed at its top. The old file is left as it was."));
 			let n = Z("button", "", "Convert");
 			n.className = "btn primary", n.onclick = () => void t.convert().then(u), e.append(n), i.append(e);
-		} else e.modules.length ? i.append(Z("div", $, `From ${e.modules.join(", ")}: the vault's own files, the one place snippets come from. A switch here turns one off (or on) without touching the file.`)) : i.append(Z("div", $, "No snippets yet: put a JavaScript module in .atlas/snippets/."));
+		} else e.modules.length ? i.append(Z("div", $, `From ${e.modules.join(", ")}: the vault's own files, the one place snippets come from. A switch here turns one off (or on) without touching the file.`)) : i.append(Z("div", $, "No snippets yet: put a JavaScript module in .kandinsky/snippets/."));
 		let a = le(r.settings().switched), d = (e) => {
 			a.has(e) ? a.delete(e) : a.add(e), r.save({ switched: JSON.stringify([...a].sort()) }).then(() => t.reload()).then(u);
 		}, f = (e, t, n) => {
@@ -1372,7 +1372,7 @@ function Se(e, t) {
 				let i = Z("div", "min-width:0;overflow:hidden;white-space:nowrap;"), o = typeof e.body == "string" ? e.body : null;
 				if (o && e.math && !e.regex) {
 					try {
-						t.atlas.editor.drawMath(i, c(o), !1);
+						t.kandinsky.editor.drawMath(i, c(o), !1);
 					} catch {
 						i.replaceChildren();
 					}
@@ -1399,9 +1399,9 @@ function Se(e, t) {
 //#endregion
 //#region plugins/beta/snippets/ui/src/main.ts
 async function Ce(e) {
-	let t = oe(e), n = null, r = async () => (n = await pe(e), t.use(n), n.wroteStarter && e.toast("Snippets", `The plugin's LaTeX set is now ${J}, kept current by the plugin (a replaced copy goes to .atlas/trash). Settings → Snippets switches each snippet and option; your own snippets go in another file there.`, "info"), n);
+	let t = oe(e), n = null, r = async () => (n = await pe(e), t.use(n), n.wroteStarter && e.toast("Snippets", `The plugin's LaTeX set is now ${J}, kept current by the plugin (a replaced copy goes to .kandinsky/trash). Settings → Snippets switches each snippet and option; your own snippets go in another file there.`, "info"), n);
 	e.editor.extension(t.extension), e.editor.claimTab(t.claim), await r(), t.loadWords().catch((e) => console.warn("snippets: the word list did not load, only the short one holds:", e)), e.onFilesChanged((e) => {
-		(!e.length || e.some((e) => e.startsWith(".atlas/snippets/") || e === ".atlas/config.toml")) && r();
+		(!e.length || e.some((e) => e.startsWith(".kandinsky/snippets/") || e === ".kandinsky/config.toml")) && r();
 	});
 	let i = (e, n) => t.placeOf(e, n), a = (e) => e.replace(/\$\{\d+:([^}]*)\}/g, "$1").replace(/\$\d+/g, "").replace(/\s+/g, " ").trim();
 	e.editor.registerCompletion({
@@ -1464,7 +1464,7 @@ async function Ce(e) {
 		place: "before",
 		hint: "What fires, where it fires, and what is wrong. Snippet files are JavaScript and run with what a plugin may do.",
 		mount: (i, a) => Se(i, {
-			atlas: e,
+			kandinsky: e,
 			engine: t,
 			ctx: a,
 			read: () => n,

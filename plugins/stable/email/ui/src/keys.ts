@@ -88,7 +88,7 @@ export const COMMANDS: Command[] = [
   { id: "refresh", title: "Check for new mail", group: "Pane", keys: "shift+g", run: async (m) => { m.toast("Checking for new mail…"); await m.call("sync", {}, 600); m.later(); } },
   { id: "rules", title: "Rules…", group: "Pane", run: (_m, ui) => ui.rules() },
   { id: "layout", title: "Change the layout", group: "Pane", run: (_m, ui) => ui.layout() },
-  { id: "settings", title: "Email settings…", group: "Pane", run: (m) => m.atlas.plugin.openSettings() },
+  { id: "settings", title: "Email settings…", group: "Pane", run: (m) => m.kandinsky.plugin.openSettings() },
 ];
 
 /** "shift+i" from a key event (letters lower-case, Shift kept only where it changes the meaning). */

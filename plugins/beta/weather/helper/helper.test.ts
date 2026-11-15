@@ -1,7 +1,7 @@
 // The helper through the SDK's harness: Open-Meteo's answers (cut down) as a template and a day's log see them.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { harness, Status } from "atlas-helper/testing";
+import { harness, Status } from "kandinsky-helper/testing";
 import "./helper";
 
 const GEO = { results: [{ name: "Oslo", admin1: "Oslo", country: "Norway", latitude: 59.91, longitude: 10.75 }] };

@@ -6,24 +6,24 @@ import { fileURLToPath } from "node:url";
 import { WS } from "../playwright.config";
 
 // A brand-new user's first start (docs/guides/FIRST-RUN.md): a core with an empty HOME — no vault list, no settings, no
-// secrets, no ATLAS_* variables but the two that keep tests off the desktop — serving a folder that is not a vault yet.
+// secrets, no KANDINSKY_* variables but the two that keep tests off the desktop — serving a folder that is not a vault yet.
 const BASE = `${WS}-firstrun`;
 const HOME = join(BASE, "home");
 const VAULT = join(HOME, "Notes");
 const PORT = 7743;
-const ATLAS = fileURLToPath(new URL("../../target/debug/atlas", import.meta.url));
+const KANDINSKY = fileURLToPath(new URL("../../target/debug/kandinsky", import.meta.url));
 const env = {
   PATH: process.env.PATH ?? "/usr/bin:/bin", HOME, LANG: "C.UTF-8",
   XDG_CONFIG_HOME: join(HOME, ".config"), XDG_DATA_HOME: join(HOME, ".local/share"), XDG_CACHE_HOME: join(HOME, ".cache"), XDG_STATE_HOME: join(HOME, ".local/state"),
-  ATLAS_NO_BROWSER: "1", ATLAS_VAULT_TRASH: "1",
+  KANDINSKY_NO_BROWSER: "1", KANDINSKY_VAULT_TRASH: "1",
 };
 let core: ChildProcess;
 
 test.beforeAll(async () => {
   rmSync(BASE, { recursive: true, force: true });
   mkdirSync(VAULT, { recursive: true });
-  core = spawn(ATLAS, ["serve", VAULT, "--port", String(PORT)], { env, stdio: "ignore" });
-  await expect.poll(() => fetch(`http://127.0.0.1:${PORT}/api/workspace`, { headers: { "x-atlas": "1" } }).then((r) => r.ok, () => false), { timeout: 60_000 }).toBe(true);
+  core = spawn(KANDINSKY, ["serve", VAULT, "--port", String(PORT)], { env, stdio: "ignore" });
+  await expect.poll(() => fetch(`http://127.0.0.1:${PORT}/api/workspace`, { headers: { "x-kandinsky": "1" } }).then((r) => r.ok, () => false), { timeout: 60_000 }).toBe(true);
 });
 test.afterAll(() => { core?.kill(); rmSync(BASE, { recursive: true, force: true }); });
 
@@ -41,7 +41,7 @@ test("a first start: the Today screen with nothing configured, no error, no vim,
   expect(existsSync(join(VAULT, "Home.page"))).toBe(true);
   expect(existsSync(join(HOME, "Home.page"))).toBe(false);
   // a newcomer's keys type text: vim is off until asked for
-  const config = await (await page.request.get(`http://127.0.0.1:${PORT}/api/config`, { headers: { "x-atlas": "1" } })).json();
+  const config = await (await page.request.get(`http://127.0.0.1:${PORT}/api/config`, { headers: { "x-kandinsky": "1" } })).json();
   expect(config.config.vim).toBe(false);
 
   await page.keyboard.press("Meta+,");
@@ -67,9 +67,9 @@ test("the vaults block offers a new vault and an existing folder, as the vault s
   await expect(page.getByRole("dialog", { name: "Command palette" }).getByPlaceholder(/Where the new vault goes/)).toBeVisible();
 });
 
-test("`atlas serve` in a bare home folder names what to do instead of serving the whole home", () => {
-  const r = spawnSync(ATLAS, ["serve", "--port", String(PORT + 1)], { cwd: HOME, env, encoding: "utf8", timeout: 20_000 });
+test("`kandinsky serve` in a bare home folder names what to do instead of serving the whole home", () => {
+  const r = spawnSync(KANDINSKY, ["serve", "--port", String(PORT + 1)], { cwd: HOME, env, encoding: "utf8", timeout: 20_000 });
   expect(r.status).not.toBe(0);
-  expect(r.stderr).toContain("atlas serve ~/Notes");
-  expect(existsSync(join(HOME, ".atlas"))).toBe(false);
+  expect(r.stderr).toContain("kandinsky serve ~/Notes");
+  expect(existsSync(join(HOME, ".kandinsky"))).toBe(false);
 });

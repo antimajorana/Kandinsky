@@ -1,7 +1,7 @@
 // MusicBrainz's answers (cut down) as the catalog sees them — offline.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { harness } from "atlas-helper/testing";
+import { harness } from "kandinsky-helper/testing";
 import "./helper";
 import { cleanArtist, cleanTitle, firstAlbum } from "./helper";
 

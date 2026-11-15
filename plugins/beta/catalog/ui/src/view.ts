@@ -6,15 +6,15 @@ import type { LibrarySource, PluginApi } from "../../../../../ui/src/lib/plugin-
 import Libraries from "./Libraries.svelte";
 import Library from "./Library.svelte";
 
-export default function (host: HTMLElement, atlas: PluginApi) {
+export default function (host: HTMLElement, kandinsky: PluginApi) {
   host.style.height = "100%";
-  const app = mount(Libraries, { target: host, props: { atlas } });
+  const app = mount(Libraries, { target: host, props: { kandinsky } });
   return () => void unmount(app);
 }
 
 /** The library page over one source; returns the cleanup. */
-export function mountLibrary(host: HTMLElement, source: LibrarySource, atlas: PluginApi): () => void {
+export function mountLibrary(host: HTMLElement, source: LibrarySource, kandinsky: PluginApi): () => void {
   host.style.height = "100%"; // in a pane it fills it and its columns scroll; in a note, 100% of nothing is its own height
-  const app = mount(Library, { target: host, props: { atlas, source } });
+  const app = mount(Library, { target: host, props: { kandinsky, source } });
   return () => void unmount(app);
 }

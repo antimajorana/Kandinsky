@@ -13,7 +13,7 @@
   // read again when the active tab changes, so Back is shown only when it goes somewhere
   const back = $derived(shown ? canNavigate(-1) : false);
 
-  // a sideways swipe on the bar shows the next / previous tab (the app's top bar does the same: AtlasActivity)
+  // a sideways swipe on the bar shows the next / previous tab (the app's top bar does the same: KandinskyActivity)
   let from: { x: number; y: number } | null = null;
   function swiped(e: TouchEvent): void {
     const t = e.changedTouches[0];

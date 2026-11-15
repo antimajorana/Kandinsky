@@ -3,7 +3,7 @@ import { runCommand } from "./open";
 
 // The explorer (panes/Explorer.svelte) on the vault: one explorer shared by the local
 // files, SSH hosts and copyparty servers, where files are edited, sent and downloaded. The SSH side of the same pane: example-sftp.spec.ts.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("the vault in the explorer: browse, sort, upload from the computer, rename, open, move, trash", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "explorer-test/alpha.md", text: "# Alpha\n\nfirst\n" } });
@@ -72,7 +72,7 @@ test("the vault in the explorer: browse, sort, upload from the computer, rename,
   await pane.locator(".list").press("Delete");
   await pane.getByRole("alertdialog").getByRole("button", { name: "Move to Trash" }).click();
   await expect(row("from-disk.bin")).toHaveCount(0);
-  await expect(pane.locator(".status .msg")).toContainText("Moved to .atlas/trash");
+  await expect(pane.locator(".status .msg")).toContainText("Moved to .kandinsky/trash");
 });
 
 // The Thumbnails view: pictures, the first page of a PDF, the

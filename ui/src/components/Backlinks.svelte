@@ -16,7 +16,7 @@
   let { path }: { path: string } = $props();
   let links = $state<Backlink[]>([]);
   let unlinked = $state<Backlink[]>([]);
-  const KEY = "atlas.backlinks.open";
+  const KEY = "kandinsky.backlinks.open";
   let expanded = $state(readOpen());
 
   function readOpen(): boolean {

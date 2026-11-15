@@ -83,7 +83,7 @@ impl<H> Default for Leases<H> {
 }
 
 impl<H: Clone + Eq + Serialize + DeserializeOwned> Leases<H> {
-    /// The table of a server's vault, its recent versions kept in `file` (`.atlas/cache/leases.json`): they come back
+    /// The table of a server's vault, its recent versions kept in `file` (`.kandinsky/cache/leases.json`): they come back
     /// after a restart as just reported, so they are trusted over the disk for [`SETTLE`] again. Holders are not kept
     /// (a lease runs out in seconds; its device asks again).
     pub fn kept_in(file: PathBuf) -> Self {
@@ -103,7 +103,7 @@ impl<H: Clone + Eq + Serialize + DeserializeOwned> Leases<H> {
             .collect();
         let saved = serde_json::to_vec(&recent).map_err(|e| crate::Error::Other(e.into())).and_then(|b| crate::vault_write::cache::write(file, &b));
         if let Err(e) = saved {
-            eprintln!("atlas: leases: not kept in {}: {e}", file.display());
+            eprintln!("kandinsky: leases: not kept in {}: {e}", file.display());
         }
     }
 
@@ -269,7 +269,7 @@ mod tests {
         // the desktop reported 2; the server restarts before Syncthing brought 2 to its disk (still 1): the phone, whose
         // copy is that 1, must wait, not fork 2
         let d = tempfile::tempdir().unwrap();
-        let file = d.path().join(".atlas/cache/leases.json");
+        let file = d.path().join(".kandinsky/cache/leases.json");
         let l = Leases::<u32>::kept_in(file.clone());
         let t = Instant::now();
         assert_eq!(l.ask("a.md", "desktop", Some(1), || Some(1), HOLD, t), Answer::Granted);

@@ -11,11 +11,11 @@ export type DesktopConfig = {
  */
 on_close: OnClose, 
 /**
- * Minutes the window may stay hidden before its page is closed to give its memory back; Atlas keeps running in
+ * Minutes the window may stay hidden before its page is closed to give its memory back; Kandinsky keeps running in
  * the tray, and opening it again reloads the page and its tabs. 0: keep the page.
  */
 sleep_after_min: number, 
 /**
- * Start Atlas, in the tray, when you log in, so its schedules and notifications run from the start.
+ * Start Kandinsky, in the tray, when you log in, so its schedules and notifications run from the start.
  */
 start_at_login: boolean, };

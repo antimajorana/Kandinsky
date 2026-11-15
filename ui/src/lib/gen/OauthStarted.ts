@@ -2,7 +2,7 @@
 
 export type OauthStarted = { 
 /**
- * The provider's sign-in page, to open with `atlas.signIn(url, redirect)`.
+ * The provider's sign-in page, to open with `kandinsky.signIn(url, redirect)`.
  */
 url: string, 
 /**

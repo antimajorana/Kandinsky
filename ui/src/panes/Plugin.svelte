@@ -1,7 +1,7 @@
 <script lang="ts">
-  // A workspace plugin's view: mounts .atlas/plugins/<id>/<view> into this pane, and remounts it when a
+  // A workspace plugin's view: mounts .kandinsky/plugins/<id>/<view> into this pane, and remounts it when a
   // file of the plugin changes (edit view.js → see it at once). Load errors are shown, never swallowed.
-  // As a file's editor (`atlas.pane`, docs/guides/PLUGIN-API.md): the unsaved dot, Ctrl+S and saving on close.
+  // As a file's editor (`kandinsky.pane`, docs/guides/PLUGIN-API.md): the unsaved dot, Ctrl+S and saving on close.
   import { errText } from "../lib/text";
   import { onMount } from "svelte";
   import type { PaneProps } from "../lib/dock";
@@ -60,19 +60,19 @@
     error = "";
     if (!plugins.loaded) await loadPlugins();
     const p = plugins.list.find((x) => x.id === spec.id);
-    if (!p) { error = `No plugin "${spec.id}" in .atlas/plugins/.`; return; }
+    if (!p) { error = `No plugin "${spec.id}" in .kandinsky/plugins/.`; return; }
     if (p.error) { error = p.error; return; }
     if (!pluginOn(p)) { error = `"${p.title}" is switched off (Settings → Plugins).`; return; }
     try {
       const mod = await loadView(p);
       if (mine !== generation) return;
-      if (typeof mod.default !== "function") throw new Error("the module has no default export function (host, atlas) => …");
+      if (typeof mod.default !== "function") throw new Error("the module has no default export function (host, kandinsky) => …");
       const r = await mod.default(host, pluginApi(p, { path: spec.path, arg: spec.arg, anchor: spec.anchor, pane: paneOf(mine), hold: scope.hold }));
       if (mine !== generation) { if (typeof r === "function") r(); return; }
       cleanup = typeof r === "function" ? r : undefined;
     } catch (e) {
       error = `${p.view}: ${errText(e)}`;
-      console.error("[atlas] plugin", p.id, e);
+      console.error("[kandinsky] plugin", p.id, e);
     }
   }
 
@@ -89,7 +89,7 @@
     paneParks.set(panel.id, save);
     pluginAnchors.set(panel.id, (a) => goTo?.(a));
     let t: ReturnType<typeof setTimeout> | undefined, manifest = false;
-    const prefix = `.atlas/plugins/${spec.id}/`;
+    const prefix = `.kandinsky/plugins/${spec.id}/`;
     const off = on("fs", (e) => {
       if (!touches(e.paths, (p) => p.startsWith(prefix))) return;
       // a manifest change in any event of the burst reloads the plugin list, not only one in the last

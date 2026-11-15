@@ -44,7 +44,7 @@ function valueHtml(v: unknown, kind: PropertyKind, dir: string): string {
   return items.map(one).join("");
 }
 
-let collapsed = loadRaw("atlas.properties.collapsed") === "1";
+let collapsed = loadRaw("kandinsky.properties.collapsed") === "1";
 
 /** Build the table. `onLink(target)` opens a link; a YAML error shows the error, not an empty box. */
 export function propertiesElement(yamlText: string, dir: string, onLink: (target: string) => void): HTMLElement {
@@ -62,7 +62,7 @@ export function propertiesElement(yamlText: string, dir: string, onLink: (target
   host.querySelector(".prop-head")!.addEventListener("click", (e) => {
     e.stopPropagation();
     collapsed = !collapsed;
-    saveRaw("atlas.properties.collapsed", collapsed ? "1" : "0");
+    saveRaw("kandinsky.properties.collapsed", collapsed ? "1" : "0");
     for (const el of document.querySelectorAll(".note-properties")) el.classList.toggle("is-collapsed", collapsed);
     host.querySelector(".prop-head")!.setAttribute("aria-expanded", String(!collapsed));
   });
@@ -87,7 +87,7 @@ export function propertiesChip(yamlText: string): HTMLElement {
   pill.className = "cm-properties";
   pill.title = "Show the properties in a panel at the right";
   // opens the rich panel (PropertiesPanel); the event never reaches CodeMirror, so the caret does not drop into the YAML
-  line.addEventListener("mousedown", (e) => { if (e.altKey) return; /* Alt+click: the YAML (live-preview.js) */ e.preventDefault(); e.stopImmediatePropagation(); window.dispatchEvent(new Event("atlas-properties-toggle")); }); // immediate: the live preview's own listener on this element would enter the YAML
+  line.addEventListener("mousedown", (e) => { if (e.altKey) return; /* Alt+click: the YAML (live-preview.js) */ e.preventDefault(); e.stopImmediatePropagation(); window.dispatchEvent(new Event("kandinsky-properties-toggle")); }); // immediate: the live preview's own listener on this element would enter the YAML
   pill.textContent = "Properties";
   const n = document.createElement("span");
   n.className = "cm-properties-n";

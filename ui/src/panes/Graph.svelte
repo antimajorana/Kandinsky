@@ -1,10 +1,9 @@
 <script lang="ts">
-  // Graph view, as Obsidian draws it: every note a dot sized by its links, links as lines, a force layout that
-  // settles (lib/graph/sim.ts), and Obsidian's settings card — Filters (search, tags, attachments, orphans),
-  // Groups (colour by query), Display (arrows, text fade, node size, link thickness) and Forces — read from the
-  // vault's Obsidian graph settings the first time (lib/graph/settings.ts). Hover lights a note and its neighbours;
-  // click opens it (Ctrl/Cmd+click beside); drag moves a note; wheel zooms; drag the background pans. "Local" keeps
-  // the active note's neighbourhood.
+  // Graph view ("Several Circles" mode, after Wassily Kandinsky, 1926): every note is a luminous translucent circle
+  // tinted by its semantic vault domain with a soft radial halo, concentric double-ring orbit halos on hover/focus,
+  // a Barnes–Hut force layout (lib/graph/sim.ts), and Obsidian's settings card — Filters, Groups, Display and Forces —
+  // read from `.kandinsky/graph.json` or `.obsidian/graph.json` (lib/graph/settings.ts). Hover lights a note and its
+  // neighbours; click opens it (Ctrl/Cmd+click beside); drag moves a note; wheel zooms; drag the background pans.
   import { onMount } from "svelte";
   import Icon from "../components/Icon.svelte";
   import GraphControls from "../components/GraphControls.svelte";
@@ -13,6 +12,7 @@
   import { reloadOnChange } from "../lib/reload-on-change";
   import { getDock, open, openPath } from "../lib/dock";
   import { editors, lastEditorId } from "../lib/registry";
+  import { app } from "../lib/state.svelte";
   import type { PaneProps } from "../lib/dock";
   import { Sim, type SimNode } from "../lib/graph/sim";
   import { compile, propertiesIn, type Subject } from "../lib/graph/query";
@@ -33,9 +33,66 @@
   let noActive = $state(false);
   let count = $state({ nodes: 0, edges: 0 });
   let tip = $state("");
+  let tipDomain = $state<Domain>("concepts");
+  let tipCustomColor = $state<string | null>(null);
+  let paneSize = $state({ w: 0, h: 0 });
+  let domTheme = $state<"dark" | "light" | null>(null);
 
   type Kind = "note" | "tag" | "attachment";
-  type GNode = SimNode & { key: string; kind: Kind; name: string; path: string; deg: number; colour: string | null };
+  type Domain = "concepts" | "sources" | "entities" | "problems" | "notebooks" | "meta" | "other";
+
+  /** Kandinsky "Several Circles" (1926) domain pigments for Velvet Circles (dark) and Bauhaus Paper (light). */
+  const PIGMENTS: Record<Domain, { dark: string; light: string; label: string }> = {
+    concepts:  { dark: "#7d97f4", light: "#264ca4", label: "Concepts" },
+    sources:   { dark: "#3ca395", light: "#247a7d", label: "Sources" },
+    entities:  { dark: "#d48fb0", light: "#9b4dca", label: "Entities" },
+    problems:  { dark: "#dfab2e", light: "#c48b16", label: "Problems" },
+    notebooks: { dark: "#e28327", light: "#cf6d17", label: "Notebooks" },
+    meta:      { dark: "#5fb3ce", light: "#2a7ca3", label: "Meta" },
+    other:     { dark: "#d94e41", light: "#c6362c", label: "Notes" },
+  };
+  const LEGEND_DOMAINS: Domain[] = ["concepts", "sources", "entities", "problems"];
+
+  const lightMode = $derived((domTheme ?? app.theme) === "light");
+  const tipDotColor = $derived(tipCustomColor ?? PIGMENTS[tipDomain][lightMode ? "light" : "dark"]);
+  const showLegend = $derived(count.nodes > 0 && !failed && paneSize.w >= 380 && paneSize.h >= 240 && (s.close || paneSize.w >= 620));
+
+  function domainOf(path: string, kind: Kind): Domain {
+    if (kind === "tag") return "meta";
+    const low = path.replace(/\\/g, "/").replace(/^\/+/, "").toLowerCase();
+    const base = low.split("/").pop() ?? low;
+    if (/\.(ipynb|wln)$/i.test(base) || low.startsWith("notebooks/") || low.includes("/notebooks/")) return "notebooks";
+    if (/\.pdf$/i.test(base) || low.startsWith("wiki/sources/") || low === "wiki/sources" || low.startsWith("zai/papers/") || low.startsWith("papers/") || low.includes("/papers/")) return "sources";
+    if (low.startsWith("wiki/entities/") || low.startsWith("entities/") || low.includes("/entities/")) return "entities";
+    if (low.startsWith("problems/") || low.includes("/problems/")) return "problems";
+    if (low.startsWith("wiki/concepts/") || low.startsWith("concepts/") || low.includes("/concepts/") || low.startsWith("wiki/lectures/")) return "concepts";
+    if (low.startsWith("wiki/meta/") || low.startsWith("zai/") || low.startsWith("zmeta/") || low.startsWith("genkan/") || low.startsWith(".agents/") || low.startsWith(".claude/") || /^(agents|claude|gemini)\.md$/i.test(base) || /^wiki\/(hot|index|log|overview)\.md$/i.test(low)) return "meta";
+    return kind === "attachment" ? "notebooks" : "other";
+  }
+
+  interface RGB { r: number; g: number; b: number }
+  const rgbCache = new Map<string, RGB>();
+  function parseRgb(color: string): RGB {
+    const hit = rgbCache.get(color);
+    if (hit) return hit;
+    let out: RGB = { r: 125, g: 151, b: 244 };
+    const hex = color.trim();
+    if (/^#[0-9a-f]{6}$/i.test(hex)) {
+      const n = parseInt(hex.slice(1), 16);
+      out = { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+    } else if (/^#[0-9a-f]{3}$/i.test(hex)) {
+      out = { r: parseInt(hex[1] + hex[1], 16), g: parseInt(hex[2] + hex[2], 16), b: parseInt(hex[3] + hex[3], 16) };
+    } else {
+      const m = hex.match(/rgba?\(\s*(\d+)\s*[, ]\s*(\d+)\s*[, ]\s*(\d+)/i);
+      if (m) out = { r: +m[1], g: +m[2], b: +m[3] };
+    }
+    rgbCache.set(color, out);
+    return out;
+  }
+  const rgba = ({ r, g, b }: RGB, a: number) => `rgba(${r}, ${g}, ${b}, ${a})`;
+  const WHITE: RGB = { r: 255, g: 255, b: 255 };
+
+  type GNode = SimNode & { key: string; kind: Kind; domain: Domain; name: string; path: string; deg: number; colour: string | null };
   let nodes: GNode[] = [];
   let edges: [number, number][] = []; // from → to
   let adj: Set<number>[] = [];
@@ -50,6 +107,7 @@
   const nameOf = (p: string) => (p.split("/").pop() ?? p).replace(/\.md$/i, "");
   const subjectOf = (n: NoteData): Subject => ({ path: n.path, name: n.path.split("/").pop() ?? n.path, tags: n.tags, props: n.props });
   const fileSubject = (p: string): Subject => ({ path: p, name: p.split("/").pop() ?? p, tags: [], props: {} });
+  const pigmentHex = (n: GNode, light: boolean) => n.colour ?? PIGMENTS[n.domain][light ? "light" : "dark"];
 
   /** The properties the filter and the groups read: asked for in the notes' query. */
   const wanted = $derived([...new Set([s.search, ...s.colorGroups.map((g) => g.query)].flatMap(propertiesIn))].sort().join("\n"));
@@ -101,9 +159,10 @@
     nodes = keep.map((g, i) => {
       const it = list[g], prev = old.get(it.key);
       const colour = it.kind === "tag" ? null : groups.find((gr) => gr.test(it.subject))?.colour ?? null;
+      const domain = domainOf(it.path, it.kind);
       const name = it.kind === "tag" ? `#${it.path}` : nameOf(it.path);
       const at = prev ?? { ...Sim.seed(i), vx: 0, vy: 0 };
-      return { x: at.x, y: at.y, vx: at.vx, vy: at.vy, fx: null, fy: null, key: it.key, kind: it.kind, name, path: it.path, deg: 0, colour };
+      return { x: at.x, y: at.y, vx: at.vx, vy: at.vy, fx: null, fy: null, key: it.key, kind: it.kind, domain, name, path: it.path, deg: 0, colour };
     });
     edges = es.filter(([a, b]) => remap.has(a) && remap.has(b)).map(([a, b]) => [remap.get(a)!, remap.get(b)!]);
     adj = nodes.map(() => new Set());
@@ -111,68 +170,216 @@
     sim.setGraph(nodes, edges);
     sim.reheat(old.size ? 0.6 : 1);
     count = { nodes: nodes.length, edges: edges.length };
-    hover = null; tip = "";
+    hover = null; tip = ""; tipCustomColor = null;
     kick();
   }
 
-  // ---- drawing
+  // ---- drawing ("Several Circles" luminous halos + concentric orbits)
   function theme() {
     const st = getComputedStyle(document.documentElement), css = (v: string, d = "") => st.getPropertyValue(v).trim() || d;
-    return { bg: css("--bg", "#1e1e1e"), node: css("--text-muted", "#999"), line: css("--border-strong", "#555"), text: css("--text", "#ddd"),
-      accent: css("--accent", "#7b6cd9"), tag: css("--green", "#86d1a0"), file: css("--yellow", "#e8c47c"), font: css("--font-ui", "sans-serif") };
+    return {
+      bg: css("--bg", lightMode ? "#faf8f4" : "#15161a"),
+      line: css("--border-strong", lightMode ? "rgba(30, 32, 36, 0.22)" : "rgba(237, 235, 230, 0.22)"),
+      text: css("--text", lightMode ? "#222428" : "#e8e6e1"),
+      font: css("--font-ui", "sans-serif"),
+    };
   }
-  const radius = (n: GNode) => s.nodeSizeMultiplier * (4 + Math.sqrt(n.deg) * 1.5);
+  const radius = (n: GNode) => s.nodeSizeMultiplier * (4 + Math.sqrt(Math.min(n.deg, 64)) * 1.5);
 
   function draw() {
     const dpr = window.devicePixelRatio || 1, w = wrap.clientWidth, h = wrap.clientHeight;
-    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
-    const c = canvas.getContext("2d")!, col = theme(), k = view.k;
+    if (w <= 0 || h <= 0) return;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
+    const c = canvas.getContext("2d");
+    if (!c) return;
+    const light = lightMode, col = theme(), k = view.k;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    c.fillStyle = col.bg; c.fillRect(0, 0, w, h);
+    c.fillStyle = col.bg;
+    c.fillRect(0, 0, w, h);
+
     const ox = w / 2 + view.x, oy = h / 2 + view.y;
     const X = (n: GNode) => ox + n.x * k, Y = (n: GNode) => oy + n.y * k;
-    const lit = (i: number) => hover === null || i === hover || adj[hover]?.has(i);
+    const hoverIdx = hover !== null && hover >= 0 && hover < nodes.length ? hover : null;
     const active = activePath();
-    // links: the hovered note's in the accent, the rest faint
-    const lw = Math.max(0.4, s.lineSizeMultiplier * Math.min(1.6, Math.max(0.5, k)));
+    const activeFound = active ? nodes.findIndex((n) => n.path === active) : -1;
+    const activeIdx = activeFound >= 0 ? activeFound : null;
+    const focusIdx = hoverIdx ?? activeIdx;
+    const lit = (i: number) => hoverIdx === null || i === hoverIdx || Boolean(adj[hoverIdx]?.has(i));
+
+    // 1. Links: calm draftsman hairlines at rest; incident links tinted with the hovered/focused node's pigment
+    const lw = Math.max(0.45, s.lineSizeMultiplier * Math.min(1.6, Math.max(0.55, k)));
     c.lineWidth = lw;
-    const stroke = (mine: boolean) => {
+    c.strokeStyle = col.line;
+    c.globalAlpha = hoverIdx !== null ? 0.12 : light ? 0.36 : 0.42;
+    c.beginPath();
+    for (const [a, b] of edges) {
+      if (focusIdx !== null && (a === focusIdx || b === focusIdx)) continue;
+      c.moveTo(X(nodes[a]), Y(nodes[a]));
+      c.lineTo(X(nodes[b]), Y(nodes[b]));
+    }
+    c.stroke();
+
+    const focusHex = focusIdx !== null ? pigmentHex(nodes[focusIdx], light) : "";
+    if (focusIdx !== null) {
+      const focusRgb = parseRgb(focusHex);
+      c.lineWidth = hoverIdx !== null ? lw * 1.3 : lw * 1.15;
+      c.strokeStyle = rgba(focusRgb, hoverIdx !== null ? (light ? 0.78 : 0.86) : (light ? 0.56 : 0.66));
+      c.globalAlpha = 1;
       c.beginPath();
       for (const [a, b] of edges) {
-        if ((hover !== null && (a === hover || b === hover)) !== mine) continue;
-        c.moveTo(X(nodes[a]), Y(nodes[a])); c.lineTo(X(nodes[b]), Y(nodes[b]));
+        if (a !== focusIdx && b !== focusIdx) continue;
+        c.moveTo(X(nodes[a]), Y(nodes[a]));
+        c.lineTo(X(nodes[b]), Y(nodes[b]));
       }
       c.stroke();
-    };
-    c.strokeStyle = col.line; c.globalAlpha = hover === null ? 0.6 : 0.12; stroke(false);
-    if (hover !== null) { c.strokeStyle = col.accent; c.globalAlpha = 0.9; stroke(true); }
+    }
+
     if (s.showArrow) {
-      c.fillStyle = col.line;
       for (const [a, b] of edges) {
         const A = nodes[a], B = nodes[b], dx = X(B) - X(A), dy = Y(B) - Y(A), d = Math.hypot(dx, dy);
         if (d < 1) continue;
-        const ux = dx / d, uy = dy / d, tip0 = Math.max(1.5, radius(B) * k), size = 4 + 2 * lw;
+        const isFocusEdge = focusIdx !== null && (a === focusIdx || b === focusIdx);
+        const ux = dx / d, uy = dy / d, tip0 = Math.max(2, radius(B) * k), size = 4 + 2 * lw;
         const px = X(B) - ux * tip0, py = Y(B) - uy * tip0;
-        c.globalAlpha = hover === null ? 0.7 : lit(a) && lit(b) && (a === hover || b === hover) ? 0.9 : 0.12;
-        c.beginPath(); c.moveTo(px, py); c.lineTo(px - ux * size - uy * size * 0.5, py - uy * size + ux * size * 0.5); c.lineTo(px - ux * size + uy * size * 0.5, py - uy * size - ux * size * 0.5); c.fill();
+        c.fillStyle = isFocusEdge ? focusHex : col.line;
+        c.globalAlpha = hoverIdx !== null ? (isFocusEdge ? 0.88 : 0.12) : isFocusEdge ? 0.72 : light ? 0.48 : 0.56;
+        c.beginPath();
+        c.moveTo(px, py);
+        c.lineTo(px - ux * size - uy * size * 0.5, py - uy * size + ux * size * 0.5);
+        c.lineTo(px - ux * size + uy * size * 0.5, py - uy * size - ux * size * 0.5);
+        c.fill();
       }
     }
-    // nodes
-    nodes.forEach((n, i) => {
-      c.globalAlpha = lit(i) ? 1 : 0.2;
-      c.fillStyle = i === hover || n.path === active ? col.accent : n.kind === "tag" ? col.tag : n.kind === "attachment" ? col.file : n.colour ?? col.node;
-      c.beginPath(); c.arc(X(n), Y(n), Math.max(1.5, radius(n) * k), 0, Math.PI * 2); c.fill();
-    });
-    // names: fading in with the zoom (Obsidian's text fade threshold); the hovered note's neighbourhood always
+
+    // 2. Nodes: background/dimmed first, lit neighbourhood next, active & hovered concentric orbits on top
+    c.globalAlpha = 1;
+    const order: number[] = [];
+    const litNeighbors: number[] = [];
+    for (let i = 0; i < nodes.length; i++) {
+      if (i === hoverIdx || i === activeIdx) continue;
+      if (hoverIdx !== null && lit(i)) litNeighbors.push(i);
+      else order.push(i);
+    }
+    for (const i of litNeighbors) order.push(i);
+    if (activeIdx !== null && activeIdx !== hoverIdx) order.push(activeIdx);
+    if (hoverIdx !== null) order.push(hoverIdx);
+
+    for (const i of order) {
+      const n = nodes[i];
+      const x = X(n), y = Y(n);
+      const r = Math.max(2, radius(n) * k);
+      const margin = Math.max(48, r * 4.2);
+      if (x < -margin || x > w + margin || y < -margin || y > h + margin) continue;
+
+      const hex = pigmentHex(n, light);
+      const rgb = parseRgb(hex);
+      const isHover = i === hoverIdx;
+      const isActive = i === activeIdx;
+      const isLit = lit(i);
+
+      if (isHover || isActive) {
+        const mul = isHover ? 1 : hoverIdx !== null && !isLit ? 0.34 : 0.92;
+        const outerR = isHover ? r * 3.35 + 9 : r * 2.85 + 6;
+        const orbitR = isHover ? r * 1.68 + 4.5 : r * 1.48 + 3.5;
+        const coreR = isHover ? r * 1.08 : r;
+
+        // Outer radial glow wash
+        const wash = c.createRadialGradient(x, y, r * 0.35, x, y, outerR);
+        wash.addColorStop(0, rgba(rgb, (light ? 0.34 : 0.46) * mul));
+        wash.addColorStop(0.45, rgba(rgb, (light ? 0.15 : 0.21) * mul));
+        wash.addColorStop(0.78, rgba(rgb, (light ? 0.05 : 0.07) * mul));
+        wash.addColorStop(1, rgba(rgb, 0));
+        c.fillStyle = wash;
+        c.beginPath();
+        c.arc(x, y, outerR, 0, Math.PI * 2);
+        c.fill();
+
+        // Translucent Bauhaus concentric disc + 1px crisp concentric orbit ring
+        c.fillStyle = rgba(rgb, (light ? 0.10 : 0.14) * mul);
+        c.beginPath();
+        c.arc(x, y, orbitR, 0, Math.PI * 2);
+        c.fill();
+
+        c.lineWidth = 1;
+        c.strokeStyle = rgba(rgb, (isHover ? (light ? 0.82 : 0.90) : (light ? 0.62 : 0.72)) * mul);
+        c.beginPath();
+        c.arc(x, y, orbitR, 0, Math.PI * 2);
+        c.stroke();
+
+        // Bright luminous inner core
+        c.fillStyle = rgba(rgb, (light ? 0.96 : 0.98) * mul);
+        c.beginPath();
+        c.arc(x, y, coreR, 0, Math.PI * 2);
+        c.fill();
+
+        c.lineWidth = 1;
+        c.strokeStyle = rgba(WHITE, (light ? 0.68 : 0.50) * mul);
+        c.beginPath();
+        c.arc(x, y, Math.max(1, coreR - 0.5), 0, Math.PI * 2);
+        c.stroke();
+      } else {
+        const dim = isLit ? 1 : 0.18;
+        if (isLit && r >= 2) {
+          const haloR = r * 2.25 + 1.5;
+          const halo = c.createRadialGradient(x, y, r * 0.3, x, y, haloR);
+          halo.addColorStop(0, rgba(rgb, light ? 0.24 : 0.32));
+          halo.addColorStop(0.52, rgba(rgb, light ? 0.09 : 0.13));
+          halo.addColorStop(1, rgba(rgb, 0));
+          c.fillStyle = halo;
+          c.beginPath();
+          c.arc(x, y, haloR, 0, Math.PI * 2);
+          c.fill();
+        } else {
+          c.fillStyle = rgba(rgb, (light ? 0.09 : 0.11) * dim);
+          c.beginPath();
+          c.arc(x, y, r * 1.7, 0, Math.PI * 2);
+          c.fill();
+        }
+
+        // Crisp luminous inner core circle
+        c.fillStyle = rgba(rgb, (light ? 0.88 : 0.90) * dim);
+        c.beginPath();
+        c.arc(x, y, r, 0, Math.PI * 2);
+        c.fill();
+
+        if (isLit && r >= 3) {
+          c.lineWidth = 0.75;
+          c.strokeStyle = light ? rgba(rgb, 0.98) : rgba(WHITE, 0.22);
+          c.stroke();
+        }
+      }
+    }
+
+    // 3. Labels: fading in with zoom (Obsidian's text fade threshold); hovered neighbourhood & active note stay legible
     const fade = Math.min(1, Math.max(0, 1 + Math.log2(k) - s.textFadeMultiplier));
-    const size = Math.min(16, Math.max(9, 12 * Math.sqrt(k)));
-    c.font = `${size}px ${col.font}`; c.textAlign = "center"; c.textBaseline = "top"; c.fillStyle = col.text;
-    nodes.forEach((n, i) => {
-      const a = hover !== null ? (lit(i) ? 1 : fade * 0.2) : fade;
-      if (a <= 0.02) return;
+    const size = Math.min(15.5, Math.max(9.5, 12 * Math.sqrt(k)));
+    c.font = `${size}px ${col.font}`;
+    c.textAlign = "center";
+    c.textBaseline = "top";
+    c.lineJoin = "round";
+    c.lineWidth = 3;
+    c.strokeStyle = col.bg;
+    c.fillStyle = col.text;
+    for (const i of order) {
+      const n = nodes[i];
+      const isHover = i === hoverIdx;
+      const isActive = i === activeIdx;
+      const a = hoverIdx !== null
+        ? (lit(i) ? 1 : fade * 0.16)
+        : (isActive ? Math.max(fade, 0.85) : fade);
+      if (a <= 0.02) continue;
+      const x = X(n), y = Y(n);
+      if (x < -120 || x > w + 120 || y < -40 || y > h + 40) continue;
+      const r = Math.max(2, radius(n) * k);
+      const offset = (isHover ? r * 1.68 + 4.5 : isActive ? r * 1.48 + 3.5 : r) + 4;
+      c.globalAlpha = a * 0.78;
+      c.strokeText(n.name, x, y + offset);
       c.globalAlpha = a;
-      c.fillText(n.name, X(n), Y(n) + Math.max(1.5, radius(n) * k) + 3);
-    });
+      c.fillText(n.name, x, y + offset);
+    }
     c.globalAlpha = 1;
   }
 
@@ -235,7 +442,16 @@
     if (h !== hover) {
       hover = h;
       const n = h === null ? null : nodes[h];
-      tip = !n ? "" : n.kind === "tag" ? `${n.name} · ${n.deg} note${n.deg === 1 ? "" : "s"} — click to search` : `${shownPath(n.path)} · ${n.deg} link${n.deg === 1 ? "" : "s"} — click to open`;
+      if (!n) {
+        tip = "";
+        tipCustomColor = null;
+      } else {
+        tipDomain = n.domain;
+        tipCustomColor = n.colour;
+        tip = n.kind === "tag"
+          ? `${n.name} · ${n.deg} note${n.deg === 1 ? "" : "s"} — click to search`
+          : `${shownPath(n.path)} · ${n.deg} link${n.deg === 1 ? "" : "s"} — click to open`;
+      }
       kick();
     }
   }
@@ -274,7 +490,7 @@
     sim.forces = { centerStrength: s.centerStrength, repelStrength: s.repelStrength, linkStrength: s.linkStrength, linkDistance: s.linkDistance };
     sim.reheat(0.3); kick();
   });
-  $effect(() => { void s.showArrow; void s.textFadeMultiplier; void s.nodeSizeMultiplier; void s.lineSizeMultiplier; kick(); });
+  $effect(() => { void s.showArrow; void s.textFadeMultiplier; void s.nodeSizeMultiplier; void s.lineSizeMultiplier; void lightMode; kick(); });
   let saved = "";
   $effect(() => {
     const text = JSON.stringify(s);
@@ -285,12 +501,26 @@
 
   onMount(() => {
     void loadGraphSettings().then((r) => { s = r.settings; from = r.from; ready = true; });
-    const ro = new ResizeObserver(() => kick());
+    const syncSize = () => {
+      if (wrap) paneSize = { w: wrap.clientWidth, h: wrap.clientHeight };
+      kick();
+    };
+    syncSize();
+    const ro = new ResizeObserver(syncSize);
     ro.observe(wrap);
-    const off = reloadOnChange(() => void load(), { wait: 800, wants: (p) => /\.md$/i.test(p), host: () => wrap });
-    // the active note is drawn in the accent, and Local follows it
+
+    const syncDomTheme = () => {
+      const dt = document.documentElement.dataset.theme;
+      domTheme = dt === "light" || dt === "dark" ? dt : null;
+    };
+    syncDomTheme();
+    const mo = new MutationObserver(() => { syncDomTheme(); kick(); });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-palette", "style", "class"] });
+
+    const off = reloadOnChange(() => void load(), { wait: 800, wants: (p) => /\.(md|ipynb|wln|pdf)$/i.test(p), host: () => wrap });
+    // the active note gets its concentric orbit halo, and Local follows it
     const sub = getDock()?.onDidActivePanelChange(() => setTimeout(() => { if (local) build(); else kick(); }, 50));
-    return () => { ro.disconnect(); off(); sub?.dispose(); if (raf) cancelAnimationFrame(raf); };
+    return () => { ro.disconnect(); mo.disconnect(); off(); sub?.dispose(); if (raf) cancelAnimationFrame(raf); };
   });
 </script>
 
@@ -307,10 +537,22 @@
   </header>
   <div class="canvas-wrap" bind:this={wrap}>
     <canvas bind:this={canvas} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={() => { drag = null; sim.alphaTarget = 0; }}
-      onpointerleave={() => { if (!drag) { hover = null; tip = ""; kick(); } }} onwheel={wheel}
+      onpointerleave={() => { if (!drag) { hover = null; tip = ""; tipCustomColor = null; kick(); } }} onwheel={wheel}
       aria-label="Graph of {count.nodes} nodes" data-testid="graph-canvas"></canvas>
     {#if ready && !s.close}<GraphControls bind:s {from} onanimate={animate} onclose={() => (s.close = true)} />{/if}
-    {#if tip}<div class="tip">{tip}</div>{/if}
+    {#if showLegend}
+      <div class="legend" class:yield={Boolean(tip) && paneSize.w < 640} aria-label="Domain legend">
+        {#each LEGEND_DOMAINS as dom (dom)}
+          <span class="legend-item"><span class="legend-dot" style="--dot: {lightMode ? PIGMENTS[dom].light : PIGMENTS[dom].dark}" aria-hidden="true"></span>{PIGMENTS[dom].label}</span>
+        {/each}
+      </div>
+    {/if}
+    {#if tip}
+      <div class="tip" class:with-legend={showLegend && paneSize.w >= 640}>
+        <span class="tip-dot" style="--dot: {tipDotColor}" aria-hidden="true"></span>
+        <span class="tip-text">{tip}</span>
+      </div>
+    {/if}
     {#if failed}<p class="empty">The graph could not be read: {failed}</p>
     {:else if notes && !count.nodes}<p class="empty">{notes.length ? "Nothing to show with these filters: change the search, or turn on Orphans." : "No notes yet: write a note, and link it to another with [[its name]]."}</p>{/if}
   </div>
@@ -318,18 +560,26 @@
 
 <style>
   .graph-pane { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
-  header { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; font-size: calc(12.5px * var(--ui-scale, 1)); }
-  .title { color: var(--heading); font-weight: 600; }
+  header { display: flex; align-items: center; gap: 12px; padding: 6px 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; font-size: calc(12.5px * var(--ui-scale, 1)); }
+  .title { color: var(--heading); font-weight: 600; letter-spacing: -0.01em; }
   .meta, .hint { color: var(--text-muted); }
   .grow { flex: 1; }
   .toggle { display: inline-flex; gap: 5px; align-items: center; color: var(--text-muted); }
+  .toggle input[type="checkbox"] { accent-color: var(--accent); }
   .toggle input[type="number"] { width: 46px; font: inherit; color: var(--text); background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 4px; padding: 1px 4px; }
-  .btn { border: 1px solid var(--border-strong); padding: 3px 10px; border-radius: var(--radius-sm); }
+  .btn { border: 1px solid var(--border); padding: 3px 10px; border-radius: var(--radius-sm); color: var(--text-muted); transition: background 120ms ease, color 120ms ease; }
   .btn.icon { display: inline-grid; place-items: center; padding: 3px 6px; }
-  .btn:hover, .btn.on { background: var(--bg-hover); }
+  .btn:hover, .btn.on { background: var(--bg-hover); color: var(--text); }
   .canvas-wrap { position: relative; flex: 1; min-height: 0; }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
   canvas:active { cursor: grabbing; }
   .empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 24px; text-align: center; color: var(--text-muted); font-size: calc(13px * var(--ui-scale, 1)); pointer-events: none; }
-  .tip { position: absolute; left: 12px; bottom: 10px; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-muted); background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px 8px; pointer-events: none; }
+  .legend { position: absolute; right: 12px; bottom: 10px; display: inline-flex; align-items: center; gap: 11px; padding: 4px 11px; border-radius: 999px; background: color-mix(in srgb, var(--bg-elev) 84%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border); color: var(--text-muted); font-size: calc(11.5px * var(--ui-scale, 1)); line-height: 1.2; pointer-events: none; user-select: none; transition: opacity 140ms ease; z-index: 1; }
+  .legend.yield { opacity: 0; }
+  .legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .legend-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--dot) 24%, transparent); flex-shrink: 0; }
+  .tip { position: absolute; left: 12px; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; max-width: calc(100% - 24px); font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-muted); background: color-mix(in srgb, var(--bg-elev) 90%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; pointer-events: none; z-index: 1; }
+  .tip.with-legend { max-width: calc(100% - 320px); }
+  .tip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 2px color-mix(in srgb, var(--dot) 28%, transparent); flex-shrink: 0; }
+  .tip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

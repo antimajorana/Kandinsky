@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 
-// Web links open as a tab of Atlas when the site allows being shown inside a page, else in a window.
-const H = { "x-atlas": "1" };
+// Web links open as a tab of Kandinsky when the site allows being shown inside a page, else in a window.
+const H = { "x-kandinsky": "1" };
 let site: Server, port = 0;
 test.beforeAll(async () => {
   site = createServer((req, res) => {
@@ -14,8 +14,8 @@ test.beforeAll(async () => {
   port = (site.address() as { port: number }).port;
 });
 test.afterAll(() => site.close());
-// the desktop app's window says so before the page runs (atlas-app main.rs); these tests are that window
-const asDesktop = (page: import("@playwright/test").Page) => page.addInitScript(() => { (window as unknown as { __atlasDesktop: boolean }).__atlasDesktop = true; });
+// the desktop app's window says so before the page runs (kandinsky-app main.rs); these tests are that window
+const asDesktop = (page: import("@playwright/test").Page) => page.addInitScript(() => { (window as unknown as { __kandinskyDesktop: boolean }).__kandinskyDesktop = true; });
 
 test("a web link opens as a tab when the site allows it, else in a window", async ({ page, request }) => {
   await asDesktop(page);
@@ -77,10 +77,10 @@ test("Shift+click, or a link marked data-outside, opens in the system's browser 
 test("the core opens only web and mail addresses outside", async ({ request }) => {
   const r = await request.post("/api/open-outside", { headers: H, data: { url: "file:///etc/hosts" } });
   expect(r.status()).toBe(400);
-  expect((await request.post("/api/open-outside", { headers: H, data: { url: "https://example.org/" } })).status()).toBe(204); // ATLAS_NO_BROWSER: nothing opens
+  expect((await request.post("/api/open-outside", { headers: H, data: { url: "https://example.org/" } })).status()).toBe(204); // KANDINSKY_NO_BROWSER: nothing opens
 });
 
-test("Atlas in a plain browser (a vault on a server) opens a web link in a new tab of that browser", async ({ page }) => {
+test("Kandinsky in a plain browser (a vault on a server) opens a web link in a new tab of that browser", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   const popup = page.waitForEvent("popup", { timeout: 10_000 });

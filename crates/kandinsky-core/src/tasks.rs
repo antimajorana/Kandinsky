@@ -1,6 +1,6 @@
 //! What a task line says beyond its text, and the questions a task block can ask of a list of tasks.
 //! The syntax read is the one of Obsidian's Tasks plugin (emoji fields), by shape — so the user's
-//! existing notes work — but the block's options are Atlas's own small set (docs/guides/TASKS.md), not a
+//! existing notes work — but the block's options are Kandinsky's own small set (docs/guides/TASKS.md), not a
 //! port of that plugin's query language.
 //!
 //! `- [ ] Submit the abstract ⏫ 🔁 every week 🛫 2026-10-10 📅 2026-10-17 #work`
@@ -193,7 +193,7 @@ impl Task {
 /// `every week`, `every 3 days`, `every month` (the day kept by the date itself), `every month on the 31st` / `on the
 /// last` (that day, or the month's last when it has none), `every week on Monday, Thursday` (every N weeks counted
 /// from the task's week, weeks from Monday), `every weekday`, each optionally ending in `when done`. None: a rule
-/// Atlas does not read (`every month on the 2nd Tuesday`) — the task is then ticked like any other and nothing new is
+/// Kandinsky does not read (`every month on the 2nd Tuesday`) — the task is then ticked like any other and nothing new is
 /// made, rather than made wrongly.
 pub(crate) fn step(rule: &str, from: NaiveDate) -> Option<NaiveDate> {
     let r = rule.to_ascii_lowercase();
@@ -238,7 +238,7 @@ pub(crate) fn step(rule: &str, from: NaiveDate) -> Option<NaiveDate> {
         }
         _ => return None,
     }
-    // a huge count (`every 4000000000 days`) is a rule Atlas does not read, not an overflow
+    // a huge count (`every 4000000000 days`) is a rule Kandinsky does not read, not an overflow
     let months = |m: u32| -> Option<NaiveDate> {
         let total = (from.year() * 12 + from.month0() as i32).checked_add(i32::try_from(m).ok()?)?;
         let (y, mo) = (total.div_euclid(12), total.rem_euclid(12) as u32 + 1);
@@ -272,7 +272,7 @@ pub(crate) fn step(rule: &str, from: NaiveDate) -> Option<NaiveDate> {
 
 /// The line of the next occurrence of a recurring task line that is being ticked on `today`: the
 /// same line with its dates moved on by the rule, still open. None when the line has no rule, or
-/// one Atlas does not read.
+/// one Kandinsky does not read.
 ///
 /// The step is taken from the task's own date (due, else scheduled, else start) — a weekly task
 /// done two days late is due next week all the same — unless the rule says `when done`, or the

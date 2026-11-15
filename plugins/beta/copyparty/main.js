@@ -1,11 +1,11 @@
-// copyparty — your copyparty servers in Atlas's explorer (docs/guides/PLUGIN-API.md, `atlas.files.source`). All through
-// copyparty's own HTTP API with atlas.fetch (the core makes the request: no CORS, the password never in the page):
-// `?ls` lists a folder, a GET fetches a file into its local copy (.atlas/remote/copyparty/<server>/<path>, which the
+// copyparty — your copyparty servers in Kandinsky's explorer (docs/guides/PLUGIN-API.md, `kandinsky.files.source`). All through
+// copyparty's own HTTP API with kandinsky.fetch (the core makes the request: no CORS, the password never in the page):
+// `?ls` lists a folder, a GET fetches a file into its local copy (.kandinsky/remote/copyparty/<server>/<path>, which the
 // explorer opens in the editor or a viewer), a PUT writes one back, POST `?move=` / `?delete` / act=mkdir change them.
 // A folder is deleted only when empty: copyparty's own delete takes everything inside, and nothing goes to a trash.
 // Thumbnails (the explorer's Thumbnails view) are the server's own, `?th=j`.
-export function register(atlas) {
-  const servers = () => (Array.isArray(atlas.plugin.settings.servers) ? atlas.plugin.settings.servers : []).filter((s) => s?.name && s?.url);
+export function register(kandinsky) {
+  const servers = () => (Array.isArray(kandinsky.plugin.settings.servers) ? kandinsky.plugin.settings.servers : []).filter((s) => s?.name && s?.url);
   const server = (name) => {
     const s = servers().find((x) => x.name === name);
     if (!s) throw new Error(`no copyparty server “${name}” (Settings → copyparty)`);
@@ -22,10 +22,10 @@ export function register(atlas) {
   const plain = (t) => t.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
 
   async function call(name, vpath, query = "", init = {}) {
-    const pw = (await atlas.secrets.has(secret(name))) ? { pw: { secret: secret(name) } } : {};
-    const r = await atlas.fetch(url(name, vpath, query), { timeout: 120, ...init, headers: { ...pw, ...init.headers } });
-    // a sign-in in front of the server (Authelia…): Atlas offers it; the explorer waits for it instead of an error
-    if (r.signin) throw Object.assign(new Error(`${name}: sign in to ${r.signin.host} first (Atlas offers it), then open it again`), { waiting: true });
+    const pw = (await kandinsky.secrets.has(secret(name))) ? { pw: { secret: secret(name) } } : {};
+    const r = await kandinsky.fetch(url(name, vpath, query), { timeout: 120, ...init, headers: { ...pw, ...init.headers } });
+    // a sign-in in front of the server (Authelia…): Kandinsky offers it; the explorer waits for it instead of an error
+    if (r.signin) throw Object.assign(new Error(`${name}: sign in to ${r.signin.host} first (Kandinsky offers it), then open it again`), { waiting: true });
     if (r.status === 401 || r.status === 403) throw new Error(`${name}: not allowed (${r.status}) — a password in Settings → copyparty, or the VPN?`);
     if (!r.ok) throw new Error(`${name}: ${r.status} ${plain(await r.text())}`);
     return r;
@@ -42,7 +42,7 @@ export function register(atlas) {
 
   // folders seen before show at once from a cache kept between runs, the server's answer refreshing it behind;
   // what a write checks (stat) always asks the server, and a change here drops the folders it touched
-  const LISTS = "atlas.copyparty.lists", MAX_LISTS = 400;
+  const LISTS = "kandinsky.copyparty.lists", MAX_LISTS = 400;
   const lists = (() => { try { return JSON.parse(localStorage.getItem(LISTS) ?? "{}"); } catch { return {}; } })();
   // written once listing pauses: serialising every kept folder after each one froze the page through a walk of a hundred
   // (the books library over the server)
@@ -70,7 +70,7 @@ export function register(atlas) {
   }
 
   // thumbnails fetched before: (server, path) → the cached file (null: the server has none), written once fetching pauses
-  const THUMBS = "atlas.copyparty.thumbs", MAX_THUMBS = 5000;
+  const THUMBS = "kandinsky.copyparty.thumbs", MAX_THUMBS = 5000;
   const thumbs = (() => { try { return JSON.parse(localStorage.getItem(THUMBS) ?? "{}"); } catch { return {}; } })();
   let thumbTimer = 0;
   // the oldest forgotten past the cap (their files stay in the cache; one is fetched again when shown)
@@ -78,16 +78,16 @@ export function register(atlas) {
   const keepThumbs = () => { clearTimeout(thumbTimer); thumbTimer = setTimeout(() => { trim(thumbs, MAX_THUMBS); try { localStorage.setItem(THUMBS, JSON.stringify(thumbs)); } catch { /* kept for this run */ } }, 2000); };
 
   // each local copy → the file it came from, as last seen there (its date and size): a save over a newer version is asked first
-  const KEY = "atlas.copyparty.copies";
+  const KEY = "kandinsky.copyparty.copies";
   const copies = (() => { try { return JSON.parse(localStorage.getItem(KEY) ?? "{}"); } catch { return {}; } })();
   const remember = (local, seen) => { copies[local] = seen; try { localStorage.setItem(KEY, JSON.stringify(copies)); } catch { /* kept for this run */ } };
   const put = (name, path, local, replace) => call(name, path, replace ? "?replace" : "", { method: "PUT", bodyFile: local, timeout: 300 });
 
-  if (!atlas.files) return; // an Atlas older than the shared explorer: nothing to add to
-  atlas.files.source({
+  if (!kandinsky.files) return; // an Kandinsky older than the shared explorer: nothing to add to
+  kandinsky.files.source({
     title: "copyparty", icon: "server",
     places: async () => servers().map((s) => ({ id: s.name, title: s.name, detail: s.url })),
-    // a link to a file on a server (its address as the setting has it, or a deeper one): that file, opened in Atlas
+    // a link to a file on a server (its address as the setting has it, or a deeper one): that file, opened in Kandinsky
     owns: (href) => {
       for (const s of servers()) {
         const base = s.url.trim().replace(/\/+$/, "");
@@ -127,7 +127,7 @@ export function register(atlas) {
       // made once: a thumbnail fetched before is the file kept in the cache (a library of 900 covers asked the server
       // for each one on every visit); a month later it is asked again
       const key = `${name}\n${path}`, kept = thumbs[key];
-      if (kept && Date.now() - kept.at < 30 * 864e5 && (kept.saved === null || (await atlas.exists(kept.saved).catch(() => false)))) return kept.saved;
+      if (kept && Date.now() - kept.at < 30 * 864e5 && (kept.saved === null || (await kandinsky.exists(kept.saved).catch(() => false)))) return kept.saved;
       const r = await call(name, path, "?th=j", { saveTo: `thumbs/${name}/${path.replace(/^\/+/, "")}.jpg` });
       const saved = (r.headers["content-type"] ?? "").startsWith("image/jpeg") ? r.saved : null; // else the server's icon
       thumbs[key] = { saved, at: Date.now() };
@@ -135,7 +135,7 @@ export function register(atlas) {
       return saved;
     },
     mkdir: async (name, path) => {
-      const b = `----atlas${Math.random().toString(36).slice(2)}`, field = (k, v) => `--${b}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`;
+      const b = `----kandinsky${Math.random().toString(36).slice(2)}`, field = (k, v) => `--${b}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`;
       await call(name, parentOf(path).replace(/\/*$/, "/"), "", { method: "POST", headers: { "content-type": `multipart/form-data; boundary=${b}` }, body: `${field("act", "mkdir")}${field("name", baseName(path))}--${b}--\r\n` });
       forget(name, parentOf(path));
     },

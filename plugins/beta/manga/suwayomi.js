@@ -25,7 +25,7 @@ const KEEP_PAGES = 300;
 /** What a server answered, kept in the page's storage per server: { library, chapters: {<manga id>: nodes},
  *  pages: {c<chapter id>: urls}, the last opened last, marks: {<chapter id>: { page, read }} not yet sent }. In memory only when storage is off. */
 export function kept(base, storage = globalThis.localStorage) {
-  const key = `atlas.manga.suwayomi:${base}`;
+  const key = `kandinsky.manga.suwayomi:${base}`;
   let data = {};
   try { data = JSON.parse(storage?.getItem(key) ?? "{}") ?? {}; } catch { /* storage off or spoilt: start empty */ }
   data.chapters ??= {}; data.pages ??= {}; data.marks ??= {};
@@ -43,14 +43,14 @@ export function kept(base, storage = globalThis.localStorage) {
 class Answered extends Error {}
 const MARK = "mutation($id: Int!, $page: Int!, $read: Boolean!) { updateChapter(input: {id: $id, patch: {lastPageRead: $page, isRead: $read}}) { chapter { id } } }";
 
-export function suwayomi(atlas, address, store) {
+export function suwayomi(kandinsky, address, store) {
   const base = String(address || "").trim().replace(/\/+$/, "");
   store ??= kept(base);
   const k = store.data;
   let flushing = null, told = false;
   async function ask(q, variables) {
-    const r = await atlas.fetch(`${base}/api/graphql`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { query: q, variables } });
-    if (r.signin) throw new Error(`sign in to ${new URL(base).host} first (Atlas offered it)`);
+    const r = await kandinsky.fetch(`${base}/api/graphql`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { query: q, variables } });
+    if (r.signin) throw new Error(`sign in to ${new URL(base).host} first (Kandinsky offered it)`);
     if (!r.ok) throw new Error(`Suwayomi answered ${r.status}`);
     const d = await r.json();
     if (d.errors?.length) throw new Answered(said(d.errors[0].message));
@@ -81,12 +81,12 @@ export function suwayomi(atlas, address, store) {
    *  (`width` px at most): the server sends JPEG XL too, which WebKit's own decoder can hang the page on. One kept
    *  already is not asked again (a page's picture does not change; a cover rarely). */
   async function picture(url, keep, width) {
-    const there = `.atlas/cache/plugins/${atlas.plugin?.id ?? "manga"}/suwayomi/${keep}`;
-    if (await atlas.exists?.(there).catch(() => false)) return atlas.thumbUrl(there, width);
-    const r = await atlas.fetch(url, { saveTo: `suwayomi/${keep}` });
+    const there = `.kandinsky/cache/plugins/${kandinsky.plugin?.id ?? "manga"}/suwayomi/${keep}`;
+    if (await kandinsky.exists?.(there).catch(() => false)) return kandinsky.thumbUrl(there, width);
+    const r = await kandinsky.fetch(url, { saveTo: `suwayomi/${keep}` });
     if (r.signin) throw new Error(`sign in to ${new URL(base).host} first`);
     if (!r.ok || !r.saved) throw new Error(`Suwayomi answered ${r.status}`);
-    return atlas.thumbUrl(r.saved, width);
+    return kandinsky.thumbUrl(r.saved, width);
   }
   const api = {
     on: !!base,
@@ -162,7 +162,7 @@ export function suwayomi(atlas, address, store) {
         if (e instanceof Answered) throw e;
         k.marks[id] = { page, read, at: Date.now() };
         store.save();
-        if (!told) { told = true; atlas.toast?.("Manga", `Suwayomi cannot be reached (${e.message ?? e}): where you are is kept and sent when it answers.`); }
+        if (!told) { told = true; kandinsky.toast?.("Manga", `Suwayomi cannot be reached (${e.message ?? e}): where you are is kept and sent when it answers.`); }
       }
     },
   };

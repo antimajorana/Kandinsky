@@ -1,4 +1,4 @@
-// What plugins add to Today's greeting (`atlas.shell.greetingItem`): short chips under the date — the weather and the
+// What plugins add to Today's greeting (`kandinsky.shell.greetingItem`): short chips under the date — the weather and the
 // place (Weather), the week and the moon, what is due (Home). The greeting draws this list, in `order`.
 import { guard } from "./plugin-log.svelte";
 export interface GreetingChip { key: string; plugin: string; text: string; icon?: string; title?: string; order: number; run?: () => void | Promise<void> }

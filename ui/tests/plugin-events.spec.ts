@@ -1,25 +1,25 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import { openFile } from "./open";
 
-// Plugins v4, events (docs/refactor/REFACTOR-plugins-v4.md, 3.3): `atlas.on(type, fn)` — a tab opened on a
+// Plugins v4, events (docs/refactor/REFACTOR-plugins-v4.md, 3.3): `kandinsky.on(type, fn)` — a tab opened on a
 // file, a save, a new note. A listener that throws breaks nothing and is in its plugin's log.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
-const MAIN = `export function register(atlas) {
+const MAIN = `export function register(kandinsky) {
   const seen = [];
-  const cell = atlas.shell.statusItem({ id: "last", text: "nothing yet" });
+  const cell = kandinsky.shell.statusItem({ id: "last", text: "nothing yet" });
   const note = (e) => { seen.push(e.type + " " + (e.path ?? e.from)); cell.set(seen.join(" | ").slice(-200)); };
-  for (const t of ["file:open", "file:save", "file:create", "file:rename", "file:delete", "capture"]) atlas.on(t, note);
-  atlas.on("command", (e) => { if (e.id === "ui.outline") note({ type: "command", path: e.id }); });
-  atlas.on("file:save", () => { throw new Error("a listener that breaks"); });
+  for (const t of ["file:open", "file:save", "file:create", "file:rename", "file:delete", "capture"]) kandinsky.on(t, note);
+  kandinsky.on("command", (e) => { if (e.id === "ui.outline") note({ type: "command", path: e.id }); });
+  kandinsky.on("file:save", () => { throw new Error("a listener that breaks"); });
 }\n`;
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/ev/plugin.toml", 'title = "Events"\n');
-  await put(request, ".atlas/plugins/ev/main.js", MAIN);
+  await put(request, ".kandinsky/plugins/ev/plugin.toml", 'title = "Events"\n');
+  await put(request, ".kandinsky/plugins/ev/main.js", MAIN);
   await put(request, "notes/events-note.md", "# Events\n\nline\n");
 });
-test.afterAll(async ({ request }) => { await put(request, ".atlas/plugins/ev/main.js", "export function register() {}\n"); });
+test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/ev/main.js", "export function register() {}\n"); });
 
 test("a plugin hears a file opened, saved and created; a broken listener harms nothing", async ({ page }) => {
   await page.goto("/");

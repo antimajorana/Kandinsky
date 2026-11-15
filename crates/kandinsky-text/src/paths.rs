@@ -14,6 +14,9 @@ pub fn safe_join(root: &Path, rel: &str) -> Result<PathBuf, String> {
     let mut out = root.to_path_buf();
     for comp in Path::new(rel).components() {
         match comp {
+            // Windows drops a name's trailing dots and spaces when it opens it (`.kandinsky./x` is `.kandinsky/x`): such a
+            // name would get past every check that compares names (the state folder's, a plugin's folder)
+            Component::Normal(c) if cfg!(windows) && c.to_string_lossy().ends_with(['.', ' ']) => return Err(bad("a name ending in a dot or a space is not allowed")),
             Component::Normal(c) => out.push(c),
             Component::CurDir => {}
             Component::ParentDir => return Err(bad("`..` is not allowed")),
@@ -75,6 +78,18 @@ pub fn rel_path(root: &Path, abs: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Windows drops trailing dots and spaces from a name it opens: such a name is refused, never joined.
+    #[cfg(windows)]
+    #[test]
+    fn a_name_windows_would_trim_is_refused() {
+        let d = tempfile::tempdir().unwrap();
+        for rel in [".kandinsky./plugins/x/view.js", "notes /a.md", "a.md.", "notes/a.md "] {
+            assert!(safe_join(d.path(), rel).is_err(), "{rel}");
+        }
+        assert!(safe_join(d.path(), "notes/a.b.md").is_ok());
+        assert!(safe_join(d.path(), "./notes/.hidden").is_ok());
+    }
 
     /// A root given in another form than its canonical one (Windows' short `RUNNER~1` temp names; here a symlink to it)
     /// still contains its own files, and `..` or a symlink out of it is still refused.

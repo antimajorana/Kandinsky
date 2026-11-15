@@ -41,7 +41,7 @@ export function liveDrawing(path: string, lib: Lib, api: () => Api | null, onPee
     if (!a) return;
     const id = `${DRAFT}${from}`;
     const rest = a.getSceneElementsIncludingDeleted().filter((e) => e.id !== id);
-    const draft = el && { ...el, id, locked: true, customData: { atlasDraft: true } };
+    const draft = el && { ...el, id, locked: true, customData: { kandinskyDraft: true } };
     a.updateScene({ elements: (draft ? [...rest, draft] : rest) as never, captureUpdate: lib.CaptureUpdateAction.NEVER });
     repaintUnderPen();
   };

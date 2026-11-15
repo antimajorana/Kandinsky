@@ -4,10 +4,10 @@ import { shownName } from "../src/lib/paths";
 // A note's properties (`[editor] properties`): hidden by default behind one faint line, shown in the
 // note as Obsidian does, or edited in a panel at the right of the note with a control per kind (the
 // vault's spec, templates/properties.yaml in the fixture).
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 type Mode = "hidden" | "inline" | "panel";
 const PANEL = "---\n# a comment that stays\ndate: 2026-10-01 09:00\ntype: Talk\ntags:\n  - physics\nrating: 3\nsomething_else: kept as it is\n---\n# Panel\n\nThe body, untouched by the panel.\n";
-const text = (page: Page) => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string } | null } }).__atlas.editor()?.text ?? "");
+const text = (page: Page) => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } | null } }).__kandinsky.editor()?.text ?? "");
 const read = async (page: Page, path: string) => ((await (await page.request.get(`/api/file?path=${encodeURIComponent(path)}`, { headers: H })).json()) as { text: string }).text;
 
 /** Open `path` with the properties shown as `mode` (the served settings only; config.toml is not touched). */

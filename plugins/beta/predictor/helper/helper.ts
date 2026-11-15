@@ -1,17 +1,17 @@
 // The Predictor's helper (docs/design/DESIGN-spelling-predictor.md): each note's sentences as plain words, with its
 // language, a chunk of notes per call so no call nears the helper's time limit; and a Hunspell dictionary's word list,
 // for finishing words the vault does not write often. Nothing is written; the page keeps the model in memory.
-import type { Params } from "atlas-helper";
+import type { Params } from "kandinsky-helper";
 import { guessLanguage, ownWriting, plainProse, withoutLongRuns, wordsOf } from "../../../../ui/src/lib/editor/prose";
 import { chooseDictionaries, dicStems, dictionaryFile, installedDictionaries, machineFiles, vaultFiles, type Exec } from "../../../../ui/src/lib/editor/dictionaries";
 import { packSentences, sentences } from "../ui/src/model";
 
-const exec: Exec = (cmd, args, opts) => atlas.exec(cmd, args, opts) as unknown as ReturnType<Exec>;
-const vault = vaultFiles(atlas), machine = machineFiles(exec);
+const exec: Exec = (cmd, args, opts) => kandinsky.exec(cmd, args, opts) as unknown as ReturnType<Exec>;
+const vault = vaultFiles(kandinsky), machine = machineFiles(exec);
 
 /** The notes to count, in order (the page asks for them in chunks). */
 async function notes() {
-  return (await atlas.files(true)).filter((p) => /\.md$/i.test(p) && !p.startsWith(".atlas/"));
+  return (await kandinsky.files(true)).filter((p) => /\.md$/i.test(p) && !p.startsWith(".kandinsky/"));
 }
 
 /** path → { lang, text: its sentences packed }; a note that is not the owner's writing (a kept mail) left out. */
@@ -21,7 +21,7 @@ async function count(p: Params) {
   const out: Record<string, { lang: string; text: string }> = {};
   for (const path of (p.paths as string[]) ?? []) {
     let text: string;
-    try { text = withoutLongRuns(await atlas.read(path), false); } catch { continue; } // gone since the list
+    try { text = withoutLongRuns(await kandinsky.read(path), false); } catch { continue; } // gone since the list
     if (!ownWriting(text)) continue;
     const lang = guessLanguage(text, langs, fallback, /^---[\s\S]*?^lang:\s*([\w-]+)/m.exec(text)?.[1]);
     out[path] = { lang, text: packSentences(sentences(plainProse(text), wordsOf)) };
@@ -38,4 +38,4 @@ async function lexicon(p: Params) {
   return [...words].join("\n");
 }
 
-atlas.methods({ notes, count, lexicon });
+kandinsky.methods({ notes, count, lexicon });

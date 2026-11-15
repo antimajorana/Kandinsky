@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # trim-target.sh — keeps target/ from growing without end. cargo never deletes a build it no longer uses: every feature set
 # (`cargo test -p X` and `--workspace` unify features differently), profile, target triple, toolchain and Cargo.lock
-# change makes a new copy (atlas-core: ~170 MB a copy, ~25 of them in a week; target/ reached 76 GB).
+# change makes a new copy (kandinsky-core: ~170 MB a copy, ~25 of them in a week; target/ reached 76 GB).
 #
 # Per crate and per profile folder: the newest build is always kept, up to KEEP-1 more while younger than DAYS; the
 # rest go — their files in deps/, their .fingerprint/ and build/ folders, and old incremental caches. A deleted build

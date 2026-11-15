@@ -1,7 +1,7 @@
 //! libarchive built from its release source, only the RAR and RAR5 readers' needs (no compression libraries, no
 //! crypto, no XML, no programs), as a static library. The source tarball is pinned by its SHA-256 and fetched once into
-//! OUT_DIR with curl, or taken from `ATLAS_LIBARCHIVE_TARBALL` (offline builds).
-//! For Android, cmake uses the NDK's toolchain file: `ANDROID_NDK_ROOT` (crates/atlas-android/build-apk.sh sets it).
+//! OUT_DIR with curl, or taken from `KANDINSKY_LIBARCHIVE_TARBALL` (offline builds).
+//! For Android, cmake uses the NDK's toolchain file: `ANDROID_NDK_ROOT` (crates/kandinsky-android/build-apk.sh sets it).
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
@@ -11,7 +11,7 @@ const ANDROID_API: &str = "26"; // build-apk.sh's `api`
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-env-changed=ATLAS_LIBARCHIVE_TARBALL");
+    println!("cargo:rerun-if-env-changed=KANDINSKY_LIBARCHIVE_TARBALL");
     println!("cargo:rerun-if-env-changed=ANDROID_NDK_ROOT");
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let src = source(&out);
@@ -53,14 +53,14 @@ fn source(out: &Path) -> PathBuf {
     if dir.join("CMakeLists.txt").is_file() {
         return dir;
     }
-    let tarball = match std::env::var_os("ATLAS_LIBARCHIVE_TARBALL") {
+    let tarball = match std::env::var_os("KANDINSKY_LIBARCHIVE_TARBALL") {
         Some(t) => PathBuf::from(t),
         None => {
             let t = out.join(format!("libarchive-{VERSION}.tar.gz"));
             if !t.is_file() {
                 let url = format!("https://github.com/libarchive/libarchive/releases/download/v{VERSION}/libarchive-{VERSION}.tar.gz");
                 let ok = std::process::Command::new("curl").args(["-fsSL", "--retry", "3", "-o"]).arg(&t).arg(&url).status().map(|s| s.success()).unwrap_or(false);
-                assert!(ok, "could not fetch {url} (set ATLAS_LIBARCHIVE_TARBALL to a downloaded copy)");
+                assert!(ok, "could not fetch {url} (set KANDINSKY_LIBARCHIVE_TARBALL to a downloaded copy)");
             }
             t
         }

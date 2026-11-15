@@ -14,7 +14,7 @@ use crate::store::{Kind, Object, Source, Store};
 use crate::sync::{self, Scope as SyncScope};
 use crate::uid;
 use crate::zone::Zone;
-use atlas_plugin::error;
+use kandinsky_plugin::error;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -25,10 +25,10 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Instant, SystemTime};
 use url::Url;
 
-pub type Res = atlas_plugin::Result<Value>;
+pub type Res = kandinsky_plugin::Result<Value>;
 pub type Method = fn(Value) -> Res;
 
-fn fail(e: impl std::fmt::Display) -> atlas_plugin::Error {
+fn fail(e: impl std::fmt::Display) -> kandinsky_plugin::Error {
     error(e.to_string())
 }
 
@@ -146,24 +146,24 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// Tells the page (when serving) that the cache changed.
 fn changed() {
     if conf::serving() {
-        atlas_plugin::event("changed", json!({}));
+        kandinsky_plugin::event("changed", json!({}));
     }
 }
 
 /// The account card of a calendar (its source's `account`).
-fn card_named(s: &Value, p: &Value, name: &str) -> atlas_plugin::Result<Card> {
+fn card_named(s: &Value, p: &Value, name: &str) -> kandinsky_plugin::Result<Card> {
     conf::accounts(s, p).into_iter().find(|c| c.name == name).ok_or_else(|| error(format!("no account {name:?} in Settings (Calendar → Accounts)")))
 }
 
 /// A cached calendar and the client of its account.
-fn client_for(s: &Value, p: &Value, source: &str) -> atlas_plugin::Result<(Source, Remote)> {
+fn client_for(s: &Value, p: &Value, source: &str) -> kandinsky_plugin::Result<(Source, Remote)> {
     let src = engine().store.source(source).ok_or_else(|| error(format!("no calendar {source:?} (refresh the calendars)")))?;
     let account = src.account.clone().ok_or_else(|| error(format!("{} is a subscription: read-only", src.name)))?;
     let c = Remote::of(&card_named(s, p, &account)?).map_err(|e| error(format!("{account}: {e}")))?;
     Ok((src, c))
 }
 
-fn dir_of(src: &Source) -> atlas_plugin::Result<Url> {
+fn dir_of(src: &Source) -> kandinsky_plugin::Result<Url> {
     Url::parse(&src.url).map(as_dir).map_err(fail)
 }
 
@@ -270,7 +270,7 @@ fn watch(p: Value) -> Res {
     let e = engine();
     if !e.watching.swap(true, Ordering::SeqCst) {
         std::thread::spawn(|| loop {
-            // settings asked of Atlas each time: a change in Settings reaches the next round
+            // settings asked of Kandinsky each time: a change in Settings reaches the next round
             let _ = pull_all(&json!({}), false);
             push_round();
             std::thread::sleep(std::time::Duration::from_secs(60));
@@ -434,7 +434,7 @@ fn instances(srcs: &[Source], s: &Value, range: Range, user: &Zone) -> Vec<Shown
     out
 }
 
-fn day_param(p: &Value, key: &str, default: NaiveDate) -> atlas_plugin::Result<NaiveDate> {
+fn day_param(p: &Value, key: &str, default: NaiveDate) -> kandinsky_plugin::Result<NaiveDate> {
     match param(p, key) {
         None => Ok(default),
         Some(s) => When::parse(s).map(|w| w.date()).map_err(|e| error(format!("{key}: {e}"))),
@@ -508,7 +508,7 @@ fn note_events(r: Range, user: &Zone) -> Vec<Value> {
                 let _ = std::io::Read::read_to_end(&mut std::io::Read::take(f, 16 * 1024), &mut buf);
                 String::from_utf8_lossy(&buf).into_owned()
             });
-            let evs = text.filter(|t| atlas_text::frontmatter::yaml_head(t).is_some_and(|y| y.contains("important"))).map(|t| sync::dated_events(&path, &t).0).unwrap_or_default();
+            let evs = text.filter(|t| kandinsky_text::frontmatter::yaml_head(t).is_some_and(|y| y.contains("important"))).map(|t| sync::dated_events(&path, &t).0).unwrap_or_default();
             cache.insert(path.clone(), (mtime, evs));
         }
         for ev in &cache[&path].1 {
@@ -551,7 +551,7 @@ fn remember(steps: Vec<Step>) -> u64 {
 /// The calendar to write to and its account's client: the call's `calendar` (an id, `account/Name`, a name, an
 /// address), else the default (Settings), else the first writable one. The calendars are read first when the cache
 /// has none yet.
-fn target(p: &Value, s: &Value) -> atlas_plugin::Result<(Source, Remote)> {
+fn target(p: &Value, s: &Value) -> kandinsky_plugin::Result<(Source, Remote)> {
     if engine().store.sources().iter().all(|x| x.kind != Kind::Caldav) && conf::filled(s) {
         let _ = pull_all(p, true);
     }
@@ -592,7 +592,7 @@ fn create(p: Value) -> Res {
     let cal = dir_of(&dst)?;
     let ch = change_for(&p, &s, &dst);
     let stamp = Utc::now();
-    let uid = uid::derive(&format!("atlas-calendar:{}", stamp.timestamp_nanos_opt().unwrap_or_default()), ch.summary.as_deref().unwrap_or(""));
+    let uid = uid::derive(&format!("kandinsky-calendar:{}", stamp.timestamp_nanos_opt().unwrap_or_default()), ch.summary.as_deref().unwrap_or(""));
     let text = edit::create(&uid, &ch, &user, stamp).map_err(error)?;
     let href = cal.join(&uid::resource_name(&uid)).map_err(fail)?;
     let etag = c.write(&href, &text, None).map_err(fail)?;
@@ -605,7 +605,7 @@ fn create(p: Value) -> Res {
 }
 
 /// The cached object, else the server's (a calendar not synced yet).
-fn object(c: &Remote, source: &str, href: &str) -> atlas_plugin::Result<Object> {
+fn object(c: &Remote, source: &str, href: &str) -> kandinsky_plugin::Result<Object> {
     if let Some(o) = engine().store.object(source, href) {
         return Ok(o);
     }
@@ -617,7 +617,7 @@ fn object(c: &Remote, source: &str, href: &str) -> atlas_plugin::Result<Object> 
 }
 
 /// Writes `text` over the object read (If-Match its ETag); the cache follows.
-fn put_over(c: &Remote, o: &Object, text: Option<&str>) -> atlas_plugin::Result<()> {
+fn put_over(c: &Remote, o: &Object, text: Option<&str>) -> kandinsky_plugin::Result<()> {
     let u = Url::parse(&o.href).map_err(fail)?;
     match text {
         Some(t) => {
@@ -633,7 +633,7 @@ fn put_over(c: &Remote, o: &Object, text: Option<&str>) -> atlas_plugin::Result<
 }
 
 /// Runs an edit on the object; when the server had a newer version (412), once more on that one.
-fn edit_object<F>(c: &Remote, source: &str, href: &str, mut f: F) -> atlas_plugin::Result<(Object, edit::Written)>
+fn edit_object<F>(c: &Remote, source: &str, href: &str, mut f: F) -> kandinsky_plugin::Result<(Object, edit::Written)>
 where
     F: FnMut(&str) -> Result<edit::Written, String>,
 {
@@ -723,7 +723,7 @@ fn undo(p: Value) -> Res {
     let id = p["id"].as_u64().ok_or_else(|| error("id: required"))?;
     let steps = {
         let mut u = lock(&engine().undo);
-        let i = u.iter().position(|(x, _)| *x == id).ok_or_else(|| error("nothing to undo (Atlas was restarted since?)"))?;
+        let i = u.iter().position(|(x, _)| *x == id).ok_or_else(|| error("nothing to undo (Kandinsky was restarted since?)"))?;
         u.remove(i).1
     };
     let s = conf::settings(&p);
@@ -815,7 +815,7 @@ struct Invitation {
     span: Option<(i64, i64)>,
 }
 
-fn first_invite(p: &Value) -> atlas_plugin::Result<Invitation> {
+fn first_invite(p: &Value) -> kandinsky_plugin::Result<Invitation> {
     let text = p["ics"].as_str().ok_or_else(|| error("ics: required (the invitation's calendar text)"))?;
     let inv = ics::split_invite(text).map_err(error)?.into_iter().next().ok_or_else(|| error("the invitation has no event"))?;
     let user = conf::user_zone(p);
@@ -864,7 +864,7 @@ fn exchange_copy(s: &Value, p: &Value, uid: &str) -> Option<(Object, Remote)> {
 }
 
 /// Files an invitation the user answered (README "Email"): the user's PARTSTAT on their ATTENDEE line, METHOD
-/// dropped, the mail as X-ATLAS-SOURCE; a cancellation marks the copy cancelled.
+/// dropped, the mail as X-KANDINSKY-SOURCE; a cancellation marks the copy cancelled.
 fn import_invite(p: Value) -> Res {
     let s = conf::settings(&p);
     let Invitation { inv, start, end, .. } = first_invite(&p)?;
@@ -1150,7 +1150,7 @@ fn migrate(p: Value) -> Res {
     let key = conf::password_key(&name);
     if conf::secret(&p, &key).is_none() {
         if let (Some(pw), true) = (conf::secret(&p, "password"), conf::serving()) {
-            atlas_plugin::Atlas::new().set_secret(&key, &pw).map_err(|e| error(format!("the app password could not be moved to the card {name}: {e}")))?;
+            kandinsky_plugin::Kandinsky::new().set_secret(&key, &pw).map_err(|e| error(format!("the app password could not be moved to the card {name}: {e}")))?;
         }
     }
     eprintln!("dav: the 0.1 settings become the account card {name}");
@@ -1239,14 +1239,14 @@ fn remove_event(p: Value) -> Res {
 }
 
 /// The vault's important notes into the default calendar (opt-in: `push_notes`; never mail, never .ics files —
-/// invitations come from Email's `import_invite`). With `paths` (Atlas, after files changed: `on = "fs"`) only those,
+/// invitations come from Email's `import_invite`). With `paths` (Kandinsky, after files changed: `on = "fs"`) only those,
 /// and only while it is on and an account is filled in (an empty list: every note, on the same terms); without, every
 /// note in the folders.
 fn sync_method(p: Value) -> Res {
     let s = conf::settings(&p);
     let folders: Vec<String> = s["folders"].as_array().map(|a| a.iter().filter_map(|f| f.as_str().map(str::to_string)).collect()).unwrap_or_default();
     let scope = SyncScope { folders, past_days: s["past_days"].as_i64().unwrap_or(30) };
-    // `paths` given: Atlas after files changed; an empty list there means anything may have changed (every note read)
+    // `paths` given: Kandinsky after files changed; an empty list there means anything may have changed (every note read)
     let hooked = p["paths"].as_array();
     let only: Option<Vec<String>> = hooked.filter(|a| !a.is_empty()).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect());
     if hooked.is_some() {
@@ -1274,7 +1274,7 @@ fn sync_method(p: Value) -> Res {
     let serving = conf::serving();
     let told = |r: &sync::Report| {
         if serving {
-            atlas_plugin::event("added", json!({ "title": r.title, "start": r.start, "path": r.path, "outcome": r.outcome }));
+            kandinsky_plugin::event("added", json!({ "title": r.title, "start": r.start, "path": r.path, "outcome": r.outcome }));
         }
     };
     let reports = sync::push(&c, &dir_of(&dst)?, &scan.found, &told);

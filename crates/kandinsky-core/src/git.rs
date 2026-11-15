@@ -291,14 +291,14 @@ fn parse_status(text: &str) -> GitStatus {
 }
 
 /// How long one `git status` answers every page that asks. A file change ([`files_changed`]) or anything
-/// Atlas does to git ([`forget_status`]) forgets it at once.
+/// Kandinsky does to git ([`forget_status`]) forgets it at once.
 const STATUS_FRESH: Duration = Duration::from_millis(1500);
 /// A vault's root → when an answer was made, and the answer.
 type Shared<T> = LazyLock<Mutex<HashMap<PathBuf, (Instant, T)>>>;
 /// The answer also keeps the index's stamp it was made against.
 static STATUS: Shared<(Option<IndexStamp>, GitStatus)> = LazyLock::new(Mutex::default);
 
-/// The index file's modification time and size: `git add`, `commit`, `reset`… run outside Atlas rewrite it, and touch
+/// The index file's modification time and size: `git add`, `commit`, `reset`… run outside Kandinsky rewrite it, and touch
 /// no watched file (`.git/` is not watched), so this is what tells the shared status it is stale.
 type IndexStamp = (std::time::SystemTime, u64);
 fn index_stamp(root: &Path) -> Option<IndexStamp> {
@@ -486,7 +486,7 @@ pub fn stage(root: &Path, rels: &[String], on: bool) -> Result<()> {
 
 /// Throws away the unstaged changes of files: tracked ones go back to their index version,
 /// untracked ones go to the Trash. The current text of each is copied to
-/// `.atlas/cache/discarded/<stamp>/` first, so a slip is recoverable. Returns that folder.
+/// `.kandinsky/cache/discarded/<stamp>/` first, so a slip is recoverable. Returns that folder.
 pub fn discard(ws: &Workspace, rels: &[String]) -> Result<String> {
     let root = ws.root();
     let untracked: Vec<&String> = {

@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 // A rendered note hydrates only once the file index is in: before it, `![[x.svg]]` can only be guessed beside the
 // note, and the guess was fetched (a 404) on every first Home load whose log embeds a picture kept elsewhere.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#345"/></svg>`;
 
 test("Home's log picture kept in another folder is fetched from there, never guessed beside the log", async ({ page, request }) => {

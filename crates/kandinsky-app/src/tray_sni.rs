@@ -36,13 +36,13 @@ struct Sni {
 
 impl ksni::Tray for Sni {
     fn id(&self) -> String {
-        "atlas".into()
+        "kandinsky".into()
     }
     fn title(&self) -> String {
         self.model.tooltip()
     }
     fn icon_name(&self) -> String {
-        String::new() // the pixmap: an installed theme icon named atlas may be older or missing (AppImage)
+        String::new() // the pixmap: an installed theme icon named kandinsky may be older or missing (AppImage)
     }
     /// Unseen notices: the dotted icon, steady. `NeedsAttention` would make Plasma pulse it for as long as they wait.
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {

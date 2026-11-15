@@ -1,15 +1,15 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /** A PDF page's text as PDFium gives it (Pdfium.chars: each character with its box in points, y up), for selecting
  *  words on the Boox: the character under a point, a word's ends, a selection's line boxes and its quote — the same
- *  quote the desktop writes (ui/src/lib/atlas-mark.ts quoteOf: the words, and up to 32 characters of whole words on
+ *  quote the desktop writes (ui/src/lib/kandinsky-mark.ts quoteOf: the words, and up to 32 characters of whole words on
  *  either side, spaces squashed), so a passage marked on either device is found on the other. Plain Java (no Android),
  *  tested on the desktop JVM (android/test). */
 public final class PdfText {
-    /** Characters around a quote's words (atlas-mark.ts AROUND). */
+    /** Characters around a quote's words (kandinsky-mark.ts AROUND). */
     static final int AROUND = 32;
 
     private final int[] codes;

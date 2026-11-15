@@ -2,7 +2,7 @@
 import type { DraftFile } from "./DraftFile";
 
 /**
- * A tool Atlas drafted from how the workspace is used (`GET /api/tools/suggestions`). Nothing is
+ * A tool Kandinsky drafted from how the workspace is used (`GET /api/tools/suggestions`). Nothing is
  * written until it is kept.
  */
 export type ToolDraft = { id: string, title: string, 

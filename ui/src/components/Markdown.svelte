@@ -4,6 +4,8 @@
   import { errText } from "../lib/text";
   import { renderMarkdown, stripFrontmatter } from "../lib/markdown";
   import { onHighlightLanguage } from "../lib/highlight";
+  import { onRendererArrived } from "../lib/lazy-render";
+  import { loadMath } from "../lib/math";
   import { markLogEntries } from "../lib/log-entries";
   import { followRenderedLink } from "../lib/rendered-links";
   import { onVaultChange, vaultReady } from "../lib/vault";
@@ -19,8 +21,9 @@
   let vaultTick = $state(0);
   // hydrate only once the file index is in: before it, embeds resolve to a guess beside the note (a 404)
   let listed = $state(false);
-  $effect(() => { void vaultReady().then(() => (listed = true)); return onVaultChange(() => vaultTick++); });
+  $effect(() => { void loadMath().catch(() => {}); void vaultReady().then(() => (listed = true)); return onVaultChange(() => vaultTick++); });
   $effect(() => onHighlightLanguage(() => vaultTick++)); // a fence's language arrived: drawn highlighted
+  $effect(() => onRendererArrived(() => vaultTick++)); // KaTeX arrived: redraw pending formulas
   const html = $derived((void vaultTick, renderMarkdown(stripFrontmatter(text), { dir })));
   let el: HTMLDivElement;
 
@@ -41,6 +44,16 @@
       box.disabled = true;
       void api.tickTask(path, line).catch((err) => { box.disabled = false; toast("Could not tick it", errText(err), "error"); });
       return;
+    }
+    const eqLink = (e.target as HTMLElement).closest<HTMLElement>("[data-eqref]");
+    if (eqLink && el && !e.ctrlKey && !e.metaKey) {
+      const id = eqLink.dataset.eqref ?? "";
+      const targetEl = id ? el.querySelector<HTMLElement>(`[data-eq-id="${CSS.escape(id)}"]`) : null;
+      if (targetEl) {
+        e.preventDefault();
+        targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
     }
     followLink(e, false);
   }

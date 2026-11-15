@@ -1,6 +1,6 @@
 // The other vaults in the explorer: every vault this core serves at `/v/<name>/` (the desktop's one
 // core, a server's vaults) is a place, read and written through that vault's own API. A file opens from its copy in
-// `.atlas/remote/vaults/<name>/…`, and each save of the copy goes back (refused when the file changed there meanwhile),
+// `.kandinsky/remote/vaults/<name>/…`, and each save of the copy goes back (refused when the file changed there meanwhile),
 // as a remote file does (file-sources.svelte.ts).
 import { api, apiBase, ApiError } from "./api";
 import { basename } from "./paths";
@@ -17,7 +17,7 @@ const copyOf = (place: string, path: string) => `${REMOTE}${ID}/${nameOf(place)}
 
 async function call(place: string, method: string, path: string, query: Record<string, string> = {}, body?: BodyInit, json = false): Promise<Response> {
   const qs = new URLSearchParams(query).toString();
-  const r = await fetch(`${baseOf(place)}${path}${qs ? `?${qs}` : ""}`, { method, body, headers: { "x-atlas": "1", ...(json ? { "content-type": "application/json" } : {}) } });
+  const r = await fetch(`${baseOf(place)}${path}${qs ? `?${qs}` : ""}`, { method, body, headers: { "x-kandinsky": "1", ...(json ? { "content-type": "application/json" } : {}) } });
   if (!r.ok) throw new ApiError(r.status, `${nameOf(place)}: ${(await r.text().catch(() => "")) || `${method} ${path}: ${r.status}`}`);
   return r;
 }

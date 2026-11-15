@@ -195,14 +195,14 @@
     const start = r.widths ?? (r.columns.length === 2 ? [1.25, 1] : r.columns.map(() => 1));
     const perPx = start.reduce((a, b) => a + b, 0) / grid.clientWidth;
     const x0 = e.clientX;
-    document.body.classList.add("atlas-resizing"); // no text selection while dragging
+    document.body.classList.add("kandinsky-resizing"); // no text selection while dragging
     const move = (ev: PointerEvent) => {
       // neither side below a quarter share
       const d = Math.min(Math.max((ev.clientX - x0) * perPx, 0.25 - start[col]), start[col + 1] - 0.25);
       setWidths(page, row, start.map((w, i) => (i === col ? w + d : i === col + 1 ? w - d : w)));
     };
     const up = () => {
-      document.body.classList.remove("atlas-resizing");
+      document.body.classList.remove("kandinsky-resizing");
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       void save();

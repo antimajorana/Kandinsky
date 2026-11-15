@@ -1,14 +1,14 @@
-// The Print plugin's helper: CUPS (`lp`, `lpstat`) on the machine running Atlas, run by the core (`atlas.exec`). A note
+// The Print plugin's helper: CUPS (`lp`, `lpstat`) on the machine running Kandinsky, run by the core (`kandinsky.exec`). A note
 // prints as the document the Export plugin makes of it (its PDF, with the Export settings), never as its Markdown text;
 // any other file as it is. The answer is the job id `lp` gives, or why not — the page shows it. Tests: helper.test.ts.
-import type { Params } from "atlas-helper";
+import type { Params } from "kandinsky-helper";
 
 const SIDES: Record<string, string> = { "one-sided": "one-sided", "two-sided (long edge)": "two-sided-long-edge", "two-sided (short edge)": "two-sided-short-edge" };
 
 /** A CUPS program's output, in English whatever the machine's language (the words are read here). */
 async function cups(program: "lp" | "lpstat", args: string[]): Promise<string> {
-  const r = await atlas.exec(program, args, { locale: "C", timeout: 60 }).catch((e: Error) => {
-    throw new Error(/not installed/.test(e.message) ? `${program} is not installed on the machine running Atlas (CUPS)` : e.message);
+  const r = await kandinsky.exec(program, args, { locale: "C", timeout: 60 }).catch((e: Error) => {
+    throw new Error(/not installed/.test(e.message) ? `${program} is not installed on the machine running Kandinsky (CUPS)` : e.message);
   });
   if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim() || `${program} failed (${r.status ?? "killed"})`);
   return r.stdout;
@@ -25,7 +25,7 @@ async function printers() {
 /** A note's PDF, made by the plugin that is the vault's PDF export (role `pdf-export`: Export) with its own saved
  *  settings (the core puts them in); its vault path. */
 async function asPdf(path: string): Promise<string> {
-  const r = await atlas.post("/api/plugins/@pdf-export/helper", { method: "export", params: { path, to: "pdf" }, timeout_secs: 600 }).catch((e: Error) => {
+  const r = await kandinsky.post("/api/plugins/@pdf-export/helper", { method: "export", params: { path, to: "pdf" }, timeout_secs: 600 }).catch((e: Error) => {
     throw new Error(/provides the role/.test(e.message) ? "a note is printed as its PDF, made by the Export plugin: install it (Settings → Plugins)" : e.message);
   });
   return r.written[r.written.length - 1];
@@ -71,4 +71,4 @@ async function print(params: Params) {
   return { job: /request id is (\S+)/.exec(out)?.[1] ?? out.trim(), printed: target, printer: printer || "the default printer" };
 }
 
-atlas.methods({ printers, prepare, print });
+kandinsky.methods({ printers, prepare, print });

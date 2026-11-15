@@ -1,4 +1,4 @@
-// Atlas's CodeMirror 6 editor: the base every file gets (vim, history, search, selection, keys, the change / focus /
+// Kandinsky's CodeMirror 6 editor: the base every file gets (vim, history, search, selection, keys, the change / focus /
 // selection callbacks, where it was left), plus a note's (note-extensions.ts: the live preview…) or a code file's
 // (code-extensions.ts: its language, its server…). Links clicked: link-clicks.ts. Wiring follows obsidian-web's
 // editor.js; the textarea-adapter glue is deliberately not ported.
@@ -21,6 +21,7 @@ import { acceptCompletion, clearSnippet, closeCompletion, completionStatus } fro
 import { vim, getCM } from "@replit/codemirror-vim";
 import { bodyStart, frontmatterClose, redecorate, showRawProperties } from "./live/live-preview.js";
 import { onHighlightLanguage } from "../highlight";
+import { onRendererArrived } from "../lazy-render";
 import { onPropertySpec } from "../property-spec.svelte";
 import { lspFor, lspKeys } from "./lsp";
 import { definitionClicks } from "./definition";
@@ -28,7 +29,7 @@ import { mathPreview } from "./math-preview";
 import { editorMenu } from "./menu";
 import { guestLock } from "../guest.svelte";
 import { pluginCompletions, pluginHooks } from "./plugin-hooks";
-import { atlasTheme } from "./theme";
+import { kandinskyTheme } from "./theme";
 import { drawnSelection } from "./drawn-selection";
 import { defineEx, exHooks, modeLabel, stashVisual, restoreVisual, desktopKeys, type VimModeLabel } from "./vim-glue";
 import { defineWordMotions } from "./vim-words";
@@ -74,7 +75,7 @@ export interface EditorOptions {
   onOpenLink?: (target: string, opts?: { beside?: boolean }) => void;
 }
 
-export interface AtlasEditor {
+export interface KandinskyEditor {
   view: EditorView;
   setVim(on: boolean): void;
   /** Make the document this text (a reload from disk), changing only what differs. */
@@ -92,7 +93,7 @@ export const isMarkdown = (path: string) => /\.(md|markdown)$/i.test(path);
 
 installImagePeek(); // Ctrl over a picture: shown large (lib/image-peek.ts); once, for every editor and view
 
-export function createEditor(o: EditorOptions): AtlasEditor {
+export function createEditor(o: EditorOptions): KandinskyEditor {
   defineEx();
   defineWordMotions();
   let keepTimer: ReturnType<typeof setTimeout> | undefined;
@@ -131,7 +132,7 @@ export function createEditor(o: EditorOptions): AtlasEditor {
     keymap.of([
       { key: "Mod-s", preventDefault: true, run: () => { o.onSave?.(); return true; } },
     ]),
-    atlasTheme,
+    kandinskyTheme,
     ansiColors(), // before highlightSpecialChars: a hidden ESC [ … m is not drawn as a special character
     history(),
     drawnSelection(), // drawSelection() minus a rule that restyled the whole note on each focus change
@@ -211,9 +212,9 @@ export function createEditor(o: EditorOptions): AtlasEditor {
   // Code languages load lazily (language-data splits one chunk per language).
   const desc = md ? null : LanguageDescription.matchFilename(languages, basename(o.path));
   desc?.load().then((support) => { if (!destroyed) view.dispatch({ effects: lang.reconfigure(support) }); },
-    (err) => console.warn("[atlas] language load failed", o.path, err));
+    (err) => console.warn("[kandinsky] language load failed", o.path, err));
   if (!md) void lspFor(o.path).then((x) => { if (x && !destroyed) view.dispatch({ effects: lspSlot.reconfigure(x) }); },
-    (err) => console.warn("[atlas] language server", o.path, err));
+    (err) => console.warn("[kandinsky] language server", o.path, err));
   exHooks.set(view, { save: o.onSave, quit: o.onQuit });
   // a setting can change what the live preview draws (the properties' mode, the inline title): redraw
   const offSettings = onSettings((cfg) => {
@@ -227,6 +228,7 @@ export function createEditor(o: EditorOptions): AtlasEditor {
   const offZoom = () => window.removeEventListener(PANE_ZOOM_EVENT, onZoom);
   const offSpec = md ? onPropertySpec(() => view.dispatch({ effects: redecorate.of(null) })) : () => {};
   const offLang = md ? onHighlightLanguage(() => view.dispatch({ effects: redecorate.of(null) })) : () => {}; // a fence's language arrived
+  const offRenderer = md ? onRendererArrived(() => { view.dispatch({ effects: redecorate.of(null) }); view.requestMeasure(); }) : () => {}; // KaTeX arrived
 
   let vimOn = o.vim;
   let mode: VimModeLabel = o.vim ? "NORMAL" : "";
@@ -284,6 +286,7 @@ export function createEditor(o: EditorOptions): AtlasEditor {
       offZoom();
       offSpec();
       offLang();
+      offRenderer();
       unwireVim();
       exHooks.delete(view);
       view.destroy();

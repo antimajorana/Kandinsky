@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.content.Context;
 import android.view.MotionEvent;
@@ -7,8 +7,8 @@ import org.json.JSONArray;
 
 /**
  * The pen over a drawing in the page, read natively: a transparent view over Excalidraw's ink region, there exactly while Onyx's instant
- * ink is (AtlasActivity.applyInk). It takes the pen as Notepad does — every sample Android batched between frames, with
- * its pressure — and hands each finished stroke to the page (`atlasShell.penStroke`, pen-target.ts), where the drawing
+ * ink is (KandinskyActivity.applyInk). It takes the pen as Notepad does — every sample Android batched between frames, with
+ * its pressure — and hands each finished stroke to the page (`kandinskyShell.penStroke`, pen-target.ts), where the drawing
  * makes it an element; the page never sees that pen. Fingers and the eraser end go through to the page (pan, zoom,
  * Excalidraw's eraser), except right after the pen: a hand resting while writing moves nothing (Notepad's palm rule).
  */

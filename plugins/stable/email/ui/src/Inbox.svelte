@@ -6,7 +6,7 @@
   import Icon from "./Icon.svelte";
   import { call, hue, initials, senders, setting, snoozeTimes, when, type Account, type Draft, type Moved, type PluginApi, type Row } from "./api";
 
-  let { atlas, options = {}, onopen }: { atlas: PluginApi; options?: Record<string, unknown>; onopen: (detail: Record<string, unknown>) => void } = $props();
+  let { kandinsky, options = {}, onopen }: { kandinsky: PluginApi; options?: Record<string, unknown>; onopen: (detail: Record<string, unknown>) => void } = $props();
   const limit = $derived(Number(options.limit ?? 8) || 8);
   const account = $derived(String(options.account ?? ""));
 
@@ -33,11 +33,11 @@
     try {
       const base = { view: "inbox", account };
       const [a, imp, unread, recent, c] = await Promise.all([
-        call<{ accounts: Account[]; own: string[] }>(atlas, "accounts", {}, 30),
-        call<{ rows: Row[] }>(atlas, "list", { ...base, quick: "starred", limit: 6 }, 30),
-        call<{ rows: Row[] }>(atlas, "list", { ...base, kind: "person", quick: "unread", limit }, 30),
-        call<{ rows: Row[] }>(atlas, "list", { ...base, kind: "person", limit }, 30),
-        call<Counts>(atlas, "count", { account }, 30),
+        call<{ accounts: Account[]; own: string[] }>(kandinsky, "accounts", {}, 30),
+        call<{ rows: Row[] }>(kandinsky, "list", { ...base, quick: "starred", limit: 6 }, 30),
+        call<{ rows: Row[] }>(kandinsky, "list", { ...base, kind: "person", quick: "unread", limit }, 30),
+        call<{ rows: Row[] }>(kandinsky, "list", { ...base, kind: "person", limit }, 30),
+        call<Counts>(kandinsky, "count", { account }, 30),
       ]);
       accounts = account ? a.accounts.filter((x) => x.name === account) : a.accounts;
       own = a.own;
@@ -48,7 +48,7 @@
       people = [...take(unread.rows), ...take(recent.rows)].slice(0, limit);
       counts = c;
       error = "";
-      call<{ events: typeof today } | null>(atlas, "agenda", { days: 1 }, 20).then((a) => { today = a?.events ?? []; }).catch(() => {});
+      call<{ events: typeof today } | null>(kandinsky, "agenda", { days: 1 }, 20).then((a) => { today = a?.events ?? []; }).catch(() => {});
       if (cursor !== null && !all.some((r) => r.id === cursor)) cursor = null;
     } catch (e) { error = (e as Error).message; }
     loaded = true;
@@ -58,7 +58,7 @@
     // a sync says `changed` per batch and `new` with it: one reload for a burst, as the pane does
     let timer: ReturnType<typeof setTimeout> | undefined;
     const soon = () => { clearTimeout(timer); timer = setTimeout(() => void load(), 250); };
-    const offs = [atlas.helper.on("changed", soon), atlas.helper.on("new", soon)];
+    const offs = [kandinsky.helper.on("changed", soon), kandinsky.helper.on("new", soon)];
     return () => { clearTimeout(timer); offs.forEach((o) => o()); };
   });
 
@@ -76,21 +76,21 @@
     people = people.filter((x) => x.id !== r.id);
     try {
       const { moved } = await run();
-      say(label, moved?.length ? async () => { await call(atlas, "undo", { moved }); load(); } : undefined);
+      say(label, moved?.length ? async () => { await call(kandinsky, "undo", { moved }); load(); } : undefined);
     } catch (e) {
       important = was.important; people = was.people;
       say(`${label} failed: ${(e as Error).message}`);
     } finally { busy.delete(r.id); }
   }
-  const archive = (r: Row) => leave(r, "Archived", () => call(atlas, "archive", { ids: [r.id] }));
-  const snooze = (r: Row, at: number, label: string) => { snoozing = null; return leave(r, `Snoozed until ${label}`, () => call(atlas, "snooze", { ids: [r.id], until: at })); };
+  const archive = (r: Row) => leave(r, "Archived", () => call(kandinsky, "archive", { ids: [r.id] }));
+  const snooze = (r: Row, at: number, label: string) => { snoozing = null; return leave(r, `Snoozed until ${label}`, () => call(kandinsky, "snooze", { ids: [r.id], until: at })); };
 
   async function mark(r: Row, what: "read" | "starred", on: boolean) {
     const before = { unread: r.unread, flagged: r.flagged };
     if (what === "read") r.unread = on ? 0 : 1; else r.flagged = on;
     try {
-      await call(atlas, "mark", { ids: [r.id], [what]: on });
-      say(what === "read" ? (on ? "Marked read" : "Marked unread") : on ? "Starred" : "Unstarred", async () => { await call(atlas, "mark", { ids: [r.id], [what]: !on }); load(); });
+      await call(kandinsky, "mark", { ids: [r.id], [what]: on });
+      say(what === "read" ? (on ? "Marked read" : "Marked unread") : on ? "Starred" : "Unstarred", async () => { await call(kandinsky, "mark", { ids: [r.id], [what]: !on }); load(); });
       if (what === "starred") load();
     } catch (e) { r.unread = before.unread; r.flagged = before.flagged; say(`Failed: ${(e as Error).message}`); }
   }
@@ -98,7 +98,7 @@
   async function startReply(r: Row) {
     reply = { id: r.id, text: "", draft: null, sending: false };
     try {
-      const d = await call<Partial<Draft>>(atlas, "compose_for", { id: r.id, mode: "reply" });
+      const d = await call<Partial<Draft>>(kandinsky, "compose_for", { id: r.id, mode: "reply" });
       if (reply?.id === r.id) reply.draft = d;
     } catch (e) { say(`Cannot answer: ${(e as Error).message}`); reply = null; }
   }
@@ -107,14 +107,14 @@
     const payload = { ...reply.draft, body: reply.text };
     const to = reply.draft.to ?? "";
     reply.sending = true;
-    const wait = Number(setting(atlas, "undo_send", 10)) * 1000;
+    const wait = Number(setting(kandinsky, "undo_send", 10)) * 1000;
     let undone = false;
     const kept = reply;
     reply = null;
     say(`Sending to ${to.replace(/<.*?>/g, "").trim() || to}…`, async () => { undone = true; reply = { ...kept, sending: false }; });
     setTimeout(async () => {
       if (undone) return;
-      try { await call(atlas, "send", payload, 300); say("Sent"); load(); }
+      try { await call(kandinsky, "send", payload, 300); say("Sent"); load(); }
       catch (e) { reply = { ...kept, sending: false }; say(`Not sent: ${(e as Error).message}`); }
     }, wait);
   }

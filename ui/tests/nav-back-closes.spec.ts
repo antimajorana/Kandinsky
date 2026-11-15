@@ -2,7 +2,7 @@ import { test, expect, type Page, type APIRequestContext } from "@playwright/tes
 import { shownName } from "../src/lib/paths";
 
 // Back closes the tab it leaves, forward opens it again.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 async function openFile(page: Page, name: string) {
   await page.keyboard.press("Control+p");

@@ -1,25 +1,25 @@
 import { test, expect } from "@playwright/test";
 
 // Files and Search on a phone (docs/guides/MOBILE.md, "Files and Search on a phone"): in the phone app's note view (a fake
-// AtlasNative bridge) Files is one folder at a time — in, Back up, open — and Search a large field with wrapping hits; the
-// ⋮ menu's file actions (atlasShell.rename / trash / openers) work; an SVG opens as a picture.
+// KandinskyNative bridge) Files is one folder at a time — in, Back up, open — and Search a large field with wrapping hits; the
+// ⋮ menu's file actions (kandinskyShell.rename / trash / openers) work; an SVG opens as a picture.
 test.use({ viewport: { width: 412, height: 760 }, hasTouch: true });
 
 const put = (request: import("@playwright/test").APIRequestContext, path: string, text: string) =>
-  request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path, text } });
+  request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path, text } });
 type Shell = { view(k: string): void; dismiss(): boolean; rename(p: string, n: string): Promise<void>; trash(p: string): Promise<void>; openers(p: string): string };
 
 test.beforeEach(async ({ page, request }) => {
   await put(request, "birds/raptors/kestrel.md", "# kestrel\n\nhovers over the field\n");
   await put(request, "birds/raptors/osprey.md", "# osprey\n\nfishes in the lake\n");
   await put(request, "birds/mark.svg", '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>');
-  await page.addInitScript(() => { (window as unknown as { AtlasNative: unknown }).AtlasNative = { ready() {}, tabs() {} }; });
+  await page.addInitScript(() => { (window as unknown as { KandinskyNative: unknown }).KandinskyNative = { ready() {}, tabs() {} }; });
   await page.goto("/");
-  await page.waitForFunction(() => "atlasShell" in window);
+  await page.waitForFunction(() => "kandinskyShell" in window);
 });
 
 test("Files goes into folders, Back goes up, a tap opens", async ({ page }) => {
-  await page.evaluate(() => (window as unknown as { atlasShell: Shell }).atlasShell.view("files"));
+  await page.evaluate(() => (window as unknown as { kandinskyShell: Shell }).kandinskyShell.view("files"));
   const pf = page.locator(".pf");
   await expect(pf).toBeVisible();
   await pf.locator(".row", { hasText: "birds" }).click();
@@ -30,7 +30,7 @@ test("Files goes into folders, Back goes up, a tap opens", async ({ page }) => {
   const row = await pf.locator(".row", { hasText: "kestrel" }).boundingBox();
   expect(row!.height).toBeGreaterThanOrEqual(56); // a finger's row
   // Back: up a folder, then up again, then nothing left to close
-  expect(await page.evaluate(() => (window as unknown as { atlasShell: Shell }).atlasShell.dismiss())).toBe(true);
+  expect(await page.evaluate(() => (window as unknown as { kandinskyShell: Shell }).kandinskyShell.dismiss())).toBe(true);
   await expect(pf.locator(".title")).toHaveText("birds");
   await pf.locator(".row", { hasText: "raptors" }).click();
   await pf.locator(".row", { hasText: "osprey" }).click();
@@ -38,7 +38,7 @@ test("Files goes into folders, Back goes up, a tap opens", async ({ page }) => {
 });
 
 test("Search on a phone: a large field, no expert switches, wrapping hits", async ({ page }) => {
-  await page.evaluate(() => (window as unknown as { atlasShell: Shell }).atlasShell.view("search"));
+  await page.evaluate(() => (window as unknown as { kandinskyShell: Shell }).kandinskyShell.view("search"));
   const box = page.locator(".search-box");
   await expect(box).toBeVisible();
   expect((await box.boundingBox())!.height).toBeGreaterThanOrEqual(46);
@@ -49,13 +49,13 @@ test("Search on a phone: a large field, no expert switches, wrapping hits", asyn
 });
 
 test("the ⋮ menu's file actions: rename, open with, trash; an SVG opens as a picture", async ({ page, request }) => {
-  const openers = JSON.parse(await page.evaluate(() => (window as unknown as { atlasShell: Shell }).atlasShell.openers("birds/mark.svg"))) as { id: string; isDefault: boolean }[];
+  const openers = JSON.parse(await page.evaluate(() => (window as unknown as { kandinskyShell: Shell }).kandinskyShell.openers("birds/mark.svg"))) as { id: string; isDefault: boolean }[];
   expect(openers.find((o) => o.isDefault)?.id).toBe("image");
   expect(openers.map((o) => o.id)).toContain("editor");
-  await page.evaluate(() => (window as unknown as { atlasShell: Shell }).atlasShell.rename("birds/raptors/kestrel.md", "falcon.md"));
-  await expect.poll(async () => (await request.get("/api/file?path=birds/raptors/falcon.md", { headers: { "x-atlas": "1" } })).status()).toBe(200);
-  await page.evaluate(() => (window as unknown as { atlasShell: Shell }).atlasShell.trash("birds/raptors/falcon.md"));
-  await expect.poll(async () => (await request.get("/api/file?path=birds/raptors/falcon.md", { headers: { "x-atlas": "1" } })).status()).toBe(404);
+  await page.evaluate(() => (window as unknown as { kandinskyShell: Shell }).kandinskyShell.rename("birds/raptors/kestrel.md", "falcon.md"));
+  await expect.poll(async () => (await request.get("/api/file?path=birds/raptors/falcon.md", { headers: { "x-kandinsky": "1" } })).status()).toBe(200);
+  await page.evaluate(() => (window as unknown as { kandinskyShell: Shell }).kandinskyShell.trash("birds/raptors/falcon.md"));
+  await expect.poll(async () => (await request.get("/api/file?path=birds/raptors/falcon.md", { headers: { "x-kandinsky": "1" } })).status()).toBe(404);
 });
 
 test("the phone's Home is the vault's home document (`home` in its config), as on the desktop", async ({ page, request }) => {
@@ -63,8 +63,8 @@ test("the phone's Home is the vault's home document (`home` in its config), as o
   await put(request, "notes/the-home.md", "# the vault's own home\n\nshown on the phone too\n");
   await page.route("**/api/home", (r) => r.fulfill({ json: { path: "notes/the-home.md", title: null } }));
   await page.reload();
-  await page.waitForFunction(() => "atlasShell" in window);
-  await page.evaluate(() => (window as unknown as { atlasShell: { home(): void } }).atlasShell.home());
+  await page.waitForFunction(() => "kandinskyShell" in window);
+  await page.evaluate(() => (window as unknown as { kandinskyShell: { home(): void } }).kandinskyShell.home());
   await expect(page.locator(".dv-active-group .cm-content")).toContainText("shown on the phone too");
 });
 
@@ -75,7 +75,7 @@ test("Files tapped while Home is still being looked up stays Files", async ({ pa
   const held = new Promise<void>((r) => { release = r; });
   await page.route("**/api/home", async (route) => { await held; await route.continue(); });
   await page.evaluate(() => {
-    const shell = (window as unknown as { atlasShell: Shell & { home(): void } }).atlasShell;
+    const shell = (window as unknown as { kandinskyShell: Shell & { home(): void } }).kandinskyShell;
     shell.home();
     shell.view("files");
   });

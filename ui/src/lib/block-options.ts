@@ -49,7 +49,7 @@ export const ROW_VIEW_FIELDS: OptionField[] = [
   { key: "columns", label: "Columns", kind: "list", hint: "properties shown by a table, e.g. state, due" },
 ];
 
-/** What a task block can be asked (crates/atlas-core/src/tasks.rs: Query). */
+/** What a task block can be asked (crates/kandinsky-core/src/tasks.rs: Query). */
 export const TASK_FIELDS: OptionField[] = [
   { key: "from", label: "Tasks from", kind: "choice", choices: ["", "section", "note", "tasks"], hint: "this section (default), this note, or every note of the vault (tasks)" },
   { key: "show", label: "Show", kind: "choice", choices: ["", "open", "done", "all"] },
@@ -74,6 +74,7 @@ export const BUILTIN_FIELDS: Record<string, OptionField[]> = {
   "file-table": [path("The CSV / TSV file")],
   excalidraw: [path("The drawing")],
   page: [path("The page (.page)")],
+  notebook: [path("The Jupyter (.ipynb) or WLJS (.wln) notebook")],
   web: [{ key: "url", label: "Address", kind: "text", hint: "https://…" }],
   search: [{ key: "q", label: "Search for", kind: "text", hint: "the same words as in the Search pane, e.g. tag:run" }],
   terminal: [{ key: "preset", label: "Runs", kind: "choice", choices: ["shell", "claude"] }],

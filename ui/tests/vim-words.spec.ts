@@ -48,7 +48,7 @@ test("in the editor: dw on a formula's command takes the backslash with it; the 
   await openFile(page, "hubbard.md");
   await page.locator(".cm-content").click();
   await page.keyboard.press("Escape");
-  const last = () => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string } | null } }).__atlas.editor()?.text.trimEnd().split("\n").pop());
+  const last = () => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } | null } }).__kandinsky.editor()?.text.trimEnd().split("\n").pop());
   await page.keyboard.type("Go");
   await page.keyboard.insertText("x $\\alpha + \\beta$ a\\b");
   await page.keyboard.press("Escape");

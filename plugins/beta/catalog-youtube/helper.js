@@ -29,7 +29,7 @@
 		};
 		const kind = params.kind === "song" ? "song" : "video";
 		const watch = encodeURIComponent(`https://www.youtube.com/watch?v=${vid}`);
-		const o = await atlas.fetchJson(`https://www.youtube.com/oembed?format=json&url=${watch}`, {
+		const o = await kandinsky.fetchJson(`https://www.youtube.com/oembed?format=json&url=${watch}`, {
 			timeout: 15,
 			missing: [
 				401,
@@ -47,7 +47,7 @@
 		};
 		return fromOembed(o, vid, kind);
 	}
-	atlas.methods({ lookup });
+	kandinsky.methods({ lookup });
 	//#endregion
 	exports.lookup = lookup;
 	return exports;

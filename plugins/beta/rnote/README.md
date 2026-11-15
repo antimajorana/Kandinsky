@@ -20,7 +20,7 @@ None.
 
 ## How it fits
 
-No requirements. The drawings it makes are ordinary Excalidraw files with Atlas's drawing features.
+No requirements. The drawings it makes are ordinary Excalidraw files with Kandinsky's drawing features.
 
 ## Platforms
 

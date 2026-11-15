@@ -2,6 +2,6 @@
 
 /**
  * When a notice (a failed schedule, a filed capture, a conflict copy, a plugin's word) also reaches the system's
- * notifications, outside Atlas's window.
+ * notifications, outside Kandinsky's window.
  */
 export type SystemNotices = "off" | "failures" | "away" | "always";

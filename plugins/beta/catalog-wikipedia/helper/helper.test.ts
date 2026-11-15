@@ -1,7 +1,7 @@
 // Wikipedia's answers (cut down) as the catalog sees them, through the SDK's harness.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { harness, Reply } from "atlas-helper/testing";
+import { harness, Reply } from "kandinsky-helper/testing";
 import "./helper";
 import { kindOf, qualifier, queryUrl } from "./helper";
 
@@ -37,7 +37,7 @@ test("a film page gives its own ids, not the books it cites", async () => {
   harness.web = wiki("2023 film by Ari Aster", ["https://www.imdb.com/title/tt13521006/", "https://books.google.com/books?isbn=9781841505510"]);
   const [c] = (await harness.call("recognize", { text: "https://en.wikipedia.org/wiki/Beau_Is_Afraid" })).candidates;
   assert.deepEqual([c.kind, c.ids], ["movie", { url: "https://en.wikipedia.org/wiki/Beau_Is_Afraid", imdb: "tt13521006" }]);
-  assert.equal(harness.asked[0].headers?.["User-Agent"], "Atlas/0.1 (personal notes app) catalog-wikipedia");
+  assert.equal(harness.asked[0].headers?.["User-Agent"], "Kandinsky/0.1 (personal notes app) catalog-wikipedia");
 });
 
 test("a page about something else stays a web page, and other links are not asked", async () => {

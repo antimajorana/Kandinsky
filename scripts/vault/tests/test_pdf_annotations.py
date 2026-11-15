@@ -26,11 +26,11 @@ class ExportTest(unittest.TestCase):
         self.assertFalse((self.d / "notes.md").exists())
         t = target.read_text()
         self.assertTrue(t.startswith("---\ntype: literature\ncitekey: hubbard1963electron\n"), t)
-        self.assertIn("My reading.", t); self.assertIn("<!-- atlas:annotations -->", t); self.assertIn("Hubbard model", t)
+        self.assertIn("My reading.", t); self.assertIn("<!-- kandinsky:annotations -->", t); self.assertIn("Hubbard model", t)
         target.write_text(t + "\nAfter the export.\n")
         self.pa.export(self.d / "h.pdf")
         t2 = target.read_text()
-        self.assertEqual(t2.count("<!-- atlas:annotations -->"), 1); self.assertIn("After the export.", t2)
+        self.assertEqual(t2.count("<!-- kandinsky:annotations -->"), 1); self.assertIn("After the export.", t2)
 
     def test_a_new_note_has_the_head_and_a_place_to_write(self):
         target, _ = self.pa.export(self.d / "h.pdf")
@@ -51,8 +51,8 @@ class ExportTest(unittest.TestCase):
         rect = [r.x0, h - r.y1, r.x1, h - r.y0]
         els = [
             {"id": "f", "type": "frame"},
-            {"id": "pic", "type": "image", "frameId": "f", "customData": {"atlasPage": {"file": "h.pdf", "page": 1}}},
-            {"id": "a", "type": "rectangle", "frameId": "f", "customData": {"atlasHighlight": {"page": 1, "mark": "m1", "rect": rect}}},
+            {"id": "pic", "type": "image", "frameId": "f", "customData": {"kandinskyPage": {"file": "h.pdf", "page": 1}}},
+            {"id": "a", "type": "rectangle", "frameId": "f", "customData": {"kandinskyHighlight": {"page": 1, "mark": "m1", "rect": rect}}},
             {"id": "t", "type": "text", "frameId": "f", "text": "check the sign"},
             {"id": "s", "type": "freedraw", "frameId": "f"},
             {"id": "gone", "type": "text", "frameId": "f", "text": "erased", "isDeleted": True},

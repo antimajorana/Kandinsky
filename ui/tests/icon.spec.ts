@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // The icon (docs/guides/ICON.md): the tab's icon is served and linked, and the badge atop the sidebar is the vault's initial.
-test("the browser tab has Atlas's icon", async ({ page, request }) => {
+test("the browser tab has Kandinsky's icon", async ({ page, request }) => {
   for (const [path, type] of [["/favicon.svg", "image/svg+xml"], ["/favicon.ico", "image/"], ["/apple-touch-icon.png", "image/png"]]) {
     const res = await request.get(path);
     expect(res.status(), path).toBe(200);

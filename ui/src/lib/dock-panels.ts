@@ -69,14 +69,14 @@ export function reveal(g: DockviewGroupPanel): void {
   g.api.setVisible(true);
   setContentVisible(g, true);
   keepShape();
-  window.dispatchEvent(new Event("atlas-layout")); // dockview emits nothing for visibility: the tab sidebar listens
+  window.dispatchEvent(new Event("kandinsky-layout")); // dockview emits nothing for visibility: the tab sidebar listens
 }
 
 /** Hide a tool panel (its panes stay open, shells keep running); the keys go back to the editor. */
 export function hidePanel(g: DockviewGroupPanel): void {
   g.api.setVisible(false);
   setContentVisible(g, false);
-  window.dispatchEvent(new Event("atlas-layout"));
+  window.dispatchEvent(new Event("kandinsky-layout"));
   const main = zoneGroup("main")?.activePanel;
   main?.api.setActive();
   // keyboard focus leaves the hidden panel (a hidden terminal kept eating Ctrl+P / Ctrl+K — UX audit);

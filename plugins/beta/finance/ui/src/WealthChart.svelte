@@ -60,7 +60,7 @@
       <table><tbody>{#each points as p (p.month)}<tr><td>{short(p.month)}</td><td>{format(p.value)}</td></tr>{/each}</tbody></table>
     </details>
   {:else}
-    <div class="atlas-empty">One month of history so far: the line starts with the second.</div>
+    <div class="kandinsky-empty">One month of history so far: the line starts with the second.</div>
   {/if}
 </div>
 

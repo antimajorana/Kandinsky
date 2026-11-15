@@ -39,7 +39,7 @@ function setField(into: Props, key: string, raw: string): void {
 
 /** The frontmatter as data, and the line (0-based) where the body starts. */
 function frontmatter(lines: string[]): { note: Props; body: number } {
-  // the fences as the core reads them (property-model.ts `frontmatterOf`, atlas-text `frontmatter::split`)
+  // the fences as the core reads them (property-model.ts `frontmatterOf`, kandinsky-text `frontmatter::split`)
   const text = lines.join("\n"), f = frontmatterOf(text);
   if (!f) return { note: {}, body: 0 };
   return { note: (f.data ?? {}) as Props, body: text.slice(0, f.end).split("\n").length };

@@ -6,7 +6,7 @@ import { gitTree } from "./gitstatus.svelte";
 import type { Change } from "./gen/Change";
 import { onPluginEvent } from "./plugin-events";
 
-const OPEN_KEY = "atlas.tree.expanded";
+const OPEN_KEY = "kandinsky.tree.expanded";
 export const openDirs = new SvelteSet<string>(load<string[]>(OPEN_KEY, []));
 /** The active file's path (one element at most): a row asks `activeRow.has(its path)`. */
 export const activeRow = new SvelteSet<string>();

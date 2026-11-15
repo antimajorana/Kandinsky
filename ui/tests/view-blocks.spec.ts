@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { openFile } from "./open";
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 // docs/guides/MALLEABLE.md R4 (Embark): a ```view block draws the tasks of its section as a calendar; ticking
 // a task in the calendar writes [x] in the note, and the block follows the note as it changes.
@@ -10,7 +10,7 @@ test("a view block shows its section's dated tasks as a calendar, and ticks them
   const text = () => request.get("/api/file?path=notes/week.md", { headers: H }).then((r) => r.json()).then((j) => j.text as string);
   await page.goto("/");
   await openFile(page, "week.md");
-  const cal = page.locator(".cm-content .atlas-view-calendar");
+  const cal = page.locator(".cm-content .kandinsky-view-calendar");
   await expect(cal).toContainText("October 2026", { ignoreCase: true });
   await expect(cal.locator(".item")).toHaveCount(2); // the section's dated tasks only
   await expect(cal.locator(".undated")).toContainText("someday");
@@ -38,5 +38,5 @@ test("a view block is still drawn after its tab was hidden a while", async ({ pa
     await expect(page.locator(".dv-tab.dv-active-tab")).toContainText(name);
     await expect(page.locator(".dv-active-group .cm-editor.cm-focused")).toBeVisible(); // else the next Ctrl+P races the focus
   }
-  await expect(page.locator(".cm-content .atlas-view-calendar .item")).toHaveCount(1);
+  await expect(page.locator(".cm-content .kandinsky-view-calendar .item")).toHaveCount(1);
 });

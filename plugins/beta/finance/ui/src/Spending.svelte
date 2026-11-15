@@ -32,7 +32,7 @@
       {#if onpin}<button class="pinbtn" title="Pin a target for {label(l.account)}" onclick={() => onpin(l)}>{l.target ? "edit" : "pin"}</button>{/if}
     </div>
   {:else}
-    <div class="atlas-empty">No spending this month.</div>
+    <div class="kandinsky-empty">No spending this month.</div>
   {/each}
   {#if budget.unpriced.length}<div class="faint">Not counted, no price into {cur} yet: {budget.unpriced.join(", ")}.</div>{/if}
 </div>

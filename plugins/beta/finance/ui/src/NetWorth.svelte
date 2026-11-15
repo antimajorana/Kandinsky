@@ -1,8 +1,8 @@
 <script lang="ts">
   // Net worth at each month's end measured in a unit of your choice — any currency, or an asset (gold, BTC, a fund):
-  // the engine converts every holding at that month's price (`wealth`). Drawn by Atlas's own plot.
+  // the engine converts every holding at that month's price (`wealth`). Drawn by Kandinsky's own plot.
   import { call, measure, num, type PluginApi, type Summary, type Unit, type WealthMonth } from "./api";
-  let { atlas, summary }: { atlas: PluginApi; summary: Summary } = $props();
+  let { kandinsky, summary }: { kandinsky: PluginApi; summary: Summary } = $props();
   const first = () => summary.units.find((u) => u.unit === summary.unit) ?? { unit: summary.unit, name: summary.unit, money: true };
   let unit = $state<Unit>(first());
   let other = $state<WealthMonth[] | null>(null); // the series in a unit other than the summary's
@@ -11,7 +11,7 @@
 
   async function pick(u: Unit) {
     try {
-      other = u.unit === summary.unit ? null : (await call<{ months: WealthMonth[] }>(atlas, "wealth", { unit: u.unit })).months;
+      other = u.unit === summary.unit ? null : (await call<{ months: WealthMonth[] }>(kandinsky, "wealth", { unit: u.unit })).months;
       unit = u;
       error = "";
     } catch (e) { error = (e as Error).message; }
@@ -27,7 +27,7 @@
   function plot(host: HTMLElement) {
     // In thousands for money: the core's plot writes 15000 as 1.5e+4 (its science habit).
     const k = big ? 1000 : 1;
-    return { destroy: atlas.plot(host, { x: points.map((p) => p.x), ys: [points.map((p) => p.y / k)], xLabel: `months before ${lastMonth?.month ?? ""}`, yLabels: [`${big ? "k " : ""}${unit.unit}`] }) };
+    return { destroy: kandinsky.plot(host, { x: points.map((p) => p.x), ys: [points.map((p) => p.y / k)], xLabel: `months before ${lastMonth?.month ?? ""}`, yLabels: [`${big ? "k " : ""}${unit.unit}`] }) };
   }
 </script>
 
@@ -41,7 +41,7 @@
     </div>
   </div>
   {#if year !== null}<div class="delta" class:neg={year < 0}>{measure(year, unit, { sign: true })} over twelve months</div>{/if}
-  {#if error}<div class="atlas-notice error">{error}</div>{/if}
+  {#if error}<div class="kandinsky-notice error">{error}</div>{/if}
   {#if lastMonth?.unpriced.length}<div class="faint">Without a price in {unit.unit} yet: {lastMonth.unpriced.join(", ")} (Investments → Update prices).</div>{/if}
   {#if shares.length > 1}
     <div class="shares">

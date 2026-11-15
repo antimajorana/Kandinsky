@@ -4,7 +4,7 @@
   // is the engine's (`budget`, in summary); pinning a target writes the category's note (`set_target`).
   import { call, label, money, monthName, num, type Budget, type BudgetLine, type PluginApi } from "./api";
   import Spending from "./Spending.svelte";
-  let { atlas, budget, cur, onchange }: { atlas: PluginApi; budget: Budget; cur: string; onchange: () => void } = $props();
+  let { kandinsky, budget, cur, onchange }: { kandinsky: PluginApi; budget: Budget; cur: string; onchange: () => void } = $props();
 
   function pin(l: BudgetLine) {
     const usual = Math.round(num(l.usual));
@@ -12,16 +12,16 @@
       { value: `${usual} ${cur}`, title: `${money(usual, cur, { whole: true })}, the usual month`, detail: "pin it as it is" },
       ...(l.target ? [{ value: "", title: "Unpin", detail: `back to the usual month (${money(usual, cur, { whole: true })})` }] : []),
     ];
-    atlas.pick({
+    kandinsky.pick({
       placeholder: `Monthly target for ${label(l.account)} (e.g. 250)`, tag: "Finance", items,
       typed: (s) => `Pin ${/[A-Za-z]/.test(s) ? s : `${s} ${cur}`} a month`,
       onpick: async (v) => {
         const target = v && !/[A-Za-z]/.test(v) ? `${v} ${cur}` : v;
         try {
-          const r = await call<{ path: string }>(atlas, "set_target", { account: l.account, target });
-          atlas.toast(target ? "Target pinned" : "Target unpinned", `${label(l.account)}: ${target || "the usual month"} (${r.path})`);
+          const r = await call<{ path: string }>(kandinsky, "set_target", { account: l.account, target });
+          kandinsky.toast(target ? "Target pinned" : "Target unpinned", `${label(l.account)}: ${target || "the usual month"} (${r.path})`);
           onchange();
-        } catch (e) { atlas.toast("Not pinned", (e as Error).message, "error"); }
+        } catch (e) { kandinsky.toast("Not pinned", (e as Error).message, "error"); }
       },
     });
   }
@@ -58,13 +58,13 @@
   <section class="card">
     <h3>Recurring <span class="faint">{money(perMonth, cur, { whole: true })} a month out{#if inMonth > 0}, {money(inMonth, cur, { whole: true })} in{/if}</span></h3>
     {#each budget.recurring as r (r.path + r.line)}
-      <button class="rec" onclick={() => atlas.open(r.path, r.line)} title="{r.count} times, last {r.last}">
+      <button class="rec" onclick={() => kandinsky.open(r.path, r.line)} title="{r.count} times, last {r.last}">
         <span class="payee">{r.payee}<span class="faint"> · {label(r.account)}</span></span>
         <span class="num" class:income={num(r.amount) < 0}>{money(Math.abs(num(r.amount)), cur)}<span class="faint">&nbsp;{r.period}</span></span>
         <span class="next faint">next {r.next}</span>
       </button>
     {:else}
-      <div class="atlas-empty">Nothing comes back regularly yet: three payments at a steady period and amount make a recurring one.</div>
+      <div class="kandinsky-empty">Nothing comes back regularly yet: three payments at a steady period and amount make a recurring one.</div>
     {/each}
   </section>
 </div>

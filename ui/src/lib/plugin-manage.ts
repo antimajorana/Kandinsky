@@ -1,6 +1,6 @@
 // A vault plugin as Settings shows and manages it — in the list (components/settings/PluginsPanel.svelte) and on its
 // own page (components/settings/PluginPage.svelte): what it may do, what it adds, which settings differ from its
-// defaults, and switching, installing, updating, removing it (replaced or removed folders go to .atlas/trash/).
+// defaults, and switching, installing, updating, removing it (replaced or removed folders go to .kandinsky/trash/).
 import { errText } from "./text";
 import { api } from "./api";
 import { pick, type PickItem } from "./palette.svelte";
@@ -12,7 +12,7 @@ import type { Support } from "./gen/Support";
 import type { Available } from "./gen/Available";
 
 export const isOff = (id: string): boolean => (settings.config?.plugins.off ?? []).includes(id);
-export const pluginDir = (id: string): string => `.atlas/plugins/${id}`;
+export const pluginDir = (id: string): string => `.kandinsky/plugins/${id}`;
 
 export function switchPlugin(id: string, on: boolean): void {
   setPluginOn(id, on).catch((e) => toast("Not saved", errText(e), "error"));
@@ -31,7 +31,7 @@ export function mayOf(perm: Plugin["permissions"] | undefined, helper: boolean):
 export const PLATFORM_NAMES: Record<Platform, string> = { linux: "Linux", macos: "macOS", windows: "Windows", android: "Android", server: "Server" };
 export const SUPPORT_WORDS: Record<Support, string> = { works: "works", untested: "untested", no: "does not run" };
 
-/** What it adds to Atlas, as a list of words — with what it gives the plugins that run (`gives`). */
+/** What it adds to Kandinsky, as a list of words — with what it gives the plugins that run (`gives`). */
 export const partsOf = (p: Plugin): string[] =>
   [p.view && "a pane", p.main && "blocks / commands", p.has_data && "a data script", p.rail && "a button at the top of the bar", ...(p.parts ?? []),
     ...giftsOf(p).filter((g) => g.runs).map((g) => `${g.what.join(", ")} for ${g.title}`)].filter((x): x is string => !!x);
@@ -103,14 +103,14 @@ export async function updatePlugin(p: Plugin): Promise<void> {
   try {
     const r = await api.updatePlugin(p.id);
     await loadPlugins();
-    toast(`Updated ${r.title}${r.version ? ` to v${r.version}` : ""}`, `Your settings were kept. The copy it replaced is in ${r.replaced ?? ".atlas/trash/"}.`, "success", 9000);
+    toast(`Updated ${r.title}${r.version ? ` to v${r.version}` : ""}`, `Your settings were kept. The copy it replaced is in ${r.replaced ?? ".kandinsky/trash/"}.`, "success", 9000);
   } catch (e) { toast("Not updated", errText(e), "error", 9000); }
 }
 
 export function removePlugin(p: Plugin): void {
   pick({
     placeholder: `Remove the plugin “${p.title}” from this vault?`, tag: "Remove", icon: "plugin",
-    items: [{ value: "remove", title: `Remove ${p.title}`, detail: "its folder moves to .atlas/trash/ — nothing is deleted" }, { value: "", title: "Keep it" }],
+    items: [{ value: "remove", title: `Remove ${p.title}`, detail: "its folder moves to .kandinsky/trash/ — nothing is deleted" }, { value: "", title: "Keep it" }],
     onpick: async (v) => {
       if (v !== "remove") return;
       try { const r = await api.removePlugin(p.id); await loadPlugins(); toast(`Removed ${p.title}`, `Its folder is in ${r.to}.`, "success", 9000); }

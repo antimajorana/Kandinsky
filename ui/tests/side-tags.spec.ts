@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const LONG = "a-note-whose-name-goes-on-and-on-without-a-single-space-to-break-it-anywhere-at-all";
 
 // A tag's notes: a long name is cut with an ellipsis inside the list, and a slow answer for a tag

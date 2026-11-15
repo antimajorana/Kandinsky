@@ -27,13 +27,15 @@ export type PaneSpec =
   | { kind: "base"; path: RelPath; view?: string }
   // a .page layout file (rows/columns of blocks) — the home screen is one; title from the file
   | { kind: "page"; path: RelPath; title?: string }
+  // Jupyter (.ipynb) and Wolfram WLJS (.wln) computational notebooks
+  | { kind: "notebook"; path: RelPath }
   | { kind: "excalidraw"; path: RelPath; page?: string } // `page`: shown at open (an embed's `#Page 2`, draw-pages.ts frameRef)
   | { kind: "outline" }
   | { kind: "commands" }
   | { kind: "graph" }
-  // a workspace plugin's view (.atlas/plugins/<id>/); title and icon travel with the spec so a
+  // a workspace plugin's view (.kandinsky/plugins/<id>/); title and icon travel with the spec so a
   // restored layout can label the tab before the plugin list has loaded
-  | { kind: "plugin"; id: string; title?: string; icon?: string; /** the file it was opened with (Open with…) */ path?: RelPath; /** what the pane shows (a host, an account): `atlas.openView(arg)`; one tab per value */ arg?: string; /** the link's `#…` it was opened at (`atlas.anchor`); not part of its id */ anchor?: string }
+  | { kind: "plugin"; id: string; title?: string; icon?: string; /** the file it was opened with (Open with…) */ path?: RelPath; /** what the pane shows (a host, an account): `kandinsky.openView(arg)`; one tab per value */ arg?: string; /** the link's `#…` it was opened at (`kandinsky.anchor`); not part of its id */ anchor?: string }
   // any block (lib/blocks.ts) alone in a tab: its YAML and the document whose context it reads
   | { kind: "block"; src: string; doc: RelPath; title?: string; /** the tab's icon, an IconName (default: a chart) */ icon?: string };
 
@@ -43,7 +45,7 @@ export type PaneKind = PaneSpec["kind"];
 // PaneKind: forgetting a new kind here is a compile error, not a silent gap.
 const KINDS: Record<PaneKind, true> = {
   today: true, editor: true, terminal: true, files: true, search: true, pdf: true, image: true, web: true,
-  settings: true, git: true, commit: true, diff: true, table: true, base: true, excalidraw: true,
+  settings: true, git: true, commit: true, diff: true, table: true, base: true, notebook: true, excalidraw: true,
   outline: true, plugin: true, commands: true, graph: true, page: true, block: true, explorer: true,
 };
 export const PANE_KINDS = Object.keys(KINDS) as PaneKind[];
@@ -81,6 +83,7 @@ export function paneId(s: PaneSpec): string {
     case "table":
     case "base":
     case "page":
+    case "notebook":
     case "excalidraw":
       return `${s.kind}:${s.path}`;
     case "terminal":
@@ -115,6 +118,7 @@ export function paneTitle(s: PaneSpec): string {
     case "image":
     case "table":
     case "base":
+    case "notebook":
     case "excalidraw":
       return tabName(s.path);
     case "page": return s.title ?? shownName(s.path);
@@ -166,6 +170,7 @@ export function paneIcon(s: PaneSpec): IconName {
     case "base":
       return "table";
     case "page": return "today";
+    case "notebook": return "sigma";
     case "excalidraw":
       return "edit";
     case "outline": return "outline";
@@ -180,8 +185,11 @@ export function paneIcon(s: PaneSpec): IconName {
 export const TABLE_RE = /\.(tsv|csv|tab|xlsx)$/i;
 const CODE_RE = /\.(rs|py|ts|js|mjs|cjs|tsx|jsx|svelte|c|h|cc|cpp|hpp|go|java|kt|jl|f90|f|sh|zsh|bash|toml|ya?ml|json|lua|rb|css|scss|html|tex|bib|nix|cmake|sql)$/i;
 
+export const NOTEBOOK_RE = /\.(ipynb|wln)$/i;
+
 export function fileIcon(path: string): IconName {
   if (/\.(excalidraw|rnote|excalidraw\.md)$/i.test(path)) return "edit";
+  if (NOTEBOOK_RE.test(path)) return "sigma";
   if (/\.pdf$/i.test(path)) return "pdf";
   if (IMAGE_RE.test(path)) return "image";
   if (TABLE_RE.test(path) || /\.base$/i.test(path)) return "table";
@@ -196,6 +204,7 @@ export const tableViewIn = (anchor?: string) => /^view=(.+)$/.exec(anchor?.trim(
 
 export function specForPath(path: RelPath, line?: number, anchor?: string): PaneSpec {
   if (/\.excalidraw(\.md)?$/i.test(path)) return { kind: "excalidraw", path }; // .md: the Obsidian plugin's format
+  if (NOTEBOOK_RE.test(path)) return { kind: "notebook", path };
   if (/\.pdf$/i.test(path)) return line === undefined ? { kind: "pdf", path } : { kind: "pdf", path, page: line }; // a PDF's "line" is its page
   if (IMAGE_RE.test(path)) return { kind: "image", path }; // SVG too, as a picture; "Open with" → the text editor for its code
   if (TABLE_RE.test(path)) return tableViewIn(anchor) ? { kind: "table", path, view: tableViewIn(anchor) } : { kind: "table", path };
@@ -229,6 +238,7 @@ export function paneZone(k: PaneKind): PaneZone {
     case "table":
     case "base":
     case "page":
+    case "notebook":
     case "excalidraw":
     case "plugin":
     case "commands":
@@ -249,7 +259,7 @@ export function embedOptions(s: PaneSpec): Record<string, string> | null {
     case "search": return s.q ? { q: s.q } : {};
     case "table": return s.view ? { path: s.path, view: s.view } : { path: s.path };
     case "base": return s.view ? { path: s.path, table: s.view } : { path: s.path }; // the block's option is `table`
-    case "editor": case "pdf": case "image": case "excalidraw": case "page":
+    case "editor": case "pdf": case "image": case "excalidraw": case "page": case "notebook":
       return { path: s.path };
     default: return null;
   }
@@ -275,6 +285,7 @@ export function specFromOptions(kind: PaneKind, o: Record<string, unknown>): Pan
     case "editor":
     case "pdf":
     case "image":
+    case "notebook":
     case "excalidraw":
       return path ? { kind, path } : needPath;
     case "base": return path ? { kind, path, view: str(o.table) || undefined } : needPath;

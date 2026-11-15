@@ -6,7 +6,7 @@ It has no pane: once switched on it works by itself.
 
 ## What it adds
 
-- **A changed-files hook** (`on = "fs"`): each batch of paths the vault's watcher sees change — Atlas's own writes and
+- **A changed-files hook** (`on = "fs"`): each batch of paths the vault's watcher sees change — Kandinsky's own writes and
   any other program's — is handed to Syncthing's REST API (`POST /rest/db/scan?folder=<id>&sub=<path>&sub=…`, up to 50 paths a call). Batches that
   arrive while one call runs are joined into the next.
 - **The tool `scan`** `{ paths }`.
@@ -26,7 +26,7 @@ No requirements. Useful with mirrored vaults (docs/guides/SERVER.md); the core's
 
 ## Needs
 
-Syncthing running on the machine where Atlas's core runs (the network permission is only `127.0.0.1` and
+Syncthing running on the machine where Kandinsky's core runs (the network permission is only `127.0.0.1` and
 `localhost`). The helper is built by `bash engine/build.sh` (Rust; not committed).
 
 ## Platforms

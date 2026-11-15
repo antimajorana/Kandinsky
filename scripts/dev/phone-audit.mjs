@@ -1,7 +1,7 @@
 // The phone layout's look, audited (docs/guides/MOBILE.md, "The shape audit"): nothing may stretch or break
 // when the screen's shape changes. Opens every place of
-// Atlas on a phone-shaped Chromium (the engine of Android's WebView) — as the phone app's note view (a fake
-// `AtlasNative` bridge: the page hides its own bars) and as a phone's browser, portrait and landscape, both themes —
+// Kandinsky on a phone-shaped Chromium (the engine of Android's WebView) — as the phone app's note view (a fake
+// `KandinskyNative` bridge: the page hides its own bars) and as a phone's browser, portrait and landscape, both themes —
 // and flags by shape, not by a list of components: what runs off the screen sideways, media drawn out of their
 // proportions, text spilling out of or clipped by its box, boxes squeezed narrower than a letter, buttons stretched
 // tall or wide, text too small, targets too small for a finger. A screenshot of each place goes beside the report.
@@ -100,10 +100,10 @@ function judge() {
   return out;
 }
 
-const NATIVE = `window.AtlasNative = { ready() {}, tabs(j) { window.__tabs = j; } };`;
+const NATIVE = `window.KandinskyNative = { ready() {}, tabs(j) { window.__tabs = j; } };`;
 const settle = (page, ms = 1200) => page.waitForTimeout(ms);
 
-/** The places, each a step from the page as the last one left it: in the app through its bridge (as AtlasActivity
+/** The places, each a step from the page as the last one left it: in the app through its bridge (as KandinskyActivity
  *  does), in a browser as a person would — the bottom bar, the palette, the capture button. null: not in that mode. */
 function places(found) {
   const shell = (js) => (page) => page.evaluate(js);
@@ -115,18 +115,18 @@ function places(found) {
     await page.waitForTimeout(600);
     await page.keyboard.press("Enter");
   };
-  const note = (path) => ({ app: async (page) => { await page.keyboard.press("Escape"); await page.evaluate((p) => atlasShell.open(p), path); }, browser: byPalette(path) });
+  const note = (path) => ({ app: async (page) => { await page.keyboard.press("Escape"); await page.evaluate((p) => kandinskyShell.open(p), path); }, browser: byPalette(path) });
   const list = [
-    ["home", { app: shell("atlasShell.home()"), browser: bar("Home") }],
-    ["files", { app: shell("atlasShell.view('files')"), browser: bar("Files") }],
-    ["search", { app: shell("atlasShell.view('search')"), browser: bar("Search") }],
-    ["settings", { app: shell("atlasShell.view('settings')"), browser: byPalette(">Settings") }],
+    ["home", { app: shell("kandinskyShell.home()"), browser: bar("Home") }],
+    ["files", { app: shell("kandinskyShell.view('files')"), browser: bar("Files") }],
+    ["search", { app: shell("kandinskyShell.view('search')"), browser: bar("Search") }],
+    ["settings", { app: shell("kandinskyShell.view('settings')"), browser: byPalette(">Settings") }],
     ["settings-area", { app: (page) => page.locator(".settings nav button").nth(2).click(), browser: (page) => page.locator(".settings nav button").nth(2).click() }],
-    ["commands", { app: shell("atlasShell.view('commands')"), browser: null }],
-    ["graph", { app: shell("atlasShell.view('graph')"), browser: null }],
-    ["library", { app: shell("atlasShell.view('library')"), browser: null }],
+    ["commands", { app: shell("kandinskyShell.view('commands')"), browser: null }],
+    ["graph", { app: shell("kandinskyShell.view('graph')"), browser: null }],
+    ["library", { app: shell("kandinskyShell.view('library')"), browser: null }],
     // the Library tab (Catalog's kinds, Manga, Books, Audiobooks, Drawings…): each of its tabs judged on its own
-    ["libraries", { app: shell("atlasShell.view('libraries')"), browser: byPalette(">Libraries"), tabs: ".libraries [role=tab]" }],
+    ["libraries", { app: shell("kandinskyShell.view('libraries')"), browser: byPalette(">Libraries"), tabs: ".libraries [role=tab]" }],
     ["palette", { app: (page) => page.keyboard.press("Control+p"), browser: bar("Commands") }],
     ["tabs-sheet", { app: null, browser: async (page) => { await page.keyboard.press("Escape"); await bar("Tabs")(page); } }],
     ["capture", { app: null, browser: async (page) => { await page.keyboard.press("Escape"); await page.locator(".fab").click(); } }],
@@ -155,7 +155,7 @@ try {
     const errs = [];
     page.on("pageerror", (e) => errs.push(e.message));
     await page.goto(URL_);
-    await page.waitForFunction(() => document.querySelector(".dv-dockview") && (window.atlasShell || !window.AtlasNative), null, { timeout: 30_000 });
+    await page.waitForFunction(() => document.querySelector(".dv-dockview") && (window.kandinskyShell || !window.KandinskyNative), null, { timeout: 30_000 });
     page.setDefaultTimeout(5000);
     await settle(page, 3000);
     for (const [id, go] of places(found)) {

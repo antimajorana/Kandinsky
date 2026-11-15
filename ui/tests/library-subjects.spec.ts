@@ -7,14 +7,14 @@ import { WS } from "../playwright.config";
 // `bySubject`, `mergeSources`): a catalog's book notes and the e-books read here show as "Books", each source a tab
 // inside it, each item opened by the plugin that gave it.
 const plugin = (id: string, title: string, items: string[], extra = "") => {
-  const dir = join(WS, ".atlas/plugins", id);
+  const dir = join(WS, ".kandinsky/plugins", id);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "plugin.toml"), `title = "${id}"\napi = 19\n`);
-  writeFileSync(join(dir, "main.js"), `export function register(atlas) {
-  atlas.registerLibrary({ id: "${id}", title: "${title}", ${extra} icon: "book", noun: "books", layouts: ["list"], sorts: [{ id: "title", label: "title" }],
+  writeFileSync(join(dir, "main.js"), `export function register(kandinsky) {
+  kandinsky.registerLibrary({ id: "${id}", title: "${title}", ${extra} icon: "book", noun: "books", layouts: ["list"], sorts: [{ id: "title", label: "title" }],
     search: "Search…", empty: "None.",
     load: async () => ${JSON.stringify(items)}.map((t) => ({ id: t, title: t, text: t, sort: { title: t } })),
-    detail: (item) => ({ title: item.title, kind: "${id}", actions: [{ label: "Open", run: () => atlas.toast("${id} opens " + item.id) }] }),
+    detail: (item) => ({ title: item.title, kind: "${id}", actions: [{ label: "Open", run: () => kandinsky.toast("${id} opens " + item.id) }] }),
   });
 }\n`);
 };
@@ -22,11 +22,11 @@ test.beforeAll(() => {
   plugin("subj-notes", "Books", ["Dune", "Solaris"]);
   plugin("subj-files", "E-books", ["qft.epub"], `subject: "books",`);
 });
-test.afterAll(() => { for (const id of ["subj-notes", "subj-files"]) rmSync(join(WS, ".atlas/plugins", id), { recursive: true, force: true }); });
+test.afterAll(() => { for (const id of ["subj-notes", "subj-files"]) rmSync(join(WS, ".kandinsky/plugins", id), { recursive: true, force: true }); });
 
 test("two libraries of one subject are one Books tab, a tab inside per source, each item its own plugin's", async ({ page, request }) => {
   // the plugins were just written: the page loads only once the core lists them, else "Books" is the vault's own alone
-  await expect.poll(async () => JSON.stringify(await (await request.get("/api/plugins", { headers: { "x-atlas": "1" } })).json())).toContain("subj-files");
+  await expect.poll(async () => JSON.stringify(await (await request.get("/api/plugins", { headers: { "x-kandinsky": "1" } })).json())).toContain("subj-files");
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("F1");

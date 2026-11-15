@@ -1,4 +1,4 @@
-// The Tasks plugin's field markers as the core reads them (crates/atlas-core/src/tasks.rs `MARKERS`): one list for
+// The Tasks plugin's field markers as the core reads them (crates/kandinsky-core/src/tasks.rs `MARKERS`): one list for
 // every reader here (the task dialog's parser, the chips, Today's sections), its alternatives included (`📆` / `🗓`
 // due, `⌛` scheduled). A marker may carry the emoji variation selector (U+FE0F).
 

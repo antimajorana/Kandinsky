@@ -1,24 +1,24 @@
 // The Hunspell dictionaries the Spelling and Predictor plugins use: which are there, which a language takes, and a
 // dictionary's plain word list (its stems) for finishing a word. Pure but for the file access a helper passes in.
 //
-// Two places hold dictionaries. The vault's own `.atlas/dictionaries/` comes first: read through the vault's file API,
+// Two places hold dictionaries. The vault's own `.kandinsky/dictionaries/` comes first: read through the vault's file API,
 // it works on every device (the server and the phone have no system dictionaries, nor `ls`). Then the machine's
 // folders (the setting's, /usr/share/hunspell…), read with `ls` and `cat`. A machine that has a language's dictionary
 // copies it into the vault (`keepInVault`), so every device sharing the vault checks that language too.
 
-/** What a helper's `atlas.exec` gives back. */
+/** What a helper's `kandinsky.exec` gives back. */
 export type Exec = (cmd: string, args: string[], opts?: { timeout?: number }) => Promise<{ status: number; stdout: string; stderr: string }>;
 
 /** One place's files: a folder's file names (null: no such folder, or no way to look), and a file's text. */
 export type Files = { list(dir: string): Promise<string[] | null>; read(path: string): Promise<string> };
 
 /** The vault's folder of dictionaries (synced with the vault, unlike the machine's). */
-export const VAULT_DICTIONARIES = ".atlas/dictionaries";
+export const VAULT_DICTIONARIES = ".kandinsky/dictionaries";
 
-/** The vault, through a helper's `atlas`. */
-export const vaultFiles = (atlas: { tree(dir: string): Promise<{ name: string; kind: string }[]>; read(path: string): Promise<string> }): Files => ({
-  list: (dir) => atlas.tree(dir).then((t) => t.filter((e) => e.kind === "file").map((e) => e.name), () => null),
-  read: (path) => atlas.read(path),
+/** The vault, through a helper's `kandinsky`. */
+export const vaultFiles = (kandinsky: { tree(dir: string): Promise<{ name: string; kind: string }[]>; read(path: string): Promise<string> }): Files => ({
+  list: (dir) => kandinsky.tree(dir).then((t) => t.filter((e) => e.kind === "file").map((e) => e.name), () => null),
+  read: (path) => kandinsky.read(path),
 });
 
 /** The machine, through `ls` and `cat` (none on the phone: nothing found there). */

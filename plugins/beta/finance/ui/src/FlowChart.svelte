@@ -65,7 +65,7 @@
       <rect class="mid" x={x1} y={mid.top} width={node} height={mid.h} rx="2" />
     </svg>
   {:else}
-    <div class="atlas-empty">No income or spending in this period.</div>
+    <div class="kandinsky-empty">No income or spending in this period.</div>
   {/if}
 </div>
 

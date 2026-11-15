@@ -8,10 +8,10 @@ reason it failed, shows in the dialog.
 
 - **Print** in the file tree's right-click menu and in a tab's menu, and the command **Print the open file**: each
   opens the print dialog (`view.js`) in a popup over the app (a tab in an app older than plugin API 20).
-- **The print dialog**: a preview that is Atlas's own view of what will print (a note's PDF, made first); beside it
+- **The print dialog**: a preview that is Kandinsky's own view of what will print (a note's PDF, made first); beside it
   the printer (the ones CUPS knows), copies, pages (`1-3,5`), sides, paper, landscape and fit to the page, prefilled
   from the settings below.
-- A helper in JavaScript (run inside Atlas's core) that calls `lp` and `lpstat` through `atlas.exec`, with the
+- A helper in JavaScript (run inside Kandinsky's core) that calls `lp` and `lpstat` through `kandinsky.exec`, with the
   programs allowed in the manifest (`[permissions] exec = ["lp", "lpstat"]`).
 
 ## Settings
@@ -31,7 +31,7 @@ reason it failed, shows in the dialog.
 
 ## Needs
 
-CUPS (`lp`, `lpstat`) on the machine running Atlas's core. On a served vault that is the server.
+CUPS (`lp`, `lpstat`) on the machine running Kandinsky's core. On a served vault that is the server.
 
 ## Platforms
 

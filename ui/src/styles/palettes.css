@@ -1,8 +1,99 @@
 /* Palettes (Settings → Appearance → Palette, `ui.palette`; lib/settings.svelte.ts sets <html data-palette>): colour
-   families over tokens.css, in light and dark. `ink` and `clay` share a warm paper and differ in the accent; `sage`,
-   `sea`, `dusk`, `graphite`, `phosphor` and the rest (rose … midnight) each have a paper of their own, tinted toward their accent. They
-   outrank tokens.css's theme blocks by specificity; e-ink keeps its own black on white (:not(.eink)); an accent set in
-   Settings is an inline style on <html>, so it still wins. */
+   families over tokens.css, in light and dark. Default `kandinsky` (also matching legacy `"atlas"`) implements
+   Velvet Circles (Dark) and Bauhaus Paper (Light) inspired by Wassily Kandinsky's Several Circles (1926).
+   Other optional palettes (`ink`, `clay`, `sage`, `sea`, `dusk`, `graphite`, `phosphor`, `rose` … `midnight`) remain
+   intact. All blocks keep specificity ≤ (0,4,0) so contrast.css (`[data-contrast="high"]`) still wins when enabled. */
+
+/* Kandinsky default — Velvet Circles (Dark) */
+:root:not(.eink):not([data-theme="light"]):is([data-palette="kandinsky"], [data-palette="atlas"]),
+.pal-sample[data-theme="dark"]:is([data-palette="kandinsky"], [data-palette="atlas"]) {
+  --bg-app: #121317;
+  --bg: #15161a;
+  --bg-side: #1b1d22;
+  --bg-alt: #1b1d22;
+  --card-bg: #1e2027;
+  --bg-elev: #21242b;
+  --bg-hover: rgba(255, 255, 255, 0.048);
+  --bg-active: rgba(125, 151, 244, 0.14);
+  --border: rgba(255, 255, 255, 0.075);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: #eceae4;
+  --text-muted: #9ca0ab;
+  --text-faint: #686d78;
+  --heading: #f5f3ee;
+  --accent: #7d97f4;
+  --accent-dim: rgba(125, 151, 244, 0.16);
+  --accent-soft: rgba(125, 151, 244, 0.14);
+  --accent-hover: #93a9f7;
+  --accent-strong: #93a9f7;
+  --accent-sel: rgba(125, 151, 244, 0.26);
+  --accent-fg: #0b0d12;
+  --link: #7d97f4;
+  --yellow: #dfab2e;
+  --red: #d94e41;
+  --green: #3ca395;
+  --orange: #e28327;
+  --purple: #d48fb0;
+  --cyan: #5fb3ce;
+  --code-bg: #1e2027;
+  --inline-code: #e8a882;
+  --highlight-bg: rgba(223, 171, 46, 0.24);
+  --tag-bg: rgba(125, 151, 244, 0.14);
+  --tag-color: #93a9f7;
+  --term-bg: #121317;
+  --term-black: #262932;
+  --ansi-black: #262932;
+  --pdf-bg: #0e1013;
+  --paper-line: #363942;
+}
+
+/* Kandinsky default — Bauhaus Paper (Light: warm Weimar watercolor ivory) */
+:root:not(.eink)[data-theme="light"]:is([data-palette="kandinsky"], [data-palette="atlas"]),
+.pal-sample[data-theme="light"]:is([data-palette="kandinsky"], [data-palette="atlas"]) {
+  --bg-app: #eae6de;
+  --bg: #faf8f4;
+  --bg-side: #f2efe9;
+  --bg-alt: #f2efe9;
+  --card-bg: #f3efe7;
+  --bg-elev: #ffffff;
+  --bg-hover: rgba(28, 29, 34, 0.045);
+  --bg-active: rgba(38, 76, 164, 0.09);
+  --border: rgba(28, 29, 34, 0.09);
+  --border-strong: rgba(28, 29, 34, 0.16);
+  --text: #1c1d22;
+  --text-muted: #5c5f69;
+  --text-faint: #90949f;
+  --heading: #141518;
+  --accent: #264ca4;
+  --accent-dim: rgba(38, 76, 164, 0.11);
+  --accent-soft: rgba(38, 76, 164, 0.09);
+  --accent-hover: #1d3c85;
+  --accent-strong: #1d3c85;
+  --accent-sel: rgba(38, 76, 164, 0.18);
+  --accent-fg: #ffffff;
+  --link: #264ca4;
+  --yellow: #c48b16;
+  --red: #c6362c;
+  --green: #247a7d;
+  --orange: #cf6d17;
+  --purple: #9b4dca;
+  --cyan: #2a7ca3;
+  --code-bg: #f2efe8;
+  --inline-code: #9e3b24;
+  --highlight-bg: rgba(196, 139, 22, 0.24);
+  --tag-bg: rgba(38, 76, 164, 0.10);
+  --tag-color: #1d3c85;
+  --term-bg: #faf8f4;
+  --term-black: #e4e0d8;
+  --pdf-bg: #e6e2d8;
+  --paper-line: #dcd6ca;
+}
+
+/* Optional palettes inherit their own --bg-alt for --bg-side */
+:root:not(.eink):not([data-palette="kandinsky"]):not([data-palette="atlas"]),
+:root:not(.eink)[data-contrast="high"] {
+  --bg-side: var(--bg-alt);
+}
 
 /* warm paper, light */
 :root:not(.eink)[data-theme="light"]:is([data-palette="ink"], [data-palette="clay"]), .pal-sample[data-theme="light"]:is([data-palette="ink"], [data-palette="clay"]) {

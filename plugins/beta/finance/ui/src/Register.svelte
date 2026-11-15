@@ -19,12 +19,12 @@
         <td class="num run">{Number(r.running).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</td>
       </tr>
     {:else}
-      <tr><td class="atlas-empty" colspan="4">No postings.</td></tr>
+      <tr><td class="kandinsky-empty" colspan="4">No postings.</td></tr>
     {/each}
   </tbody>
 </table>
 {#if newest.length > max}
-  <button class="atlas-btn more" onclick={() => (shown = max + 500)}>{newest.length - max} older…</button>
+  <button class="kandinsky-btn more" onclick={() => (shown = max + 500)}>{newest.length - max} older…</button>
 {/if}
 
 <style>

@@ -1,14 +1,16 @@
 <p align="center">
-  <img src="packaging/icon/atlas.svg" width="96" alt="">
+  <img src="packaging/icon/kandinsky.svg" width="96" alt="">
 </p>
 
-<h1 align="center">Atlas</h1>
+<h1 align="center">Kandinsky</h1>
 
 <p align="center">
   <b>One workspace over a folder of plain files</b>: notes that render like Obsidian, papers like Zotero, mail like
   Thunderbird, an editor like VS Code and real terminals, on the desktop, the phone, an e-ink tablet and your own
   server.
 </p>
+
+<p align="center"><sub>Kandinsky is based on Atlas by Alneb (github.com/Alneb/atlas), AGPL-3.0.</sub></p>
 
 <p align="center">
   <a href="https://github.com/Alneb/atlas/actions/workflows/ci.yml"><img src="https://github.com/Alneb/atlas/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -18,7 +20,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/readme/workspace-dark.webp">
-  <img src="docs/img/readme/workspace-light.webp" alt="Atlas: two notes side by side, one with its properties, a callout and an embedded Bases table, the other with LaTeX and a table">
+  <img src="docs/img/readme/workspace-light.webp" alt="Kandinsky: two notes side by side, one with its properties, a callout and an embedded Bases table, the other with LaTeX and a table">
 </picture>
 
 <sub>A demo vault (<code>scripts/dev/readme-shots.mjs</code> builds it and takes these shots).</sub>
@@ -26,7 +28,7 @@
 ## The idea
 
 - **Everything is a file.** A vault is a folder. Notes are Markdown; papers, mail, drawings, runs and tables are files
-  too. Atlas keeps its own settings, pages and plugins in one `.atlas/` folder. Nothing lives only in a database or on
+  too. Kandinsky keeps its own settings, pages and plugins in one `.kandinsky/` folder. Nothing lives only in a database or on
   a server, and the vault stays readable in Obsidian.
 - **Everything can be linked.** Anything that is not Markdown gets a *companion note*, made for you: the thing's
   metadata as properties and a block that shows the thing itself. You link it with `[[wikilinks]]`, search it, tag it
@@ -35,7 +37,7 @@
   core stays generic: files, blocks, search, the settings form, terminals, and one MCP server any agent can use
   ([docs/PHILOSOPHY.md](docs/PHILOSOPHY.md)).
 - **Automation proposes, you decide.** Nothing irreversible happens without a yes, deleted things go to
-  `.atlas/trash/`, and long jobs say what they are doing.
+  `.kandinsky/trash/`, and long jobs say what they are doing.
 
 ## What it does
 
@@ -74,7 +76,7 @@
 **Code and machines**
 - **Code**: language servers, find and replace, formatting, problems, Run and Test buttons, git changes in the gutter,
   blame and staging, two vim modes.
-- **Terminals** beside your notes. AI coding agents see what you are looking at through Atlas's MCP server, which is
+- **Terminals** beside your notes. AI coding agents see what you are looking at through Kandinsky's MCP server, which is
   open to any agent; plugins offer their own tools to agents too.
 - **Other machines' files in your tree**: SSH hosts and copyparty servers appear in the explorer beside the vault's
   folders. A file you opened before still opens from its kept copy when the server is out of reach.
@@ -94,10 +96,10 @@
 
 | | |
 |---|---|
-| **Linux** | The desktop app (AppImage, `.deb`, `.rpm`, Flatpak), the `atlas` CLI and the capture box `atlas-capture`. |
-| **macOS, Windows** | Built by the same workflow (`.dmg`, NSIS installer), with the `atlas` CLI and the capture box inside; not yet signed or notarized, and less tried. On Windows the installer puts **Atlas Capture** in the Start menu, on Ctrl+Alt+Shift+C; on macOS Atlas takes Ctrl+Cmd+C for it while it runs. On Windows, plugins that need a shell use Git for Windows' `sh`. Ad blocking and web tabs are Linux-only for now. |
-| **Android** | Three APKs: **Atlas** (the full app, with the core inside it), **Atlas for Boox** (the same app tuned for e-ink and the Boox pen) and **Atlas capture** (just the capture box). |
-| **A server** | `atlas serve` or the Docker image. Every folder in `./vaults` becomes a vault. |
+| **Linux** | The desktop app (AppImage, `.deb`, `.rpm`, Flatpak), the `kandinsky` CLI and the capture box `kandinsky-capture`. |
+| **macOS, Windows** | Built by the same workflow (`.dmg`, NSIS installer), with the `kandinsky` CLI and the capture box inside; not yet signed or notarized, and less tried. On Windows the installer puts **Kandinsky Capture** in the Start menu, on Ctrl+Alt+Shift+C; on macOS Kandinsky takes Ctrl+Cmd+C for it while it runs. On Windows, plugins that need a shell use Git for Windows' `sh`. Ad blocking and web tabs are Linux-only for now. |
+| **Android** | Three APKs: **Kandinsky** (the full app, with the core inside it), **Kandinsky for Boox** (the same app tuned for e-ink and the Boox pen) and **Kandinsky capture** (just the capture box). |
+| **A server** | `kandinsky serve` or the Docker image. Every folder in `./vaults` becomes a vault. |
 
 Each plugin states where it works in its manifest's `[platforms]`, and Settings says why a plugin is unavailable on the
 system you are on.
@@ -127,7 +129,7 @@ says what each tier promises and where each plugin stands. Each plugin's folder 
             └───────────────────────────┬────────────────────────────┘
                                         │ HTTP + one event stream (local key, or a sign-in on a server)
 ┌───────────────────────────────────────┴──────────────────────────────────────┐
-│ atlas-core (Rust): the vault's files, the index and search, links and Bases, │
+│ kandinsky-core (Rust): the vault's files, the index and search, links and Bases, │
 │ tasks, templates, git, PDFs, the mirror, the server, the MCP server, and the │
 │ plugin host (settings, secrets, network permissions, scheduled tools)        │
 └──────────┬──────────────────────────────────────────────┬────────────────────┘
@@ -142,23 +144,23 @@ says what each tier promises and where each plugin stands. Each plugin's folder 
   Svelte) that reloads when saved. They can also have a *helper*: JavaScript run inside the core by QuickJS (the same
   on the phone), or a long-running program — Python with only the standard library, or a compiled Rust program — that
   speaks JSON over a pipe and can call the core back on that same pipe. A plugin declares its settings, secrets,
-  network hosts, agent tools, schedules and what it requires or provides in `plugin.toml`; Atlas draws the settings
+  network hosts, agent tools, schedules and what it requires or provides in `plugin.toml`; Kandinsky draws the settings
   page from those declarations and enforces the rest ([docs/guides/PLUGIN-API.md](docs/guides/PLUGIN-API.md)).
 - **Extending without touching this repository**: commands, templates, pages, CSS snippets and plugins can all live
-  in a vault's `.atlas/` folder ([docs/guides/EXTENDING.md](docs/guides/EXTENDING.md)).
+  in a vault's `.kandinsky/` folder ([docs/guides/EXTENDING.md](docs/guides/EXTENDING.md)).
 
 ### Repository map
 
 | Path | What it is |
 |---|---|
-| `crates/atlas-core` | The core: files, index, API, server, mirror, plugin host, MCP |
-| `crates/atlas` | The `atlas` CLI: serve, capture, run commands, open files |
-| `crates/atlas-app` | The desktop window (Tauri), with the core in-process |
-| `crates/atlas-android` | The Android apps: the in-app core over JNI, the native screens (Java, no Gradle), the pen notepad |
-| `crates/atlas-capture` | The quick-capture box, a native window drawn on the CPU so it opens at once |
-| `crates/atlas-pen` | Pen strokes to shapes, shared by the phone's notepad and the web drawing |
-| `crates/atlas-template` | The template language (`{{…}}`), a superset of Obsidian's |
-| `crates/atlas-text`, `crates/atlas-plugin` | Helpers shared with plugin engines, and the Rust plugin SDK |
+| `crates/kandinsky-core` | The core: files, index, API, server, mirror, plugin host, MCP |
+| `crates/kandinsky` | The `kandinsky` CLI: serve, capture, run commands, open files |
+| `crates/kandinsky-app` | The desktop window (Tauri), with the core in-process |
+| `crates/kandinsky-android` | The Android apps: the in-app core over JNI, the native screens (Java, no Gradle), the pen notepad |
+| `crates/kandinsky-capture` | The quick-capture box, a native window drawn on the CPU so it opens at once |
+| `crates/kandinsky-pen` | Pen strokes to shapes, shared by the phone's notepad and the web drawing |
+| `crates/kandinsky-template` | The template language (`{{…}}`), a superset of Obsidian's |
+| `crates/kandinsky-text`, `crates/kandinsky-plugin` | Helpers shared with plugin engines, and the Rust plugin SDK |
 | `ui/` | The interface: Svelte 5 + TypeScript, CodeMirror 6, dockview |
 | `plugins/stable`, `plugins/beta` | The plugins, by maturity ([docs/guides/PLUGIN-MATURITY.md](docs/guides/PLUGIN-MATURITY.md)) |
 | `plugins/examples` | The smallest working plugins to copy from |
@@ -169,12 +171,12 @@ says what each tier promises and where each plugin stands. Each plugin's folder 
 
 **Linux packages.** Download the AppImage, `.deb`, `.rpm` or Flatpak from the
 [latest release](https://github.com/Alneb/atlas/releases), or build from source (below). The `.deb` and `.rpm` install
-the `atlas` command line beside the app (`/usr/bin/atlas`), and the quick-capture box (`atlas-capture`, with the menu
-entry **Atlas Capture**: give it a key in your desktop's shortcut settings, docs/guides/CAPTURE.md); both are also
+the `kandinsky` command line beside the app (`/usr/bin/kandinsky`), and the quick-capture box (`kandinsky-capture`, with the menu
+entry **Kandinsky Capture**: give it a key in your desktop's shortcut settings, docs/guides/CAPTURE.md); both are also
 files of their own in each release.
 
 **Android with Obtainium.** A release carries three APKs (the full app, the Boox build, the capture app): give the app's
-entry the APK filter `^atlas\.apk$` so Obtainium installs the right one.
+entry the APK filter `^kandinsky\.apk$` so Obtainium installs the right one.
 
 **Android.** The APKs are attached to each release. They are signed with the project's key, so later versions install
 as updates ([docs/guides/ANDROID.md](docs/guides/ANDROID.md)).
@@ -183,7 +185,7 @@ as updates ([docs/guides/ANDROID.md](docs/guides/ANDROID.md)).
 
 ```sh
 cp .env.example .env                                   # where your vaults are, which user owns them
-docker compose run --rm atlas server password          # once: set the owner's password
+docker compose run --rm kandinsky server password          # once: set the owner's password
 docker compose up -d
 ```
 
@@ -196,7 +198,7 @@ You need Rust (stable), Node 20+ and, on Linux, the WebKitGTK development packag
 
 ```sh
 npm --prefix ui ci && npm --prefix ui run build   # the interface, embedded into the binaries
-cargo build                                       # the core and CLI (target/debug/atlas) and the desktop app
+cargo build                                       # the core and CLI (target/debug/kandinsky) and the desktop app
 bash scripts/dev/dev.sh ~/Notes                   # the core and the UI with hot reload → http://localhost:5173
 bash packaging/install.sh                         # build and install the desktop app and the CLI for this user
 bash scripts/dev/gate.sh                          # every check: secrets scan, Rust tests, lints, types, build, end-to-end
@@ -205,7 +207,7 @@ bash scripts/dev/gate.sh                          # every check: secrets scan, R
 The end-to-end tests need Playwright's Chromium once: `npx --prefix ui playwright install chromium`. Plugins with a
 compiled helper build it with their own `engine/build.sh`; plugins with a Svelte pane or a TypeScript helper are built
 with `node scripts/dev/plugin-ui.mjs plugins/<tier>/<id>`. The Android toolchain is downloaded into `local/` by
-`crates/atlas-android/get-toolchain.sh`, and `build-apk.sh` builds the APKs with neither Gradle nor Android Studio.
+`crates/kandinsky-android/get-toolchain.sh`, and `build-apk.sh` builds the APKs with neither Gradle nor Android Studio.
 
 ## Documentation
 
@@ -214,7 +216,7 @@ with `node scripts/dev/plugin-ui.mjs plugins/<tier>/<id>`. The Android toolchain
 | [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) | The principles every feature is checked against |
 | [docs/guides/FIRST-RUN.md](docs/guides/FIRST-RUN.md) | Opening a first vault |
 | [docs/guides/KEYS.md](docs/guides/KEYS.md) | The keyboard |
-| [docs/guides/EXTENDING.md](docs/guides/EXTENDING.md) | Extending Atlas from inside a vault |
+| [docs/guides/EXTENDING.md](docs/guides/EXTENDING.md) | Extending Kandinsky from inside a vault |
 | [docs/guides/PLUGIN-API.md](docs/guides/PLUGIN-API.md) | Writing a plugin |
 | [docs/guides/PLUGIN-MATURITY.md](docs/guides/PLUGIN-MATURITY.md) | What beta and stable promise, plugin by plugin |
 | [docs/guides/SERVER.md](docs/guides/SERVER.md) | Running a server |
@@ -224,7 +226,7 @@ with `node scripts/dev/plugin-ui.mjs plugins/<tier>/<id>`. The Android toolchain
 
 ## Status
 
-Atlas is young and used every day by its author, on a desktop, a phone, an e-ink tablet and a home server. Expect
+Kandinsky is young and used every day by its author, on a desktop, a phone, an e-ink tablet and a home server. Expect
 rough edges, settings that still move, and plugins at different levels of polish: `plugins/stable/` keeps its
 promises, `plugins/beta/` may still change. Changes are listed in [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
@@ -236,6 +238,11 @@ follow the [code of conduct](docs/CODE_OF_CONDUCT.md).
 
 ## License
 
-[AGPL-3.0-or-later](LICENSE), except the plugin SDK (`crates/atlas-plugin`, `crates/atlas-core/sdk/js`), which is
+Kandinsky is based on Atlas by Alneb (github.com/Alneb/atlas), AGPL-3.0. This repository is a modified version of Atlas: it was renamed to Kandinsky (with the
+migration of earlier data, see [docs/guides/DEVELOPING.md](docs/guides/DEVELOPING.md#names-from-before-the-rename))
+and changed further by its maintainers; last modified 2026-11-15. Changes are listed in
+[docs/CHANGELOG.md](docs/CHANGELOG.md).
+
+[AGPL-3.0-or-later](LICENSE), except the plugin SDK (`crates/kandinsky-plugin`, `crates/kandinsky-core/sdk/js`), which is
 MIT OR Apache-2.0 so plugins may carry any licence. Third-party code inside the repository keeps its own licence
 ([docs/THIRD-PARTY.md](docs/THIRD-PARTY.md)).

@@ -1,4 +1,4 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.content.Context;
 import android.graphics.Color;
@@ -15,8 +15,8 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.Look;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.Look;
 
 import java.util.ArrayList;
 import java.util.List;

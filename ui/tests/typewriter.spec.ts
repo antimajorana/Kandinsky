@@ -2,7 +2,7 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 import { openFile } from "./open";
 
 // Typewriter scrolling ([editor] typewriter): the line being written stays at mid-height of the pane.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 async function setTypewriter(request: APIRequestContext, on: boolean) {
   const d = await (await request.get("/api/config", { headers: H })).json();
   d.config.editor.typewriter = on;

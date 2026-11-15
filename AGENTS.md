@@ -21,7 +21,7 @@ Several agents and people may work in one checkout at once. Leave it as you foun
 - **Downloaded toolchains and runtimes stay in `local/`** (git-ignored): the Android SDK/NDK and emulator images, a JDK,
   Python for Android, signing keys. `node publish/scan.mjs` rejects such paths and package files, whatever their size.
 - **Tests and probes never write into the repository or a real vault.** They work on a throwaway copy in the temp
-  folder. A cache a test leaves behind (`.atlas/cache/`) is ignored, but the test should still clean up.
+  folder. A cache a test leaves behind (`.kandinsky/cache/`) is ignored, but the test should still clean up.
 - **Delete what you created and no longer need**, before you finish: temporary files, test folders, stopped servers.
 
 ## Write for the public
@@ -30,8 +30,8 @@ The repository is published. Everything you write here can be read by anyone.
 
 - **No personal data**: no real names, e-mail addresses, home paths (`/home/<name>`), host names, account names, bank
   details or vault contents. Tests use fixtures (`example.org`, `alice`, `/home/u`, `notes.example.org`).
-- **Tests that need real data read it from the environment** (`ATLAS_TEST_VAULT`, `ATLAS_TEST_PAPERS`,
-  `ATLAS_VAULT`…) and skip, saying why, when it is unset. A machine's own values live in `scripts/dev/local.env`,
+- **Tests that need real data read it from the environment** (`KANDINSKY_TEST_VAULT`, `KANDINSKY_TEST_PAPERS`,
+  `KANDINSKY_VAULT`…) and skip, saying why, when it is unset. A machine's own values live in `scripts/dev/local.env`,
   which is never committed.
 - **Comments and docs give the reason, neutrally.** Don't quote the person who asked, and don't mention dates of
   requests, chat sessions, ticket numbers from a private tracker, or which agent wrote the code. Say what the code does
@@ -55,7 +55,7 @@ The repository is published. Everything you write here can be read by anyone.
   rewrites) and never push unless the maintainer asks.
 - **One heavy job at a time.** The gate, the Rust build and the end-to-end tests are heavy: if one is already running,
   wait for it instead of starting a second.
-- **Never kill processes by pattern** (`pkill -f atlas` can hit the app the maintainer is using, or your own shell).
+- **Never kill processes by pattern** (`pkill -f kandinsky` can hit the app the maintainer is using, or your own shell).
   Stop what you started by its PID.
 
 ## Before you call it done

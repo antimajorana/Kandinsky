@@ -1,22 +1,22 @@
 # The first start
 
-What someone who has never run Atlas sees, on a computer that is not the developer's: no settings, no vault list,
-no secrets, no `ATLAS_*` variables. The end-to-end spec `ui/tests/first-run.spec.ts` starts a core exactly so (an empty
+What someone who has never run Kandinsky sees, on a computer that is not the developer's: no settings, no vault list,
+no secrets, no `KANDINSKY_*` variables. The end-to-end spec `ui/tests/first-run.spec.ts` starts a core exactly so (an empty
 `HOME` with its own `XDG_*` folders) and checks the path below on every gate.
 
 ## The desktop app
 
-1. **No vault asked for and none remembered** → the app opens the **Welcome vault**, a folder in Atlas's own data
-   folder (`$XDG_DATA_HOME/atlas/Welcome`, `vault_to_open` in `crates/atlas-app/src/main.rs`). It is a start page,
+1. **No vault asked for and none remembered** → the app opens the **Welcome vault**, a folder in Kandinsky's own data
+   folder (`$XDG_DATA_HOME/kandinsky/Welcome`, `vault_to_open` in `crates/kandinsky-app/src/main.rs`). It is a start page,
    nothing of the user's is written there.
 2. Its page (`WELCOME_PAGE`) shows the greeting, then the **`vaults` block**, *Start with a vault*:
    - **New vault…** — makes a folder (e.g. `~/Notes`) and opens it;
    - **Open a folder…** — any folder; an Obsidian vault opens as it is;
-   - **Connect to a server…** — an `atlas serve --listen` elsewhere;
+   - **Connect to a server…** — an `kandinsky serve --listen` elsewhere;
    - **Your vaults (n)…** — once the list has others.
-   Then *What a vault is*: one paragraph on vaults and `.atlas/`, and the two keys worth knowing — **Ctrl+Alt+V**
+   Then *What a vault is*: one paragraph on vaults and `.kandinsky/`, and the two keys worth knowing — **Ctrl+Alt+V**
    switches vaults, **F1** lists every command. (An earlier page told the newcomer to press Ctrl+K, which is not
-   Atlas's key, and offered no button.)
+   Kandinsky's key, and offered no button.)
 3. The chosen vault is remembered and opened at the next start.
 4. **The window fits the screen.** The default 1400×900 window overflowed a 1366×768 laptop or a 1280×800 tablet;
    `fit_to_screen` shrinks a window larger than its monitor's work area to 95 % of it and centres it. A screen with
@@ -26,19 +26,19 @@ The `vaults` block (`ui/src/components/views/VaultsBlock.svelte`) is an ordinary
 `.page` or a ```` ```view ```` in a note. It goes through `lib/vaults.ts`, the same code as the vault switcher, so a
 core that keeps no vault list (a server's) says so instead of offering buttons that cannot work.
 
-## `atlas serve`
+## `kandinsky serve`
 
-- `atlas serve <folder>` serves that folder; a folder that is not a vault yet gets its `.atlas/` and a `Home.page`,
+- `kandinsky serve <folder>` serves that folder; a folder that is not a vault yet gets its `.kandinsky/` and a `Home.page`,
   and the CLI says so on stderr.
-- `atlas serve` with no folder serves the vault around the current folder, or the current folder — **except a bare
-  home folder** (no `.atlas/` in it): there it stops with *"no vault here: name the folder to serve, e.g.
-  `atlas serve ~/Notes`"*. Before, a newcomer's first `atlas serve` in `~` indexed the whole home folder and wrote
-  `Home.page` and `.atlas/` into it (`serve_root` in `crates/atlas/src/main.rs`).
+- `kandinsky serve` with no folder serves the vault around the current folder, or the current folder — **except a bare
+  home folder** (no `.kandinsky/` in it): there it stops with *"no vault here: name the folder to serve, e.g.
+  `kandinsky serve ~/Notes`"*. Before, a newcomer's first `kandinsky serve` in `~` indexed the whole home folder and wrote
+  `Home.page` and `.kandinsky/` into it (`serve_root` in `crates/kandinsky/src/main.rs`).
 
 ## Defaults that assumed the developer
 
 - **Vim keys are off by default** (`Config::vim`), as in Obsidian: a newcomer's keys type text. The status bar's
-  `vim off` turns them on; `vim = true` in `.atlas/config.toml` keeps them. The end-to-end workspace sets it, since its
+  `vim off` turns them on; `vim = true` in `.kandinsky/config.toml` keeps them. The end-to-end workspace sets it, since its
   editor specs drive vim.
 - Hints in Settings no longer quote anyone (the Motion setting).
 - The Today page no longer flashes *"Activity — Invalid date"* while it loads (`TodayParts.svelte`: no day yet counts
@@ -52,12 +52,12 @@ core that keeps no vault list (a server's) says so instead of offering buttons t
 - `vim` is off.
 - Settings opens (Super+,) and its Plugins page reads sensibly with no plugin installed.
 - The `vaults` block offers *New vault…* and *Open a folder…*.
-- `atlas serve` in a bare home folder refuses, names what to do, and writes nothing there.
+- `kandinsky serve` in a bare home folder refuses, names what to do, and writes nothing there.
 
 ## Required and optional
 
 **Required to run:** the desktop app needs WebKitGTK 4.1 and GTK 3 (the packages pull them in); the core and
-`atlas serve` need nothing beyond the binary. **Required to build:** see the README's *Build from source*.
+`kandinsky serve` need nothing beyond the binary. **Required to build:** see the README's *Build from source*.
 
 **Optional** — a feature that needs one of these is off or says what is missing, the rest works:
 
@@ -84,7 +84,7 @@ found, fixed:
 - **Text search found nothing without ripgrep** (`rg` is installed by default on neither Fedora nor Ubuntu, and no
   package pulled it in): the core now links ripgrep's own crates (`grep-searcher`, `grep-regex`) and searches the
   walk's files in process — no `rg` program at all, for search and Replace alike. The files are the walk's (the
-  config's ignores, hidden folders skipped); a `.gitignore` is no longer consulted, as nothing else in Atlas does.
+  config's ignores, hidden folders skipped); a `.gitignore` is no longer consulted, as nothing else in Kandinsky does.
 - **A repository without the git program:** the Git panel's status is read in process by the pure-Rust `gix`
   (`git_read.rs`) — the changed, staged and new files are listed, and the panel says git is missing for commits, pull
   and push. Writing (stage, commit, discard, pull, push) always goes through the `git` program, so hooks, signing and

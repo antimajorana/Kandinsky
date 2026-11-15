@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -11,7 +11,7 @@ import org.json.JSONArray;
 final class Vaults {
     private final SharedPreferences prefs;
 
-    Vaults(Context c) { prefs = c.getSharedPreferences("atlas", Context.MODE_PRIVATE); }
+    Vaults(Context c) { prefs = c.getSharedPreferences("kandinsky", Context.MODE_PRIVATE); }
 
     List<String> list() {
         List<String> out = new ArrayList<>();
@@ -116,7 +116,7 @@ final class Vaults {
 
     boolean cookies(String url) { return prefs.getBoolean("cookies:" + url, false); }
 
-    /** The gate's session (its cookies, `name=value; …`), handed over by Atlas after a sign-in in the browser. */
+    /** The gate's session (its cookies, `name=value; …`), handed over by Kandinsky after a sign-in in the browser. */
     void keepGate(String url, String cookies) { prefs.edit().putString("gate:" + url, cookies).apply(); }
 
     String gate(String url) { return prefs.getString("gate:" + url, ""); }

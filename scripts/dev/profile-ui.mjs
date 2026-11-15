@@ -19,7 +19,7 @@ import { hot } from "./cpuprofile.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const { chromium } = createRequire(join(here, "../../ui/package.json"))("playwright");
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : d; };
-const distArg = opt("--dist"), cpu = Number(opt("--cpu", "1")), dist = distArg && resolve(distArg), out = resolve(opt("--out", "/tmp/atlas-profile")), notePath = opt("--note");
+const distArg = opt("--dist"), cpu = Number(opt("--cpu", "1")), dist = distArg && resolve(distArg), out = resolve(opt("--out", "/tmp/kandinsky-profile")), notePath = opt("--note");
 const TYPES = { ".js": "text/javascript", ".css": "text/css", ".html": "text/html", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".wasm": "application/wasm", ".json": "application/json" };
 const READS = /\/api\/(base\/query|view|link-mention|search)/;
 mkdirSync(out, { recursive: true });
@@ -69,12 +69,12 @@ await scenario("start", async () => {
 });
 await page.waitForTimeout(3000); // plugins, the home page's blocks
 
-const files = await page.evaluate(async () => (await (await fetch("/api/files", { headers: { "x-atlas": "1" } })).json()));
+const files = await page.evaluate(async () => (await (await fetch("/api/files", { headers: { "x-kandinsky": "1" } })).json()));
 const note = notePath ?? (await page.evaluate(async (fs) => {
   // the biggest note among a sample: the editor's worst case on this vault
   let best = ["", 0];
   for (const f of fs.filter((x) => x.endsWith(".md") && !x.startsWith("mail/")).slice(0, 400)) {
-    const r = await fetch(`/api/file?path=${encodeURIComponent(f)}`, { headers: { "x-atlas": "1" } });
+    const r = await fetch(`/api/file?path=${encodeURIComponent(f)}`, { headers: { "x-kandinsky": "1" } });
     if (r.ok) { const t = (await r.json()).text; if (t.length > best[1]) best = [f, t.length]; }
   }
   return best[0];
@@ -89,8 +89,8 @@ await scenario("quick-open", async () => {
   await page.keyboard.press("Escape");
 });
 await scenario("open-big-note", async () => {
-  // straight to the note (window.__atlas): the palette's ranking is not what is measured here
-  await page.evaluate((p) => window.__atlas.open(p), note);
+  // straight to the note (window.__kandinsky): the palette's ranking is not what is measured here
+  await page.evaluate((p) => window.__kandinsky.open(p), note);
   await page.locator(".cm-editor:visible .cm-line").first().waitFor({ timeout: 20_000 });
   await page.waitForTimeout(1500);
 });

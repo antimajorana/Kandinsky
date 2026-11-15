@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.alneb.Atlas</id>
-  <name>Atlas</name>
+  <id>io.github.alneb.Kandinsky</id>
+  <name>Kandinsky</name>
   <summary>A workspace over plain files: notes, papers, mail, code and terminals</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>AGPL-3.0-or-later</project_license>
   <description>
-    <p>Atlas is a fast desktop workspace over a folder of plain files. Notes render like Obsidian, with wikilinks,
+    <p>Kandinsky is a fast desktop workspace over a folder of plain files. Notes render like Obsidian, with wikilinks,
       embeds, callouts, LaTeX and Bases tables; papers come with their PDFs and annotations; code gets language
       servers; terminals run beside your notes. Plugins in plain JavaScript add the rest.</p>
   </description>
-  <launchable type="desktop-id">io.github.alneb.Atlas.desktop</launchable>
+  <launchable type="desktop-id">io.github.alneb.Kandinsky.desktop</launchable>
   <url type="homepage">https://github.com/Alneb/atlas</url>
   <url type="bugtracker">https://github.com/Alneb/atlas/issues</url>
   <content_rating type="oars-1.1"/>

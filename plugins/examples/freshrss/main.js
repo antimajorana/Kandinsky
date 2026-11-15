@@ -7,24 +7,24 @@
 // tools); the block only draws the list. "Save" makes a note of the article in the folder of the settings and opens it.
 const el = (tag, style, text) => { const e = document.createElement(tag); if (style) e.style.cssText = style; if (text !== undefined) e.textContent = text; return e; };
 
-export function register(atlas) {
+export function register(kandinsky) {
   async function save(item) {
     try {
-      const r = await atlas.helper.call("save", { id: item.id });
-      if (!r.made) atlas.toast("FreshRSS", `${r.path} is already there`);
-      atlas.open(r.path);
-    } catch (e) { atlas.toast("FreshRSS: not saved", String(e.message ?? e), "error"); }
+      const r = await kandinsky.helper.call("save", { id: item.id });
+      if (!r.made) kandinsky.toast("FreshRSS", `${r.path} is already there`);
+      kandinsky.open(r.path);
+    } catch (e) { kandinsky.toast("FreshRSS: not saved", String(e.message ?? e), "error"); }
   }
-  atlas.registerBlock("freshrss.unread", (host, block) => {
+  kandinsky.registerBlock("freshrss.unread", (host, block) => {
     let gone = false;
-    if (!String(atlas.plugin.settings.server ?? "").trim()) {
+    if (!String(kandinsky.plugin.settings.server ?? "").trim()) {
       host.replaceChildren(el("p", "color: var(--text-faint)", "Set the FreshRSS server in Settings → Plugins → FreshRSS."));
       return () => {};
     }
     host.replaceChildren(el("p", "color: var(--text-faint)", "Reading FreshRSS…"));
     void (async () => {
       try {
-        const items = await atlas.helper.call("unread", { limit: Number(block.options.limit ?? 15) });
+        const items = await kandinsky.helper.call("unread", { limit: Number(block.options.limit ?? 15) });
         if (gone) return;
         const list = el("ul", "list-style: none; margin: 0; padding: 4px 0");
         for (const it of items) {

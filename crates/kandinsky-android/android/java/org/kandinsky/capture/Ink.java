@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.view.View;
 
@@ -32,6 +32,6 @@ abstract class Ink {
     /** Onyx's instant ink for this view, or NONE when the framework does not have it. */
     static Ink onyx(View v) {
         try { return new OnyxInk(v); }
-        catch (ReflectiveOperationException | LinkageError e) { android.util.Log.i("AtlasInk", "no Onyx instant ink: " + e); return NONE; }
+        catch (ReflectiveOperationException | LinkageError e) { android.util.Log.i("KandinskyInk", "no Onyx instant ink: " + e); return NONE; }
     }
 }

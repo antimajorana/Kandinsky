@@ -1,4 +1,4 @@
-/* CodeMirror chrome for Atlas: caret, selection, gutters, panels, tooltips, vim prompt; plus
+/* CodeMirror chrome for Kandinsky: caret, selection, gutters, panels, tooltips, vim prompt; plus
    the live-preview specifics (fenced lines, lists, rendered blocks) from obsidian-web's app.css. */
 .cm-editor { height: 100%; background: var(--bg); color: var(--text); font-size: var(--code-size, 14px); }
 .cm-editor.cm-focused { outline: none; }
@@ -70,18 +70,20 @@
 .cm-task-row .cm-completionLabel, .task-row .task-sugg-label { flex: 1; }
 .cm-task-row .cm-completionDetail, .task-row .task-sugg-detail { margin-left: 16px; font-style: normal; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 
-/* --- live preview (markdown) -------------------------------------------------------------- */
-.live-cm.cm-editor { font-size: var(--prose-size, 15px); }
+/* --- live preview (markdown: Notion × Bauhaus document sheet) ----------------------------- */
+.live-cm.cm-editor { --line-width: 740px; font-size: var(--prose-size, 15.5px); }
 .live-cm.cm-editor .cm-scroller.cm-scroller { font-family: var(--prose-font, var(--font-ui)); line-height: var(--prose-line-height, 1.68); }
-.live-cm .cm-content { max-width: calc(var(--prose-width, 88ch) + 80px); margin: 0 auto; padding: 36px 40px 45vh; box-sizing: border-box; width: 100%; }
-/* a phone's width goes to the words: 16 px at the sides (the desktop's 40 px took a fifth of the line) */
+.live-cm .cm-content { max-width: calc(var(--prose-width, var(--line-width, 740px)) + 112px); margin: 0 auto; padding: 36px 56px 45vh; box-sizing: border-box; width: 100%; }
+/* a phone's width goes to the words: 16 px at the sides (the desktop's 56 px took a fifth of the line) */
 html.phone .live-cm .cm-content { padding: 20px 16px 45vh; }
 .live-cm .cm-line { padding: 0; }
+.live-cm .cm-fm-anchor { height: 0; margin: 0; padding: 0; overflow: hidden; line-height: 0; font-size: 0; }
 .live-cm .cm-activeLine { background: transparent; }
 .live-cm .markdown .cm-header { margin: 0; }
 .live-cm .cm-header-1 { padding-top: .35em; padding-bottom: .1em; }
-.live-cm .cm-header-2 { padding-top: .45em; }
-.live-cm .cm-header-3, .live-cm .cm-header-4 { padding-top: .35em; }
+.live-cm .cm-header-1.cm-page-title-h1 { padding-top: 0; padding-bottom: .16em; }
+.live-cm .cm-header-2 { padding-top: .55em; padding-bottom: .08em; }
+.live-cm .cm-header-3, .live-cm .cm-header-4 { padding-top: .4em; }
 .live-cm .cm-header .cm-formatting, .live-cm .cm-formatting { color: var(--text-faint); }
 
 /* the selection over the line backgrounds and rendered boxes (a code block, a callout): drawn under them it showed in pieces,
@@ -121,7 +123,7 @@ html.phone .live-cm .cm-content { padding: 20px 16px 45vh; }
 .markdown .cm-rendered-block:hover { background: var(--bg-hover); }
 /* an editable table, an embedded base or any block (a day's header, a widget) draws its own box: the "click to show
    the source" band round it peeked out above and below that box like a smudged shadow */
-.markdown .cm-rendered-block:has(.table-edit-box, .base.embedded, .atlas-block):hover { background: none; }
+.markdown .cm-rendered-block:has(.table-edit-box, .base.embedded, .kandinsky-block):hover { background: none; }
 .markdown .cm-rendered-block pre, .markdown .cm-rendered-block .table-wrap { margin: .3em 0; }
 
 .markdown .cm-frontmatter { font-family: var(--font-mono); font-size: .78em; color: var(--text-muted); line-height: 1.55; }
@@ -174,9 +176,9 @@ html.phone .live-cm .cm-content { padding: 20px 16px 45vh; }
 /* footnotes: `[^1]` is a superscript reference, `[^1]:` the definition's small label (brackets hidden) */
 .markdown .cm-footnote-ref { vertical-align: super; font-size: .75em; color: var(--accent); }
 .markdown .cm-footnote-label { font-size: .85em; color: var(--text-muted); }
-/* Obsidian's inline title: the file name, at h1 size, above the note's first line */
+/* Notion × Obsidian inline page title: the file name at 33px above the note when no `# H1` repeats it */
 /* padding, never margin: CodeMirror measures block widgets by their border box (a margin shifted every click below it) */
-.markdown .inline-title { font-size: 1.802em; font-weight: 700; letter-spacing: -.022em; color: var(--heading, var(--text)); line-height: 1.2; margin: 0; padding: .1em 0 .5em; overflow-wrap: anywhere; }
+.markdown .inline-title { font-size: 2.06em; font-weight: 700; letter-spacing: -.028em; color: var(--heading, var(--text)); line-height: 1.18; margin: 0; padding: 0 0 .35em; overflow-wrap: anywhere; }
 textarea.inline-title { display: block; width: 100%; box-sizing: border-box; resize: none; overflow: hidden; border: 0; border-radius: 4px; background: transparent; font-family: inherit; outline: none; padding-inline: 0; cursor: text; }
 textarea.inline-title:hover { background: var(--bg-hover); }
 textarea.inline-title:focus { background: var(--bg-hover); box-shadow: inset 0 -2px 0 var(--accent); }
@@ -226,7 +228,7 @@ textarea.inline-title:focus { background: var(--bg-hover); box-shadow: inset 0 -
 
 /* a table edited in place (lib/editor/table-edit.ts) */
 /* the − buttons lie over the hovered cell's edges and "+ row / + column" under the frame: no band kept around the table */
-.table-edit-box { position: relative; z-index: 2; width: fit-content; max-width: 100%; }
+.table-edit-box { position: relative; z-index: 2; width: 100%; max-width: 100%; }
 .markdown .table-edit-box > .table-wrap { margin-bottom: 0; }
 .table-edit td, .table-edit th { cursor: text; }
 .table-edit .editing { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--bg); }

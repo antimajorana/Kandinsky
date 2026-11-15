@@ -49,8 +49,8 @@ const EVENTS_TTL = 120_000;
 let styled = false;
 const style = () => { if (styled) return; styled = true; const s = document.createElement("style"); s.textContent = CSS; document.head.append(s); };
 
-export function registerDaily(atlas, lang) {
-  atlas.registerBlock("daily.header", (host, block) => {
+export function registerDaily(kandinsky, lang) {
+  kandinsky.registerBlock("daily.header", (host, block) => {
     style();
     let gone = false, drawn = 0, daysOf = null, later = 0;
     if (drawnHtml.has(block.note) && !host.querySelector(".daily-head")) host.innerHTML = drawnHtml.get(block.note);
@@ -58,7 +58,7 @@ export function registerDaily(atlas, lang) {
     // there changes, not on every save of this one
     const here = block.note.includes("/") ? block.note.slice(0, block.note.lastIndexOf("/")) : "";
     const folder = here.replace(/(^|\/)\d{4}(\/[^/]+)*$/, "");
-    const days = () => (daysOf ??= atlas.query(`filters:\n  and:\n    - file.inFolder(${JSON.stringify(folder)})\nviews:\n  - type: table\n    name: days\n    order: [file.name]\n`)
+    const days = () => (daysOf ??= kandinsky.query(`filters:\n  and:\n    - file.inFolder(${JSON.stringify(folder)})\nviews:\n  - type: table\n    name: days\n    order: [file.name]\n`)
       .then((r) => (r?.views?.[0]?.rows ?? []).map((row) => row.path).filter((p) => DAY.test(p) && !p.includes("sync-conflict"))
         // by the day, not the path: month folders by name (`2026/noviembre`) sort before `2026/octubre`
         .sort((a, b) => DAY.exec(a)[1].localeCompare(DAY.exec(b)[1]) || a.localeCompare(b)))
@@ -67,7 +67,7 @@ export function registerDaily(atlas, lang) {
     const draw = async () => {
       const mine = ++drawn;
       const props = await block.props().catch(() => ({}));
-      const text = await atlas.readText(block.note).catch(() => "");
+      const text = await kandinsky.readText(block.note).catch(() => "");
       if (gone || mine !== drawn) return;
       // a template (`date: {{date}}`, or a note in the templates folder): today's header as a preview, said to be one
       const template = /\{\{/.test(String(props.date ?? "")) || /(^|\/)(templates?|plantillas)\//i.test(block.note);
@@ -95,7 +95,7 @@ export function registerDaily(atlas, lang) {
       const [all] = await Promise.all([days(), template ? null : dayFacts(facts, iso)]);
       if (gone || mine !== drawn) return;
       const at = all.indexOf(block.note);
-      const step = (label, path) => { const b = el("button", "", label); b.disabled = !path; if (path) { b.title = DAY.exec(path)[1]; b.onclick = () => atlas.open(path); } return b; };
+      const step = (label, path) => { const b = el("button", "", label); b.disabled = !path; if (path) { b.title = DAY.exec(path)[1]; b.onclick = () => kandinsky.open(path); } return b; };
       nav.append(step("←", at > 0 ? all[at - 1] : null), step("→", at >= 0 && at < all.length - 1 ? all[at + 1] : null));
       const shown = host.querySelector(".daily-head");
       if (!first && !(shown?.live && shown.outerHTML === box.outerHTML)) host.replaceChildren(box);
@@ -104,7 +104,7 @@ export function registerDaily(atlas, lang) {
     };
     /** A save of the note itself: its count at once, in place; the rest (its tasks done) a while after the typing stops. */
     const recount = async () => {
-      const text = await atlas.readText(block.note).catch(() => null);
+      const text = await kandinsky.readText(block.note).catch(() => null);
       const count = host.querySelector(".daily-head .count");
       if (gone || text === null || !count) return void draw();
       count.textContent = countText(entries(text));
@@ -119,16 +119,16 @@ export function registerDaily(atlas, lang) {
       items.forEach((it, i) => {
         if (i) v.append(" · ");
         const a = el("a", "", it.text);
-        if (it.path) a.onclick = () => atlas.open(it.path, it.line);
+        if (it.path) a.onclick = () => kandinsky.open(it.path, it.line);
         v.append(a);
       });
       facts.append(row);
     };
     /** The day's events (any calendar plugin's `events` tool, through a view) and its tasks due and done. */
     const dayFacts = async (facts, iso) => {
-      const rows = async (src) => (await atlas.view(src, block.note).catch(() => null))?.rows ?? [];
+      const rows = async (src) => (await kandinsky.view(src, block.note).catch(() => null))?.rows ?? [];
       const [events, due, done] = await Promise.all([
-        calendar(iso, async () => (await atlas.view(`type: list\nfrom: plugin:dav/events\nargs: {from: "${iso}", to: "${iso}"}`, block.note).catch(() => null))?.rows ?? null),
+        calendar(iso, async () => (await kandinsky.view(`type: list\nfrom: plugin:dav/events\nargs: {from: "${iso}", to: "${iso}"}`, block.note).catch(() => null))?.rows ?? null),
         rows(`type: task-list\nfrom: tasks\ndue: ${iso}\nstarted: false`),
         rows(`type: task-list\nfrom: tasks\nshow: all\ncompleted: ${iso}`),
       ]);
@@ -146,7 +146,7 @@ export function registerDaily(atlas, lang) {
       return rows ?? had?.rows ?? [];
     };
     void draw();
-    const off = atlas.onFilesChanged((paths) => {
+    const off = kandinsky.onFilesChanged((paths) => {
       // a day made or gone; no paths: the connection came back, anything may have changed
       const day = !paths.length || paths.some((p) => p !== block.note && DAY.test(p) && (!folder || p.startsWith(`${folder}/`)));
       if (day) daysOf = null;

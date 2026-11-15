@@ -1,4 +1,4 @@
-// Hand-written types for live-preview.js (only the surface Atlas uses).
+// Hand-written types for live-preview.js (only the surface Kandinsky uses).
 import type { Extension, EditorState, StateEffectType, Text } from "@codemirror/state";
 import type { DecorationSet } from "@codemirror/view";
 
@@ -7,7 +7,9 @@ export interface LivePreviewOptions {
   resolveAttachment?: (src: string) => string | null;
   linkResolves?: (target: string) => boolean;
   highlightCode?: (code: string, lang: string) => CodeRange[];
-  renderMath?: (host: HTMLElement, source: string, block: boolean) => void;
+  renderMath?: (host: HTMLElement, source: string, block: boolean, state?: EditorState) => void;
+  /** Returns true once the synchronous KaTeX renderer is loaded; flips MathWidget keys so pending spans re-render. */
+  mathReady?: () => boolean;
   blockHtml?: (source: string, state: EditorState) => string | null;
   /** The words a link without an alias reads instead of its target (a numbered equation's "(3)"), or null. A cached
    *  lookup: it runs on every keystroke. */

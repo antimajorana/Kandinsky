@@ -74,7 +74,7 @@ export const capture = {
 };
 
 /** Ctrl+Shift+H asked for the replace row: the Search pane takes it on mount, or on the
- *  "atlas-search-replace" event when it is already open. */
+ *  "kandinsky-search-replace" event when it is already open. */
 /** `q`: a text to search for at once (the code bar hands over the editor's selection). */
 export const searchRequest: { replace: boolean; q?: string } = { replace: false };
 

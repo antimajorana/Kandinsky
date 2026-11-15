@@ -1,5 +1,5 @@
 //! Plugin tools: a plugin's helper methods offered to agents. `[[tool]]` in `plugin.toml` names a
-//! method of its `[helper]`; `atlas mcp` lists every switched-on plugin's tools as MCP tools, and a
+//! method of its `[helper]`; `kandinsky mcp` lists every switched-on plugin's tools as MCP tools, and a
 //! call runs in the same helper the page talks to (the window's, when it is open), so a session a
 //! helper keeps — an ssh shell, a signed-in mailbox — is shared by the user's page and the agent.
 //!
@@ -293,7 +293,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let tool = "[helper]\nrun = \"true\"\n[[tool]]\nname = \"capture\"\ndescription = \"after a capture\"\non = \"capture\"\n";
         for (id, platforms) in [("ocr", "[platforms]\nlinux = \"no\"\nmacos = \"no\"\nwindows = \"no\"\nserver = \"no\"\n"), ("catalog", "")] {
-            let p = dir.path().join(".atlas/plugins").join(id);
+            let p = dir.path().join(".kandinsky/plugins").join(id);
             std::fs::create_dir_all(&p).unwrap();
             std::fs::write(p.join("plugin.toml"), format!("title = \"{id}\"\n{tool}{platforms}")).unwrap();
         }
@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn tools_are_listed_for_switched_on_plugins_with_a_helper_and_secrets_in_an_answer_are_kept() {
         let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join(".atlas/plugins/mail");
+        let p = dir.path().join(".kandinsky/plugins/mail");
         std::fs::create_dir_all(&p).unwrap();
         std::fs::write(p.join("plugin.toml"), "title = \"Mail\"\n[helper]\nrun = \"true\"\n[permissions]\nsecrets = true\n[[tool]]\nname = \"inbox\"\ndescription = \"the inbox\"\ninput = { limit = \"integer?\" }\n[[tool]]\nname = \"wait\"\ndescription = \"a long one\"\ntimeout_secs = 400\n").unwrap();
         let mut cfg = Config::default();
@@ -333,7 +333,7 @@ mod tests {
     #[test]
     fn a_page_call_carries_settings_and_secrets_and_is_refused_while_off() {
         let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join(".atlas/plugins/bell");
+        let p = dir.path().join(".kandinsky/plugins/bell");
         std::fs::create_dir_all(&p).unwrap();
         std::fs::write(p.join("plugin.toml"), "title = \"Bell\"\n[helper]\nrun = \"true\"\n[permissions]\nsecrets = true\n[[setting]]\nkey = \"server\"\nkind = \"text\"\ndefault = \"https://ntfy.example.org\"\n").unwrap();
         let store = Store::in_dir(&dir.path().join("secrets"), dir.path());

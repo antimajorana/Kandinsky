@@ -1,19 +1,19 @@
 // The Zstandard plugin's helper: `open` decompresses a vault's `x.tsv.zst` with the machine's zstd (run by the core,
-// `atlas.exec`) into `.atlas/cache/plugins/<id>/x.tsv`, the same folders as the original, and answers that path for the
+// `kandinsky.exec`) into `.kandinsky/cache/plugins/<id>/x.tsv`, the same folders as the original, and answers that path for the
 // page to open. Always made afresh (zstd reads ~1 GB/s); the .zst is never written. After each open the cache is pruned
 // (copies not opened for `cache_hours`, then the oldest past `cache_mb`) with find/rm/touch: the core's file API has no
 // stat and deletes only into the trash. Tests: helper.test.ts.
-import type { Params } from "atlas-helper";
+import type { Params } from "kandinsky-helper";
 
 const HOUR = 3600;
 const MB = 1024 * 1024;
 
 /** The plugin's cache folder, vault-relative. Nothing outside it is ever deleted. */
 export function cacheDir(id: string): string {
-  return `.atlas/cache/plugins/${id}`;
+  return `.kandinsky/cache/plugins/${id}`;
 }
 
-/** Where `x/y.tsv.zst` is read from: `.atlas/cache/plugins/<id>/x/y.tsv` (the name without `.zst` keeps its view). */
+/** Where `x/y.tsv.zst` is read from: `.kandinsky/cache/plugins/<id>/x/y.tsv` (the name without `.zst` keeps its view). */
 export function copyPath(id: string, path: string): string {
   return `${cacheDir(id)}/${path.replace(/\.zst$/i, "")}`;
 }
@@ -56,14 +56,14 @@ const limit = (v: unknown, dflt: number) => (typeof v === "number" && Number.isF
 
 /** Runs a program for the pruning; its output, or an error with its message. */
 async function run(program: string, args: string[]): Promise<string> {
-  const r = await atlas.exec(program, args, { locale: "C", timeout: 120 });
+  const r = await kandinsky.exec(program, args, { locale: "C", timeout: 120 });
   if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim() || `${program} failed (${r.status ?? "killed"})`);
   return r.stdout;
 }
 
 /** Deletes old and surplus copies from the cache, then the folders left empty; never `keep` (cache-relative). */
 async function prune(keep: string, settings: Record<string, unknown>) {
-  const dir = `./${cacheDir(atlas.id)}`;
+  const dir = `./${cacheDir(kandinsky.id)}`;
   // no trailing slash: a cache folder that is a symlink is not followed (find -P), nor one below it
   const files = parseListing(await run("find", [dir, "-type", "f", "-printf", "%T@\\t%s\\t%P\\0"]));
   const gone = victims(files, keep, Date.now() / 1000, limit(settings.cache_hours, 24) * HOUR, limit(settings.cache_mb, 500) * MB);
@@ -75,22 +75,22 @@ async function open(params: Params) {
   const path = String(params.path ?? "").trim().replace(/^\/+/, "");
   if (!/[^/]\.zst$/i.test(path)) throw new Error(`not a .zst file: ${path || "(none)"}`);
   if (path.split("/").some((p) => p === ".." || p === ".")) throw new Error(`not a vault path: ${path}`);
-  const out = copyPath(atlas.id, path);
-  await atlas.write(out, ""); // makes its folders (zstd does not)
+  const out = copyPath(kandinsky.id, path);
+  await kandinsky.write(out, ""); // makes its folders (zstd does not)
   // `./` so a name starting with "-" is never read as an option
-  const r = await atlas.exec("zstd", ["-d", "-q", "-f", "-o", `./${out}`, `./${path}`], { locale: "C", timeout: 600 }).catch((e: Error) => {
-    throw new Error(/not installed/.test(e.message) ? "zstd is not installed on the machine running Atlas" : e.message);
+  const r = await kandinsky.exec("zstd", ["-d", "-q", "-f", "-o", `./${out}`, `./${path}`], { locale: "C", timeout: 600 }).catch((e: Error) => {
+    throw new Error(/not installed/.test(e.message) ? "zstd is not installed on the machine running Kandinsky" : e.message);
   });
   if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim() || `zstd failed (${r.status ?? "killed"})`);
   // zstd gives the copy the .zst's mtime: touched, the mtime is the last open, which the pruning goes by. A failure
   // here costs only the pruning, never the open.
   try {
     await run("touch", ["-c", `./${out}`]);
-    await prune(out.slice(cacheDir(atlas.id).length + 1), params.settings ?? {});
+    await prune(out.slice(cacheDir(kandinsky.id).length + 1), params.settings ?? {});
   } catch (e) {
     console.warn(`zstd: the cache was not pruned: ${(e as Error).message}`);
   }
   return { path: out };
 }
 
-atlas.methods({ open });
+kandinsky.methods({ open });

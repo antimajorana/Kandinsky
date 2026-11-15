@@ -1,13 +1,13 @@
 // The Spelling plugin's helper (docs/design/DESIGN-spelling-predictor.md): the Hunspell dictionaries (the vault's
-// .atlas/dictionaries, then the machine's), read for the page (which checks with them: QuickJS is too slow to load
+// .kandinsky/dictionaries, then the machine's), read for the page (which checks with them: QuickJS is too slow to load
 // one), and the vault's words counted per language, a chunk of notes per call so no call nears the helper's time
 // limit. The only write: `keep`, the dictionaries in use copied into the vault for the devices that have none.
-import type { Params } from "atlas-helper";
+import type { Params } from "kandinsky-helper";
 import { guessLanguage, ownWriting, plainProse, withoutLongRuns, wordsOf } from "../../../../ui/src/lib/editor/prose";
 import { dictionaryFile, installedDictionaries, keepInVault, machineFiles, vaultFiles, type Exec } from "../../../../ui/src/lib/editor/dictionaries";
 
-const exec: Exec = (cmd, args, opts) => atlas.exec(cmd, args, opts) as unknown as ReturnType<Exec>;
-const vault = vaultFiles(atlas), machine = machineFiles(exec);
+const exec: Exec = (cmd, args, opts) => kandinsky.exec(cmd, args, opts) as unknown as ReturnType<Exec>;
+const vault = vaultFiles(kandinsky), machine = machineFiles(exec);
 
 async function dictionaries(p: Params) {
   return [...(await installedDictionaries(vault, machine, p.folder)).keys()].sort();
@@ -21,12 +21,12 @@ async function dictionary(p: Params) {
 
 /** The named dictionaries this machine has and the vault does not, copied into the vault: the names copied. */
 async function keep(p: Params) {
-  return keepInVault(vault, machine, p.folder, (p.names as string[]) ?? [], (path, text) => atlas.write(path, text));
+  return keepInVault(vault, machine, p.folder, (p.names as string[]) ?? [], (path, text) => kandinsky.write(path, text));
 }
 
 /** The notes to count, in order (the page asks for them in chunks). */
 async function notes() {
-  return (await atlas.files(true)).filter((p) => /\.md$/i.test(p) && !p.startsWith(".atlas/"));
+  return (await kandinsky.files(true)).filter((p) => /\.md$/i.test(p) && !p.startsWith(".kandinsky/"));
 }
 
 /** Each of these notes' words, with its language: path → { lang, words: word → uses }. Per note, so the page can
@@ -38,7 +38,7 @@ async function count(p: Params) {
   const out: Record<string, { lang: string; words: Record<string, number> }> = {};
   for (const path of paths) {
     let text: string;
-    try { text = withoutLongRuns(await atlas.read(path), false); } catch { continue; } // gone since the list
+    try { text = withoutLongRuns(await kandinsky.read(path), false); } catch { continue; } // gone since the list
     if (!ownWriting(text)) continue;
     const lang = guessLanguage(text, langs, fallback, /^---[\s\S]*?^lang:\s*([\w-]+)/m.exec(text)?.[1]);
     const words: Record<string, number> = {};
@@ -48,4 +48,4 @@ async function count(p: Params) {
   return out;
 }
 
-atlas.methods({ dictionaries, dictionary, keep, notes, count });
+kandinsky.methods({ dictionaries, dictionary, keep, notes, count });

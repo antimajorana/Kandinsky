@@ -5,7 +5,7 @@ import { OUT } from "./render.config";
 import { propertiesInline } from "./props-inline";
 
 type Finding = { kind: string; text: string };
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 // What counts as "rendered wrong", judged on screen (shape-based, no per-note lists).
 // Runs in the page: looks at every visible editor line except the caret's (which shows source).

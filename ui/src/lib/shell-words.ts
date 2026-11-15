@@ -1,5 +1,5 @@
-// A command's words as a terminal's shell reads them back (`atlas.terminal.quote` / `line`): POSIX shells, PowerShell
-// and cmd quote differently, so a plugin typing a command into the terminal asks `atlas.terminal.shell()` once and
+// A command's words as a terminal's shell reads them back (`kandinsky.terminal.quote` / `line`): POSIX shells, PowerShell
+// and cmd quote differently, so a plugin typing a command into the terminal asks `kandinsky.terminal.shell()` once and
 // quotes for that. Pure.
 
 export type ShellKind = "posix" | "powershell" | "cmd";

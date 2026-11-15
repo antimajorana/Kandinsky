@@ -1,4 +1,4 @@
-// A workspace table file → rows, for plugins (`atlas.table`): the Table pane's own reader (lib/csv/io.ts), so a plugin
+// A workspace table file → rows, for plugins (`kandinsky.table`): the Table pane's own reader (lib/csv/io.ts), so a plugin
 // sees the same header, delimiter and columns the pane shows.
 import { loadSheet } from "./csv/io";
 import type { Table } from "./table";

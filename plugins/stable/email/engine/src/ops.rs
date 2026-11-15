@@ -256,12 +256,22 @@ pub async fn undo_moves(m: &Mail, moved: &[Moved]) -> Result<(), String> {
 
 /// The keyword a snoozed message carries: when it comes back (unix seconds).
 pub fn snooze_keyword(until: i64) -> String {
-    format!("$atlas-snooze-{until}")
+    format!("{}{until}", SNOOZE_PREFIXES[0])
 }
 
-fn snoozed_until(x: &Msg, flags: &str) -> Option<i64> {
+/// The snooze keyword's start; the second is the one written before the rename, which mail snoozed then still carries
+/// on the server: read, woken and removed the same way.
+pub const SNOOZE_PREFIXES: [&str; 2] = ["$kandinsky-snooze-", "$atlas-snooze-"];
+
+/// Whether `keyword` is a snooze keyword (either spelling).
+pub fn is_snooze_keyword(keyword: &str) -> bool {
+    SNOOZE_PREFIXES.iter().any(|p| keyword.starts_with(p))
+}
+
+/// When the message with `flags` comes back, and the keyword that says so (to remove it then).
+fn snoozed_until(x: &Msg, flags: &str) -> Option<(i64, String)> {
     let _ = x;
-    flags.split_whitespace().find_map(|f| f.strip_prefix("$atlas-snooze-").and_then(|t| t.parse().ok()))
+    flags.split_whitespace().find_map(|f| SNOOZE_PREFIXES.iter().find_map(|p| f.strip_prefix(p)).and_then(|t| t.parse().ok()).map(|t| (t, f.to_string())))
 }
 
 /// Snooze: out of the inbox into Snoozed until `until`, when it comes back unread (`wake_snoozed`).
@@ -279,8 +289,8 @@ pub async fn wake_snoozed(m: &Mail, acc: &Account) -> Result<usize, String> {
         .into_iter()
         .filter_map(|(id, flags)| {
             let x = m.index.msg(id)?;
-            let t = snoozed_until(&x, &flags)?;
-            (t <= now).then(|| (id, snooze_keyword(t)))
+            let (t, keyword) = snoozed_until(&x, &flags)?;
+            (t <= now).then_some((id, keyword))
         })
         .collect();
     if due.is_empty() {
@@ -396,7 +406,25 @@ mod tests {
         assert_eq!(x.folder, "INBOX");
         assert!(!x.seen);
         let st = s.store.lock().unwrap();
-        assert!(st.folders["INBOX"].msgs.iter().all(|x| !x.flags.iter().any(|f| f.starts_with("$atlas-snooze"))));
+        assert!(st.folders["INBOX"].msgs.iter().all(|x| !x.flags.iter().any(|f| f.starts_with("$kandinsky-snooze"))));
+    }
+
+    /// Mail snoozed by a build from before the rename carries `$atlas-snooze-<t>` on the server: it wakes the same way,
+    /// and the old keyword goes.
+    #[test]
+    fn mail_snoozed_under_the_old_keyword_still_wakes() {
+        let (m, s, _e, _d) = harness(true);
+        let acc = m.account(None).unwrap();
+        m.rt.block_on(crate::sync::account(&m, &acc, None)).unwrap();
+        let id = inbox_ids(&m)[0];
+        let old = format!("$atlas-snooze-{}", chrono::Utc::now().timestamp() - 5);
+        m.rt.block_on(flag(&m, &[id], &old, true)).unwrap();
+        m.rt.block_on(move_role(&m, &[id], "snoozed")).unwrap();
+        assert!(is_snooze_keyword(&old) && is_snooze_keyword(&snooze_keyword(1)) && !is_snooze_keyword("$label"));
+        assert_eq!(m.rt.block_on(wake_snoozed(&m, &acc)).unwrap(), 1);
+        assert_eq!(m.index.msg(id).unwrap().folder, "INBOX");
+        let st = s.store.lock().unwrap();
+        assert!(st.folders["INBOX"].msgs.iter().all(|x| !x.flags.iter().any(|f| is_snooze_keyword(f))), "the old keyword is gone too");
     }
 
     #[test]

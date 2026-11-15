@@ -2,9 +2,9 @@ import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { WS } from "../playwright.config";
 
-// Settings → Server (docs/guides/SERVER.md), on the desktop: it prepares what `atlas serve --listen` starts from. The test
-// server writes ${WS}-server.toml / .json (ATLAS_SERVER_CONFIG / _STATE), never ~/.config. The page shows only in server mode; the test server is a local one, so
-// /api/auth/me is answered as `atlas serve`'s would be — the panel's own calls are the real ones.
+// Settings → Server (docs/guides/SERVER.md), on the desktop: it prepares what `kandinsky serve --listen` starts from. The test
+// server writes ${WS}-server.toml / .json (KANDINSKY_SERVER_CONFIG / _STATE), never ~/.config. The page shows only in server mode; the test server is a local one, so
+// /api/auth/me is answered as `kandinsky serve`'s would be — the panel's own calls are the real ones.
 async function serverPage(page: Page) {
   await page.route("**/api/auth/me", (r) => r.fulfill({ json: { server: true, via: "password", signOut: true } }));
   await page.goto("/");
@@ -35,10 +35,10 @@ test("Server shows only in a browser on the server's page; Advanced (the setting
   await open(); // a browser on the server: Server, and Advanced with the file (its GPU field is the desktop's only)
   await expect(nav.getByRole("button", { name: "Server" })).toBeVisible();
   await expect(nav.getByRole("button", { name: "Advanced" })).toBeVisible();
-  await page.addInitScript(() => { (window as unknown as { AtlasNative: unknown }).AtlasNative = { ready() {}, tabs() {} }; });
+  await page.addInitScript(() => { (window as unknown as { KandinskyNative: unknown }).KandinskyNative = { ready() {}, tabs() {} }; });
   await page.goto("/");
-  await page.waitForFunction(() => "atlasShell" in window);
-  await page.evaluate(() => (window as unknown as { atlasShell: { view(k: string): void } }).atlasShell.view("settings"));
+  await page.waitForFunction(() => "kandinskyShell" in window);
+  await page.evaluate(() => (window as unknown as { kandinskyShell: { view(k: string): void } }).kandinskyShell.view("settings"));
   await expect(nav.getByRole("button", { name: "Appearance" })).toBeVisible(); // the phone, a server's vault: no Server
   await expect(nav.getByRole("button", { name: "Server" })).toHaveCount(0);
   await expect(nav.getByRole("button", { name: "Advanced" })).toBeVisible();

@@ -3,7 +3,7 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 // The Library is a built-in plugin (References, for a science vault): its button sits in the bar's bottom row with the
 // other launchers and opens the Libraries page (the Catalog plugin's pane) at References; one switch — its id in
 // `[plugins] off` — removes the button, the command, its shortcut and @-citations from the vault.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 async function setOff(request: APIRequestContext, off: string[]) {
   const d = await (await request.get("/api/config", { headers: H })).json();
   d.config.plugins.off = off;
@@ -18,7 +18,7 @@ async function setRestore(request: APIRequestContext, on: boolean) {
 test.afterEach(async ({ request }) => {
   await setOff(request, []);
   await setRestore(request, false);
-  await request.put("/api/file", { headers: H, data: { path: ".atlas/cache/layout.json", text: "null" } });
+  await request.put("/api/file", { headers: H, data: { path: ".kandinsky/cache/layout.json", text: "null" } });
 });
 
 test("the Library is a plugin: an app at the top of the bar, gone when switched off", async ({ page, request }) => {
@@ -63,11 +63,11 @@ test("an old layout's Library panes become the one Libraries page, the Catalog's
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+Shift+l");
   const layoutText = async () => {
-    const r = await request.get(`/api/file?path=${encodeURIComponent(".atlas/cache/layout.json")}`, { headers: { "x-atlas": "1" } });
+    const r = await request.get(`/api/file?path=${encodeURIComponent(".kandinsky/cache/layout.json")}`, { headers: { "x-kandinsky": "1" } });
     return r.ok() ? (((await r.json()) as { text?: string }).text ?? "") : "";
   };
   await expect.poll(layoutText).toContain('"plugin:catalog"');
-  // the same layout as an older Atlas wrote it: the page as the core's `libraries` pane, the old `library` beside it
+  // the same layout as an older Kandinsky wrote it: the page as the core's `libraries` pane, the old `library` beside it
   const saved = JSON.parse(await layoutText());
   const now = saved.panels["plugin:catalog"];
   delete saved.panels["plugin:catalog"];
@@ -79,7 +79,7 @@ test("an old layout's Library panes become the one Libraries page, the Catalog's
     if (n.data.activeView === "plugin:catalog") n.data.activeView = "libraries";
   };
   asOld(saved.grid.root);
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: ".atlas/cache/layout.json", text: JSON.stringify(saved) } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: ".kandinsky/cache/layout.json", text: JSON.stringify(saved) } });
   await page.close();
   const fresh = await context.newPage(); // a new window reads the file (a reload keeps its own tabs)
   await fresh.goto("/");

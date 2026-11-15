@@ -173,7 +173,7 @@ pub struct Instance {
     /// the master's RRULE (the editor's "repeat")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rrule: Option<String>,
-    /// the note or mail it came from (X-ATLAS-SOURCE)
+    /// the note or mail it came from (X-KANDINSKY-SOURCE)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -283,7 +283,7 @@ fn instance(ev: &Component, rid: Option<String>, dates: Option<(NaiveDate, Naive
         location: text("LOCATION"),
         description: text("DESCRIPTION"),
         rrule,
-        source: text("X-ATLAS-SOURCE"),
+        source: text("X-KANDINSKY-SOURCE").or_else(|| text(crate::ics::LEGACY_SOURCE)),
         status: text("STATUS").map(|s| s.to_ascii_uppercase()),
         free: text("TRANSP").is_some_and(|t| t.eq_ignore_ascii_case("TRANSPARENT")),
         organizer: ev.prop("ORGANIZER").or(master.prop("ORGANIZER")).map(person),
@@ -311,7 +311,7 @@ fn starts(master: &Component, frame: Frame, first: NaiveDateTime, lo: NaiveDateT
     };
     // a wall-clock time a DST change skips (a range's midnight in Santiago or Havana) is the hour after, as Zone::instant
     // takes it: none would leave the whole series out of that range
-    let at = |t: NaiveDateTime| atlas_text::wall_clock::at(t, &rtz);
+    let at = |t: NaiveDateTime| kandinsky_text::wall_clock::at(t, &rtz);
     for line in master.props.iter().filter(|l| l.name == "RRULE") {
         // UNTIL is applied by hand: the crate wants it in UTC, calendars write it as a date or a floating time too
         let mut until = None;

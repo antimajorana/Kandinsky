@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -9,7 +9,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-/** A note's flat frontmatter properties, read and changed by the core's own rules (atlas-text frontmatter.rs, through
+/** A note's flat frontmatter properties, read and changed by the core's own rules (kandinsky-text frontmatter.rs, through
  *  Core): only the keys asked for are touched, every other line (other keys, lists, comments, the body) stays as
  *  written; numbers and booleans are written typed, other values as YAML strings. The plugins' (Books, Manga) one way to
  *  keep state in a note. */

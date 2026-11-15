@@ -1,7 +1,7 @@
 // The words a vault accepts on top of its dictionaries: a Markdown note (metadata lives in Markdown), one word per
 // line in its ```words block, written by "Add to this vault's words" and free to edit by hand.
 
-export const WORDS_NOTE = ".atlas/spelling/words.md";
+export const WORDS_NOTE = ".kandinsky/spelling/words.md";
 
 const BLOCK = /^```words[ \t]*\n([\s\S]*?)^```/m;
 

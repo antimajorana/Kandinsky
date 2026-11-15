@@ -1,5 +1,5 @@
-// Typed client for the Atlas HTTP + WebSocket API v0 (docs/ARCHITECTURE.md).
-// Every HTTP request carries `x-atlas: 1` (the server's CSRF guard); WebSockets rely on Origin.
+// Typed client for the Kandinsky HTTP + WebSocket API v0 (docs/ARCHITECTURE.md).
+// Every HTTP request carries `x-kandinsky: 1` (the server's CSRF guard); WebSockets rely on Origin.
 import type { CaptureKey } from "./gen/CaptureKey";
 import type {
   ApiErrorBody, CaptureResult, CmdResult, CommandInfo, FileDoc, PtyPreset, PtyControl,
@@ -20,14 +20,14 @@ import type { TriageRequest } from "./gen/TriageRequest";
 import type { CaptureDay } from "./gen/CaptureDay";
 
 declare global {
-  interface Window { __ATLAS_API__?: string }
+  interface Window { __KANDINSKY_API__?: string }
 }
 
 /** After a request that worked, tell the plugins what happened; the result passes through. */
 const told = (e: PluginEvent) => <T>(r: T): T => { emitPluginEvent(e); return r; };
 
-/** Origin of the API. Empty = same origin (Vite proxy in dev, atlas-core serving dist in prod). */
-export const apiBase = (): string => (typeof window !== "undefined" && window.__ATLAS_API__) || "";
+/** Origin of the API. Empty = same origin (Vite proxy in dev, kandinsky-core serving dist in prod). */
+export const apiBase = (): string => (typeof window !== "undefined" && window.__KANDINSKY_API__) || "";
 /** A sessionStorage key of this window's vault: a vault switch loads the other vault in the same window, which keeps
  *  its sessionStorage — unscoped, the next vault restored this one's tabs and took over its terminals. */
 export const vaultScoped = (key: string): string => `${key}@${apiBase() || "/"}`;
@@ -44,7 +44,7 @@ export class ApiError extends Error {
 }
 
 type Query = Record<string, string | number | undefined>;
-/** How the task list is asked for (`Ask` in crates/atlas-core/src/task_suggest.rs). */
+/** How the task list is asked for (`Ask` in crates/kandinsky-core/src/task_suggest.rs). */
 export type TaskAsk = { explicit?: boolean; at?: boolean; browse?: boolean; keepEnter?: boolean };
 
 function url(path: string, query?: Query, base = apiBase()): string {
@@ -61,7 +61,7 @@ function signInThroughBridge(page: string): void {
   bridgeAsked = Date.now();
   window.open(`/signin/door?url=${encodeURIComponent(page)}`, "_blank"); // the desktop app catches it (its own core)
   const t = setInterval(() => {
-    void fetch(url("/api/workspace"), { headers: { "x-atlas": "1" } }).then((r) => { if (r.ok) { clearInterval(t); location.reload(); } }, () => {});
+    void fetch(url("/api/workspace"), { headers: { "x-kandinsky": "1" } }).then((r) => { if (r.ok) { clearInterval(t); location.reload(); } }, () => {});
   }, 2500);
   setTimeout(() => clearInterval(t), 300_000);
 }
@@ -70,7 +70,7 @@ function signInThroughBridge(page: string): void {
 // for a lease first (core mirror_guard.rs; docs/design/DESIGN-mirror-v2.md). `base: ""` is the desktop's own core
 // whatever vault the page shows (ownCore).
 async function request<T>(method: string, path: string, opts: { query?: Query; body?: unknown; base?: string; signal?: AbortSignal } = {}): Promise<T> {
-  const headers: Record<string, string> = { "x-atlas": "1" };
+  const headers: Record<string, string> = { "x-kandinsky": "1" };
   if (opts.body !== undefined) headers["content-type"] = "application/json";
   const res = await fetch(url(path, opts.query, opts.base), {
     method,
@@ -142,7 +142,7 @@ export const api = {
   /** A locked local core's one-time link for another window (local_lock.rs); 400 when the core is open. */
   localLink: () => request<{ url: string }>("POST", "/api/local/link"),
   signOut: () => request<void>("POST", "/api/auth/logout"),
-  /** What a pen stroke was meant as (atlas-pen, the phone's recogniser): `x, y, t` triples, null triples between two
+  /** What a pen stroke was meant as (kandinsky-pen, the phone's recogniser): `x, y, t` triples, null triples between two
    *  strokes → the wire (pen-shapes.ts), `[0]` for none. */
   penShape: (xyt: (number | null)[], openink = true) => request<{ wire: number[] }>("POST", "/api/pen/shape", { body: { xyt, openink } }),
   server: () => request<ServerState>("GET", "/api/server"),
@@ -158,7 +158,7 @@ export const api = {
   /** Settings → AI agents (agents.rs): this machine's agents, each with its own token; 400 on a server (device tokens there). */
   agents: () => request<AgentsState>("GET", "/api/agents"),
   allowAgent: (name: string) => request<{ token: string; mcp: unknown }>("POST", "/api/agents", { body: { name } }),
-  /** Whether the terminals Atlas starts for an agent get the shared agent's token (agents.rs TERMINAL_AGENT). */
+  /** Whether the terminals Kandinsky starts for an agent get the shared agent's token (agents.rs TERMINAL_AGENT). */
   agentTerminals: (on: boolean) => request<void>("PUT", "/api/agents/terminals", { body: { on } }),
   revokeAgent: (name: string) => request<void>("DELETE", `/api/agents/${encodeURIComponent(name)}`),
   serverSignOutAll: () => request<{ ended: number }>("POST", "/api/server/signout-all"),
@@ -214,35 +214,35 @@ export const api = {
     request<CmdResult>("POST", `/api/cmd/${encodeURIComponent(id)}`, { body: { args } }),
   /** Raw bytes (PDF, images). Fetched with the header, so it works under the CSRF guard. */
   thumb: async (path: RelPath, w: number): Promise<Blob> => {
-    const res = await fetch(url("/api/thumb", { path, w: String(Math.round(w)) }), { headers: { "x-atlas": "1" } });
+    const res = await fetch(url("/api/thumb", { path, w: String(Math.round(w)) }), { headers: { "x-kandinsky": "1" } });
     if (!res.ok) throw new ApiError(res.status, `GET /api/thumb: ${res.status}`);
     return res.blob();
   },
   raw: async (path: RelPath): Promise<Blob> => {
-    const res = await fetch(url("/api/raw", { path }), { headers: { "x-atlas": "1" } });
+    const res = await fetch(url("/api/raw", { path }), { headers: { "x-kandinsky": "1" } });
     if (!res.ok) throw new ApiError(res.status, `GET /api/raw: ${res.status}`);
     return res.blob();
   },
   /** A file's first `n` bytes as text, and whether that is all of it (an empty file: an error, there is no range). */
   rawHead: async (path: RelPath, n: number): Promise<{ text: string; whole: boolean }> => {
-    const res = await fetch(url("/api/raw", { path }), { headers: { "x-atlas": "1", range: `bytes=0-${n - 1}` } });
+    const res = await fetch(url("/api/raw", { path }), { headers: { "x-kandinsky": "1", range: `bytes=0-${n - 1}` } });
     if (!res.ok) throw new ApiError(res.status, `GET /api/raw: ${res.status}`);
     const bytes = new Uint8Array(await res.arrayBuffer());
     const total = Number(res.headers.get("content-range")?.split("/")[1] ?? bytes.length);
     return { text: new TextDecoder().decode(bytes.subarray(0, n)), whole: total <= n };
   },
   rawUrl: (path: RelPath) => url("/api/raw", { path }),
-  /** What the user is looking at, for Claude via `atlas mcp` (atlas_context). */
+  /** What the user is looking at, for Claude via `kandinsky mcp` (kandinsky_context). */
   putUiState: (state: UiState) => request<void>("PUT", "/api/ui/state", { body: state }),
   config: () => request<ConfigDoc>("GET", "/api/config"),
   /** Raw bytes in the body; the server picks a free name in the note's attachment folder. */
   /** The desktop clipboard's picture (the core reads it: core/clipboard.rs); null when it holds none. */
   clipboardImage: async (): Promise<Blob | null> => {
-    const res = await fetch(url("/api/clipboard/image"), { headers: { "x-atlas": "1" } });
+    const res = await fetch(url("/api/clipboard/image"), { headers: { "x-kandinsky": "1" } });
     return res.status === 200 ? res.blob() : null;
   },
   attach: async (note: RelPath, name: string, data: Blob) => {
-    const res = await fetch(url("/api/attach", { note, name }), { method: "POST", headers: { "x-atlas": "1" }, body: data });
+    const res = await fetch(url("/api/attach", { note, name }), { method: "POST", headers: { "x-kandinsky": "1" }, body: data });
     if (!res.ok) throw new ApiError(res.status, `POST /api/attach: ${res.status} ${await res.text()}`);
     return (await res.json()) as { path: string; embed: string };
   },
@@ -250,8 +250,8 @@ export const api = {
   // docs/refactor/REFACTOR-references-plugin.md): these call it
   refsPdf: async (name: string, data: Blob) => {
     // the PDF into the plugin's cache, then filed by the helper (which removes the upload)
-    const path = `.atlas/cache/plugins/${(await referencesPlugin()) ?? "references"}/import-${Date.now()}-${name.replace(/[^\w.-]+/g, "_")}`;
-    const res = await fetch(url("/api/fs/upload", { path }), { method: "POST", headers: { "x-atlas": "1" }, body: data });
+    const path = `.kandinsky/cache/plugins/${(await referencesPlugin()) ?? "references"}/import-${Date.now()}-${name.replace(/[^\w.-]+/g, "_")}`;
+    const res = await fetch(url("/api/fs/upload", { path }), { method: "POST", headers: { "x-kandinsky": "1" }, body: data });
     if (!res.ok) throw new ApiError(res.status, `${await res.text()}`);
     return papers<import("./types").PaperAdded>("import", { path, name });
   },
@@ -264,7 +264,7 @@ export const api = {
   /** The paper's reading note `<dir>/<citekey>.md`, made (or renamed from a legacy notes.md) if needed. */
   /** Whether a web page lets itself be shown as a tab (web_frame.rs). */
   /** A language's general word frequencies as text (words.rs); not JSON: the page parses it once (editor/word-freq.ts). */
-  wordList: (lang: string) => fetch(url(`/api/words/${encodeURIComponent(lang)}`), { headers: { "x-atlas": "1" } }),
+  wordList: (lang: string) => fetch(url(`/api/words/${encodeURIComponent(lang)}`), { headers: { "x-kandinsky": "1" } }),
   webFrameable: (url: string) => request<boolean>("GET", "/api/web/frameable", { query: { url } }),
   /** A file's one note (companion.rs): `find` says which without making it; else made when missing. */
   companion: (req: import("./gen/CompanionRequest").CompanionRequest) => request<import("./types").CompanionNote>("POST", "/api/companion", { body: req }),
@@ -296,7 +296,7 @@ export const api = {
   home: () => request<import("./gen/HomeDoc").HomeDoc>("GET", "/api/home"),
   /** The usage journal (core usage.rs): fire-and-forget, never in the way of what the user did. */
   usage: (e: import("./gen/UsageEvent").UsageEvent) => { void request<void>("POST", "/api/usage", { body: e }).catch(() => {}); },
-  /** Tools Atlas drafted from how the workspace is used (docs/guides/MALLEABLE.md R5); nothing is written until kept. */
+  /** Tools Kandinsky drafted from how the workspace is used (docs/guides/MALLEABLE.md R5); nothing is written until kept. */
   toolDrafts: () => request<import("./gen/ToolDraft").ToolDraft[]>("GET", "/api/tools/suggestions"),
   keepTool: (id: string) => request<string[]>("POST", "/api/tools/keep", { body: { id } }),
   dismissTool: (id: string) => request<void>("POST", "/api/tools/dismiss", { body: { id } }),
@@ -313,10 +313,10 @@ export const api = {
   mkdir: (path: string) => request<void>("POST", "/api/fs/mkdir", { query: { path } }),
   /** Raw bytes to a vault path (an upload in the explorer); 409 (ApiError.status) when it exists and not `replace`. */
   upload: async (path: RelPath, data: Blob, replace = false): Promise<void> => {
-    const res = await fetch(url("/api/fs/upload", { path, replace: replace ? "true" : undefined }), { method: "POST", headers: { "x-atlas": "1" }, body: data });
+    const res = await fetch(url("/api/fs/upload", { path, replace: replace ? "true" : undefined }), { method: "POST", headers: { "x-kandinsky": "1" }, body: data });
     if (!res.ok) throw new ApiError(res.status, `POST /api/fs/upload: ${res.status} ${await res.text()}`);
   },
-  /** A request made by the core for a plugin (`atlas.fetch`): only to hosts its manifest lists. */
+  /** A request made by the core for a plugin (`kandinsky.fetch`): only to hosts its manifest lists. */
   pluginFetch: (id: string, req: PluginFetchRequest) => request<PluginFetchResponse>("POST", `/api/plugins/${encodeURIComponent(id)}/fetch`, { body: req }),
   /** A plugin's media address (core plugin_media.rs): the ticket the core keeps its headers under, secrets filled in. */
   pluginMedia: (id: string, req: { url: string; headers?: PluginFetchRequest["headers"] }) => request<{ src: string; ticket: string }>("POST", `/api/plugins/${encodeURIComponent(id)}/media`, { body: req }),
@@ -324,7 +324,7 @@ export const api = {
   availablePlugins: () => request<import("./gen/Available").Available[]>("GET", "/api/plugins/available"),
   /** Obsidian community plugins detected in `<vault>/.obsidian/plugins/` (read-only). */
   obsidianPlugins: () => request<{ id: string; name: string; version?: string; description?: string; author?: string; enabled: boolean }[]>("GET", "/api/plugins/obsidian"),
-  /** Moves unnecessary `.obsidian/plugins/<id>` folders safely into `.atlas/trash/`. */
+  /** Moves unnecessary `.obsidian/plugins/<id>` folders safely into `.kandinsky/trash/`. */
   removeObsidianPlugins: (ids: string[]) => request<{ moved: string[] }>("POST", "/api/plugins/obsidian/remove", { body: { ids } }),
   /** Copy a plugin into the vault (a folder, a git address, an archive); it arrives switched off. */
   installPlugin: (from: string, id?: string) => request<import("./gen/Installed").Installed>("POST", "/api/plugins/install", { body: { from, id } }),
@@ -365,7 +365,7 @@ export const api = {
     return t;
   },
   /** The file shown selected in the desktop's own file manager (the desktop's core only: 403 elsewhere). */
-  /** The desktop's global key for Atlas Capture (platform/capture_key.rs); `set` binds one where Atlas can. */
+  /** The desktop's global key for Kandinsky Capture (platform/capture_key.rs); `set` binds one where Kandinsky can. */
   captureKey: () => request<CaptureKey>("GET", "/api/desktop/capture-key"),
   setCaptureKey: (key: string) => request<CaptureKey>("POST", "/api/desktop/capture-key", { body: { key } }),
   revealOutside: (path: string) => request<void>("POST", "/api/fs/reveal-outside", { query: { path } }),
@@ -444,7 +444,7 @@ export function connectEvents(onEvent: (e: ServerEvent) => void, onState: (s: Co
     ws.onmessage = (m) => {
       if (typeof m.data !== "string") return;
       try { onEvent(JSON.parse(m.data) as ServerEvent); }
-      catch (err) { console.warn("[atlas] bad event frame", m.data, err); }
+      catch (err) { console.warn("[kandinsky] bad event frame", m.data, err); }
     };
     ws.onclose = () => {
       onState("closed");

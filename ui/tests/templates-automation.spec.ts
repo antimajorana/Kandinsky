@@ -3,7 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 // Templates that apply by themselves (docs/design/DESIGN-templates-automation.md): a property set in a note merges the
 // template whose `apply_when:` names it (only what the note lacks; Ctrl+Z undoes it), "Insert template…" puts a
 // template at the caret, and Settings → Writing lists each template with its rules in words.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const MOVIE = "---\ntemplate_title: Film\napply_when:\n  - property: { kind: movie }\nkind: movie\ndirector:\nrating:\n---\n## Review\n";
 
 /** Open `path`, the properties in the side panel (the served settings only). */

@@ -1,5 +1,5 @@
 """A reference's fields are its note's properties, `<refs>/<key>/<key>.md` — the scripts' copy of
-crates/atlas-core/src/ref_entry.rs (same names, same rules). Zotero's field names, except four the note uses for its own
+crates/kandinsky-core/src/ref_entry.rs (same names, same rules). Zotero's field names, except four the note uses for its own
 meaning (RENAMED); an `info.yaml` not folded yet is still read, and the first write folds it into the note.
 """
 from __future__ import annotations

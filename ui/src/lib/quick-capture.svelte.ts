@@ -9,7 +9,7 @@ import { landedAt } from "./capture-guides";
 import { errText } from "./text";
 import type { CaptureResult } from "./gen/CaptureResult";
 
-const DRAFT = "atlas.capture.draft";
+const DRAFT = "kandinsky.capture.draft";
 export const quickCapture = $state({ open: false, text: "" });
 
 /** The selection in the last editor, when there is one: a passage to keep. */

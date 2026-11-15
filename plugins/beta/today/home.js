@@ -96,31 +96,31 @@ export function topicTree(rows, min = 2) {
   return sort(roots);
 }
 
-export function registerHome(atlas, language) {
+export function registerHome(kandinsky, language) {
   const lang = () => (language().startsWith("es") ? "es" : "en"); // its words exist in English and Spanish
   const W = () => WORDS[lang()];
 
-  if (atlas.shell.greetingItem) {
-    const icon = (name, older) => (atlas.version >= 21 ? name : older); // app icons in chips since API 21
+  if (kandinsky.shell.greetingItem) {
+    const icon = (name, older) => (kandinsky.version >= 21 ? name : older); // app icons in chips since API 21
     const now = new Date(), { week, yday } = weekOf(now), moon = moonOf(now);
-    atlas.shell.greetingItem({ id: "week", icon: icon("calendar", "📅"), text: `${W().week} ${week} · ${W().day} ${yday}`, order: 30 });
-    atlas.shell.greetingItem({ id: "moon", icon: MOONS[moon.phase], text: W().moon[moon.phase], title: `${moon.lit} %`, order: 31 });
-    const due = atlas.shell.greetingItem({ id: "due", icon: icon("check", "☑"), text: "…", order: 20 });
-    const count = async (when) => ((await atlas.view(`type: task-list\nfrom: tasks\ndue: ${when}`)).rows ?? []).filter((r) => !r.done).length;
+    kandinsky.shell.greetingItem({ id: "week", icon: icon("calendar", "📅"), text: `${W().week} ${week} · ${W().day} ${yday}`, order: 30 });
+    kandinsky.shell.greetingItem({ id: "moon", icon: MOONS[moon.phase], text: W().moon[moon.phase], title: `${moon.lit} %`, order: 31 });
+    const due = kandinsky.shell.greetingItem({ id: "due", icon: icon("check", "☑"), text: "…", order: 20 });
+    const count = async (when) => ((await kandinsky.view(`type: task-list\nfrom: tasks\ndue: ${when}`)).rows ?? []).filter((r) => !r.done).length;
     void Promise.all([count("today"), count("overdue")]).then(([today, over]) => {
       due.set([today ? W().due(today) : W().free, over ? W().over(over) : ""].filter(Boolean).join(" · "));
     }, () => due.remove());
   }
 
-  atlas.registerBlock("home.map", (host, block) => {
+  kandinsky.registerBlock("home.map", (host, block) => {
     style();
-    const by = String(block.options?.by ?? atlas.plugin.settings.by ?? "topics").trim() || "topics";
+    const by = String(block.options?.by ?? kandinsky.plugin.settings.by ?? "topics").trim() || "topics";
     const min = Number(block.options?.min ?? 2) || 2;
     const box = el("div", "home-map");
     host.append(box);
     let gone = false;
     const yaml = `filters:\n  and:\n    - file.ext == "md"\n    - '!${by}.isEmpty()'\nviews:\n  - type: table\n    name: map\n    order: [file.name, ${by}]\n`;
-    void atlas.query(yaml).then((res) => {
+    void kandinsky.query(yaml).then((res) => {
       if (gone) return;
       const rows = (res.views?.[0]?.rows ?? []).map((r) => ({
         name: r.cells[0]?.text ?? r.path.replace(/^.*\//, "").replace(/\.md$/, ""), path: r.path,
@@ -139,7 +139,7 @@ export function registerHome(atlas, language) {
         const fold = x.kids.length ? el("span", "kids", "") : null;
         if (fold) name.append(fold);
         row.append(el("span", "dot"), name, bar, el("span", "n", String(x.n)));
-        if (x.path) row.onclick = () => atlas.open(x.path);
+        if (x.path) row.onclick = () => kandinsky.open(x.path);
         into.append(row);
         if (!x.kids.length) return;
         const under = el("div");
@@ -158,8 +158,8 @@ export function registerHome(atlas, language) {
   ] });
 
   // The vault's areas: each top folder a tile — how many notes, when it was last touched, a bar of how busy it was this month,
-  // and its latest notes — busiest first. Mail, templates and Atlas's own folders are left out.
-  atlas.registerBlock("home.areas", (host, block) => {
+  // and its latest notes — busiest first. Mail, templates and Kandinsky's own folders are left out.
+  kandinsky.registerBlock("home.areas", (host, block) => {
     style();
     const max = Number(block.options?.areas ?? 6) || 6, per = Number(block.options?.notes ?? 3) || 3;
     const skip = new Set(String(block.options?.skip ?? "").split(",").map((x) => x.trim()).filter(Boolean));
@@ -167,7 +167,7 @@ export function registerHome(atlas, language) {
     host.append(box);
     let gone = false;
     const yaml = `filters:\n  and:\n    - file.ext == "md"\nviews:\n  - type: table\n    name: areas\n    order: [file.name, file.folder, file.mtime, type]\n    sort:\n      - property: file.mtime\n        direction: DESC\n`;
-    void atlas.query(yaml).then((res) => {
+    void kandinsky.query(yaml).then((res) => {
       if (gone) return;
       const A = AREA_WORDS[lang()], now = Date.now(), month = 30 * 864e5;
       const areas = new Map();
@@ -192,10 +192,10 @@ export function registerHome(atlas, language) {
         const tile = el("div", "area");
         const head = el("button", "head"); head.title = `${a.name}: ${W().notes(a.n)}, ${a.recent} this month`;
         head.append(el("b", "", a.name), el("span", "n", String(a.n)));
-        head.onclick = () => (atlas.files?.explore ? atlas.files.explore({ source: "vault", path: a.name }) : a.notes[0] && atlas.open(a.notes[0].path));
+        head.onclick = () => (kandinsky.files?.explore ? kandinsky.files.explore({ source: "vault", path: a.name }) : a.notes[0] && kandinsky.open(a.notes[0].path));
         const heat = el("div", "heat"), fill = el("i"); fill.style.width = `${Math.max(4, Math.round((a.recent / busiest) * 100))}%`; heat.append(fill);
         tile.append(head, heat, el("span", "when", a.last ? ago(a.last) : ""));
-        for (const x of a.notes) { const b = el("button", "note", x.name); b.title = x.path; b.onclick = () => atlas.open(x.path); tile.append(b); }
+        for (const x of a.notes) { const b = el("button", "note", x.name); b.title = x.path; b.onclick = () => kandinsky.open(x.path); tile.append(b); }
         box.append(tile);
       }
     }, (e) => { if (!gone) box.append(el("p", "empty", String(e?.message ?? e))); });

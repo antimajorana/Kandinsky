@@ -3,7 +3,18 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) once 1.0 is out.
 
+Kandinsky is based on Atlas by Alneb (github.com/Alneb/atlas). The sections from 0.2.10 down are
+upstream Atlas releases and keep the names that release used.
+
 ## [Unreleased]
+
+### Changed
+
+- Renamed from Atlas to Kandinsky (based on Atlas by Alneb, AGPL-3.0; modified 2026-11-15): crates, packages,
+  the vault's `.kandinsky/` folder, the app's folders and identifier, `KANDINSKY_*` variables, headers, markers and
+  the phone app's packages. Data from before is migrated or still read: a vault's `.atlas/` is renamed when it is
+  opened, the app's folders are moved once, and old variables, headers, note markers, drawing keys and browser
+  settings keep working ([docs/guides/DEVELOPING.md](guides/DEVELOPING.md#names-from-before-the-rename)).
 
 ## [0.2.10] - 2026-11-12
 

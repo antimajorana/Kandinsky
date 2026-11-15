@@ -1,4 +1,4 @@
-# Vendored from boox_5c_re (scripts/dev/sync-openink.sh, VENDORED.md); only this file is Atlas's.
+# Vendored from boox_5c_re (scripts/dev/sync-openink.sh, VENDORED.md); only this file is Kandinsky's.
 [package]
 name = "openink-pen"
 description = "Stylus input for the BOOX Note Air 5C: evdev decoding, pen state machine, regions"

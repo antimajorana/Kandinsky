@@ -5,7 +5,7 @@
   import { hue, type Contact, type PluginApi } from "./api";
   import { call } from "./api";
 
-  let { atlas, label, value = $bindable(), autofocus = false }: { atlas: PluginApi; label: string; value: string; autofocus?: boolean } = $props();
+  let { kandinsky, label, value = $bindable(), autofocus = false }: { kandinsky: PluginApi; label: string; value: string; autofocus?: boolean } = $props();
 
   let text = $state("");
   let offers = $state<Contact[]>([]);
@@ -52,7 +52,7 @@
     if (!q) { offers = []; return; }
     timer = setTimeout(async () => {
       try {
-        const r = await call<{ contacts: Contact[] }>(atlas, "contacts", { q, limit: 7 }, 10);
+        const r = await call<{ contacts: Contact[] }>(kandinsky, "contacts", { q, limit: 7 }, 10);
         if (text.trim() === q) { offers = r.contacts.filter((c) => !chips.some((x) => addr(x).toLowerCase() === c.addr)); sel = 0; }
       } catch { offers = []; }
     }, 90);

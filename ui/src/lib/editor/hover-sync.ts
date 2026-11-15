@@ -21,7 +21,7 @@ export function hoverSync(dir: string) {
       const h = context.hover;
       const want = h && h.source !== "editor" ? h.path : null;
       for (const el of this.view.contentDOM.querySelectorAll<HTMLElement>(LINK)) {
-        el.classList.toggle("atlas-hover-link", !!want && resolveLink(targetOf(el), dir) === want);
+        el.classList.toggle("kandinsky-hover-link", !!want && resolveLink(targetOf(el), dir) === want);
       }
     }
   }, {

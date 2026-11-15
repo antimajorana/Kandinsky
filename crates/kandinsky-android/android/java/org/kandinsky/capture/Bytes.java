@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

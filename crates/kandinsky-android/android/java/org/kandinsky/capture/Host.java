@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -18,7 +18,7 @@ import java.util.Collections;
 import java.util.List;
 
 /** What a native plugin may do (docs/refactor/REFACTOR-native-plugins.md), and nothing more: the vault's files by
- *  vault path — a folder on the phone or a vault on Atlas's server, the same calls (VaultFiles) — its own settings, the
+ *  vault path — a folder on the phone or a vault on Kandinsky's server, the same calls (VaultFiles) — its own settings, the
  *  e-ink refresh, pictures, going back to the app. */
 public final class Host {
     private final Activity activity;
@@ -220,7 +220,7 @@ public final class Host {
     /** 0 filled polygons, 1 translucent (the marker), 2 dabs. */
     public int penOutput(int pen) { return Core.penOutput(pen); }
     /** The shape a stroke was meant as (Core.penShape): `x, y, t (ms)` per point in; held still at its end, Boox Notes
-     *  snaps it. Atlas's recogniser (shape.rs), or openink's (shape_openink.rs); the answer in shape.rs's wire format. */
+     *  snaps it. Kandinsky's recogniser (shape.rs), or openink's (shape_openink.rs); the answer in shape.rs's wire format. */
     public float[] penShape(float[] xyt, boolean openink) { return Core.penShape(xyt, openink); }
 
     /** The screen's own ink under the pen, before the view redraws: Onyx's instant ink on a Boox, nothing elsewhere. */
@@ -268,7 +268,7 @@ public final class Host {
 
     /** Back to the app on a `[[note]]` link found in vault file `from` (resolved there as the desktop does). */
     public void openLink(String link, String from) {
-        activity.startActivity(new Intent(activity, AtlasActivity.class).putExtra(AtlasActivity.LINK, link).putExtra(AtlasActivity.LINK_FROM, from)
+        activity.startActivity(new Intent(activity, KandinskyActivity.class).putExtra(KandinskyActivity.LINK, link).putExtra(KandinskyActivity.LINK_FROM, from)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
     }
 
@@ -289,12 +289,12 @@ public final class Host {
     }
 
     public void openInWeb(String path) {
-        activity.startActivity(new Intent(activity, AtlasActivity.class).putExtra(AtlasActivity.OPEN, path).putExtra(AtlasActivity.WEB, true)
+        activity.startActivity(new Intent(activity, KandinskyActivity.class).putExtra(KandinskyActivity.OPEN, path).putExtra(KandinskyActivity.WEB, true)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
     }
 
     /** Back to the app on a vault path (a note, a drawing). */
     public void open(String path) {
-        activity.startActivity(new Intent(activity, AtlasActivity.class).putExtra(AtlasActivity.OPEN, path).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        activity.startActivity(new Intent(activity, KandinskyActivity.class).putExtra(KandinskyActivity.OPEN, path).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
     }
 }

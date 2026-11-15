@@ -1,4 +1,4 @@
-package org.atlas.plugins.books;
+package org.kandinsky.plugins.books;
 
 import android.app.AlertDialog;
 import android.content.Context;
@@ -10,9 +10,9 @@ import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.Look;
-import org.atlas.capture.ReaderBars;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.Look;
+import org.kandinsky.capture.ReaderBars;
 import org.json.JSONArray;
 import org.json.JSONObject;
 

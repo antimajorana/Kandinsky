@@ -1,6 +1,6 @@
 // Note triage: the notes that need a decision — unsorted, untagged, orphaned, stale — as a Base, so they are listed,
 // sorted, edited (a tag typed in the table is written to the note) and opened like any other table. The Base is a file
-// of the vault, `.atlas/note-triage.base`, written once from the vault's folders the first time the command runs and
+// of the vault, `.kandinsky/note-triage.base`, written once from the vault's folders the first time the command runs and
 // never again: from then on it is the owner's, its views edited like any Base's.
 import { api } from "./api";
 import { open } from "./dock";
@@ -8,7 +8,7 @@ import { settings } from "./settings.svelte";
 import { toast } from "./state.svelte";
 import { errText } from "./text";
 
-export const NOTE_TRIAGE = ".atlas/note-triage.base";
+export const NOTE_TRIAGE = ".kandinsky/note-triage.base";
 
 /** Folders whose notes are not the owner's to file: the day's logs, what features write (mail, references), agents'. */
 function generated(logDir: string): string[] {

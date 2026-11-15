@@ -21,7 +21,7 @@ pub enum Needed {
     /// A gate in front of the host: open `page` in a sign-in window; when it lands back on `host`, its cookies are kept.
     Door { host: String, page: String },
     /// The service wants an OpenID token the plugin's sign-in `name` does not have (not made yet, ended, or refused
-    /// by a Bearer 401): `atlas.oauth.signIn(name, { resource: page })` finds the provider from the service.
+    /// by a Bearer 401): `kandinsky.oauth.signIn(name, { resource: page })` finds the provider from the service.
     Token { host: String, name: String, page: String },
 }
 
@@ -158,7 +158,7 @@ pub fn spawn_keep_alive(root: std::path::PathBuf) -> tokio::task::JoinHandle<()>
             for (host, ended) in entries(&store).unwrap_or_default().into_iter().map(|(h, e)| (h, e.ended)) {
                 if !ended {
                     if let Err(e) = touch(&store, &host).await {
-                        eprintln!("atlas: keeping the sign-in to {host}: {e}");
+                        eprintln!("kandinsky: keeping the sign-in to {host}: {e}");
                     }
                 }
             }

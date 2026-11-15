@@ -1,4 +1,4 @@
-// What Atlas draws over the panes — the palette, dialogs, menus, popovers, suggestion lists, the Ctrl+Tab glance —
+// What Kandinsky draws over the panes — the palette, dialogs, menus, popovers, suggestion lists, the Ctrl+Tab glance —
 // registered while it is open. A native view laid over the page (the web tab: a real browser view, which no CSS
 // z-index can put under anything) cannot be ordered with the page's elements, so it yields: it hides the moment an
 // open overlay meets it and comes back when the last one closes. One register, told at once, instead of each native

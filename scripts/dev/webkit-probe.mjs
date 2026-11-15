@@ -1,4 +1,4 @@
-// A read-only look at the RUNNING Atlas, in WebKit (the engine of the desktop window), on the user's real vault:
+// A read-only look at the RUNNING Kandinsky, in WebKit (the engine of the desktop window), on the user's real vault:
 // the page talks to the live core, but nothing it does can change the vault — API GETs go through, every write
 // is answered here with `{}`, and the event socket is closed. What passes in Playwright's throwaway workspace and
 // still fails in the app is found this way (docs/guides/DEVELOPING.md, "Checking on the real vault").
@@ -7,8 +7,8 @@
 //
 // --dist: serve this build of the interface instead of the one the core serves (a fix not installed yet).
 // script.mjs: `export default async ({ page, errs }) => { … }`, run with the page open; without one, the page is
-// opened, errors printed and a screenshot taken. The core's port comes from <vault>/.atlas/cache/server.json
-// (ATLAS_VAULT) or ATLAS_URL.
+// opened, errors printed and a screenshot taken. The core's port comes from <vault>/.kandinsky/cache/server.json
+// (KANDINSKY_VAULT) or KANDINSKY_URL.
 //
 // WebKit on Fedora: Playwright's build wants Ubuntu's libicu74, libjpeg-turbo8 and libbacktrace0, and
 // libjxl.so.0.8 — copied into ~/.cache/ms-playwright/webkit-<n>/minibrowser-{wpe,gtk}/lib/ (see DEVELOPING.md);
@@ -28,32 +28,32 @@ const readingFetch = (req) => {
   if (!/\/api\/plugins\/[^/]+\/fetch$/.test(new URL(req.url()).pathname)) return false;
   try { const b = JSON.parse(req.postData() ?? "{}"); return (b.method ?? "GET").toUpperCase() === "GET" && !b.save_to && !b.body_file; } catch { return false; }
 };
-// ATLAS_PROBE_COPY=1: the vault behind ATLAS_URL is a copy (target/probe-vault…), so writes and plugin helper calls go
+// KANDINSKY_PROBE_COPY=1: the vault behind KANDINSKY_URL is a copy (target/probe-vault…), so writes and plugin helper calls go
 // through too — a plugin's view that asks its helper (POST) shows what it really shows
-const COPY = !!process.env.ATLAS_PROBE_COPY;
+const COPY = !!process.env.KANDINSKY_PROBE_COPY;
 
-/** The live core's address: ATLAS_URL, else the vault's server.json. */
+/** The live core's address: KANDINSKY_URL, else the vault's server.json. */
 export function coreUrl() {
-  if (process.env.ATLAS_URL) return process.env.ATLAS_URL;
-  const vault = process.env.ATLAS_VAULT;
-  if (!vault) throw new Error("set ATLAS_URL, or ATLAS_VAULT to the vault whose core to probe");
-  const info = JSON.parse(readFileSync(join(vault, ".atlas/cache/server.json"), "utf8"));
+  if (process.env.KANDINSKY_URL) return process.env.KANDINSKY_URL;
+  const vault = process.env.KANDINSKY_VAULT;
+  if (!vault) throw new Error("set KANDINSKY_URL, or KANDINSKY_VAULT to the vault whose core to probe");
+  const info = JSON.parse(readFileSync(join(vault, ".kandinsky/cache/server.json"), "utf8"));
   return `http://127.0.0.1:${info.port}/`;
 }
 
 /** The key a locked core (the desktop's default) left for this user, as the CLI reads it (auth.rs `local_key_file`). */
 function localKey(url) {
-  const f = join(process.env.XDG_RUNTIME_DIR ?? "/tmp", "atlas", `server-${new URL(url).port}.key`);
+  const f = join(process.env.XDG_RUNTIME_DIR ?? "/tmp", "kandinsky", `server-${new URL(url).port}.key`);
   return existsSync(f) ? readFileSync(f, "utf8").trim() : "";
 }
 
-/** A WebKit page on the running Atlas that cannot write. `dist`: the interface from this folder. */
+/** A WebKit page on the running Kandinsky that cannot write. `dist`: the interface from this folder. */
 export async function readOnlyPage({ url = coreUrl(), dist, width = 1500, height = 900 } = {}) {
   const browser = await webkit.launch();
   const key = localKey(url);
-  // ATLAS_PROBE_SCALE=2: a HiDPI screen (canvases sized by devicePixelRatio look different there)
-  const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: Number(process.env.ATLAS_PROBE_SCALE ?? 1), extraHTTPHeaders: key ? { "x-atlas-token": key } : {} });
-  if (key) await page.context().addCookies([{ name: "atlas_local", value: key, url }]);
+  // KANDINSKY_PROBE_SCALE=2: a HiDPI screen (canvases sized by devicePixelRatio look different there)
+  const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: Number(process.env.KANDINSKY_PROBE_SCALE ?? 1), extraHTTPHeaders: key ? { "x-kandinsky-token": key } : {} });
+  if (key) await page.context().addCookies([{ name: "kandinsky_local", value: key, url }]);
   if (!COPY) await page.routeWebSocket(/.*/, (ws) => ws.close()); // a copy may talk to its core (a language server, live events)
   await page.route("**/*", async (r) => {
     const req = r.request(), u = new URL(req.url());

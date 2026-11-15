@@ -1,9 +1,9 @@
-// The block registry (docs/refactor/REFACTOR-blocks.md): ONE map of everything Atlas can draw. A block mounts
+// The block registry (docs/refactor/REFACTOR-blocks.md): ONE map of everything Kandinsky can draw. A block mounts
 // into any host — a ```view block in a note, a `.page`, or a tab of its own — so the Library, a PDF,
 // a terminal or a calendar are the same kind of thing and go wherever the user puts them.
 //   - built-in blocks: Today's parts, settings, saved search, tool drafts
 //   - every pane kind (library, git, pdf, editor, terminal…), through one adapter
-//   - plugin blocks (`atlas.registerBlock`)
+//   - plugin blocks (`kandinsky.registerBlock`)
 //   - anything else is a row view (list, table, calendar: lib/views.ts) fed by the core's /api/view
 import { errText } from "./text";
 import { hydrateFences } from "./fences";
@@ -140,7 +140,7 @@ export const paneBlockType = (kind: PaneKind) => PANE_BLOCK_TYPE[kind] ?? kind;
 // pane kinds that show a file, and which files (asked for when the block is added by hand)
 const PANE_FILES: Partial<Record<PaneKind, RegExp | true>> = {
   editor: true, pdf: /\.pdf$/i, image: IMAGE_RE, table: /\.(tsv|csv|tab|dat|txt)$/i,
-  page: /\.page$/i, excalidraw: /\.excalidraw(\.md)?$/i,
+  page: /\.page$/i, notebook: /\.(ipynb|wln)$/i, excalidraw: /\.excalidraw(\.md)?$/i,
 };
 const EMBED_HEIGHT = 420;
 let embeds = 0;
@@ -173,7 +173,7 @@ function paneBlock(kind: PaneKind, specOf = (ctx: BlockCtx): PaneSpec | string =
     mount(host, ctx) {
       const spec = specOf(ctx);
       if (typeof spec === "string") { message(host, "view-error", spec); return; }
-      host.classList.add("atlas-pane", `atlas-pane-${kind}`);
+      host.classList.add("kandinsky-pane", `kandinsky-pane-${kind}`);
       ctx.setTitle(paneTitle(spec));
       let app: ReturnType<typeof mount> | undefined;
       let gone = false;
@@ -262,7 +262,7 @@ function mountRows(body: HTMLElement, doc: string, src: string): () => void {
  *  blocks get a quiet "open as tab" button; a block already in a tab does not. */
 export function mountBlock(el: HTMLElement, doc: string, src: string, host: BlockHost = "note"): () => void {
   for (const ev of ["keydown", "keyup", "keypress", "beforeinput", "input", "mousedown", "paste", "cut", "copy"]) el.addEventListener(ev, (e) => e.stopPropagation());
-  el.classList.add("atlas-block");
+  el.classList.add("kandinsky-block");
   const type = blockType(src);
   const body = document.createElement("div");
   body.className = "block-body";

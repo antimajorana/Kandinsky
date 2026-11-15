@@ -40,10 +40,10 @@ export async function refreshGitTree(): Promise<void> {
 
 export const LETTER: Record<Change, string> = { modified: "M", added: "A", untracked: "U", deleted: "D", renamed: "R", conflicted: "C" };
 
-// Atlas's own writes (caches, trash, the layout) and git's own are not changes anyone reviews in git
+// Kandinsky's own writes (caches, trash, the layout) and git's own are not changes anyone reviews in git
 const quiet = (p: string) => isBookkeeping(p) || p.startsWith(".git/");
 
-/** Calls `fn` after file changes have been quiet for `wait` ms, never for Atlas's own cache / trash writes, and not
+/** Calls `fn` after file changes have been quiet for `wait` ms, never for Kandinsky's own cache / trash writes, and not
  *  while `shown()` is false — then once when shown again. Returns the unsubscribe. */
 export function onGitWorthyChange(fn: () => void, shown: () => boolean, wait = 2000): () => void {
   let t: ReturnType<typeof setTimeout> | undefined, missed = false;

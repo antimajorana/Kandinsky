@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The phone app's toolchain into atlas/local/toolchains/ (git-ignored), each archive checked against Google's SHA-1:
+# The phone app's toolchain into kandinsky/local/toolchains/ (git-ignored), each archive checked against Google's SHA-1:
 # the NDK (clang, the sysroot), build-tools (aapt2, zipalign, apksigner, d8) and one platform (android.jar).
 # No SDK manager, no Gradle, no Android Studio (docs/guides/ANDROID.md).
 #   --emulator  also the emulator and an Android 15 x86_64 image (~2 GB), to run the apps headless here (run-emulator.sh)

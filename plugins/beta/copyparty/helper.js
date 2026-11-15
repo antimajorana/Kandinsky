@@ -23,8 +23,8 @@
 	const fileUrl = (s, path) => `${s.url}${enc(abs(path))}`;
 	async function ls(s, dir) {
 		const at = abs(dir).replace(/\/*$/, "/");
-		const pw = await atlas.secret(`servers.${s.name}.password`) ? { pw: { secret: `servers.${s.name}.password` } } : void 0;
-		const text = await atlas.fetch(`${s.url}${enc(at)}?ls&dots`, {
+		const pw = await kandinsky.secret(`servers.${s.name}.password`) ? { pw: { secret: `servers.${s.name}.password` } } : void 0;
+		const text = await kandinsky.fetch(`${s.url}${enc(at)}?ls&dots`, {
 			headers: {
 				accept: "application/json",
 				...pw
@@ -101,7 +101,7 @@
 		const s = serverOf(params);
 		if (typeof params.path !== "string" || !params.path.trim()) throw new Error("`path`: the file on the server, as `list` shows it");
 		const url = fileUrl(s, params.path);
-		const r = await atlas.post("/api/plugins/catalog/tools/add", { text: url });
+		const r = await kandinsky.post("/api/plugins/catalog/tools/add", { text: url });
 		return {
 			url,
 			note: r.path,
@@ -110,7 +110,7 @@
 			steps: r.steps
 		};
 	}
-	atlas.methods({
+	kandinsky.methods({
 		list,
 		file
 	});

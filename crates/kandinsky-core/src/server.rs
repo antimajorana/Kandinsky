@@ -73,7 +73,7 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let status = status_of(&self);
         if status.is_server_error() {
-            eprintln!("atlas: {self}");
+            eprintln!("kandinsky: {self}");
         }
         let mtime = match &self {
             Error::Conflict { current } => *current,
@@ -171,7 +171,7 @@ async fn file_put(State(st): S, Json(req): Json<FileWrite>) -> Result<Json<FileW
         }
         // a drawing's companion note follows each save (drawing_note.rs); a failure there never fails the save
         let note = crate::drawing_note::update(&ws, &req.path, &req.text).unwrap_or_else(|e| {
-            eprintln!("atlas: the companion note of {} was not written: {e}", req.path);
+            eprintln!("kandinsky: the companion note of {} was not written: {e}", req.path);
             None
         });
         Ok((written, note))
@@ -236,7 +236,7 @@ async fn raw(State(st): S, headers: HeaderMap, Query(q): Query<PathQuery>) -> Re
     let body = axum::body::Body::from_stream(tokio_util::io::ReaderStream::new(tokio::fs::File::open(path).await?));
     // The mtime lets binary editors (PDF annotation) save with the same 409 check as text.
     Ok((
-        [(header::CONTENT_TYPE, mime), (header::HeaderName::from_static("x-atlas-mtime"), mtime.0.to_string())],
+        [(header::CONTENT_TYPE, mime), (header::HeaderName::from_static("x-kandinsky-mtime"), mtime.0.to_string())],
         [ranges, (header::CONTENT_LENGTH, HeaderValue::from(len))],
         body,
     )
@@ -317,7 +317,7 @@ async fn plugin_settings_put(State(st): S, UrlPath(id): UrlPath<String>, Json(va
     Ok(())
 }
 
-/// `atlas.fetch`: a request made by the core for a plugin, to a host its manifest lists.
+/// `kandinsky.fetch`: a request made by the core for a plugin, to a host its manifest lists.
 /// A sign-in met on the way is also told to the page, which offers it — a helper's fetch too.
 /// A plugin's media to play (plugin_media.rs): the page's address for it, the secret kept here.
 async fn plugin_media_post(State(st): S, UrlPath(id): UrlPath<String>, Json(req): Json<crate::plugin_media::MediaRequest>) -> Result<Json<crate::plugin_media::MediaAddress>> {
@@ -326,7 +326,7 @@ async fn plugin_media_post(State(st): S, UrlPath(id): UrlPath<String>, Json(req)
     Ok(Json(crate::plugin_media::MediaAddress { src: format!("{}/media/{ticket}", st.prefix), ticket }))
 }
 
-/// `<audio src>`'s request (no `x-atlas` header can be set there: outside /api, the ticket its own key), streamed.
+/// `<audio src>`'s request (no `x-kandinsky` header can be set there: outside /api, the ticket its own key), streamed.
 async fn media_get(State(st): S, UrlPath(ticket): UrlPath<String>, headers: axum::http::HeaderMap) -> Response {
     st.media.play(&ticket, &headers).await
 }
@@ -359,7 +359,7 @@ async fn plugin_fetch_post(State(st): S, UrlPath(id): UrlPath<String>, Json(req)
     Ok(Json(r))
 }
 
-/// The desktop's sign-in window came back to the service with the gate's cookies (crates/atlas-app `door_window`).
+/// The desktop's sign-in window came back to the service with the gate's cookies (crates/kandinsky-app `door_window`).
 #[derive(serde::Deserialize)]
 struct DoorReturn {
     host: String,
@@ -404,7 +404,7 @@ async fn signin_token_delete(State(st): S, UrlPath(key): UrlPath<String>) -> Res
 }
 
 /// Where the page sends a service sign-in: the desktop app catches this address and opens the gate's page in a
-/// window of its own (crates/atlas-app `door_target`). A browser lands here, and is told why nothing more happens.
+/// window of its own (crates/kandinsky-app `door_target`). A browser lands here, and is told why nothing more happens.
 async fn signin_door_page() -> Response {
     axum::response::Html(concat!(
         "<!doctype html><meta charset=utf-8><title>Sign in — Kandinsky</title>",
@@ -439,7 +439,7 @@ async fn plugins_obsidian_get(State(st): S) -> Result<Json<Vec<crate::plugin_ins
     Ok(Json(with_ws(&st, move |ws| Ok(crate::plugin_install::obsidian_detected(ws.root()))).await?))
 }
 
-/// Moves unnecessary `.obsidian/plugins/<id>` folders into `.atlas/trash/` (never deleted).
+/// Moves unnecessary `.obsidian/plugins/<id>` folders into `.kandinsky/trash/` (never deleted).
 async fn plugins_obsidian_remove_post(State(st): S, Json(req): Json<ObsidianRemoveReq>) -> Result<Json<serde_json::Value>> {
     let moved = with_ws(&st, move |ws| crate::plugin_install::remove_obsidian_plugins(ws.root(), &req.ids)).await?;
     Ok(Json(serde_json::json!({ "moved": moved })))
@@ -475,7 +475,7 @@ struct HelperCall {
     timeout_secs: Option<u64>,
 }
 
-/// `atlas.helper.call`: asks the plugin's helper (started now if it is not running) and waits.
+/// `kandinsky.helper.call`: asks the plugin's helper (started now if it is not running) and waits.
 /// `{id}` of a plugin route that acts: an id, or `@role` (plugins::resolve).
 async fn plugin_named(st: &AppState, named: String) -> Result<String> {
     with_ws(st, move |ws| crate::plugins::resolve(ws.root(), &ws.config()?.plugins.off, &named)).await
@@ -537,11 +537,11 @@ async fn plugin_secrets_get(State(st): S, UrlPath(id): UrlPath<String>) -> Resul
 }
 
 /// A secret's value: only to the plugin's own helper (over its pipe, `helper_api::Caller`), never to a page — a page
-/// lets the core fill it in (`atlas.fetch` headers and form fields) or asks the helper, which gets it with each call
+/// lets the core fill it in (`kandinsky.fetch` headers and form fields) or asks the helper, which gets it with each call
 /// (docs/guides/PLUGIN-API.md).
 async fn plugin_secret_get(State(st): S, helper: Option<axum::Extension<crate::helper_api::Caller>>, UrlPath((id, name)): UrlPath<(String, String)>) -> Response {
     if helper.is_none() {
-        return forbidden("a plugin's secret stays on the server: let atlas.fetch fill it in ({ secret: name } in a header or a form field), or read it in the plugin's helper (it comes with each call as params.secrets)");
+        return forbidden("a plugin's secret stays on the server: let kandinsky.fetch fill it in ({ secret: name } in a header or a form field), or read it in the plugin's helper (it comes with each call as params.secrets)");
     }
     match with_ws(&st, move |ws| plugin_secrets(&ws, &id)?.get(&id, &name)).await {
         Ok(value) => Json(serde_json::json!({ "value": value })).into_response(),
@@ -563,7 +563,7 @@ async fn plugin_secret_delete(State(st): S, UrlPath((id, name)): UrlPath<(String
 }
 
 // A plugin's OpenID sign-ins (plugin_oauth.rs): the page starts one and hands back where the provider sent the
-// browser; the tokens stay here, and atlas.fetch fills them in ({ oauth: name }).
+// browser; the tokens stay here, and kandinsky.fetch fills them in ({ oauth: name }).
 async fn plugin_oauth_start(State(st): S, UrlPath(id): UrlPath<String>, Json(req): Json<crate::plugin_oauth::OauthStart>) -> Result<Json<crate::plugin_oauth::OauthStarted>> {
     Ok(Json(with_ws(&st, move |ws| crate::plugin_oauth::start(ws.root(), &id, &req, &ws.config()?.plugins)).await?))
 }
@@ -960,7 +960,7 @@ async fn fs_reveal_outside(State(st): S, axum::extract::ConnectInfo(peer): axum:
 }
 
 /// Opens a web address in the system's browser (Shift+click on a link, "Open in the browser"): the desktop window turns
-/// every `window.open` into a tab of Atlas, so the page asks here instead. Same guard as the file manager's.
+/// every `window.open` into a tab of Kandinsky, so the page asks here instead. Same guard as the file manager's.
 async fn open_outside_post(State(st): S, axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>, Json(q): Json<OutsideRequest>) -> Response {
     if !may_reveal_outside(st.auth.is_some(), peer.ip()) {
         return forbidden("the system's browser opens only from the desktop's own core");
@@ -974,7 +974,7 @@ async fn open_outside_post(State(st): S, axum::extract::ConnectInfo(peer): axum:
     }
 }
 
-/// Settings → Desktop app: the desktop's global key for Atlas Capture (platform/capture_key.rs), this machine's only.
+/// Settings → Desktop app: the desktop's global key for Kandinsky Capture (platform/capture_key.rs), this machine's only.
 async fn capture_key_get(State(st): S, axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>) -> Response {
     if !may_reveal_outside(st.auth.is_some(), peer.ip()) {
         return forbidden("the desktop's keys are read only by its own core");
@@ -1365,11 +1365,11 @@ struct PenStroke {
 }
 fn yes() -> bool { true }
 
-/// What a stroke was meant as (atlas_pen::recognize, the phone's Notepad's own reading): `{ wire }`, `[0]` for none.
+/// What a stroke was meant as (kandinsky_pen::recognize, the phone's Notepad's own reading): `{ wire }`, `[0]` for none.
 /// The web drawing asks here, so a shape snaps alike on the phone, the desktop and a server's vault.
 async fn pen_shape(Json(s): Json<PenStroke>) -> Json<serde_json::Value> {
     let xyt: Vec<f32> = s.xyt.iter().map(|v| v.unwrap_or(f32::NAN)).collect();
-    Json(serde_json::json!({ "wire": atlas_pen::recognize(&xyt, s.openink) }))
+    Json(serde_json::json!({ "wire": kandinsky_pen::recognize(&xyt, s.openink) }))
 }
 
 async fn config_put(State(st): S, Json(body): Json<serde_json::Value>) -> Result<StatusCode> {
@@ -1496,13 +1496,13 @@ async fn cmd_post(State(st): S, UrlPath(id): UrlPath<String>, body: Bytes) -> Re
     }
     .await;
     if let Err(e) = &result {
-        eprintln!("atlas: cmd {id}: {e}");
+        eprintln!("kandinsky: cmd {id}: {e}");
     }
     Json(CmdResponse::from_result(&result)).into_response()
 }
 
-/// The desktop app's sign-in window hands back the address it ended on (crates/atlas-app, `signin_window`);
-/// the page waiting in `atlas.signIn` takes it from the event.
+/// The desktop app's sign-in window hands back the address it ended on (crates/kandinsky-app, `signin_window`);
+/// the page waiting in `kandinsky.signIn` takes it from the event.
 #[derive(serde::Deserialize)]
 struct SigninReturn {
     url: String,
@@ -1545,7 +1545,7 @@ struct FrameQuery {
     url: String,
 }
 
-/// Whether `url` lets itself be shown as a tab of Atlas (web_frame.rs).
+/// Whether `url` lets itself be shown as a tab of Kandinsky (web_frame.rs).
 async fn web_frameable_get(Query(q): Query<FrameQuery>) -> Json<bool> {
     Json(crate::web_frame::check(&q.url).await)
 }
@@ -1593,18 +1593,30 @@ async fn live_ws(State(st): S, Query(mut q): Query<LiveQuery>, upgrade: WebSocke
 
 async fn events_ws(State(st): S, upgrade: WebSocketUpgrade) -> Response {
     let rx = st.bus.subscribe();
-    upgrade.on_upgrade(move |socket| forward_events(socket, rx))
+    let root = st.ws.root().to_path_buf();
+    upgrade.on_upgrade(move |socket| forward_events(socket, rx, root))
+}
+
+/// `ev` as the page is told it: changed paths in the state folder with its current spelling (`state_dir::told_rel`),
+/// whatever the folder is called on disk (`.atlas` while a vault is not migrated yet).
+fn told(ev: Event, root: &std::path::Path) -> Event {
+    let tell = |paths: Vec<String>| paths.into_iter().map(|p| crate::state_dir::told_rel(root, &p).into_owned()).collect();
+    match ev {
+        Event::Fs { paths } => Event::Fs { paths: tell(paths) },
+        Event::Gone { paths } => Event::Gone { paths: tell(paths) },
+        ev => ev,
+    }
 }
 
 /// The bus to one page; the page says on it whether it is looked at (`{"seen": …}`, notify.rs).
-async fn forward_events(mut socket: WebSocket, mut rx: tokio::sync::broadcast::Receiver<Event>) {
+async fn forward_events(mut socket: WebSocket, mut rx: tokio::sync::broadcast::Receiver<Event>, root: std::path::PathBuf) {
     use tokio::sync::broadcast::error::RecvError;
     let page = crate::notify::Presence::global().join();
     loop {
         tokio::select! {
             ev = rx.recv() => match ev {
                 Ok(ev) => {
-                    let text = serde_json::to_string(&ev).expect("events serialize");
+                    let text = serde_json::to_string(&told(ev, &root)).expect("events serialize");
                     if socket.send(Message::Text(text.into())).await.is_err() { break }
                 }
                 // the page fell behind and old events were dropped: an `fs` naming nothing makes it look at everything again
@@ -1686,13 +1698,13 @@ async fn pty_ws(State(st): S, Query(q): Query<PtyQuery>, upgrade: WebSocketUpgra
 }
 
 /// SPA: real asset if it exists, else index.html; unknown `/api/*` stays a JSON 404.
-/// The app's page for a vault at `prefix` ("/v/work"): its API is there, which the page learns from `__ATLAS_API__`
+/// The app's page for a vault at `prefix` ("/v/work"): its API is there, which the page learns from `__KANDINSKY_API__`
 /// (the desktop window sets the same to its core's address).
 fn with_base(html: Vec<u8>, prefix: &str) -> Vec<u8> {
     if prefix.is_empty() {
         return html;
     }
-    let tag = format!("<script>window.__ATLAS_API__={}</script>", serde_json::to_string(prefix).unwrap_or_default());
+    let tag = format!("<script>window.__KANDINSKY_API__={}</script>", serde_json::to_string(prefix).unwrap_or_default());
     let text = String::from_utf8_lossy(&html);
     match text.find("<head>") {
         Some(i) => format!("{}{tag}{}", &text[..i + 6], &text[i + 6..]).into_bytes(),
@@ -1753,7 +1765,7 @@ pub const API_LEVEL: u32 = 2;
 pub fn version_info() -> serde_json::Value {
     let ui = ui_file("index.html", "").map(|(d, _)| crate::auth::sha256(&String::from_utf8_lossy(&d))[..12].to_string()).unwrap_or_default();
     // `api`: the HTTP API's level (the page checks it); `plugin_api`: what plugins test (plugins.rs API_VERSION)
-    serde_json::json!({ "version": env!("CARGO_PKG_VERSION"), "api": API_LEVEL, "plugin_api": crate::plugins::API_VERSION, "commit": env!("ATLAS_COMMIT"), "ui": ui, "shell": crate::pty::shell_kind() })
+    serde_json::json!({ "version": env!("CARGO_PKG_VERSION"), "api": API_LEVEL, "plugin_api": crate::plugins::API_VERSION, "commit": env!("KANDINSKY_COMMIT"), "ui": ui, "shell": crate::pty::shell_kind() })
 }
 
 fn host_ok(headers: &HeaderMap) -> bool {
@@ -1781,7 +1793,7 @@ fn forbidden(why: &str) -> Response {
     (StatusCode::FORBIDDEN, Json(ApiError { error: why.into(), mtime: None })).into_response()
 }
 
-/// `/api` HTTP needs `x-atlas: 1` (a custom header forces a CORS preflight, which we never
+/// `/api` HTTP needs `x-kandinsky: 1` (a custom header forces a CORS preflight, which we never
 /// answer); WS upgrades cannot set headers, so they are checked by Origin instead.
 async fn guard(State(st): S, mut req: Request, next: Next) -> Response {
     // a plugin's helper, over its pipe (helper_api.rs): no network request carries this extension
@@ -1812,8 +1824,8 @@ async fn guard(State(st): S, mut req: Request, next: Next) -> Response {
             if !origin_ok(h, st.port) {
                 return forbidden("websocket origin not allowed");
             }
-        } else if h.get("x-atlas") != Some(&HeaderValue::from_static("1")) {
-            return forbidden("missing header x-atlas: 1");
+        } else if !crate::auth::has_api_header(h) {
+            return forbidden("missing header x-kandinsky: 1");
         }
     }
     next.run(req).await
@@ -1835,8 +1847,8 @@ fn locked(lock: &crate::local_lock::LocalLock, req: &Request) -> Option<Response
             }
         }
     }
-    // `atlas mcp` comes in only with its agent's own token (agents.rs), never this machine's key, so a revoke shuts it out
-    let mcp = req.headers().get(crate::auth::CLIENT_HEADER).is_some_and(|v| v == "mcp");
+    // `kandinsky mcp` comes in only with its agent's own token (agents.rs), never this machine's key, so a revoke shuts it out
+    let mcp = crate::auth::header(req.headers(), crate::auth::CLIENT_HEADER).is_some_and(|v| v == "mcp");
     if !mcp && lock.admits(req.headers()) {
         return None;
     }
@@ -1844,9 +1856,9 @@ fn locked(lock: &crate::local_lock::LocalLock, req: &Request) -> Option<Response
         return path.starts_with("/api/agents").then(|| forbidden(&format!("the agent “{agent}” may not allow or revoke agents")));
     }
     let why = if mcp {
-        "this AI agent is not allowed in: Settings → Agents → Allow an agent, then give it the token (ATLAS_AGENT_TOKEN in its MCP config)"
+        "this AI agent is not allowed in: Settings → Agents → Allow an agent, then give it the token (KANDINSKY_AGENT_TOKEN in its MCP config)"
     } else {
-        "this Atlas answers only its own apps: open it from the Atlas app (or its \"Open in browser\" link)"
+        "this Kandinsky answers only its own apps: open it from the Kandinsky app (or its \"Open in browser\" link)"
     };
     Some(if api {
         (StatusCode::UNAUTHORIZED, Json(ApiError { error: why.into(), mtime: None })).into_response()
@@ -1868,7 +1880,7 @@ async fn words_get(axum::extract::Path(lang): axum::extract::Path<String>) -> Re
 }
 
 /// A second launch of the desktop app asks the first to show its window (shell.rs): 404 from a core with no window
-/// around it (`atlas serve`), so the asker starts as before.
+/// around it (`kandinsky serve`), so the asker starts as before.
 async fn shell_show(State(st): S, body: Option<Json<crate::shell::ShowRequest>>) -> Result<StatusCode> {
     let open = body.and_then(|Json(b)| b.open);
     let vault = Some(st.ws.root().to_path_buf());
@@ -1933,8 +1945,8 @@ async fn guard_server(auth: &crate::auth::Auth, mut req: Request, next: Next) ->
         return next.run(req).await;
     }
     let h = req.headers();
-    if h.get(crate::auth::CLIENT_HEADER).is_some_and(|v| v == "mcp") && !auth.settings().mcp {
-        return forbidden("AI agents (atlas mcp) are off on this server: Settings → Server");
+    if crate::auth::header(h, crate::auth::CLIENT_HEADER).is_some_and(|v| v == "mcp") && !auth.settings().mcp {
+        return forbidden("AI agents (kandinsky mcp) are off on this server: Settings → Server");
     }
     let Some(who) = auth.identify(peer, h) else {
         if path.starts_with("/api/") {
@@ -1954,8 +1966,8 @@ async fn guard_server(auth: &crate::auth::Auth, mut req: Request, next: Next) ->
             if !same_origin(h) {
                 return forbidden("websocket origin not allowed");
             }
-        } else if h.get("x-atlas") != Some(&HeaderValue::from_static("1")) {
-            return forbidden("missing header x-atlas: 1");
+        } else if !crate::auth::has_api_header(h) {
+            return forbidden("missing header x-kandinsky: 1");
         }
     }
     req.extensions_mut().insert(who);
@@ -2073,7 +2085,7 @@ async fn auth_logout(State(st): S, h: HeaderMap) -> Response {
 }
 
 // ---- Settings → Server (docs/guides/SERVER.md): the running server's sign-in when serving, else the files it will start
-// from (setting up `atlas serve --listen` from the desktop)
+// from (setting up `kandinsky serve --listen` from the desktop)
 fn auth_of(st: &AppState) -> Result<Arc<crate::auth::Auth>> {
     match &st.auth {
         Some(a) => Ok(a.clone()),
@@ -2144,10 +2156,15 @@ async fn server_token_delete(State(st): S, UrlPath(name): UrlPath<String>) -> Re
 /// The apps a device token may be handed to, by `app=`: each by its own address (scheme), so a token never leaves for a
 /// web address. The phone opens `/auth/app?app=…&name=…` in the browser, where the sign-in in front (Authelia, Authentik…,
 /// security keys included) or this server's own runs first (docs/guides/SERVER.md, "Signing in a phone").
-const APPS: [(&str, &str, &str, crate::auth::Scope); 3] = [
-    ("capture", "Atlas capture", "org.atlas.capture", crate::auth::Scope::Capture),
-    ("atlas", "Atlas", "org.atlas.app", crate::auth::Scope::Full),
-    ("boox", "Atlas for Boox", "org.atlas.boox", crate::auth::Scope::Full),
+/// The last three are the phone apps as installed before the rename (legacy.rs): `app=atlas`, `capture` and `boox`, each
+/// answering to its old scheme; the renamed editions name themselves `kandinsky`, `kandinsky-capture`, `kandinsky-boox`.
+const APPS: [(&str, &str, &str, crate::auth::Scope); 6] = [
+    ("kandinsky-capture", "Kandinsky capture", "org.kandinsky.capture", crate::auth::Scope::Capture),
+    ("kandinsky", "Kandinsky", "org.kandinsky.app", crate::auth::Scope::Full),
+    ("kandinsky-boox", "Kandinsky for Boox", "org.kandinsky.boox", crate::auth::Scope::Full),
+    (crate::legacy::PHONE_APP, "Kandinsky", crate::legacy::PHONE_APP_SCHEME, crate::auth::Scope::Full),
+    ("capture", "Kandinsky capture", crate::legacy::PHONE_CAPTURE_SCHEME, crate::auth::Scope::Capture),
+    ("boox", "Kandinsky for Boox", crate::legacy::PHONE_BOOX_SCHEME, crate::auth::Scope::Full),
 ];
 
 #[derive(serde::Deserialize)]
@@ -2178,7 +2195,7 @@ fn person(who: &Option<axum::Extension<crate::auth::Who>>) -> std::result::Resul
     }
 }
 
-/// The request's cookies but Atlas's own session: the gate's (Authelia's, Authentik's…), whatever their names.
+/// The request's cookies but Kandinsky's own session: the gate's (Authelia's, Authentik's…), whatever their names.
 fn gate_cookies(h: &HeaderMap) -> String {
     h.get_all(header::COOKIE)
         .iter()
@@ -2517,7 +2534,7 @@ impl ServerHandle {
 pub enum Listen {
     /// The desktop and the phone: 127.0.0.1 only, no sign-in (`port` 0 = any free port); locked or not (local_lock.rs).
     Local(u16, crate::local_lock::Lock),
-    /// Server mode (`atlas serve --listen`): any address, everyone signed in (auth.rs).
+    /// Server mode (`kandinsky serve --listen`): any address, everyone signed in (auth.rs).
     Server { addr: std::net::SocketAddr, auth: Box<crate::auth::Auth> },
 }
 
@@ -2531,8 +2548,8 @@ pub async fn serve_on(root: PathBuf, listen: Listen) -> anyhow::Result<ServerHan
     serve_vaults(Vaults::One(root), listen).await
 }
 
-/// What a core serves: one vault at `/` (the desktop, `atlas serve <dir>`), or a server's several, each at
-/// `/v/<name>/` with one sign-in for all (`atlas serve --vaults-in`, `--vault name=path`; docs/guides/SERVER.md).
+/// What a core serves: one vault at `/` (the desktop, `kandinsky serve <dir>`), or a server's several, each at
+/// `/v/<name>/` with one sign-in for all (`kandinsky serve --vaults-in`, `--vault name=path`; docs/guides/SERVER.md).
 pub enum Vaults {
     One(PathBuf),
     Many(Vec<Served>),
@@ -2564,7 +2581,7 @@ pub async fn serve_vaults(vaults: Vaults, listen: Listen) -> anyhow::Result<Serv
         crate::local_lock::Lock::Locked { fixed } => Some(Arc::new(crate::local_lock::LocalLock::new(port, fixed)?)),
     };
     if let Some(a) = &auth {
-        a.make_local_key(port)?; // this machine's `atlas` CLI signs in with it
+        a.make_local_key(port)?; // this machine's `kandinsky` CLI signs in with it
     }
     let mut lazy = None;
     let (app, runs, first) = match vaults {
@@ -2573,7 +2590,7 @@ pub async fn serve_vaults(vaults: Vaults, listen: Listen) -> anyhow::Result<Serv
             // the window's own vault at once: its server.json is what the CLI, the capture box and agents look for
             let name = d.name_for(&first);
             let warm = d.clone();
-            let _ = warm.dispatch(Request::builder().uri(format!("/v/{name}/api/workspace")).header("x-atlas", "1").body(axum::body::Body::empty())?).await;
+            let _ = warm.dispatch(Request::builder().uri(format!("/v/{name}/api/workspace")).header("x-kandinsky", "1").body(axum::body::Body::empty())?).await;
             lazy = Some(d.clone());
             tokio::spawn(d.clone().start_ahead(std::time::Duration::from_secs(20)));
             let app = Router::new().fallback(move |req: Request| d.clone().dispatch(req));
@@ -2643,7 +2660,7 @@ fn vault_picker(names: &[String], asked: &str) -> (StatusCode, axum::response::H
     let esc = |t: &str| t.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
     let rows: String = names.iter().map(|n| format!(r#"<a href="/v/{n}/">{n}</a>"#, n = esc(n))).collect();
     let said = if asked.is_empty() { String::new() } else { format!("<p>There is no vault called <b>{}</b> here.</p>", esc(asked)) };
-    (StatusCode::NOT_FOUND, axum::response::Html(format!(r#"<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atlas — vaults</title>
+    (StatusCode::NOT_FOUND, axum::response::Html(format!(r#"<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kandinsky — vaults</title>
 <style>:root{{color-scheme:light dark;--bg:#f7f8fa;--card:#fff;--text:#1f2329;--muted:#5d6470;--line:#e3e6eb;--accent:#4864dd}}
 @media (prefers-color-scheme:dark){{:root{{--bg:#17191e;--card:#1f2128;--text:#dcdfe5;--muted:#9aa1ad;--line:#2c2f37;--accent:#8aa4ff}}}}
 body{{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--text);font:15px/1.5 Inter,system-ui,sans-serif}}
@@ -2658,6 +2675,7 @@ fn dir_name(root: &std::path::Path) -> String {
 
 /// One vault's state, background work and routes (at `prefix` on a server of several).
 fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::Auth>>, lock: Option<Arc<crate::local_lock::LocalLock>>, served: Option<Arc<Vec<Served>>>, prefix: &str) -> anyhow::Result<(Router, VaultRun, Arc<AppState>)> {
+    crate::state_dir::migrate_logged(root); // `.atlas` → `.kandinsky` before anything reads or writes the folder
     let ws = Workspace::open(root)?;
     let cfg = ws.config()?; // fail loudly on a malformed config instead of serving defaults
     let off = cfg.plugins.off.clone();
@@ -2665,13 +2683,13 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
     let watcher = match spawn_watcher(ws.root(), cfg, bus.clone()) {
         Ok(w) => Some(w),
         Err(e) => {
-            eprintln!("atlas: file watching disabled for {}: {e}", ws.root().display());
+            eprintln!("kandinsky: file watching disabled for {}: {e}", ws.root().display());
             None
         }
     };
     // the caches are rebuilt from the vault: git and the Git pane leave them out
-    if let Err(e) = crate::vault_write::ignored_folder(&ws.cache_dir(), "Atlas's caches, rebuilt from the vault") {
-        eprintln!("atlas: {}: {e}", ws.cache_dir().display());
+    if let Err(e) = crate::vault_write::ignored_folder(&ws.cache_dir(), "Kandinsky's caches, rebuilt from the vault") {
+        eprintln!("kandinsky: {}: {e}", ws.cache_dir().display());
     }
     let server_file = ws.cache_dir().join("server.json");
     let sf = ServerFile { port, pid: std::process::id(), root: ws.root().to_string_lossy().into_owned(), path: prefix.to_string() };
@@ -2733,16 +2751,16 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
     state.helpers.answer_with(routes.clone()); // helpers' calls back (helper_api.rs); a cycle that lives as long as the vault
     // the vault's former [refs] settings become catalog-papers' (REFACTOR-references-plugin.md), keys it has win
     if let Err(e) = crate::plugins::adopt_config_section(state.ws.root(), "refs", "catalog-papers") {
-        eprintln!("atlas: [refs] → catalog-papers settings: {e}");
+        eprintln!("kandinsky: [refs] → catalog-papers settings: {e}");
     }
-    // settings values never live in a manifest: an older vault's `[settings]` move to .atlas/plugin-settings/ (once)
+    // settings values never live in a manifest: an older vault's `[settings]` move to .kandinsky/plugin-settings/ (once)
     crate::plugins::move_all_settings_out(state.ws.root());
     // a merged plugin copied in by hand takes over the settings of the plugins it replaces (plugin_install.rs)
     crate::plugin_install::adopt_all_replaced(state.ws.root());
     crate::plugins::hide_legacy_rails(state.ws.root());
     for id in crate::plugins::helpers_started_with_vault(state.ws.root(), &off) {
         if let Err(e) = state.helpers.start(&id) {
-            eprintln!("atlas: plugin {id}: its helper did not start with the vault: {e}");
+            eprintln!("kandinsky: plugin {id}: its helper did not start with the vault: {e}");
         }
     }
     Ok((routes, VaultRun { server_file, _watcher: watcher, scheduler, hooks, merges, notices }, state))
@@ -2751,6 +2769,19 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_phone_app_from_before_the_rename_still_signs_in() {
+        let q = |app: &str| AppQuery { app: app.into(), name: String::new() };
+        assert_eq!(app_of(&q("kandinsky")).unwrap().1, "org.kandinsky.app");
+        assert_eq!(app_of(&q("atlas")).unwrap().1, "org.atlas.app", "an installed app answers to its own scheme");
+        assert_eq!(app_of(&q("capture")).unwrap().1, "org.atlas.capture", "the capture edition installed before the rename");
+        assert_eq!(app_of(&q("capture")).unwrap().2, crate::auth::Scope::Capture);
+        assert_eq!(app_of(&q("boox")).unwrap().1, "org.atlas.boox");
+        assert_eq!(app_of(&q("kandinsky-capture")).unwrap().1, "org.kandinsky.capture");
+        assert_eq!(app_of(&q("kandinsky-boox")).unwrap().1, "org.kandinsky.boox");
+        assert!(app_of(&q("other")).is_err());
+    }
 
     #[test]
     fn a_path_is_judged_inside_its_vault() {
@@ -2809,9 +2840,9 @@ mod tests {
         }
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("vault");
-        let plug = root.join(".atlas/plugins/back");
+        let plug = root.join(".kandinsky/plugins/back");
         std::fs::create_dir_all(&plug).unwrap();
-        std::fs::write(plug.join("plugin.toml"), "title = \"Back\"\n[helper]\nrun = \"node \\\"$ATLAS_PLUGIN_DIR/helper.mjs\\\"\"\n").unwrap();
+        std::fs::write(plug.join("plugin.toml"), "title = \"Back\"\n[helper]\nrun = \"node \\\"$KANDINSKY_PLUGIN_DIR/helper.mjs\\\"\"\n").unwrap();
         std::fs::write(
             plug.join("helper.mjs"),
             r##"import { createInterface } from "node:readline";
@@ -2825,8 +2856,8 @@ async function roundtrip(p) {
   const back = (await call("GET", "/api/file?path=" + encodeURIComponent("notes/From helper.md"))).body.text;
   const names = (await call("GET", "/api/files")).body.filter((f) => f.endsWith(".md"));
   const other = (await call("GET", "/api/plugins/other/secrets/token")).status;
-  const code = (await call("PUT", "/api/file", { path: ".atlas/plugins/other/view.js", text: "hijacked" })).status;
-  await call("PUT", "/api/file", { path: ".atlas/plugins/back/state.json", text: "{}" });
+  const code = (await call("PUT", "/api/file", { path: ".kandinsky/plugins/other/view.js", text: "hijacked" })).status;
+  await call("PUT", "/api/file", { path: ".kandinsky/plugins/back/state.json", text: "{}" });
   return { back, names, other, code };
 }
 createInterface({ input: process.stdin }).on("line", (line) => {
@@ -2844,7 +2875,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         assert!(got["names"].as_array().unwrap().iter().any(|p| p == "notes/From helper.md"), "{got}");
         assert_eq!(got["other"], 403, "another plugin's secrets stay closed: {got}");
         assert_eq!(got["code"], 403, "another plugin's code stays closed: {got}");
-        assert!(!root.join(".atlas/plugins/other/view.js").exists() && root.join(".atlas/plugins/back/state.json").exists(), "its own folder stays writable");
+        assert!(!root.join(".kandinsky/plugins/other/view.js").exists() && root.join(".kandinsky/plugins/back/state.json").exists(), "its own folder stays writable");
         assert_eq!(std::fs::read_to_string(root.join("notes/From helper.md")).unwrap(), "# Hi\npipe\n");
         state.helpers.stop_all();
     }
@@ -2855,16 +2886,16 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     async fn a_js_helper_calls_the_core_back_and_reaches_only_its_hosts() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("vault");
-        let plug = root.join(".atlas/plugins/jsback");
+        let plug = root.join(".kandinsky/plugins/jsback");
         std::fs::create_dir_all(&plug).unwrap();
         std::fs::write(plug.join("plugin.toml"), "title = \"Back\"\n[permissions]\nnet = [\"api.example.org\"]\n[helper]\njs = \"helper.js\"\n").unwrap();
         std::fs::write(
             plug.join("helper.js"),
-            r##"atlas.method("roundtrip", async (p) => {
-  await atlas.write("notes/From js.md", "# Hi\n" + p.word + "\n");
-  const back = await atlas.read("notes/From js.md");
-  const other = await atlas.get("/api/plugins/other/secrets/token").then(() => "read", (e) => e.status);
-  const web = await atlas.fetch("https://elsewhere.example.net/", { waits: [] }).then(() => "fetched", (e) => e.message);
+            r##"kandinsky.method("roundtrip", async (p) => {
+  await kandinsky.write("notes/From js.md", "# Hi\n" + p.word + "\n");
+  const back = await kandinsky.read("notes/From js.md");
+  const other = await kandinsky.get("/api/plugins/other/secrets/token").then(() => "read", (e) => e.status);
+  const web = await kandinsky.fetch("https://elsewhere.example.net/", { waits: [] }).then(() => "fetched", (e) => e.message);
   return { back, other, web };
 });
 "##,
@@ -2878,6 +2909,29 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         assert_eq!(state.helpers.state("jsback"), "running");
         state.helpers.stop_all();
     }
+    /// A vault whose state folder stays `.atlas` (here a link, as a guest's from before the rename; a failed rename or an
+    /// older core serving it leave it the same way) is served from it: starting it makes no `.kandinsky` beside it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_vault_served_from_its_old_state_folder_gets_no_second_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let (root, kept) = (dir.path().join("vault"), dir.path().join("kept-state"));
+        std::fs::create_dir_all(root.join("notes")).unwrap();
+        std::fs::write(root.join("notes/a.md"), "# A\n[[b]]\n").unwrap();
+        std::fs::create_dir_all(kept.join("plugins")).unwrap();
+        std::fs::write(kept.join("config.toml"), "[editor]\nvim = true\n").unwrap();
+        #[cfg(windows)] // a junction: no right to make symbolic links needed
+        let linked = std::process::Command::new("cmd").arg("/C").arg("mklink").arg("/J").arg(root.join(".atlas")).arg(&kept).status().map(|s| s.success());
+        #[cfg(unix)]
+        let linked = std::os::unix::fs::symlink(&kept, root.join(".atlas")).map(|()| true);
+        assert!(linked.unwrap(), "the link to the state folder");
+        let (_routes, _run, state) = start_vault(&root, 0, None, None, None, "").unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await; // the index and the watcher start behind it
+        assert!(kept.join("cache").is_dir(), "the cache is made in the folder that is there");
+        assert!(root.join(".atlas").symlink_metadata().is_ok(), "the link is left as it is");
+        assert!(!root.join(".kandinsky").exists(), "no second state folder");
+        state.helpers.stop_all();
+    }
+
     /// The catalog end to end with its real helpers: the compiled engine (plugins/beta/catalog) and the Python
     /// Linkwarden helper, a page served here, read by the engine (its clip.rs, the page fetched through the core) for
     /// its own clip source (`engine = "clip"`, the "read_pages" setting), written as a note,
@@ -2886,8 +2940,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     async fn the_catalog_turns_a_link_into_a_note_and_a_linkwarden_link_with_its_real_helpers() {
         // the engine binary, built by the cargo running this test (the build lock is free while tests run)
         let ws = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let built = std::process::Command::new(env!("CARGO")).args(["build", "-q", "-p", "atlas-catalog", "--bin", "catalog"]).current_dir(&ws).status().unwrap();
-        assert!(built.success(), "cargo build -p atlas-catalog failed");
+        let built = std::process::Command::new(env!("CARGO")).args(["build", "-q", "-p", "kandinsky-catalog", "--bin", "catalog"]).current_dir(&ws).status().unwrap();
+        assert!(built.success(), "cargo build -p kandinsky-catalog failed");
         let target = std::env::var_os("CARGO_TARGET_DIR").map(std::path::PathBuf::from).unwrap_or_else(|| ws.join("target"));
         let engine = crate::paths::real(&target.join(format!("debug/catalog{}", std::env::consts::EXE_SUFFIX))).unwrap();
 
@@ -2906,19 +2960,19 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         let root = dir.path().join("vault");
         let plugins = ws.join("plugins/beta"); // the catalog and its subplugins are beta
         for id in ["catalog", "catalog-linkwarden"] {
-            let to = root.join(".atlas/plugins").join(id);
+            let to = root.join(".kandinsky/plugins").join(id);
             std::fs::create_dir_all(&to).unwrap();
             let mut manifest = std::fs::read_to_string(plugins.join(id).join("plugin.toml")).unwrap();
             if id == "catalog" {
                 // a run line reads an unquoted `\` as an escape, as sh does: a Windows path goes in single quotes
                 let line = toml::Value::String(format!("'{}'", engine.to_string_lossy()));
-                manifest = manifest.replace("run = \"\\\"${ATLAS_PLUGIN_BIN:-$ATLAS_PLUGIN_DIR/bin/$ATLAS_PLUGIN_TARGET}/catalog\\\"\"", &format!("run = {line}"));
-                assert!(!manifest.contains("$ATLAS_PLUGIN_TARGET}/catalog"), "the helper line moved: {manifest}");
+                manifest = manifest.replace("run = \"\\\"${KANDINSKY_PLUGIN_BIN:-$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET}/catalog\\\"\"", &format!("run = {line}"));
+                assert!(!manifest.contains("$KANDINSKY_PLUGIN_TARGET}/catalog"), "the helper line moved: {manifest}");
             }
             if id == "catalog-linkwarden" {
                 // its helper runs in the core (helper.js); the vault's value in its own settings file
-                std::fs::create_dir_all(root.join(".atlas/plugin-settings")).unwrap();
-                std::fs::write(root.join(".atlas/plugin-settings/catalog-linkwarden.toml"), format!("address = \"http://{addr}\"\n")).unwrap();
+                std::fs::create_dir_all(root.join(".kandinsky/plugin-settings")).unwrap();
+                std::fs::write(root.join(".kandinsky/plugin-settings/catalog-linkwarden.toml"), format!("address = \"http://{addr}\"\n")).unwrap();
                 std::fs::copy(plugins.join(id).join("helper.js"), to.join("helper.js")).unwrap();
             }
             std::fs::write(to.join("plugin.toml"), manifest).unwrap();

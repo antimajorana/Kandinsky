@@ -6,7 +6,7 @@ in that kind's folder. The notes stay yours: a later refresh changes only the pr
 catalog's notes then show as libraries on the **Libraries** page (Films & Series with anime, Music, Comics, Books,
 Videos, Web pages), each kind a tab — a page that is this plugin's own pane.
 
-The work runs in a helper (Rust) that reaches Atlas back through its pipe; the page side draws blocks, registers the
+The work runs in a helper (Rust) that reaches Kandinsky back through its pipe; the page side draws blocks, registers the
 libraries and is the Libraries page.
 
 ## How a thing is filed
@@ -32,8 +32,8 @@ Each step is narrated (the tools answer their `steps`).
   kinds; groups are shelves (`status`); tags are `genres`, `topics`, `tags`. The detail has Open note, Open on
   <service>, Copy link, Update, Edit, a shelf choice and Delete (to the trash). Papers are left to References.
 - **The Libraries page** — its pane (`view.js`, built from `ui/` by `scripts/dev/plugin-ui.mjs`; the role `libraries`):
-  every library of the vault a tab, those of one subject one tab — its own, Atlas's Drawings and References, Books'
-  E-books, Manga's and Audiobookshelf's. `atlas.openLibrary`, the Library tile and the phone's Library open it; with this
+  every library of the vault a tab, those of one subject one tab — its own, Kandinsky's Drawings and References, Books'
+  E-books, Manga's and Audiobookshelf's. `kandinsky.openLibrary`, the Library tile and the phone's Library open it; with this
   plugin off there is no Libraries page. Its library page also draws the `catalog.library` and `catalog.app` blocks.
 - **Blocks**: `catalog.item` (the top of a catalogued note: cover, key fields, shelf chips, a five-star rating, buttons
   to the services, Refresh), `catalog.library` (a collection over its `.base` as shelves, covers or a table, with
@@ -54,8 +54,8 @@ Each step is narrated (the tools answer their `steps`).
 Built in: film (`movie`), series (`show`), video, song, album, artist, book, science book, manga, anime, and web page
 (`article`). Each says its folder (under `notes/`), note name, the IDs that identify it, the properties the catalog
 owns, the fields written as links, and how its library looks. Plugins may add kinds (papers); a vault reshapes any of
-them with `.atlas/kinds/<name>.yaml` (folder, names, property names via `rename`, starting properties via `set`,
-languages that keep the original title). Rules without code go in `.atlas/catalog/rules.yaml`: `when` → `then`
+them with `.kandinsky/kinds/<name>.yaml` (folder, names, property names via `rename`, starting properties via `set`,
+languages that keep the original title). Rules without code go in `.kandinsky/catalog/rules.yaml`: `when` → `then`
 (another folder, tags, properties, a link plugin switched off or given options).
 
 **Books or reference books.** A plugin may say that, while it is installed, one kind is filed as another
@@ -81,7 +81,7 @@ book's subjects.
 
 ## Needs
 
-Nothing outside Atlas: pages are fetched through Atlas's core (`net = ["*"]`, for the pages links point to). The
+Nothing outside Kandinsky: pages are fetched through Kandinsky's core (`net = ["*"]`, for the pages links point to). The
 helper is built by `bash engine/build.sh` into `bin/<arch>-<os>/catalog` (not committed); in the phone app the app's
 own copy runs.
 
@@ -91,7 +91,7 @@ Linux works; Android works (`phone = true`); macOS, Windows and a server are unt
 
 ## Status
 
-Beta. Tests: `cargo test -p atlas-catalog` (the engine against a vault in memory) and the specs
+Beta. Tests: `cargo test -p kandinsky-catalog` (the engine against a vault in memory) and the specs
 `ui/tests/catalog-library.spec.ts`, `catalog-collections.spec.ts`, `plugin-requires.spec.ts`, and the page's own:
 `libraries.spec.ts`, `library.spec.ts`, `library-subjects.spec.ts`, `library-plugin.spec.ts`; `node
 scripts/dev/plugin-ui.mjs --check plugins/beta/catalog` (its types, and `view.js` current). Known rough edges: the

@@ -35,7 +35,7 @@ test("Outline: arrows walk the headings, Enter jumps, Esc returns to the editor"
 
 // A note with no heading says how to make one, in the file's own syntax.
 test("Outline: a note without headings says how to make one", async ({ page, request }) => {
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "notes/side-flat.md", text: "Just a line.\n" } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "notes/side-flat.md", text: "Just a line.\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "side-flat.md");

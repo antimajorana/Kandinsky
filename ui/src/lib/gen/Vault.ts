@@ -13,7 +13,7 @@ last_opened: number, missing: boolean,
  */
 url?: string, 
 /**
- * A local vault's copy on a server (`https://atlas.example.org/v/notes/`), kept in step by Syncthing: while it answers,
+ * A local vault's copy on a server (`https://kandinsky.example.org/v/notes/`), kept in step by Syncthing: while it answers,
  * a file open here is read, saved and edited live there, so only the server writes it and the two copies never
  * conflict (docs/design/DESIGN-mirror.md).
  */

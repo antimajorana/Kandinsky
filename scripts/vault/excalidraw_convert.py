@@ -4,7 +4,7 @@
 # dependencies = ["lzstring>=1.0.4"]
 # ///
 """Convert Obsidian-Excalidraw `.excalidraw.md` files into plain `.excalidraw` JSON (what excalidraw.com
-and Atlas's Excalidraw pane open). Handles both `compressed-json` (LZString base64) and `json` blocks.
+and Kandinsky's Excalidraw pane open). Handles both `compressed-json` (LZString base64) and `json` blocks.
 Source files are only read; existing outputs are not overwritten.
 Usage: excalidraw_convert.py SRC(.excalidraw.md|dir) OUT_DIR
 """

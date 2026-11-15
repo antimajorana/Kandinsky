@@ -1,4 +1,4 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.app.AlertDialog;
 import android.content.SharedPreferences;
@@ -10,8 +10,8 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.Look;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.Look;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -172,7 +172,7 @@ final class FilePicker {
         if (had != null) img.setImageBitmap(had);
         else if (!reader.isShutdown()) reader.execute(() -> {
             android.graphics.Bitmap b = null;
-            try (java.io.InputStream in = host.read(p)) { b = host.decode(org.atlas.capture.Bytes.all(in), side, side); } catch (Exception e) { /* its name stays */ }
+            try (java.io.InputStream in = host.read(p)) { b = host.decode(org.kandinsky.capture.Bytes.all(in), side, side); } catch (Exception e) { /* its name stays */ }
             android.graphics.Bitmap got = b;
             if (got != null) host.activity().runOnUiThread(() -> { thumbs.put(p, got); img.setImageBitmap(got); });
         });

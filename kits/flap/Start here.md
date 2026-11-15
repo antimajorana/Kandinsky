@@ -21,7 +21,7 @@ A note points to what it belongs to with `up: "[[Parent]]"`. Folders stay as the
 
 ## Changing it
 
-- The pages are files, kept in `.atlas/pages/` so the vault's root stays yours: open one (the links above, or Ctrl+P and its name) and press **Arrange**, or **Edit as text**.
+- The pages are files, kept in `.kandinsky/pages/` so the vault's root stays yours: open one (the links above, or Ctrl+P and its name) and press **Arrange**, or **Edit as text**.
 - The templates are in `templates/`; "New note from a template…" in the palette uses them.
 - [[Projects.base|Projects]] is a table and a board over `type: project`; add columns from its header.
-- How every piece works: run `atlas guide` in a terminal, or read `docs/guides/NOTES-SYSTEM.md` in the Atlas repository.
+- How every piece works: run `kandinsky guide` in a terminal, or read `docs/guides/NOTES-SYSTEM.md` in the Kandinsky repository.

@@ -23,9 +23,9 @@ export const notePathOf = (book) => book.replace(EPUB, ".md");
 const squash = (t) => t.replace(/\s+/g, " ").trim();
 /** The book's one note, made through the core when it is missing — as every device makes it (companion.rs: the vault's
  *  template rules, the book's block, `title`) — with `book` linking the file, and `author` when known. → its path. */
-export function ensureNote(atlas, book, meta = {}) {
+export function ensureNote(kandinsky, book, meta = {}) {
   const name = book.split("/").pop();
-  return atlas.companion(book, { find: false, title: meta.title || name.replace(EPUB, ""), properties: { book: `[[${name}]]`, ...(meta.author ? { author: meta.author } : {}) } });
+  return kandinsky.companion(book, { find: false, title: meta.title || name.replace(EPUB, ""), properties: { book: `[[${name}]]`, ...(meta.author ? { author: meta.author } : {}) } });
 }
 /** One highlight as Markdown: the passage quoted, then where it is (`— <chapter>`). */
 export const highlightBlock = (text, where) => `\n> ${squash(text)}\n> — ${where}\n`;
@@ -40,7 +40,7 @@ export function highlightsIn(md) {
   }
   return out.filter(Boolean);
 }
-// ---- the pen (a Boox, atlas.eink.pen): ink cannot stay on reflowed pages, so a pen line marks the text it runs along
+// ---- the pen (a Boox, kandinsky.eink.pen): ink cannot stay on reflowed pages, so a pen line marks the text it runs along
 /** What a pen stroke over the page means, its samples in the frame's own px: a `tap` (a dot: a link, a page turn), a
  *  `line` along a line of text (under it or through it: from its left end to its right end, at its middle height), a
  *  `bar` down the margin (every line beside it, top to bottom), or null (a scribble: nothing). */
@@ -58,12 +58,12 @@ export function penGesture(pts) {
 }
 // textMap, wrap, markPassages, occurrences, markFound: shared/marks.js (the native reader uses the same file)
 import "./shared/marks.js";
-export const { markPassages, occurrences, markFound } = globalThis.atlasMarks;
-const { textMap, wrap } = globalThis.atlasMarks;
+export const { markPassages, occurrences, markFound } = globalThis.kandinskyMarks;
+const { textMap, wrap } = globalThis.kandinskyMarks;
 
 // ---- an EPUB: its package (metadata, manifest, spine) and table of contents ---------------------------------
 /** → { title, author, spine: [path], toc: [{ label, path, frag, depth }], cover: path | null, text(path), blob(path) };
- *  `z` is the app's zip reader (`atlas.zip`). */
+ *  `z` is the app's zip reader (`kandinsky.zip`). */
 export async function openEpub(buf, z) {
   const zip = z.index(buf);
   const file = (path) => { const e = zip.get(path); if (!e) throw new Error(`missing in the EPUB: ${path}`); return e; };
@@ -160,9 +160,9 @@ export const BOOK = /\.(epub|pdf|djvu|mobi|azw3?|fb2)$/i;
 const bookName = (name) => name.replace(BOOK, "");
 
 /** Every book (`match`, EPUB by default) under a vault folder (subfolders too): `{ path, name }`. */
-export async function booksIn(atlas, dir, out = [], match = EPUB) {
-  for (const e of await atlas.list(dir).catch(() => [])) {
-    if (e.dir) await booksIn(atlas, e.path, out, match);
+export async function booksIn(kandinsky, dir, out = [], match = EPUB) {
+  for (const e of await kandinsky.list(dir).catch(() => [])) {
+    if (e.dir) await booksIn(kandinsky, e.path, out, match);
     else if (match.test(e.name)) out.push({ path: e.path, name: e.name.replace(match, "") });
   }
   return out;
@@ -172,13 +172,13 @@ export async function booksIn(atlas, dir, out = [], match = EPUB) {
  *  subject, a folder per book), hidden folders (copyparty's `.hist`) skipped, at most `MAX_REMOTE` books; a folder
  *  that cannot be read is skipped. Folders are listed `WIDTH` at a time: one by one, the user's 100 took ~20 s. */
 const MAX_REMOTE = 3000, WIDTH = 6;
-export async function remoteBooks(atlas, { source, place, folder }, depth = 4) {
+export async function remoteBooks(kandinsky, { source, place, folder }, depth = 4) {
   const out = [], queue = [];
   // the top folder first, and loudly: the source's plugin may still be starting (plugins load in no fixed order), and
   // a refusal (no VPN, a password) is said rather than shown as an empty library
   let top;
   for (let n = 0; ; n++) {
-    try { top = await atlas.files.list(source, place, folder); break; }
+    try { top = await kandinsky.files.list(source, place, folder); break; }
     catch (e) { if (n >= 20 || !/no file source/.test(String(e?.message ?? e))) throw e; await new Promise((r) => setTimeout(r, 500)); }
   }
   const take = (listed, at) => {
@@ -196,7 +196,7 @@ export async function remoteBooks(atlas, { source, place, folder }, depth = 4) {
       while (busy < WIDTH && queue.length && out.length < MAX_REMOTE) {
         const at = queue.shift();
         busy++;
-        atlas.files.list(source, place, at.folder).catch(() => null).then((listed) => take(listed, at)).finally(() => { busy--; next(); });
+        kandinsky.files.list(source, place, at.folder).catch(() => null).then((listed) => take(listed, at)).finally(() => { busy--; next(); });
       }
       if (!busy) done();
     };
@@ -217,10 +217,10 @@ export async function bookFacts(url, z) {
   return { title: book.title, author: book.author, cover };
 }
 
-export default function mount(host, atlas) {
-  const S = atlas.plugin.settings ?? {};
+export default function mount(host, kandinsky) {
+  const S = kandinsky.plugin.settings ?? {};
   const folder = String(S.folder || "books").replace(/^\/+|\/+$/g, "");
-  const eink = !!atlas.eink?.on;
+  const eink = !!kandinsky.eink?.on;
   const paged = eink || S.flow !== "scrolled";
   const root = el("div", "books");
   root.tabIndex = 0;
@@ -228,24 +228,24 @@ export default function mount(host, atlas) {
   let leave = () => {};
   let gone = false;
   const show = (draw) => { leave(); leave = () => {}; root.replaceChildren(); leave = draw() ?? (() => {}); root.focus({ preventScroll: true }); };
-  const toLibrary = () => atlas.openLibrary("books");
+  const toLibrary = () => kandinsky.openLibrary("books");
 
   // ---- where you are: one file per library, read again before each write (another device may have written) ----
   // Where you are lives in the book's note, as the native reader writes it (android/Shelf.java): progress: 42% · reading_chapter: 4 ·
   // reading_at: 25.12% · last_read: <ISO>. A book only in an old reading.json is read from there.
   // the book's one note (the core says which: a paper's PDF has the paper's note, else `<name>.md` beside it — the user,
-  // 2026-10-18: one note per thing); an Atlas without `companion`: beside it
+  // 2026-10-18: one note per thing); an Kandinsky without `companion`: beside it
   const notes = new Map();
   const noteOf = (book) => {
-    if (!notes.has(book)) notes.set(book, Promise.resolve(atlas.companion ? atlas.companion(book, { find: true }) : notePathOf(book)).catch(() => notePathOf(book)));
+    if (!notes.has(book)) notes.set(book, Promise.resolve(kandinsky.companion ? kandinsky.companion(book, { find: true }) : notePathOf(book)).catch(() => notePathOf(book)));
     return notes.get(book);
   };
   const readingPath = `${folder}/${READING}`;
-  const oldReading = async () => { try { return JSON.parse(await atlas.readText(readingPath)); } catch { return {}; } };
+  const oldReading = async () => { try { return JSON.parse(await kandinsky.readText(readingPath)); } catch { return {}; } };
   const pct = (v) => { const t = String(v ?? "").trim(); const n = parseFloat(t); return Number.isFinite(n) ? (t.includes("%") ? n / 100 : n) : 0; };
   const entryOf = async (book) => {
     try {
-      const p = await atlas.noteProps(await noteOf(book));
+      const p = await kandinsky.noteProps(await noteOf(book));
       if (p.reading_chapter != null) return { spine: Math.max(0, Number(p.reading_chapter) - 1), at: pct(p.reading_at), progress: pct(p.progress), updated: String(p.last_read ?? "") };
     } catch { /* no note yet */ }
     return (await oldReading()).books?.[book];
@@ -254,28 +254,28 @@ export default function mount(host, atlas) {
   const saveAt = (book, spine, at) => {
     writes = writes.then(async () => {
       const note = await noteOf(book);
-      if (!(await atlas.readText(note).catch(() => ""))) await ensureNote(atlas, book); // a note of its own when none
+      if (!(await kandinsky.readText(note).catch(() => ""))) await ensureNote(kandinsky, book); // a note of its own when none
       const r = (n, d) => `${Math.round(n * 100 * 10 ** d) / 10 ** d}%`;
-      await atlas.writeProperty(note, "reading_chapter", String(spine + 1));
-      await atlas.writeProperty(note, "reading_at", r(at, 2));
-      await atlas.writeProperty(note, "last_read", new Date().toISOString().replace(/\.\d+Z$/, "Z"));
-    }).catch((e) => atlas.toast("Books", `Not saved: ${e.message ?? e}`, "error"));
+      await kandinsky.writeProperty(note, "reading_chapter", String(spine + 1));
+      await kandinsky.writeProperty(note, "reading_at", r(at, 2));
+      await kandinsky.writeProperty(note, "last_read", new Date().toISOString().replace(/\.\d+Z$/, "Z"));
+    }).catch((e) => kandinsky.toast("Books", `Not saved: ${e.message ?? e}`, "error"));
   };
 
   const opened = new Map(); // path → Promise<book>
   const load = (path) => {
-    if (!opened.has(path)) opened.set(path, Promise.resolve(atlas.fileUrl(path)).then((u) => fetch(u)).then((r) => r.arrayBuffer()).then((b) => openEpub(b, atlas.zip)));
+    if (!opened.has(path)) opened.set(path, Promise.resolve(kandinsky.fileUrl(path)).then((u) => fetch(u)).then((r) => r.arrayBuffer()).then((b) => openEpub(b, kandinsky.zip)));
     return opened.get(path);
   };
 
   // ---- Reader -------------------------------------------------------------------------------------------
-  // `anchor`: a link's `#Chapter 3` (atlas.anchor, API 7) — that entry of the contents instead of where you were
+  // `anchor`: a link's `#Chapter 3` (kandinsky.anchor, API 7) — that entry of the contents instead of where you were
   function reader(path, anchor = "") {
     const bar = el("div", "b-bar");
-    const backBtn = el("button", "atlas-btn", "‹ Library"), title = el("div", "b-title", path.split("/").pop().replace(EPUB, ""));
-    const tocBtn = el("button", "atlas-btn", "Contents"), findBtn = el("button", "atlas-btn", "Search"), where = el("span", "b-where", "");
+    const backBtn = el("button", "kandinsky-btn", "‹ Library"), title = el("div", "b-title", path.split("/").pop().replace(EPUB, ""));
+    const tocBtn = el("button", "kandinsky-btn", "Contents"), findBtn = el("button", "kandinsky-btn", "Search"), where = el("span", "b-where", "");
     findBtn.title = "Search the whole book (/ or Ctrl+F)";
-    const hlBtn = el("button", "atlas-btn", "Highlight");
+    const hlBtn = el("button", "kandinsky-btn", "Highlight");
     hlBtn.title = "Keep the selected passage in the book's note (beside the book)";
     hlBtn.disabled = true;
     backBtn.title = "The books, on the Libraries page";
@@ -311,7 +311,7 @@ export default function mount(host, atlas) {
     let saving = 0;
     const remember = () => { clearTimeout(saving); saving = setTimeout(() => saveAt(path, spine, fraction()), 600); };
     const typography = () => {
-      const font = S.font === "the book's own" ? "" : S.font === "the app's" ? "font-family: var(--atlas-font, system-ui, sans-serif) !important;" : `font-family: ${S.font === "sans-serif" ? "system-ui, sans-serif" : "Georgia, 'Noto Serif', serif"} !important;`;
+      const font = S.font === "the book's own" ? "" : S.font === "the app's" ? "font-family: var(--kandinsky-font, system-ui, sans-serif) !important;" : `font-family: ${S.font === "sans-serif" ? "system-ui, sans-serif" : "Georgia, 'Noto Serif', serif"} !important;`;
       const size = Number(S.size ?? 19), line = Number(S.line ?? 1.55);
       // a readable measure: on a wide window the text keeps ~36 em (about 70 characters) and centres; narrower, the setting's margins
       const m = Math.max(Number(S.margin ?? 28), Math.round((width() - size * 36) / 2));
@@ -327,8 +327,8 @@ export default function mount(host, atlas) {
                ${S.justify === false ? "" : "text-align: justify; hyphens: auto;"} overflow-wrap: break-word; }
         img, svg, video { max-width: 100% !important; max-height: 88vh !important; height: auto; }
         a { color: inherit; }
-        mark.atlas-found { background: ${eink ? "transparent" : "color-mix(in srgb, #4a9eff 40%, transparent)"}; color: inherit; ${eink ? "outline: 2px solid currentColor; outline-offset: 1px;" : ""} }
-        mark.atlas-hl { background: ${eink ? "transparent" : "color-mix(in srgb, #f5c542 45%, transparent)"}; color: inherit; ${eink ? "text-decoration: underline 2px; text-underline-offset: 3px;" : ""} }
+        mark.kandinsky-found { background: ${eink ? "transparent" : "color-mix(in srgb, #4a9eff 40%, transparent)"}; color: inherit; ${eink ? "outline: 2px solid currentColor; outline-offset: 1px;" : ""} }
+        mark.kandinsky-hl { background: ${eink ? "transparent" : "color-mix(in srgb, #f5c542 45%, transparent)"}; color: inherit; ${eink ? "text-decoration: underline 2px; text-underline-offset: 3px;" : ""} }
         ${page}`;
     };
     async function open(i, at = 0, frag = "") {
@@ -369,7 +369,7 @@ export default function mount(host, atlas) {
       d.defaultView?.addEventListener("scroll", () => { lastAt = fraction(); say(); remember(); }, { passive: true });
       if (!opening) void Promise.resolve(d.fonts?.ready).then(() => { scrollToFraction(lastAt); say(); });
     });
-    const readNote = async () => atlas.readText(await noteOf(path)).catch(() => "");
+    const readNote = async () => kandinsky.readText(await noteOf(path)).catch(() => "");
     /** The selection kept in the book's note (made with the book's properties the first time) and marked here. */
     async function highlight() {
       const d = doc(), sel = d?.getSelection(), text = squash(sel?.toString() ?? "");
@@ -378,15 +378,15 @@ export default function mount(host, atlas) {
       const whereText = `${label ? `${label}, ` : ""}chapter ${spine + 1}`;
       try {
         let md = await readNote();
-        if (!md) { await ensureNote(atlas, path, book); md = await readNote(); }
+        if (!md) { await ensureNote(kandinsky, path, book); md = await readNote(); }
         if (!/^## Highlights\s*$/m.test(md)) md = `${md.replace(/\n*$/, "\n")}\n## Highlights\n`;
         const notePath = await noteOf(path);
-        await atlas.writeText(notePath, md.replace(/\n*$/, "\n") + highlightBlock(text, whereText));
+        await kandinsky.writeText(notePath, md.replace(/\n*$/, "\n") + highlightBlock(text, whereText));
         sel.removeAllRanges();
         hlBtn.disabled = true;
         markPassages(d, [text]);
-        atlas.toast("Books", `Kept in ${notePath.split("/").pop()}`);
-      } catch (e) { atlas.toast("Books", `Not kept: ${e.message ?? e}`, "error"); }
+        kandinsky.toast("Books", `Kept in ${notePath.split("/").pop()}`);
+      } catch (e) { kandinsky.toast("Books", `Not kept: ${e.message ?? e}`, "error"); }
     }
     hlBtn.onclick = () => void highlight();
     // the pen: a tap is a tap, a line under or through words keeps them, a bar down the margin keeps the lines beside it
@@ -434,9 +434,9 @@ export default function mount(host, atlas) {
       sel.removeAllRanges();
       sel.addRange(wordsBetween(d, a, b));
       if (squash(sel.toString()).length < 2) { sel.removeAllRanges(); return; }
-      void highlight().then(() => atlas.eink.refresh()); // the firmware's quick line off the page with the mark in
+      void highlight().then(() => kandinsky.eink.refresh()); // the firmware's quick line off the page with the mark in
     }
-    const pen = atlas.eink.pen?.(frame, fromPen, { line: () => [3, 2] });
+    const pen = kandinsky.eink.pen?.(frame, fromPen, { line: () => [3, 2] });
     function turn(dir) {
       const d = doc()?.documentElement;
       if (!d || !book) return;
@@ -445,7 +445,7 @@ export default function mount(host, atlas) {
         if (page + dir < 0) { if (spine > 0) void open(spine - 1, -1); return; }
         if (page + dir >= pages()) { if (spine < book.spine.length - 1) void open(spine + 1, 0); return; }
         d.scrollLeft = (page + dir) * width();
-        if (eink && ++turns % 6 === 0) atlas.eink.refresh(); // Mihon's "flash on page change", every few pages
+        if (eink && ++turns % 6 === 0) kandinsky.eink.refresh(); // Mihon's "flash on page change", every few pages
       } else {
         const atEnd = d.scrollTop + d.clientHeight >= d.scrollHeight - 2, atTop = d.scrollTop <= 0;
         if (dir > 0 && atEnd && spine < book.spine.length - 1) return void open(spine + 1, 0);
@@ -539,13 +539,13 @@ export default function mount(host, atlas) {
           b.onclick = () => { toc.hidden = true; const i = book.spine.indexOf(t.path); if (i >= 0) void open(i, 0, t.frag); };
           toc.append(b);
         }
-        if (!book.toc.length) toc.append(el("div", "atlas-empty", "This book has no table of contents."));
+        if (!book.toc.length) toc.append(el("div", "kandinsky-empty", "This book has no table of contents."));
         const named = anchor && book.toc.find((t) => t.label.toLowerCase() === anchor.toLowerCase() && book.spine.includes(t.path));
         if (named) { await open(book.spine.indexOf(named.path), 0, named.frag); return; }
         const pos = await entryOf(path);
         await open(pos?.spine ?? 0, pos?.at ?? 0);
       } catch (e) {
-        frame.replaceWith(el("div", "atlas-notice", `This book cannot be read: ${e.message ?? e}`));
+        frame.replaceWith(el("div", "kandinsky-notice", `This book cannot be read: ${e.message ?? e}`));
       }
     })();
     const resize = new ResizeObserver(() => { if (book && paged && doc()?.documentElement) { const f = fraction(); doc().documentElement.scrollLeft = Math.round(f * (pages() - 1)) * width(); say(); } });
@@ -554,15 +554,15 @@ export default function mount(host, atlas) {
   }
 
   // the book: the file opened with the pane ("Open with…", a link), or the Libraries page's (`openView(path)`)
-  const book = [atlas.path, atlas.arg].find((p) => p && EPUB.test(p));
+  const book = [kandinsky.path, kandinsky.arg].find((p) => p && EPUB.test(p));
   if (book) {
-    show(() => reader(book, atlas.anchor));
+    show(() => reader(book, kandinsky.anchor));
     // a later link to the book at another chapter, while it is open here (API 7)
-    atlas.pane?.onAnchor((a) => show(() => reader(book, a)));
+    kandinsky.pane?.onAnchor((a) => show(() => reader(book, a)));
   } else {
     // no book (a tab kept from an older version): the library is the Libraries page's
     toLibrary();
-    atlas.pane?.close();
+    kandinsky.pane?.close();
   }
   return () => { gone = true; leave(); };
 }

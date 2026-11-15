@@ -1,4 +1,4 @@
-# Papers for the catalog, and the references library itself: Atlas does what Zotero did. A DOI or an arXiv id, bare or as a link, is recognised as
+# Papers for the catalog, and the references library itself: Kandinsky does what Zotero did. A DOI or an arXiv id, bare or as a link, is recognised as
 # a paper; OpenAlex and arXiv say what it is (title, authors, year, venue, abstract, its other identifier); the entry is
 # written by this plugin's helper (refs/papers/<citekey>/: the note whose properties are the paper's fields, the PDF
 # when an open-access copy exists, refs.bib), so it looks like every paper already in the library. The helper also
@@ -21,8 +21,8 @@ net = ["api.crossref.org", "export.arxiv.org", "arxiv.org", "api.openalex.org", 
 secrets = true
 
 [helper]
-# built by engine/build.sh (crate atlas-papers): one static binary per platform
-run = "\"$ATLAS_PLUGIN_DIR/bin/$ATLAS_PLUGIN_TARGET/papers\""
+# built by engine/build.sh (crate kandinsky-papers): one static binary per platform
+run = "\"$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET/papers\""
 # with the vault, so the Zotero Connector's listener is up when the setting is on
 start = "open"
 

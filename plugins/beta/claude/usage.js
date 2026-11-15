@@ -1,9 +1,9 @@
-// The usage report in a dialog (atlas.openDialog with view "usage.js", from "Claude: show usage" or the status bar's
-// cell): each account Atlas finds, the one in use first, its limits as bars — red past the warning setting — with when
+// The usage report in a dialog (kandinsky.openDialog with view "usage.js", from "Claude: show usage" or the status bar's
+// cell): each account Kandinsky finds, the one in use first, its limits as bars — red past the warning setting — with when
 // each window resets. Look again reads the helper anew.
 import { resetText } from "./main.js";
 
-export default function mount(host, atlas) {
+export default function mount(host, kandinsky) {
   const el = (tag, props = {}, kids = []) => {
     const e = Object.assign(document.createElement(tag), props);
     e.append(...kids);
@@ -32,7 +32,7 @@ export default function mount(host, atlas) {
   const list = el("div", { className: "cu-list" });
   const again = el("button", { textContent: "Look again" });
   const close = el("button", { textContent: "Close" });
-  close.addEventListener("click", () => atlas.pane.close());
+  close.addEventListener("click", () => kandinsky.pane.close());
   host.append(style, said, list, el("div", { className: "cu-go" }, [again, close]));
 
   let gone = false;
@@ -56,9 +56,9 @@ export default function mount(host, atlas) {
   async function look() {
     again.disabled = true;
     try {
-      const { accounts } = await atlas.helper.call("usage", {}, { timeout: 30 });
+      const { accounts } = await kandinsky.helper.call("usage", {}, { timeout: 30 });
       if (gone) return;
-      const warn = Number(atlas.plugin.settings.warn ?? 80);
+      const warn = Number(kandinsky.plugin.settings.warn ?? 80);
       const shown = [...accounts].sort((x, y) => Number(!!y.current) - Number(!!x.current));
       said.textContent = shown.length ? `A bar turns red at ${warn} % (the warning setting).` : "No Claude account found on this computer.";
       list.replaceChildren(...shown.map((a) => account(a, warn)));

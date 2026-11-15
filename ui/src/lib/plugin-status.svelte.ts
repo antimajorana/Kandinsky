@@ -1,4 +1,4 @@
-// Cells a plugin puts in the status bar (`atlas.shell.statusItem`). The bar draws this list; a cell
+// Cells a plugin puts in the status bar (`kandinsky.shell.statusItem`). The bar draws this list; a cell
 // with `run` is a button, one with `panel` opens a popover the plugin draws (StatusBar.svelte).
 import { guard } from "./plugin-log.svelte";
 import type { StatusItem } from "./plugin-api";

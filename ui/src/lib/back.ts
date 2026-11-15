@@ -1,13 +1,16 @@
 // What a phone's Back closes before it leaves the screen (docs/guides/ANDROID.md, " "): an overlay registers how it
 // closes while it is open — the palette, a menu, a dialog, a dropdown, a Settings area on a phone — the newest on top.
-// The app's system Back asks `dismiss()` first (atlasShell.dismiss, native-shell.svelte.ts); only when nothing was
+// The app's system Back asks `dismiss()` first (kandinskyShell.dismiss, native-shell.svelte.ts); only when nothing was
 // open does it go back a place.
 // `shown`: for a view that stays mounted when hidden (Files, Settings behind an open note): counted only while on screen —
 // before, Back on a note went up a hidden Files folder each time, and landed at its root.
 type Entry = { close: () => void; shown?: () => boolean };
 // one list per page, on the window: a plugin's pane built with the app's components (plugins/*/ui, a bundle of its
-// own with its own copy of this module) registers its dropdowns where the app's Back looks
-const open: Entry[] = ((globalThis as { atlasBackStack?: Entry[] }).atlasBackStack ??= []);
+// own with its own copy of this module) registers its dropdowns where the app's Back looks. The same list under the
+// name from before the rename too: a plugin bundled with an older copy registers there.
+const stacks = globalThis as { kandinskyBackStack?: Entry[]; atlasBackStack?: Entry[] };
+const open: Entry[] = (stacks.kandinskyBackStack ??= stacks.atlasBackStack ?? []);
+stacks.atlasBackStack = open;
 
 /** Registers `close` while the overlay is open; the returned function unregisters it (an `$effect`'s cleanup). */
 export function closable(close: () => void, shown?: () => boolean): () => void {
@@ -35,12 +38,12 @@ export function dismiss(): boolean {
 export const onScreen = (el: HTMLElement | undefined): boolean => !!el && el.isConnected && el.getClientRects().length > 0;
 
 /** A browser's Back (the phone's gesture, the desktop's button, Alt+←, a mouse's side button) is the browser's history, of
- *  which Atlas keeps none — so Back left Atlas, or on a server landed in the vault visited before. One guard entry stays on top while `on()`: Back
+ *  which Kandinsky keeps none — so Back left Kandinsky, or on a server landed in the vault visited before. One guard entry stays on top while `on()`: Back
  *  closes an overlay, else takes the app's own step back (`step`, false when there is none); with nothing left, a phone
  *  leaves (`leave`), a desktop stays in the vault. The guard is put back at the next touch, since a browser skips
  *  history entries made without one. */
 export function attachBrowserBack(on: () => boolean, step: () => boolean, leave: () => boolean): () => void {
-  const guard = () => { if (on() && !history.state?.atlasBack) history.pushState({ atlasBack: true }, ""); };
+  const guard = () => { if (on() && !history.state?.kandinskyBack) history.pushState({ kandinskyBack: true }, ""); };
   const pop = () => {
     if (!on()) return;
     if (dismiss() || step() || !leave()) guard();

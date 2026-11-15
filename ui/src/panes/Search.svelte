@@ -172,11 +172,11 @@
       if (searchRequest.replace) { searchRequest.replace = false; toggleReplace(true); }
     };
     onReplace();
-    window.addEventListener("atlas-search-replace", onReplace);
+    window.addEventListener("kandinsky-search-replace", onReplace);
     // re-activated (Ctrl+Shift+F again, a click on the tab): the old query selected, so typing
     // replaces it. open() calls this synchronously; a later select() would eat typed letters.
     paneFocus.set(panel.id, () => input?.select());
-    return () => { paneFocus.delete(panel.id); window.removeEventListener("atlas-search-replace", onReplace); };
+    return () => { paneFocus.delete(panel.id); window.removeEventListener("kandinsky-search-replace", onReplace); };
   });
 </script>
 

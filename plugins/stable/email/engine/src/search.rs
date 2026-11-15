@@ -124,7 +124,7 @@ fn when(v: &str, now: i64) -> Option<i64> {
         return Some(now - n * unit);
     }
     let d = chrono::NaiveDate::parse_from_str(&v.replace('/', "-"), "%Y-%m-%d").ok()?;
-    atlas_text::wall_clock::at(d.and_hms_opt(0, 0, 0)?, &chrono::Local).map(|t| t.timestamp())
+    kandinsky_text::wall_clock::at(d.and_hms_opt(0, 0, 0)?, &chrono::Local).map(|t| t.timestamp())
 }
 
 /// "5M", "200k", "1G", "300" → bytes.
@@ -191,7 +191,8 @@ pub fn parse(q: &str, now: i64) -> Query {
                 "starred" | "flagged" | "important" => out.cond(&format!("{n}m.flagged=1"), vec![]),
                 "draft" => out.cond(&format!("{n}m.draft=1"), vec![]),
                 "answered" | "replied" => out.cond(&format!("{n}m.answered=1"), vec![]),
-                "snoozed" => out.cond(&format!("{n}m.flags LIKE '%$atlas-snooze-%'"), vec![]),
+                // either keyword: mail snoozed before the rename carries `$atlas-snooze-` (ops::SNOOZE_PREFIXES)
+                "snoozed" => out.cond(&format!("{n}(m.flags LIKE '%$kandinsky-snooze-%' OR m.flags LIKE '%$atlas-snooze-%')"), vec![]),
                 "person" | "newsletter" | "notification" => out.cond(&format!("{n}m.kind=?1"), vec![Value::Text(value.to_lowercase())]),
                 _ => continue,
             },
@@ -263,7 +264,7 @@ mod tests {
         let q = parse("in:sent account:gmail before:2026-01-01 newer_than:2w larger:5M", NOW);
         assert_eq!(q.folder.as_deref(), Some("sent"));
         assert_eq!(q.account.as_deref(), Some("gmail"));
-        let new_year = atlas_text::wall_clock::at(chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap().and_hms_opt(0, 0, 0).unwrap(), &chrono::Local).unwrap().timestamp();
+        let new_year = kandinsky_text::wall_clock::at(chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap().and_hms_opt(0, 0, 0).unwrap(), &chrono::Local).unwrap().timestamp();
         assert_eq!(q.args, vec![Value::Integer(new_year), Value::Integer(NOW - 14 * 86400), Value::Integer(5 * 1024 * 1024)]);
         assert!(q.text.is_none());
     }

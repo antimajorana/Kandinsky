@@ -1,7 +1,7 @@
 //! The core's system notifications on the phone (docs/design/DESIGN-notifications.md, "Delivery to the system"): the
 //! core decides when (notify.rs), Java shows (Notices.java).
-use atlas_core::api::{Notice, NoticeLevel};
-use atlas_core::notify::{self, Notifier};
+use kandinsky_core::api::{Notice, NoticeLevel};
+use kandinsky_core::notify::{self, Notifier};
 use jni::objects::{GlobalRef, JClass, JObject, JValue};
 use jni::{JNIEnv, JavaVM};
 use std::sync::{Arc, Once};
@@ -51,7 +51,7 @@ impl Notifier for JavaNotifier {
 pub fn install(env: &mut JNIEnv) {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        let class = env.find_class("org/atlas/capture/Notices").and_then(|c| env.new_global_ref(c));
+        let class = env.find_class("org/kandinsky/capture/Notices").and_then(|c| env.new_global_ref(c));
         match (env.get_java_vm(), class) {
             (Ok(vm), Ok(class)) => {
                 let java = Arc::new(Java { vm, class });
@@ -59,7 +59,7 @@ pub fn install(env: &mut JNIEnv) {
             }
             (vm, class) => {
                 let _ = env.exception_clear();
-                eprintln!("atlas: no system notifications: {:?} {:?}", vm.err(), class.err());
+                eprintln!("kandinsky: no system notifications: {:?} {:?}", vm.err(), class.err());
             }
         }
     });

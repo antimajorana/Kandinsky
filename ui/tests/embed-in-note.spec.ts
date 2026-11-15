@@ -4,7 +4,7 @@ import { shownName } from "../src/lib/paths";
 
 // "Embed in note…" (the plan's phase 1): a tab's menu puts that pane as a live block into the note
 // last written in — a ```view block, plain text in the note.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("a tab's menu embeds its pane in the note last written in", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/embed-here.md", text: "# Embed here\n\nFirst paragraph.\n\nSecond paragraph.\n" } });

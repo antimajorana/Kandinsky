@@ -6,8 +6,8 @@ import { deflateSync } from "node:zlib";
 // The catalog's collections (docs/design/DESIGN-collections.md): a collection's index page is the Library page over its base,
 // its shelves (one per status, in the kind's order) at the side; dragging a cover onto another shelf moves it there; the item
 // block at the top of a note shows its fields, its shelf chips, stars and the services it points at. Rows come from the
-// base through Atlas's Bases engine, so these are the same files Obsidian reads.
-const H = { "x-atlas": "1" };
+// base through Kandinsky's Bases engine, so these are the same files Obsidian reads.
+const H = { "x-kandinsky": "1" };
 const put = (request: APIRequestContext, path: string, text: string) => request.put("/api/file", { headers: H, data: { path, text } });
 
 // a solid-colour PNG, so covers are real pictures without the network
@@ -30,7 +30,7 @@ const FILMS: [string, number, string, string, number, [number, number, number]][
 
 async function vault(request: APIRequestContext) {
   // the vault's copy of the plugin (its page, no helper: these blocks need none) with its main.js
-  await put(request, ".atlas/plugins/catalog/main.js", catalogFile("main.js"));
+  await put(request, ".kandinsky/plugins/catalog/main.js", catalogFile("main.js"));
   for (const [title, year, director, status, rating, rgb] of FILMS) {
     const slug = title.toLowerCase().replace(/\s+/g, "-");
     expect((await request.put(`/api/raw?path=${encodeURIComponent(`Films/covers/${slug}.png`)}`, { headers: H, data: png(40, 60, rgb) })).ok()).toBeTruthy();

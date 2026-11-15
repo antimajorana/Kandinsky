@@ -79,12 +79,12 @@ function newFromTemplate(): void {
 
 // --- the starter kit ----------------------------------------------------------------------------------
 
-// the kit's files, bundled as text (kits/flap/ in the Atlas repository): path in the vault → content.
-// Its pages go to `.atlas/pages/` (the vault's root stays the user's; the core lists that folder, so
+// the kit's files, bundled as text (kits/flap/ in the Kandinsky repository): path in the vault → content.
+// Its pages go to `.kandinsky/pages/` (the vault's root stays the user's; the core lists that folder, so
 // links and quick open find them); `exhaustive` because a glob skips dot-folders otherwise.
 const KIT = Object.fromEntries(Object.entries(import.meta.glob("../../../kits/flap/**/*", { query: "?raw", import: "default", eager: true, exhaustive: true }) as Record<string, string>)
   .map(([p, text]) => [p.slice(p.indexOf("kits/flap/") + "kits/flap/".length), text]));
-const PAGES = ".atlas/pages/";
+const PAGES = ".kandinsky/pages/";
 /** Where a kit file may already be: its path, or (a page) the vault's root, where older kits put it. */
 const START = "Start here.md";
 /** Where a kit file is written: as in the kit, except its one root note, which goes to the notes folder. */

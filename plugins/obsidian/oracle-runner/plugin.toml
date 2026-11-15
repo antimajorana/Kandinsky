@@ -1,0 +1,16 @@
+title = "Oracle Physics Runner"
+description = "Local runner for Jupyter (.ipynb), WLJS/Wolfram (.wln/.wls), c_lint, and oracle_wiki filing."
+icon = "sigma"
+version = "1.0.0"
+api = 28
+
+[permissions]
+exec = ["node", "py", "python", "powershell", "cmd"]
+
+[helper]
+js = "helper.js"
+idle = "15m"
+
+[platforms]
+windows = "works"
+linux = "works"

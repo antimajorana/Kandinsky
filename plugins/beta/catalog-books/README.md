@@ -10,7 +10,7 @@ Books for the catalog, filled in by Open Library, with no key. A subplugin of th
 
 ## Needs
 
-The Catalog plugin (`requires = ["catalog"]`); nothing installed: the helper is JavaScript run inside Atlas's core (`helper.js`, built from `helper/helper.ts`). Requests go through Atlas's core.
+The Catalog plugin (`requires = ["catalog"]`); nothing installed: the helper is JavaScript run inside Kandinsky's core (`helper.js`, built from `helper/helper.ts`). Requests go through Kandinsky's core.
 
 ## Platforms
 

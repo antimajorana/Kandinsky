@@ -192,7 +192,7 @@ impl<H: Host> Connector<H> {
             return Response::empty(403);
         }
         let mut res = self.route(req);
-        res.headers.push(("X-Zotero-Version", "7.0.0 (Atlas)".into()));
+        res.headers.push(("X-Zotero-Version", "7.0.0 (Kandinsky)".into()));
         res.headers.push(("X-Zotero-Connector-API-Version", API_VERSION.into()));
         res
     }
@@ -203,7 +203,7 @@ impl<H: Host> Connector<H> {
             ("GET", "/connector/ping") => Response {
                 status: 200,
                 headers: vec![("content-type", "text/html".into())],
-                body: b"<!DOCTYPE html><html><body>Zotero is running (Atlas)</body></html>".to_vec(),
+                body: b"<!DOCTYPE html><html><body>Zotero is running (Kandinsky)</body></html>".to_vec(),
             },
             ("POST", "/connector/ping") => Response::json(
                 200,
@@ -237,12 +237,12 @@ impl<H: Host> Connector<H> {
 
     fn selected_collection(&self) -> Response {
         let cfg = self.host.settings();
-        let mut list = vec![json!({ "id": "L1", "name": "Atlas Library", "filesEditable": true, "level": 0 })];
+        let mut list = vec![json!({ "id": "L1", "name": "Kandinsky Library", "filesEditable": true, "level": 0 })];
         list.extend(self.targets(&cfg).iter().enumerate().map(|(i, n)| json!({ "id": format!("C{}", i + 1), "name": n, "filesEditable": true, "level": 1 })));
         Response::json(
             200,
-            json!({ "libraryID": 1, "libraryName": "Atlas Library", "libraryEditable": true, "filesEditable": true,
-                "editable": true, "id": null, "name": "Atlas Library", "targets": list, "tags": {} }),
+            json!({ "libraryID": 1, "libraryName": "Kandinsky Library", "libraryEditable": true, "filesEditable": true,
+                "editable": true, "id": null, "name": "Kandinsky Library", "targets": list, "tags": {} }),
         )
     }
 
@@ -255,7 +255,7 @@ impl<H: Host> Connector<H> {
                 return Ok(self.root.join(&p.dir));
             }
         }
-        let base = atlas_text::paths::safe_join(&self.root, &cfg.dir)?;
+        let base = kandinsky_text::paths::safe_join(&self.root, &cfg.dir)?;
         let year = m.get("date").and_then(|v| v.as_str()).and_then(year_in);
         let title = m.get("title").and_then(|v| v.as_str()).unwrap_or("untitled").to_string();
         let key = citekey(&strings(m.get("author")), year.as_deref(), &title, &|k| base.join(k).exists());
@@ -282,7 +282,7 @@ impl<H: Host> Connector<H> {
         if let Err(e) = self.lib(cfg).write_bib() {
             eprintln!("papers: connector: refs.bib: {e}");
         }
-        let notes = dirs.iter().filter_map(|d| atlas_text::paths::rel_path(&self.root, &d.join(entry::note_file(&entry::key_of(d)))));
+        let notes = dirs.iter().filter_map(|d| kandinsky_text::paths::rel_path(&self.root, &d.join(entry::note_file(&entry::key_of(d)))));
         self.host.changed(notes.chain(std::iter::once(cfg.bib.clone())).collect());
     }
 
@@ -334,7 +334,7 @@ impl<H: Host> Connector<H> {
             n += 1;
             name = format!("{key}-{n}.{ext}");
         }
-        if let Err(e) = atlas_plugin::write_file(dir.join(&name), body) {
+        if let Err(e) = kandinsky_plugin::write_file(dir.join(&name), body) {
             return Response::text(500, e.to_string());
         }
         let mut m = entry::read(&dir).unwrap_or_default();
@@ -487,7 +487,7 @@ fn serve_one<H: Host>(c: &Connector<H>, mut stream: std::net::TcpStream) {
 }
 
 /// The listener while the connector is wanted: stopped by [`Listener::stop`] (the setting switched off, the helper
-/// ending). A port held by Zotero (or another vault's Atlas) is tried again each minute.
+/// ending). A port held by Zotero (or another vault's Kandinsky) is tried again each minute.
 pub struct Listener {
     stop: Arc<AtomicBool>,
     bound: Arc<AtomicBool>,
@@ -549,9 +549,9 @@ impl Drop for Listener {
     }
 }
 
-/// The port to listen on: 23119, or `ATLAS_CONNECTOR_PORT` (tests, two vaults).
+/// The port to listen on: 23119, or `KANDINSKY_CONNECTOR_PORT` (tests, two vaults).
 pub fn port() -> u16 {
-    std::env::var("ATLAS_CONNECTOR_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(PORT)
+    kandinsky_plugin::env_var_os("CONNECTOR_PORT").and_then(|p| p.into_string().ok()).and_then(|p| p.parse().ok()).unwrap_or(PORT)
 }
 
 #[cfg(test)]

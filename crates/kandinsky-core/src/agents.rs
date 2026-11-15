@@ -1,8 +1,8 @@
 //! AI agents allowed into a locked local core (docs/design/DESIGN-local-lock.md, step 3): one named token per agent,
-//! made in Settings → Agents and revoked one by one. `atlas mcp` sends its
-//! agent's token (`ATLAS_AGENT_TOKEN`, from the agent's MCP config); a locked core turns away an `atlas mcp` without one.
+//! made in Settings → Agents and revoked one by one. `kandinsky mcp` sends its
+//! agent's token (`KANDINSKY_AGENT_TOKEN`, from the agent's MCP config); a locked core turns away an `kandinsky mcp` without one.
 //!
-//! Per machine, not per vault: `$XDG_STATE_HOME/atlas/agents.json` (`ATLAS_AGENTS_FILE` names another), owner-only,
+//! Per machine, not per vault: `$XDG_STATE_HOME/kandinsky/agents.json` (`KANDINSKY_AGENTS_FILE` names another), owner-only,
 //! only hashes. Every core of this machine reads the same file, so a revoke reaches all of them at their next request.
 use crate::auth::{Token, TOKEN_HEADER};
 use axum::http::{header, HeaderMap};
@@ -13,7 +13,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const LAST_USED_STEP: u64 = 60;
 
 pub fn agents_file() -> PathBuf {
-    std::env::var_os("ATLAS_AGENTS_FILE").map(PathBuf::from).unwrap_or_else(|| crate::auth::state_file().with_file_name("agents.json"))
+    crate::env::var_os("AGENTS_FILE").map(PathBuf::from).unwrap_or_else(|| match crate::env::var_os("SERVER_STATE") {
+        Some(s) => PathBuf::from(s).with_file_name("agents.json"),
+        None => crate::platform::dirs::app_entry(crate::platform::dirs::Base::State, "agents.json"),
+    })
 }
 
 /// Changes of the agents file one at a time in this process, each reading the file under it: `who` noting a use wrote
@@ -75,10 +78,10 @@ impl Agents {
         Ok(true)
     }
 
-    /// The agent whose token the request carries (`Authorization: Bearer` or `x-atlas-token`), if any; notes its use.
+    /// The agent whose token the request carries (`Authorization: Bearer` or `x-kandinsky-token`), if any; notes its use.
     pub fn who(&self, h: &HeaderMap) -> Option<String> {
         let bearer = h.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer "));
-        let own = h.get(TOKEN_HEADER).and_then(|v| v.to_str().ok());
+        let own = crate::auth::header(h, TOKEN_HEADER).and_then(|v| v.to_str().ok());
         let hashes: Vec<String> = [bearer, own].into_iter().flatten().map(|t| crate::auth::sha256(t.trim())).collect();
         if hashes.is_empty() {
             return None;
@@ -99,9 +102,9 @@ impl Agents {
     }
 }
 
-/// The agent the terminals Atlas starts for an agent share: a vault's
-/// `.mcp.json` is synced, so the token reaches `atlas mcp` through the terminal's environment instead.
-pub const TERMINAL_AGENT: &str = "Agents in Atlas terminals";
+/// The agent the terminals Kandinsky starts for an agent share: a vault's
+/// `.mcp.json` is synced, so the token reaches `kandinsky mcp` through the terminal's environment instead.
+pub const TERMINAL_AGENT: &str = "Agents in Kandinsky terminals";
 
 /// The terminal agent's switch and token, owner-only beside the agents (the token in clear, as the machine key is).
 #[derive(Default, serde::Serialize, serde::Deserialize)]
@@ -120,7 +123,7 @@ impl Agents {
         std::fs::read_to_string(self.terminals_file()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
     }
 
-    /// `ATLAS_AGENT_TOKEN` for an agent terminal: the shared token while it is allowed; a new one on first use and
+    /// `KANDINSKY_AGENT_TOKEN` for an agent terminal: the shared token while it is allowed; a new one on first use and
     /// after a revoke (a revoke rotates it: running sessions are out, new ones in); None while switched off.
     pub fn terminal_token(&self) -> Option<String> {
         let mut t = self.terminals();
@@ -134,9 +137,9 @@ impl Agents {
             }
         }
         let _ = self.revoke(TERMINAL_AGENT);
-        let tok = self.allow(TERMINAL_AGENT).map_err(|e| eprintln!("atlas: no agent token for the terminal: {e}")).ok()?;
+        let tok = self.allow(TERMINAL_AGENT).map_err(|e| eprintln!("kandinsky: no agent token for the terminal: {e}")).ok()?;
         t.token = Some(tok.clone());
-        crate::auth::write_private(&self.terminals_file(), &serde_json::to_vec(&t).ok()?).map_err(|e| eprintln!("atlas: the terminal agent's token not kept: {e}")).ok()?;
+        crate::auth::write_private(&self.terminals_file(), &serde_json::to_vec(&t).ok()?).map_err(|e| eprintln!("kandinsky: the terminal agent's token not kept: {e}")).ok()?;
         Some(tok)
     }
 
@@ -164,7 +167,7 @@ pub fn mcp_server(token: &str) -> serde_json::Value {
             sibling.is_file().then(|| sibling.to_string_lossy().into_owned())
         })
         .unwrap_or_else(|| "kandinsky".into());
-    serde_json::json!({ "mcpServers": { "kandinsky": { "command": cmd, "args": ["mcp"], "env": { "ATLAS_AGENT_TOKEN": token } } } })
+    serde_json::json!({ "mcpServers": { "kandinsky": { "command": cmd, "args": ["mcp"], "env": { "KANDINSKY_AGENT_TOKEN": token, "ATLAS_AGENT_TOKEN": token } } } })
 }
 
 #[cfg(test)]

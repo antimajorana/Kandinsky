@@ -1,6 +1,6 @@
 # Immich
 
-Your latest Immich photos as a strip of thumbnails in a note or a page. Also an example of `atlas.fetch` with
+Your latest Immich photos as a strip of thumbnails in a note or a page. Also an example of `kandinsky.fetch` with
 `saveTo`: the thumbnails are fetched by the core into the plugin's cache and shown from there, so the API key never
 reaches the page.
 

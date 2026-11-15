@@ -1,5 +1,5 @@
 // What a note's editor adds to the shared base (create.ts): the live preview (live/live-preview.js + KaTeX) with
-// Atlas's renderers, Obsidian's folds, list continuation, the typing aids and their completions, files pasted or
+// Kandinsky's renderers, Obsidian's folds, list continuation, the typing aids and their completions, files pasted or
 // dropped saved beside the note, and the settings-driven options (heading folds, typewriter scrolling).
 import { basename, dirOf, shownName } from "../paths";
 import { renameTo } from "../rename-file";
@@ -21,7 +21,8 @@ import { obsidianMarkdown, AnyTaskStatus } from "./live/obsidian-syntax.js";
 import { livePreview, bodyStart, frontmatterClose, redecorate } from "./live/live-preview.js";
 import { equationLabelNow, equationTarget, linkText, noteEquations, numberedTex, refOf, texKey, type Equations } from "../equations";
 import { readText } from "../vault-files";
-import { renderMathInto } from "../math";
+import { katexNow, loadMath, renderMathInto } from "../math";
+import { enhanceNotionProperties, scanExtraEquations } from "./pigment-pills";
 import { highlightCode } from "../highlight";
 import { blockHtml, inlineHtml } from "../markdown";
 import { resolveLink, resolveOrBeside, vaultReady } from "../vault";
@@ -42,6 +43,8 @@ import { gatedCompletion, syncSource } from "./completion-gate";
 import { completionTab } from "./tab-keys";
 import { citing, mdSymbols } from "./completion-sources";
 import { figureCaptions } from "./figure-captions";
+import { slashMenuExtension } from "./slash-menu";
+import { blockGutterExtension } from "./block-gutter";
 
 // Fold like Obsidian: headings and lists only. lang-markdown makes every multi-line block foldable,
 // which put arrows beside ordinary paragraphs; lists inside the frontmatter are YAML, not lists.
@@ -77,15 +80,46 @@ export function noteExtensions(path: string, viewRef: { view: EditorView | null 
     void vaultReady().then(() => warm(resolveOrBeside(src, dir))).then(patch, () => patch("about:invalid"));
     return PLACEHOLDER;
   };
-  // the note's numbered equations, once per text (lib/equations.ts)
-  let eqs: { doc: unknown; of: Equations } | null = null;
-  const equationsOf = (state: EditorState): Equations => {
-    if (eqs?.doc !== state.doc) eqs = { doc: state.doc, of: noteEquations(state.doc.toString()) };
-    return eqs.of;
+  // the note's numbered equations, once per text (lib/equations.ts + standalone env/tag scan)
+  let eqs: { doc: unknown; of: Equations; extra: Map<string, { num: string; line: number }> } | null = null;
+  const equationsBundle = (state: EditorState) => {
+    if (eqs?.doc !== state.doc) {
+      const text = state.doc.toString();
+      const of = noteEquations(text);
+      eqs = { doc: state.doc, of, extra: scanExtraEquations(text, of.byId) };
+    }
+    return eqs;
+  };
+  const equationsOf = (state: EditorState): Equations => equationsBundle(state).of;
+  const resolveLocalEq = (state: EditorState, id: string): string | null => {
+    const b = equationsBundle(state);
+    const own = refOf(b.of, id);
+    if (own) return own;
+    const ext = b.extra.get(id)?.num;
+    return ext ? `(${ext})` : null;
+  };
+  const renderNoteMath = (host: HTMLElement, source: string, block: boolean, state?: EditorState) => {
+    const resolved = source.replace(/\\eqref\{([^}]+)\}/g, (_m, rawId: string) => {
+      const id = rawId.trim();
+      const label = (state ? resolveLocalEq(state, id) : null) ?? `(${id})`;
+      return `\\text{${label}}`;
+    });
+    const compat = block
+      ? resolved.replace(/\\label\{[^}]*\}/g, "").replace(/\\(begin|end)\{(equation|align|gather|multline|eqnarray)(\*?)\}/g, (_m, be: string, env: string) =>
+          env === "equation" || env === "multline" ? "" : `\\${be}{${env === "align" || env === "eqnarray" ? "aligned" : "gathered"}}`)
+      : resolved;
+    renderMathInto(host, compat, block);
+    if (!katexNow()) {
+      void loadMath().then(() => {
+        renderMathInto(host, compat, block);
+        viewRef.view?.requestMeasure();
+      });
+    }
   };
   const unmount = new WeakMap<HTMLElement, () => void>(); // a rendered block's views, per widget host
   const [liveField, liveKeys] = livePreview({
-    renderMath: renderMathInto,
+    renderMath: renderNoteMath,
+    mathReady: () => Boolean(katexNow()),
     highlightCode,
     resolveAttachment,
     linkResolves: (target: string) => target.trim().startsWith("#") || !!resolveLink(target, dir), // `#…`: this note
@@ -93,31 +127,38 @@ export function noteExtensions(path: string, viewRef: { view: EditorView | null 
     inlineTitle: (state) => {
       if (!(settings.config?.editor.inline_title ?? true)) return null;
       const name = shownName(path);
-      if (headingRepeats(state, name)) return null; // "titles are duplicated usually": the note's own `# name` is the title
+      if (headingRepeats(state, name)) return null; // "titles are duplicated usually": the note's own `# ...` is the title
       return { key: name, render: () => titleInput(path, name) };
     },
     inlineHtml: (source: string) => inlineHtml(source, dir) || null,
     toggleTask: tickTaskLine, // a box ticks as on Home: done date, next occurrence
-    // the YAML between the fences: Obsidian's Properties table in the note (`inline`), else one faint
+    // the YAML between the fences: Notion/Obsidian's Properties rows in the note (`inline`), else one faint
     // "Properties" line (`hidden`; `panel` edits them beside the note). Keyed by mode + text.
     noteProperties: (fm: string) => {
       const mode = settings.config?.editor.properties ?? "inline";
       const yaml = fm.replace(/^---\r?\n/, "").replace(/\r?\n(---|\.\.\.)\s*$/, "");
       return mode === "inline"
-        ? { key: `inline:${propertySpec.version}:${fm}`, render: () => propertiesElement(yaml, dir, (t) => onOpenLink?.(t)) }
+        ? { key: `inline:${propertySpec.version}:${fm}`, render: () => enhanceNotionProperties(propertiesElement(yaml, dir, (t) => onOpenLink?.(t)), yaml) }
         : { key: `folded:${fm}`, render: () => propertiesChip(yaml) };
     },
     // a log entry with a file under it stays a timeline line, its embed a chip (log-lines.ts), not the reader's block
     blockHtml: (source: string, state: EditorState) => {
       if (isLog() && LOG_ENTRY.test(source)) return null;
       // display math (lib/equations.ts): its labels out, its number (counted over the whole note) drawn on it
-      if (!/^[ \t>]*\$\$/.test(source)) return blockHtml(source, dir);
-      return blockHtml(numberedTex(source, equationsOf(state).byTex.get(texKey(source))), dir);
+      if (!/^[ \t>]*(\$\$|\\\[|\\begin\{(equation|align|gather|multline|eqnarray)\*?})/.test(source)) return blockHtml(source, dir);
+      const b = equationsBundle(state);
+      const lbl = /\\label\{([^}]+)\}/.exec(source)?.[1]?.trim();
+      const num = b.of.byTex.get(texKey(source)) ?? (lbl ? b.extra.get(lbl)?.num : undefined);
+      const withEqrefs = source.replace(/\\eqref\{([^}]+)\}/g, (_m, rawId: string) => {
+        const id = rawId.trim();
+        return `\\text{${resolveLocalEq(state, id) ?? `(${id})`}}`;
+      });
+      return blockHtml(numberedTex(withEqrefs, num), dir);
     },
     linkLabel: (state: EditorState, target: string) => {
       const eq = equationTarget(target);
       if (!eq) return null;
-      if (!eq[0]) return refOf(equationsOf(state), eq[1]) ?? null;
+      if (!eq[0]) return resolveLocalEq(state, eq[1]);
       const path = resolveLink(eq[0], dir);
       if (!path) return null;
       const n = equationLabelNow(path, eq[1], readText, () => viewRef.view?.dispatch({ effects: redecorate.of(null) }));
@@ -137,6 +178,8 @@ export function noteExtensions(path: string, viewRef: { view: EditorView | null 
       hoverSync(dir),
       expressions(path),
       mathPreview(() => settings.config?.editor.math_preview ?? true),
+      slashMenuExtension(),
+      blockGutterExtension(),
       taskChips(() => settings.config?.editor.task_chips ?? true),
       logLines(isLog),
       mentions,
@@ -223,16 +266,23 @@ const typewriter = [
   EditorView.theme({ ".cm-content": { paddingBottom: "50vh" } }),
 ];
 
-/** Whether the note's first line of text (after the frontmatter) is a `# heading` saying the file's name — then the
- *  inline title would draw the same words twice. Case, spaces and emphasis marks do not count. */
+/** Whether the note's first line of text (after the frontmatter) is a `# heading` that serves as the single Notion page
+ *  title — when frontmatter is present with a leading `# H1`, or when the `# H1` repeats / expands the file's name
+ *  (e.g. `08 Higher-form Symmetries.md` → `# Higher-form Symmetries & Defect Homology`). */
 export function headingRepeats(state: EditorState, name: string): boolean {
   const norm = (t: string) => t.replace(/[*_`~]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
   const doc = state.doc;
-  for (let n = frontmatterClose(doc) + 1; n <= Math.min(doc.lines, 400); n++) {
+  const fmClose = frontmatterClose(doc);
+  const baseName = norm(name);
+  const strippedName = norm(name.replace(/^\d+[\s._-]+/, ""));
+  for (let n = fmClose + 1; n <= Math.min(doc.lines, 400); n++) {
     const t = doc.line(n).text;
     if (!t.trim()) continue;
     const h = /^#[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/.exec(t);
-    return !!h && norm(h[1]) === norm(name);
+    if (!h) return false;
+    if (fmClose > 0) return true;
+    const hNorm = norm(h[1]);
+    return hNorm === baseName || (strippedName.length >= 4 && hNorm.startsWith(strippedName));
   }
   return false;
 }

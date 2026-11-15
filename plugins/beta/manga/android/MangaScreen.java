@@ -1,11 +1,11 @@
-package org.atlas.plugins.manga;
+package org.kandinsky.plugins.manga;
 
 import android.view.Gravity;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.NativePlugin;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.NativePlugin;
 import org.json.JSONObject;
 
 import java.util.concurrent.ExecutorService;

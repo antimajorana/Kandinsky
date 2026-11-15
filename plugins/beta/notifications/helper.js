@@ -2,9 +2,9 @@
 (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 	//#region plugins/beta/notifications/helper/helper.ts
-	const STATE = `.atlas/cache/${atlas.id}.json`;
+	const STATE = `.kandinsky/cache/${kandinsky.id}.json`;
 	/** Where the Python helper kept a topic's last id (one file per topic), read once so an upgrade files nothing twice. */
-	const OLD_SINCE = (topic) => `.atlas/cache/plugins/${atlas.id}/since-${topic.replace(/[^\w.-]/g, "_")}`;
+	const OLD_SINCE = (topic) => `.kandinsky/cache/plugins/${kandinsky.id}/since-${topic.replace(/[^\w.-]/g, "_")}`;
 	const MARK = {
 		5: "🔴",
 		4: "🟠"
@@ -133,7 +133,7 @@
 	}
 	async function sendWith(net, p) {
 		const s = p.settings ?? {};
-		const text = String(p.text ?? ""), title = String(p.title || "Atlas");
+		const text = String(p.text ?? ""), title = String(p.title || "Kandinsky");
 		if (!text.trim()) throw new Error("nothing to send");
 		const apprise = str(s.apprise);
 		if (apprise) {
@@ -148,19 +148,19 @@
 		}
 		const topic = str(s.phone_topic);
 		if (!topic) throw new Error("set the Apprise address or your phone's topic first: Settings → Notifications");
-		await net.post(`${(str(s.server) || "https://ntfy.sh").replace(/\/+$/, "")}/${encodeURIComponent(topic)}?${atlas.qs({ title })}`, text, auth(p));
+		await net.post(`${(str(s.server) || "https://ntfy.sh").replace(/\/+$/, "")}/${encodeURIComponent(topic)}?${kandinsky.qs({ title })}`, text, auth(p));
 		return {
 			sent: true,
 			through: "ntfy"
 		};
 	}
 	const net = {
-		get: async (url, headers) => await atlas.fetch(url, {
+		get: async (url, headers) => await kandinsky.fetch(url, {
 			headers,
 			timeout: 30,
 			missing: []
 		}) ?? "",
-		post: (url, body, headers) => atlas.fetch(url, {
+		post: (url, body, headers) => kandinsky.fetch(url, {
 			method: "POST",
 			body,
 			headers,
@@ -170,7 +170,7 @@
 	};
 	async function readOrNull(path) {
 		try {
-			return await atlas.read(path);
+			return await kandinsky.read(path);
 		} catch (e) {
 			if (e.status === 404) return null;
 			throw e;
@@ -179,8 +179,8 @@
 	let kept = null;
 	const vault = {
 		read: readOrNull,
-		write: (path, text) => atlas.write(path, text),
-		capture: (text) => atlas.capture(text),
+		write: (path, text) => kandinsky.write(path, text),
+		capture: (text) => kandinsky.capture(text),
 		async since(topic) {
 			kept ??= JSON.parse(await readOrNull(STATE) ?? "{}").since ?? {};
 			return kept[topic] ?? str(await readOrNull(OLD_SINCE(topic)));
@@ -188,7 +188,7 @@
 		async keep(topic, id) {
 			(kept ??= {})[topic] = id;
 			try {
-				await atlas.write(STATE, JSON.stringify({ since: kept }));
+				await kandinsky.write(STATE, JSON.stringify({ since: kept }));
 			} catch (e) {
 				console.warn(`notifications: cannot keep the last id of ${topic}: ${e.message}`);
 			}
@@ -208,10 +208,10 @@
 			return run;
 		};
 	}
-	atlas.methods({
+	kandinsky.methods({
 		sync: oneAtATime(async (p) => {
 			const r = await syncWith(net, vault, p);
-			if (r.new) atlas.event("synced", {
+			if (r.new) kandinsky.event("synced", {
 				new: r.new,
 				loud: r.loud
 			});

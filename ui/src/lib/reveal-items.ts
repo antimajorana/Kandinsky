@@ -1,4 +1,4 @@
-// "Show in the explorer" (Atlas's, at the file's folder) and "Show in the system's file manager" (the desktop's own,
+// "Show in the explorer" (Kandinsky's, at the file's folder) and "Show in the system's file manager" (the desktop's own,
 // the file selected): the same two items in a tab's menu and the file tree's.
 import { api } from "./api";
 import { open } from "./dock";

@@ -1,12 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
 import { shownName } from "../src/lib/paths";
 
-// The shell as files, second half (docs/guides/SHELL.md): bookmarks and pins live in `.atlas/bookmarks.yaml`,
-// and the sidebar is a page of blocks (`.atlas/sidebar.page`) that can be rearranged like any page.
-const FILES = { bookmarks: ".atlas/bookmarks.yaml", sidebar: ".atlas/sidebar.page" };
+// The shell as files, second half (docs/guides/SHELL.md): bookmarks and pins live in `.kandinsky/bookmarks.yaml`,
+// and the sidebar is a page of blocks (`.kandinsky/sidebar.page`) that can be rearranged like any page.
+const FILES = { bookmarks: ".kandinsky/bookmarks.yaml", sidebar: ".kandinsky/sidebar.page" };
 const side = (page: Page) => page.getByTestId("sidebar");
-const fileText = (page: Page, path: string) => page.request.get(`/api/file?path=${path}`, { headers: { "x-atlas": "1" } }).then((r) => r.json()).then((j) => String(j.text ?? ""));
-const put = (page: Page, path: string, text: string) => page.request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path, text } });
+const fileText = (page: Page, path: string) => page.request.get(`/api/file?path=${path}`, { headers: { "x-kandinsky": "1" } }).then((r) => r.json()).then((j) => String(j.text ?? ""));
+const put = (page: Page, path: string, text: string) => page.request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path, text } });
 
 async function run(page: Page, command: string) {
   await page.keyboard.press("Meta+e");
@@ -93,7 +93,7 @@ test("the sidebar is a page: its file decides the blocks, a toolbar's buttons ar
   await expect(top.getByRole("button")).toHaveCount(2);
   await expect(top.getByRole("button", { name: "Links" })).toBeVisible();
   await expect(side(page).locator(".side-toolbar")).toHaveCount(1);
-  await expect(side(page).locator(".sb-block.guest .atlas-pane-outline")).toBeVisible();
+  await expect(side(page).locator(".sb-block.guest .kandinsky-pane-outline")).toBeVisible();
   await top.getByRole("button", { name: "Links" }).click();
   await expect(side(page).locator(".tab.active", { hasText: "Graph" })).toBeVisible();
 

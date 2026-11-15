@@ -1,22 +1,22 @@
 /* Shell chrome of the vertical-tabs layout (docs/design/VERTICAL-TABS.md; calm, SilverBullet-inspired):
    no tab strips, a quiet title bar on each editor, soft group cards whose focus shows only when
    the window is split. Chrome only: note rendering is not touched here. */
-.vtabs .dockview-theme-atlas .dv-groupview { box-shadow: none; transition: border-color .15s; }
-.vtabs.split .dockview-theme-atlas .dv-groupview.dv-active-group { border-color: color-mix(in srgb, var(--accent) 38%, var(--border-strong)); }
-.vtabs:not(.split) .dockview-theme-atlas .dv-groupview.dv-active-group { border-color: var(--border); }
+.vtabs .dockview-theme-kandinsky .dv-groupview { box-shadow: none; transition: border-color .15s; }
+.vtabs.split .dockview-theme-kandinsky .dv-groupview.dv-active-group { border-color: color-mix(in srgb, var(--accent) 38%, var(--border-strong)); }
+.vtabs:not(.split) .dockview-theme-kandinsky .dv-groupview.dv-active-group { border-color: var(--border); }
 
 /* the editor's path bar is the page's title bar now (SilverBullet's page name): roomier, no rule */
 .vtabs .editor-pane .crumbs { min-height: 36px; padding: 6px 16px; border-bottom-color: transparent; }
 .vtabs .editor-pane .crumbs .seg.file { font-weight: 600; color: var(--heading); }
 
 /* blocks (lib/blocks.ts): anything drawn inside a note or a page */
-.atlas-block { position: relative; min-width: 0; }
+.kandinsky-block { position: relative; min-width: 0; }
 /* a block that fills its box (an embedded pane): a framed window the user can pull taller */
-.atlas-block.framed > .block-body { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); overflow: hidden; resize: vertical; min-height: 140px; max-height: 92vh; }
+.kandinsky-block.framed > .block-body { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); overflow: hidden; resize: vertical; min-height: 140px; max-height: 92vh; }
 /* "open as a tab": hangs on the corner, so it never covers the block's own controls */
 .block-pop { position: absolute; top: -9px; right: -9px; z-index: 5; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%;
   color: var(--text-muted); background: var(--bg-elev); border: 1px solid var(--border-strong); box-shadow: var(--shadow-sm); opacity: 0; transition: opacity .12s; }
-.atlas-block:hover > .block-pop, .block-pop:focus-visible { opacity: 1; }
+.kandinsky-block:hover > .block-pop, .block-pop:focus-visible { opacity: 1; }
 /* a table's saved views in its note (lib/table-views-fence.ts) */
 .table-views { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-elev); padding: 8px 12px; font-size: calc(13px * var(--ui-scale, 1)); }
 .table-views-head { color: var(--text-faint); font-size: calc(12px * var(--ui-scale, 1)); margin-bottom: 4px; }
@@ -39,23 +39,25 @@
 @media (prefers-reduced-motion: reduce) { .block-pop { transition: none; } }
 
 /* --- the sidebar's blocks (components/sidebar/): shared by the toolbar, pins, bookmarks and tab list --- */
-.side-tool { position: relative; width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: var(--text-muted); transition: color .12s, background .12s; flex: none; }
+.side-tool { position: relative; width: 32px; height: 32px; border-radius: var(--radius); display: grid; place-items: center; color: var(--text-muted); transition: color .12s, background .12s; flex: none; }
 .side-tool:hover { color: var(--text); background: var(--bg-hover); }
+.side-tool.on, .side-tool[aria-selected="true"] { color: var(--accent); background: var(--accent-soft); }
 .side-tool:active { transform: scale(.96); }
 /* delayed tooltips: to the right by default (icons in a column), below in a row of buttons */
 .tipped { position: relative; }
 .tipped::after { content: attr(data-tip); position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%) translateX(-4px); white-space: nowrap;
-  background: var(--bg-elev); color: var(--text); border: 1px solid var(--border-strong); box-shadow: var(--shadow-sm); padding: 4px 9px; border-radius: 7px;
+  background: var(--bg-elev); color: var(--text); border: 1px solid var(--border-strong); box-shadow: var(--shadow-sm); padding: 4px 9px; border-radius: var(--radius);
   font-size: calc(12px * var(--ui-scale, 1)); font-weight: 400; pointer-events: none; opacity: 0; transition: opacity .12s, transform .12s; z-index: 100; }
 .tipped:hover::after { opacity: 1; transform: translateY(-50%); transition-delay: .45s; }
 .side-toolbar.wide .tipped::after { left: 50%; top: calc(100% + 6px); transform: translateX(-50%) translateY(-2px); }
 .side-toolbar.wide .tipped:hover::after { transform: translateX(-50%); }
 .side-toolbar.wide .tipped:first-child::after { left: 0; transform: none; }
 .side-toolbar.wide .tipped:last-child:not(:first-child)::after { left: auto; right: 0; transform: none; }
-.side-row { position: relative; display: flex; align-items: center; justify-content: center; gap: 9px; width: 36px; height: 32px; padding: 0; border-radius: 8px; color: var(--text-muted); cursor: default;
+.side-row { position: relative; display: flex; align-items: center; justify-content: center; gap: 9px; width: 36px; height: 30px; padding: 0; border-radius: var(--radius); color: var(--text-muted); cursor: default;
   font-size: calc(13px * var(--ui-scale, 1)); outline: none; border: 1px solid transparent; transition: background .1s, color .1s; }
-.wide .side-row { width: auto; height: 32px; padding: 0 4px 0 calc(var(--side-inset) - 9px); justify-content: flex-start; } /* the icon on the bar's one left edge */
+.wide .side-row { width: auto; height: 30px; padding: 0 6px 0 calc(var(--side-inset) - 9px); justify-content: flex-start; } /* the icon on the bar's one left edge */
 .side-row:hover { background: var(--bg-hover); color: var(--text); }
+.side-row.active { background: var(--bg-active); color: var(--heading); font-weight: 500; }
 .mono-chip { font-size: calc(11.5px * var(--ui-scale, 1)); font-weight: 600; letter-spacing: -.01em; color: var(--text-muted); }
 
 /* completions in a plain text box (lib/textarea-complete.ts): the capture boxes */
@@ -115,26 +117,26 @@
 .image-peek.tikz-peek > svg { display: block; overflow: visible; }
 :root:not([data-theme="light"]) .image-peek.tikz-peek > svg { filter: invert(.9) hue-rotate(180deg); }
 /* vertical tabs: the side column's header is the side panel's row of tools (SideHead.svelte), not tabs */
-.dockview-theme-atlas .atlas-side-group .dv-tabs-container,
-.dockview-theme-atlas .atlas-side-group .dv-void-container,
-.dockview-theme-atlas .atlas-side-group .dv-right-actions-container { display: none; }
-.dockview-theme-atlas .atlas-side-group .dv-pre-actions-container { flex: 1; min-width: 0; }
-.dockview-theme-atlas .atlas-side-group .dv-tabs-and-actions-container { height: auto; background: transparent; border-bottom: 0; overflow: visible; }
-.dockview-theme-atlas .atlas-side-group .side-head-row { padding-left: 6px; }
+.dockview-theme-kandinsky .kandinsky-side-group .dv-tabs-container,
+.dockview-theme-kandinsky .kandinsky-side-group .dv-void-container,
+.dockview-theme-kandinsky .kandinsky-side-group .dv-right-actions-container { display: none; }
+.dockview-theme-kandinsky .kandinsky-side-group .dv-pre-actions-container { flex: 1; min-width: 0; }
+.dockview-theme-kandinsky .kandinsky-side-group .dv-tabs-and-actions-container { height: auto; background: transparent; border-bottom: 0; overflow: visible; }
+.dockview-theme-kandinsky .kandinsky-side-group .side-head-row { padding-left: 6px; }
 /* the side panel is one row (SideHead.svelte): each tool's own heading is hidden there, its "+" lists it */
 [data-testid="side-panel"] .sp-tool .side-pane > .side-head,
-.dockview-theme-atlas .atlas-side-group .dv-content-container .side-pane > .side-head { display: none; }
+.dockview-theme-kandinsky .kandinsky-side-group .dv-content-container .side-pane > .side-head { display: none; }
 
 /* a split's halves: each one's × in its corner, shown on hover (lib/tabs.svelte.ts halfCloses) */
-.vtabs .dockview-theme-atlas .dv-groupview { position: relative; }
+.vtabs .dockview-theme-kandinsky .dv-groupview { position: relative; }
 .half-close { position: absolute; top: 6px; right: 6px; z-index: 6; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%;
   color: var(--text-muted); background: var(--bg-elev); border: 1px solid var(--border-strong); opacity: 0; transition: opacity .12s; cursor: pointer; }
 .dv-groupview:hover > .half-close, .half-close:focus-visible { opacity: 1; }
 .half-close:hover { color: var(--text); background: var(--bg-hover); }
 
 /* a drawing's zen (panes/Excalidraw.svelte setZen): the page alone — no tab bar, not even fullscreen's icons, no status */
-html.atlas-zen .shell .main > :not(.work), html.atlas-zen .shell .status { display: none !important; }
-html.atlas-zen .shell .dock { inset: 0; }
+html.kandinsky-zen .shell .main > :not(.work), html.kandinsky-zen .shell .status { display: none !important; }
+html.kandinsky-zen .shell .dock { inset: 0; }
 
 /* glance mode (lib/where.svelte.ts): following another device — what it shows alone, none of the app around it, the
    page as large as the window lets it be */

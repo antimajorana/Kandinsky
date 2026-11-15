@@ -176,7 +176,7 @@ export function startColor(c: PenColor | undefined): string {
 
 /** This device's last choices (pen, paper): a convenience, so anything going wrong here only forgets them. */
 export function remembered<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
-  const v = loadRaw(`atlas.draw.${key}`) as T | null;
+  const v = loadRaw(`kandinsky.draw.${key}`) as T | null;
   return v && allowed.includes(v) ? v : fallback;
 }
-export function remember(key: string, v: string): void { saveRaw(`atlas.draw.${key}`, v); }
+export function remember(key: string, v: string): void { saveRaw(`kandinsky.draw.${key}`, v); }

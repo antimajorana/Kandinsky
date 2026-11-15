@@ -6,19 +6,19 @@ import { fileURLToPath } from "node:url";
 // The example plugin of the repo (plugins/examples/ttrpg/) is real code, not documentation that
 // rots: it is installed into the test vault as it is and used — stat block, dice, the initiative
 // block, a session note in its folder, its settings form.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const read = async (r: APIRequestContext, path: string) => ((await (await r.get(`/api/file?path=${encodeURIComponent(path)}`, { headers: H })).json()) as { text?: string }).text ?? "";
 const example = (f: string) => readFileSync(fileURLToPath(new URL(`../../plugins/examples/ttrpg/${f}`, import.meta.url)), "utf8");
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/ttrpg-example/main.js", example("main.js"));
-  await put(request, ".atlas/plugins/ttrpg-example/plugin.toml", example("plugin.toml"));
+  await put(request, ".kandinsky/plugins/ttrpg-example/main.js", example("main.js"));
+  await put(request, ".kandinsky/plugins/ttrpg-example/plugin.toml", example("plugin.toml"));
   await put(request, "campaigns/cast/Mira.md", "---\ntype: character\ninitiative: 17\n---\n# Mira\n");
   await put(request, "campaigns/cast/Brok.md", "---\ntype: character\ninitiative: 4\n---\n# Brok\n");
   await put(request, "campaigns/Ambush.md", "# Ambush\n\n```statblock\nname: Goblin boss\nac: 17\nhp: 6d6\n```\n\n```view\ntype: ttrpg.initiative\n```\n\nend\n");
 });
-test.afterAll(async ({ request }) => { await put(request, ".atlas/plugins/ttrpg-example/main.js", "export function register() {}\n"); });
+test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/ttrpg-example/main.js", "export function register() {}\n"); });
 
 test("the example TTRPG plugin: a stat block with dice, the initiative list, a session note in its folder", async ({ page, request }) => {
   await page.goto("/");
@@ -38,7 +38,7 @@ test("the example TTRPG plugin: a stat block with dice, the initiative list, a s
   expect(total).toBeLessThanOrEqual(36);
 
   // the initiative block: characters by their property, highest first
-  const order = note.locator(".atlas-block.own button span");
+  const order = note.locator(".kandinsky-block.own button span");
   await expect(order).toHaveText(["Mira", "Brok"]);
 
   // a session note goes to the folder of the plugin's setting, not to the vault's root

@@ -3,12 +3,13 @@ use crate::api::{EntryKind, FileText, FileWrite, FileWritten, Mtime, TreeEntry};
 use crate::{Error, Result, Workspace};
 use crate::vault_write;
 
-/// A save writes beside the file as `.<name>.atlas-tmp-<pid>-<nanos>` and renames it into place.
-pub(crate) const WRITE_TMP: &str = ".atlas-tmp-";
+/// A save writes beside the file as `.<name>.kandinsky-tmp-<pid>-<nanos>` and renames it into place.
+pub(crate) const WRITE_TMP: &str = ".kandinsky-tmp-";
 /// Is this path such a temporary file? (They live for a moment; lists of the user's files skip them.)
+/// Helpers built before the rename still write `.<name>.atlas-tmp-…` ([`crate::legacy::WRITE_TMP`]).
 pub fn is_write_tmp(rel: &str) -> bool {
     let name = rel.rsplit('/').next().unwrap_or(rel);
-    name.starts_with('.') && name.contains(WRITE_TMP)
+    name.starts_with('.') && (name.contains(WRITE_TMP) || name.contains(crate::legacy::WRITE_TMP))
 }
 
 pub const MAX_TEXT_BYTES: u64 = 5 * 1024 * 1024;
@@ -32,7 +33,7 @@ fn unshown(path: &std::path::Path) -> bool {
     let mut head = [0u8; 4096];
     let n = std::fs::File::open(path).and_then(|mut f| f.read(&mut head)).unwrap_or(0);
     let text = String::from_utf8_lossy(&head[..n]);
-    let Some(fm) = atlas_text::frontmatter::yaml_head(&text) else { return false };
+    let Some(fm) = kandinsky_text::frontmatter::yaml_head(&text) else { return false };
     fm.lines().any(|l| l.trim_end() == "shown: false")
 }
 
@@ -63,6 +64,15 @@ fn unshown_cached(path: &std::path::Path, meta: &std::fs::Metadata) -> bool {
     v
 }
 
+/// Refuses a path that names the state folder of an earlier build left beside the one in use (`state_dir::stale_twin`):
+/// it resolves to the folder in use, so trashing or moving "the old one" would take the live settings and plugins.
+fn left_twin(ws: &Workspace, rel: &str) -> Result<()> {
+    if crate::state_dir::names_stale_twin(ws.root(), rel) {
+        return Err(Error::BadRequest(format!("{rel}: the state folder of an earlier build, left beside {}; it is not changed from here", crate::state_dir::STATE_DIR)));
+    }
+    Ok(())
+}
+
 /// One directory level, dirs first then by name. Ignored and hidden entries per `[files]` config; `all_hidden`: the
 /// dotfiles too (the explorers' "Show hidden files", which then hide them by the same rule in the UI).
 pub fn tree(ws: &Workspace, rel: &str, all_hidden: bool) -> Result<Vec<TreeEntry>> {
@@ -72,10 +82,15 @@ pub fn tree(ws: &Workspace, rel: &str, all_hidden: bool) -> Result<Vec<TreeEntry
         return Err(Error::NotFound(rel.into()));
     }
     let mut out = Vec::new();
+    // at the top, the state folder of an earlier build left beside the one in use is not listed: its path means the other
+    let twin = if dir == ws.root() { crate::state_dir::stale_twin(ws.root()) } else { None };
     for entry in std::fs::read_dir(&dir)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        let hidden = name.starts_with('.') && name != ".atlas";
+        if twin.is_some_and(|t| name.eq_ignore_ascii_case(t)) {
+            continue;
+        }
+        let hidden = name.starts_with('.') && !crate::state_dir::is_name(&name);
         if name == ".git" || is_write_tmp(&name) || (hidden && !cfg.files.show_hidden && !all_hidden) {
             continue;
         }
@@ -142,14 +157,14 @@ pub enum Guard {
 }
 
 /// Where the untouched original of a binary file is kept before its first overwrite.
-pub const ORIGINALS_DIR: &str = ".atlas/originals";
+pub const ORIGINALS_DIR: &str = ".kandinsky/originals";
 
 /// Binary write (annotated PDFs). Before the first overwrite of a file, its original is kept under
-/// `.atlas/originals/<rel>` — a hard link when possible, so it costs no space.
+/// `.kandinsky/originals/<rel>` — a hard link when possible, so it costs no space.
 pub fn write_raw(ws: &Workspace, rel: &str, bytes: &[u8], base_mtime: Option<Mtime>) -> Result<FileWritten> {
     let path = ws.resolve(rel)?;
     if path.is_file() {
-        let keep = ws.root().join(ORIGINALS_DIR).join(rel);
+        let keep = crate::state_dir::join(ws.root(), ORIGINALS_DIR).join(rel);
         if !keep.exists() {
             vault_write::link_or_copy(&path, &keep)?;
         }
@@ -254,9 +269,9 @@ mod tests {
 
     #[test]
     fn a_save_in_flight_is_recognised_and_a_users_dotfile_is_not() {
-        assert!(is_write_tmp(".atlas/.bookmarks.yaml.atlas-tmp-3410544-1791934156284501517"));
-        assert!(is_write_tmp(".note.md.atlas-tmp-1-2"));
-        assert!(!is_write_tmp("notes/atlas-tmp-ideas.md"));
+        assert!(is_write_tmp(".kandinsky/.bookmarks.yaml.kandinsky-tmp-3410544-1791934156284501517"));
+        assert!(is_write_tmp(".note.md.kandinsky-tmp-1-2"));
+        assert!(!is_write_tmp("notes/kandinsky-tmp-ideas.md"));
         assert!(!is_write_tmp(".gitignore"));
     }
 
@@ -264,7 +279,7 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let root = d.path();
         std::fs::create_dir_all(root.join("notes")).unwrap();
-        std::fs::create_dir_all(root.join(".atlas")).unwrap();
+        std::fs::create_dir_all(root.join(".kandinsky")).unwrap();
         std::fs::create_dir_all(root.join(".git")).unwrap();
         std::fs::create_dir_all(root.join("runs/big")).unwrap();
         std::fs::write(root.join("b.md"), "b").unwrap();
@@ -324,14 +339,14 @@ mod tests {
         let (_d, w) = ws();
         let entries = tree(&w, "", false).unwrap();
         let names: Vec<_> = entries.iter().map(|e| e.name.as_str()).collect();
-        assert_eq!(names, [".atlas", "notes", "runs", "A.md", "b.md"]);
+        assert_eq!(names, [".kandinsky", "notes", "runs", "A.md", "b.md"]);
         assert!(entries.iter().all(|e| e.ignored == (e.name == "runs")));
         let all: Vec<_> = tree(&w, "", true).unwrap().into_iter().map(|e| e.name).collect();
         assert!(all.contains(&".hidden".to_string()) && !all.contains(&".git".to_string()), "asked: dotfiles too, never .git");
-        std::fs::write(w.root().join(".atlas/config.toml"), "[files]\nshow_ignored = false\nshow_hidden = true\n")
+        std::fs::write(w.root().join(".kandinsky/config.toml"), "[files]\nshow_ignored = false\nshow_hidden = true\n")
             .unwrap();
         let names: Vec<_> = tree(&w, "", false).unwrap().into_iter().map(|e| e.name).collect();
-        assert_eq!(names, [".atlas", "notes", ".hidden", "A.md", "b.md"], ".git stays hidden always");
+        assert_eq!(names, [".kandinsky", "notes", ".hidden", "A.md", "b.md"], ".git stays hidden always");
     }
 
     #[test]
@@ -426,6 +441,8 @@ pub fn put_bytes(ws: &Workspace, rel: &str, bytes: &[u8], replace: bool) -> Resu
 
 /// Move / rename inside the workspace; never overwrites (409).
 pub fn move_path(ws: &Workspace, from: &str, to: &str) -> Result<()> {
+    left_twin(ws, from)?;
+    left_twin(ws, to)?;
     let (a, b) = (ws.resolve(from)?, ws.resolve(to)?);
     if !a.exists() || a == ws.root() {
         return Err(Error::NotFound(from.into()));
@@ -436,7 +453,7 @@ pub fn move_path(ws: &Workspace, from: &str, to: &str) -> Result<()> {
     vault_write::rename(&a, &b)?;
     // a drawing's companion note follows it; a failure there never undoes the move
     if let Err(e) = crate::drawing_note::moved(ws, from, to) {
-        eprintln!("atlas: the note of {from} did not follow it to {to}: {e}");
+        eprintln!("kandinsky: the note of {from} did not follow it to {to}: {e}");
     }
     Ok(())
 }
@@ -448,15 +465,16 @@ fn case_only(a: &std::path::Path, b: &std::path::Path) -> bool {
 }
 
 /// Delete = to the desktop Trash (platform/trash.rs: gio, Finder, the Recycle Bin; recoverable from the file manager);
-/// without one, into `.atlas/trash/<timestamp>/` (still recoverable). Never a hard delete.
+/// without one, into `.kandinsky/trash/<timestamp>/` (still recoverable). Never a hard delete.
 pub fn trash(ws: &Workspace, rel: &str) -> Result<String> {
+    left_twin(ws, rel)?;
     let p = ws.resolve(rel)?;
     // the resolved path, not the text: `.` or `./` is the vault itself
     if !p.exists() || p == ws.root() {
         return Err(Error::NotFound(rel.into()));
     }
-    // tests never touch the user's desktop Trash (ATLAS_VAULT_TRASH: the e2e server, whose vault may sit on the home disk)
-    if !cfg!(test) && std::env::var_os("ATLAS_VAULT_TRASH").is_none() {
+    // tests never touch the user's desktop Trash (KANDINSKY_VAULT_TRASH: the e2e server, whose vault may sit on the home disk)
+    if !cfg!(test) && crate::env::var_os("VAULT_TRASH").is_none() {
         let kind = if p.is_dir() { vault_write::WriteKind::RemoveDir } else { vault_write::WriteKind::Remove };
         // no system Trash, or one that refused, is an error, not a success: the guard then hands the mirror's lease back
         // with the file as it is, instead of telling the server it is gone (the vault's trash below would then be
@@ -478,19 +496,19 @@ pub fn trash(ws: &Workspace, rel: &str) -> Result<String> {
     Ok(to.rsplit_once(&format!("/{}", rel.trim_matches('/'))).map_or(to.clone(), |(stamp, _)| stamp.to_string()))
 }
 
-/// Moves `rel` (a file or folder of the vault) to `.atlas/trash/<stamp>/<rel>` and says where, vault-relative: the one
+/// Moves `rel` (a file or folder of the vault) to `.kandinsky/trash/<stamp>/<rel>` and says where, vault-relative: the one
 /// way anything goes to the vault's trash. A path this second already put there gets a stamp of its own (`-1`…): a
 /// rename would replace it.
 pub(crate) fn to_vault_trash(root: &std::path::Path, rel: &str) -> Result<String> {
     let to = trash_slot(root, rel)?;
-    vault_write::rename(&root.join(rel), &root.join(&to))?;
+    vault_write::rename(&crate::state_dir::join(root, rel), &crate::state_dir::join(root, &to))?;
     Ok(to)
 }
 
-/// Lines taken out of `rel` (a deleted capture), kept as `.atlas/trash/<stamp>/<rel>`: recoverable as a file is.
+/// Lines taken out of `rel` (a deleted capture), kept as `.kandinsky/trash/<stamp>/<rel>`: recoverable as a file is.
 pub(crate) fn lines_to_vault_trash(root: &std::path::Path, rel: &str, lines: &str) -> Result<String> {
     let to = trash_slot(root, rel)?;
-    let abs = root.join(&to);
+    let abs = crate::state_dir::join(root, &to);
     if let Some(dir) = abs.parent() {
         vault_write::mkdir(dir)?;
     }
@@ -501,12 +519,12 @@ pub(crate) fn lines_to_vault_trash(root: &std::path::Path, rel: &str, lines: &st
     Ok(to)
 }
 
-/// A free `.atlas/trash/<stamp>/<rel>`, vault-relative.
+/// A free `.kandinsky/trash/<stamp>/<rel>`, vault-relative.
 fn trash_slot(root: &std::path::Path, rel: &str) -> Result<String> {
     let now = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
     (0..1000)
-        .map(|n| if n == 0 { format!(".atlas/trash/{now}/{rel}") } else { format!(".atlas/trash/{now}-{n}/{rel}") })
-        .find(|to| !root.join(to).exists())
+        .map(|n| if n == 0 { format!(".kandinsky/trash/{now}/{rel}") } else { format!(".kandinsky/trash/{now}-{n}/{rel}") })
+        .find(|to| !crate::state_dir::join(root, to).exists()) // the folder that is there (`.atlas` until migrated)
         .ok_or_else(|| Error::BadRequest("the trash is full for this second".into()))
 }
 

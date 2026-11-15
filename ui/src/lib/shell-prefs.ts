@@ -1,12 +1,12 @@
 // The shell's small per-machine choices (the sidebar's width and collapsed state, the left-bar side
-// panel's tool and whether it shows) in one file of the vault, `.atlas/cache/shell.json`, so the
+// panel's tool and whether it shows) in one file of the vault, `.kandinsky/cache/shell.json`, so the
 // desktop app and a browser tab on the same vault agree (docs/guides/SHELL.md). Each part still keeps its
 // copy in the browser's storage, but only to draw the first frame where it was; the file wins once
 // read. Like the layout, the file is read only when "reopen the last tabs at start" is on.
 import { api } from "./api";
 import { readText } from "./vault-files";
 
-const FILE = ".atlas/cache/shell.json";
+const FILE = ".kandinsky/cache/shell.json";
 type Part = { get: () => unknown; set: (v: Record<string, unknown>) => void };
 const parts = new Map<string, Part>();
 let loaded = false;
@@ -36,6 +36,6 @@ export function saveShellPrefs(): void {
   clearTimeout(t);
   t = setTimeout(() => {
     const all = Object.fromEntries([...parts].map(([name, p]) => [name, p.get()]));
-    void api.putFile(FILE, JSON.stringify(all, null, 1)).catch((e) => console.warn("[atlas] shell prefs not saved", e));
+    void api.putFile(FILE, JSON.stringify(all, null, 1)).catch((e) => console.warn("[kandinsky] shell prefs not saved", e));
   }, 400);
 }

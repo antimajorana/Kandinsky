@@ -23,7 +23,7 @@
   ]);
 </script>
 
-<div class="scopes atlas-seg" role="tablist" aria-label="Which notes the filter applies to">
+<div class="scopes kandinsky-seg" role="tablist" aria-label="Which notes the filter applies to">
   {#each tabs as t (t.id)}
     <button type="button" role="tab" class:on={scope === t.id} aria-selected={scope === t.id} onclick={() => (scope = t.id)}>
       {t.label}{#if t.n}<span class="n">{t.n}</span>{/if}

@@ -1,6 +1,6 @@
 //! The engine's state: the index, the accounts the last call described, logged-in IMAP connections kept between
 //! calls (at most two idle per account, checked with NOOP before reuse), the async runtime the network runs on, and
-//! the events the page listens to (`atlas.helper.on`).
+//! the events the page listens to (`kandinsky.helper.on`).
 
 use crate::account::{self, Account};
 use crate::imap::Imap;
@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 /// Where events go: the helper's stdout in the plugin, a list in tests.
 pub type Emit = dyn Fn(&str, Value) + Send + Sync;
-/// A POST to Atlas's API (`/api/…`, another plugin's tool among them): over the helper's pipe; a stand-in in tests.
+/// A POST to Kandinsky's API (`/api/…`, another plugin's tool among them): over the helper's pipe; a stand-in in tests.
 pub type Core = dyn Fn(&str, &Value) -> Result<Value, String> + Send + Sync;
 
 pub struct Mail {
@@ -27,7 +27,7 @@ pub struct Mail {
     core: Mutex<Arc<Core>>,
     /// the plugin's cache folder (attachments opened, the index)
     pub cache: PathBuf,
-    /// the vault (saved notes; written with atlas_plugin::write_file, through Atlas)
+    /// the vault (saved notes; written with kandinsky_plugin::write_file, through Kandinsky)
     pub root: PathBuf,
     /// the last call's settings and secrets: what background work uses
     params: Mutex<Value>,
@@ -53,7 +53,7 @@ impl Mail {
             rt,
             post,
             emit,
-            core: Mutex::new(Arc::new(|path: &str, body: &Value| atlas_plugin::Atlas::new().post(path, body).map_err(|e| e.to_string()))),
+            core: Mutex::new(Arc::new(|path: &str, body: &Value| kandinsky_plugin::Kandinsky::new().post(path, body).map_err(|e| e.to_string()))),
             cache,
             root,
             params: Mutex::new(json!({})),
@@ -200,7 +200,7 @@ impl Mail {
         self.syncing.lock().unwrap().contains(account)
     }
 
-    /// POSTs to Atlas's API (the Calendar plugin's tools: `/api/plugins/@calendar/tools/<name>`).
+    /// POSTs to Kandinsky's API (the Calendar plugin's tools: `/api/plugins/@calendar/tools/<name>`).
     pub fn core_post(&self, path: &str, body: &Value) -> Result<Value, String> {
         let f = self.core.lock().unwrap().clone();
         f(path, body)

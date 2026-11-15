@@ -72,7 +72,7 @@ export const PAGES: PageDef[] = [
       "editor.prose_font", "editor.prose_font_size", "editor.prose_line_height", "editor.prose_width",
       "editor.code_font", "editor.code_font_size", "editor.inline_title"],
     features: ["ui.theme", "ui.zoomIn", "ui.zoomOut", "ui.zoomReset", "ui.zoomAllIn", "ui.zoomAllOut", "ui.zoomAllReset", "ui.sidePanel", "ui.sidePanel.move", "ui.fullscreen", "ui.resetLayout"], panels: ["device", "preview", "apps", "snippets"],
-    next: [{ label: "Write a CSS snippet", why: "Restyle anything — a file in .atlas/snippets/ applies live on save.", run: "settings.newSnippet" }],
+    next: [{ label: "Write a CSS snippet", why: "Restyle anything — a file in .kandinsky/snippets/ applies live on save.", run: "settings.newSnippet" }],
   },
   {
     id: "writing", title: "Writing", group: "working", icon: "edit", blurb: "Notes in markdown: vim, links, citations, math, the / menu, properties, capture and templates. A plain note starts from the default template, which the New… list leaves out; a template's `template_title:` names it there and is never copied into its notes. A note open on two devices is edited together, live. In a note Ctrl+B is bold, Ctrl+I italic, Ctrl+K a link, Ctrl+Q turns a line into a list item or a to-do.",
@@ -103,7 +103,7 @@ export const PAGES: PageDef[] = [
     fields: ["web.*"], features: ["ui.web"],
   },
   {
-    id: "server", title: "Server", group: "connections", icon: "server", blurb: "Serving a vault to other machines and the phone (atlas serve --listen): who may sign in, the password, device tokens.",
+    id: "server", title: "Server", group: "connections", icon: "server", blurb: "Serving a vault to other machines and the phone (kandinsky serve --listen): who may sign in, the password, device tokens.",
     fields: [], features: [], panels: ["server"], only: ["browser"],
   },
   {
@@ -131,7 +131,7 @@ export const PAGES: PageDef[] = [
     id: "plugins", title: "Plugins", group: "plugins", icon: "plugin", blurb: "The plugins in this vault: switch one on or off, open its page (its settings, problems and actions), install, update or remove. Their sign-ins are under Accounts.",
     fields: [], features: [], panels: ["plugins"],
     next: [
-      { label: "Write a plugin", why: "A folder in .atlas/plugins/ with a view.js and an optional data script; reloads on save.", run: "settings.pluginHelp" },
+      { label: "Write a plugin", why: "A folder in .kandinsky/plugins/ with a view.js and an optional data script; reloads on save.", run: "settings.pluginHelp" },
       { label: "Make a block of your own", why: "A block for notes and pages from a template: one file, with its options form.", run: "settings.newBlock" },
     ],
   },
@@ -141,7 +141,7 @@ export const PAGES: PageDef[] = [
     next: [{ label: "Turn a shell line into a command", why: "A command gets a palette entry, a shortcut and an optional schedule.", run: "ui.commands" }],
   },
   {
-    id: "agents", title: "AI agents", group: "connections", icon: "claude", blurb: "Claude Code and other agents drive Kandinsky through `atlas mcp`. Each one you allow gets a token of its own, which you can revoke alone.",
+    id: "agents", title: "AI agents", group: "connections", icon: "claude", blurb: "Claude Code and other agents drive Kandinsky through `kandinsky mcp`. Each one you allow gets a token of its own, which you can revoke alone.",
     fields: [], features: [], panels: ["agents"], only: ["app"],
   },
   {

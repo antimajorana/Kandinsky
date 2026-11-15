@@ -18,31 +18,31 @@ type Speller = ReturnType<typeof nspell>;
 /** word → [uses, notes using it], per language */
 type Counts = Map<string, Map<string, [number, number]>>;
 
-export async function register(atlas: PluginApi) {
-  const { state: S, view: V, language } = atlas.editor.codemirror;
-  const setting = (k: string) => atlas.plugin.settings[k];
+export async function register(kandinsky: PluginApi) {
+  const { state: S, view: V, language } = kandinsky.editor.codemirror;
+  const setting = (k: string) => kandinsky.plugin.settings[k];
   const minUses = () => Number(setting("min_uses") ?? 3);
   const minNotes = () => Number(setting("min_notes") ?? 2);
 
   /** A notice said once on this device (a page per pane or window would each say it again). */
   const tellOnce = (key: string, text: string) => {
-    const k = `atlas.spelling.told.${key}`;
+    const k = `kandinsky.spelling.told.${key}`;
     try { if (localStorage.getItem(k)) return; localStorage.setItem(k, "1"); } catch { /* no storage: say it */ }
-    atlas.toast("Spelling", text, "info");
+    kandinsky.toast("Spelling", text, "info");
   };
 
   // --- what is known -------------------------------------------------------------------------------------------
-  const installed: string[] = ((await atlas.helper.call("dictionaries", { folder: setting("folder") }).catch(() => [])) as string[]) ?? [];
+  const installed: string[] = ((await kandinsky.helper.call("dictionaries", { folder: setting("folder") }).catch(() => [])) as string[]) ?? [];
   /** language → dictionary names, from the setting (`en=en_GB, es=es_MX+es_AR`) over the preferred installed ones */
   const chosen = chooseDictionaries(installed, setting("dictionaries"));
   const langs = [...chosen.keys()];
   const fallback = String(setting("language") || langs[0] || "en");
   const NAMES: Record<string, string> = { en: "English", es: "Spanish", fr: "French", de: "German", it: "Italian", pt: "Portuguese", ca: "Catalan", nl: "Dutch" };
-  if (!installed.length) tellOnce("no-dictionary", "No Hunspell dictionary here, nor in the vault's .atlas/dictionaries: only the vault's own words are known, so nothing is marked. Open the vault once on a computer that has one (Settings → Spelling keeps it in the vault), or name a folder there.");
+  if (!installed.length) tellOnce("no-dictionary", "No Hunspell dictionary here, nor in the vault's .kandinsky/dictionaries: only the vault's own words are known, so nothing is marked. Open the vault once on a computer that has one (Settings → Spelling keeps it in the vault), or name a folder there.");
   // a machine with the dictionaries in use copies them into the vault, for the server and the phone (none of their own)
   if (setting("keep_in_vault") !== false && chosen.size)
-    void (atlas.helper.call("keep", { names: [...new Set([...chosen.values()].flat())], folder: setting("folder") }, { timeout: 120 }) as Promise<string[]>)
-      .then((kept) => { if (kept.length) console.info(`spelling: kept ${kept.join(", ")} in the vault (.atlas/dictionaries) for the devices that have none`); })
+    void (kandinsky.helper.call("keep", { names: [...new Set([...chosen.values()].flat())], folder: setting("folder") }, { timeout: 120 }) as Promise<string[]>)
+      .then((kept) => { if (kept.length) console.info(`spelling: kept ${kept.join(", ")} in the vault (.kandinsky/dictionaries) for the devices that have none`); })
       .catch((e) => console.warn("spelling: the dictionaries were not kept in the vault:", e));
 
   /** A language's dictionaries, loaded the first time a note in it is shown: null until they are there. */
@@ -54,7 +54,7 @@ export async function register(atlas: PluginApi) {
     if (!names) return null;
     spellers.set(lang, "loading");
     freqOf(lang); // its frequencies, for ranking suggestions, load beside it
-    void Promise.all(names.map((name) => atlas.helper.call("dictionary", { name, folder: setting("folder") }, { timeout: 60 }) as Promise<{ aff: string; dic: string }>))
+    void Promise.all(names.map((name) => kandinsky.helper.call("dictionary", { name, folder: setting("folder") }, { timeout: 60 }) as Promise<{ aff: string; dic: string }>))
       .then((dicts) => { spellers.set(lang, dicts.map(({ aff, dic }) => nspell(aff, dic))); redrawAll(); })
       .catch((e) => { console.warn(`spelling: ${names.join(", ")} did not load:`, e); spellers.delete(lang); });
     return null;
@@ -63,8 +63,8 @@ export async function register(atlas: PluginApi) {
   /** The language's general frequencies (plugin API v26), for ranking suggestions: undefined until loaded. */
   const freqs = new Map<string, WordFreq | null>();
   const freqOf = (lang: string): WordFreq | undefined => {
-    if (!atlas.editor.words) return undefined;
-    if (!freqs.has(lang)) { freqs.set(lang, null); void atlas.editor.words(lang).then((w) => freqs.set(lang, w)).catch(() => {}); }
+    if (!kandinsky.editor.words) return undefined;
+    if (!freqs.has(lang)) { freqs.set(lang, null); void kandinsky.editor.words(lang).then((w) => freqs.set(lang, w)).catch(() => {}); }
     return freqs.get(lang) ?? undefined;
   };
   /** What suggestions are made from, for a language: its dictionaries, the vault's uses, the language's frequencies. */
@@ -76,7 +76,7 @@ export async function register(atlas: PluginApi) {
   const counts: Counts = new Map();
   let accepted = new Set<string>();
   const readAccepted = async () => {
-    accepted = (await atlas.exists(WORDS_NOTE)) ? parseWords(await atlas.readText(WORDS_NOTE)) : new Set();
+    accepted = (await kandinsky.exists(WORDS_NOTE)) ? parseWords(await kandinsky.readText(WORDS_NOTE)) : new Set();
     redrawAll();
   };
 
@@ -91,11 +91,11 @@ export async function register(atlas: PluginApi) {
     }
   };
   const vault = vaultCounter<Counted>(
-    async (paths) => (await atlas.helper.call("count", { paths, langs: langs.length ? langs : [fallback], fallback })) as Record<string, Counted>,
+    async (paths) => (await kandinsky.helper.call("count", { paths, langs: langs.length ? langs : [fallback], fallback })) as Record<string, Counted>,
     apply, "spelling");
   const countVault = async () => {
     // what is learned shows as it comes
-    await vault.countAll((await atlas.helper.call("notes")) as string[], (done) => { if (done % 200 === 0) redrawAll(); });
+    await vault.countAll((await kandinsky.helper.call("notes")) as string[], (done) => { if (done % 200 === 0) redrawAll(); });
     redrawAll();
   };
 
@@ -136,10 +136,10 @@ export async function register(atlas: PluginApi) {
 
   // --- the bottom bar: the note's language and what is marked; a click opens the Spelling panel (panel.ts) ---------
   let shown: EditorView | null = null;
-  const cell = atlas.shell.statusItem({
+  const cell = kandinsky.shell.statusItem({
     id: "spelling", text: "", title: "Spelling", panelWidth: 420,
     // before plugin API 27 a click runs this: the settings, where the language and dictionaries are
-    run: () => atlas.plugin.openSettings(),
+    run: () => kandinsky.plugin.openSettings(),
     panel: (host, close) => { if (shown) drawPanel(host, () => panelModel(shown!), actions(shown, close)); },
   });
   /** Every word marked in the whole note, not only on screen, with its likeliest fixes. */
@@ -170,14 +170,14 @@ export async function register(atlas: PluginApi) {
     };
   }
   const editWords = async (change: (text: string) => string) => {
-    const text = (await atlas.exists(WORDS_NOTE)) ? await atlas.readText(WORDS_NOTE) : "";
-    await atlas.writeText(WORDS_NOTE, change(text));
+    const text = (await kandinsky.exists(WORDS_NOTE)) ? await kandinsky.readText(WORDS_NOTE) : "";
+    await kandinsky.writeText(WORDS_NOTE, change(text));
     await readAccepted();
   };
   const learnedIn = (lang: string) => [...(counts.get(lang)?.values() ?? [])].filter(([u, n]) => (u >= minUses() && n >= minNotes()) || u >= 8).length;
 
   // --- Settings → Spelling: the languages, the main one, your words (panel.ts drawSettings) ---------------------------
-  atlas.plugin.registerSettingsSection?.({ id: "words", title: "Languages and words", place: "before",
+  kandinsky.plugin.registerSettingsSection?.({ id: "words", title: "Languages and words", place: "before",
     hint: "What this machine's dictionaries give and the words you added; the form below has the finer settings.",
     mount: (host, ctx) => drawSettings(host, () => {
       const used = new Set([...chosen.values()].flat());
@@ -197,15 +197,15 @@ export async function register(atlas: PluginApi) {
     // a mail being written is not a file: its language stays guessed
     setLang: (l: string) => {
       close();
-      const path = atlas.editor.path(view);
-      void atlas.exists(path).then((is) => is ? atlas.writeProperty(path, "lang", l) : atlas.toast("Spelling", "This text is not a note, so it has no lang: property: its language is guessed from its words.", "info"));
+      const path = kandinsky.editor.path(view);
+      void kandinsky.exists(path).then((is) => is ? kandinsky.writeProperty(path, "lang", l) : kandinsky.toast("Spelling", "This text is not a note, so it has no lang: property: its language is guessed from its words.", "info"));
     },
     select: (m: Marked) => { close(); view.dispatch({ selection: { anchor: m.from, head: m.to }, scrollIntoView: true }); view.focus(); },
     // the note may have changed since the panel was drawn: only the same word at the same place is replaced
     fix: (m: Marked, by: string) => { if (view.state.sliceDoc(m.from, m.to) === m.word) view.dispatch({ changes: { from: m.from, to: m.to, insert: by }, userEvent: "input.spelling" }); },
     add: (word: string) => editWords((t) => addWord(t, word)),
     remove: (word: string) => editWords((t) => removeWord(t, word)),
-    settings: () => { close(); atlas.plugin.openSettings(); },
+    settings: () => { close(); kandinsky.plugin.openSettings(); },
   });
   function status(view: EditorView, lang: string, marked: number) {
     if (!view.hasFocus && shown && shown !== view && views.has(shown)) return;
@@ -216,7 +216,7 @@ export async function register(atlas: PluginApi) {
       `Spelling: ${NAMES[lang] ?? lang} (${dicts}), ${langProperty(view) ? "from the note's lang: property" : "guessed from its words"}. `
       + `${marked} word${marked === 1 ? "" : "s"} marked on screen; ${learned} words learned from the vault, ${accepted.size} added by you. Click for the panel: the language, the marked words and their fixes, your words.`);
   }
-  const isNote = (view: EditorView) => /\.(md|markdown)$/i.test(atlas.editor.path(view));
+  const isNote = (view: EditorView) => /\.(md|markdown)$/i.test(kandinsky.editor.path(view));
 
   /** The marked words of the visible prose; the word the caret ends is left alone while it is being typed. */
   function marks(view: EditorView): DecorationSet {
@@ -278,12 +278,12 @@ export async function register(atlas: PluginApi) {
     const lang = noteLanguage(view);
     if (word && isNote(view) && !aName(view, word) && wrong(lang, word.word)) pointed = { view, word, lang };
   }
-  atlas.editor.extension([
+  kandinsky.editor.extension([
     plugin,
     V.EditorView.baseTheme({ ".cm-spell-miss": { textDecoration: "underline wavy var(--red)", textDecorationThickness: "1px", textUnderlineOffset: "3px", textDecorationSkipInk: "none" } }),
   ]);
 
-  atlas.shell.menu("editor", () => {
+  kandinsky.shell.menu("editor", () => {
     const p = pointed;
     if (!p) return [];
     const s = speller(p.lang);
@@ -296,10 +296,10 @@ export async function register(atlas: PluginApi) {
     ];
   });
 
-  atlas.onFilesChanged((paths) => {
+  kandinsky.onFilesChanged((paths) => {
     if (!paths.length || paths.includes(WORDS_NOTE)) void readAccepted();
     // a saved note: its counts replaced (after the first count, which reads every note anyway)
-    const notes = paths.filter((p) => /\.md$/i.test(p) && !p.startsWith(".atlas/"));
+    const notes = paths.filter((p) => /\.md$/i.test(p) && !p.startsWith(".kandinsky/"));
     if (vault.counted && notes.length) void vault.count(notes).then(redrawAll);
   });
   await readAccepted();

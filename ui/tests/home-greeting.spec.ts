@@ -3,17 +3,17 @@ import { openFile } from "./open";
 import { readFileSync } from "node:fs";
 
 // Home:
-// plugins add chips under the date (`atlas.shell.greetingItem`); Activity lists what was made; the Today plugin's map.
-const H = { "x-atlas": "1" };
+// plugins add chips under the date (`kandinsky.shell.greetingItem`); Activity lists what was made; the Today plugin's map.
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const today = (f: string) => readFileSync(new URL(`../../plugins/beta/today/${f}`, import.meta.url), "utf8");
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/greet-test/plugin.toml", 'title = "Greet test"\napi = 4\n');
-  await put(request, ".atlas/plugins/greet-test/main.js", 'export function register(atlas) { atlas.shell.greetingItem({ id: "sky", icon: "⛅", text: "12 °C · Oslo", order: 1 }); }\n');
-  await put(request, ".atlas/plugins/today/plugin.toml", 'title = "Today"\napi = 4\n');
-  await put(request, ".atlas/plugin-settings/today.toml", 'language = "en"\n'); // the vault's values, never in the manifest
-  for (const f of ["home.js", "daily.js", "main.js"]) await put(request, `.atlas/plugins/today/${f}`, today(f)); // main.js last: it imports the others
+  await put(request, ".kandinsky/plugins/greet-test/plugin.toml", 'title = "Greet test"\napi = 4\n');
+  await put(request, ".kandinsky/plugins/greet-test/main.js", 'export function register(kandinsky) { kandinsky.shell.greetingItem({ id: "sky", icon: "⛅", text: "12 °C · Oslo", order: 1 }); }\n');
+  await put(request, ".kandinsky/plugins/today/plugin.toml", 'title = "Today"\napi = 4\n');
+  await put(request, ".kandinsky/plugin-settings/today.toml", 'language = "en"\n'); // the vault's values, never in the manifest
+  for (const f of ["home.js", "daily.js", "main.js"]) await put(request, `.kandinsky/plugins/today/${f}`, today(f)); // main.js last: it imports the others
   await put(request, "notes/map/Physics.md", "# Physics\n");
   await put(request, "notes/map/Optics.md", "---\ntopics: [\"[[Physics]]\"]\n---\n# Optics\n");
   await put(request, "notes/map/Lasers.md", "---\ntopics: [\"[[Physics]]\", \"[[Optics]]\"]\n---\n# Lasers\n");
@@ -21,7 +21,7 @@ test.beforeAll(async ({ request }) => {
   await put(request, "notes/map/Mechanics.md", "---\ntopics: [\"[[Physics]]\"]\n---\n# Mechanics\n");
 });
 test.afterAll(async ({ request }) => {
-  for (const p of ["greet-test", "today"]) await request.post(`/api/fs/trash?path=.atlas/plugins/${p}`, { headers: H });
+  for (const p of ["greet-test", "today"]) await request.post(`/api/fs/trash?path=.kandinsky/plugins/${p}`, { headers: H });
   await request.post("/api/fs/trash?path=notes/map", { headers: H });
 });
 
@@ -77,7 +77,7 @@ test("plugins put chips under the date; Activity says what was made; the map is 
   await openFile(page, "Areas.md");
   const areas = page.locator(".home-areas");
   await expect(areas.locator(".area", { hasText: "notes" }).first()).toBeVisible();
-  await expect(areas.locator(".area .head", { hasText: /^\.atlas/ })).toHaveCount(0);
+  await expect(areas.locator(".area .head", { hasText: /^\.kandinsky/ })).toHaveCount(0);
 });
 
 test("the log card's one button makes today's log from the template, then opens it", async ({ page, request }) => {

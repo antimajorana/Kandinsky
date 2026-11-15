@@ -1,6 +1,6 @@
 <script lang="ts">
   // The quick-capture window (docs/guides/CAPTURE.md): the app's page reduced to the one capture box
-  // (components/CaptureBox.svelte), opened by `atlas-app --capture` (a small frameless window, `ATLAS_CAPTURE=webview`)
+  // (components/CaptureBox.svelte), opened by `kandinsky-app --capture` (a small frameless window, `KANDINSKY_CAPTURE=webview`)
   // or in a browser at `/#capture`. Enter: written, where it went shown, the window gone; Esc: gone, nothing written.
   // No tabs, no dock: nothing of the app is mounted.
   import { onMount } from "svelte";
@@ -16,12 +16,12 @@
   let list = $state<VaultList | null>(null);
   let vault = $state("");
   let saved = $state("");
-  // this window's vault first (it need not be in the list: `atlas serve` on a folder leaves no trace there), then the known ones
+  // this window's vault first (it need not be in the list: `kandinsky serve` on a folder leaves no trace there), then the known ones
   const vaults = $derived(list ? [{ name: basename(list.current), path: list.current },
     ...list.vaults.filter((v) => !v.missing && v.path !== list!.current).map((v) => ({ name: v.name, path: v.path }))] : []);
 
-  /** The desktop app closes the window when it is sent here (crates/atlas-app: on_navigation); a browser tab simply stays. */
-  const close = () => { location.href = "/__atlas_close"; };
+  /** The desktop app closes the window when it is sent here (crates/kandinsky-app: on_navigation); a browser tab simply stays. */
+  const close = () => { location.href = "/__kandinsky_close"; };
 
   onMount(() => {
     document.title = "Kandinsky capture";

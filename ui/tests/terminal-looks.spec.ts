@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-// Claude Code's symbols (⎿ ⏺ ✻) are not in the bundled JetBrains Mono: "Atlas Term Symbols" (a subset of
+// Claude Code's symbols (⎿ ⏺ ✻) are not in the bundled JetBrains Mono: "Kandinsky Term Symbols" (a subset of
 // Adwaita Mono) supplies them at the same width, so they never come from a random wide fallback font.
 // And a click on the terminal's padding gives it the keys, like a click on its text.
 test("the terminal has a symbols font for Claude's glyphs, and its padding takes focus", async ({ page }) => {
@@ -9,14 +9,14 @@ test("the terminal has a symbols font for Claude's glyphs, and its padding takes
   const pane = page.locator(".term-pane").first();
   await expect(pane.locator(".xterm")).toBeVisible();
   const loaded = await page.evaluate(async () => {
-    await document.fonts.load('13px "Atlas Term Symbols"', "⎿⏺✻");
-    return document.fonts.check('13px "Atlas Term Symbols"', "⎿⏺✻");
+    await document.fonts.load('13px "Kandinsky Term Symbols"', "⎿⏺✻");
+    return document.fonts.check('13px "Kandinsky Term Symbols"', "⎿⏺✻");
   });
   expect(loaded).toBe(true);
   // same advance as the main font, or the glyph would push the cells after it
   const widths = await page.evaluate(() => {
     const c = document.createElement("canvas").getContext("2d")!;
-    c.font = '20px "Atlas Term Symbols"'; const sym = c.measureText("⎿").width;
+    c.font = '20px "Kandinsky Term Symbols"'; const sym = c.measureText("⎿").width;
     c.font = '20px "JetBrains Mono"'; const mono = c.measureText("M").width;
     return { sym, mono };
   });

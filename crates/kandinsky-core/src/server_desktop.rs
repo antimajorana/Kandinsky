@@ -1,6 +1,6 @@
 //! One core for every local vault of the desktop (docs/refactor/REFACTOR-one-core.md). Each vault on the vault list is at
 //! `/v/<name>/` of this core, started the first time it is asked for and kept warm after that, so a switch is a page
-//! load. A vault another Atlas already serves (a second window of an older run) is not started twice: two cores on one
+//! load. A vault another Kandinsky already serves (a second window of an older run) is not started twice: two cores on one
 //! vault would run its schedules twice.
 use super::{start_vault, AppState, VaultRun};
 use axum::extract::{OriginalUri, Request};
@@ -96,9 +96,9 @@ impl DesktopVaults {
 
     /// The other local vaults on the list, started one after another a while after the window's own: the first switch to
     /// one is then a page load, not a vault's start (its index, watcher and plugins). One that will not start, or that
-    /// another Atlas serves, is left for its first request to say why. A test's core starts nothing ahead.
+    /// another Kandinsky serves, is left for its first request to say why. A test's core starts nothing ahead.
     pub(super) async fn start_ahead(self: Arc<Self>, after: std::time::Duration) {
-        if std::env::var_os("ATLAS_NO_SCHEDULE").is_some() {
+        if crate::env::var_os("NO_SCHEDULE").is_some() {
             return;
         }
         tokio::time::sleep(after).await;

@@ -1,6 +1,6 @@
 //! WebDAV Push (bitfireAT's draft, as RustiCal and DAVx5 speak it): a calendar that offers the Web Push transport is
 //! subscribed with an ntfy topic as its push resource, and one stream from ntfy for all the topics says which calendar
-//! changed, so its account syncs at once. Atlas can't be reached from the server; ntfy can (a UnifiedPush
+//! changed, so its account syncs at once. Kandinsky can't be reached from the server; ntfy can (a UnifiedPush
 //! distributor: anyone may publish to an `up…` topic, only the user reads it). The message is encrypted to the
 //! subscription's key and never read: its arrival is the signal. The regular sync stays, as the draft asks.
 use crate::caldav::{Client, DavError};

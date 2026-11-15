@@ -1,5 +1,5 @@
 // The app's own questions (components/InputDialog.svelte): a yes/no, or a line of text. Themed, focus kept inside and
-// given back, Esc cancels; what commands and plugins (`atlas.confirm`, `atlas.input`) ask instead of window.confirm /
+// given back, Esc cancels; what commands and plugins (`kandinsky.confirm`, `kandinsky.input`) ask instead of window.confirm /
 // window.prompt, which are unthemed and blocked in some webviews.
 import { mount, unmount } from "svelte";
 import InputDialog from "../components/InputDialog.svelte";

@@ -14,9 +14,9 @@ const DEFAULT_MODELS = [
   { value: "gemini-4-hydrogen-low", label: "Gemini 4 Hydrogen (Low)", family: "Hydrogen" },
   { value: "gemini-pro-orchestrator", label: "Orchestrator (Carbon)", family: "Orchestrator" },
   { value: "gemini-pro-orchestrator-argon", label: "Orchestrator (Argon)", family: "Orchestrator" },
-  { value: "gemini-3.8-flash-high", label: "Gemini 3.8 Flash (High)", family: "Other" },
-  { value: "gemini-3.8-flash-medium", label: "Gemini 3.8 Flash (Medium)", family: "Other" },
-  { value: "gemini-3.8-flash-low", label: "Gemini 3.8 Flash (Low)", family: "Other" },
+  { value: "gemini-3.8-flash-high", label: "Gemini 3.8 Flash (High)", family: "Flash" },
+  { value: "gemini-3.8-flash-medium", label: "Gemini 3.8 Flash (Medium)", family: "Flash" },
+  { value: "gemini-3.8-flash-low", label: "Gemini 3.8 Flash (Low)", family: "Flash" },
   { value: "claude-opus-4-6-thinking", label: "Claude Opus 4.6 (Thinking)", family: "Other" },
   { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", family: "Other" },
   { value: "gpt-oss-120b-medium", label: "GPT-OSS 120B (Medium)", family: "Other" },
@@ -24,6 +24,8 @@ const DEFAULT_MODELS = [
 
 let cachedModels = null;
 let cachedModelsAt = 0;
+let cachedSpecialists = null;
+let cachedSpecialistsAt = 0;
 
 function inferFamily(slug, label) {
   const s = `${slug} ${label}`.toLowerCase();
@@ -31,7 +33,177 @@ function inferFamily(slug, label) {
   if (s.includes("carbon")) return "Carbon";
   if (s.includes("argon")) return "Argon";
   if (s.includes("hydrogen")) return "Hydrogen";
+  if (s.includes("flash")) return "Flash";
   return "Other";
+}
+
+function humanizeSpecialistTitle(id) {
+  return String(id || "")
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function unquoteYaml(val) {
+  let s = String(val || "").trim();
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1);
+    s = s.replace(/\\"/g, '"').replace(/\\n/g, " ");
+  }
+  return s.replace(/\s+/g, " ").trim();
+}
+
+function parseSpecialistMarkdown(raw, fileStem) {
+  const text = String(raw || "");
+  const fmMatch = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const fields = {};
+  if (fmMatch) {
+    const lines = fmMatch[1].split(/\r?\n/);
+    let currentKey = "";
+    for (let i = 0; i < lines.length; i++) {
+      const ln = lines[i];
+      const kv = ln.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
+      if (kv) {
+        currentKey = kv[1];
+        const rest = kv[2].trim();
+        if (rest === ">" || rest === "|") {
+          fields[currentKey] = "";
+        } else {
+          fields[currentKey] = rest;
+        }
+      } else if (currentKey && /^\s+/.test(ln)) {
+        fields[currentKey] = `${fields[currentKey] || ""} ${ln.trim()}`.trim();
+      } else {
+        currentKey = "";
+      }
+    }
+  }
+  const rawName = unquoteYaml(fields.name || fileStem).replace(/^@+/, "");
+  const id = rawName || String(fileStem || "").trim();
+  if (!id) return null;
+  const title = unquoteYaml(fields.title || "") || humanizeSpecialistTitle(id);
+  const description = unquoteYaml(fields.description || "");
+  const model = unquoteYaml(fields.model || "");
+  return {
+    id,
+    handle: `@${id}`,
+    title,
+    description,
+    ...(model ? { model } : {}),
+  };
+}
+
+async function listVaultSpecialists(params = {}) {
+  const now = Date.now();
+  if (!params.refresh && cachedSpecialists && now - cachedSpecialistsAt < 10000) {
+    return cachedSpecialists;
+  }
+
+  const nodeScript = `
+    const fs = require("node:fs");
+    const path = require("node:path");
+
+    function unquote(val) {
+      let s = String(val || "").trim();
+      if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+        s = s.slice(1, -1).replace(/\\\\"/g, '"').replace(/\\\\n/g, " ");
+      }
+      return s.replace(/\\s+/g, " ").trim();
+    }
+
+    function titleOf(id) {
+      return String(id || "")
+        .split(/[-_]+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+    }
+
+    const dir = path.join(process.cwd(), ".agents", "agents");
+    if (!fs.existsSync(dir)) {
+      process.stdout.write("[]");
+      process.exit(0);
+    }
+
+    const out = [];
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!ent.isFile() || !/\\.md$/i.test(ent.name)) continue;
+      const stem = ent.name.replace(/\\.md$/i, "");
+      let raw = "";
+      try { raw = fs.readFileSync(path.join(dir, ent.name), "utf8"); } catch { continue; }
+      const fm = raw.match(/^---\\r?\\n([\\s\\S]*?)\\r?\\n---/);
+      const fields = {};
+      if (fm) {
+        let curKey = "";
+        for (const ln of fm[1].split(/\\r?\\n/)) {
+          const kv = ln.match(/^([A-Za-z0-9_-]+)\\s*:\\s*(.*)$/);
+          if (kv) {
+            curKey = kv[1];
+            const rest = kv[2].trim();
+            fields[curKey] = (rest === ">" || rest === "|") ? "" : rest;
+          } else if (curKey && /^\\s+/.test(ln)) {
+            fields[curKey] = ((fields[curKey] || "") + " " + ln.trim()).trim();
+          } else {
+            curKey = "";
+          }
+        }
+      }
+      const id = unquote(fields.name || stem).replace(/^@+/, "") || stem;
+      if (!id) continue;
+      const title = unquote(fields.title || "") || titleOf(id);
+      const description = unquote(fields.description || "");
+      const model = unquote(fields.model || "");
+      const item = { id, handle: "@" + id, title, description };
+      if (model) item.model = model;
+      out.push(item);
+    }
+    out.sort((a, b) => a.id.localeCompare(b.id));
+    process.stdout.write(JSON.stringify(out));
+  `;
+
+  try {
+    const r = await kandinsky.exec("node", ["-e", nodeScript], { timeout: 6 });
+    if (r.status === 0 && r.stdout) {
+      const parsed = JSON.parse(String(r.stdout).trim() || "[]");
+      if (Array.isArray(parsed)) {
+        cachedSpecialists = parsed;
+        cachedSpecialistsAt = now;
+        return parsed;
+      }
+    }
+  } catch {}
+
+  // Fallback via Kandinsky vault API if node exec was unavailable
+  try {
+    const exists = await kandinsky.get("/api/exists", { path: ".agents/agents" });
+    if (!exists) {
+      cachedSpecialists = [];
+      cachedSpecialistsAt = now;
+      return [];
+    }
+    const entries = await kandinsky.get("/api/tree", { path: ".agents/agents", hidden: "true" });
+    const mdFiles = (Array.isArray(entries) ? entries : []).filter(
+      (e) => e && e.kind === "file" && /\.md$/i.test(String(e.name || "")),
+    );
+    const items = await Promise.all(
+      mdFiles.map(async (e) => {
+        try {
+          const text = await kandinsky.read(e.path);
+          const stem = String(e.name || "").replace(/\.md$/i, "");
+          return parseSpecialistMarkdown(text, stem);
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const sorted = items.filter(Boolean).sort((a, b) => a.id.localeCompare(b.id));
+    cachedSpecialists = sorted;
+    cachedSpecialistsAt = now;
+    return sorted;
+  } catch {
+    return [];
+  }
 }
 
 async function listModels(params = {}) {
@@ -40,7 +212,7 @@ async function listModels(params = {}) {
     return cachedModels;
   }
   try {
-    const mRes = await atlas.exec("agy", ["models"], { timeout: 10 });
+    const mRes = await kandinsky.exec("agy", ["models"], { timeout: 10 });
     const raw = String(mRes.stdout || "").trim();
     const parsed = [{ value: "default", label: "CLI Default (Inherit)", family: "Default" }];
     const seen = new Set(["default"]);
@@ -69,10 +241,10 @@ async function inspectAgy(params = {}) {
   let kandinskyMcpConnected = false;
 
   try {
-    const mcpRes = await atlas.exec("agy", ["mcp", "list"], { timeout: 10 });
+    const mcpRes = await kandinsky.exec("agy", ["mcp", "list"], { timeout: 10 });
     installed = mcpRes.status === 0 || Boolean(mcpRes.stdout || mcpRes.stderr);
     mcpText = String(mcpRes.stdout || "").trim();
-    kandinskyMcpConnected = /\b(kandinsky|atlas)\b/i.test(mcpText);
+    kandinskyMcpConnected = /\b(kandinsky|kandinsky)\b/i.test(mcpText);
   } catch (e) {
     return {
       installed: false,
@@ -209,7 +381,7 @@ async function liveStatus() {
   `;
 
   try {
-    const r = await atlas.exec("node", ["-e", nodeScript], { timeout: 8 });
+    const r = await kandinsky.exec("node", ["-e", nodeScript], { timeout: 8 });
     if (r.status === 0 && r.stdout) {
       return JSON.parse(r.stdout.trim());
     }
@@ -221,14 +393,14 @@ async function liveStatus() {
 
 async function connectKandinskyMcp(params = {}) {
   const cliPath = String(
-    params.kandinskyExe || "C:/Users/antimajorana/AppData/Local/Atlas/kandinsky.exe",
+    params.kandinskyExe || "C:/Users/antimajorana/AppData/Local/Kandinsky/kandinsky.exe",
   ).trim();
 
   try {
-    await atlas.exec("agy", ["mcp", "remove", "kandinsky"], { timeout: 8 });
+    await kandinsky.exec("agy", ["mcp", "remove", "kandinsky"], { timeout: 8 });
   } catch {}
 
-  const addRes = await atlas.exec("agy", ["mcp", "add", "kandinsky", cliPath, "mcp"], {
+  const addRes = await kandinsky.exec("agy", ["mcp", "add", "kandinsky", cliPath, "mcp"], {
     timeout: 15,
   });
   const after = await inspectAgy({ includeModels: false });
@@ -240,16 +412,28 @@ async function connectKandinskyMcp(params = {}) {
   };
 }
 
-atlas.methods({
+kandinsky.methods({
   status: inspectAgy,
   liveStatus,
   models: listModels,
+  listVaultSpecialists,
+  specialists: async () => {
+    const specs = await listVaultSpecialists({ refresh: false });
+    return [
+      { value: "", label: "Coordinator (no @specialist)" },
+      ...specs.map((s) => ({
+        value: s.handle,
+        label: s.description ? `${s.handle} — ${s.description.slice(0, 72)}` : s.handle,
+      })),
+    ];
+  },
   connectMcp: connectKandinskyMcp,
   commands: async () => [
     { value: "agy", label: "agy (default model & interactive mode)" },
     { value: "agy --model gemini-4-carbon-high", label: "agy --model gemini-4-carbon-high" },
     { value: "agy --model gemini-4-argon-high", label: "agy --model gemini-4-argon-high" },
     { value: "agy --model gemini-4-hydrogen-high", label: "agy --model gemini-4-hydrogen-high" },
+    { value: "agy --model gemini-3.8-flash-high", label: "agy --model gemini-3.8-flash-high" },
     { value: "agy --mode auto", label: "agy --mode auto" },
     { value: "agy --mode plan", label: "agy --mode plan" },
   ],

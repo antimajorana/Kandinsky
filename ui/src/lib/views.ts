@@ -1,6 +1,6 @@
 // Row views (docs/guides/MALLEABLE.md R2/R4): a view draws rows — tasks, notes — into a host. The core
 // turns a block's YAML into rows (/api/view); list, table and calendar draw them, and plugins add
-// more (`atlas.registerView`). Everything else a block can be lives in lib/blocks.ts.
+// more (`kandinsky.registerView`). Everything else a block can be lives in lib/blocks.ts.
 import { errText } from "./text";
 import { mount, unmount } from "svelte";
 import { api } from "./api";

@@ -37,7 +37,7 @@
   async function setZen(on: boolean): Promise<void> {
     if (on === zen) return;
     zen = on;
-    document.documentElement.classList.toggle("atlas-zen", on); // chrome.css: nothing but the drawing
+    document.documentElement.classList.toggle("kandinsky-zen", on); // chrome.css: nothing but the drawing
     if (on && !fullscreen.on) { zenMadeFull = true; await toggleFullscreen(); }
     // the phone app keeps its own fullscreen (the page's `fullscreen.on` stays off there): toggled back as it was toggled
     else if (!on && zenMadeFull) { zenMadeFull = false; if (fullscreen.on || nativeShell.on) await toggleFullscreen(); }
@@ -164,7 +164,7 @@
     void load();
     const askMirror = () => void mirrorState().then((m) => { if (!gone) mirror = m && { host: hostOf(m.address), state: m.state }; }, () => {});
     askMirror();
-    window.addEventListener("atlas-mirror-unlinked", askMirror); // linked or unlinked in the vault switcher
+    window.addEventListener("kandinsky-mirror-unlinked", askMirror); // linked or unlinked in the vault switcher
     drawingPages.set(panel.id, (p) => d?.showPage(p)); // an embed's "Edit Page 2" with the drawing already open
     drawingExports.set(panel.id, async () => {
       if (!d) throw new Error("the drawing is still loading");
@@ -188,10 +188,10 @@
     const pageTick = window.setInterval(keepPage, 5000);
     return () => {
       gone = true;
-      if (zen) document.documentElement.classList.remove("atlas-zen"); // the pane closed in zen: the app back
+      if (zen) document.documentElement.classList.remove("kandinsky-zen"); // the pane closed in zen: the app back
       keepPage(); clearInterval(pageTick);
       if (dirty && d) void save(fileText()); // the scene read now, before the drawing goes
-      window.removeEventListener("atlas-mirror-unlinked", askMirror);
+      window.removeEventListener("kandinsky-mirror-unlinked", askMirror);
       drawingPages.delete(panel.id); drawingExports.delete(panel.id); mo.disconnect(); off(); clearTimeout(timer); releaseCanvases(host); d?.destroy(); setDirty(panel.id, false); };
   });
 </script>
@@ -224,7 +224,7 @@
     background: var(--accent); color: var(--accent-fg, #fff); font-size: calc(12px * var(--ui-scale, 1)); pointer-events: none; }
   .live.mirror { background: var(--bg-elev); color: var(--text-muted); border: 1px solid var(--border); opacity: .85; }
   .live.mirror.down { color: var(--text-faint); border-style: dashed; }
-  /* Excalidraw in Atlas's look ("to meet the design of our app"), light, dark and e-ink alike: its own
+  /* Excalidraw in Kandinsky's look ("to meet the design of our app"), light, dark and e-ink alike: its own
      variables set from our tokens — more specific than its .theme--dark, so ours follow the theme */
   .host :global(.excalidraw) {
     --ui-font: var(--font-ui, Inter, system-ui, sans-serif);
@@ -242,7 +242,7 @@
   .zen-out { position: absolute; z-index: 6; top: 8px; right: 8px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%;
     border: 2px solid var(--text); background: var(--bg); color: var(--text); opacity: .55; }
   .zen-out:hover, .zen-out:focus-visible { opacity: 1; }
-  .host :global(.atlas-draw-full) { width: 2.25rem; height: 2.25rem; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text); font-size: 1.1rem; }
+  .host :global(.kandinsky-draw-full) { width: 2.25rem; height: 2.25rem; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text); font-size: 1.1rem; }
   .banner { padding: 6px 12px; background: var(--bg-elev); border-bottom: 1px solid var(--border); font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text); }
   .banner button { color: var(--accent); text-decoration: underline; }
   .banner.err { color: var(--red); }

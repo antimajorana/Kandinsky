@@ -8,8 +8,8 @@ import { WS } from "../playwright.config";
 // it), then an account's local mail checked, its counts shown, and written as notes on the go-ahead. The plugin's
 // page side as built; its helper a stand-in (the engine reads the real ~/.thunderbird, which a test never does).
 const REPO = fileURLToPath(new URL("../..", import.meta.url));
-const DIR = join(WS, ".atlas/plugins/email");
-const H = { "x-atlas": "1" };
+const DIR = join(WS, ".kandinsky/plugins/email");
+const H = { "x-kandinsky": "1" };
 
 const FOUND = [
   { user: "alice@example.org", name: "Work", imap_host: "imap.example.org", auth: "password", profile: "thunderbird/abc.default", record: { name: "work", user: "alice@example.org", imap_host: "imap.example.org" } },
@@ -34,13 +34,13 @@ test.beforeAll(async ({ request }) => {
   const plugin = join(REPO, "plugins/stable/email");
   for (const f of ["view.js", "main.js", "ui-lib"]) cpSync(join(plugin, f), join(DIR, f), { recursive: true });
   writeFileSync(join(DIR, "helper.py"), HELPER);
-  writeFileSync(join(DIR, "plugin.toml"), readFileSync(join(plugin, "plugin.toml"), "utf8").replace(/^run = .*$/m, 'run = "python3 -u \\"$ATLAS_PLUGIN_DIR/helper.py\\""'));
-  await request.put("/api/file", { headers: H, data: { path: ".atlas/plugin-settings/email.toml", text: '[[accounts]]\nname = "old-pop"\nuser = "old@example.org"\n\n[[accounts]]\nname = "school"\nuser = "me@school.example.org"\nauth = "outlook"\n' } });
+  writeFileSync(join(DIR, "plugin.toml"), readFileSync(join(plugin, "plugin.toml"), "utf8").replace(/^run = .*$/m, 'run = "python3 -u \\"$KANDINSKY_PLUGIN_DIR/helper.py\\""'));
+  await request.put("/api/file", { headers: H, data: { path: ".kandinsky/plugin-settings/email.toml", text: '[[accounts]]\nname = "old-pop"\nuser = "old@example.org"\n\n[[accounts]]\nname = "school"\nuser = "me@school.example.org"\nauth = "outlook"\n' } });
 });
 test.afterAll(async ({ request }) => {
   await request.post("/api/plugins/email/helper/stop", { headers: H });
   rmSync(DIR, { recursive: true, force: true });
-  await request.post(`/api/fs/trash?path=${encodeURIComponent(".atlas/plugin-settings/email.toml")}`, { headers: H });
+  await request.post(`/api/fs/trash?path=${encodeURIComponent(".kandinsky/plugin-settings/email.toml")}`, { headers: H });
 });
 
 test("Thunderbird's accounts and local mail in one dialog: add a card, check, write", async ({ page, request }) => {
@@ -56,7 +56,7 @@ test("Thunderbird's accounts and local mail in one dialog: add a card, check, wr
 
   await work.getByRole("button", { name: "Add" }).click();
   await expect(work).toContainText("now type its password on its card");
-  await expect.poll(async () => (await (await request.get(`/api/file?path=${encodeURIComponent(".atlas/plugin-settings/email.toml")}`, { headers: H })).json()).text)
+  await expect.poll(async () => (await (await request.get(`/api/file?path=${encodeURIComponent(".kandinsky/plugin-settings/email.toml")}`, { headers: H })).json()).text)
     .toContain('name = "work"');
 
   await dialog.getByRole("combobox", { name: "Account" }).selectOption("old-pop");

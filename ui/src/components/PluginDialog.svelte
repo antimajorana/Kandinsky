@@ -1,7 +1,7 @@
 <script lang="ts">
-  // A plugin's pane (view.js) in a popup over the app (`atlas.openDialog`, lib/plugin-dialog.ts): the same module and
+  // A plugin's pane (view.js) in a popup over the app (`kandinsky.openDialog`, lib/plugin-dialog.ts): the same module and
   // API as in a tab, drawn in a titled frame; Escape, Back, the ✕ and the backdrop close it, and so does
-  // `atlas.pane.close()` from inside. Load errors are shown, never swallowed.
+  // `kandinsky.pane.close()` from inside. Load errors are shown, never swallowed.
   import { onMount } from "svelte";
   import Dialog from "./Dialog.svelte";
   import { errText } from "../lib/text";
@@ -22,13 +22,13 @@
       try {
         const mod = await loadView(plugin, view);
         if (gone) return;
-        if (typeof mod.default !== "function") throw new Error("the module has no default export function (host, atlas) => …");
+        if (typeof mod.default !== "function") throw new Error("the module has no default export function (host, kandinsky) => …");
         const r = await mod.default(host, pluginApi(plugin, { arg, pane, hold: scope.hold }));
         if (gone) { if (typeof r === "function") r(); return; }
         cleanup = typeof r === "function" ? r : undefined;
       } catch (e) {
         error = `${view ?? plugin.view}: ${errText(e)}`;
-        console.error("[atlas] plugin dialog", plugin.id, e);
+        console.error("[kandinsky] plugin dialog", plugin.id, e);
       }
     })();
     return () => { gone = true; cleanup?.(); scope.release(); };

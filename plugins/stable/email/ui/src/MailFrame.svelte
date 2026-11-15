@@ -6,9 +6,9 @@
   // It wears the app's colours (the scheme's --bg, --text, --link…, read from the window and followed when the theme or
   // scheme changes). In a dark theme the mail's own colours are remapped — white made the app's surface, other light
   // backgrounds darkened, dark text made light, hues kept, pictures untouched — rather than the whole page inverted.
-  // `atlas`: its links open as Atlas opens links (atlas.openLink, API 28), Shift+click in the system's browser
+  // `kandinsky`: its links open as Kandinsky opens links (kandinsky.openLink, API 28), Shift+click in the system's browser
   import type { PluginApi } from "./api";
-  let { html, plain = false, remote = false, prose = "", atlas }: { html: string; plain?: boolean; remote?: boolean; prose?: string; atlas?: PluginApi } = $props();
+  let { html, plain = false, remote = false, prose = "", kandinsky }: { html: string; plain?: boolean; remote?: boolean; prose?: string; kandinsky?: PluginApi } = $props();
 
   /** The window's theme and scheme colours (palettes.css). */
   function appColours() {
@@ -34,7 +34,7 @@
 
   const QUOTES = [
     ".gmail_quote", "blockquote[type=cite]", ".yahoo_quoted", "#appendonsend", "#divRplyFwdMsg", "#mail-editor-reference-message-container",
-    ".moz-cite-prefix", "div[style*='border-top:solid #E1E1E1']", "div[style*='border-top: solid #E1E1E1']", "div[style*='border-top:solid #B5C4DF']", ".atlas-quote",
+    ".moz-cite-prefix", "div[style*='border-top:solid #E1E1E1']", "div[style*='border-top: solid #E1E1E1']", "div[style*='border-top:solid #B5C4DF']", ".kandinsky-quote",
   ].join(",");
 
   /** The earlier messages a mail carries, folded into a <details> (it opens with no script). */
@@ -54,7 +54,7 @@
     if (prev && /wrote:\s*$|a écrit\s*:?\s*$|escribió:\s*$|schrieb.*:\s*$/i.test(prev.textContent ?? "") && (prev.textContent ?? "").length < 300) start = prev;
     for (let n: Node | null = start; n; n = n.nextSibling) { nodes.push(n); if (!tail && n === q) break; }
     const d = doc.createElement("details"), s = doc.createElement("summary");
-    d.className = "atlas-quoted";
+    d.className = "kandinsky-quoted";
     s.textContent = "···";
     s.title = "Show the earlier messages";
     start.parentNode!.insertBefore(d, start);
@@ -131,15 +131,15 @@ img:not([src]),img[src^="http"]:not([data-ok]){min-height:0}
 a{color:${t.link}}
 blockquote{margin:.5em 0 .5em .2em;padding-left:.9em;border-left:3px solid ${t.border};color:${t.muted}}
 blockquote blockquote{border-left-color:${t.borderStrong}}
-.atlas-plain{white-space:normal;font-size:15px;line-height:1.6;max-width:72ch}
-.atlas-signature{color:${t.faint};font-size:.92em}
-pre.atlas-text{white-space:pre-wrap;font:inherit}
-details.atlas-quoted>summary{display:inline-block;cursor:pointer;list-style:none;padding:0 8px;margin:6px 0;border-radius:6px;background:${t.chip};color:${t.muted};font:600 13px/1.4 system-ui,sans-serif;letter-spacing:.1em}
-details.atlas-quoted>summary::-webkit-details-marker{display:none}
-details.atlas-quoted[open]>summary{margin-bottom:8px}
+.kandinsky-plain{white-space:normal;font-size:15px;line-height:1.6;max-width:72ch}
+.kandinsky-signature{color:${t.faint};font-size:.92em}
+pre.kandinsky-text{white-space:pre-wrap;font:inherit}
+details.kandinsky-quoted>summary{display:inline-block;cursor:pointer;list-style:none;padding:0 8px;margin:6px 0;border-radius:6px;background:${t.chip};color:${t.muted};font:600 13px/1.4 system-ui,sans-serif;letter-spacing:.1em}
+details.kandinsky-quoted>summary::-webkit-details-marker{display:none}
+details.kandinsky-quoted[open]>summary{margin-bottom:8px}
 table{max-width:100%}
-mark.atlas-find{background:${t.dark ? "#7a5d00" : "#ffe27a"};color:inherit;border-radius:2px}
-mark.atlas-find.cur{background:${t.dark ? "#c77700" : "#ff9f1a"};color:${t.dark ? "#fff" : "#000"}}
+mark.kandinsky-find{background:${t.dark ? "#7a5d00" : "#ffe27a"};color:inherit;border-radius:2px}
+mark.kandinsky-find.cur{background:${t.dark ? "#c77700" : "#ff9f1a"};color:${t.dark ? "#fff" : "#000"}}
 </style></head><body>${html}</body></html>`;
   });
 
@@ -153,13 +153,13 @@ mark.atlas-find.cur{background:${t.dark ? "#c77700" : "#ff9f1a"};color:${t.dark 
     new ResizeObserver(fit).observe(d.documentElement);
     for (const img of Array.from(d.images)) img.addEventListener("load", fit);
     d.addEventListener("toggle", fit, true);
-    // a web link: as Atlas opens links, Shift+click in the browser. Left to the frame (`<base target=_blank>`), every
-    // link became a tab of the desktop window, Shift or not. An Atlas without openLink keeps the frame's way.
+    // a web link: as Kandinsky opens links, Shift+click in the browser. Left to the frame (`<base target=_blank>`), every
+    // link became a tab of the desktop window, Shift or not. An Kandinsky without openLink keeps the frame's way.
     d.addEventListener("click", (e) => {
       const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
-      if (!a || !atlas?.openLink || !/^https?:/i.test(a.href) || e.button !== 0) return;
+      if (!a || !kandinsky?.openLink || !/^https?:/i.test(a.href) || e.button !== 0) return;
       e.preventDefault();
-      atlas.openLink(a.href, { outside: e.shiftKey });
+      kandinsky.openLink(a.href, { outside: e.shiftKey });
     });
     // Ctrl+F inside the message is the pane's find (Reader.svelte), not lost in the frame
     d.addEventListener("keydown", (e) => {

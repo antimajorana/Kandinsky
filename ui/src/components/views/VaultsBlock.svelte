@@ -1,10 +1,10 @@
 <script lang="ts">
-  // The `vaults` block: a way into one's own vault from a page — the first screen of a fresh Atlas (the desktop's
+  // The `vaults` block: a way into one's own vault from a page — the first screen of a fresh Kandinsky (the desktop's
   // Welcome vault) carries it. Making, opening and switching go through lib/vaults.ts, as the vault switcher does.
   import Icon from "../Icon.svelte";
   import { askFolder, askServer, chooseVault, vaultListing } from "../../lib/vaults";
 
-  /** null while asking; false: this core keeps no vault list (`atlas serve` of one folder) — nothing to switch to. */
+  /** null while asking; false: this core keeps no vault list (`kandinsky serve` of one folder) — nothing to switch to. */
   let manage = $state<boolean | null>(null);
   let others = $state(0);
   $effect(() => {
@@ -14,7 +14,7 @@
 
 <section class="vaults-block" data-testid="vaults-block" aria-label="Vaults">
   {#if manage === false}
-    <p class="muted">This Kandinsky serves one folder. Another vault is served by starting <code>atlas serve</code> on it.</p>
+    <p class="muted">This Kandinsky serves one folder. Another vault is served by starting <code>kandinsky serve</code> on it.</p>
   {:else}
     <div class="row">
       <button class="btn primary" disabled={manage === null} onclick={() => void askFolder(true)}><Icon name="plus" size={14} /> New vault…</button>

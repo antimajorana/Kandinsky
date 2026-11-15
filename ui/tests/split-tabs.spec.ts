@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 // Zen's split view: a tab outside the split is shown alone, the split row stays, a click on
 // it brings the pair back side by side (lib/tabs.svelte.ts splitPair).
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 async function openNote(page: Page, name: string): Promise<void> {
   await page.keyboard.press("Control+p");

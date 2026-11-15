@@ -5,7 +5,7 @@ use anyhow::Result;
 
 /// A JPEG XL's first frame as (width, height, ARGB pixels), in sRGB: the core's decoder (its thumbnails use it too).
 pub fn decode_jxl(bytes: &[u8]) -> Result<(u32, u32, Vec<i32>)> {
-    let img = atlas_core::thumbs::decode_jxl(bytes)?;
+    let img = kandinsky_core::thumbs::decode_jxl(bytes)?;
     let px = img.pixels().map(|p| { let [r, g, b, a] = p.0.map(i32::from); (a << 24) | (r << 16) | (g << 8) | b }).collect();
     Ok((img.width(), img.height(), px))
 }

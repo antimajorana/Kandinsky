@@ -1,7 +1,7 @@
 // TMDB for the catalog: `search` (words → candidates to pick from) and `details` (an id → the note's fields). With the
 // API token set, TMDB's API; without one, themoviedb.org's own pages, which say the same (the page's JSON-LD, its crew
-// and cast lists, its search results). Requests go through Atlas's core. Tests: helper.test.ts.
-import type { Params } from "atlas-helper";
+// and cast lists, its search results). Requests go through Kandinsky's core. Tests: helper.test.ts.
+import type { Params } from "kandinsky-helper";
 
 const API = "https://api.themoviedb.org/3";
 const IMG = "https://image.tmdb.org/t/p/w500";
@@ -56,7 +56,7 @@ export async function searchWith(get: Get, params: Params) {
   const text = String(params.text ?? "").trim();
   if (!text || /^https?:\/\//.test(text)) return { candidates: [] };
   const [title, year] = splitYear(text);
-  const r = (await get(`${API}/search/multi?include_adult=false&language=${lang(params)}&query=${atlas.url.quote(title)}`)) ?? {};
+  const r = (await get(`${API}/search/multi?include_adult=false&language=${lang(params)}&query=${kandinsky.url.quote(title)}`)) ?? {};
   const out = [];
   for (const x of r.results ?? []) {
     const kind: Kind | undefined = x.media_type === "movie" ? "movie" : x.media_type === "tv" ? "show" : undefined;
@@ -116,7 +116,7 @@ const LANGS: Record<string, string> = { English: "en", Spanish: "es", French: "f
   Polish: "pl", Turkish: "tr", Persian: "fa", Hindi: "hi", Catalan: "ca", Basque: "eu", Galician: "gl", Arabic: "ar", Greek: "el",
   Hebrew: "he", Czech: "cs", Hungarian: "hu", Romanian: "ro", Finnish: "fi", Thai: "th", Icelandic: "is", Irish: "ga", Ukrainian: "uk" };
 
-const un = (s: string | undefined) => (s ? atlas.html.unescape(s) : "");
+const un = (s: string | undefined) => (s ? kandinsky.html.unescape(s) : "");
 
 /** The page's schema.org Movie or TVSeries (its JSON-LD, CDATA comments and all). */
 function ld(page: string): any {
@@ -202,7 +202,7 @@ export async function siteSearchWith(getText: GetText, params: Params) {
   const [title, year] = splitYear(text);
   const out = [];
   for (const kind of ["movie", "show"] as Kind[]) {
-    const page = (await getText(`${SITE}/search/${own(kind)}?query=${atlas.url.quote(title)}&language=${lang(params)}`)) ?? "";
+    const page = (await getText(`${SITE}/search/${own(kind)}?query=${kandinsky.url.quote(title)}&language=${lang(params)}`)) ?? "";
     for (const [tmdb, name, y] of searchPage(page, kind).slice(0, 6)) {
       if (year && y && Math.abs(y - year) > 1) continue;
       out.push({ kind, ids: { tmdb }, label: label(name, y, kind) });
@@ -215,18 +215,18 @@ export async function siteSearchWith(getText: GetText, params: Params) {
 
 /** TMDB's API with the token the core fills in; 404 is "no such id". */
 const apiGet: Get = async (url) => {
-  const res = await atlas.fetchResponse({ url, headers: { Authorization: { secret: "token", prefix: "Bearer " }, Accept: "application/json" }, timeout_secs: 20 });
+  const res = await kandinsky.fetchResponse({ url, headers: { Authorization: { secret: "token", prefix: "Bearer " }, Accept: "application/json" }, timeout_secs: 20 });
   if (res.status === 404) return null;
-  if (res.status === 401) throw new atlas.AtlasError("TMDB refused the token: set the API Read Access Token in Settings → Catalog · TMDB", 401);
-  if (!res.ok) throw new atlas.AtlasError(`TMDB answered ${res.status}`, res.status);
+  if (res.status === 401) throw new kandinsky.KandinskyError("TMDB refused the token: set the API Read Access Token in Settings → Catalog · TMDB", 401);
+  if (!res.ok) throw new kandinsky.KandinskyError(`TMDB answered ${res.status}`, res.status);
   return JSON.parse(res.text || "{}");
 };
 // the core's own User-Agent: the site answers it (a browser-like one made from a program is refused)
-const siteText: GetText = (url) => atlas.fetch(url);
-const hasToken = async () => { try { return Boolean(await atlas.secret("token")); } catch { return false; } };
+const siteText: GetText = (url) => kandinsky.fetch(url);
+const hasToken = async () => { try { return Boolean(await kandinsky.secret("token")); } catch { return false; } };
 
 // the API with a token (faster, IMDb/TVDB ids too); the website without one
-atlas.methods({
+kandinsky.methods({
   search: async (params) => ((await hasToken()) ? searchWith(apiGet, params) : siteSearchWith(siteText, params)),
   details: async (params) => ((await hasToken()) ? detailsWith(apiGet, params) : siteDetailsWith(siteText, params)),
 });

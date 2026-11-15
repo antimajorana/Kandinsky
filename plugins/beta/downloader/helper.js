@@ -9,7 +9,7 @@
 	/** A value inside a JSON string: its escapes, without the quotes. */
 	const jsonInner = (v) => JSON.stringify(v).slice(1, -1);
 	/** Every reserved character escaped (an address's query part). */
-	const urlPart = (v) => atlas.url.quote(v, "");
+	const urlPart = (v) => kandinsky.url.quote(v, "");
 	const JSON_HEADERS = {
 		"Content-Type": "application/json",
 		Accept: "application/json"
@@ -24,7 +24,7 @@
 	/** The request a preset makes for `t` (null: it cannot take this thing), and the value the note keeps. */
 	async function requestFor(s, t) {
 		const address = String(s.address ?? "").trim(), base = address.replace(/\/+$/, "");
-		const hasToken = Boolean(await atlas.secret("token"));
+		const hasToken = Boolean(await kandinsky.secret("token"));
 		switch (presetOf(s)) {
 			case "TubeArchivist": {
 				if (!t.youtube) return { skipped: "TubeArchivist takes only YouTube videos" };
@@ -125,12 +125,12 @@
 			fields: {},
 			skipped: made.skipped
 		};
-		const res = await atlas.fetchResponse(made.req);
+		const res = await kandinsky.fetchResponse(made.req);
 		if (res.signin) return { signin: res.signin };
 		if (!res.ok) throw new Error(`the download service answered ${res.status}: ${String(res.text ?? "").slice(0, 200)}`);
 		return { fields: { [answer]: made.value } };
 	}
-	atlas.methods({ send });
+	kandinsky.methods({ send });
 	//#endregion
 	exports.answerOf = answerOf;
 	exports.presetOf = presetOf;

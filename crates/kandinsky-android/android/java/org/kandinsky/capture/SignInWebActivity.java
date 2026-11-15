@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Activity;
 import android.os.Bundle;
@@ -10,8 +10,8 @@ import android.widget.Toast;
 
 /**
  * Signing in inside the app: the server's `/auth/app` in a WebView, through whatever sign-in is in front (its password,
- * a one-time code — a key's code from its authenticator app) and Atlas's own; the cookies stay with the app (requests
- * carry them, Server.headers) and the redirect to `org.atlas.…://signed-in` brings the device token. Security keys
+ * a one-time code — a key's code from its authenticator app) and Kandinsky's own; the cookies stay with the app (requests
+ * carry them, Server.headers) and the redirect to `org.kandinsky.…://signed-in` brings the device token. Security keys
  * (WebAuthn) do not work in a WebView: the browser sign-in is for them.
  */
 public final class SignInWebActivity extends Activity {
@@ -45,8 +45,8 @@ public final class SignInWebActivity extends Activity {
                     Toast.makeText(SignInWebActivity.this, "Signed in to " + Vaults.name(server), Toast.LENGTH_LONG).show();
                     Server.verify(SignInWebActivity.this, server);
                     if (Edition.of(SignInWebActivity.this).full()) // the vault's page again, now let in
-                        startActivity(new android.content.Intent(SignInWebActivity.this, AtlasActivity.class)
-                            .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP | android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(AtlasActivity.RELOAD, true));
+                        startActivity(new android.content.Intent(SignInWebActivity.this, KandinskyActivity.class)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP | android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(KandinskyActivity.RELOAD, true));
                 } else {
                     Toast.makeText(SignInWebActivity.this, "Not signed in: " + u.getQueryParameter("error"), Toast.LENGTH_LONG).show();
                 }

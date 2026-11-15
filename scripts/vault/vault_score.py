@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["pyyaml>=6"]
 # ///
-"""Score Obsidian notes for migration into an Atlas workspace; writes a checklist the user ticks.
+"""Score Obsidian notes for migration into an Kandinsky workspace; writes a checklist the user ticks.
 
 Signals (shape-based, so unseen notes degrade gracefully):
   topic graph — notes whose `topics` reach the root topic (default "Physics") through other notes'
@@ -100,7 +100,7 @@ def main() -> int:
 
     keep = [r for r in rows if r[0] >= a.threshold]
     maybe = [r for r in rows if 1 <= r[0] < a.threshold]
-    out = [f"# Vault migration review — {a.vault}", "", "<!-- atlas:no-tasks -->", "",
+    out = [f"# Vault migration review — {a.vault}", "", "<!-- kandinsky:no-tasks -->", "",
            f"Tick what should move into this workspace, then run `vault_migrate.py`. Pre-ticked = score ≥ {a.threshold}.",
            f"{len(keep)} likely · {len(maybe)} unsure · {len(rows) - len(keep) - len(maybe)} left out (not listed). The vault is never modified.", "",
            "## Likely", ""]

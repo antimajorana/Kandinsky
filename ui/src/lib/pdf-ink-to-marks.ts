@@ -1,6 +1,6 @@
 // An older companion drawing (`x.pdf.excalidraw`, lib/pdf-ink-scene.ts) read as the PDF's marks (lib/pdf-marks.ts,
 // core pdf_marks.rs): each element over a page frame turned from the frame's units into PDF points by its page's
-// box. A mark keeps its id, colour, device, time and words when the drawing had them (`customData.atlasMark`); a
+// box. A mark keeps its id, colour, device, time and words when the drawing had them (`customData.kandinskyMark`); a
 // highlight's boxes stay one mark; the notepad's shapes become pen strokes along their outline. What has no mark shape
 // (a picture, an embed) is counted, and the drawing is then kept. Pure: no I/O.
 import { toPage } from "./pdf-geom";
@@ -10,7 +10,7 @@ import { localMinute } from "./local-day";
 import type { Mark } from "./gen/Mark";
 import type { Sample } from "./gen/Sample";
 import type { Stroke } from "./gen/Stroke";
-import type { AtlasMark } from "./kandinsky-mark";
+import type { KandinskyMark } from "./kandinsky-mark";
 import type { Box } from "./pdf-engine";
 
 /** A page's box and /Rotate (Reader.space, PdfEngine.layers). */
@@ -64,16 +64,16 @@ export function convert(els: readonly El[], spaces: Map<number, Space>): Convert
       const [ax, ay] = pt(e.x ?? 0, e.y ?? 0), [bx, by] = pt((e.x ?? 0) + (e.width ?? 0), (e.y ?? 0) + (e.height ?? 0));
       return [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
     };
-    const cd = (e.customData ?? {}) as { atlasMark?: AtlasMark; atlasHighlight?: { mark?: string; rect?: [number, number, number, number] } };
-    const am = cd.atlasMark;
+    const cd = (e.customData ?? {}) as { kandinskyMark?: KandinskyMark; kandinskyHighlight?: { mark?: string; rect?: [number, number, number, number] } };
+    const am = cd.kandinskyMark;
     const device = am?.device ?? (/^(pen|highlight|note)-/.test(e.id) ? "desktop" : "android");
-    const key = am?.id ?? cd.atlasHighlight?.mark ?? e.id;
+    const key = am?.id ?? cd.kandinskyHighlight?.mark ?? e.id;
     const head = (color: string) => ({
       id: am && ID.test(am.id) ? am.id : (marks.get(key)?.id ?? idOf(key)), page: n, version: 0, color, device,
       created: localMinute(new Date(am?.created ?? (Number(e.updated) || Date.now()))), tags: [] as string[],
     });
-    if (e.type === "rectangle" && (cd.atlasHighlight || am?.kind === "highlight")) {
-      const quad = cd.atlasHighlight?.rect ?? box();
+    if (e.type === "rectangle" && (cd.kandinskyHighlight || am?.kind === "highlight")) {
+      const quad = cd.kandinskyHighlight?.rect ?? box();
       const had = marks.get(key) as (Mark & { kind: "highlight" }) | undefined;
       if (had) had.quads.push(quad);
       else marks.set(key, { ...head(String(e.backgroundColor ?? "#FFE066")), kind: "highlight", quads: [quad], ...(am?.quote ? { quote: am.quote } : {}) } as Mark);

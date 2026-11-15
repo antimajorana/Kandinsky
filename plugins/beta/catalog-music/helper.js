@@ -20,8 +20,8 @@
 		song: "recording",
 		artist: "artist"
 	};
-	const get = (url) => atlas.fetchJson(url, {
-		headers: { "User-Agent": "Atlas/0.1 (personal notes app; catalog-music)" },
+	const get = (url) => kandinsky.fetchJson(url, {
+		headers: { "User-Agent": "Kandinsky/0.1 (personal notes app; catalog-music)" },
 		every: 1,
 		missing: [400, 404]
 	});
@@ -33,7 +33,7 @@
 	const yearOf = (date) => typeof date === "string" && /^\d{4}/.test(date) ? Number(date.slice(0, 4)) : void 0;
 	function genres(e) {
 		const gs = [...e.genres ?? []].sort((a, b) => (b.count ?? 0) - (a.count ?? 0));
-		return gs.length ? gs.slice(0, 5).map((g) => atlas.text.title(g.name)) : void 0;
+		return gs.length ? gs.slice(0, 5).map((g) => kandinsky.text.title(g.name)) : void 0;
 	}
 	function duration(length) {
 		if (!length) return void 0;
@@ -89,7 +89,7 @@
 	/** The entity MusicBrainz has linked to this address (a Spotify album, a Bandcamp page), if any. */
 	async function byLink(kind, url) {
 		if (!url || url.includes("musicbrainz.org")) return void 0;
-		const r = await get(`${API}/url?resource=${atlas.url.quote(url, "")}&inc=release-group-rels+release-rels+recording-rels+artist-rels&fmt=json`) ?? {};
+		const r = await get(`${API}/url?resource=${kandinsky.url.quote(url, "")}&inc=release-group-rels+release-rels+recording-rels+artist-rels&fmt=json`) ?? {};
 		const want = ENTITY[kind];
 		for (const rel of r.relations ?? []) {
 			if (rel[want]) return rel[want].id;
@@ -105,7 +105,7 @@
 		const artist = cleanArtist(typeof hints.artist === "string" ? hints.artist : hints.artist?.[0]) ?? cleanArtist(hints.channel);
 		if (!title || kind === "song" && !artist) return void 0;
 		const q = `${FIELD[kind]}:"${title}"` + (artist && kind !== "artist" ? ` AND artist:"${artist}"` : "");
-		let sure = ((await get(`${API}/${ENTITY[kind]}?query=${atlas.url.quote(q)}&limit=50&fmt=json`) ?? {})[`${ENTITY[kind]}s`] ?? []).filter((h) => Number(h.score ?? 0) >= SURE);
+		let sure = ((await get(`${API}/${ENTITY[kind]}?query=${kandinsky.url.quote(q)}&limit=50&fmt=json`) ?? {})[`${ENTITY[kind]}s`] ?? []).filter((h) => Number(h.score ?? 0) >= SURE);
 		if (kind === "song") {
 			const exact = sure.filter((h) => (h.title ?? "").toLowerCase() === title.toLowerCase() && !h.disambiguation);
 			sure = (exact.length ? exact : sure).sort((a, b) => (a["first-release-date"] || "9999").localeCompare(b["first-release-date"] || "9999"));
@@ -138,7 +138,7 @@
 			fields
 		};
 	}
-	atlas.methods({ lookup });
+	kandinsky.methods({ lookup });
 	//#endregion
 	exports.cleanArtist = cleanArtist;
 	exports.cleanTitle = cleanTitle;

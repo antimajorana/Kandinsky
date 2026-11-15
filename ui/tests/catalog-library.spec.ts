@@ -7,7 +7,7 @@ import { restoreCatalog, withCatalog } from "./fixtures/catalog";
 // with its fields, the services it is in and its shelf, changed in place. The kinds come from the plugin's helper (a
 // stand-in here); the rows from the Bases engine over the notes. The page is the plugin's own (its view.js, the
 // vault's copy: tests/fixtures/catalog.ts), and so is the Libraries page its libraries are tabs of.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (request: APIRequestContext, path: string, text: string) => request.put("/api/file", { headers: H, data: { path, text } });
 
 const KINDS = {

@@ -7,7 +7,7 @@ test.use({ viewport: { width: 400, height: 760 }, hasTouch: true });
 test("the end of a long Home scrolls clear of the floating button", async ({ page, request }) => {
   const d = new Date(), day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const lines = Array.from({ length: 40 }, (_, i) => `- 09:${String(i).padStart(2, "0")} capture number ${i + 1}`);
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: `log/${day}.md`, text: `# ${day}\n\n${lines.join("\n")}\n` } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: `log/${day}.md`, text: `# ${day}\n\n${lines.join("\n")}\n` } });
   await page.goto("/");
   const fab = page.locator(".fab");
   await expect(fab).toBeVisible();

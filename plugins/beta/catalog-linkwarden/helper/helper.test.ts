@@ -1,7 +1,7 @@
 // What Linkwarden is sent for a catalogued thing, and its answers.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { harness, Reply, Status } from "atlas-helper/testing";
+import { harness, Reply, Status } from "kandinsky-helper/testing";
 import { linkOf } from "./helper";
 
 let token: string | null = "t";
@@ -25,8 +25,8 @@ test("the address is the thing's own link, else the best its IDs give", () => {
 
 test("a link is saved in its library's collection with the tags, the token filled in by the core", async () => {
   const r = await harness.call("save", {
-    settings: { address: "https://links.example.org/", tags: ["atlas"] }, library: "Films & Series",
-    ids: { imdb: "tt0111161" }, props: { title: "The Shawshank Redemption" }, options: { tags: ["atlas", "watch"] },
+    settings: { address: "https://links.example.org/", tags: ["kandinsky"] }, library: "Films & Series",
+    ids: { imdb: "tt0111161" }, props: { title: "The Shawshank Redemption" }, options: { tags: ["kandinsky", "watch"] },
   });
   assert.deepEqual(r, { fields: { linkwarden: "https://links.example.org/links/42" } });
   const sent = harness.asked[0];
@@ -34,7 +34,7 @@ test("a link is saved in its library's collection with the tags, the token fille
   assert.deepEqual(sent.headers?.Authorization, { secret: "token", prefix: "Bearer " });
   assert.deepEqual(JSON.parse(String(sent.body)), {
     url: "https://www.imdb.com/title/tt0111161/", name: "The Shawshank Redemption", description: "",
-    tags: [{ name: "atlas" }, { name: "watch" }], collection: { name: "Films & Series" },
+    tags: [{ name: "kandinsky" }, { name: "watch" }], collection: { name: "Films & Series" },
   });
 });
 

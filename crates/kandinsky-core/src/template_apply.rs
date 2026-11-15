@@ -1,6 +1,6 @@
 //! A template applied to a note that already exists (docs/design/DESIGN-templates-automation.md, "a property is
 //! set"): when a save makes one of the note's properties a value some template's rule names (`apply_when:
-//! { property: { type: lecture } }`), and it was not so before, that template is merged in (atlas-text `merge`:
+//! { property: { type: lecture } }`), and it was not so before, that template is merged in (kandinsky-text `merge`:
 //! only what the note lacks is added).
 //!
 //! Who writes the result: an editor that holds the note applies it itself, as one change of its own (undo, the
@@ -22,7 +22,7 @@ pub struct Applied {
 
 /// The note's properties as text values: a list's items each, `[[links]]` as written.
 fn values(text: &str) -> Vec<(String, String)> {
-    let m = atlas_text::frontmatter::mapping(text);
+    let m = kandinsky_text::frontmatter::mapping(text);
     let scalar = |v: &serde_yaml::Value| match v {
         serde_yaml::Value::String(s) => Some(s.clone()),
         serde_yaml::Value::Number(n) => Some(n.to_string()),
@@ -56,7 +56,7 @@ pub fn on_save(root: &Path, cfg: &Config, rel: &str, before: Option<&str>, after
     let text = crate::notes::template_text(root, cfg, &chosen.template).ok()?;
     let title = rel.rsplit('/').next().unwrap_or(rel).trim_end_matches(".md");
     let rendered = crate::notes::render_template(root, cfg, &text, title, now);
-    let merged = atlas_text::merge::merge(after, &rendered);
+    let merged = kandinsky_text::merge::merge(after, &rendered);
     (!merged.added.is_empty()).then_some(Applied { template: chosen.template, added: merged.added, text: merged.text, body: None })
 }
 
@@ -67,14 +67,14 @@ pub fn merge_into(root: &Path, cfg: &Config, rel: &str, template: &str, text: &s
     let title = rel.rsplit('/').next().unwrap_or(rel).trim_end_matches(".md");
     let rendered = crate::notes::render_template(root, cfg, &t, title, now);
     if !at_cursor {
-        let merged = atlas_text::merge::merge(text, &rendered);
+        let merged = kandinsky_text::merge::merge(text, &rendered);
         return Ok(Applied { template: template.to_string(), added: merged.added, text: merged.text, body: None });
     }
-    let (props, body) = match atlas_text::frontmatter::split(&rendered) {
+    let (props, body) = match kandinsky_text::frontmatter::split(&rendered) {
         (Some(yaml), body) => (format!("---\n{yaml}---\n"), body.trim_start_matches(['\r', '\n']).to_string()),
         (None, _) => (String::new(), rendered),
     };
-    let merged = atlas_text::merge::merge(text, &props);
+    let merged = kandinsky_text::merge::merge(text, &props);
     Ok(Applied { template: template.to_string(), added: merged.added, text: merged.text, body: Some(body) })
 }
 

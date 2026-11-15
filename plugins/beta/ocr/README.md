@@ -37,4 +37,4 @@ Linux works; the others are untested; not in the phone app.
 
 ## Status
 
-Beta. Tests: `cargo test -p atlas-ocr`. No end-to-end spec yet, and no progress shown for a long page.
+Beta. Tests: `cargo test -p kandinsky-ocr`. No end-to-end spec yet, and no progress shown for a long page.

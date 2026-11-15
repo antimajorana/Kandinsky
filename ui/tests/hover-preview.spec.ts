@@ -4,7 +4,7 @@ import { shownName } from "../src/lib/paths";
 // "I also would like previews in links and in the left panel list of tabs" / "also no previews on
 // hover": resting the pointer on a [[link]], on a [text](note.md) link, or on a tab in the left bar
 // shows what it leads to; moving away, a click or a key hides it.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 async function openNote(page: Page, name: string) {
   await page.keyboard.press("Control+p");
@@ -59,13 +59,13 @@ test("a tab of any kind previews itself: Settings from the background", async ({
   await page.keyboard.press("F1");
   await page.keyboard.type("Settings");
   await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click();
-  await expect(page.getByText("What Atlas can do").first()).toBeVisible();
+  await expect(page.getByText("What Kandinsky can do").first()).toBeVisible();
   await openNote(page, "hubbard.md"); // Settings goes to the background
   await expect(page.locator(".cm-content:visible").first()).toContainText("Energy");
   const card = page.getByTestId("hover-preview");
   await page.getByTestId("sidebar").locator(".tab", { hasText: "Settings" }).hover();
   await expect(card.locator(".preview-mini")).toBeVisible();
-  await expect(card).toContainText("What Atlas can do");
+  await expect(card).toContainText("What Kandinsky can do");
   // the copy is inert and carries no test ids or tab ids of its own
   await expect(card.locator("[data-testid], [data-tab-id]")).toHaveCount(0);
   await page.mouse.move(900, 880);

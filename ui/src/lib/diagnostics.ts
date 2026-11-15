@@ -1,4 +1,4 @@
-// Diagnostics → server (.atlas/cache/ui.log): uncaught errors, failed promises, and a layout
+// Diagnostics → server (.kandinsky/cache/ui.log): uncaught errors, failed promises, and a layout
 // self-check, so problems that only happen in the desktop webview (WebKitGTK) are visible.
 import { api } from "./api";
 

@@ -1,8 +1,8 @@
-//! Editing one frontmatter property in place: the pure edits live in `atlas-text` (shared with the plugin engines);
+//! Editing one frontmatter property in place: the pure edits live in `kandinsky-text` (shared with the plugin engines);
 //! here, what the properties panel may send (`POST /api/frontmatter/edit`).
 use crate::api::FrontmatterEdit;
 use crate::{Error, Result};
-pub use atlas_text::frontmatter::*;
+pub use kandinsky_text::frontmatter::*;
 
 /// A key the panel may write: one plain line, no `:` nor ` #` (a comment), not starting with a YAML indicator (a list
 /// item, a comment, a quote, a flow `[`/`{`, an anchor, alias or tag…: the key would not read back as a name).

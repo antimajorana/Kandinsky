@@ -1,5 +1,5 @@
 [package]
-name = "atlas-ocr"
+name = "kandinsky-ocr"
 description = "The OCR plugin's helper: a screenshot's text read on this machine (Tesseract), kept under its capture and handed to the catalog"
 version = "0.1.0"
 edition.workspace = true
@@ -15,11 +15,11 @@ name = "ocr"
 path = "src/main.rs"
 
 [dependencies]
-atlas-plugin = { path = "../../../../crates/kandinsky-plugin" }
+kandinsky-plugin = { path = "../../../../crates/kandinsky-plugin" }
 serde_json = { workspace = true }
 kreuzberg-tesseract = "4.10.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
 
 # Linux: built against glibc, not musl (Tesseract is C++), on an old distribution so it runs on newer ones
-[package.metadata.atlas]
+[package.metadata.kandinsky]
 libc = "gnu"

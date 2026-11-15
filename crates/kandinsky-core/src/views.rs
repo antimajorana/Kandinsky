@@ -127,7 +127,7 @@ fn task_of(r: &ViewRow) -> crate::tasks::Task {
 /// heading of the same or a higher level; the whole note when `at` is above every heading. Headings inside code fences
 /// (a shell `# comment`) are not.
 fn section_range(lines: &[&str], at: usize) -> (usize, usize) {
-    let mut fences = atlas_text::fence::Fences::default();
+    let mut fences = kandinsky_text::fence::Fences::default();
     let heads: Vec<Option<usize>> = lines
         .iter()
         .map(|l| {

@@ -20,7 +20,7 @@ secrets = true
 
 [helper]
 # built by engine/build.sh: one static binary per platform (it also runs in the server's container)
-run = "\"$ATLAS_PLUGIN_DIR/bin/$ATLAS_PLUGIN_TARGET/finance\""
+run = "\"$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET/finance\""
 
 [[tool]]
 name = "summary"

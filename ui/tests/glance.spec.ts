@@ -1,9 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import { writePdf } from "./fixtures/pdf";
 
-// Glance mode (lib/where.svelte.ts): every page tells the vault's live room `.atlas/cache/where` what it shows; one
+// Glance mode (lib/where.svelte.ts): every page tells the vault's live room `.kandinsky/cache/where` what it shows; one
 // following another opens the same file, full screen, and moves when the other turns a PDF's page. Esc stops it.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 /** A three-page PDF, one line of Helvetica a page (ASCII: offsets are lengths). */
 function pdf(): string {
   const page = (i: number) => 4 + i * 2;
@@ -14,9 +14,9 @@ function pdf(): string {
   }
   return writePdf(objs);
 }
-const atlas = (p: Page) => ({
-  open: (path: string) => p.evaluate((x) => (window as unknown as { __atlas: { open(p: string): void } }).__atlas.open(x), path),
-  run: (id: string) => p.evaluate((x) => (window as unknown as { __atlas: { run(id: string): void } }).__atlas.run(x), id),
+const kandinsky = (p: Page) => ({
+  open: (path: string) => p.evaluate((x) => (window as unknown as { __kandinsky: { open(p: string): void } }).__kandinsky.open(x), path),
+  run: (id: string) => p.evaluate((x) => (window as unknown as { __kandinsky: { run(id: string): void } }).__kandinsky.run(x), id),
 });
 
 test("a page follows what another shows: the note, then the PDF and its page; Esc stops", async ({ page, request }, info) => {
@@ -24,13 +24,13 @@ test("a page follows what another shows: the note, then the PDF and its page; Es
   await request.put("/api/file", { headers: H, data: { path: "books/glance.pdf", text: pdf() } });
   const other = await page.context().newPage();
   for (const p of [page, other]) { await p.goto("/"); await expect(p.getByTestId("sidebar")).toBeVisible({ timeout: 20_000 }); }
-  await atlas(other).open("notes/glance-a.md");
+  await kandinsky(other).open("notes/glance-a.md");
   await expect(other.locator(".cm-content", { hasText: "Shown on the other device." })).toBeVisible();
 
-  await expect(async () => { await atlas(page).run("ui.glance"); await expect(page.locator("html.glance")).toHaveCount(1, { timeout: 1000 }); }).toPass({ timeout: 15_000 });
+  await expect(async () => { await kandinsky(page).run("ui.glance"); await expect(page.locator("html.glance")).toHaveCount(1, { timeout: 1000 }); }).toPass({ timeout: 15_000 });
   await expect(page.locator(".cm-content", { hasText: "Shown on the other device." })).toBeVisible();
 
-  await atlas(other).open("books/glance.pdf");
+  await kandinsky(other).open("books/glance.pdf");
   const there = other.locator(".pdf-pane").last();
   await expect(there.locator(".pager .faint")).toHaveText("/ 3", { timeout: 20_000 });
   await there.locator(".page-in").fill("3");

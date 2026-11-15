@@ -1,10 +1,10 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import { openFile } from "./open";
 
-// Tasks, Atlas's way (docs/guides/TASKS.md): a task's line is read for its fields (priority, due date,
+// Tasks, Kandinsky's way (docs/guides/TASKS.md): a task's line is read for its fields (priority, due date,
 // recurrence, tags — the Obsidian Tasks syntax, by shape), and a `task-list` block filters, sorts and
 // groups. Ticking a recurring task leaves its next occurrence.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const read = async (r: APIRequestContext, path: string) => ((await (await r.get(`/api/file?path=${encodeURIComponent(path)}`, { headers: H })).json()) as { text?: string }).text ?? "";
 // the local date (the core groups by the local day; toISOString's UTC date is tomorrow's near midnight)
@@ -15,7 +15,7 @@ const day = (offset: number) => { const d = new Date(); d.setDate(d.getDate() + 
 test.beforeAll(async ({ request }) => {
   await put(request, "notes/chores.md", [
     "# Chores",
-    "<!-- atlas:no-tasks -->", // kept out of Today's open tasks: the vault is shared by the specs, and Today shows only the first twelve
+    "<!-- kandinsky:no-tasks -->", // kept out of Today's open tasks: the vault is shared by the specs, and Today shows only the first twelve
     "",
     `- [ ] water the plants 🔁 every week 📅 ${day(-1)} #home`,
     `- [ ] fix figure 2 ⏫ 📅 ${day(0)} #work/figures`,

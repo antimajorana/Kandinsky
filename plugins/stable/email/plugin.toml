@@ -2,7 +2,7 @@
 # Rust) keeps a local index of the servers (IMAP, kept live with IDLE) so the pane answers at once, parses, threads
 # and renders mail, sends (SMTP), and writes a conversation as a note only when asked (or by a rule). The pane
 # (ui/, Svelte): three panes, conversations, search with operators, Gmail's keys, snooze, send later, rules.
-# IMAP/SMTP with a password, or Outlook / Microsoft 365 with OAuth2. Claude reads through `atlas mcp` ([[tool]]
+# IMAP/SMTP with a password, or Outlook / Microsoft 365 with OAuth2. Claude reads through `kandinsky mcp` ([[tool]]
 # below), asking first as each card says.
 title = "Email"
 description = "mail: conversations, search, fast triage, a composer, rules; saved notes; IMAP/SMTP or Outlook (OAuth2), several accounts"
@@ -14,10 +14,10 @@ api = 12
 
 [helper]
 # built by engine/build.sh: one static binary per platform (it also runs in the server's container)
-run = "\"$ATLAS_PLUGIN_DIR/bin/$ATLAS_PLUGIN_TARGET/email\""
+run = "\"$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET/email\""
 
 [permissions]
-secrets = true   # passwords, and Outlook's refresh tokens: in Atlas's secret store, not the vault
+secrets = true   # passwords, and Outlook's refresh tokens: in Kandinsky's secret store, not the vault
 # Outlook's sign-in (login.microsoftonline.com) and one-click unsubscribe (any list's own address)
 net = ["*"]
 
@@ -50,12 +50,12 @@ fields = [
   { key = "smtp_port", label = "SMTP port", kind = "number", group = "Servers", when = { auth = "password" }, hint = "465 = TLS from the start; anything else (587) = STARTTLS" },
   { key = "security", label = "Security", kind = "choice", choices = ["ssl", "starttls", "none"], default = "ssl", group = "Servers", when = { auth = "password" } },
   { key = "client_id", label = "Application (client) ID", kind = "text", group = "Outlook", when = { auth = "outlook" }, hint = "empty: Thunderbird's public ID (many organisations allow it); or an app your organisation registered (README.md)" },
-  { key = "flow", label = "Sign-in flow", kind = "choice", choices = ["automatic", "window", "code"], default = "automatic", group = "Outlook", when = { auth = "outlook" }, hint = "automatic: Microsoft's page opens in your own browser (already signed in to your university there) and Atlas catches the answer by itself; window: the page in a window of Atlas; code: type a copied code at microsoft.com/devicelogin" },
+  { key = "flow", label = "Sign-in flow", kind = "choice", choices = ["automatic", "window", "code"], default = "automatic", group = "Outlook", when = { auth = "outlook" }, hint = "automatic: Microsoft's page opens in your own browser (already signed in to your university there) and Kandinsky catches the answer by itself; window: the page in a window of Kandinsky; code: type a copied code at microsoft.com/devicelogin" },
   { key = "tenant", label = "Tenant", kind = "text", default = "common", group = "Outlook", when = { auth = "outlook" }, hint = "common, organizations, or your organisation's domain / tenant id" },
   { key = "oauth_refresh", label = "Outlook sign-in", kind = "secret", readonly = true, when = { auth = "outlook" }, hint = "kept by “Sign in to Outlook”" },
   { key = "aliases", label = "Other addresses", kind = "longtext", hint = "identities to send from and to recognise as you: one per line, Name <address>" },
   { key = "signature", label = "Signature", kind = "longtext", hint = "put under what you write, after a “-- ” line (above a quoted reply); empty: none" },
-  { key = "claude", label = "Claude may read it", kind = "choice", choices = ["ask", "always", "never"], default = "ask", hint = "through atlas mcp (email_inbox, email_read): ask — Atlas asks you each time, in its window; sending always needs your own yes in Claude Code" },
+  { key = "claude", label = "Claude may read it", kind = "choice", choices = ["ask", "always", "never"], default = "ask", hint = "through kandinsky mcp (email_inbox, email_read): ask — Kandinsky asks you each time, in its window; sending always needs your own yes in Claude Code" },
 ]
 
 [[setting]]
@@ -182,7 +182,7 @@ secrets = ["*"]
 
 [[tool]]
 name = "open"
-description = "Show one email to the user in Atlas's Email pane (by uid and folder from email_inbox, or its Message-ID). Use it when the user asks to see or open a mail. Nothing comes back but its subject; fails when no Atlas window is open."
+description = "Show one email to the user in Kandinsky's Email pane (by uid and folder from email_inbox, or its Message-ID). Use it when the user asks to see or open a mail. Nothing comes back but its subject; fails when no Kandinsky window is open."
 input = { uid = "string?", message_id = { type = "string", description = "the mail's Message-ID, instead of a uid", optional = true }, folder = "string?", account = "string?" }
 method = "agent_open"
 secrets = ["*"]
@@ -242,7 +242,7 @@ timeout_secs = 600
 [[tool]]
 name = "accounts"
 method = "agent_accounts"
-description = "The user's email accounts in Atlas (names to pass as `account`; the first is the main one). No secrets."
+description = "The user's email accounts in Kandinsky (names to pass as `account`; the first is the main one). No secrets."
 
 # where it runs (PLUGIN-API.md, "Platforms"); a platform not named is untested (Android: only with `phone = true`)
 [platforms]

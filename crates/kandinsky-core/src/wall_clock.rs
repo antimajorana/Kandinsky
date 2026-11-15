@@ -1,5 +1,5 @@
-//! A wall-clock time as an instant: atlas-text's one rule (a time the clocks skip is read an hour later).
-pub use atlas_text::wall_clock::at;
+//! A wall-clock time as an instant: kandinsky-text's one rule (a time the clocks skip is read an hour later).
+pub use kandinsky_text::wall_clock::at;
 
 #[cfg(test)]
 mod tests {

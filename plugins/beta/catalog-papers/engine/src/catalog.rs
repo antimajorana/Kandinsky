@@ -204,7 +204,7 @@ pub fn find_pdf(ask: &dyn Fn(&Source, &Value) -> Res<Value>, attach: &dyn Fn(&st
         // `{ attached: true }` without a file: a source on the SDK's `attach_pdf`, which downloads to its fixed place in
         // the source's cache (`pdf/<key>.pdf`) and no longer attaches itself (the helper would wait on itself)
         let file = r["file"].as_str().map(String::from).or_else(|| {
-            (r["attached"].as_bool() == Some(true)).then(|| format!(".atlas/cache/plugins/{}/pdf/{}.pdf", src.plugin, sdk_name(paper["key"].as_str().unwrap_or_default())))
+            (r["attached"].as_bool() == Some(true)).then(|| format!(".kandinsky/cache/plugins/{}/pdf/{}.pdf", src.plugin, sdk_name(paper["key"].as_str().unwrap_or_default())))
         });
         let attached = match file {
             Some(file) => attach(&file, &from).map_err(|e| tried.push(format!("{}: {e}", src.label))).is_ok(),
@@ -262,7 +262,7 @@ pub fn add(lib: &Lib, params: &Value, sources_of: &dyn Fn() -> Res<Map<String, V
 fn add_pdf_link(lib: &Lib, url: &str) -> Res<Value> {
     let bytes = lib.net.pdf(url).map_err(|e| e.to_string())?;
     let name = url.split(['?', '#']).next().unwrap_or(url).rsplit('/').next().filter(|n| !n.is_empty()).unwrap_or("document.pdf");
-    let name = atlas_text::links::percent_decoded(name);
+    let name = kandinsky_text::links::percent_decoded(name);
     let opts = crate::refs::ImportOpts { keep_name: true, url: Some(url.to_string()), ..Default::default() };
     let added = lib.import_pdf_with(&name, &bytes, &opts)?;
     Ok(json!({ "path": lib.note(&added.paper.key)?, "created": added.created, "pdf": true }))
@@ -370,14 +370,14 @@ mod tests {
     fn add_files_the_paper_and_asks_the_sources_only_when_no_pdf_came() {
         let mut v = Vault::new();
         v.net = Table::default().on("https://api.crossref.org/works/10.1/x", Answer::Json(json!({ "message": { "title": ["Kinks"], "type": "journal-article" } })));
-        let cache = v.root.join(".atlas/cache/plugins/oa");
+        let cache = v.root.join(".kandinsky/cache/plugins/oa");
         std::fs::create_dir_all(&cache).unwrap();
         std::fs::write(cache.join("k.pdf"), b"%PDF-1.4 found").unwrap();
         let lib = v.lib();
         let asked = RefCell::new(Vec::new());
         let ask = |s: &Source, paper: &Value| -> Res<Value> {
             asked.borrow_mut().push(paper.clone());
-            Ok(json!({ "file": ".atlas/cache/plugins/oa/k.pdf", "from": format!("a mirror via {}", s.plugin) }))
+            Ok(json!({ "file": ".kandinsky/cache/plugins/oa/k.pdf", "from": format!("a mirror via {}", s.plugin) }))
         };
         let sources = || -> Res<Map<String, Value>> { Ok(json!({ "another-source": { "pdf_sources": [{ "tool": "find_pdf" }] } }).as_object().unwrap().clone()) };
         let r = add(&lib, &json!({ "ids": { "doi": "10.1/x" } }), &sources, &ask).unwrap();

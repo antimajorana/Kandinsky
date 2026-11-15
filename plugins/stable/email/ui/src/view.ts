@@ -9,21 +9,21 @@ import SignIn from "./SignIn.svelte";
 import type { PluginApi } from "./api";
 import { RULES_DIALOG, THUNDERBIRD_DIALOG, standIn } from "./rules-host";
 
-export default function (host: HTMLElement, atlas: PluginApi) {
-  if (atlas.arg === RULES_DIALOG) {
-    const rules = mount(Rules, { target: host, props: { frame: "dialog", mail: standIn(atlas), onclose: () => atlas.pane?.close?.() } });
+export default function (host: HTMLElement, kandinsky: PluginApi) {
+  if (kandinsky.arg === RULES_DIALOG) {
+    const rules = mount(Rules, { target: host, props: { frame: "dialog", mail: standIn(kandinsky), onclose: () => kandinsky.pane?.close?.() } });
     return () => unmount(rules);
   }
-  const dialog = (() => { try { return JSON.parse(String(atlas.arg ?? "")) as { dialog?: string; account?: string; record?: { name: string } }; } catch { return {}; } })();
+  const dialog = (() => { try { return JSON.parse(String(kandinsky.arg ?? "")) as { dialog?: string; account?: string; record?: { name: string } }; } catch { return {}; } })();
   if (dialog.dialog === "signin") {
-    const si = mount(SignIn, { target: host, props: { atlas, account: dialog.account, record: dialog.record, onclose: () => atlas.pane?.close?.() } });
+    const si = mount(SignIn, { target: host, props: { kandinsky, account: dialog.account, record: dialog.record, onclose: () => kandinsky.pane?.close?.() } });
     return () => unmount(si);
   }
-  if (atlas.arg === THUNDERBIRD_DIALOG) {
-    const tb = mount(Thunderbird, { target: host, props: { atlas, onclose: () => atlas.pane?.close?.() } });
+  if (kandinsky.arg === THUNDERBIRD_DIALOG) {
+    const tb = mount(Thunderbird, { target: host, props: { kandinsky, onclose: () => kandinsky.pane?.close?.() } });
     return () => unmount(tb);
   }
   host.style.height = "100%";
-  const app = mount(App, { target: host, props: { atlas } });
+  const app = mount(App, { target: host, props: { kandinsky } });
   return () => unmount(app);
 }

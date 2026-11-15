@@ -1,9 +1,9 @@
 // The export dialog (docs/design/DESIGN-export.md §1): the options beside a preview of the document. PDF (Typst)
 // previews as the options change; the LaTeX road on "Preview" (it takes seconds). "Export" writes into the exports
-// folder and remembers the choices as the plugin's settings. Opened by main.js with the note's path as `atlas.arg`.
-export default function mount(host, atlas) {
-  const path = String(atlas.arg ?? "");
-  const s = atlas.plugin.settings ?? {};
+// folder and remembers the choices as the plugin's settings. Opened by main.js with the note's path as `kandinsky.arg`.
+export default function mount(host, kandinsky) {
+  const path = String(kandinsky.arg ?? "");
+  const s = kandinsky.plugin.settings ?? {};
   const name = path.split("/").pop().replace(/\.md$/i, "");
   const el = (tag, props = {}, kids = []) => {
     const e = Object.assign(document.createElement(tag), props);
@@ -123,16 +123,16 @@ export default function mount(host, atlas) {
   let tikz = [];
   const drawn = new Map(); // key → width in points
   async function figures(f) {
-    if (f === "pdf-latex" || f === "tex" || !tikz.length || !atlas.tikz) return {};
+    if (f === "pdf-latex" || f === "tex" || !tikz.length || !kandinsky.tikz) return {};
     for (const t of tikz) {
       if (drawn.has(t.key)) continue;
       say("Drawing the TikZ pictures…");
       // a picture TeX cannot draw stays code, and the helper says so
-      try { const { png, width } = await atlas.tikz.png(t.source); await atlas.writeBytes(t.png, png); drawn.set(t.key, width); } catch { /* left as code */ }
+      try { const { png, width } = await kandinsky.tikz.png(t.source); await kandinsky.writeBytes(t.png, png); drawn.set(t.key, width); } catch { /* left as code */ }
     }
     return Object.fromEntries(drawn);
   }
-  const offProgress = atlas.helper.on("progress", (d) => { if (d?.stage !== "done" && d?.text) say(`${d.text}…`); });
+  const offProgress = kandinsky.helper.on("progress", (d) => { if (d?.stage !== "done" && d?.text) say(`${d.text}…`); });
   async function make(previewOnly) {
     const mine = ++generation;
     const f = previewOnly ? previewFormat() : format;
@@ -141,13 +141,13 @@ export default function mount(host, atlas) {
     previewBtn.disabled = true;
     if (!previewOnly) { go.disabled = true; stop.hidden = false; }
     try {
-      const r = await atlas.helper.call("export", { path, format: f, options: options(), settings: s, preview: previewOnly, figures: await figures(f) }, { timeout: 600 });
+      const r = await kandinsky.helper.call("export", { path, format: f, options: options(), settings: s, preview: previewOnly, figures: await figures(f) }, { timeout: 600 });
       if (mine !== generation) return;
       warn(r.warnings);
       if (r.pdf && (previewOnly || f.startsWith("pdf"))) {
         unmount();
         shown.replaceChildren();
-        unmount = atlas.mountBlock(shown, { type: "text", text: `![[${r.pdf}]]` }, path);
+        unmount = kandinsky.mountBlock(shown, { type: "text", text: `![[${r.pdf}]]` }, path);
         label.textContent = previewOnly ? (f === format ? "Preview" : `Preview (as ${f === "pdf-latex" ? "PDF through LaTeX" : "PDF through Typst"})`) : r.pdf;
       }
       if (previewOnly) say("");
@@ -155,8 +155,8 @@ export default function mount(host, atlas) {
         const made = r.written[r.written.length - 1];
         say(`Exported: ${made}${r.cited.length ? ` · ${r.cited.length} paper${r.cited.length > 1 ? "s" : ""} cited` : ""}`);
         const { title: _t, subtitle: _s, author: _a, date: _d, ...keep } = options();
-        await atlas.plugin.saveSettings({ ...s, ...keep, format }).catch(() => {});
-        if (openAfter.checked) atlas.open(made);
+        await kandinsky.plugin.saveSettings({ ...s, ...keep, format }).catch(() => {});
+        if (openAfter.checked) kandinsky.open(made);
       }
     } catch (e) {
       if (mine === generation) say(stopped ? "Stopped" : String(e?.message ?? e), !stopped);
@@ -178,11 +178,11 @@ export default function mount(host, atlas) {
 
   previewBtn.onclick = () => void make(true);
   go.onclick = () => void make(false);
-  stop.onclick = () => { stopped = true; say("Stopping…"); void atlas.helper.restart(); };
-  close.onclick = () => atlas.pane?.close();
+  stop.onclick = () => { stopped = true; say("Stopping…"); void kandinsky.helper.restart(); };
+  close.onclick = () => kandinsky.pane?.close();
   host.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); go.click(); } });
 
-  Promise.all([atlas.helper.call("formats", {}, { timeout: 30 }), atlas.helper.call("describe", { path, settings: s }, { timeout: 60 })]).then(([list, d]) => {
+  Promise.all([kandinsky.helper.call("formats", {}, { timeout: 30 }), kandinsky.helper.call("describe", { path, settings: s }, { timeout: 60 })]).then(([list, d]) => {
     roads = Object.fromEntries(list.map((x) => [x.id, x.ok]));
     if (!roads[format]) format = list.find((x) => x.ok)?.id ?? format;
     for (const x of list) {
@@ -196,10 +196,10 @@ export default function mount(host, atlas) {
     if (d.cited.length && !bibliography.value) bibliography.placeholder = d.bib ?? "no .bib found";
     warn(d.warnings);
     shown.replaceChildren(el("p", { className: "ex-empty", textContent: "The preview appears here." }));
-    if (!list.some((x) => x.ok)) say("Nothing can export here: pandoc is not installed on the machine running Atlas.", true);
+    if (!list.some((x) => x.ok)) say("Nothing can export here: pandoc is not installed on the machine running Kandinsky.", true);
     changed();
   }, (e) => say(String(e?.message ?? e), true));
 
   // closed while exporting: the export is stopped, not left building a file nobody waits for
-  return () => { if (!stop.hidden) void atlas.helper.restart(); clearTimeout(timer); offProgress?.(); unmount(); host.replaceChildren(); host.classList.remove("ex"); };
+  return () => { if (!stop.hidden) void kandinsky.helper.restart(); clearTimeout(timer); offProgress?.(); unmount(); host.replaceChildren(); host.classList.remove("ex"); };
 }

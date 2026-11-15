@@ -9,7 +9,7 @@ the result goes under the exports folder at the note's own path (`notes/reports/
 - **Export…** in a note's right-click menu (file tree and tab) and the command **Export the open note…**: a dialog over
   the app (a tab in an app older than plugin API 20).
 - **The dialog**:
-  - *Format* — **PDF (Typst)**: compiled by the Typst built into Atlas, fast, no TeX; the preview follows the options
+  - *Format* — **PDF (Typst)**: compiled by the Typst built into Kandinsky, fast, no TeX; the preview follows the options
     as you change them. **PDF (LaTeX)**: pandoc writes the `.tex` (kept beside the PDF), latexmk compiles it; the
     preview is made with **Preview**. **LaTeX source**, **Typst source**, **Word (.docx)**. A format whose programs
     are missing is shown greyed, saying what it needs.
@@ -27,16 +27,16 @@ the result goes under the exports folder at the note's own path (`notes/reports/
   → quotes with a bold title; `==marked==` → highlighted; ```` ```tikz ```` → the picture on the LaTeX road
   (`tikz.lua`, a pandoc Lua filter usable on its own); on the Typst and Word roads a PNG drawn by the TeX in the page
   (the same one that draws it in the note, its Computer Modern text inside) at the width TeX gave it, made by the
-  dialog before the export (Atlas 23 or newer; code before that); ```` ```typst ```` → the picture on the Typst
-  road, a PDF picture made by Atlas's Typst on the LaTeX road, code in Word; comments, block ids and query blocks left
+  dialog before the export (Kandinsky 23 or newer; code before that); ```` ```typst ```` → the picture on the Typst
+  road, a PDF picture made by Kandinsky's Typst on the LaTeX road, code in Word; comments, block ids and query blocks left
   out.
-- **Formulas** as Atlas draws them: its own macros (`\ket`, `\bra`, `\braket`, `\Tr`, `\mbox`, `\R`…) kept as
+- **Formulas** as Kandinsky draws them: its own macros (`\ket`, `\bra`, `\braket`, `\Tr`, `\mbox`, `\R`…) kept as
   written and defined in each document (`\providecommand` in the LaTeX preamble, `\newcommand` for pandoc's Typst
   and Word writers); a `$$align` block and a whole `\begin{align}` in `$$` written
   as `aligned` (valid inside display math everywhere); a heading right after a line of text kept a heading. The
   definitions come from the table the drawing uses (`ui/src/lib/tex-portable.ts`).
-- LaTeX's own files (`.aux`, `.log`, `.bbl`…) stay in `.atlas/cache/plugins/export/build/`; previews in
-  `.atlas/cache/plugins/export/preview/`.
+- LaTeX's own files (`.aux`, `.log`, `.bbl`…) stay in `.kandinsky/cache/plugins/export/build/`; previews in
+  `.kandinsky/cache/plugins/export/preview/`.
 
 ## Settings
 
@@ -50,8 +50,8 @@ own rather than the references plugin's, which it only matches by default.
 
 ## Needs
 
-pandoc (3.0 or newer) on the machine running Atlas's core (a served vault: the server) for every format; for PDF
-(LaTeX), a TeX distribution with latexmk and biber. PDF (Typst) needs nothing more: Typst is part of Atlas.
+pandoc (3.0 or newer) on the machine running Kandinsky's core (a served vault: the server) for every format; for PDF
+(LaTeX), a TeX distribution with latexmk and biber. PDF (Typst) needs nothing more: Typst is part of Kandinsky.
 
 ## Platforms
 

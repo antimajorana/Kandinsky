@@ -1,9 +1,9 @@
 <script lang="ts">
   // The capture box (DESIGN-finance "Capture"): type a payment in your words — "12,40 café con Ana revolut ayer",
   // "+1500 salary unicaja" — and the engine's reading shows as you type (`parse`); Enter writes it to review (`add`).
-  // The same words work in Atlas's own capture box, from any app (the `capture` hook).
+  // The same words work in Kandinsky's own capture box, from any app (the `capture` hook).
   import { call, type PluginApi } from "./api";
-  let { atlas, onchange }: { atlas: PluginApi; onchange: () => void } = $props();
+  let { kandinsky, onchange }: { kandinsky: PluginApi; onchange: () => void } = $props();
   interface Reading { hint?: string; why?: string; sure?: boolean; skipped?: string }
   let text = $state("");
   let reading = $state<Reading | null>(null);
@@ -17,7 +17,7 @@
     if (!t) { reading = null; return; }
     timer = setTimeout(async () => {
       const n = ++asked;
-      try { const r = await call<Reading>(atlas, "parse", { text: t }); if (n === asked) reading = r; } catch (e) { if (n === asked) reading = { skipped: (e as Error).message }; }
+      try { const r = await call<Reading>(kandinsky, "parse", { text: t }); if (n === asked) reading = r; } catch (e) { if (n === asked) reading = { skipped: (e as Error).message }; }
     }, 150);
   }
 
@@ -25,11 +25,11 @@
     if (!text.trim() || busy) return;
     busy = true;
     try {
-      const r = await call<{ path: string; hint: string }>(atlas, "add", { text: text.trim() });
-      atlas.toast("Added to review", r.hint.replace(/^→ /, ""));
+      const r = await call<{ path: string; hint: string }>(kandinsky, "add", { text: text.trim() });
+      kandinsky.toast("Added to review", r.hint.replace(/^→ /, ""));
       text = ""; reading = null;
       onchange();
-    } catch (e) { atlas.toast("Not added", (e as Error).message, "error"); } finally { busy = false; }
+    } catch (e) { kandinsky.toast("Not added", (e as Error).message, "error"); } finally { busy = false; }
   }
 </script>
 

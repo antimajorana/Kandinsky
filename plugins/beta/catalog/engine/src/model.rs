@@ -28,7 +28,7 @@ macro_rules! name {
 }
 
 name!(
-    /// A kind of thing: `movie`, `album`, `paper`, `article` (a `.atlas/kinds/<name>.yaml` or a subplugin's default).
+    /// A kind of thing: `movie`, `album`, `paper`, `article` (a `.kandinsky/kinds/<name>.yaml` or a subplugin's default).
     KindName
 );
 name!(
@@ -100,7 +100,7 @@ pub fn canonical_url(url: &str) -> String {
     let kept: Vec<&str> = query
         .into_iter()
         .flat_map(|q| q.split('&'))
-        .filter(|kv| !kv.split('=').next().unwrap_or("").is_empty() && !atlas_text::links::is_tracking(kv))
+        .filter(|kv| !kv.split('=').next().unwrap_or("").is_empty() && !kandinsky_text::links::is_tracking(kv))
         .collect();
     let path = path.trim_end_matches('/');
     let mut out = format!("{}://{host}", scheme.to_ascii_lowercase());

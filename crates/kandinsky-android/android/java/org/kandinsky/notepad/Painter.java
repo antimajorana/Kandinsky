@@ -1,4 +1,4 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -183,7 +183,7 @@ final class Painter {
     }
 
     private void picture(Canvas c, JSONObject e, float x, float y, float w, float h) {
-        JSONObject custom = e.optJSONObject("customData"), at = custom == null ? null : custom.optJSONObject("atlasPage");
+        JSONObject custom = e.optJSONObject("customData"), at = custom == null ? null : custom.optJSONObject("kandinskyPage");
         Bitmap b = at != null && linked != null ? linked.page(at.optString("file"), at.optInt("page", 1), w * scaleOf(c)) : bitmap(e.optString("fileId"));
         if (b == null) { line.setPathEffect(new DashPathEffect(new float[] { 6, 4 }, 0)); c.drawRect(x, y, x + w, y + h, line); return; }
         JSONArray scale = e.optJSONArray("scale");

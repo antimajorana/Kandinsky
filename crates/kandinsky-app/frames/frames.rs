@@ -1,14 +1,14 @@
 //! Web pages as tabs on Linux: a library preloaded into WebKitGTK's network process (main.rs `frames_preload`) that
-//! wraps three libsoup calls WebKit makes for every request, so a site framed by Atlas's own page (the core, on a
+//! wraps three libsoup calls WebKit makes for every request, so a site framed by Kandinsky's own page (the core, on a
 //! loopback address) shows and stays signed in, as on Windows (webview2/frame-any) and in Electron apps:
-//! - `soup_message_get_response_headers`: for a load inside Atlas's page (its first party) that is not a top-level
+//! - `soup_message_get_response_headers`: for a load inside Kandinsky's page (its first party) that is not a top-level
 //!   navigation, `X-Frame-Options` goes and the CSP loses its `frame-ancestors` directive (the rest of the site's policy stays);
 //! - `soup_cookie_jar_get_cookie_list_with_same_site_info` / `soup_cookie_jar_add_cookie_full`: a request or a cookie
-//!   whose first party is Atlas's page counts as first-party for its own site, so `SameSite` session cookies flow.
+//!   whose first party is Kandinsky's page counts as first-party for its own site, so `SameSite` session cookies flow.
 //!
 //! Nothing changes for any other page. Inactive (a pass-through) in every process but `WebKitNetworkProcess`; in each
 //! process it is loaded into, it takes itself out of `LD_PRELOAD`, so what that process starts never loads it.
-//! Built by build.rs with plain rustc (no crates), embedded in atlas-app. docs/guides/DEVELOPING.md, "Web pages as tabs".
+//! Built by build.rs with plain rustc (no crates), embedded in kandinsky-app. docs/guides/DEVELOPING.md, "Web pages as tabs".
 #![allow(clippy::missing_safety_doc)]
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,10 +22,10 @@ extern "C" {
 const RTLD_NEXT: *mut c_void = -1isize as *mut c_void;
 const RTLD_DEFAULT: *mut c_void = std::ptr::null_mut();
 /// The file's name, as main.rs writes it: what is taken out of LD_PRELOAD.
-const NAME: &str = "atlas-webkit-frames";
+const NAME: &str = "kandinsky-webkit-frames";
 
 static ACTIVE: AtomicBool = AtomicBool::new(false);
-/// `ATLAS_FRAMES_DEBUG=1`: each decision on stderr (the network process writes to the app's).
+/// `KANDINSKY_FRAMES_DEBUG=1`: each decision on stderr (the network process writes to the app's).
 static DEBUG: AtomicBool = AtomicBool::new(false);
 
 #[used]
@@ -36,7 +36,7 @@ extern "C" fn init() {
     let exe = std::fs::read_link("/proc/self/exe").ok();
     let network = exe.as_ref().and_then(|p| p.file_name()).is_some_and(|n| n == "WebKitNetworkProcess");
     ACTIVE.store(network, Ordering::Relaxed);
-    DEBUG.store(std::env::var_os("ATLAS_FRAMES_DEBUG").is_some(), Ordering::Relaxed);
+    DEBUG.store(std::env::var_os("KANDINSKY_FRAMES_DEBUG").is_some(), Ordering::Relaxed);
     if network && DEBUG.load(Ordering::Relaxed) {
         eprintln!("[frames] active in the network process");
     }
@@ -69,7 +69,7 @@ macro_rules! sym {
 
 type Ptr = *mut c_void;
 
-/// Atlas's own page: the desktop core serves it on a loopback address.
+/// Kandinsky's own page: the desktop core serves it on a loopback address.
 fn loopback(host: &str) -> bool {
     matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]")
 }
@@ -98,8 +98,8 @@ unsafe fn uri_host<'a>(uri: Ptr) -> Option<&'a str> {
     cstr(get(uri))
 }
 
-/// Is this URI Atlas's page (the first party a framed site gets treated as its own)?
-unsafe fn is_atlas(uri: Ptr) -> bool {
+/// Is this URI Kandinsky's page (the first party a framed site gets treated as its own)?
+unsafe fn is_kandinsky(uri: Ptr) -> bool {
     uri_host(uri).is_some_and(loopback)
 }
 
@@ -124,7 +124,7 @@ pub unsafe extern "C" fn soup_message_get_response_headers(msg: Ptr) -> Ptr {
     headers
 }
 
-/// Lets Atlas's page frame this response, nothing else: a load inside Atlas's page (WebKit's first party for it is
+/// Lets Kandinsky's page frame this response, nothing else: a load inside Kandinsky's page (WebKit's first party for it is
 /// the page, on loopback), not a top-level navigation, for another site. `Sec-Fetch-Dest` and `Referer` would say the
 /// same but WebKit sends neither to a plain-http site. X-Frame-Options and `frame-ancestors` only matter on a document,
 /// so a subresource losing them changes nothing.
@@ -144,7 +144,7 @@ unsafe fn unframe(msg: Ptr, headers: Ptr) {
     if DEBUG.load(Ordering::Relaxed) {
         eprintln!("[frames] {:?} first party {:?} top-level {top}", uri_host(u), uri_host(fp));
     }
-    if top || !is_atlas(fp) || is_atlas(u) {
+    if top || !is_kandinsky(fp) || is_kandinsky(u) {
         return;
     }
     remove(headers, c"X-Frame-Options".as_ptr());
@@ -172,8 +172,8 @@ pub unsafe extern "C" fn soup_cookie_jar_get_cookie_list_with_same_site_info(
     let Some(real) = sym!(REAL_LIST, RTLD_NEXT, "soup_cookie_jar_get_cookie_list_with_same_site_info", F) else {
         return std::ptr::null_mut();
     };
-    // a site inside Atlas's page is its own first party: its SameSite cookies come along, as in its own tab
-    if ACTIVE.load(Ordering::Relaxed) && (is_atlas(site_for_cookies) || is_atlas(top_level)) && !is_atlas(uri) {
+    // a site inside Kandinsky's page is its own first party: its SameSite cookies come along, as in its own tab
+    if ACTIVE.load(Ordering::Relaxed) && (is_kandinsky(site_for_cookies) || is_kandinsky(top_level)) && !is_kandinsky(uri) {
         return real(jar, uri, uri, uri, for_http, is_safe_method, is_top_level_navigation);
     }
     real(jar, uri, top_level, site_for_cookies, for_http, is_safe_method, is_top_level_navigation)
@@ -184,8 +184,8 @@ pub unsafe extern "C" fn soup_cookie_jar_add_cookie_full(jar: Ptr, cookie: Ptr, 
     let Some(real) = sym!(REAL_ADD, RTLD_NEXT, "soup_cookie_jar_add_cookie_full", unsafe extern "C" fn(Ptr, Ptr, Ptr, Ptr)) else {
         return;
     };
-    // a cookie set from inside Atlas's page is kept as the site's own (else the third-party policy drops it)
-    if ACTIVE.load(Ordering::Relaxed) && is_atlas(first_party) && !uri.is_null() && !is_atlas(uri) {
+    // a cookie set from inside Kandinsky's page is kept as the site's own (else the third-party policy drops it)
+    if ACTIVE.load(Ordering::Relaxed) && is_kandinsky(first_party) && !uri.is_null() && !is_kandinsky(uri) {
         return real(jar, cookie, uri, uri);
     }
     real(jar, cookie, uri, first_party)
@@ -203,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn atlas_is_the_loopback_page() {
+    fn kandinsky_is_the_loopback_page() {
         assert_eq!(host_of("http://127.0.0.1:4317/v/notes/"), "127.0.0.1");
         assert_eq!(host_of("http://[::1]:80/"), "::1");
         assert_eq!(host_of("https://user@sub.example.test/x"), "sub.example.test");

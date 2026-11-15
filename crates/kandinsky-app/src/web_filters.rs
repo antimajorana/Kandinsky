@@ -1,11 +1,11 @@
-//! Ad blocking for Atlas's browsing windows. WebKitGTK runs no browser extensions, so uBlock Origin itself
+//! Ad blocking for Kandinsky's browsing windows. WebKitGTK runs no browser extensions, so uBlock Origin itself
 //! cannot run there; what it has is WebKit's content blocker (Safari's rule format, compiled natively and applied to
 //! every request and page). The filter lists uBlock Origin starts with (EasyList, EasyPrivacy, uBlock's own) are
 //! fetched here, kept a week, and converted into that format by Brave's adblock-rust (`content-blocking`, what Brave
-//! does on iOS); the window compiles the result (crates/atlas-app `browser.rs`). uBlock's extended syntax (scriptlets,
+//! does on iOS); the window compiles the result (crates/kandinsky-app `browser.rs`). uBlock's extended syntax (scriptlets,
 //! procedural cosmetic filters) has no equivalent in WebKit and is left out. docs/WEB-WINDOWS.md.
-use atlas_core::config::WebConfig;
-use atlas_core::Result;
+use kandinsky_core::config::WebConfig;
+use kandinsky_core::Result;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
@@ -29,7 +29,7 @@ pub struct Rules {
 
 /// Where lists and rules are kept: the user's cache, not a vault (they are the same for every vault).
 pub fn cache_dir() -> PathBuf {
-    atlas_core::platform::dirs::atlas(atlas_core::platform::dirs::Base::Cache).join("web-filters")
+    kandinsky_core::platform::dirs::app(kandinsky_core::platform::dirs::Base::Cache).join("web-filters")
 }
 
 /// FNV-1a: a stable name for a list's file and for a rule set (std's hasher may change between Rust versions).
@@ -60,16 +60,16 @@ fn list_text(url: &str, dir: &Path, fetch: &dyn Fn(&str) -> Result<String>) -> (
 }
 
 fn http_get(url: &str) -> Result<String> {
-    let res = reqwest::blocking::Client::builder().use_preconfigured_tls(atlas_core::tls_chain::config())
+    let res = reqwest::blocking::Client::builder().use_preconfigured_tls(kandinsky_core::tls_chain::config())
         .timeout(Duration::from_secs(60))
-        .user_agent(concat!("Atlas/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("Kandinsky/", env!("CARGO_PKG_VERSION")))
         .build()
-        .map_err(|e| atlas_core::Error::Other(e.into()))?
+        .map_err(|e| kandinsky_core::Error::Other(e.into()))?
         .get(url)
         .send()
         .and_then(|r| r.error_for_status())
-        .map_err(|e| atlas_core::Error::BadRequest(format!("{}", e.without_url())))?;
-    res.text().map_err(|e| atlas_core::Error::BadRequest(e.to_string()))
+        .map_err(|e| kandinsky_core::Error::BadRequest(format!("{}", e.without_url())))?;
+    res.text().map_err(|e| kandinsky_core::Error::BadRequest(e.to_string()))
 }
 
 /// Lists in Adblock Plus / uBlock syntax → WebKit content-blocker rules (what WebKit cannot express is left out).
@@ -89,17 +89,17 @@ pub fn rules(cfg: &WebConfig) -> Result<Option<Rules>> {
 /// Converts `lists` into WebKit rules at `path`, atomically; → how many rules.
 pub fn write_rules(lists: &[String], path: &Path) -> Result<usize> {
     let rules = convert(lists);
-    let json = serde_json::to_string(&rules).map_err(|e| atlas_core::Error::Other(e.into()))?;
+    let json = serde_json::to_string(&rules).map_err(|e| kandinsky_core::Error::Other(e.into()))?;
     let part = path.with_extension("part");
     std::fs::write(&part, &json)?;
     std::fs::rename(&part, path)?;
     Ok(rules.len())
 }
 
-/// The flag that makes `atlas-app` the converter (main.rs): lists on stdin, `\0`-separated; the count on stdout.
+/// The flag that makes `kandinsky-app` the converter (main.rs): lists on stdin, `\0`-separated; the count on stdout.
 pub const CONVERT_FLAG: &str = "--convert-web-filters";
 
-/// `write_rules` in a child `atlas-app`: the conversion's ~30 MB of small allocations stayed in glibc's arenas for
+/// `write_rules` in a child `kandinsky-app`: the conversion's ~30 MB of small allocations stayed in glibc's arenas for
 /// the rest of the run (malloc_trim cannot return pages they fragment); a process that exits gives them all back.
 fn convert_apart(lists: &[String], path: &Path) -> Result<usize> {
     use std::io::Write;
@@ -110,7 +110,7 @@ fn convert_apart(lists: &[String], path: &Path) -> Result<usize> {
     let said = String::from_utf8_lossy(&out.stdout);
     match said.trim().parse() {
         Ok(n) if out.status.success() => Ok(n),
-        _ => Err(atlas_core::Error::BadRequest(format!("the filter converter failed ({}): {}", out.status, said.trim()))),
+        _ => Err(kandinsky_core::Error::BadRequest(format!("the filter converter failed ({}): {}", out.status, said.trim()))),
     }
 }
 
@@ -157,7 +157,7 @@ fn rules_with(cfg: &WebConfig, dir: &Path, fetch: &dyn Fn(&str) -> Result<String
 mod tests {
     use super::*;
 
-    /// The real lists, over the network: `cargo test -p atlas-core --lib real_lists -- --ignored --nocapture`.
+    /// The real lists, over the network: `cargo test -p kandinsky-core --lib real_lists -- --ignored --nocapture`.
     #[test]
     #[ignore]
     fn real_lists() {
@@ -191,7 +191,7 @@ mod tests {
         for f in std::fs::read_dir(&lists).unwrap().flatten() {
             std::fs::File::options().write(true).open(f.path()).unwrap().set_modified(SystemTime::now() - MAX_AGE * 2).unwrap();
         }
-        let offline = |_: &str| -> Result<String> { Err(atlas_core::Error::BadRequest("offline".into())) };
+        let offline = |_: &str| -> Result<String> { Err(kandinsky_core::Error::BadRequest("offline".into())) };
         let stale = rules_with(&cfg, dir.path(), &offline, &write_rules).unwrap().unwrap();
         assert!(stale.report[0].contains("not refreshed") && stale.report[0].contains("offline") && stale.id == r.id, "{:?}", stale.report);
         // off, or nothing to be had: no rules

@@ -1,4 +1,4 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -26,7 +26,7 @@ final class Exporter {
         this.n = n;
         painter.files(n.scene.files);
         // linked PDF pages, rendered and waited for (an export runs off the UI thread), sharp enough to print
-        painter.linked((file, page, px) -> org.atlas.capture.PageSource.pageNow(n.host, file, page, Math.max(px, 1600)));
+        painter.linked((file, page, px) -> org.kandinsky.capture.PageSource.pageNow(n.host, file, page, Math.max(px, 1600)));
     }
 
     /** The whole drawing as a PDF beside it; its vault path, or null (said in a toast). */

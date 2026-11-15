@@ -4,7 +4,7 @@ import { expect, type Page } from "@playwright/test";
 import { journey, type User } from "./harness";
 
 const T = { timeout: 6000 };
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 async function ready(p: Page) {
   await p.goto("/");
@@ -402,11 +402,11 @@ journey("Depth: settings and layout", "It remembers and responds", async (u) => 
 });
 
 // docs/guides/MALLEABLE.md (D21): the Ink & Switch guideline as user flows. Every step is `want` until built.
-journey("Depth: malleability", "Reshape Atlas without leaving it (gentle slope, tools not apps, dynamic documents)", async (u) => {
+journey("Depth: malleability", "Reshape Kandinsky without leaving it (gentle slope, tools not apps, dynamic documents)", async (u) => {
   const p = u.page;
   await ready(p);
-  await u.step("A CSS snippet in .atlas/snippets restyles the app live", want("R1 rung 2: Stylish-like restyling"), async () => {
-    await p.request.put("/api/file", { headers: H, data: { path: ".atlas/snippets/depth.css", text: ":root { --depth-snippet: 1; } .status { outline: 2px solid rgb(255, 0, 255); }\n" } });
+  await u.step("A CSS snippet in .kandinsky/snippets restyles the app live", want("R1 rung 2: Stylish-like restyling"), async () => {
+    await p.request.put("/api/file", { headers: H, data: { path: ".kandinsky/snippets/depth.css", text: ":root { --depth-snippet: 1; } .status { outline: 2px solid rgb(255, 0, 255); }\n" } });
     await expect.poll(() => p.evaluate(() => getComputedStyle(document.querySelector(".status")!).outlineColor), T).toBe("rgb(255, 0, 255)");
   });
   await u.step("Open a file with another view (Open with…)", want("R2: tools, not apps — one file, many views"), async () => {
@@ -420,7 +420,7 @@ journey("Depth: malleability", "Reshape Atlas without leaving it (gentle slope, 
   });
   await newNote(u, "notes/depth-plan.md", "# Week plan\n\n## Monday\n\n- [ ] read Georges 1996 📅 2026-10-12\n- [ ] run U=4 sweep 📅 2026-10-13\n\n```view\ntype: calendar\nfrom: note\n```\n");
   await u.step("A view block in a note shows its dated tasks as a calendar", want("R4 / Embark: views over the surrounding document"), async () => {
-    await expect(p.locator(".cm-content .atlas-view-calendar")).toContainText("read Georges", T);
+    await expect(p.locator(".cm-content .kandinsky-view-calendar")).toContainText("read Georges", T);
   });
   await u.step("@ mentions a paper from the Library as a chip", want("R4 / Embark: mentions of structured entities"), async () => {
     await p.locator(".cm-content").click();
@@ -430,7 +430,7 @@ journey("Depth: malleability", "Reshape Atlas without leaving it (gentle slope, 
     await expect(p.locator(".cm-tooltip-autocomplete")).toBeVisible({ timeout: 2000 });
     await u.press("Enter");
     await u.press("Escape");
-    await expect(p.locator(".cm-content .atlas-mention").first()).toBeVisible(T);
+    await expect(p.locator(".cm-content .kandinsky-mention").first()).toBeVisible(T);
   });
   await u.step("A repeated shell command becomes a suggested tool on Today", want("R5: tools made without being asked"), async () => {
     await u.press("Control+`");

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Atlas capture (docs/guides/ANDROID.md): the capture app — its launcher opens Settings; the box opens from the tile, the
-     accessibility button, a share, or "New capture". Java screens (android/java) over the Rust core (libatlas_android.so, JNI). -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.atlas.capture" android:versionCode="10" android:versionName="0.2.10">
+<!-- Kandinsky capture (docs/guides/ANDROID.md): the capture app — its launcher opens Settings; the box opens from the tile, the
+     accessibility button, a share, or "New capture". Java screens (android/java) over the Rust core (libkandinsky_android.so, JNI). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.kandinsky.capture" android:versionCode="10" android:versionName="0.2.10">
   <uses-permission android:name="android.permission.INTERNET" />
   <!-- Outbox: a job that waits for a network (JobScheduler asks for it; without it the app was killed, 2026-10-19) -->
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -14,9 +14,9 @@
   <!-- the last screenshot, when all-files access is not given -->
   <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-  <application android:label="Atlas capture" android:icon="@mipmap/ic_launcher" android:extractNativeLibs="true" android:requestLegacyExternalStorage="true">
+  <application android:label="Kandinsky capture" android:icon="@mipmap/ic_launcher" android:extractNativeLibs="true" android:requestLegacyExternalStorage="true">
     <!-- opened from the launcher: a normal app, its settings -->
-    <activity android:name=".SettingsActivity" android:exported="true" android:theme="@style/App" android:label="Atlas capture">
+    <activity android:name=".SettingsActivity" android:exported="true" android:theme="@style/App" android:label="Kandinsky capture">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
@@ -47,7 +47,7 @@
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="org.atlas.capture" />
+        <data android:scheme="org.kandinsky.capture" />
       </intent-filter>
     </activity>
     <activity android:name=".SignInWebActivity" android:exported="false" android:theme="@style/App" />

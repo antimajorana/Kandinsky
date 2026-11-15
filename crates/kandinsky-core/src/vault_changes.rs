@@ -1,5 +1,5 @@
 //! Whether a vault may have changed since a moment: what lets the note index (links.rs) skip its walk when nothing
-//! did. A vault's watcher (events.rs) holds a [`Feed`]; every change it sees, and every write Atlas makes through
+//! did. A vault's watcher (events.rs) holds a [`Feed`]; every change it sees, and every write Kandinsky makes through
 //! vault_write, moves the vault's generation on. A [`Stamp`] is only given while the watcher covers every folder the
 //! walk enters, with the walk's own configuration — anything less, and the caller walks as before.
 use crate::config::Config;
@@ -23,7 +23,7 @@ struct Shared {
     gen: AtomicU64,
     /// Every folder got its watch (inotify's limit can refuse one: then this vault is never trusted).
     whole: AtomicBool,
-    /// What the walk sees ([`walk::keep`]): a write Atlas makes elsewhere (a run's files in an ignored folder, its own
+    /// What the walk sees ([`walk::keep`]): a write Kandinsky makes elsewhere (a run's files in an ignored folder, its own
     /// cache) leaves the generation alone, or every such write would make the next index request walk the vault.
     walked: Config,
 }
@@ -86,7 +86,7 @@ impl Drop for Feed {
     }
 }
 
-/// Atlas changed `abs` itself (vault_write): told at once, not when the watcher's event arrives.
+/// Kandinsky changed `abs` itself (vault_write): told at once, not when the watcher's event arrives.
 pub(crate) fn touched(abs: &Path) {
     let feeds = FEEDS.read().unwrap_or_else(|e| e.into_inner());
     for s in feeds.iter() {
@@ -128,13 +128,13 @@ mod tests {
         assert_eq!(stamp(root, &cfg), Some(a));
         touched(&root.join("notes/x.md"));
         let b = stamp(root, &cfg).unwrap();
-        assert_ne!(a, b, "Atlas's own write");
+        assert_ne!(a, b, "Kandinsky's own write");
         feed.bump().changed();
         assert_ne!(stamp(root, &cfg), Some(b), "the watcher's event");
         touched(Path::new("/elsewhere/x.md"));
         let c = stamp(root, &cfg);
-        touched(&root.join(".atlas/cache/recent.json"));
-        assert_eq!(stamp(root, &cfg), c, "a write the walk never sees (Atlas's cache) changes nothing for the index");
+        touched(&root.join(".kandinsky/cache/recent.json"));
+        assert_eq!(stamp(root, &cfg), c, "a write the walk never sees (Kandinsky's cache) changes nothing for the index");
         let mut other = cfg.clone();
         other.ignore.push("runs".into());
         assert_eq!(stamp(root, &other), None, "another configuration: the watcher's folders may not be the walk's");

@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Activity;
 import android.app.Dialog;
@@ -28,23 +28,23 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Atlas on the phone (docs/guides/ANDROID.md, "The native shell"): a native app — its top bar, its bottom bar (Home, Files,
+ * Kandinsky on the phone (docs/guides/ANDROID.md, "The native shell"): a native app — its top bar, its bottom bar (Home, Files,
  * Search, Settings), the capture button, the open files' sheet, the menu, the phone's settings — around one WebView, the
  * note view, which shows the web's own Home, Files, Search, the open files and any other view (ui/src/lib/native-shell
- * .svelte.ts on that side). Only files are tabs. The vault's logic runs where its Atlas server runs: the core inside this
+ * .svelte.ts on that side). Only files are tabs. The vault's logic runs where its Kandinsky server runs: the core inside this
  * app (src/serve.rs) for a vault on the phone, the server itself for a vault there.
  */
-public final class AtlasActivity extends Activity {
+public final class KandinskyActivity extends Activity {
     /** An Intent extra: a vault path to open (a native plugin sending the user back to a note: Host.open). */
-    static final String OPEN = "org.atlas.open";
+    static final String OPEN = "org.kandinsky.open";
     /** With OPEN: in the web editor, not the native plugin that opens such files (Notepad's "Open in Excalidraw"). */
-    static final String WEB = "org.atlas.web";
+    static final String WEB = "org.kandinsky.web";
     /** The path to open on the web once (WEB): nativeOpens says no to it the next time it is asked. */
     private volatile String webOnce;
     /** A native plugin's `[[link]]` to follow, and the vault file it is in (LINK_FROM): resolved by the page. */
-    static final String LINK = "org.atlas.link", LINK_FROM = "org.atlas.link-from";
+    static final String LINK = "org.kandinsky.link", LINK_FROM = "org.kandinsky.link-from";
     /** An Intent extra: open the vault's page afresh (SignedInActivity, after a sign-in). */
-    static final String RELOAD = "org.atlas.reload";
+    static final String RELOAD = "org.kandinsky.reload";
     /** Where the shell is: the phone's own settings (drawn natively), or the note view showing the web's Home, Files or
      *  Search, or
      *  a tab (`arg`: its id) / a view (Settings…). */
@@ -53,7 +53,7 @@ public final class AtlasActivity extends Activity {
         /** shown by the note view (the WebView), not drawn natively */
         boolean web() { return this != SETTINGS; }
         /** the whole page call that shows it (NOTE: the tab, by its id) */
-        String call() { return this == HOME ? "atlasShell.home()" : this == LIBRARY ? "atlasShell.view('libraries')" : this == FILES ? "atlasShell.view('files')" : this == SEARCH ? "atlasShell.view('search')" : null; }
+        String call() { return this == HOME ? "kandinskyShell.home()" : this == LIBRARY ? "kandinskyShell.view('libraries')" : this == FILES ? "kandinskyShell.view('files')" : this == SEARCH ? "kandinskyShell.view('search')" : null; }
     }
 
     private static final class Screen {
@@ -112,7 +112,7 @@ public final class AtlasActivity extends Activity {
     private void openAsked(Intent i) {
         String path = i.getStringExtra(OPEN);
         if (path != null && i.getBooleanExtra(WEB, false)) webOnce = path;
-        if (path != null) js("atlasShell.open(" + JSONObject.quote(path) + ")"); // js() waits for the page
+        if (path != null) js("kandinskyShell.open(" + JSONObject.quote(path) + ")"); // js() waits for the page
     }
 
     /** Only a file in front has a Back stack (the app's own places start afresh); its tab ids die with the page, so a
@@ -158,7 +158,7 @@ public final class AtlasActivity extends Activity {
         if (i.getBooleanExtra(RELOAD, false)) shown = null; // back from a sign-in: the vault's page again, now let in
         openAsked(i);
         String link = i.getStringExtra(LINK);
-        if (link != null) js("atlasShell.link(" + JSONObject.quote(link) + "," + JSONObject.quote(String.valueOf(i.getStringExtra(LINK_FROM))) + ")");
+        if (link != null) js("kandinskyShell.link(" + JSONObject.quote(link) + "," + JSONObject.quote(String.valueOf(i.getStringExtra(LINK_FROM))) + ")");
     }
 
     /** The native plugin that opens `path` in this vault (installed there and on), or null. */
@@ -225,7 +225,7 @@ public final class AtlasActivity extends Activity {
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(look.dp(28), look.dp(28));
         bp.setMargins(look.dp(10), 0, look.dp(6), 0);
         top.addView(brand, bp);
-        title = look.label(this, "Atlas", 20, look.text); // Material's top app bar: a 64 dp bar, its title medium weight
+        title = look.label(this, "Kandinsky", 20, look.text); // Material's top app bar: a 64 dp bar, its title medium weight
         title.setTypeface(MEDIUM);
         title.setSingleLine(true);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -427,10 +427,10 @@ public final class AtlasActivity extends Activity {
         WebView mine = web;
         place.postDelayed(() -> {
             if (ready || web != mine || !vault.equals(shown)) return;
-            android.util.Log.e("AtlasPage", "not ready after " + READY_WAIT_MS + " ms: showing the page as it is");
+            android.util.Log.e("KandinskyPage", "not ready after " + READY_WAIT_MS + " ms: showing the page as it is");
             web.setVisibility(View.VISIBLE);
             place.setVisibility(View.GONE);
-            android.widget.Toast.makeText(this, Vaults.name(vault) + " did not finish opening: its page as it is (adb logcat -s AtlasPage)", android.widget.Toast.LENGTH_LONG).show();
+            android.widget.Toast.makeText(this, Vaults.name(vault) + " did not finish opening: its page as it is (adb logcat -s KandinskyPage)", android.widget.Toast.LENGTH_LONG).show();
             // a server whose sign-in in front turned the page's scripts away: say so and offer to sign in, not a blank page
             if (Server.is(vault)) new Thread(() -> {
                 SignIn.Probe p = SignIn.probe(this, vault, true);
@@ -451,7 +451,7 @@ public final class AtlasActivity extends Activity {
                     web.loadUrl(o.getString("open")); // a one-time address: the in-app core is locked to this app (its cookie)
                 } catch (Exception e) {
                     place.removeAllViews();
-                    place.addView(quiet("Atlas could not open " + Vaults.name(vault) + ": " + e.getMessage()));
+                    place.addView(quiet("Kandinsky could not open " + Vaults.name(vault) + ": " + e.getMessage()));
                     place.setVisibility(View.VISIBLE);
                 }
             });
@@ -490,7 +490,7 @@ public final class AtlasActivity extends Activity {
                 h.setInstanceFollowRedirects(false);
                 h.setConnectTimeout(8000);
                 h.setReadTimeout(10000);
-                h.setRequestProperty("x-atlas", "1");
+                h.setRequestProperty("x-kandinsky", "1"); h.setRequestProperty("x-atlas", "1"); // and a server from before the rename
                 Server.headers(this, base, h);
                 int code = h.getResponseCode();
                 theirs = code == 200 ? new String(Bytes.all(h.getInputStream()), java.nio.charset.StandardCharsets.UTF_8) : code == 404 ? "{}" : null;
@@ -500,19 +500,19 @@ public final class AtlasActivity extends Activity {
                 JSONObject a = new JSONObject(mine), b = new JSONObject(theirs);
                 int ours = a.optInt("api"), server = b.optInt("api", 0);
                 String key = "version-said:" + base + ":" + b.optString("version", "?") + ":" + server;
-                android.util.Log.i("AtlasPage", "versions: app " + mine + ", server " + theirs);
-                if (ours == server || getSharedPreferences("atlas", MODE_PRIVATE).getBoolean(key, false)) return;
+                android.util.Log.i("KandinskyPage", "versions: app " + mine + ", server " + theirs);
+                if (ours == server || getSharedPreferences("kandinsky", MODE_PRIVATE).getBoolean(key, false)) return;
                 String say = server == 0
                     ? Vaults.name(base) + "'s server is older than this app (it does not say its version): the app shows its own interface, and some things may not work until the server is updated."
                     : server < ours
-                        ? Vaults.name(base) + "'s server (Atlas " + b.optString("version") + ", API " + server + ") is older than this app (API " + ours + "): some things may not work until the server is updated."
+                        ? Vaults.name(base) + "'s server (Kandinsky " + b.optString("version") + ", API " + server + ") is older than this app (API " + ours + "): some things may not work until the server is updated."
                         : Vaults.name(base) + "'s server (API " + server + ") is newer than this app (API " + ours + "): update the app.";
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed()) return; // closed meanwhile: a dialog would crash, and it is said next time
-                    getSharedPreferences("atlas", MODE_PRIVATE).edit().putBoolean(key, true).apply();
+                    getSharedPreferences("kandinsky", MODE_PRIVATE).edit().putBoolean(key, true).apply();
                     new android.app.AlertDialog.Builder(this).setTitle("Versions differ").setMessage(say).setPositiveButton("OK", null).show();
                 });
-            } catch (Exception e) { android.util.Log.w("AtlasPage", "version check: " + e); }
+            } catch (Exception e) { android.util.Log.w("KandinskyPage", "version check: " + e); }
         }).start();
     }
 
@@ -534,20 +534,20 @@ public final class AtlasActivity extends Activity {
         // the phone's text size goes to the page's own scale (Bridge.fontScale), which grows boxes with their words; the
         // WebView's default text zoom grows the words alone, out of their rows and buttons
         s.setTextZoom(100);
-        w.addJavascriptInterface(new Bridge(), "AtlasNative");
+        w.addJavascriptInterface(new Bridge(), "KandinskyNative");
         // a tap that reaches the page itself (the drawing's toolbar: undo, redo, its menus — the pen's strokes go to the
         // catcher over the drawing): what it changed shown once the page has drawn it (OnyxInk `repaint`)
         w.setOnTouchListener((v, e) -> {
             if (webInk != null && e.getActionMasked() == MotionEvent.ACTION_UP) webInk.repaint(150);
             return false; // the page still gets every event
         });
-        // the page's console in logcat (`adb logcat -s AtlasPage`): a release WebView cannot be inspected otherwise
+        // the page's console in logcat (`adb logcat -s KandinskyPage`): a release WebView cannot be inspected otherwise
         w.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
                 boolean bad = m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR;
                 String line = m.message() + " (" + m.sourceId() + ":" + m.lineNumber() + ")";
-                if (bad) android.util.Log.e("AtlasPage", line); else android.util.Log.i("AtlasPage", line);
+                if (bad) android.util.Log.e("KandinskyPage", line); else android.util.Log.i("KandinskyPage", line);
                 return true;
             }
         });
@@ -555,7 +555,7 @@ public final class AtlasActivity extends Activity {
             /** The page's renderer died (out of memory, a crash): say so and start the vault again, never a blank screen. */
             @Override
             public boolean onRenderProcessGone(WebView v, android.webkit.RenderProcessGoneDetail d) {
-                android.util.Log.e("AtlasPage", "renderer gone (crashed: " + d.didCrash() + ")");
+                android.util.Log.e("KandinskyPage", "renderer gone (crashed: " + d.didCrash() + ")");
                 if (v == web && shown != null) open(shown, true); // open() takes the dead view out and destroys it; back where it was
                 return true; // handled: the app lives on
             }
@@ -590,13 +590,13 @@ public final class AtlasActivity extends Activity {
         if (vault == null || Server.is(vault)) { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); return; }
         Web.signIn(this, url, () -> new Thread(() -> {
             String said = Core.keepSignin(vault, url, Web.cookies(this, url));
-            if (said.contains("\"error\"")) android.util.Log.w("AtlasSignin", url + ": " + said);
+            if (said.contains("\"error\"")) android.util.Log.w("KandinskySignin", url + ": " + said);
         }).start());
     }
 
     /** The page's side of the shell (native-shell.svelte.ts). Called on the WebView's thread: everything goes to the main one. */
     private final class Bridge {
-        @JavascriptInterface public void ready() { runOnUiThread(AtlasActivity.this::pageReady); }
+        @JavascriptInterface public void ready() { runOnUiThread(KandinskyActivity.this::pageReady); }
         /** The page's fullscreen (Super+F, a drawing's ⛶): the app's (setFull), the page being always one pane here. */
         @JavascriptInterface public void toggleFullscreen() { runOnUiThread(() -> setFull(!full)); }
         @JavascriptInterface public void tabs(String json) { runOnUiThread(() -> tabsChanged(json)); }
@@ -613,8 +613,8 @@ public final class AtlasActivity extends Activity {
         }
         /** `path` may name a place in the file after `#` (a drawing's `#Page 2`): the plugin is chosen by the file, handed all. */
         /** service-signin.ts: a plugin met a service's gate. */
-        @JavascriptInterface public void signInDoor(String url) { runOnUiThread(() -> AtlasActivity.this.signInDoor(url)); }
-        @JavascriptInterface public void openNative(String path) { runOnUiThread(() -> { NativePlugin p = nativeFor(path.split("#", 2)[0]); if (p != null) PluginActivity.start(AtlasActivity.this, p.id(), path); }); }
+        @JavascriptInterface public void signInDoor(String url) { runOnUiThread(() -> KandinskyActivity.this.signInDoor(url)); }
+        @JavascriptInterface public void openNative(String path) { runOnUiThread(() -> { NativePlugin p = nativeFor(path.split("#", 2)[0]); if (p != null) PluginActivity.start(KandinskyActivity.this, p.id(), path); }); }
         /** lib/eink.ts's automatic refreshes: the calm one, no flash (Look.calmRefresh). */
         @JavascriptInterface public void einkRefresh() { runOnUiThread(() -> Look.calmRefresh(web)); }
         /** lib/eink.ts, the command "E-ink: clear the screen": the full, flashing one (Look.fullRefresh). */
@@ -629,8 +629,8 @@ public final class AtlasActivity extends Activity {
         @JavascriptInterface public void ink(double left, double top, double width, double height, double lineWidth, int style) {
             runOnUiThread(() -> {
                 if (webInk == null) {
-                    android.util.Log.i("AtlasInk", "page asks for instant ink (e-ink " + look.eink + ", Onyx " + OnyxAccess.here() + ")");
-                    if (look.eink) OnyxAccess.offer(AtlasActivity.this); // a Boox that hides its pen from Atlas: ask to be let in
+                    android.util.Log.i("KandinskyInk", "page asks for instant ink (e-ink " + look.eink + ", Onyx " + OnyxAccess.here() + ")");
+                    if (look.eink) OnyxAccess.offer(KandinskyActivity.this); // a Boox that hides its pen from Kandinsky: ask to be let in
                     webInk = look.eink ? Ink.onyx(web) : Ink.NONE;
                 }
                 float d = getResources().getDisplayMetrics().density;
@@ -666,10 +666,10 @@ public final class AtlasActivity extends Activity {
                 // the page's picture shown once the writing pauses, never mid-word (OnyxInk down / up)
                 public void began() { if (webInk != null) webInk.down(0, 0, 0); }
                 public void done(String json) {
-                    if (ready && web != null) web.evaluateJavascript("atlasShell.penStroke && atlasShell.penStroke(" + JSONObject.quote(json) + ")", null);
+                    if (ready && web != null) web.evaluateJavascript("kandinskyShell.penStroke && kandinskyShell.penStroke(" + JSONObject.quote(json) + ")", null);
                     if (webInk != null) webInk.up();
                 }
-                public void growing(String json) { if (ready && web != null) web.evaluateJavascript("atlasShell.penDraft && atlasShell.penDraft(" + (json == null ? "null" : JSONObject.quote(json)) + ")", null); }
+                public void growing(String json) { if (ready && web != null) web.evaluateJavascript("kandinskyShell.penDraft && kandinskyShell.penDraft(" + (json == null ? "null" : JSONObject.quote(json)) + ")", null); }
             });
             catcher.drafts = wantDrafts;
             ((FrameLayout) web.getParent()).addView(catcher, new FrameLayout.LayoutParams(0, 0));
@@ -714,7 +714,7 @@ public final class AtlasActivity extends Activity {
         JSONArray kept = remembered();
         // behind, never native: opened as before, a kept drawing launched Notepad and a slow file took the front from
         // the view asked for meanwhile
-        for (int i = 0; i < kept.length(); i++) js("(atlasShell.restore || atlasShell.open)(" + JSONObject.quote(kept.optString(i)) + ")");
+        for (int i = 0; i < kept.length(); i++) js("(kandinskyShell.restore || kandinskyShell.open)(" + JSONObject.quote(kept.optString(i)) + ")");
         while (!waiting.isEmpty()) waiting.poll().run();
         String back = resumeTo;
         resumeTo = null;
@@ -722,7 +722,7 @@ public final class AtlasActivity extends Activity {
         // the app shows, not the page's Home
         if (back == null && at.kind == Kind.NOTE && at.path != null) back = at.path;
         // in front again, unless a native plugin opens it (a drawing would launch Notepad over the app unasked)
-        if (back != null && nativeFor(back) == null) js("atlasShell.open(" + JSONObject.quote(back) + ")");
+        if (back != null && nativeFor(back) == null) js("kandinskyShell.open(" + JSONObject.quote(back) + ")");
         else if (at.kind != Kind.HOME && at.kind != Kind.NOTE && at.kind.call() != null) js(at.kind.call()); // Library, Files, Search
         render(); // the note view can be shown now
     }
@@ -791,7 +791,7 @@ public final class AtlasActivity extends Activity {
         place(active.optBoolean("file") ? active.optString("path") : null);
     }
 
-    private SharedPreferences prefs() { return getSharedPreferences("atlas-tabs", MODE_PRIVATE); }
+    private SharedPreferences prefs() { return getSharedPreferences("kandinsky-tabs", MODE_PRIVATE); }
     /** prefs: the file in front per vault (PLACE + vault: its path; absent on Home, Files, Search); the one to go back to. */
     private static final String PLACE = "place:";
     /** prefs: the app's own place per vault (Library, Files, Search, Home), for a vault opened again by itself. */
@@ -814,7 +814,7 @@ public final class AtlasActivity extends Activity {
     private void applyMirror(String vault) {
         String mirror = vaults.mirror(vault);
         String said = Core.mirror(vault, mirror == null ? "" : mirror, mirror == null ? "" : Web.cookies(this, mirror));
-        if (said.contains("\"error\"")) android.util.Log.w("AtlasMirror", vault + " → " + mirror + ": " + said);
+        if (said.contains("\"error\"")) android.util.Log.w("KandinskyMirror", vault + " → " + mirror + ": " + said);
     }
 
     /** Settings changed a folder's mirror (Setup): the in-app core told, and that folder's page loaded again, so the
@@ -886,7 +886,7 @@ public final class AtlasActivity extends Activity {
     /** A view of the page that is not a file (the vault's Settings, the graph): shown in the note view, never a tab. */
     private void view(String call) {
         go(new Screen(Kind.NOTE, null), true);
-        js("atlasShell." + call);
+        js("kandinskyShell." + call);
     }
 
     /** The keyboard is up (the insets listener): the + steps aside with the bottom bar. */
@@ -911,13 +911,13 @@ public final class AtlasActivity extends Activity {
             pills[i].setBackground(on ? look.round(look.accentSoft, 16, 0) : null);
             ((ImageView) ((FrameLayout) pills[i]).getChildAt(0)).getDrawable().setTint(on ? look.accent : look.muted);
         }
-        String name = shown == null ? "Atlas" : Vaults.name(shown);
+        String name = shown == null ? "Kandinsky" : Vaults.name(shown);
         if (at.kind == Kind.SETTINGS) { title.setText(SettingsPages.title(at.arg)); place.removeAllViews(); place.addView(settings()); return; }
         if (at.kind != Kind.NOTE && ready) place(null); // the user went Home (Files, Search): that is where to come back
         title.setText(at.kind == Kind.HOME ? name : at.kind == Kind.LIBRARY ? "Library" : at.kind == Kind.FILES ? "Files" : at.kind == Kind.SEARCH ? "Search" : title.getText().toString());
         if (!ready) { place.removeAllViews(); place.addView(quiet("Opening " + name + "…")); }
         if (at.kind.call() != null) js(at.kind.call());
-        else if (at.arg != null) js("atlasShell.activate(" + JSONObject.quote(at.arg) + ")");
+        else if (at.arg != null) js("kandinskyShell.activate(" + JSONObject.quote(at.arg) + ")");
     }
 
     /** A built-in plugin switched on or off in the vault on screen (VaultFiles.setOn), then its card drawn again. */
@@ -946,7 +946,7 @@ public final class AtlasActivity extends Activity {
         SettingsPages pages = new SettingsPages(this, look, new SettingsPages.Nav() {
             public void page(String arg) { go(new Screen(Kind.SETTINGS, arg), true); }
             public void web(String call) { view(call); }
-            public void switchPlugin(String id, boolean on) { AtlasActivity.this.switchPlugin(id, on); }
+            public void switchPlugin(String id, boolean on) { KandinskyActivity.this.switchPlugin(id, on); }
             public String vault() { return shown; }
             public JSONArray plugins() { return pluginsOfShown; }
         });
@@ -962,7 +962,7 @@ public final class AtlasActivity extends Activity {
     public void onBackPressed() {
         if (full) { setFull(false); return; }
         if (!ready || !at.kind.web() || web.getVisibility() != View.VISIBLE) { backOut(); return; }
-        web.evaluateJavascript("window.atlasShell && atlasShell.dismiss ? atlasShell.dismiss() : false", r -> { if (!"true".equals(r)) backOut(); });
+        web.evaluateJavascript("window.kandinskyShell && kandinskyShell.dismiss ? kandinskyShell.dismiss() : false", r -> { if (!"true".equals(r)) backOut(); });
     }
 
     private void backOut() {
@@ -975,7 +975,7 @@ public final class AtlasActivity extends Activity {
                 at = new Screen(Kind.NOTE, null);
                 at.path = s.path;
                 render();
-                js("atlasShell.open(" + JSONObject.quote(s.path) + ")");
+                js("kandinskyShell.open(" + JSONObject.quote(s.path) + ")");
                 return;
             }
             at = s;
@@ -1083,7 +1083,7 @@ public final class AtlasActivity extends Activity {
             }
             r.addView(words, new LinearLayout.LayoutParams(0, -2, 1f));
             r.setOnClickListener(v -> { d.dismiss(); go(new Screen(Kind.NOTE, id), true); });
-            ImageView x = iconButton("close", "Close " + t.optString("title"), v -> { js("atlasShell.close(" + JSONObject.quote(id) + ")"); list.removeView((View) v.getParent()); });
+            ImageView x = iconButton("close", "Close " + t.optString("title"), v -> { js("kandinskyShell.close(" + JSONObject.quote(id) + ")"); list.removeView((View) v.getParent()); });
             r.addView(x);
             list.addView(r);
         }
@@ -1094,7 +1094,7 @@ public final class AtlasActivity extends Activity {
     private void closeAll() {
         for (int i = 0; i < tabs.length(); i++) {
             JSONObject t = tabs.optJSONObject(i);
-            if (t.optBoolean("file")) js("atlasShell.close(" + JSONObject.quote(t.optString("id")) + ")");
+            if (t.optBoolean("file")) js("kandinskyShell.close(" + JSONObject.quote(t.optString("id")) + ")");
         }
     }
 
@@ -1110,12 +1110,12 @@ public final class AtlasActivity extends Activity {
         pop.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0));
         boolean file = at.kind == Kind.NOTE && at.arg != null && isOpen(at.arg);
         String path = file ? pathOf(at.arg) : null;
-        if (file) menuItem(card, pop, "close", "Close this file", () -> js("atlasShell.close(" + JSONObject.quote(at.arg) + ")"));
+        if (file) menuItem(card, pop, "close", "Close this file", () -> js("kandinskyShell.close(" + JSONObject.quote(at.arg) + ")"));
         if (file && tabs.length() > 1) menuItem(card, pop, "tabs", "Close all files", this::closeAll);
         if (path != null) {
             // the file's own actions
             menuItem(card, pop, "note", "Rename…", () -> rename(path));
-            menuItem(card, pop, "chevron", "Show in Files", () -> { go(new Screen(Kind.FILES, ""), true); js("atlasShell.reveal(" + JSONObject.quote(path) + ")"); });
+            menuItem(card, pop, "chevron", "Show in Files", () -> { go(new Screen(Kind.FILES, ""), true); js("kandinskyShell.reveal(" + JSONObject.quote(path) + ")"); });
             menuItem(card, pop, "more", "Open with…", () -> openWith(path));
             menuItem(card, pop, "link", "Copy a link to it", () -> copyLink(path));
             menuItem(card, pop, "search", "Outline", () -> view("view('outline')"));
@@ -1140,7 +1140,7 @@ public final class AtlasActivity extends Activity {
 
     private void rename(String path) {
         android.widget.EditText name = new android.widget.EditText(this);
-        String shown = Look.shownName(path); // no extension: the page keeps the file's own (atlasShell.rename)
+        String shown = Look.shownName(path); // no extension: the page keeps the file's own (kandinskyShell.rename)
         name.setText(shown);
         int dot = shown.equals(nameOf(path)) ? shown.lastIndexOf('.') : -1; // a shown extension (not a note's) stays unselected
         name.setSelection(0, dot > 0 ? dot : name.length());
@@ -1149,19 +1149,19 @@ public final class AtlasActivity extends Activity {
         form.setPadding(look.dp(20), look.dp(8), look.dp(20), 0);
         form.addView(name, new LinearLayout.LayoutParams(-1, -2));
         new android.app.AlertDialog.Builder(this).setTitle("Rename").setView(form)
-            .setPositiveButton("Rename", (d, w) -> js("atlasShell.rename(" + JSONObject.quote(path) + "," + JSONObject.quote(name.getText().toString().trim()) + ")"))
+            .setPositiveButton("Rename", (d, w) -> js("kandinskyShell.rename(" + JSONObject.quote(path) + "," + JSONObject.quote(name.getText().toString().trim()) + ")"))
             .setNegativeButton("Cancel", null).show();
     }
 
     /** The views that can show this file (the page's openers: a picture as image or as its code, a table as text…). */
     private void openWith(String path) {
-        web.evaluateJavascript("atlasShell.openers(" + JSONObject.quote(path) + ")", r -> {
+        web.evaluateJavascript("kandinskyShell.openers(" + JSONObject.quote(path) + ")", r -> {
             try {
                 JSONArray all = new JSONArray(new JSONArray("[" + r + "]").getString(0)); // the call's answer is a JSON string
                 String[] labels = new String[all.length()];
                 for (int i = 0; i < all.length(); i++) labels[i] = all.getJSONObject(i).getString("title") + (all.getJSONObject(i).optBoolean("isDefault") ? " · default" : "");
                 new android.app.AlertDialog.Builder(this).setTitle("Open with")
-                    .setItems(labels, (d, w) -> js("atlasShell.openWith(" + JSONObject.quote(path) + "," + JSONObject.quote(all.optJSONObject(w).optString("id")) + ")"))
+                    .setItems(labels, (d, w) -> js("kandinskyShell.openWith(" + JSONObject.quote(path) + "," + JSONObject.quote(all.optJSONObject(w).optString("id")) + ")"))
                     .setNegativeButton("Cancel", null).show();
             } catch (Exception e) { android.widget.Toast.makeText(this, "Nothing else opens this file", android.widget.Toast.LENGTH_SHORT).show(); }
         });
@@ -1176,8 +1176,8 @@ public final class AtlasActivity extends Activity {
 
     private void trash(String path) {
         new android.app.AlertDialog.Builder(this).setTitle("Move to the trash?")
-            .setMessage(Look.shownName(path) + " goes to the vault's .atlas/trash/, where it can be taken back.")
-            .setPositiveButton("Move to the trash", (d, w) -> js("atlasShell.trash(" + JSONObject.quote(path) + ")"))
+            .setMessage(Look.shownName(path) + " goes to the vault's .kandinsky/trash/, where it can be taken back.")
+            .setPositiveButton("Move to the trash", (d, w) -> js("kandinskyShell.trash(" + JSONObject.quote(path) + ")"))
             .setNegativeButton("Cancel", null).show();
     }
 

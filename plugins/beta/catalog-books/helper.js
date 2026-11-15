@@ -29,7 +29,7 @@
 		const out = [];
 		for (const s of subjects ?? []) {
 			if (typeof s !== "string" || s.includes(":") || s.includes(",") || BOOKKEEPING.has(s.toLowerCase())) continue;
-			const t = atlas.text.title(s.trim());
+			const t = kandinsky.text.title(s.trim());
 			if (!out.includes(t)) out.push(t);
 		}
 		return out.length ? out.slice(0, 5) : void 0;
@@ -49,7 +49,7 @@
 		if (by && !/\b(edit|translat|foreword|introduc|illustrat)/i.test(by)) for (const n of by.split(/\s*(?:,|;|&|\[?\band\b\]?)\s*/i)) add(n);
 		return out;
 	}
-	const get = (url) => atlas.fetchJson(url);
+	const get = (url) => kandinsky.fetchJson(url);
 	const nameOf = async (key) => key ? (await get(`${OL}${key}.json`))?.name : void 0;
 	async function lookup(params) {
 		const ids = params.ids ?? {};
@@ -88,7 +88,7 @@
 			fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== void 0 && v !== null && v !== ""))
 		};
 	}
-	atlas.methods({ lookup });
+	kandinsky.methods({ lookup });
 	//#endregion
 	exports.lookup = lookup;
 	exports.withCoauthors = withCoauthors;

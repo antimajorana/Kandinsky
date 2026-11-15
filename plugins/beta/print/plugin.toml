@@ -1,7 +1,7 @@
 # Print through CUPS: "Print" in the file tree's and the tab's menus, and a command, open a dialog with the document as
 # it will print beside the options (printer, copies, pages, sides, paper, orientation, fit). A note prints as the document the
 # Export plugin makes of it (its PDF), any other file as it is; the job id or the reason it failed is shown in a notice.
-# Needs CUPS (lp, lpstat) on the machine running Atlas. Copy into a vault's .atlas/plugins/.
+# Needs CUPS (lp, lpstat) on the machine running Kandinsky. Copy into a vault's .kandinsky/plugins/.
 title = "Print"
 description = "print a file, or a note as its exported PDF, with CUPS (lp)"
 icon = "file"
@@ -9,7 +9,7 @@ version = "0.5.0"
 api = 20
 
 [permissions]
-exec = ["lp", "lpstat"]            # CUPS, run by the core (atlas.exec)
+exec = ["lp", "lpstat"]            # CUPS, run by the core (kandinsky.exec)
 
 [helper]
 js = "helper.js"                   # run in the core (QuickJS), built from helper/helper.ts

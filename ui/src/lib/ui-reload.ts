@@ -1,5 +1,5 @@
 // A new interface reloads into the open window (no restart): the desktop app serves the UI from
-// the installed folder (atlas-core ui_files.rs), and when its build changes the page saves every
+// the installed folder (kandinsky-core ui_files.rs), and when its build changes the page saves every
 // open editor and reloads. The layout is a file, so the tabs come back as they were — and so do the
 // terminals: a core that keeps them across a reload says `terminals_survive` (pty.rs). An older core
 // killed every shell and Claude session in them ("it reset"), so then the page does not reload by
@@ -14,7 +14,7 @@ type Build = { build: string; terminals_survive?: boolean };
 
 async function build(): Promise<Build | null> {
   try {
-    const r = await fetch(`${apiBase()}/api/ui/build`, { headers: { "x-atlas": "1" } });
+    const r = await fetch(`${apiBase()}/api/ui/build`, { headers: { "x-kandinsky": "1" } });
     return r.ok ? ((await r.json()) as Build) : null;
   } catch { return null; }
 }

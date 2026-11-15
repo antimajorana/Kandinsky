@@ -20,7 +20,7 @@ history runs it again. Commands are written for the shell the terminal runs (POS
 
 - **Test** offers the file's own tests to pick from (pytest's `test_x` and `TestX::test_y`, Rust's `#[test]`, Go's
   `TestX`, JavaScript's `test("…")` / `it("…")`), "All tests in this file" first.
-- It is also the reference example of `atlas.editor.toolbar` and `atlas.terminal` (docs/guides/PLUGIN-API.md).
+- It is also the reference example of `kandinsky.editor.toolbar` and `kandinsky.terminal` (docs/guides/PLUGIN-API.md).
 
 ## Settings
 

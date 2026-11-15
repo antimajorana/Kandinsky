@@ -1,4 +1,4 @@
-# Vendored from boox_5c_re (scripts/dev/sync-openink.sh, VENDORED.md); only this file is Atlas's.
+# Vendored from boox_5c_re (scripts/dev/sync-openink.sh, VENDORED.md); only this file is Kandinsky's.
 [package]
 name = "openink-stroke"
 description = "Pressure/tilt/velocity-shaped stroke geometry for the knote2 pen set (replaces libneo_pen.so)"

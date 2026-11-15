@@ -2,7 +2,7 @@
 //! conflicts impossible; offline, two devices can still change a note at once, and Syncthing keeps one side as the file
 //! and the other as `name.sync-conflict-<date>-<time>-<device>.ext`. The core merges the two against the base (the last
 //! version both had, kept by mirror_guard.rs at each leased write) line by line, writes the result (with a lease) and
-//! moves the conflict copy to `.atlas/trash/`. Only when both sides changed the same lines is it left for the user.
+//! moves the conflict copy to `.kandinsky/trash/`. Only when both sides changed the same lines is it left for the user.
 use crate::api::{Notice, NoticeLevel};
 use crate::events::EventBus;
 use crate::{mirror_guard, pdf_marks, vault_write, Workspace};
@@ -132,7 +132,7 @@ pub enum Settled {
     Later(String),
 }
 
-/// The settled copy into `.atlas/trash/<stamp>/` (synced like the vault: the other device sees it there too), never the
+/// The settled copy into `.kandinsky/trash/<stamp>/` (synced like the vault: the other device sees it there too), never the
 /// desktop's Trash.
 fn to_trash(ws: &Workspace, copy: &str) -> crate::Result<()> {
     ws.resolve(copy)?; // in the vault
@@ -201,19 +201,24 @@ pub fn settle(ws: &Workspace, copy: &str) -> crate::Result<Settled> {
 }
 
 /// Whether `rel` is in a folder of the vault's own files: not another program's hidden folder (`.obsidian/`, Obsidian's
-/// `.trash/`, Syncthing's `.stversions/`, `.git/`), nor Atlas's per-device cache or its trash. Copies there are not ours.
-fn in_vault_files(rel: &str) -> bool {
+/// `.trash/`, Syncthing's `.stversions/`, `.git/`), nor Kandinsky's per-device cache or its trash, nor the state folder of
+/// an earlier build left beside the one in use (its paths mean the other: `state_dir::stale_twin`). Copies there are not ours.
+fn in_vault_files(root: &Path, rel: &str) -> bool {
+    if crate::state_dir::names_stale_twin(root, rel) {
+        return false;
+    }
+    let rel = crate::state_dir::current_rel(rel); // `.atlas/` in a vault not yet migrated
     let dirs: Vec<&str> = rel.split('/').collect();
     let dirs = &dirs[..dirs.len().saturating_sub(1)];
-    dirs.iter().all(|d| !d.starts_with('.') || *d == ".atlas")
-        && !matches!(dirs, [".atlas", "cache" | "trash" | "remote", ..])
+    dirs.iter().all(|d| !d.starts_with('.') || *d == ".kandinsky")
+        && !matches!(dirs, [".kandinsky", "cache" | "trash" | "remote", ..])
 }
 
 /// Every conflict copy in the vault (at start: the ones Syncthing made while no core watched).
 fn all_copies(root: &Path) -> Vec<String> {
     walkdir::WalkDir::new(root)
         .into_iter()
-        .filter_entry(|e| !e.file_type().is_dir() || e.depth() == 0 || crate::paths::rel_path(root, e.path()).is_some_and(|rel| in_vault_files(&format!("{rel}/x"))))
+        .filter_entry(|e| !e.file_type().is_dir() || e.depth() == 0 || crate::paths::rel_path(root, e.path()).is_some_and(|rel| in_vault_files(root, &format!("{rel}/x"))))
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .filter_map(|e| crate::paths::rel_path(root, e.path()))
@@ -224,10 +229,10 @@ fn all_copies(root: &Path) -> Vec<String> {
 /// Settles `copy` and logs what was done; `None` when nothing is left to do.
 fn settle_logged(ws: &Workspace, copy: &str) -> Option<Settled> {
     match settle(ws, copy) {
-        Ok(Settled::Merged) => eprintln!("atlas: sync: {copy} merged into {}", original_of(copy).unwrap_or_default()),
-        Ok(Settled::Same) => eprintln!("atlas: sync: {copy} was the same text; trashed"),
+        Ok(Settled::Merged) => eprintln!("kandinsky: sync: {copy} merged into {}", original_of(copy).unwrap_or_default()),
+        Ok(Settled::Same) => eprintln!("kandinsky: sync: {copy} was the same text; trashed"),
         Ok(left @ (Settled::Left(_) | Settled::Later(_))) => return Some(left),
-        Err(e) => eprintln!("atlas: sync: {copy}: {e}"),
+        Err(e) => eprintln!("kandinsky: sync: {copy}: {e}"),
     }
     None
 }
@@ -236,7 +241,7 @@ fn settle_logged(ws: &Workspace, copy: &str) -> Option<Settled> {
 const RETRIES: u32 = 6;
 const RETRY_AFTER: std::time::Duration = std::time::Duration::from_secs(5);
 
-/// The copies the user was already told of, on this device (`.atlas/cache/sync-told.json`): a restart, or the watcher
+/// The copies the user was already told of, on this device (`.kandinsky/cache/sync-told.json`): a restart, or the watcher
 /// seeing the same copy again, tells nothing new.
 pub struct Told {
     file: PathBuf,
@@ -273,14 +278,14 @@ impl Told {
     fn save(&self, set: &BTreeSet<String>) {
         let saved = serde_json::to_vec(set).map_err(|e| crate::Error::Other(e.into())).and_then(|b| vault_write::cache::write(&self.file, &b));
         if let Err(e) = saved {
-            eprintln!("atlas: sync: what was told not kept in {}: {e}", self.file.display());
+            eprintln!("kandinsky: sync: what was told not kept in {}: {e}", self.file.display());
         }
     }
 }
 
 /// The user is told of a copy left for them (the two versions side by side in its note), once per copy.
 fn tell(bus: &EventBus, told: &Told, copy: &str, why: &str) {
-    eprintln!("atlas: sync: {copy} left for the user: {why}");
+    eprintln!("kandinsky: sync: {copy} left for the user: {why}");
     if !told.first_time(copy) {
         return; // told already; its note still shows it side by side
     }
@@ -290,7 +295,7 @@ fn tell(bus: &EventBus, told: &Told, copy: &str, why: &str) {
     bus.publish(crate::api::Event::Notify(notice.source("sync").level(NoticeLevel::Warning).open(orig.as_str()).id(format!("sync:{copy}"))));
 }
 
-/// A copy that arrived while Atlas runs: settled, or the user told at once; `Some` when it is to be tried again.
+/// A copy that arrived while Kandinsky runs: settled, or the user told at once; `Some` when it is to be tried again.
 fn settle_arrived(ws: &Workspace, bus: &EventBus, told: &Told, copy: &str) -> Option<String> {
     match settle_logged(ws, copy)? {
         Settled::Later(_) => Some(copy.to_string()),
@@ -337,7 +342,7 @@ fn settle_found(ws: &Workspace, bus: &EventBus, told: &Told) -> Vec<String> {
         let more = if l.len() > 5 { format!(" and {} more", l.len() - 5) } else { String::new() };
         format!("{}{more}", l.iter().take(5).cloned().collect::<Vec<_>>().join(", "))
     };
-    eprintln!("atlas: sync: {} conflict copies left for the user (no base or the same lines changed): {}", left.len(), list(&left));
+    eprintln!("kandinsky: sync: {} conflict copies left for the user (no base or the same lines changed): {}", left.len(), list(&left));
     // a restart is not news: only copies never announced on this device make a notice
     let news: Vec<String> = left.iter().filter(|c| told.first_time(c)).cloned().collect();
     if news.is_empty() {
@@ -379,7 +384,7 @@ pub fn spawn(ws: Workspace, bus: EventBus) -> tokio::task::JoinHandle<()> {
                 later.into_iter().for_each(|c| retry_later(ws.clone(), bus.clone(), told.clone(), c, RETRIES));
                 continue;
             }
-            let copies: Vec<String> = paths.into_iter().filter(|p| original_of(p).is_some() && in_vault_files(p)).collect();
+            let copies: Vec<String> = paths.into_iter().filter(|p| original_of(p).is_some() && in_vault_files(ws.root(), p)).collect();
             if copies.is_empty() {
                 continue;
             }
@@ -440,8 +445,8 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let ws = Workspace::open(d.path()).unwrap();
         let copy = "log.sync-conflict-20261020-231529-H3IIIUW.md";
-        std::fs::create_dir_all(d.path().join(".atlas/cache/sync-base")).unwrap();
-        std::fs::write(d.path().join(".atlas/cache/sync-base/log.md"), "a\nb\n").unwrap();
+        std::fs::create_dir_all(d.path().join(".kandinsky/cache/sync-base")).unwrap();
+        std::fs::write(d.path().join(".kandinsky/cache/sync-base/log.md"), "a\nb\n").unwrap();
         std::fs::write(d.path().join("log.md"), "a (here)\nb\n").unwrap();
         std::fs::write(d.path().join(copy), "a\nb\nc (there)\n").unwrap();
         assert_eq!(settle(&ws, copy).unwrap(), Settled::Merged);
@@ -450,7 +455,7 @@ mod tests {
         assert_eq!(all_copies(d.path()), Vec::<String>::new(), "the trash is not searched");
 
         std::fs::write(d.path().join(copy), "a (there)\nb\n").unwrap();
-        std::fs::write(d.path().join(".atlas/cache/sync-base/log.md"), "a\nb\n").unwrap();
+        std::fs::write(d.path().join(".kandinsky/cache/sync-base/log.md"), "a\nb\n").unwrap();
         assert!(matches!(settle(&ws, copy).unwrap(), Settled::Left(_)));
         assert!(d.path().join(copy).exists(), "a clash stays for the user");
         assert_eq!(all_copies(d.path()), vec![copy.to_string()]);
@@ -464,16 +469,16 @@ mod tests {
         // copy's few lines replace the whole file
         let d = tempfile::tempdir().unwrap();
         let ws = Workspace::open(d.path()).unwrap();
-        let copy = ".atlas/config.sync-conflict-20261017-045849-J3SZH65.toml";
+        let copy = ".kandinsky/config.sync-conflict-20261017-045849-J3SZH65.toml";
         let (full, old) = ("[ui]\ntheme = \"light\"\nside_panel = \"sidebar\"\n[editor]\nvim_keys = \"desktop\"\n", "[ui]\nside_panel = \"sidebar\"\n");
-        std::fs::create_dir_all(d.path().join(".atlas/cache/sync-base/.atlas")).unwrap();
-        std::fs::write(d.path().join(".atlas/config.toml"), full).unwrap();
-        std::fs::write(d.path().join(".atlas/cache/sync-base/.atlas/config.toml"), full).unwrap();
+        std::fs::create_dir_all(d.path().join(".kandinsky/cache/sync-base/.kandinsky")).unwrap();
+        std::fs::write(d.path().join(".kandinsky/config.toml"), full).unwrap();
+        std::fs::write(d.path().join(".kandinsky/cache/sync-base/.kandinsky/config.toml"), full).unwrap();
         std::fs::write(d.path().join(copy), old).unwrap();
         let week_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(7 * 86400);
         std::fs::File::options().write(true).open(d.path().join(copy)).unwrap().set_modified(week_ago).unwrap();
         assert!(matches!(settle(&ws, copy).unwrap(), Settled::Left(_)));
-        assert_eq!(std::fs::read_to_string(d.path().join(".atlas/config.toml")).unwrap(), full, "the file is untouched");
+        assert_eq!(std::fs::read_to_string(d.path().join(".kandinsky/config.toml")).unwrap(), full, "the file is untouched");
         assert!(d.path().join(copy).exists(), "the copy stays for the user");
     }
 
@@ -500,8 +505,8 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let ws = Workspace::open(d.path()).unwrap();
         let copy = "log.sync-conflict-20261020-231529-H3IIIUW.md";
-        std::fs::create_dir_all(d.path().join(".atlas/cache/sync-base")).unwrap();
-        std::fs::write(d.path().join(".atlas/cache/sync-base/log.md"), "a\nb\n").unwrap();
+        std::fs::create_dir_all(d.path().join(".kandinsky/cache/sync-base")).unwrap();
+        std::fs::write(d.path().join(".kandinsky/cache/sync-base/log.md"), "a\nb\n").unwrap();
         std::fs::write(d.path().join(copy), "a\nb\n").unwrap(); // the base: "ours" (no file) would win as an empty text
         assert!(matches!(settle(&ws, copy).unwrap(), Settled::Left(_)));
         assert!(!d.path().join("log.md").exists(), "not brought back");
@@ -520,8 +525,8 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let ws = Workspace::open(d.path()).unwrap();
         let copy = "log.sync-conflict-20261020-231529-H3IIIUW.md";
-        std::fs::create_dir_all(d.path().join(".atlas/cache/sync-base")).unwrap();
-        std::fs::write(d.path().join(".atlas/cache/sync-base/log.md"), "a\nb\n").unwrap();
+        std::fs::create_dir_all(d.path().join(".kandinsky/cache/sync-base")).unwrap();
+        std::fs::write(d.path().join(".kandinsky/cache/sync-base/log.md"), "a\nb\n").unwrap();
         std::fs::write(d.path().join("log.md"), "a (here)\nb\n").unwrap();
         std::fs::write(d.path().join(copy), "a\nb\nc (there)\n").unwrap();
         ws.set_write_guard(std::sync::Arc::new(Behind));
@@ -566,12 +571,12 @@ mod tests {
     #[test]
     fn other_programs_folders_are_not_searched() {
         for theirs in [".obsidian/appearance.sync-conflict-20260531-190730-FAF6EWY.json", ".trash/a.sync-conflict-20260609-154406-J3SZH65.md",
-            ".stversions/n.sync-conflict-20260609-154406-J3SZH65~20260610-101010.md", ".atlas/cache/ui.sync-conflict-20261016-183728-FAF6EWY.log",
+            ".stversions/n.sync-conflict-20260609-154406-J3SZH65~20260610-101010.md", ".kandinsky/cache/ui.sync-conflict-20261016-183728-FAF6EWY.log",
             ".git/x.sync-conflict-20260609-154406-J3SZH65", "notes/.hidden/n.sync-conflict-20260609-154406-J3SZH65.md"] {
-            assert!(!in_vault_files(theirs), "{theirs}");
+            assert!(!in_vault_files(Path::new("/nowhere"), theirs), "{theirs}");
         }
-        for ours in ["n.sync-conflict-20260609-154406-J3SZH65.md", "runs/.live.sync-conflict-20261020-152033-J3SZH65.json", ".atlas/config.sync-conflict-20261017-045849-J3SZH65.toml"] {
-            assert!(in_vault_files(ours), "{ours}");
+        for ours in ["n.sync-conflict-20260609-154406-J3SZH65.md", "runs/.live.sync-conflict-20261020-152033-J3SZH65.json", ".kandinsky/config.sync-conflict-20261017-045849-J3SZH65.toml"] {
+            assert!(in_vault_files(Path::new("/nowhere"), ours), "{ours}");
         }
         let d = tempfile::tempdir().unwrap();
         for f in [".obsidian/a.sync-conflict-20260531-190730-FAF6EWY.json", "notes/n.sync-conflict-20260609-154406-J3SZH65.md", "runs/.live.sync-conflict-20261020-152033-J3SZH65.json"] {

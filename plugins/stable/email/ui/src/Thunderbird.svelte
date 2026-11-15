@@ -7,21 +7,21 @@
 
   type Card = { name: string; auth?: string; user?: string };
   type Found = { user: string; name: string; imap_host: string; auth: string; profile: string; record: Card };
-  let { atlas, onclose }: { atlas: PluginApi; onclose: () => void } = $props();
+  let { kandinsky, onclose }: { kandinsky: PluginApi; onclose: () => void } = $props();
 
   // the cards as the dialog opened; this dialog adds to them
-  let cards = $state<Card[]>(untrack(() => ((atlas.plugin.settings.accounts as Card[] | undefined) ?? []).filter((c) => c?.name)));
+  let cards = $state<Card[]>(untrack(() => ((kandinsky.plugin.settings.accounts as Card[] | undefined) ?? []).filter((c) => c?.name)));
   let found = $state<Found[] | null>(null);
   let foundError = $state("");
   let added = $state<Record<number, string>>({});
 
-  untrack(() => call<{ accounts: Found[] }>(atlas, "thunderbird")).then((r) => (found = r.accounts), (e) => (foundError = String((e as Error).message ?? e)));
+  untrack(() => call<{ accounts: Found[] }>(kandinsky, "thunderbird")).then((r) => (found = r.accounts), (e) => (foundError = String((e as Error).message ?? e)));
 
   const isCard = (f: Found) => cards.some((c) => c.name === f.record.name || (c.user && c.user === f.record.user));
   async function add(i: number, f: Found) {
     try {
       cards = [...cards, f.record];
-      await atlas.plugin.saveSettings({ accounts: cards });
+      await kandinsky.plugin.saveSettings({ accounts: cards });
       added[i] = f.record.auth === "outlook" ? "Added: now “Sign in to Outlook” on its card." : "Added: now type its password on its card (an app password for Gmail).";
     } catch (e) {
       cards = cards.filter((c) => c !== f.record);
@@ -36,7 +36,7 @@
   async function check() {
     step = { kind: "busy", text: `Comparing ${account}'s local mail with its server…` };
     try {
-      const dry = await call<{ missing: Record<string, number>; note?: string }>(atlas, "thunderbird_mail", { account, dry: true }, 600);
+      const dry = await call<{ missing: Record<string, number>; note?: string }>(kandinsky, "thunderbird_mail", { account, dry: true }, 600);
       const by = Object.entries(dry.missing ?? {});
       const n = by.reduce((a, [, k]) => a + k, 0);
       step = n ? { kind: "missing", n, by } : { kind: "done", text: dry.note ?? "The server already has every local message." };
@@ -45,7 +45,7 @@
   async function write(n: number) {
     step = { kind: "busy", text: `Putting ${n} messages on the server…` };
     try {
-      const r = await call<{ uploaded: number; failed: string[] }>(atlas, "thunderbird_mail", { account, dry: false }, 1800);
+      const r = await call<{ uploaded: number; failed: string[] }>(kandinsky, "thunderbird_mail", { account, dry: false }, 1800);
       step = { kind: "done", text: `${r.uploaded} put on the server; the list has them now${r.failed.length ? `; ${r.failed.length} failed: ${r.failed.slice(0, 3).join("; ")}` : "."}`, error: r.failed.length > 0 };
     } catch (e) { step = { kind: "done", text: String((e as Error).message ?? e), error: true }; }
   }
@@ -68,7 +68,7 @@
             <div class="who"><b>{f.user || f.name}</b><small>{f.imap_host} · {f.auth} · {f.profile}</small>
               {#if added[i]}<small class:err={added[i].startsWith("Not")}>{added[i]}</small>{/if}</div>
             {#if added[i] && !added[i].startsWith("Not")}
-              <button onclick={() => atlas.plugin.openSettings()}>Open its card</button>
+              <button onclick={() => kandinsky.plugin.openSettings()}>Open its card</button>
             {:else}
               <button class:primary={!isCard(f)} disabled={isCard(f)} onclick={() => add(i, f)}>{isCard(f) ? "Already a card" : "Add"}</button>
             {/if}

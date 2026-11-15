@@ -16,7 +16,7 @@ const offerField = StateField.define<Offer | null>({
 function panel(o: Offer): (view: EditorView) => Panel {
   return (view) => {
     const dom = document.createElement("div");
-    dom.className = "atlas-suggest";
+    dom.className = "kandinsky-suggest";
     const b = document.createElement("button");
     b.textContent = `💡 ${o.s.label}`;
     b.title = "Insert at the end of this section (Alt+Enter)";
@@ -70,9 +70,9 @@ export function noteSuggestions(path: string): Extension {
       }, 400);
     }),
     EditorView.theme({
-      ".atlas-suggest": { display: "flex", gap: "8px", alignItems: "center", padding: "4px 12px", fontSize: "calc(12.5px * var(--ui-scale, 1))", background: "var(--bg-alt)", borderTop: "1px solid var(--border)" },
-      ".atlas-suggest button": { color: "var(--accent)", padding: "0", font: "inherit" },
-      ".atlas-suggest kbd": { color: "var(--text-faint)", fontFamily: "var(--font-mono)", fontSize: ".9em" },
+      ".kandinsky-suggest": { display: "flex", gap: "8px", alignItems: "center", padding: "4px 12px", fontSize: "calc(12.5px * var(--ui-scale, 1))", background: "var(--bg-alt)", borderTop: "1px solid var(--border)" },
+      ".kandinsky-suggest button": { color: "var(--accent)", padding: "0", font: "inherit" },
+      ".kandinsky-suggest kbd": { color: "var(--text-faint)", fontFamily: "var(--font-mono)", fontSize: ".9em" },
     }),
   ];
 }

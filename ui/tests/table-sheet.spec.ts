@@ -4,7 +4,7 @@ import { zip } from "./xlsx-fixture";
 
 // The table as a spreadsheet: edits saved in the file's own layout (only the edited row rewritten), undo, rows added and
 // removed, a filter per column with the numbers underneath, columns hidden, and a change on disk while editing.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const read = (r: APIRequestContext, path: string) => r.get(`/api/file?path=${path}`, { headers: H }).then((x) => x.json()).then((j) => j.text as string);
 
 async function open(page: Page, request: APIRequestContext, path: string, text: string) {

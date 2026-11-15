@@ -3,7 +3,7 @@
 import { mount, unmount, type Component } from "svelte";
 import { registerFence } from "./fences";
 
-registerFence("atlas", "pdf-marks", (host, fence) => {
+registerFence("kandinsky", "pdf-marks", (host, fence) => {
   let app: ReturnType<typeof mount> | undefined, gone = false;
   void import("../components/PdfMarksNote.svelte").then((m) => {
     if (!gone) app = mount(m.default as Component<{ source: string; note: string; file: string }>, { target: host, props: { source: fence.source, note: fence.path, file: fence.info ?? "" } });

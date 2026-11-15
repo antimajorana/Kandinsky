@@ -4,16 +4,16 @@ import { join } from "node:path";
 import { WS } from "../playwright.config";
 
 // Okular/Zotero-parity checks on a real paper (the 113-page Georges et al. RMP), copied read-only
-// from a papers library: `ATLAS_TEST_PAPERS`. Without it these tests are
+// from a papers library: `KANDINSKY_TEST_PAPERS`. Without it these tests are
 // skipped (they need real, large PDFs that are not in the repository), and say so.
-const PAPERS = process.env.ATLAS_TEST_PAPERS ?? "";
+const PAPERS = process.env.KANDINSKY_TEST_PAPERS ?? "";
 const PHD_PAPER = join(PAPERS, "georges1996dynamical");
 const PDF = "pdfs/polish.pdf";
 // the Georges scan has no link annotations; this thesis has ~1000 (references, equations, figures)
 const LINKED = join(PAPERS, "najeraocampostudy");
 const LINKED_PDF = "pdfs/linked.pdf";
-const H = { "x-atlas": "1" };
-test.skip(!existsSync(PHD_PAPER) || !existsSync(LINKED), `needs the papers georges1996dynamical and najeraocampostudy in ${PAPERS} (set ATLAS_TEST_PAPERS)`);
+const H = { "x-kandinsky": "1" };
+test.skip(!existsSync(PHD_PAPER) || !existsSync(LINKED), `needs the papers georges1996dynamical and najeraocampostudy in ${PAPERS} (set KANDINSKY_TEST_PAPERS)`);
 
 test.beforeAll(() => {
   mkdirSync(join(WS, "pdfs"), { recursive: true });
@@ -33,10 +33,10 @@ const pageNo = (pane: ReturnType<Page["locator"]>) => pane.locator(".page-in").i
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("atlas.pdf")) localStorage.removeItem(k); });
+  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("kandinsky.pdf")) localStorage.removeItem(k); });
   // the tabs earlier specs left (the layout outlives a test's browser) closed: a PDF tab of theirs, coming back on a
   // reload, would save its own place over this one's
-  await page.evaluate(() => { const a = (window as unknown as { __atlas: { panes(): { id: string }[]; close(id: string): void } }).__atlas; for (const p of a.panes()) a.close(p.id); });
+  await page.evaluate(() => { const a = (window as unknown as { __kandinsky: { panes(): { id: string }[]; close(id: string): void } }).__kandinsky; for (const p of a.panes()) a.close(p.id); });
 });
 
 test("page thumbnails: lazy, click jumps, the current page is marked", async ({ page }) => {
@@ -83,7 +83,7 @@ test("dark pages toggle (D) and stay on for the next PDF", async ({ page }) => {
   await expect(pane.locator(".viewer-container.dark")).toHaveCount(1);
   const filter = await pane.locator(".pdfViewer .page .canvasWrapper").first().evaluate((e) => getComputedStyle(e).filter);
   expect(filter).toContain("invert");
-  expect(await page.evaluate(() => localStorage.getItem("atlas.pdf.dark"))).toBe("1");
+  expect(await page.evaluate(() => localStorage.getItem("kandinsky.pdf.dark"))).toBe("1");
 });
 
 // PDFium misses a named destination that sits under a name tree whose root has both /Names and /Kids, as this thesis's
@@ -111,7 +111,7 @@ test("a pen stroke is saved into the PDF's note as it is made, and Ctrl+Z takes 
     await page.mouse.up();
   };
   // the saved ink is drawn from the note's marks over the page (lib/pdf-marks.ts)
-  const ink = pane.locator('.page[data-page-number="1"] svg.atlas-marks [data-kind="ink"]');
+  const ink = pane.locator('.page[data-page-number="1"] svg.kandinsky-marks [data-kind="ink"]');
   await pane.getByTitle("Pen / stylus (P)").click();
   await stroke(0);
   await pane.getByTitle("Select (V)").click(); // leaving the pen saves what it holds

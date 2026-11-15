@@ -5,7 +5,7 @@ import { WS } from "../playwright.config";
 
 // Closing tabs one after another by hand (the shown one's ×, again and again): the UI used
 // to stutter. Measures the gaps between frames while it closes (any engine: `--browser=webkit` too).
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 test("closing the shown tab again and again stays smooth", async ({ page, request }) => {
   const body = Array.from({ length: 400 }, (_, i) => `Line ${i} with $x^${i}$ and **bold** [[hubbard]]`).join("\n\n");
   const names = Array.from({ length: 8 }, (_, i) => `notes/closing-${i}.md`);

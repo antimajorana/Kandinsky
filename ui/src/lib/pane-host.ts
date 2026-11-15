@@ -65,7 +65,7 @@ export class SveltePane implements IContentRenderer {
   private subs: { dispose(): void }[] = [];
   private sleeper: SleeperHandle | null = null;
   constructor(private readonly load: AnyLoader, private readonly kind: PaneKind) {
-    this.element.className = `atlas-pane atlas-pane-${kind}`;
+    this.element.className = `kandinsky-pane kandinsky-pane-${kind}`;
     this.scroll = keepScroll(this.element);
   }
   init(p: GroupPanelPartInitParameters): void {
@@ -115,7 +115,7 @@ export class SveltePane implements IContentRenderer {
       },
       (err) => {
         held?.release(null);
-        console.error("[atlas] pane failed to load", this.kind, err);
+        console.error("[kandinsky] pane failed to load", this.kind, err);
         // a chunk gone after an update, imported without Vite's preload wrapper: main.ts's reload all the same
         if (/dynamically imported module|Importing a module script failed/i.test(errText(err))) window.dispatchEvent(new Event("vite:preloadError", { cancelable: true }));
         this.element.textContent = `Could not load the ${this.kind} pane: ${errText(err)}`;

@@ -27,7 +27,7 @@ test("an Excel workbook's sheets, values and formulas", async () => {
 });
 
 // A table written as a new workbook (lib/csv/xlsx-write.ts) reads back as it was: the header as row 1, numbers,
-// text with XML's specials, and formulas with their references moved down a row and Atlas's value beside them.
+// text with XML's specials, and formulas with their references moved down a row and Kandinsky's value beside them.
 test("a table written as a workbook reads back, its formulas moved under the header", async () => {
   const { writeXlsx, crc32, sheetName } = await import("../src/lib/csv/xlsx-write");
   expect(crc32(new TextEncoder().encode("123456789"))).toBe(0xcbf43926);

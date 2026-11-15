@@ -39,17 +39,17 @@ Each criterion can be checked by someone who did not write the plugin.
 6. **It narrates long work.** Anything that takes more than a second (a sync, an import, a download) shows progress
    and can be stopped.
 7. **Local and remote alike.** It works the same on a vault opened on the desktop and on a vault served by
-   `atlas serve` or the Docker image (docs/guides/SERVER.md), or it says in its manifest and README that it is
+   `kandinsky serve` or the Docker image (docs/guides/SERVER.md), or it says in its manifest and README that it is
    desktop-only.
 8. **Its platforms are declared.** Its manifest's `[platforms]` (PLUGIN-API.md, "Platforms") names each of Linux, macOS,
    Windows, Android and a server as `works` (tried there), `untested` or `no` with the reason, and its README agrees.
    `works` only where it has been tried; `phone = true` (Android) only when it has been tried in the Android app.
 9. **The current plugin API.** `api` in `plugin.toml` is the current major version (`API_VERSION` in
-   `crates/atlas-core/src/plugins.rs`), or the README says why it stays on an older one. It uses only documented calls.
+   `crates/kandinsky-core/src/plugins.rs`), or the README says why it stays on an older one. It uses only documented calls.
 10. **Nothing built is committed.** A helper program is built by `engine/build.sh` into `bin/` (ignored by git), and
     the README says how to build it. A generated `view.js` is rebuilt by `node scripts/dev/plugin-ui.mjs` and checked
     by the gate.
-11. **Writes go through Atlas.** Files in the vault are written through the API (so the index, the mirror and the
+11. **Writes go through Kandinsky.** Files in the vault are written through the API (so the index, the mirror and the
     trash stay right), never directly, and a user's own text is never overwritten without asking.
 12. **Versioned with care.** A 1.0 or later `version`, and a breaking change bumps the major version and has a
     migration or a changelog note.
@@ -81,7 +81,7 @@ is the manifest’s `api` (the current one is 20; an older number still loads, s
 | claude | beta | ✗ 0 / 0 | ✓ | ✓ | ✓ | ✓ | – | ~ | ✗ | 4 | ✓ | ✓ | 0.5.0 | tests (1); says it reads the account on the core's machine (7, 8) |
 | today | beta | ~ 0 / 2 | ✓ | ✓ | ✓ | ~ | – | ✓ | ✓ | 19 | ✓ | ✓ | 0.3.0 | unit tests (1) |
 | weather | beta | ~ 1 / 0 | ✓ | ✓ | ✓ | ~ | – | ✓ | ✓ | 15 | ✓ | ✓ | 0.3.3 | an end-to-end spec (1) |
-| notifications | beta | ~ 3 / 0 | ✓ | ✓ | ✓ | ✓ | – | ✓ | ✓ | 19 | ✓ | ✓ | 0.4.0 | an end-to-end spec (1); the Apprise hook into Atlas (DESIGN-notifications.md step 1) |
+| notifications | beta | ~ 3 / 0 | ✓ | ✓ | ✓ | ✓ | – | ✓ | ✓ | 19 | ✓ | ✓ | 0.4.0 | an end-to-end spec (1); the Apprise hook into Kandinsky (DESIGN-notifications.md step 1) |
 | syncthing, downloader | beta | ~ 1 / 0 | ✓ | ✓ | ✓ | ~ | ~ | ✓ | ✓ | 4 | ✓ | ✓ | 0.1.x | end-to-end specs against a stub (1); progress for long transfers (6) |
 | catalog-books, -music, -anime, -youtube, -wikipedia, catalog-tmdb, audiobookshelf | beta | ~ 1 / 0 each | ✓ | ✓ | ✓ | ~ | – | ✓ | ✓ | 15 | ✓ | ✓ | 0.1–0.2 | one shared end-to-end spec for the catalog's sources (1) |
 | catalog-linkwarden | beta | ~ 0 / 1 | ✓ | ✓ | ✓ | ✓ | – | ✓ | ✓ | 15 | ✓ | ✓ | 0.2.1 | unit tests (1) |
@@ -91,7 +91,7 @@ is the manifest’s `api` (the current one is 20; an older number still loads, s
 What the columns rest on:
 - **4:** finance defaults its currencies to `EUR, CAD, USD, XAU, BTC` with EUR as the base; a neutral default
   (or one taken from the locale) is the fix.
-- **5:** **~** means the code has few or no visible error paths (`atlas.notice`, an error state) and was not reviewed by
+- **5:** **~** means the code has few or no visible error paths (`kandinsky.notice`, an error state) and was not reviewed by
   hand yet.
 - **7:** a helper runs where the core runs, so a served vault works the same, except for plugins that read the core
   machine's own programs or devices (CUPS, a Boox over USB, the Claude account) without saying so.
@@ -99,17 +99,17 @@ What the columns rest on:
   a platform not named is `untested`; Android only with `phone = true`), and Settings shows them on the plugin's row.
   Most say `linux = "works"` and leave the rest untested until tried there (print: Windows `no`, no CUPS). A plugin
   meets 8 when its README agrees with its manifest.
-  **A server, headless** (`node scripts/dev/helpers-headless.mjs`): every bundled helper (30) is started by `atlas serve` in an empty environment — no
+  **A server, headless** (`node scripts/dev/helpers-headless.mjs`): every bundled helper (30) is started by `kandinsky serve` in an empty environment — no
   `DISPLAY`, Wayland, D-Bus or desktop session, `PATH=/usr/bin:/bin` — and asked for a method it does not have; each
   started and listed its methods. The only desktop program any helper calls is the email engine's `xdg-open` for an
   Outlook sign-in, which falls back to showing the address and code. That is the server's precondition, not its
   verdict: `server` stays `untested` until a plugin's own work is done on one (and print, ocr's screen capture and
   claude act on the core machine's printers, screen and accounts — criterion 7).
-- **11:** the Rust engines of email, finance and catalog-papers write vault files with `atlas_plugin::write_file` /
-  `move_path` (through Atlas when it started them; a call carries a file's bytes as base64). What is still direct, on
-  purpose: finance's command-line subcommands (`finance <command> <folder>`, run with no Atlas), catalog-papers' empty
+- **11:** the Rust engines of email, finance and catalog-papers write vault files with `kandinsky_plugin::write_file` /
+  `move_path` (through Kandinsky when it started them; a call carries a file's bytes as base64). What is still direct, on
+  purpose: finance's command-line subcommands (`finance <command> <folder>`, run with no Kandinsky), catalog-papers' empty
   entry folder made to reserve a citekey, its old `entry.json` removed once moved into the note, and the snapshot it
-  copies into `.atlas/trash/` before a fold. ssh keeps its working copies' index on disk. Everything else writes
-  through Atlas's API.
+  copies into `.kandinsky/trash/` before a fold. ssh keeps its working copies' index on disk. Everything else writes
+  through Kandinsky's API.
 
 A plugin that serves one person's setup more than anyone's is kept out of the repository until it is made general.

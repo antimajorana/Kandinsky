@@ -73,12 +73,12 @@ impl EventBus {
         self.3.subscribe()
     }
 
-    /// Number of listeners reached; an error when no UI is connected, so `atlas open` can say so.
+    /// Number of listeners reached; an error when no UI is connected, so `kandinsky open` can say so.
     pub fn emit(&self, ev: Event) -> Result<usize> {
         if let Event::Notify(n) = &ev {
             let _ = self.3.send(n.clone());
         }
-        self.0.send(ev).map_err(|_| Error::CommandFailed("no Atlas UI is connected to receive it".into()))
+        self.0.send(ev).map_err(|_| Error::CommandFailed("no Kandinsky UI is connected to receive it".into()))
     }
 
     /// Fire-and-forget (fs changes with nobody listening are not an error).
@@ -92,20 +92,21 @@ impl EventBus {
     }
 }
 
-/// Watched like the walks see the tree, plus `.atlas/` (commands, config, plugins) but never its
+/// Watched like the walks see the tree, plus `.kandinsky/` (commands, config, plugins) but never its
 /// cache or trash.
 fn watchable(cfg: &Config, rel: &str) -> bool {
     // a save's temporary twin is renamed into place: the real path's own event follows
     if crate::files::is_write_tmp(rel) {
         return false;
     }
-    if rel == ".atlas" || rel.starts_with(".atlas/") {
-        return ![".atlas/cache", ".atlas/trash"].iter().any(|x| rel == *x || rel.starts_with(&format!("{x}/")));
+    if crate::state_dir::is_state_rel(rel) {
+        let rel = &*crate::state_dir::current_rel(rel); // `.atlas/` in a vault not yet migrated
+        return ![".kandinsky/cache", ".kandinsky/trash"].iter().any(|x| rel == *x || rel.starts_with(&format!("{x}/")));
     }
     walk::keep(cfg, rel)
 }
 
-/// `dir` and every folder under it: for `.atlas/`, which the walks skip as a dot-dir. Without this an
+/// `dir` and every folder under it: for `.kandinsky/`, which the walks skip as a dot-dir. Without this an
 /// installed plugin's folder was never watched, so editing its main.js reloaded nothing.
 fn all_dirs(root: &Path, cfg: &Config, dir: &Path, out: &mut Vec<PathBuf>) {
     out.push(dir.to_path_buf());
@@ -187,7 +188,7 @@ pub fn spawn_watcher(root: &Path, cfg: Config, bus: EventBus) -> Result<WatcherG
     feed.register();
     let stop = Arc::new(AtomicBool::new(false));
     let stop_thread = stop.clone();
-    std::thread::Builder::new().name("atlas-watch".into()).spawn(move || {
+    std::thread::Builder::new().name("kandinsky-watch".into()).spawn(move || {
         while !stop_thread.load(Ordering::Relaxed) {
             let first = match rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(ev) => ev,
@@ -215,7 +216,7 @@ pub fn spawn_watcher(root: &Path, cfg: Config, bus: EventBus) -> Result<WatcherG
                     Ok(ev) if is_change(&ev.kind) => ev,
                     Ok(_) => continue,
                     Err(e) => {
-                        eprintln!("atlas: watcher error: {e}");
+                        eprintln!("kandinsky: watcher error: {e}");
                         continue;
                     }
                 };
@@ -247,7 +248,7 @@ pub fn spawn_watcher(root: &Path, cfg: Config, bus: EventBus) -> Result<WatcherG
                 }
             }
             if rescan {
-                eprintln!("atlas: watcher: events were lost (queue overflow); every folder looked at again");
+                eprintln!("kandinsky: watcher: events were lost (queue overflow); every folder looked at again");
                 if !add_tree(&root, &cfg, &root, &mut watched, &mut watcher) {
                     feed.missed();
                 }
@@ -273,13 +274,13 @@ pub fn spawn_watcher(root: &Path, cfg: Config, bus: EventBus) -> Result<WatcherG
 
 /// False when a folder could not be watched (inotify's limit).
 fn add_tree(root: &Path, cfg: &Config, dir: &Path, watched: &mut HashSet<PathBuf>, w: &mut impl Watcher) -> bool {
-    // walk::dirs skips dot-dirs: `.atlas` and all below it (minus cache and trash, see watchable) is
+    // walk::dirs skips dot-dirs: `.kandinsky` and all below it (minus cache and trash, see watchable) is
     // listed here instead
-    let in_atlas = paths::rel_path(root, dir).is_some_and(|r| r == ".atlas" || r.starts_with(".atlas/"));
-    let mut dirs = if in_atlas { vec![] } else { walk::dirs(root, dir, cfg) };
-    let atlas = if dir == root { root.join(".atlas") } else { dir.to_path_buf() };
-    if (dir == root || in_atlas) && atlas.is_dir() {
-        all_dirs(root, cfg, &atlas, &mut dirs);
+    let in_kandinsky = paths::rel_path(root, dir).is_some_and(|r| crate::state_dir::is_state_rel(&r));
+    let mut dirs = if in_kandinsky { vec![] } else { walk::dirs(root, dir, cfg) };
+    let kandinsky = if dir == root { crate::state_dir::dir(root) } else { dir.to_path_buf() };
+    if (dir == root || in_kandinsky) && kandinsky.is_dir() {
+        all_dirs(root, cfg, &kandinsky, &mut dirs);
     }
     let mut whole = true;
     for d in dirs {
@@ -318,11 +319,11 @@ mod tests {
     }
 
     /// An installed plugin's files are watched, also in a plugin folder created after the start
-    /// (`atlas plugin update` replaces the folder); `.atlas/trash` is not.
+    /// (`kandinsky plugin update` replaces the folder); `.kandinsky/trash` is not.
     #[test]
     fn plugin_folders_are_watched() {
         let d = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(d.path().join(".atlas/plugins/a")).unwrap();
+        std::fs::create_dir_all(d.path().join(".kandinsky/plugins/a")).unwrap();
         let bus = EventBus::default();
         let mut rx = bus.subscribe();
         let _g = spawn_watcher(d.path(), Config::default(), bus).unwrap();
@@ -339,16 +340,16 @@ mod tests {
             }
             false
         };
-        std::fs::write(d.path().join(".atlas/plugins/a/main.js"), "x").unwrap();
-        assert!(seen(".atlas/plugins/a/main.js"), "an edit in an existing plugin folder");
-        std::fs::create_dir_all(d.path().join(".atlas/plugins/b")).unwrap();
-        assert!(seen(".atlas/plugins/b"), "a new plugin folder");
+        std::fs::write(d.path().join(".kandinsky/plugins/a/main.js"), "x").unwrap();
+        assert!(seen(".kandinsky/plugins/a/main.js"), "an edit in an existing plugin folder");
+        std::fs::create_dir_all(d.path().join(".kandinsky/plugins/b")).unwrap();
+        assert!(seen(".kandinsky/plugins/b"), "a new plugin folder");
         std::thread::sleep(Duration::from_millis(400));
-        std::fs::write(d.path().join(".atlas/plugins/b/main.js"), "y").unwrap();
-        assert!(seen(".atlas/plugins/b/main.js"), "an edit in the new folder");
-        std::fs::create_dir_all(d.path().join(".atlas/trash/x")).unwrap();
-        std::fs::write(d.path().join(".atlas/trash/x/main.js"), "z").unwrap();
-        assert!(!seen(".atlas/trash/x/main.js"), "the trash is not watched");
+        std::fs::write(d.path().join(".kandinsky/plugins/b/main.js"), "y").unwrap();
+        assert!(seen(".kandinsky/plugins/b/main.js"), "an edit in the new folder");
+        std::fs::create_dir_all(d.path().join(".kandinsky/trash/x")).unwrap();
+        std::fs::write(d.path().join(".kandinsky/trash/x/main.js"), "z").unwrap();
+        assert!(!seen(".kandinsky/trash/x/main.js"), "the trash is not watched");
     }
 
     /// Reading must not look like writing (that fed an endless event loop with the UI).
@@ -378,7 +379,7 @@ mod tests {
         }
     }
 
-    /// A save (Atlas's temporary twin renamed into place) is one `fs` event naming the note, with no temporary
+    /// A save (Kandinsky's temporary twin renamed into place) is one `fs` event naming the note, with no temporary
     /// path and nothing gone; a deletion is announced as `gone` before its `fs`.
     #[test]
     fn a_save_is_a_change_a_deletion_is_gone() {
@@ -393,7 +394,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(900));
             std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>()
         };
-        let tmp = d.path().join("notes/.a.md.atlas-tmp-1-2");
+        let tmp = d.path().join("notes/.a.md.kandinsky-tmp-1-2");
         std::fs::write(&tmp, "y").unwrap();
         std::fs::rename(&tmp, d.path().join("notes/a.md")).unwrap();
         assert_eq!(drain(&mut rx), vec![Event::Fs { paths: vec!["notes/a.md".into()] }]);

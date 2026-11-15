@@ -4,7 +4,7 @@ import { openFile } from "./open";
 // "the autocompletion does not seem to work for greek letters" and "tab … with autocompletion it
 // should move down and enter works": in math, two letters list the commands that start with them;
 // Tab walks the list, Enter takes the entry.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("Greek letters complete in math; Tab moves down the list, Enter accepts", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/greek.md", text: "# Greek\n\nprose\n" } });
@@ -24,7 +24,7 @@ test("Greek letters complete in math; Tab moves down the list, Enter accepts", a
   await page.keyboard.press("Shift+Tab");
   await expect(list.locator("li[aria-selected=true]")).toHaveText(/\\gamma/);
   await page.keyboard.press("Enter");
-  const text = () => page.evaluate(() => (window as any).__atlas.editor().text as string);
+  const text = () => page.evaluate(() => (window as any).__kandinsky.editor().text as string);
   await expect.poll(text).toContain("$\\gamma");
   // outside math the same letters list nothing
   await page.keyboard.type("$");
@@ -39,7 +39,7 @@ test("Greek letters complete in math; Tab moves down the list, Enter accepts", a
 test("Tab types a tab at the caret in prose and indents a list item; in code it types an indent", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/tabs.md", text: "# Tabs\n\nabcdef\n- item\nline one\nline two\n" } });
   await request.put("/api/file", { headers: H, data: { path: "notes/tabs.py", text: "x = 1\n" } });
-  const text = () => page.evaluate(() => (window as any).__atlas.editor().text as string);
+  const text = () => page.evaluate(() => (window as any).__kandinsky.editor().text as string);
   const insert = async () => { if (await page.locator(".cm-fat-cursor").count()) await page.keyboard.press("i"); }; // vim: into insert mode
   const open = async (name: string, word: string) => {
     await page.keyboard.press("Control+p");

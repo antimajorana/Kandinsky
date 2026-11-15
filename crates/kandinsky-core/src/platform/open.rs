@@ -1,10 +1,10 @@
-//! Opening things outside Atlas: a folder in the system's file manager, a URL in the system's browser.
+//! Opening things outside Kandinsky: a folder in the system's file manager, a URL in the system's browser.
 use std::path::Path;
 use std::process::Command;
 
 /// Shows `abs` in the system's file manager, selected where the OS can. Err: nothing could open it, in words.
 pub fn reveal(abs: &Path) -> Result<(), String> {
-    if std::env::var_os("ATLAS_NO_BROWSER").is_some() {
+    if crate::env::var_os("NO_BROWSER").is_some() {
         return Ok(()); // tests never touch the user's desktop
     }
     let folder = || if abs.is_dir() { abs.to_path_buf() } else { abs.parent().unwrap_or(abs).to_path_buf() };
@@ -36,7 +36,7 @@ pub fn reveal(abs: &Path) -> Result<(), String> {
 
 /// Opens `url` in the system's browser (or the program the OS gives that kind of link).
 pub fn url(url: &str) -> Result<(), String> {
-    if std::env::var_os("ATLAS_NO_BROWSER").is_some() {
+    if crate::env::var_os("NO_BROWSER").is_some() {
         return Ok(()); // tests never touch the user's desktop
     }
     let mut cmd = if cfg!(windows) {

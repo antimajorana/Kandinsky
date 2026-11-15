@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;

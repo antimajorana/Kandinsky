@@ -25,7 +25,7 @@ genres, poster, runtime and the other IDs (IMDb, TVDB). A film whose language th
 
 ## Platforms
 
-Linux works; the others are untested. The helper is JavaScript run inside Atlas's core.
+Linux works; the others are untested. The helper is JavaScript run inside Kandinsky's core.
 
 ## Status
 

@@ -16,17 +16,17 @@
   import { BY_KEY, COMMANDS, PREFIXES, keyOf, shown, type Ui } from "./keys";
   import { askLine, parseWhen, snoozeTimes, type Folder, type PluginApi, type Row, type Template } from "./api";
 
-  let { atlas }: { atlas: PluginApi } = $props();
+  let { kandinsky }: { kandinsky: PluginApi } = $props();
   // svelte-ignore state_referenced_locally
-  const mail = new Mail(atlas);
+  const mail = new Mail(kandinsky);
 
   type Layout = "three" | "below" | "full";
-  const stored = (k: string, d: string) => { try { return localStorage.getItem(`atlas-email-${k}`) ?? d; } catch { return d; } };
-  const store = (k: string, v: string) => { try { localStorage.setItem(`atlas-email-${k}`, v); } catch { /* private window */ } };
+  const stored = (k: string, d: string) => { try { return localStorage.getItem(`kandinsky-email-${k}`) ?? d; } catch { return d; } };
+  const store = (k: string, v: string) => { try { localStorage.setItem(`kandinsky-email-${k}`, v); } catch { /* private window */ } };
   // svelte-ignore state_referenced_locally
-  let layout = $state<Layout>(stored("layout", String(atlas.plugin.settings.layout ?? "three")) as Layout);
+  let layout = $state<Layout>(stored("layout", String(kandinsky.plugin.settings.layout ?? "three")) as Layout);
   // svelte-ignore state_referenced_locally
-  let compact = $state(stored("density", String(atlas.plugin.settings.density ?? "comfortable")) === "compact");
+  let compact = $state(stored("density", String(kandinsky.plugin.settings.density ?? "comfortable")) === "compact");
   let sideW = $state(Number(stored("side-w", "232")));
   let listW = $state(Number(stored("list-w", "420")));
   let listH = $state(Number(stored("list-h", "320")));
@@ -64,7 +64,7 @@
 
   function pick(kind: "move" | "label" | "snooze" | "go" | "template") {
     if (kind === "snooze") {
-      atlas.pick({
+      kandinsky.pick({
         placeholder: "Snooze until… (tomorrow 9, mon 14:00, 3h, 2026-11-02 08:00)", tag: "Snooze",
         items: snoozeTimes().map((s) => ({ value: String(s.at), title: s.label })),
         typed: (t) => { const at = parseWhen(t); return at ? `Until ${new Date(at * 1000).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", hourCycle: "h23", minute: "2-digit" })}` : "Type a time: tomorrow 9, mon 14:00, 3h"; },
@@ -73,7 +73,7 @@
     } else if (kind === "move" || kind === "go") {
       const acc = kind === "move" ? accountOfTargets() : null;
       const fs: Folder[] = mail.folders.filter((f) => (!acc || f.account === acc) && f.role !== "other" && f.role !== "view" && f.role !== "all");
-      atlas.pick({
+      kandinsky.pick({
         placeholder: kind === "move" ? "Move to which folder?" : "Go to which folder?", tag: kind === "move" ? "Move" : "Go to",
         items: fs.map((f) => ({ value: `${f.account}\u0000${f.path}`, title: f.label, detail: mail.accounts.length > 1 ? f.account : f.role ?? undefined, section: mail.accounts.length > 1 ? f.account : undefined })),
         typed: kind === "move" ? (t) => `New folder “${t}”` : undefined,
@@ -95,14 +95,14 @@
     } else if (kind === "label") {
       const have = new Set(mail.rows.flatMap((r) => r.labels));
       const on = new Set(mail.targets().flatMap((r) => r.labels));
-      atlas.pick({
+      kandinsky.pick({
         placeholder: "Label… (a label it has is taken off)", tag: "Label",
         items: [...have].sort().map((l) => ({ value: l, title: l.replace(/^\$/, ""), detail: on.has(l) ? "on it — pick to take it off" : undefined })),
         typed: (t) => `New label “${t}”`,
         onpick: (l) => (on.has(l) ? mail.label([], [l]) : mail.label([l], [])),
       });
     } else {
-      atlas.pick({
+      kandinsky.pick({
         placeholder: "Write from a template… (notes in mail/templates/)", tag: "Template",
         items: async () => (await mail.call<{ templates: Template[] }>("templates")).templates.map((t) => ({ value: JSON.stringify(t), title: t.name, detail: t.subject })),
         onpick: (v) => { const t = JSON.parse(v) as Template; mail.compose({ subject: t.subject ?? "", to: t.to ?? "", cc: t.cc ?? "", body: t.body }); },
@@ -111,7 +111,7 @@
   }
 
   function palette() {
-    atlas.pick({
+    kandinsky.pick({
       placeholder: "Do what? (every command of the Email pane)", tag: "Email",
       items: COMMANDS.filter((c) => c.id !== "palette" && (!c.when || c.when(mail))).map((c) => ({ value: c.id, title: c.title, detail: shown(c.keys).join("  ·  ") || undefined, section: c.group })),
       onpick: (id) => COMMANDS.find((c) => c.id === id)?.run(mail, ui),
@@ -119,7 +119,7 @@
   }
 
   function chooseLayout() {
-    atlas.pick({
+    kandinsky.pick({
       placeholder: "Layout of the Email pane", tag: "Layout",
       items: [
         { value: "three", title: "Three panes", detail: "folders, list, reader side by side" },
@@ -141,7 +141,7 @@
     expandAll: (o) => reader?.expandAll(o),
     find: () => reader?.find(),
     // a dialog over the app (API 20); a tab of its own on an older one
-    rules: () => (typeof atlas.openDialog === "function" ? void atlas.openDialog(RULES_DIALOG, { title: "Rules", width: 860, height: 640 }) : atlas.openView(RULES_DIALOG, { title: "Email rules", icon: "mail" })),
+    rules: () => (typeof kandinsky.openDialog === "function" ? void kandinsky.openDialog(RULES_DIALOG, { title: "Rules", width: 860, height: 640 }) : kandinsky.openView(RULES_DIALOG, { title: "Email rules", icon: "mail" })),
     layout: chooseLayout,
   };
 
@@ -212,29 +212,29 @@
   onMount(() => {
     mail.start();
     const offs = [
-      atlas.helper.on("changed", () => mail.later()),
-      atlas.helper.on("bodies", () => mail.later("list")),
-      atlas.helper.on("status", (d) => {
+      kandinsky.helper.on("changed", () => mail.later()),
+      kandinsky.helper.on("bodies", () => mail.later("list")),
+      kandinsky.helper.on("status", (d) => {
         const s = d as { account: string; state: string; error?: string };
         const a = mail.accounts.find((x) => x.name === s.account);
         if (a) { a.status = s as never; a.syncing = s.state === "syncing"; }
       }),
-      atlas.helper.on("woke", () => { mail.toast("Snoozed mail is back in the inbox"); mail.later(); }),
-      atlas.helper.on("rule", (d) => { const r = d as { rule: string; count: number }; mail.toast(`Rule “${r.rule}”: ${r.count} message${r.count === 1 ? "" : "s"}`); }),
+      kandinsky.helper.on("woke", () => { mail.toast("Snoozed mail is back in the inbox"); mail.later(); }),
+      kandinsky.helper.on("rule", (d) => { const r = d as { rule: string; count: number }; mail.toast(`Rule “${r.rule}”: ${r.count} message${r.count === 1 ? "" : "s"}`); }),
     ];
     const theme = new MutationObserver(() => (dark = document.documentElement.dataset.theme !== "light"));
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     const newFolder = async (e: Event) => {
       const account = (e as CustomEvent<string>).detail;
-      const name = await askLine(mail.atlas, `A new folder in ${account}:`);
+      const name = await askLine(mail.kandinsky, `A new folder in ${account}:`);
       if (!name) return;
       try { await mail.call("folder_create", { account, name }); await mail.loadFolders(); mail.toast(`Folder “${name}” made`, "success"); }
       catch (err) { mail.toast(`No folder made: ${(err as Error).message}`, "error"); }
     };
     const signedIn = () => { mail.loadAccounts(); mail.later(); };
-    window.addEventListener("atlas-email:new-folder", newFolder);
-    window.addEventListener("atlas-email:signed-in", signedIn);
-    // another part of Atlas asks to open a message or write one (a note's Reply, the inbox block, a notice)
+    window.addEventListener("kandinsky-email:new-folder", newFolder);
+    window.addEventListener("kandinsky-email:signed-in", signedIn);
+    // another part of Kandinsky asks to open a message or write one (a note's Reply, the inbox block, a notice)
     const openAsk = (e: Event) => {
       const d = (e as CustomEvent<{ id?: number; view?: string; account?: string; kind?: Kind; compose?: Record<string, unknown>; reply?: { id: number; mode: "reply" | "all" | "forward" }; search?: string }>).detail ?? {};
       if (d.account || d.view === "inbox") mail.go({ name: "inbox", account: d.account ?? null, folder: null, label: "Inbox" });
@@ -245,15 +245,15 @@
       if (d.compose) mail.compose(d.compose);
       if (d.reply) mail.reply(d.reply.mode, d.reply.id, false);
     };
-    window.addEventListener("atlas-email:open", openAsk);
-    const pendingOpen = (window as unknown as { __atlasEmailOpen?: unknown }).__atlasEmailOpen;
-    if (pendingOpen) { openAsk(new CustomEvent("x", { detail: pendingOpen })); (window as unknown as { __atlasEmailOpen?: unknown }).__atlasEmailOpen = undefined; }
+    window.addEventListener("kandinsky-email:open", openAsk);
+    const pendingOpen = (window as unknown as { __kandinskyEmailOpen?: unknown }).__kandinskyEmailOpen;
+    if (pendingOpen) { openAsk(new CustomEvent("x", { detail: pendingOpen })); (window as unknown as { __kandinskyEmailOpen?: unknown }).__kandinskyEmailOpen = undefined; }
     return () => {
       offs.forEach((o) => o());
       theme.disconnect();
-      window.removeEventListener("atlas-email:new-folder", newFolder);
-      window.removeEventListener("atlas-email:signed-in", signedIn);
-      window.removeEventListener("atlas-email:open", openAsk);
+      window.removeEventListener("kandinsky-email:new-folder", newFolder);
+      window.removeEventListener("kandinsky-email:signed-in", signedIn);
+      window.removeEventListener("kandinsky-email:open", openAsk);
     };
   });
 
@@ -329,11 +329,11 @@
             {/if}
           </header>
           {#if mail.error}
-            <div class="atlas-notice error">{mail.error}<div class="actions"><button class="atlas-btn" onclick={() => mail.load()}>Try again</button><button class="atlas-btn" onclick={() => atlas.plugin.openSettings()}>Settings…</button></div></div>
+            <div class="kandinsky-notice error">{mail.error}<div class="actions"><button class="kandinsky-btn" onclick={() => mail.load()}>Try again</button><button class="kandinsky-btn" onclick={() => kandinsky.plugin.openSettings()}>Settings…</button></div></div>
           {:else if !mail.loading && !mail.rows.length}
             <div class="empty">
-              {#if mail.query}<p>Nothing in the index matches.</p><button class="atlas-btn" onclick={searchServer}>Search the servers too</button>
-              {:else if !mail.accounts.length}<p>No mail account yet.</p><button class="atlas-btn" onclick={() => atlas.plugin.openSettings()}>Add an account…</button>
+              {#if mail.query}<p>Nothing in the index matches.</p><button class="kandinsky-btn" onclick={searchServer}>Search the servers too</button>
+              {:else if !mail.accounts.length}<p>No mail account yet.</p><button class="kandinsky-btn" onclick={() => kandinsky.plugin.openSettings()}>Add an account…</button>
               {:else if mail.view.name === "inbox" && !mail.quick}<p class="zero">Inbox zero.</p><p class="faint">Nothing to answer. c writes a new message.</p>
               {:else}<p class="faint">Nothing here{mail.quick ? " with that filter" : ""}.</p>{/if}
             </div>

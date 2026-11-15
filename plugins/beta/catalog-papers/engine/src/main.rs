@@ -1,41 +1,41 @@
 //! The catalog-papers helper (`papers`): the references library served over the helper pipe
-//! (docs/guides/PLUGIN-API.md, "Calling Atlas back"), the core reached back through the same pipe (core_api.rs).
+//! (docs/guides/PLUGIN-API.md, "Calling Kandinsky back"), the core reached back through the same pipe (core_api.rs).
 //! Methods: list add import attach edit merge type delete bibtex bib citekey fold (the References view), lookup and
 //! catalog_add (the catalog's tools `lookup` / `add`), connector (the Zotero Connector's listener, on or off as the
 //! settings say; started with the helper).
-use atlas_papers::catalog;
-use atlas_papers::connector::{self, Connector, Listener};
-use atlas_papers::core_api::{ConnectorHost, CoreApi};
-use atlas_papers::refs::{ImportOpts, Lib, PaperEdit, Res};
-use atlas_papers::settings::Settings;
-use atlas_plugin::{serve, Methods};
+use kandinsky_papers::catalog;
+use kandinsky_papers::connector::{self, Connector, Listener};
+use kandinsky_papers::core_api::{ConnectorHost, CoreApi};
+use kandinsky_papers::refs::{ImportOpts, Lib, PaperEdit, Res};
+use kandinsky_papers::settings::Settings;
+use kandinsky_plugin::{serve, Methods};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-type Answer = atlas_plugin::Result<Value>;
+type Answer = kandinsky_plugin::Result<Value>;
 
-fn fail(why: impl Into<String>) -> atlas_plugin::Error {
-    atlas_plugin::Error { status: None, why: why.into() }
+fn fail(why: impl Into<String>) -> kandinsky_plugin::Error {
+    kandinsky_plugin::Error { status: None, why: why.into() }
 }
 
 fn answer<T: serde::Serialize>(r: Res<T>) -> Answer {
     r.and_then(|v| serde_json::to_value(v).map_err(|e| format!("the answer could not be written as JSON: {e}"))).map_err(fail)
 }
 
-fn text(p: &Value, key: &str) -> atlas_plugin::Result<String> {
+fn text(p: &Value, key: &str) -> kandinsky_plugin::Result<String> {
     p[key].as_str().map(str::to_string).ok_or_else(|| fail(format!("{key:?} is needed")))
 }
 
-fn parse<T: DeserializeOwned>(p: &Value) -> atlas_plugin::Result<T> {
+fn parse<T: DeserializeOwned>(p: &Value) -> kandinsky_plugin::Result<T> {
     serde_json::from_value(p.clone()).map_err(|e| fail(format!("params: {e}")))
 }
 
-/// The vault: `ATLAS_ROOT` (set by the core), canonical so every path check holds.
+/// The vault: `KANDINSKY_ROOT` (set by the core), canonical so every path check holds.
 fn vault() -> PathBuf {
-    let root = std::env::var_os("ATLAS_ROOT").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    let root = std::env::var_os("KANDINSKY_ROOT").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
     root.canonicalize().unwrap_or(root)
 }
 
@@ -60,7 +60,7 @@ fn sync_connector(slot: &RefCell<Option<Listener>>, cfg: &Settings, plugin: &str
 }
 
 fn main() {
-    let plugin = std::env::var("ATLAS_PLUGIN_ID").ok().filter(|p| !p.is_empty()).unwrap_or_else(|| "catalog-papers".into());
+    let plugin = std::env::var("KANDINSKY_PLUGIN_ID").ok().filter(|p| !p.is_empty()).unwrap_or_else(|| "catalog-papers".into());
     let root = vault();
     let core = Rc::new(CoreApi::new(plugin.clone(), root.clone()));
     let listener = Rc::new(RefCell::new(None));
@@ -80,10 +80,10 @@ fn main() {
         let path = text(&p, "path")?;
         let name = p["name"].as_str().map(String::from).unwrap_or_else(|| path.rsplit('/').next().unwrap_or(&path).to_string());
         let opts: ImportOpts = parse(&p)?;
-        let file = atlas_text::paths::safe_join(&c.root, &path).map_err(fail)?;
+        let file = kandinsky_text::paths::safe_join(&c.root, &kandinsky_plugin::live_rel(&c.root, &path)).map_err(fail)?;
         let bytes = std::fs::read(&file).map_err(|e| fail(format!("{path}: {e}")))?;
         let r = with_lib(&c, &p, |lib| lib.import_pdf_with(&name, &bytes, &opts));
-        if r.is_ok() && path.starts_with(&format!(".atlas/cache/plugins/{}/", c.plugin)) {
+        if r.is_ok() && kandinsky_plugin::current_rel(&path).starts_with(&format!(".kandinsky/cache/plugins/{}/", c.plugin)) {
             let _ = std::fs::remove_file(&file); // filed: the upload is not kept twice
         }
         r

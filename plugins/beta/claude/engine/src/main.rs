@@ -1,9 +1,9 @@
-//! The Claude plugin's helper (plugin.toml `[helper]`): `usage` (the plan's limits of the account Atlas's Claude runs
+//! The Claude plugin's helper (plugin.toml `[helper]`): `usage` (the plan's limits of the account Kandinsky's Claude runs
 //! as, or of every account), `commands` and `account_folders` (the settings' suggestions). The access token is read
 //! from the credentials file at each look and only sent to the usage endpoint, through the core's fetch. Answers are
 //! kept 90 s per account (the bar asks every couple of minutes, an agent may ask too); the session hooks' fresh copy
 //! is used first, and on a failure the last numbers known are shown with their age.
-use atlas_plugin::{Atlas, Methods};
+use kandinsky_plugin::{Kandinsky, Methods};
 use claude::{accounts, email_of, hooks_cache, in_use, shape, tilde, token, URL};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -27,10 +27,10 @@ fn shared(credentials: &Path, fresh: Duration) -> Option<(Value, SystemTime)> {
     v.get("raw").filter(|r| r.is_object()).map(|r| (r.clone(), at))
 }
 
-fn ask(atlas: &Atlas, credentials: &Path) -> Result<Value, String> {
+fn ask(kandinsky: &Kandinsky, credentials: &Path) -> Result<Value, String> {
     let tok = token(&std::fs::read_to_string(credentials).map_err(|e| e.to_string())?).ok_or("not signed in (no access token)")?;
     let req = json!({ "url": URL, "headers": { "Authorization": format!("Bearer {tok}"), "anthropic-beta": "oauth-2025-04-20", "Accept": "application/json" }, "timeout_secs": 10 });
-    let r = atlas.post("/api/plugins/claude/fetch", &req).map_err(|e| e.why)?;
+    let r = kandinsky.post("/api/plugins/claude/fetch", &req).map_err(|e| e.why)?;
     if r["ok"] != true {
         return Err(format!("the usage endpoint answered {}", r["status"]));
     }
@@ -38,7 +38,7 @@ fn ask(atlas: &Atlas, credentials: &Path) -> Result<Value, String> {
 }
 
 struct Usage {
-    atlas: Atlas,
+    kandinsky: Kandinsky,
     home: PathBuf,
     root: PathBuf,
     /// credentials → (when, answer)
@@ -50,7 +50,7 @@ struct Usage {
 impl Usage {
     /// One account's answer: the hooks' fresh copy, else asked; on a failure the last known, else the reason.
     fn look(&mut self, credentials: &Path, name: &str, folder: &str) -> Value {
-        let got = shared(credentials, TTL).map(Ok).unwrap_or_else(|| ask(&self.atlas, credentials).map(|d| (d, SystemTime::now())));
+        let got = shared(credentials, TTL).map(Ok).unwrap_or_else(|| ask(&self.kandinsky, credentials).map(|d| (d, SystemTime::now())));
         match got {
             Ok((data, at)) => {
                 let s = shape(name, folder, &data);
@@ -72,7 +72,7 @@ impl Usage {
     }
 
     fn usage(&mut self, p: &Value) -> Value {
-        let config = std::fs::read_to_string(self.root.join(".atlas/config.toml")).unwrap_or_default();
+        let config = std::fs::read_to_string(kandinsky_plugin::state_dir(&self.root).join("config.toml")).unwrap_or_default();
         let config_dir = std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from);
         let current = in_use(p["settings"]["account"].as_str().unwrap_or_default(), &config, config_dir.as_deref(), &self.home);
         let real = |c: &Path| c.parent().map(|d| std::fs::canonicalize(d).unwrap_or_else(|_| d.to_path_buf()));
@@ -165,12 +165,12 @@ fn account_folders(home: &Path) -> Value {
 
 fn main() {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
-    let root = PathBuf::from(std::env::var_os("ATLAS_ROOT").unwrap_or_else(|| ".".into()));
-    let mut usage = Usage { atlas: Atlas::new(), home: home.clone(), root, cache: HashMap::new(), good: HashMap::new() };
+    let root = PathBuf::from(std::env::var_os("KANDINSKY_ROOT").unwrap_or_else(|| ".".into()));
+    let mut usage = Usage { kandinsky: Kandinsky::new(), home: home.clone(), root, cache: HashMap::new(), good: HashMap::new() };
     let mut methods = Methods::new();
     methods.add("usage", move |p| Ok(usage.usage(&p)));
     let h = home.clone();
     methods.add("commands", move |_| Ok(commands(&h)));
     methods.add("account_folders", move |_| Ok(account_folders(&home)));
-    atlas_plugin::serve(methods);
+    kandinsky_plugin::serve(methods);
 }

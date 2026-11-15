@@ -6,7 +6,7 @@ fn unpacked(bytes: &[u8]) -> tempfile::TempDir {
     let d = tempfile::tempdir().unwrap();
     let src = d.path().join("in.rar");
     std::fs::write(&src, bytes).unwrap();
-    atlas_rar::unpack(&src, &d.path().join("out")).unwrap();
+    kandinsky_rar::unpack(&src, &d.path().join("out")).unwrap();
     d
 }
 

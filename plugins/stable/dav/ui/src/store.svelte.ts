@@ -13,11 +13,11 @@ export interface Change { summary?: string; start?: string; end?: string; all_da
 export interface Draft { start: Date; end: Date; all_day: boolean }
 
 export const NOTES = "notes";
-const stored = (k: string) => { try { return localStorage.getItem(`atlas-calendar-${k}`); } catch { return null; } };
-const store = (k: string, v: string) => { try { localStorage.setItem(`atlas-calendar-${k}`, v); } catch { /* a private window */ } };
+const stored = (k: string) => { try { return localStorage.getItem(`kandinsky-calendar-${k}`); } catch { return null; } };
+const store = (k: string, v: string) => { try { localStorage.setItem(`kandinsky-calendar-${k}`, v); } catch { /* a private window */ } };
 
 export class Cal {
-  atlas: PluginApi;
+  kandinsky: PluginApi;
   sources = $state<Source[]>([]);
   accounts = $state<Account[]>([]);
   events = $state<Ev[]>([]);
@@ -42,9 +42,9 @@ export class Cal {
   private seq = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(atlas: PluginApi) {
-    this.atlas = atlas;
-    const s = atlas.plugin.settings;
+  constructor(kandinsky: PluginApi) {
+    this.kandinsky = kandinsky;
+    const s = kandinsky.plugin.settings;
     this.view = (stored("view") ?? String(s.default_view ?? "week")) as View;
     this.hidden = ((s.hidden as string[] | undefined) ?? []).slice();
     for (const line of (s.colors as string[] | undefined) ?? []) {
@@ -53,7 +53,7 @@ export class Cal {
     }
   }
 
-  get settings() { return this.atlas.plugin.settings; }
+  get settings() { return this.kandinsky.plugin.settings; }
   get first() { return weekStart(this.settings.week_start); }
   get h12() { return hourCycle(this.settings.time_format); }
   get showNotes() { return this.settings.show_notes === true; }
@@ -93,7 +93,7 @@ export class Cal {
 
   async loadSources() {
     try {
-      const r = await call<{ sources: Source[]; write: string | null; accounts: Account[]; configured: boolean }>(this.atlas, "watch", {}, 30);
+      const r = await call<{ sources: Source[]; write: string | null; accounts: Account[]; configured: boolean }>(this.kandinsky, "watch", {}, 30);
       this.sources = r.sources;
       this.accounts = r.accounts ?? [];
       this.write = r.write;
@@ -108,7 +108,7 @@ export class Cal {
     if (!quiet) this.loading = true;
     try {
       const ids = this.sources.filter((s) => !this.isHidden(s.id, s.name)).map((s) => s.id);
-      const r = await call<{ events: Ev[] }>(this.atlas, "range", { from: ymd(from), to: ymd(to), sources: ids, notes: this.showNotes && !this.isHidden(NOTES, "Notes") }, 60);
+      const r = await call<{ events: Ev[] }>(this.kandinsky, "range", { from: ymd(from), to: ymd(to), sources: ids, notes: this.showNotes && !this.isHidden(NOTES, "Notes") }, 60);
       if (ask !== this.seq) return; // a newer range was asked meanwhile
       this.events = r.events;
       this.error = "";
@@ -124,7 +124,7 @@ export class Cal {
   async sync(force = true) {
     this.syncing = true;
     try {
-      const r = await call<{ changed: boolean; errors: string[] }>(this.atlas, "refresh", { force }, 300);
+      const r = await call<{ changed: boolean; errors: string[] }>(this.kandinsky, "refresh", { force }, 300);
       await this.loadSources();
       if (r.changed) await this.load(true);
       if (r.errors.length) this.toast(r.errors[0], "error");
@@ -167,13 +167,13 @@ export class Cal {
   toggle(id: string, name: string) {
     this.hidden = this.isHidden(id, name) ? this.hidden.filter((h) => h !== id && h !== name) : [...this.hidden, id];
     void this.load(true);
-    void this.atlas.plugin.saveSettings({ hidden: this.hidden }).catch(() => {});
+    void this.kandinsky.plugin.saveSettings({ hidden: this.hidden }).catch(() => {});
   }
   setColor(id: string, color: string) {
     const name = this.sources.find((s) => s.id === id)?.name;
     const next = Object.fromEntries(Object.entries(this.colors).filter(([k]) => k !== name));
     this.colors = { ...next, [id]: color };
-    void this.atlas.plugin.saveSettings({ colors: Object.entries(this.colors).map(([k, v]) => `${k}: ${v}`) }).catch(() => {});
+    void this.kandinsky.plugin.saveSettings({ colors: Object.entries(this.colors).map(([k, v]) => `${k}: ${v}`) }).catch(() => {});
   }
   writable(): Source[] { return this.sources.filter((s) => s.kind === "caldav" && s.writable); }
   /** The calendars grouped by account, in Settings' order (`writable`: only those new events can go to). */
@@ -206,7 +206,7 @@ export class Cal {
   private undoer(id: number | undefined, what: string) {
     if (id === undefined) return undefined;
     return async () => {
-      try { await call(this.atlas, "undo", { id }); this.toast(`${what} undone`); }
+      try { await call(this.kandinsky, "undo", { id }); this.toast(`${what} undone`); }
       catch (e) { this.toast(`Not undone: ${(e as Error).message}`, "error"); }
       this.later(0);
     };
@@ -217,7 +217,7 @@ export class Cal {
     if (!e.recurring || !e.rid) return Promise.resolve("this");
     return new Promise((done) => {
       let picked = false;
-      this.atlas.pick({
+      this.kandinsky.pick({
         placeholder: `${verb} a repeating event: which ones?`, tag: "Repeating",
         items: [
           { value: "this", title: "This event" },
@@ -241,7 +241,7 @@ export class Cal {
     this.events = [...this.events, temp];
     this.remember(calendar);
     try {
-      const r = await call<{ undo: number }>(this.atlas, "create", { ...c, calendar } as Record<string, unknown>);
+      const r = await call<{ undo: number }>(this.kandinsky, "create", { ...c, calendar } as Record<string, unknown>);
       this.toast(`Added “${temp.summary}”`, undefined, this.undoer(r.undo, "Adding"));
       return true;
     } catch (e) {
@@ -259,7 +259,7 @@ export class Cal {
     }
     try {
       if (c.move_to) this.remember(c.move_to);
-      const r = await call<{ undo: number }>(this.atlas, "update", { ...c, calendar: e.calendar, href: e.href, uid: e.uid, rid: e.rid, scope, from_start: c.from_start ?? e.start });
+      const r = await call<{ undo: number }>(this.kandinsky, "update", { ...c, calendar: e.calendar, href: e.href, uid: e.uid, rid: e.rid, scope, from_start: c.from_start ?? e.start });
       this.toast(`${what} “${c.summary ?? e.summary}”`, undefined, this.undoer(r.undo, what));
     } catch (err) {
       this.toast(`Not saved: ${(err as Error).message}`, "error");
@@ -272,7 +272,7 @@ export class Cal {
     const before = this.events;
     this.events = this.events.map((x) => (x.uid === e.uid && x.calendar === e.calendar ? { ...x, answer: partstat } : x));
     try {
-      await call(this.atlas, "respond", { calendar: e.calendar, href: e.href, partstat });
+      await call(this.kandinsky, "respond", { calendar: e.calendar, href: e.href, partstat });
       this.toast(`${said} “${e.summary}” — the organiser is told`);
       return true;
     } catch (err) {
@@ -287,7 +287,7 @@ export class Cal {
     if (!scope) return;
     this.events = this.events.filter((x) => !(x.uid === e.uid && (scope !== "this" || x.rid === e.rid)));
     try {
-      const r = await call<{ undo: number }>(this.atlas, "delete", { calendar: e.calendar, href: e.href, uid: e.uid, rid: e.rid, scope });
+      const r = await call<{ undo: number }>(this.kandinsky, "delete", { calendar: e.calendar, href: e.href, uid: e.uid, rid: e.rid, scope });
       this.toast(`Deleted “${e.summary}”`, undefined, this.undoer(r.undo, "Deleting"));
     } catch (err) {
       this.toast(`Not deleted: ${(err as Error).message}`, "error");
@@ -297,7 +297,7 @@ export class Cal {
   async search(q: string) {
     this.query = q;
     if (!q.trim()) { this.results = null; return; }
-    try { this.results = (await call<{ events: Ev[] }>(this.atlas, "search", { q })).events; }
+    try { this.results = (await call<{ events: Ev[] }>(this.kandinsky, "search", { q })).events; }
     catch (e) { this.toast((e as Error).message, "error"); }
   }
 

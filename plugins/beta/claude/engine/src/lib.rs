@@ -1,4 +1,4 @@
-//! The Claude plugin's helper, its pure parts: which Claude Code accounts this computer has, which one Atlas's Claude
+//! The Claude plugin's helper, its pure parts: which Claude Code accounts this computer has, which one Kandinsky's Claude
 //! runs as, and the usage endpoint's answer read into limits. The files and the network come in from main.rs, so the
 //! tests run on a throwaway home.
 use serde_json::{json, Value};
@@ -85,7 +85,7 @@ pub fn tilde(path: &Path, home: &Path) -> String {
     }
 }
 
-/// The config folder Atlas's Claude sessions run as: the Account setting, else the vault's older
+/// The config folder Kandinsky's Claude sessions run as: the Account setting, else the vault's older
 /// `[terminal] claude_account`, else `$CLAUDE_CONFIG_DIR`, else `~/.claude`.
 pub fn in_use(setting: &str, vault_config: &str, config_dir: Option<&Path>, home: &Path) -> PathBuf {
     let older = toml::from_str::<toml::Table>(vault_config).ok().and_then(|t| t.get("terminal")?.get("claude_account")?.as_str().map(String::from));

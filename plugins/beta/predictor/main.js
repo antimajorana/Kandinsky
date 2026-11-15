@@ -248,7 +248,7 @@ async function S(e) {
 		fallback: m()
 	}), (e, t) => u(h.get(e.lang) ?? h.set(e.lang, s()).get(e.lang), l(e.text), t), "predictor"), _ = async () => g.countAll(await e.helper.call("notes"));
 	e.onFilesChanged((e) => {
-		let t = e.filter((e) => /\.md$/i.test(e) && !e.startsWith(".atlas/"));
+		let t = e.filter((e) => /\.md$/i.test(e) && !e.startsWith(".kandinsky/"));
 		g.counted && t.length && g.count(t);
 	});
 	let v = /* @__PURE__ */ new Map(), S = (t) => {

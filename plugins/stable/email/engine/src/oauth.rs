@@ -1,6 +1,6 @@
 //! Outlook / Microsoft 365 sign-in (OAuth2, as Thunderbird does): the access token IMAP and SMTP sign in with, renewed
-//! from the refresh token kept in Atlas's secret store; and the three ways to get that refresh token (the card's
-//! `flow`): automatic, window (Atlas's sign-in
+//! from the refresh token kept in Kandinsky's secret store; and the three ways to get that refresh token (the card's
+//! `flow`): automatic, window (Kandinsky's sign-in
 //! window, ending on https://localhost) and code (a device code typed at microsoft.com/devicelogin).
 //! HTTPS goes through the core's fetch (the manifest's `net`), so the engine carries no HTTP client.
 
@@ -27,7 +27,7 @@ pub type Post = dyn Fn(&str, &[(&str, &str)]) -> Result<Value, String> + Send + 
 pub fn core_post(url: &str, form: &[(&str, &str)]) -> Result<Value, String> {
     let body = form.iter().map(|(k, v)| format!("{}={}", enc(k), enc(v))).collect::<Vec<_>>().join("&");
     let req = json!({ "url": url, "method": "POST", "headers": { "content-type": "application/x-www-form-urlencoded", "accept": "application/json" }, "body": body, "timeout_secs": 30 });
-    let a = atlas_plugin::Atlas::new().post("/api/plugins/email/fetch", &req).map_err(|e| format!("cannot reach Microsoft: {e}"))?;
+    let a = kandinsky_plugin::Kandinsky::new().post("/api/plugins/email/fetch", &req).map_err(|e| format!("cannot reach Microsoft: {e}"))?;
     let text = a["text"].as_str().unwrap_or("{}");
     Ok(serde_json::from_str(text).unwrap_or(json!({ "error": "no_json", "error_description": text })))
 }
@@ -140,7 +140,7 @@ pub fn access_token_for(acc: &Account, scopes: &str, post: &Post) -> Result<Opti
     let until = Instant::now() + Duration::from_secs(j["expires_in"].as_u64().unwrap_or(3600));
     if let Some(new) = j["refresh_token"].as_str().filter(|n| *n != refresh) {
         ROTATED.lock().unwrap().insert(key.clone(), new.to_string());
-        let _ = atlas_plugin::Atlas::new().set_secret(&key, new);
+        let _ = kandinsky_plugin::Kandinsky::new().set_secret(&key, new);
         TOKENS.lock().unwrap().insert(cache(new), Cached { token: token.clone(), until });
     }
     TOKENS.lock().unwrap().insert(cache(&refresh), Cached { token: token.clone(), until });
@@ -191,7 +191,7 @@ fn authorize_url(tenant: &str, client: &str, redirect: &str, user: &str, challen
 
 /// The user's own browser, opened by the helper (a page's window.open needs a click in WebKitGTK).
 pub fn open_browser(url: &str) -> bool {
-    if std::env::var_os("ATLAS_NO_BROWSER").is_some() {
+    if kandinsky_plugin::env_var_os("NO_BROWSER").is_some() {
         return false;
     }
     std::process::Command::new("xdg-open").arg(url).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().is_ok()
@@ -266,11 +266,11 @@ fn catch(state: &str) -> Result<(u16, Answer), String> {
                     continue;
                 }
                 let text = if q.contains_key("code") {
-                    "Signed in. You can close this tab and go back to Atlas.".to_string()
+                    "Signed in. You can close this tab and go back to Kandinsky.".to_string()
                 } else {
                     format!("Not signed in: {}", crate::parse::escape(&refused(&json!({ "error": q.get("error"), "error_description": q.get("error_description") }))))
                 };
-                let body = format!("<!doctype html><meta charset=utf-8><title>Atlas</title><body style='font:16px sans-serif;padding:3em'><h2>{text}</h2>");
+                let body = format!("<!doctype html><meta charset=utf-8><title>Kandinsky</title><body style='font:16px sans-serif;padding:3em'><h2>{text}</h2>");
                 let _ = c.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: text/html; charset=utf-8\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len()).as_bytes());
                 let (m, cv) = &*answer;
                 *m.lock().unwrap() = Some(q);
@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     fn the_automatic_flow_catches_the_browser_and_redeems_the_code() {
-        std::env::set_var("ATLAS_NO_BROWSER", "1");
+        std::env::set_var("KANDINSKY_NO_BROWSER", "1");
         let card = json!({ "name": "udes", "auth": "outlook", "user": "me@u.ca" });
         let post = |url: &str, form: &[(&str, &str)]| -> Result<Value, String> {
             assert!(url.ends_with("/common/oauth2/v2.0/token"));

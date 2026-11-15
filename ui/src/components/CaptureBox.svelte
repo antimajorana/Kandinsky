@@ -150,7 +150,7 @@
     <div class="thumbs" aria-label="Attached pictures">
       {#each pictures as a (a.path)}
         <figure title={shownPath(a.path)}>
-          <!-- /api/raw needs the x-atlas header, which an <img> cannot send: the core's small copy as a blob: URL -->
+          <!-- /api/raw needs the x-kandinsky header, which an <img> cannot send: the core's small copy as a blob: URL -->
           {#await thumbUrl(a.path, 128) then src}<img {src} alt={shownPath(a.path)} />{/await}
           <button onclick={() => unembed(a)} title="Take it out of the capture" aria-label="Remove {shownPath(a.path)}"><Icon name="close" size={11} /></button>
         </figure>

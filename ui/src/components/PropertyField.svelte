@@ -10,6 +10,7 @@
   import type { PropertyKind, PropertySpec } from "../lib/types";
   import { api } from "../lib/api";
   import { arxivOf, doiOf, filedSource, isSource, openSource } from "../lib/doi-links";
+  import { classifyPigment } from "../lib/editor/pigment-pills";
 
   let { name, kind, value, spec, onset, onopen, values = [] }: {
     name: string; kind: PropertyKind; value: unknown; spec?: PropertySpec;
@@ -88,7 +89,7 @@
     return [{ value: "", label: "Empty" }, ...vals.map((v) => ({ value: v, label: v.replace(/^\[\[|\]\]$/g, ""), note: spec?.values.includes(v) ? undefined : "not in the spec" }))];
   });
   // what a value points at:
-  // a [[link]] or a file name (`paper.pdf`, found as links are) opens in Atlas, an address in the browser
+  // a [[link]] or a file name (`paper.pdf`, found as links are) opens in Kandinsky, an address in the browser
   const isUrl = (v: string) => /^https?:\/\//i.test(v.trim());
   const isFile = (v: string) => !isUrl(v) && /^[^\n]{1,200}\.[A-Za-z][A-Za-z0-9]{0,7}$/.test(v.trim());
   const target = (v: string): string | null => (WIKI.test(v) ? linkTarget(v) : isFile(v) ? v.trim() : null);
@@ -120,7 +121,8 @@
 {#if pills}
   <div class="pills" data-kind={kind}>
     {#each items as it, i (it)}
-      <span class="pill" class:tag={kind === "tags"} class:link={WIKI.test(it)}>
+      {@const pig = classifyPigment(name, WIKI.test(it) ? linkLabel(it) : it, i, { isList: multi, isTag: kind === "tags", isLink: WIKI.test(it) })}
+      <span class="pill {pig.tone ? `pill-${pig.tone}` : ''}" class:tag={kind === "tags"} class:link={WIKI.test(it)} class:has-dot={pig.dot}>
         {#if WIKI.test(it)}
           <button type="button" class="pill-text" title="Open {linkTarget(it)}" onclick={() => onopen(linkTarget(it))}>{linkLabel(it)}</button>
         {:else if asSource(it)}
@@ -152,7 +154,9 @@
   <input class="field num" type="number" step="any" aria-label={label} value={scalarText(value)} onchange={commitNumber} onkeydown={enterBlurs} />
 {:else}
   {@const text = scalarText(value)}
-  <div class="text-row">
+  {@const scalarPig = classifyPigment(name, text, 0)}
+  <div class="text-row" class:has-pigment={!!(text && scalarPig.wrapScalar && scalarPig.tone)} data-tone={scalarPig.tone ?? undefined}>
+    {#if text && scalarPig.dot}<span class="status-dot" aria-hidden="true">●</span>{/if}
     <SuggestInput class="field {opens(text) ? 'is-link' : ''}" type="text" aria-label={label} placeholder="Empty" value={text} items={textSuggest}
       title={opens(text) ? "Ctrl+click to open" : undefined} onclick={(e: MouseEvent) => ctrlOpen(e, text)}
       onpick={(v) => { typed = v; onset(v.trim() === "" ? null : v); }} onchange={commitText} onkeydown={enterBlurs}
@@ -181,15 +185,33 @@
   .pills { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: calc(26px * var(--ui-scale, 1)); padding: 2px 4px; border-radius: var(--radius-sm); border: 1px solid transparent; }
   .pills:hover { border-color: var(--border); }
   .pills:focus-within { border-color: var(--accent); background: var(--bg); }
-  .pill { display: inline-flex; align-items: center; max-width: 100%; min-width: 0; border-radius: 999px; background: var(--bg-alt); border: 1px solid var(--border);
-    font-size: calc(12px * var(--ui-scale, 1)); line-height: calc(20px * var(--ui-scale, 1)); }
+  .pill { display: inline-flex; align-items: center; max-width: 100%; min-width: 0; border-radius: 5px; background: var(--bg-alt); border: 1px solid var(--border);
+    font-size: calc(12px * var(--ui-scale, 1)); line-height: calc(20px * var(--ui-scale, 1)); font-weight: 500; }
   .pill.tag { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+  .pill.pill-viridian { background: color-mix(in srgb, var(--green) 14%, transparent); border-color: color-mix(in srgb, var(--green) 26%, transparent); color: var(--green); }
+  .pill.pill-cobalt { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--accent-strong, var(--accent)); }
+  .pill.pill-ochre { background: color-mix(in srgb, var(--yellow) 15%, transparent); border-color: color-mix(in srgb, var(--yellow) 28%, transparent); color: var(--yellow); }
+  .pill.pill-mauve { background: color-mix(in srgb, var(--purple) 15%, transparent); border-color: color-mix(in srgb, var(--purple) 28%, transparent); color: var(--purple); }
+  .pill.pill-vermilion { background: color-mix(in srgb, var(--red) 14%, transparent); border-color: color-mix(in srgb, var(--red) 26%, transparent); color: var(--red); }
+  .pill.has-dot::before { content: "●"; font-size: .62em; margin-left: 7px; margin-right: -3px; line-height: 1; }
   .pill-text { padding: 0 2px 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: inherit; }
-  .pill.link .pill-text { color: var(--link, var(--accent)); }
-  .pill .pill-text.opens { color: var(--link, var(--accent)); cursor: pointer; }
+  .pill.link .pill-text { color: inherit; }
+  .pill .pill-text.opens { color: inherit; cursor: pointer; }
   .pill .pill-text.unfiled { color: var(--red); }
   .text-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; min-width: 0; }
-  .text-row > :global(:first-child) { flex: 1; min-width: 0; }
+  .text-row.has-pigment:not(:focus-within) { padding-left: 6px; border-radius: 5px; }
+  .text-row[data-tone="viridian"]:not(:focus-within) { background: color-mix(in srgb, var(--green) 12%, transparent); color: var(--green); }
+  .text-row[data-tone="viridian"]:not(:focus-within) :global(.field) { color: var(--green); font-weight: 500; }
+  .text-row[data-tone="cobalt"]:not(:focus-within) { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-strong, var(--accent)); }
+  .text-row[data-tone="cobalt"]:not(:focus-within) :global(.field) { color: var(--accent-strong, var(--accent)); font-weight: 500; }
+  .text-row[data-tone="ochre"]:not(:focus-within) { background: color-mix(in srgb, var(--yellow) 13%, transparent); color: var(--yellow); }
+  .text-row[data-tone="ochre"]:not(:focus-within) :global(.field) { color: var(--yellow); font-weight: 500; }
+  .text-row[data-tone="mauve"]:not(:focus-within) { background: color-mix(in srgb, var(--purple) 13%, transparent); color: var(--purple); }
+  .text-row[data-tone="mauve"]:not(:focus-within) :global(.field) { color: var(--purple); font-weight: 500; }
+  .text-row[data-tone="vermilion"]:not(:focus-within) { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+  .text-row[data-tone="vermilion"]:not(:focus-within) :global(.field) { color: var(--red); font-weight: 500; }
+  .status-dot { font-size: .62em; line-height: 1; flex: none; }
+  .text-row > :global(:not(.status-dot):first-of-type), .text-row > :global(:first-child:not(.status-dot)) { flex: 1; min-width: 0; }
   .text-row .open { flex: none; width: calc(22px * var(--ui-scale, 1)); height: calc(22px * var(--ui-scale, 1)); color: var(--text-faint); }
   .text-row .open:hover { color: var(--link, var(--accent)); }
   .text-row :global(.field.is-link) { color: var(--link, var(--accent)); }

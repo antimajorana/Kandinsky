@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 /**
  * The Boox's stylus read from evdev by the app's native library (src/pen_reader.rs; docs/design/DESIGN-boox-pen-openink.md):
@@ -12,7 +12,7 @@ final class PenReader {
         void onPen(int action, int tool, int x, int y, float pressure, int tiltX, int tiltY, boolean sideButton, long timeUs);
     }
 
-    static { System.loadLibrary("atlas_android"); }
+    static { System.loadLibrary("kandinsky_android"); }
 
     private long handle;
 

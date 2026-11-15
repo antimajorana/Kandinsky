@@ -1,5 +1,5 @@
 //! What the phone's screen asks of Rust. Offsets the screen sees are UTF-16 (Java strings).
-use atlas_capture::complete::{self, Names};
+use kandinsky_capture::complete::{self, Names};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -52,7 +52,7 @@ pub fn suggest(vault: &Path, text: &str, caret_utf16: usize) -> Value {
 }
 
 /// `ChevronsUp` → `chevrons_up`: the drawable's name (res/drawable/ic_<name>.xml).
-pub fn icon_name(icon: atlas_capture::icons::Icon) -> String {
+pub fn icon_name(icon: kandinsky_capture::icons::Icon) -> String {
     let mut out = String::new();
     for (i, c) in format!("{icon:?}").chars().enumerate() {
         if c.is_uppercase() && i > 0 {
@@ -71,8 +71,8 @@ pub fn describe(vault: Option<&Path>, text: &str) -> String {
 }
 
 /// The vault's settings, read again at most every few seconds: the hint asks on every keystroke, on the UI thread.
-fn config_of(vault: &Path) -> Option<atlas_core::config::Config> {
-    type Kept = Option<(PathBuf, std::time::Instant, atlas_core::config::Config)>;
+fn config_of(vault: &Path) -> Option<kandinsky_core::config::Config> {
+    type Kept = Option<(PathBuf, std::time::Instant, kandinsky_core::config::Config)>;
     static KEPT: Mutex<Kept> = Mutex::new(None);
     let mut kept = KEPT.lock().unwrap();
     if let Some((p, at, cfg)) = kept.as_ref() {
@@ -80,14 +80,14 @@ fn config_of(vault: &Path) -> Option<atlas_core::config::Config> {
             return Some(cfg.clone());
         }
     }
-    let cfg = atlas_core::Workspace::open(vault).and_then(|ws| ws.config()).ok()?;
+    let cfg = kandinsky_core::Workspace::open(vault).and_then(|ws| ws.config()).ok()?;
     *kept = Some((vault.to_path_buf(), std::time::Instant::now(), cfg.clone()));
     Some(cfg)
 }
 
 /// Writes the capture: `{path, line}` or `{error}`.
 pub fn save(vault: &Path, text: &str) -> Value {
-    match atlas_capture::send::capture(vault, text) {
+    match kandinsky_capture::send::capture(vault, text) {
         Ok((path, line)) => json!({ "path": path, "line": line }),
         Err(e) => json!({ "error": e.to_string() }),
     }
@@ -95,18 +95,20 @@ pub fn save(vault: &Path, text: &str) -> Value {
 
 /// Copies a file (a screenshot, a shared file) beside today's log note: `{path, embed}` or `{error}`.
 pub fn attach(vault: &Path, name: &str, source: &Path) -> Value {
-    match atlas_capture::send::attach(vault, name, source) {
+    match kandinsky_capture::send::attach(vault, name, source) {
         Ok((path, embed)) => json!({ "path": path, "embed": embed }),
         Err(e) => json!({ "error": e.to_string() }),
     }
 }
 
-/// Folders under `root` that are vaults (holding `.atlas` or `.obsidian`), at most 4 levels down; hidden folders and
+/// Folders under `root` that are vaults (holding `.kandinsky` or `.obsidian`), at most 4 levels down; hidden folders and
 /// Android's own are skipped. → `[{name, path, kind}]`.
 pub fn find_vaults(root: &Path) -> Value {
     fn walk(dir: &Path, depth: u8, out: &mut Vec<Value>) {
-        for kind in ["atlas", "obsidian"] {
-            if dir.join(format!(".{kind}")).is_dir() {
+        for kind in ["kandinsky", "obsidian"] {
+            // a vault from before the rename holds `.atlas` (renamed when it is served: state_dir.rs)
+            let here = if kind == "kandinsky" { kandinsky_core::workspace::is_vault(dir) } else { dir.join(format!(".{kind}")).is_dir() };
+            if here {
                 let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                 out.push(json!({ "name": name, "path": dir.display().to_string(), "kind": kind }));
                 return;
@@ -141,9 +143,9 @@ mod tests {
         let t = "é 📅 [[ko";
         assert_eq!(byte_of(t, utf16_of(t, t.len())), t.len());
         assert_eq!(utf16_of(t, "é 📅".len()), 4, "📅 is two UTF-16 units");
-        let d = std::env::temp_dir().join(format!("atlas-android-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("kandinsky-android-{}", std::process::id()));
         std::fs::create_dir_all(d.join("Sync/Notes/.obsidian")).unwrap();
-        std::fs::create_dir_all(d.join("Android/data/x/.atlas")).unwrap();
+        std::fs::create_dir_all(d.join("Android/data/x/.kandinsky")).unwrap();
         std::fs::create_dir_all(d.join("Notes/log")).unwrap();
         let v = find_vaults(&d);
         assert_eq!(v.as_array().unwrap().len(), 1, "{v}");
@@ -154,7 +156,7 @@ mod tests {
         std::fs::write(d.join("shot.png"), b"png").unwrap();
         let a = attach(&d.join("Notes"), "shot.png", &d.join("shot.png"));
         assert_eq!(a["embed"], "![[shot.png]]", "{a}");
-        assert_eq!(icon_name(atlas_capture::icons::Icon::ChevronsUp), "chevrons_up");
+        assert_eq!(icon_name(kandinsky_capture::icons::Icon::ChevronsUp), "chevrons_up");
         std::fs::remove_dir_all(&d).ok();
     }
 }
@@ -162,7 +164,7 @@ mod tests {
 /// A built-in plugin's form from the manifest the app carries (`{fields, settings}` with defaults, or `{error}`): what
 /// Settings and the plugin read while the vault has no folder for it.
 pub fn plugin_form(manifest: &str) -> Value {
-    match atlas_core::plugins::form_of(manifest) {
+    match kandinsky_core::plugins::form_of(manifest) {
         Ok((fields, settings)) => json!({ "fields": fields, "settings": settings }),
         Err(e) => json!({ "error": e.to_string() }),
     }
@@ -184,7 +186,7 @@ mod plugin_tests {
     fn every_icon_the_java_asks_for_is_drawn() {
         // a name with no icon crashed the app on start (the bottom bar's Library, 2026-10-20): the names the Java gives
         // Look.icon, in a call or in the bottom bar's { "icon", "Label" } list, each one of the icons drawn
-        let names: std::collections::HashSet<String> = atlas_capture::icons::Icon::ALL.iter().map(|i| icon_name(*i)).collect();
+        let names: std::collections::HashSet<String> = kandinsky_capture::icons::Icon::ALL.iter().map(|i| icon_name(*i)).collect();
         let call = regex::Regex::new(r#"\.icon\([^,()]+(?:\(\))?, "([a-z_]+)""#).unwrap();
         let bar = regex::Regex::new(r#"\{ "([a-z_]+)", "[A-Z][a-z]+" \}"#).unwrap();
         // a launcher shortcut's glyph (Shortcuts.make): a wrong name there drew a blank tile

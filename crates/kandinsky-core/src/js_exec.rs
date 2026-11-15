@@ -1,4 +1,4 @@
-//! `atlas.exec` for a JavaScript helper (docs/design/DESIGN-js-helpers.md, "atlas.exec"): one of the programs its
+//! `kandinsky.exec` for a JavaScript helper (docs/design/DESIGN-js-helpers.md, "kandinsky.exec"): one of the programs its
 //! manifest names (`[permissions] exec = ["pandoc"]`) run by the core with no shell, on a thread of its own, so the
 //! helper's other calls go on meanwhile. Only the helper's own script reaches it (js_helper.rs), never an HTTP route: a
 //! page could otherwise drive a plugin's programs with arguments of its choosing.
@@ -15,7 +15,7 @@ const MAX_OUTPUT: usize = 8 << 20;
 const DEFAULT_SECS: u64 = 60;
 const MAX_SECS: u64 = 600;
 
-/// One run as the script asks it (`atlas.exec(program, args, {stdin, cwd, timeout})`).
+/// One run as the script asks it (`kandinsky.exec(program, args, {stdin, cwd, timeout})`).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Run {
@@ -141,10 +141,10 @@ mod tests {
     #[test]
     fn only_a_named_installed_program_runs_inside_the_vault() {
         let dir = tempfile::tempdir().unwrap();
-        let allowed = vec!["sh".to_string(), "no-such-program-atlas".to_string()];
+        let allowed = vec!["sh".to_string(), "no-such-program-kandinsky".to_string()];
         assert!(check(dir.path(), &allowed, &ask("cat", &[])).unwrap_err().contains("not in the manifest"));
         assert!(check(dir.path(), &allowed, &ask("/bin/sh", &[])).unwrap_err().contains("not a path"));
-        assert!(check(dir.path(), &allowed, &ask("no-such-program-atlas", &[])).unwrap_err().contains("not installed"));
+        assert!(check(dir.path(), &allowed, &ask("no-such-program-kandinsky", &[])).unwrap_err().contains("not installed"));
         let outside = Run { cwd: Some("../..".into()), ..ask("sh", &[]) };
         assert!(check(dir.path(), &allowed, &outside).is_err(), "a folder outside the vault");
         assert!(check(dir.path(), &allowed, &ask("sh", &[])).is_ok());

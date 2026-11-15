@@ -1,5 +1,5 @@
 // A plugin's settings: its page in Settings (components/settings/PluginPage.svelte, opened by
-// `atlas.plugin.openSettings()` too), its fields as the form's fields, its secrets' names and suggestions, and saving.
+// `kandinsky.plugin.openSettings()` too), its fields as the form's fields, its secrets' names and suggestions, and saving.
 // The schema is the plugin's `[[setting]]` (core: plugin_settings.rs).
 import { errText } from "./text";
 import { api } from "./api";
@@ -24,7 +24,7 @@ export async function openPluginSettings(id: string): Promise<void> {
 
 /** Where a vault keeps a plugin's settings values (core: plugins.rs SETTINGS_DIR) — not its plugin.toml, which is the
  *  plugin's own manifest and only holds the starting values. */
-export const pluginSettingsFile = (id: string) => `.atlas/plugin-settings/${id}.toml`;
+export const pluginSettingsFile = (id: string) => `.kandinsky/plugin-settings/${id}.toml`;
 
 /** The settings as text: the vault's file, made (empty, with a line saying what it is) the first time it is asked for. */
 export async function openPluginSettingsText(p: Plugin): Promise<void> {

@@ -1,11 +1,11 @@
-// The recovery copy of a file whose save failed as its tab closed (.atlas/cache/recovery/<path>): written, and the
+// The recovery copy of a file whose save failed as its tab closed (.kandinsky/cache/recovery/<path>): written, and the
 // toast says where it is only when it was — a failed copy says the work is lost instead of claiming it is kept.
 import { api } from "./api";
 import { errText } from "./text";
 import { shownPath } from "./paths";
 import { toast } from "./state.svelte";
 
-export const recoveryPath = (path: string) => `.atlas/cache/recovery/${path}`;
+export const recoveryPath = (path: string) => `.kandinsky/cache/recovery/${path}`;
 
 export async function keepRecovery(path: string, text: string, kept: string): Promise<boolean> {
   try {

@@ -23,7 +23,7 @@ let watching = false;
 function watch(): void {
   if (watching) return;
   watching = true;
-  on("fs", (e) => { if (touches(e.paths, (p) => /(?:^|\/)([^/]+)\/\1\.md$/.test(p) || /info\.yaml$/.test(p) || p.startsWith(".atlas/plugins/catalog-papers/"))) { papers = null; listeners.forEach((f) => f()); } });
+  on("fs", (e) => { if (touches(e.paths, (p) => /(?:^|\/)([^/]+)\/\1\.md$/.test(p) || /info\.yaml$/.test(p) || p.startsWith(".kandinsky/plugins/catalog-papers/"))) { papers = null; listeners.forEach((f) => f()); } });
 }
 /** Called when the Library changes. */
 export function onLibraryChange(fn: () => void): () => void {
@@ -50,7 +50,7 @@ const paperEntities: EntityProvider = {
 };
 export const providers: EntityProvider[] = [paperEntities];
 
-/** Adds an entity kind (plugins: `atlas.registerEntities`). Longest prefix wins. */
+/** Adds an entity kind (plugins: `kandinsky.registerEntities`). Longest prefix wins. */
 export function registerEntities(p: EntityProvider): () => void {
   providers.push(p);
   providers.sort((a, b) => b.prefix.length - a.prefix.length);

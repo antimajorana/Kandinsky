@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -10,7 +10,7 @@ import android.widget.TextView;
 /** A native plugin's screen (docs/refactor/REFACTOR-native-plugins.md): the app's look and bars around the plugin's
  *  view, Back as anywhere else. One activity for every plugin: the plugin is named by the Intent. */
 public final class PluginActivity extends Activity {
-    private static final String ID = "org.atlas.plugin", PATH = "org.atlas.path", VAULT = "org.atlas.vault";
+    private static final String ID = "org.kandinsky.plugin", PATH = "org.kandinsky.path", VAULT = "org.kandinsky.vault";
 
     static void start(Activity from, String id, String path) {
         from.startActivity(new Intent(from, PluginActivity.class).putExtra(ID, id).putExtra(PATH, path));

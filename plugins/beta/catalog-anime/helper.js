@@ -21,7 +21,7 @@
 	};
 	const HEADERS = {
 		"Content-Type": "application/json",
-		"User-Agent": "Atlas/0.1 (personal notes app; catalog-anime)"
+		"User-Agent": "Kandinsky/0.1 (personal notes app; catalog-anime)"
 	};
 	/** AniList's description without its markup (`<br>`, `<i>`, "(Source: …)"). */
 	function plain(text) {
@@ -61,7 +61,7 @@
 		const kind = String(params.kind || "manga");
 		const ids = { ...params.ids ?? {} };
 		if (ids.mangadex && !ids.anilist && !ids.myanimelist) {
-			const links = (await atlas.fetchJson(`${MANGADEX}/manga/${ids.mangadex}`, { headers: HEADERS }))?.data?.attributes?.links ?? {};
+			const links = (await kandinsky.fetchJson(`${MANGADEX}/manga/${ids.mangadex}`, { headers: HEADERS }))?.data?.attributes?.links ?? {};
 			if (links.al) ids.anilist = links.al;
 			if (links.mal) ids.myanimelist = links.mal;
 		}
@@ -72,7 +72,7 @@
 			fields: {},
 			skipped: "no AniList or MyAnimeList id (MangaDex names none for this title)"
 		};
-		const m = (await atlas.fetchJson(ANILIST, {
+		const m = (await kandinsky.fetchJson(ANILIST, {
 			method: "POST",
 			headers: HEADERS,
 			body: {
@@ -91,7 +91,7 @@
 			fields: fieldsOf(kind, m)
 		};
 	}
-	atlas.methods({ lookup });
+	kandinsky.methods({ lookup });
 	//#endregion
 	exports.lookup = lookup;
 	exports.plain = plain;

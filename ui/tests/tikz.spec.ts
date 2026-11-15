@@ -5,7 +5,7 @@ import { parseTikz, texError, uniqueIds } from "../src/lib/tikz";
 // ```tikz fences drawn in the page by TeX in WebAssembly (lib/tikz.ts, lib/tikz-fence.ts): a flowchart with the
 // positioning and fit libraries becomes an SVG, a TeX error shows TeX's message in place, and the source stays the
 // note's text.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 
 const FLOWCHART = String.raw`\usetikzlibrary{positioning,fit}
@@ -57,7 +57,7 @@ test("a tikz fence draws as an SVG, a broken one shows TeX's error, the source s
   const err = note.locator('.tikz-figure[data-state="error"]', { hasText: "Undefined" });
   await expect(err).toContainText("Undefined control sequence", { timeout: 60_000 });
   await expect(err).toContainText("\\undefinedmacro");
-  await expect(note.locator('.tikz-figure[data-state="error"]', { hasText: "siunitx" }), "a package the page's TeX lacks is named").toContainText("Not in the TeX that draws in Atlas: siunitx");
+  await expect(note.locator('.tikz-figure[data-state="error"]', { hasText: "siunitx" }), "a package the page's TeX lacks is named").toContainText("Not in the TeX that draws in Kandinsky: siunitx");
   const text = await request.get("/api/file?path=notes/tikz-loop.md", { headers: H }).then((r) => r.json()).then((j) => j.text as string);
   expect(text, "drawing never touches the note").toContain("fit=(a)(b)(c)");
 });

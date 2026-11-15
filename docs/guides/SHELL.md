@@ -4,39 +4,39 @@ Phase 3 of the shell overhaul. Before it, what was open and where lived in the b
 
 | what | where it lives | who writes it |
 |---|---|---|
-| the list of vaults | `~/.config/atlas/vaults.toml` (the only Atlas file outside a vault; `$ATLAS_VAULTS` overrides) | the desktop app when it opens a vault; the vault chooser |
-| the current layout (tabs, splits) | `<vault>/.atlas/cache/layout.json` — per machine, deletable | the UI, 0.4 s after a change and when the window closes |
-| named workspaces | `<vault>/.atlas/workspaces/<name>.json` | "Workspace: save the current tabs as…" |
-| pinned tabs and bookmarks | `<vault>/.atlas/bookmarks.yaml` | pinning a tab; "Bookmark: add…"; the user, as text |
-| the sidebar's content | `<vault>/.atlas/sidebar.page` (a built-in default until the file exists) | "Sidebar: arrange its blocks…"; the user, as text |
-| recently opened files | the usage journal `<vault>/.atlas/cache/usage.jsonl` (`GET /api/recent`) — every window and device that opens a file in the vault, deletable | the core, when a pane shows a file |
+| the list of vaults | `~/.config/kandinsky/vaults.toml` (the only Kandinsky file outside a vault; `$KANDINSKY_VAULTS` overrides) | the desktop app when it opens a vault; the vault chooser |
+| the current layout (tabs, splits) | `<vault>/.kandinsky/cache/layout.json` — per machine, deletable | the UI, 0.4 s after a change and when the window closes |
+| named workspaces | `<vault>/.kandinsky/workspaces/<name>.json` | "Workspace: save the current tabs as…" |
+| pinned tabs and bookmarks | `<vault>/.kandinsky/bookmarks.yaml` | pinning a tab; "Bookmark: add…"; the user, as text |
+| the sidebar's content | `<vault>/.kandinsky/sidebar.page` (a built-in default until the file exists) | "Sidebar: arrange its blocks…"; the user, as text |
+| recently opened files | the usage journal `<vault>/.kandinsky/cache/usage.jsonl` (`GET /api/recent`) — every window and device that opens a file in the vault, deletable | the core, when a pane shows a file |
 
 What is still only in the browser: the sidebar's width and whether it is collapsed, the folded state of the properties and backlinks panels, PDF zoom — per-window comforts, not content.
 
 ## Vaults
 
-A vault is any folder. Everything specific to it — settings, plugins, pages, workspaces, the starter kit — is in its own `.atlas/`, so a work vault (runs, lectures, Zotero) and a personal one share nothing but the app. Choose the vault as in Obsidian; each vault is modular.
+A vault is any folder. Everything specific to it — settings, plugins, pages, workspaces, the starter kit — is in its own `.kandinsky/`, so a work vault (runs, lectures, Zotero) and a personal one share nothing but the app. Choose the vault as in Obsidian; each vault is modular.
 
-- **Chooser**: the vault's name at the top of the sidebar, or **Vault: switch, open or create…** (Ctrl+Alt+V). It lists known vaults, most recent first (the current one and missing folders are marked). Typing a path opens that folder as a vault; if it does not exist, Atlas asks before creating it. "Forget" removes an entry from the list and never touches the folder.
-- **One window per vault**: opening a vault starts another `atlas-app <folder>` (its own core, its own port). Vaults run apart, like Obsidian's vault windows.
-- **Starting the app**: `atlas-app <folder>` opens that folder; with no argument it opens the most recently opened vault; on a first run (empty list) it opens a small Welcome vault in `~/.local/share/atlas/Welcome` whose home page says how to open a real one.
-- **The list is written by the desktop app only.** `atlas serve <folder>` (development, tests, audits) never adds to it, so throwaway folders do not appear in the chooser.
+- **Chooser**: the vault's name at the top of the sidebar, or **Vault: switch, open or create…** (Ctrl+Alt+V). It lists known vaults, most recent first (the current one and missing folders are marked). Typing a path opens that folder as a vault; if it does not exist, Kandinsky asks before creating it. "Forget" removes an entry from the list and never touches the folder.
+- **One window per vault**: opening a vault starts another `kandinsky-app <folder>` (its own core, its own port). Vaults run apart, like Obsidian's vault windows.
+- **Starting the app**: `kandinsky-app <folder>` opens that folder; with no argument it opens the most recently opened vault; on a first run (empty list) it opens a small Welcome vault in `~/.local/share/kandinsky/Welcome` whose home page says how to open a real one.
+- **The list is written by the desktop app only.** `kandinsky serve <folder>` (development, tests, audits) never adds to it, so throwaway folders do not appear in the chooser.
 
-Code: `crates/atlas-core/src/vaults.rs` (`list`, `remember`, `forget`, `resolve`, `open_window`; two tests), routes `GET /api/vaults`, `POST /api/vaults/open {path, create}`, `POST /api/vaults/forget {path}`, `POST /api/vaults/pick {purpose: open|create}` (the system's folder dialog: the desktop app hands the core Tauri's dialog through `vaults::on_pick_folder`, `folder_dialog` in main.rs; New vault… and Open folder… use it, and fall back to a typed path where the core has no screen — a browser, a server; a folder the dialog just made, still empty, becomes a new vault like one that did not exist, `vaults::is_fresh`); `crates/atlas-app/src/main.rs` (`vault_to_open`); `ui/src/lib/vaults.ts` (the chooser, built on the palette's `pick`).
+Code: `crates/kandinsky-core/src/vaults.rs` (`list`, `remember`, `forget`, `resolve`, `open_window`; two tests), routes `GET /api/vaults`, `POST /api/vaults/open {path, create}`, `POST /api/vaults/forget {path}`, `POST /api/vaults/pick {purpose: open|create}` (the system's folder dialog: the desktop app hands the core Tauri's dialog through `vaults::on_pick_folder`, `folder_dialog` in main.rs; New vault… and Open folder… use it, and fall back to a typed path where the core has no screen — a browser, a server; a folder the dialog just made, still empty, becomes a new vault like one that did not exist, `vaults::is_fresh`); `crates/kandinsky-app/src/main.rs` (`vault_to_open`); `ui/src/lib/vaults.ts` (the chooser, built on the palette's `pick`).
 
 ### Guest folders: an outside folder, for a while, in a window of its own
 
-**Vault: open a folder as a guest…** opens a folder that is not a vault (a project's docs, a downloaded set of notes, a repository) in a **second window** with this vault's plugins — the editor, the code editor, the viewers — and nothing of it in the vault: not its search, index, links or Bases, and not the vault list (it is forgotten when Atlas restarts). A bar across the top says it is a guest, which folder, and whose plugins it has; it is **read-only** until its **Edit** switch is on (the editors refuse typing, the core refuses every change to the folder's files), and the switch is off each time it opens. A folder that has an `.atlas/` of its own is a vault and opens as one.
+**Vault: open a folder as a guest…** opens a folder that is not a vault (a project's docs, a downloaded set of notes, a repository) in a **second window** with this vault's plugins — the editor, the code editor, the viewers — and nothing of it in the vault: not its search, index, links or Bases, and not the vault list (it is forgotten when Kandinsky restarts). A bar across the top says it is a guest, which folder, and whose plugins it has; it is **read-only** until its **Edit** switch is on (the editors refuse typing, the core refuses every change to the folder's files), and the switch is off each time it opens. A folder that has an `.kandinsky/` of its own is a vault and opens as one.
 
-How: the core reads a vault's state from `<folder>/.atlas`, so a guest gets exactly one entry in its folder, `.atlas`, a link to its state in this machine's cache (`~/.cache/atlas/guests/<hash>/.atlas`): `plugins` and `plugin-settings` there link to the opener's, `config.toml` is the opener's with its schedules off, `guest.toml` says whose guest it is. The desktop's core serves it at `/v/<name>/` like any vault; the desktop app removes the link and the state at its next start. Read-only is a write guard in the one write funnel (`vault_write.rs`), allowing only the guest's own `.atlas/`. A plugin that writes into its own plugin folder writes into the opener's through the link (most keep their cache in `.atlas/cache/`, the guest's own). On Windows the link is a symlink, which needs developer mode. The phone has no folder dialog for it: desktop only.
+How: the core reads a vault's state from `<folder>/.kandinsky`, so a guest gets exactly one entry in its folder, `.kandinsky`, a link to its state in this machine's cache (`~/.cache/kandinsky/guests/<hash>/.kandinsky`): `plugins` and `plugin-settings` there link to the opener's, `config.toml` is the opener's with its schedules off, `guest.toml` says whose guest it is. The desktop's core serves it at `/v/<name>/` like any vault; the desktop app removes the link and the state at its next start. Read-only is a write guard in the one write funnel (`vault_write.rs`), allowing only the guest's own `.kandinsky/`. A plugin that writes into its own plugin folder writes into the opener's through the link (most keep their cache in `.kandinsky/cache/`, the guest's own). On Windows the link is a symlink, which needs developer mode. The phone has no folder dialog for it: desktop only.
 
-Code: `crates/atlas-core/src/guest.rs` (`prepare`, `install`, `sweep`; one test), `POST /api/vaults/open {path, guest: true}` → `{url, guest}`, `GET /api/guest`, `POST /api/guest/edit {on}`, `POST /api/vaults/pick {purpose: guest}`; the window: `guest_window` in `crates/atlas-app/src/main.rs` (the page's `window.open` of `/v/<name>/?guest=1`); `ui/src/lib/guest.svelte.ts` (the state, `guestLock()` in every editor, `openGuest`), `ui/src/components/GuestBar.svelte`.
+Code: `crates/kandinsky-core/src/guest.rs` (`prepare`, `install`, `sweep`; one test), `POST /api/vaults/open {path, guest: true}` → `{url, guest}`, `GET /api/guest`, `POST /api/guest/edit {on}`, `POST /api/vaults/pick {purpose: guest}`; the window: `guest_window` in `crates/kandinsky-app/src/main.rs` (the page's `window.open` of `/v/<name>/?guest=1`); `ui/src/lib/guest.svelte.ts` (the state, `guestLock()` in every editor, `openGuest`), `ui/src/components/GuestBar.svelte`.
 
-How the app binary is found when opening a vault: `$ATLAS_APP`, else the running program if it is `atlas-app`, else an `atlas-app` beside it, else `atlas-app` on the PATH. From the browser dev loop this opens a real app window.
+How the app binary is found when opening a vault: `$KANDINSKY_APP`, else the running program if it is `kandinsky-app`, else an `kandinsky-app` beside it, else `kandinsky-app` on the PATH. From the browser dev loop this opens a real app window.
 
 ## Layout and workspaces
 
-- **The current layout** is restored when Atlas starts and saved as it changes. Setting **Appearance → Reopen the tabs of the last session** (`[ui] restore_layout`, on by default) turns the restore off for fresh starts; a *reload* of the same window keeps its tabs either way (a per-window marker in `sessionStorage`).
+- **The current layout** is restored when Kandinsky starts and saved as it changes. Setting **Appearance → Reopen the tabs of the last session** (`[ui] restore_layout`, on by default) turns the restore off for fresh starts; a *reload* of the same window keeps its tabs either way (a per-window marker in `sessionStorage`).
 - The old `localStorage` layout is read once (so nothing is lost on the first start after this change), then dropped.
 - **A workspace** is a named copy of the layout. **Workspace: save the current tabs as…** writes it; **Workspace: switch to…** (Ctrl+Alt+W) lists them; each saved workspace is also its own command (**Workspace: Read paper**), so it can be given a shortcut in Settings → Keyboard. Switching saves unsaved text first, then replaces what is open.
 - Because workspaces are plain JSON files in the vault, they can be versioned, copied to another vault, or written by a script.
@@ -48,7 +48,7 @@ Code: `ui/src/lib/workspaces.ts` (`restoreLayout`, `autosaveLayout`, `saveWorksp
 One file, two lists:
 
 ```yaml
-# .atlas/bookmarks.yaml
+# .kandinsky/bookmarks.yaml
 pins: [log/2026-10-13.md, {view: library}]        # the tiles at the top of the sidebar; Ctrl+1…8
 bookmarks:
   - notes/dmft.md                                  # a file
@@ -68,7 +68,7 @@ Code: `ui/src/lib/bookmarks.svelte.ts` — `Target` is a closed union (file, vie
 
 ## The sidebar is a page
 
-`.atlas/sidebar.page` lists the sidebar's blocks top to bottom, in the page format (PAGES.md; columns are ignored — a sidebar is one column). Until the file exists, this built-in default is used (`DEFAULT_SIDEBAR` in `ui/src/lib/sidebar.svelte.ts`):
+`.kandinsky/sidebar.page` lists the sidebar's blocks top to bottom, in the page format (PAGES.md; columns are ignored — a sidebar is one column). Until the file exists, this built-in default is used (`DEFAULT_SIDEBAR` in `ui/src/lib/sidebar.svelte.ts`):
 
 ```yaml
 title: Sidebar
@@ -86,7 +86,7 @@ rows:
 - **A toolbar's buttons are command ids.** A button takes its icon, short name and shortcut from the command (`icon` / `label` on the action in `actions.ts`). Three words are not commands: `plugins` (a button per plugin with a view; no line before them any more), `divider` (a line, wherever you want one; in the expanded sidebar it also starts a new row) and `spacer`. To dress a command of your own: `{command: refs.bib, icon: library, title: Rebuild refs}`. An id that names no command is left out. In the wide bar the buttons share one row: nine fit the default width (each at least 24 px, growing to 36 px when there is room); more wrap to a second row.
 - **Any other block can live in the sidebar**: `outline`, `backlinks`, `files`, `{view: calendar, from: tasks}`… A pane block is 420 px tall unless it says `height:`. Such guest blocks are hidden while the sidebar is collapsed to icons; the four own blocks stand as icons.
 - **Layout rule**: the `tabs` block takes the free height; blocks after it stay at the bottom; the part above scrolls when crowded.
-- **A plugin's tool in the side panel** (`atlas.shell.sideTool`): listed in `ui/src/lib/side-tools.svelte.ts`; in the bar its button follows the four built-in ones, beside the editors it is a tab of the side column. The side panel's choice is a `SideId` (a kind, or `tool:<block type>`).
+- **A plugin's tool in the side panel** (`kandinsky.shell.sideTool`): listed in `ui/src/lib/side-tools.svelte.ts`; in the bar its button follows the four built-in ones, beside the editors it is a tab of the side column. The side panel's choice is a `SideId` (a kind, or `tool:<block type>`).
 - **The activity rail** (horizontal-tabs layout) shows the buttons of the file's toolbars.
 - A file that does not parse keeps the last good sidebar and shows the error at its foot.
 
@@ -103,7 +103,7 @@ Two groups of tools sit around the editors, and each has two places, chosen by a
 
 **The shape that every placement keeps** (`split()` in `ui/src/lib/dock-panels.ts`): the terminal takes the window's whole bottom (or right) edge whatever was opened first; the side panel sits left of the editors, above (left of) the terminal; an editor opened when none is open goes back *between* the two, and both keep the size they had. Before this was one function, closing the last editor tab and opening another put the editor beside whichever tool panel was active and gave the side panel half the window. The sizes are remembered by `noteToolSizes()` (called on every layout change while an editor is open), because dockview gives a removed group's space to its neighbours and forgets what they had. Switching the terminal's edge while it is open (`placeTerminalPanel`) makes a new group along the whole new edge and moves the shells into it, so the rule holds there too.
 
-**The side panel in the left bar** (`ui/src/lib/side-panel.svelte.ts`, `ui/src/components/sidebar/SidePanel.svelte`): the four tools are the same panes as in the dock, mounted as blocks (`mountBlock(…, "side")`), one row of icons to switch between them, each kept alive once opened (the file tree keeps its open folders, the search its results). **One row is its whole heading**: the four tool icons, then hide and "back beside the editors" — the tab list shows no "Side panel" heading in this mode (the first version had both, and the panel pinned to the bottom of the bar with a gap above it). **The panel has a height of its own** (320 px at first): its top edge is a handle (drag it, or focus it and press Up / Down), the tab list above takes the rest of the bar and scrolls when crowded, and the panel never gives way to it — the second version let the panel take the free height, and it got too small with many tabs open; it is now a fixed size that can be moved. `sizeSide` / `SIDE_HEIGHT` in `side-panel.svelte.ts`; the height is kept in `shell.json` with the tool and the visibility; in a short window the tab list keeps 140 px. Hidden, the panel is just its row. The blocks' hover button ("open as tab") is switched off there: the heading's move button is that. Nothing else in the app knows about the mode: `open()` in `dock.ts` hands a side-zone pane to `showSide(kind)` when `sideInBar()` is true, so every command, shortcut (Ctrl+Shift+E / F / O / G) and plugin call that opens Files or Search reaches the bar; `toggleSidePanel` (Ctrl+B) hides and shows it; `moveSidePanel()` follows the setting — the docked tools leave the dock for the bar (the one in front stays in front) and come back as a dock tab when the setting returns to `dock`. Which tool shows and whether the panel shows are per-machine choices kept, with the sidebar's width and collapsed state, in **`.atlas/cache/shell.json`** (`ui/src/lib/shell-prefs.ts`): a part of the shell registers `shellPart(name, {get, set})`, the file is read once at start (only when "reopen the last tabs at start" is on, like the layout) and written a moment after a change. So the desktop app and a browser tab on the same vault agree; the browser's storage keeps a copy only to draw the first frame where it was. Test: `ui/tests/shell-prefs.spec.ts`.
+**The side panel in the left bar** (`ui/src/lib/side-panel.svelte.ts`, `ui/src/components/sidebar/SidePanel.svelte`): the four tools are the same panes as in the dock, mounted as blocks (`mountBlock(…, "side")`), one row of icons to switch between them, each kept alive once opened (the file tree keeps its open folders, the search its results). **One row is its whole heading**: the four tool icons, then hide and "back beside the editors" — the tab list shows no "Side panel" heading in this mode (the first version had both, and the panel pinned to the bottom of the bar with a gap above it). **The panel has a height of its own** (320 px at first): its top edge is a handle (drag it, or focus it and press Up / Down), the tab list above takes the rest of the bar and scrolls when crowded, and the panel never gives way to it — the second version let the panel take the free height, and it got too small with many tabs open; it is now a fixed size that can be moved. `sizeSide` / `SIDE_HEIGHT` in `side-panel.svelte.ts`; the height is kept in `shell.json` with the tool and the visibility; in a short window the tab list keeps 140 px. Hidden, the panel is just its row. The blocks' hover button ("open as tab") is switched off there: the heading's move button is that. Nothing else in the app knows about the mode: `open()` in `dock.ts` hands a side-zone pane to `showSide(kind)` when `sideInBar()` is true, so every command, shortcut (Ctrl+Shift+E / F / O / G) and plugin call that opens Files or Search reaches the bar; `toggleSidePanel` (Ctrl+B) hides and shows it; `moveSidePanel()` follows the setting — the docked tools leave the dock for the bar (the one in front stays in front) and come back as a dock tab when the setting returns to `dock`. Which tool shows and whether the panel shows are per-machine choices kept, with the sidebar's width and collapsed state, in **`.kandinsky/cache/shell.json`** (`ui/src/lib/shell-prefs.ts`): a part of the shell registers `shellPart(name, {get, set})`, the file is read once at start (only when "reopen the last tabs at start" is on, like the layout) and written a moment after a change. So the desktop app and a browser tab on the same vault agree; the browser's storage keeps a copy only to draw the first frame where it was. Test: `ui/tests/shell-prefs.spec.ts`.
 
 The heading buttons (`SideTabs.svelte`, one `head` snippet): show / hide as one icon (minus = shown, chevron = hidden); Side panel: move it into the bar / back beside the editors; Terminal: dock bottom / right, and **"+" — a menu with "Shell" and "Claude session"**, each opening another numbered one (also the commands `ui.terminal.new`, `ui.claude.new`).
 
@@ -123,15 +123,15 @@ Test: `ui/tests/fullscreen.spec.ts` (the terminal, then the editor, take the win
 
 **The dock never scrolls** (`ui/tests/layout-overflow.spec.ts`): `ui.log` showed "layout overflow" for months — the dock twice as tall as its box. Cause: a pane that is kept alive while hidden (terminal, PDF: dockview's `always` renderer) lives in an overlay that gets its position when it is first shown; a tab restored from the layout but never shown had none, so its overlay (height 100 %) sat in normal flow *under* the dock. One rule in `styles/dockview-theme.css` gives an unplaced overlay `top: 0; left: 0`.
 
-## The tray: Atlas behind its window
+## The tray: Kandinsky behind its window
 
-Closing Atlas's window does not quit it (Settings → Desktop app, *When the window is closed*): it keeps running in the
+Closing Kandinsky's window does not quit it (Settings → Desktop app, *When the window is closed*): it keeps running in the
 tray, so the vault's schedules, mail checks and notifications go on. A click on the tray icon shows or hides the window;
 its menu has *Quick capture*, the notices that came while nobody looked (the icon gets a dot until the window is shown
-again), *Do not disturb* and *Quit Atlas*. A window hidden for half an hour (*Free the window's memory after*) is closed
-to give its memory back and reopens with its tabs. *Start Atlas when you log in* adds the system's own entry (an XDG
-autostart file on Linux, the Run key on Windows, a LaunchAgent on macOS) that starts Atlas straight into the tray.
-Launching Atlas again on a vault it already runs brings that window forward instead of starting a second one. With no
+again), *Do not disturb* and *Quit Kandinsky*. A window hidden for half an hour (*Free the window's memory after*) is closed
+to give its memory back and reopens with its tabs. *Start Kandinsky when you log in* adds the system's own entry (an XDG
+autostart file on Linux, the Run key on Windows, a LaunchAgent on macOS) that starts Kandinsky straight into the tray.
+Launching Kandinsky again on a vault it already runs brings that window forward instead of starting a second one. With no
 tray on the desktop (GNOME without its AppIndicator extension, a bare compositor) closing the window quits, as before.
 On macOS a click on the Dock icon brings a hidden window back too.
 
@@ -140,13 +140,13 @@ On macOS a click on the Dock icon brings a hidden window back too.
 - **Two windows on one vault** (the desktop app and a browser tab, or two tabs) share `layout.json`. Each window also keeps its own layout in `sessionStorage` and a reload restores *that*, so one window's tabs no longer replace the other's when it reloads (reported: moving things in one moved them in the other). The file is what a fresh start reads: the last window to change wins there.
 - **Switching workspace closes the terminals of the old layout** (their shells end with their tabs). Obsidian's workspaces behave the same; keeping terminals alive across a switch is not done.
 - **The save must survive the window closing**: it is sent with `keepalive` (a normal request in flight is cancelled by a reload — this was a real bug while building it). Browsers cap such bodies at ~64 kB; a larger layout falls back to a normal request.
-- **Tests**: the fixture vault sets `restore_layout = false`, because the layout is now a file of the vault and every test must start clean; the test server gets its own `ATLAS_VAULTS` file and `ATLAS_APP=true` so "open a vault" starts nothing.
+- **Tests**: the fixture vault sets `restore_layout = false`, because the layout is now a file of the vault and every test must start clean; the test server gets its own `KANDINSKY_VAULTS` file and `KANDINSKY_APP=true` so "open a vault" starts nothing.
 - **Missing folders must not log 404s** on start: `workspaces.ts` asks through the parents' listings (`exists`) before reading.
-- **Bookmarks, pins and the sidebar file are shared by every test** (they are files of the fixture vault): specs that pin reset `.atlas/bookmarks.yaml` first; the sidebar spec puts the default back.
+- **Bookmarks, pins and the sidebar file are shared by every test** (they are files of the fixture vault): specs that pin reset `.kandinsky/bookmarks.yaml` first; the sidebar spec puts the default back.
 - **A block element stops key events** (lib/blocks.ts), so the sidebar's j/k handler is attached inside the `pins` and `tabs` blocks, not on the frame.
 - **Global class names**: the shared styles of the sidebar's blocks are in `styles/chrome.css` under `side-` names (`.side-tool`, `.side-toolbar`, `.side-row`, `.side-head`); a first version called one `.tool` and broke the page header's buttons, which use that name locally.
 - **A pinned block tab** (not a pane kind) is identified by its YAML; after a reload its tile may not recognise the still-open tab as its own when the YAML was written differently (a second tab opens on click). Known and left.
-- **The bookmarks file is not re-read after Atlas's own write** (the text of the last write is remembered), so a slow file event cannot undo a newer change.
+- **The bookmarks file is not re-read after Kandinsky's own write** (the text of the last write is remembered), so a slow file event cannot undo a newer change.
 
 ## Tests
 

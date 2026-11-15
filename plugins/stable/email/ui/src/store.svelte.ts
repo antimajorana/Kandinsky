@@ -13,7 +13,7 @@ export interface Composer { key: number; draft: Draft; inline: boolean; saving: 
 const PAGE = 100;
 
 export class Mail {
-  atlas: PluginApi;
+  kandinsky: PluginApi;
   accounts = $state<Account[]>([]);
   own = $state<string[]>([]);
   folders = $state<Folder[]>([]);
@@ -47,15 +47,15 @@ export class Mail {
   private asking = new Set<number>();
   private timer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(atlas: PluginApi) {
-    this.atlas = atlas;
+  constructor(kandinsky: PluginApi) {
+    this.kandinsky = kandinsky;
   }
 
   call<T>(method: string, params: Record<string, unknown> = {}, timeout = 120) {
-    return call<T>(this.atlas, method, params, timeout);
+    return call<T>(this.kandinsky, method, params, timeout);
   }
 
-  get split() { return setting(this.atlas, "split_inbox", false) && this.view.name === "inbox"; }
+  get split() { return setting(this.kandinsky, "split_inbox", false) && this.view.name === "inbox"; }
 
   // ----- loading
 
@@ -271,7 +271,7 @@ export class Mail {
     const next = this.rows[Math.min(at, this.rows.length - 1)] ?? null;
     this.cursor = next?.id ?? null;
     if (wasOpen) {
-      if (next && setting(this.atlas, "after_action", "next") === "next") this.read(next.id);
+      if (next && setting(this.kandinsky, "after_action", "next") === "next") this.read(next.id);
       else this.close();
     }
     try {
@@ -291,7 +291,7 @@ export class Mail {
   archive(rows = this.targets()) { return this.leave(rows, "Archived", (ids) => this.call("archive", { ids })); }
   async trash(rows = this.targets()) {
     const inTrash = rows.every((r) => r.folder_role === "trash");
-    if (inTrash && !(await askYes(this.atlas, `Delete ${rows.length === 1 ? "this conversation" : `${rows.length} conversations`} for good? This cannot be undone.`, { ok: "Delete for good", danger: true }))) return;
+    if (inTrash && !(await askYes(this.kandinsky, `Delete ${rows.length === 1 ? "this conversation" : `${rows.length} conversations`} for good? This cannot be undone.`, { ok: "Delete for good", danger: true }))) return;
     return this.leave(rows, inTrash ? "Deleted" : "Moved to Trash", (ids) => this.call("trash", { ids }));
   }
   /** One message of the open conversation to Trash (a draft too), the rest of the conversation staying; with Undo.
@@ -383,7 +383,7 @@ export class Mail {
       if (this.open?.thread === thread) this.open.saved = r.path;
       const row = this.rows.find((x) => x.thread === thread);
       if (row) row.saved = r.path;
-      this.toast("Saved as a note", "success", { action: { label: "Open", run: () => this.atlas.open(r.path, undefined, { beside: true }) } });
+      this.toast("Saved as a note", "success", { action: { label: "Open", run: () => this.kandinsky.open(r.path, undefined, { beside: true }) } });
     } catch (e) { this.toast(`Could not save it: ${(e as Error).message}`, "error"); }
   }
 
@@ -400,7 +400,7 @@ export class Mail {
   }
 
   /** A meeting about the open conversation: the Calendar's new-event dialog with its subject and everyone in it but
-   *  the user (the Calendar listens for `atlas-calendar:new`; with no Calendar plugin nothing opens, said in a toast). */
+   *  the user (the Calendar listens for `kandinsky-calendar:new`; with no Calendar plugin nothing opens, said in a toast). */
   meeting() {
     const t = this.open;
     if (!t) return;
@@ -415,9 +415,15 @@ export class Mail {
     const title = t.subject.replace(/^((re|fwd?|tr|aw|wg)\s*:\s*)+/i, "").trim();
     let heard = false;
     const ack = () => (heard = true);
-    window.addEventListener("atlas-calendar:heard", ack, { once: true });
-    window.dispatchEvent(new CustomEvent("atlas-calendar:new", { detail: { title, guests, ack: true } }));
-    setTimeout(() => { window.removeEventListener("atlas-calendar:heard", ack); if (!heard) this.toast("No Calendar plugin to make the meeting in: turn it on in Settings → Plugins.", "error"); }, 400);
+    // a Calendar installed before the rename listens for `atlas-calendar:`: asked only when no current one answered
+    // (the answer comes during the dispatch), so a meeting is never opened twice
+    const names = ["kandinsky-calendar", "atlas-calendar"];
+    for (const name of names) {
+      if (heard) break;
+      window.addEventListener(`${name}:heard`, ack, { once: true });
+      window.dispatchEvent(new CustomEvent(`${name}:new`, { detail: { title, guests, ack: true } }));
+    }
+    setTimeout(() => { for (const name of names) window.removeEventListener(`${name}:heard`, ack); if (!heard) this.toast("No Calendar plugin to make the meeting in: turn it on in Settings → Plugins.", "error"); }, 400);
   }
 
   async reply(mode: "reply" | "all" | "forward", id = this.open?.messages.at(-1)?.id ?? this.cursor, inline = false) {

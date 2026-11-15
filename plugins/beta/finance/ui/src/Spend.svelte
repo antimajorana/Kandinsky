@@ -65,12 +65,12 @@
                   {/each}
                 </tbody>
               </table>
-              <button class="atlas-btn" onclick={() => onshow(g.toLowerCase())}>All {label(g)} transactions</button>
+              <button class="kandinsky-btn" onclick={() => onshow(g.toLowerCase())}>All {label(g)} transactions</button>
             </div>
           {/if}
         </li>
       {:else}
-        <li class="atlas-empty">Nothing spent in this period.</li>
+        <li class="kandinsky-empty">Nothing spent in this period.</li>
       {/each}
     </ol>
   </section>

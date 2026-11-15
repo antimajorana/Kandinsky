@@ -3,7 +3,7 @@ import { openFile } from "./open";
 
 // A base's table and list read and move as one: the keyboard keeps its place through a cell's editor, and a date
 // in the list reads as the table writes it.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const text = (r: APIRequestContext, f: string) => r.get(`/api/file?path=${encodeURIComponent(f)}`, { headers: H }).then((x) => x.json()).then((j) => j.text as string);
 

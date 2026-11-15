@@ -92,13 +92,13 @@
 		if (typeof code !== "number") return void 0;
 		return ICONS.find(([a, b]) => code >= a && code <= b && (a !== 45 || code === 45 || code === 48))?.[2];
 	}
-	const HEADERS = { "User-Agent": "Atlas/0.1 (personal notes app) weather" };
-	const getJson = (url) => atlas.fetchJson(url, { headers: HEADERS });
+	const HEADERS = { "User-Agent": "Kandinsky/0.1 (personal notes app) weather" };
+	const getJson = (url) => kandinsky.fetchJson(url, { headers: HEADERS });
 	/** The setting's place (Open-Meteo's geocoder), else this machine's (its internet address). */
 	async function placeOf(settings) {
 		const name = String(settings.place ?? "").trim();
 		if (name) {
-			const hits = (await getJson(`https://geocoding-api.open-meteo.com/v1/search?${atlas.qs({
+			const hits = (await getJson(`https://geocoding-api.open-meteo.com/v1/search?${kandinsky.qs({
 				name,
 				count: 1
 			})}`))?.results ?? [];
@@ -131,7 +131,7 @@
 		const settings = params.settings ?? {};
 		const es = settings.language === "es";
 		const place = await placeOf(settings);
-		const w = await getJson("https://api.open-meteo.com/v1/forecast?" + atlas.qs({
+		const w = await getJson("https://api.open-meteo.com/v1/forecast?" + kandinsky.qs({
 			latitude: place.latitude,
 			longitude: place.longitude,
 			timezone: "auto",
@@ -180,7 +180,7 @@
 	}
 	async function textOf(path) {
 		try {
-			return (await atlas.get("/api/file", { path }))?.text ?? null;
+			return (await kandinsky.get("/api/file", { path }))?.text ?? null;
 		} catch {
 			return null;
 		}
@@ -194,7 +194,7 @@
 		if (m[1] !== today()) return { skipped: "not today's log" };
 		if (/^weather:/m.test(await textOf(path) ?? "")) return { skipped: "the day has its weather" };
 		const w = await now(params);
-		if (w.summary) await atlas.put("/api/property", {
+		if (w.summary) await kandinsky.put("/api/property", {
 			path,
 			key: "weather",
 			text: dayLine(w),
@@ -202,17 +202,17 @@
 		});
 		return { skipped: "weather noted" };
 	}
-	/** Today's log, once it is there, gets the day's weather — with Atlas open, not only after the first capture. Never
+	/** Today's log, once it is there, gets the day's weather — with Kandinsky open, not only after the first capture. Never
 	* makes the log; never twice. */
 	async function fillToday(params) {
-		const path = (await atlas.get("/api/today"))?.log?.path ?? "";
+		const path = (await kandinsky.get("/api/today"))?.log?.path ?? "";
 		if (!path || await textOf(path) === null) return { skipped: "no log today yet" };
 		return logDay({
 			...params,
 			path
 		});
 	}
-	atlas.methods({
+	kandinsky.methods({
 		now,
 		log_day: logDay,
 		log_made: logDay,

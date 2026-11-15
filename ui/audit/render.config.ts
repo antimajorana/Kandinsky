@@ -3,13 +3,13 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildSample } from "./sample";
 
-// Markdown render audit: every note of a COPY of a real vault (`ATLAS_AUDIT_SOURCE`, else `ATLAS_VAULT`), opened in the real app and
+// Markdown render audit: every note of a COPY of a real vault (`KANDINSKY_AUDIT_SOURCE`, else `KANDINSKY_VAULT`), opened in the real app and
 // scrolled end to end; problems found on screen are written to REPORT.md. `npm run audit:md`.
-export const SOURCE = process.env.ATLAS_AUDIT_SOURCE ?? process.env.ATLAS_VAULT ?? "";
-if (!SOURCE) throw new Error("the render audit needs a vault to copy: set ATLAS_AUDIT_SOURCE or ATLAS_VAULT");
-export const WS = process.env.ATLAS_AUDIT_WS ?? join(process.env.TMPDIR ?? tmpdir(), "atlas-render-audit-ws");
-export const OUT = process.env.ATLAS_AUDIT_OUT ?? join(process.cwd(), "audit-report");
-const PORT = Number(process.env.ATLAS_AUDIT_PORT ?? 7750);
+export const SOURCE = process.env.KANDINSKY_AUDIT_SOURCE ?? process.env.KANDINSKY_VAULT ?? "";
+if (!SOURCE) throw new Error("the render audit needs a vault to copy: set KANDINSKY_AUDIT_SOURCE or KANDINSKY_VAULT");
+export const WS = process.env.KANDINSKY_AUDIT_WS ?? join(process.env.TMPDIR ?? tmpdir(), "kandinsky-render-audit-ws");
+export const OUT = process.env.KANDINSKY_AUDIT_OUT ?? join(process.cwd(), "audit-report");
+const PORT = Number(process.env.KANDINSKY_AUDIT_PORT ?? 7750);
 if (!process.env.TEST_WORKER_INDEX) buildSample(SOURCE, WS);
 
 export default defineConfig({
@@ -21,10 +21,10 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     viewport: { width: 1400, height: 1000 },
-    launchOptions: process.env.ATLAS_PW_CHROME ? { executablePath: process.env.ATLAS_PW_CHROME } : {},
+    launchOptions: process.env.KANDINSKY_PW_CHROME ? { executablePath: process.env.KANDINSKY_PW_CHROME } : {},
   },
   webServer: {
-    command: `cargo run -q -p atlas -- serve ${WS} --port ${PORT}`,
+    command: `cargo run -q -p kandinsky -- serve ${WS} --port ${PORT}`,
     cwd: "../..",
     url: `http://127.0.0.1:${PORT}/`,
     timeout: 300_000,

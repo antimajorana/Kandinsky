@@ -25,7 +25,7 @@ function draw(path: string, source: string) {
   return p;
 }
 
-registerFence("atlas", "typst", (host, fence) => {
+registerFence("kandinsky", "typst", (host, fence) => {
   let gone = false;
   const box = document.createElement("div");
   box.className = "tikz-figure typst-figure";

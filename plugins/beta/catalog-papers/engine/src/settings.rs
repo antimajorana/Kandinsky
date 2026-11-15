@@ -1,4 +1,4 @@
-//! The plugin's settings (`[[setting]]` in plugin.toml; values in `.atlas/plugin-settings/catalog-papers.toml`): what
+//! The plugin's settings (`[[setting]]` in plugin.toml; values in `.kandinsky/plugin-settings/catalog-papers.toml`): what
 //! the core's `[refs]` table was (config.rs `RefsConfig`), plus the PDF sources' order.
 use serde_json::Value;
 

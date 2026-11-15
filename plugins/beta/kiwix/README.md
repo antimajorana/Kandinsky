@@ -1,7 +1,7 @@
 # Kiwix
 
 Your kiwix-serve's offline library — Wikipedia, Wiktionary, Stack Exchange sites, DevDocs, any `.zim` archive it serves
-— searched from a pane of Atlas. An article opens as a web page; **Save** captures its address, which the catalog files
+— searched from a pane of Kandinsky. An article opens as a web page; **Save** captures its address, which the catalog files
 as a note. The archives stay on the server.
 
 ## What it adds
@@ -10,10 +10,10 @@ as a note. The archives stay on the server.
   - **a book**: the server's catalog (`/catalog/v2/entries`), narrowed by the **Books to offer** words; the chosen
     book is remembered per device;
   - **titles while typing** (`/suggest`), and **the full text on Enter** (`/search`, the first 25 hits with snippets);
-  - **an article** opens at `<server>/content/<book>/<path>` as any web page (a tab of Atlas, as `[web] open_links`
+  - **an article** opens at `<server>/content/<book>/<path>` as any web page (a tab of Kandinsky, as `[web] open_links`
     says);
   - **Save** captures the article's address, as the capture box would.
-- A sign-in in front of the server (Authelia and the like) is offered by Atlas; the pane says to sign in first.
+- A sign-in in front of the server (Authelia and the like) is offered by Kandinsky; the pane says to sign in first.
 
 ## Settings
 

@@ -33,9 +33,9 @@ test("sending to Claude brings back a hidden terminal panel", async ({ page }) =
 // a plugin's AI agent (`[[agent]]`, lib/agents.ts): the selection is typed in its own words (`send_selection`). The
 // plugin's id sorts before the test vault's own Claude plugin, so with no agent tab open it is the one started.
 test.describe("a plugin's agent", () => {
-  const H = { "x-atlas": "1" };
+  const H = { "x-kandinsky": "1" };
   const AGENT = `title = "Parrot"\n\n[[agent]]\nid = "parrot"\ntitle = "Parrot"\ncommand = "cat"\nsend_selection = "ASK {path} {from}..{to};"\n`;
-  test.beforeAll(async ({ request }) => { await request.put("/api/file", { headers: H, data: { path: ".atlas/plugins/aparrot/plugin.toml", text: AGENT } }); });
+  test.beforeAll(async ({ request }) => { await request.put("/api/file", { headers: H, data: { path: ".kandinsky/plugins/aparrot/plugin.toml", text: AGENT } }); });
   test.afterAll(async ({ request }) => { await request.post("/api/plugins/aparrot/remove", { headers: H }); });
 
   test("Ctrl+Alt+Enter opens the agent and types the selection in its pattern", async ({ page }) => {

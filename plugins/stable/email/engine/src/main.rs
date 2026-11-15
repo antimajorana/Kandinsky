@@ -1,14 +1,14 @@
 //! The Email plugin's helper: the engine (lib) behind the line protocol (docs/guides/PLUGIN-API.md). Every method is
 //! answered on its own thread, so a long sync never holds up a click; events (new mail, sync status, consent) go to
 //! the page as they happen.
-use atlas_plugin::{error, event, serve_threads, SharedMethods};
+use kandinsky_plugin::{error, event, serve_threads, SharedMethods};
 use email::{api, index::Index, mail::Mail};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 fn main() {
-    let root = std::env::var_os("ATLAS_ROOT").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-    let cache = std::env::var_os("ATLAS_PLUGIN_CACHE").map(PathBuf::from).unwrap_or_else(|| root.join(".atlas/cache/plugins/email"));
+    let root = std::env::var_os("KANDINSKY_ROOT").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    let cache = std::env::var_os("KANDINSKY_PLUGIN_CACHE").map(PathBuf::from).unwrap_or_else(|| kandinsky_plugin::state_dir(&root).join("cache/plugins/email"));
     let index = match Index::open(&cache.join("index.sqlite")) {
         Ok(i) => i,
         Err(e) => {

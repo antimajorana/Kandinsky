@@ -19,7 +19,7 @@ const need = createRequire(join(appUi, "package.json"));
 const { build } = await import(pathToFileURL(need.resolve("vite")).href);
 const { svelte } = await import(pathToFileURL(need.resolve("@sveltejs/vite-plugin-svelte")).href);
 const { rolldown } = await import(pathToFileURL(need.resolve("rolldown")).href);
-const sdk = join(repo, "crates/atlas-core/sdk/js");
+const sdk = join(repo, "crates/kandinsky-core/sdk/js");
 
 const log = (msg) => console.log(`[plugin-ui] ${msg}`);
 const args = process.argv.slice(2);
@@ -82,13 +82,13 @@ async function bundleHelper(plugin, file) {
   }
 }
 
-// helper/*.test.ts, each bundled with the SDK's node harness (`atlas-helper/testing`) and run by node's test runner.
+// helper/*.test.ts, each bundled with the SDK's node harness (`kandinsky-helper/testing`) and run by node's test runner.
 async function testHelper(plugin, tmp) {
   const dir = join(plugin, "helper");
   const tests = readdirSync(dir).filter((f) => f.endsWith(".test.ts"));
   for (const t of tests) {
     const out = join(tmp, t.replace(/\.ts$/, ".mjs"));
-    const b = await rolldown({ input: join(dir, t), platform: "node", logLevel: "warn", external: [/^node:/], resolve: { alias: { "atlas-helper/testing": join(sdk, "testing.ts") } } });
+    const b = await rolldown({ input: join(dir, t), platform: "node", logLevel: "warn", external: [/^node:/], resolve: { alias: { "kandinsky-helper/testing": join(sdk, "testing.ts") } } });
     try {
       await b.write({ file: out, format: "esm" });
     } finally {

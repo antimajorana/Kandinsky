@@ -3,7 +3,7 @@ import { mount, unmount } from "svelte";
 import App from "./App.svelte";
 import type { PluginApi } from "./api";
 
-export default function (host: HTMLElement, atlas: PluginApi) {
-  const app = mount(App, { target: host, props: { atlas } });
+export default function (host: HTMLElement, kandinsky: PluginApi) {
+  const app = mount(App, { target: host, props: { kandinsky } });
   return () => unmount(app);
 }

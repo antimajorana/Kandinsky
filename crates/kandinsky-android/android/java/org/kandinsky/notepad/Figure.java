@@ -1,11 +1,11 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 
-import org.atlas.capture.Host;
+import org.kandinsky.capture.Host;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -422,11 +422,11 @@ final class Figure extends Item {
     }
 
     /** Page `page` of the vault's PDF `path`, linked and never copied (PageSource draws it on the fly): an image
-     *  element with no file, `customData.atlasPage = {file, page}` saying which page; the web draws it with pdf.js. */
+     *  element with no file, `customData.kandinskyPage = {file, page}` saying which page; the web draws it with pdf.js. */
     static Figure linkedPage(String path, int page, float x, float y, float w, float h, String id, String frame) {
-        Figure f = picture(org.atlas.capture.PageSource.fileId(path, page), x, y, w, h, id, frame);
+        Figure f = picture(org.kandinsky.capture.PageSource.fileId(path, page), x, y, w, h, id, frame);
         if (f == null) return null;
-        try { f.e.put("customData", new JSONObject().put("atlasPage", new JSONObject().put("file", path).put("page", page))); } catch (JSONException e) { return null; }
+        try { f.e.put("customData", new JSONObject().put("kandinskyPage", new JSONObject().put("file", path).put("page", page))); } catch (JSONException e) { return null; }
         return f;
     }
 

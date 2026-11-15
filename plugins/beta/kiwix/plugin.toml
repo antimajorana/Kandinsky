@@ -1,5 +1,5 @@
 # Kiwix: your kiwix-serve's offline library (Wikipedia, Wiktionary, Stack Exchange sites, DevDocs… as .zim archives)
-# searched from a pane of Atlas. An article opens as a web page (a tab, as `[web] open_links` says); Save captures its
+# searched from a pane of Kandinsky. An article opens as a web page (a tab, as `[web] open_links` says); Save captures its
 # address, which the catalog files as a note (reading the page) — the archive itself stays on the server.
 title = "Kiwix"
 description = "search your Kiwix server's offline library (Wikipedia, dictionaries, docs) and open or save an article"

@@ -150,8 +150,8 @@ pub fn creation_stamp(specs: &PropertySpecs, now: chrono::NaiveDateTime) -> (Str
         Some(p) if p.kind == PropertyKind::Datetime => "YYYY-MM-DD HH:mm".into(),
         _ => "YYYY-MM-DD".into(),
     };
-    let ctx = atlas_template::Ctx { title: "", now, values: Default::default(), include: &|_| None, unknown: atlas_template::Unknown::Keep };
-    (key.to_string(), atlas_template::render(&format!("{{{{now:{fmt}}}}}"), &ctx).text)
+    let ctx = kandinsky_template::Ctx { title: "", now, values: Default::default(), include: &|_| None, unknown: kandinsky_template::Unknown::Keep };
+    (key.to_string(), kandinsky_template::render(&format!("{{{{now:{fmt}}}}}"), &ctx).text)
 }
 
 #[cfg(test)]

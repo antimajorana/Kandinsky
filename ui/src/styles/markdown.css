@@ -2,29 +2,34 @@
    editor (whose .cm-content carries class "markdown"). Each rule names the reader element and
    the live-preview decoration class side by side so the two views cannot drift (pattern and
    cm-* class names ported from obsidian-web web/src/app.css). */
-.markdown { line-height: 1.68; color: var(--text); overflow-wrap: break-word; font-size: calc(15px * var(--ui-scale, 1)); }
+.markdown { line-height: 1.68; color: var(--text); overflow-wrap: break-word; font-size: calc(15.5px * var(--ui-scale, 1)); }
 .markdown > :first-child { margin-top: 0; }
 .markdown > :last-child { margin-bottom: 0; }
-.markdown p { margin: .55em 0; }
+.markdown p { margin: .6em 0; }
 
 .markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6, .markdown .cm-header {
-  line-height: 1.3; font-weight: 650; color: var(--heading); letter-spacing: -.012em;
+  line-height: 1.28; font-weight: 650; color: var(--heading); letter-spacing: -.014em;
 }
 .markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 { margin: 1.35em 0 .45em; }
-/* Obsidian's default scale (--h1-size … --h6-size); h5/h6 keep the text colour and case */
-.markdown h1, .markdown .cm-header-1 { font-size: 1.802em; font-weight: 700; letter-spacing: -.022em; }
-.markdown h2, .markdown .cm-header-2 { font-size: 1.602em; letter-spacing: -.018em; }
-.markdown h3, .markdown .cm-header-3 { font-size: 1.424em; }
-.markdown h4, .markdown .cm-header-4 { font-size: 1.266em; }
-.markdown h5, .markdown .cm-header-5 { font-size: 1.125em; }
-.markdown h6, .markdown .cm-header-6 { font-size: 1em; }
-.markdown h1 { padding-bottom: .25em; border-bottom: 1px solid var(--border); }
+/* Notion × Bauhaus heading scale; single leading `# H1` serves as the 33px page title */
+.markdown h1, .markdown .cm-header-1 { font-size: 1.85em; font-weight: 700; letter-spacing: -.024em; }
+.markdown .cm-page-title-h1.cm-header-1, .markdown > h1:first-child {
+  font-size: 2.06em; font-weight: 700; letter-spacing: -.028em; line-height: 1.18; border-bottom: 0; padding-bottom: .22em;
+}
+.markdown h2, .markdown .cm-header-2 { font-size: 1.42em; letter-spacing: -.018em; }
+.markdown h3, .markdown .cm-header-3 { font-size: 1.24em; }
+.markdown h4, .markdown .cm-header-4 { font-size: 1.12em; }
+.markdown h5, .markdown .cm-header-5 { font-size: 1.04em; }
+.markdown h6, .markdown .cm-header-6 { font-size: .96em; color: var(--text-muted); }
+.markdown h1 { padding-bottom: .22em; border-bottom: 1px solid var(--border); }
 
 /* every link changes colour under the pointer: [text](url) in the editor (.cm-link) had no hover rule at all */
 .markdown a, .markdown .cm-link { color: var(--link); text-decoration: none; }
 .markdown .cm-link { cursor: pointer; }
 .markdown a:hover, .markdown .cm-link:hover, .markdown .cm-link:hover * { color: var(--accent-strong); text-decoration: underline; text-underline-offset: 2px; }
 .markdown a.internal-link, .markdown .cm-hmd-internal-link { color: var(--accent); cursor: pointer; text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.markdown a.eqref-link, .markdown .cm-eqref { color: var(--accent); cursor: pointer; font-variant-numeric: tabular-nums; font-weight: 500; text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.markdown a.eqref-link:hover, .markdown .cm-eqref:hover { color: var(--accent-strong); border-bottom-color: var(--accent-strong); }
 /* a phone: a target a finger can hit — an invisible box around the link, not padding (that would move the underline) */
 html.phone .markdown a, html.phone .markdown .cm-link, html.phone .markdown .cm-hmd-internal-link { position: relative; }
 html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone .markdown .cm-hmd-internal-link::after { content: ""; position: absolute; inset: -9px -3px; }
@@ -34,7 +39,7 @@ html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone 
 .markdown a.doi-link.not-in-library { text-decoration-style: dashed; }
 .markdown a.doi-link.not-in-library::after { content: "+"; margin-left: 1px; font-size: .8em; vertical-align: super; color: var(--text-faint); }
 /* hover sync (context.svelte.ts): the note another pane is pointing at */
-.markdown .atlas-hover-link { background: var(--accent-soft); border-radius: 3px; box-shadow: 0 0 0 2px var(--accent-soft); }
+.markdown .kandinsky-hover-link { background: var(--accent-soft); border-radius: 3px; box-shadow: 0 0 0 2px var(--accent-soft); }
 .markdown .embed-chip { display: inline-flex; padding: .1em .55em; border: 1px solid var(--border-strong); border-radius: 6px; border-bottom-width: 1px; font-size: .9em; }
 /* a video player written in a note (a clipped YouTube video; lib/markdown.ts lets only players through) */
 .markdown iframe { display: block; width: min(100%, 720px); aspect-ratio: 16 / 9; height: auto; border: 0; border-radius: 8px; margin: .5em 0; background: #000; } /* literal: a video's letterbox */
@@ -84,13 +89,13 @@ html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone 
 /* [-] (Obsidian Tasks' cancelled; a dismissed capture): a dash in a quiet box */
 .markdown input.task-checkbox[data-task="-"]:checked { background: var(--text-faint); border-color: var(--text-faint); }
 .markdown input.task-checkbox[data-task="-"]:checked::after { width: .5em; height: 0; border-width: 0 0 2px 0; transform: none; }
-/* `.atlas-check`: the same box for a task's checkbox outside a note (blocks' task lists) */
-.markdown input.task-checkbox, .markdown .cm-task-mark, input.atlas-check {
+/* `.kandinsky-check`: the same box for a task's checkbox outside a note (blocks' task lists) */
+.markdown input.task-checkbox, .markdown .cm-task-mark, input.kandinsky-check {
   appearance: none; -webkit-appearance: none; width: 1em; height: 1em; flex: none; margin: 0; border: 1.5px solid var(--text-faint);
   border-radius: 4px; transform: translateY(.15em); background: transparent; display: inline-grid; place-content: center; cursor: default;
 }
-.markdown input.task-checkbox:checked, .markdown .cm-task-mark:checked, input.atlas-check:checked { background: var(--accent); border-color: var(--accent); }
-.markdown input.task-checkbox:checked::after, .markdown .cm-task-mark:checked::after, input.atlas-check:checked::after {
+.markdown input.task-checkbox:checked, .markdown .cm-task-mark:checked, input.kandinsky-check:checked { background: var(--accent); border-color: var(--accent); }
+.markdown input.task-checkbox:checked::after, .markdown .cm-task-mark:checked::after, input.kandinsky-check:checked::after {
   content: ""; width: .5em; height: .28em; border: solid var(--bg); border-width: 0 0 2px 2px; transform: translateY(-.06em) rotate(-45deg);
 }
 
@@ -100,16 +105,15 @@ html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone 
 .markdown hr, .markdown .cm-hr { border: 0; border-top: 1px solid var(--border-strong); margin: 1.6em 0; }
 .markdown .cm-hr { display: block; margin: .8em 0; }
 
-/* the frame fits the table (a full-width frame around a half-width table left an empty box) */
-.markdown .table-wrap { overflow-x: auto; margin: .9em 0; border: 1px solid var(--border); border-radius: var(--radius); width: fit-content; max-width: 100%; }
-/* auto width with wrapping cells (Obsidian): max-content pushed every column after a long one off-screen */
-.markdown table { border-collapse: collapse; width: auto; font-size: 1em; }
-.markdown th, .markdown td { padding: 6px 12px; border-bottom: 1px solid var(--border); text-align: left; line-height: 1.45; }
+/* Notion horizontal-rule tables: full column width, clean top/bottom row dividers, no vertical cell grid */
+.markdown .table-wrap { overflow-x: auto; margin: .85em 0; border: 0; border-radius: 0; width: 100%; max-width: 100%; }
+/* auto layout with wrapping cells so long columns wrap cleanly inside the Notion column */
+.markdown table { border-collapse: collapse; width: 100%; font-size: .92em; }
+.markdown th, .markdown td { padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left; line-height: 1.48; }
 /* a cell breaks between words only: the editor's wrapping (`overflow-wrap: anywhere`) split "1963" into "196/3" */
 .markdown th, .markdown td { overflow-wrap: break-word; word-break: normal; }
-.markdown th { background: var(--bg-alt); font-weight: 600; color: var(--heading); }
-.markdown tr:last-child td { border-bottom: 0; }
-.markdown td + td, .markdown th + th { border-left: 1px solid var(--border); }
+.markdown th { background: transparent; font-size: .84em; font-weight: 600; letter-spacing: .02em; color: var(--text-muted); border-bottom: 1px solid var(--border-strong); }
+.markdown td + td, .markdown th + th { border-left: 0; }
 .markdown tbody tr:hover { background: var(--bg-hover); }
 
 .markdown img { max-width: 100%; border-radius: 6px; }
@@ -123,7 +127,7 @@ html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone 
 
 /* math */
 .markdown .katex { font-size: 1.08em; }
-.markdown .math-display, .markdown .cm-math-block { display: block; overflow-x: auto; overflow-y: hidden; padding: .3em 0; margin: .6em 0; text-align: center; }
+.markdown .math-display, .markdown .cm-math-block { display: block; overflow-x: auto; overflow-y: hidden; padding: .55em 0; margin: .7em 0; text-align: center; }
 .markdown .katex-display { margin: 0; }
 .markdown .cm-math-inline { display: inline-block; }
 .markdown .math-glue { white-space: nowrap; }
@@ -132,49 +136,85 @@ html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone 
 .markdown .cm-formatting-math { color: var(--text-faint); }
 .katex .katex-error { color: var(--red) !important; }
 
-/* callouts: the type class only sets variables; both views read them */
-.callout-note, .callout-info, .callout-todo { --callout-edge: var(--accent); --callout-ink: var(--accent); }
-.callout-tip, .callout-hint, .callout-important, .callout-success, .callout-check, .callout-done { --callout-edge: var(--green); --callout-ink: var(--green); }
-.callout-warning, .callout-caution, .callout-attention, .callout-question, .callout-help, .callout-faq { --callout-edge: var(--yellow); --callout-ink: var(--yellow); }
-.callout-danger, .callout-error, .callout-bug, .callout-failure, .callout-fail, .callout-missing { --callout-edge: var(--red); --callout-ink: var(--red); }
-.callout-example, .callout-abstract, .callout-summary, .callout-tldr { --callout-edge: var(--purple); --callout-ink: var(--purple); }
-.callout-quote, .callout-cite { --callout-edge: var(--text-faint); --callout-ink: var(--text-muted); }
-.markdown .callout { margin: .9em 0; border: 1px solid var(--border); border-left: 3px solid var(--callout-edge, var(--accent)); border-radius: var(--radius);
-  background: color-mix(in srgb, var(--callout-edge, var(--accent)) 7%, transparent); overflow: hidden; }
-.markdown .callout-title { padding: 8px 14px 2px; font-weight: 650; color: var(--callout-ink, inherit); }
-.markdown .callout-body { padding: 2px 14px 10px; }
+/* Bauhaus callouts: Several Circles pigment accents + geometric glyphs (◎ Note/Proof, ● Tip/Theorem/Important, ▲ Warning/Danger) */
+.callout-note, .callout-info, .callout-proof, .callout-definition, .callout-remark, .callout-todo {
+  --callout-edge: var(--accent); --callout-ink: var(--accent); --callout-glyph: "◎";
+}
+.callout-tip, .callout-theorem, .callout-lemma, .callout-proposition, .callout-corollary, .callout-summary, .callout-hint {
+  --callout-edge: var(--yellow); --callout-ink: var(--yellow); --callout-glyph: "●";
+}
+.callout-important, .callout-success, .callout-check, .callout-done, .callout-verified, .callout-result {
+  --callout-edge: var(--green); --callout-ink: var(--green); --callout-glyph: "●";
+}
+.callout-warning, .callout-caution, .callout-attention, .callout-danger, .callout-error, .callout-bug, .callout-failure, .callout-fail, .callout-missing {
+  --callout-edge: var(--red); --callout-ink: var(--red); --callout-glyph: "▲";
+}
+.callout-example, .callout-abstract, .callout-tldr, .callout-question, .callout-help, .callout-faq {
+  --callout-edge: var(--purple); --callout-ink: var(--purple); --callout-glyph: "◆";
+}
+.callout-quote, .callout-cite {
+  --callout-edge: var(--text-faint); --callout-ink: var(--text-muted); --callout-glyph: "❝";
+}
+.markdown .callout {
+  margin: .95em 0; border: 0; border-left: 3px solid var(--callout-edge, var(--accent)); border-radius: 6px;
+  background: color-mix(in srgb, var(--callout-edge, var(--accent)) 6.5%, transparent); overflow: hidden;
+}
+.markdown .callout-title {
+  display: flex; align-items: center; gap: 8px; padding: 11px 16px 3px; font-size: .95em; font-weight: 600; color: var(--callout-ink, inherit);
+}
+.markdown .callout-title::before { content: var(--callout-glyph, "◎"); font-size: .82em; line-height: 1; flex: none; }
+.markdown .callout-body { padding: 3px 16px 12px; font-size: .97em; line-height: 1.64; }
 /* a foldable callout ([!x]- / [!x]+): the title opens and closes it, a chevron says which */
-.markdown summary.callout-title { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; padding-bottom: 8px; }
+.markdown summary.callout-title { cursor: pointer; list-style: none; padding-bottom: 10px; }
 .markdown summary.callout-title::-webkit-details-marker { display: none; }
 .markdown summary.callout-title::after { content: "›"; margin-left: auto; color: var(--text-faint); transition: transform .12s; }
-.markdown details.callout[open] > summary.callout-title { padding-bottom: 2px; }
+.markdown details.callout[open] > summary.callout-title { padding-bottom: 3px; }
 .markdown details.callout[open] > summary.callout-title::after { transform: rotate(90deg); }
 .markdown .callout-body > :first-child { margin-top: 0; }
 .markdown .callout-body > :last-child { margin-bottom: 0; }
-.markdown .cm-callout { border-left: 3px solid var(--callout-edge, var(--accent)); border-right: 1px solid var(--border);
-  background: color-mix(in srgb, var(--callout-edge, var(--accent)) 7%, transparent); padding: .05em 14px !important; }
-.markdown .cm-callout-first { border-top: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; padding-top: 8px !important; }
-.markdown .cm-callout-last { border-bottom: 1px solid var(--border); border-radius: 0 0 var(--radius) var(--radius); padding-bottom: 8px !important; }
-.markdown .cm-callout-first.cm-callout-last { border-radius: var(--radius); }
-.markdown .cm-callout-title, .markdown .cm-callout-label { font-weight: 650; color: var(--callout-ink, inherit); }
+.markdown .cm-callout {
+  border: 0; border-left: 3px solid var(--callout-edge, var(--accent));
+  background: color-mix(in srgb, var(--callout-edge, var(--accent)) 6.5%, transparent); padding: 2px 16px !important;
+}
+.markdown .cm-callout-first { border-radius: 0 6px 0 0; padding-top: 10px !important; }
+.markdown .cm-callout-last { border-radius: 0 0 6px 0; padding-bottom: 10px !important; }
+.markdown .cm-callout-first.cm-callout-last { border-radius: 0 6px 6px 0; }
+.markdown .cm-callout.cm-callout-title { position: relative; padding-left: 34px !important; font-weight: 600; color: var(--callout-ink, inherit); }
+.markdown .cm-callout.cm-callout-title::before {
+  content: var(--callout-glyph, "◎"); position: absolute; left: 15px; top: 10px;
+  font-size: .82em; line-height: var(--prose-line-height, 1.68); pointer-events: none;
+}
+.markdown .cm-callout-label { font-weight: 600; color: var(--callout-ink, inherit); }
 
-/* Obsidian-style Properties (lib/properties.ts): shared by the editor's frontmatter widget and the reader */
+/* Notion-style compact Property Rows + Several Circles pigment pills (lib/properties.ts & lib/editor/pigment-pills.ts) */
 /* padding, not margin: CodeMirror measures a block widget by its border box, margins shift the gutter */
-.note-properties { margin: 0; padding: .4em 0 1.1em; font-size: .9em; }
+.note-properties { margin: 0; padding: 6px 0 8px; font-size: calc(13px * var(--ui-scale, 1)); font-family: var(--font-ui); line-height: 1.45; }
+.note-properties.is-compact:not(.is-collapsed) > .prop-head { display: none; }
 .note-properties .prop-head { all: unset; display: inline-flex; align-items: center; gap: .45em; cursor: pointer; color: var(--text-muted); font-weight: 600; font-size: .92em; padding: 2px 0 6px; }
 .note-properties .prop-head:hover { color: var(--text); }
 .note-properties .prop-chevron { display: inline-block; transition: transform .12s; transform: rotate(90deg); font-size: .8em; }
 .note-properties.is-collapsed .prop-chevron { transform: none; }
 .note-properties .prop-count { font-weight: 500; color: var(--text-faint); font-size: .9em; }
 .note-properties.is-collapsed .prop-rows { display: none; }
-.note-properties .prop-row { display: grid; grid-template-columns: minmax(7em, 11em) 1fr; gap: .8em; align-items: start; padding: 4px 6px; border-radius: 6px; }
+.note-properties .prop-rows { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 7px 0; display: flex; flex-direction: column; gap: 2px; }
+.note-properties .prop-row { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 12px; align-items: center; padding: 3px 6px; border-radius: 5px; min-height: 27px; }
 .note-properties .prop-row:hover { background: var(--bg-hover); }
-.note-properties .prop-key { display: inline-flex; align-items: center; gap: .5em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.note-properties .prop-key svg { width: 1.05em; height: 1.05em; flex: none; opacity: .8; }
-.note-properties .prop-value { display: flex; flex-wrap: wrap; gap: .35em; min-width: 0; overflow-wrap: anywhere; color: var(--text); }
-.note-properties .prop-pill { display: inline-block; padding: 0 .6em; border-radius: 999px; background: var(--bg-alt); border: 1px solid var(--border); line-height: 1.6; text-decoration: none; }
-.note-properties a.prop-pill { color: var(--link, var(--accent)); }
+.note-properties .prop-key { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: capitalize; }
+.note-properties .prop-key svg { width: 13px; height: 13px; flex: none; opacity: .72; }
+.note-properties .prop-value { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; color: var(--text); }
+.note-properties .prop-value.prop-tabular, .note-properties .prop-value.prop-date, .note-properties .prop-value.prop-datetime, .note-properties .prop-value.prop-number { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.note-properties .prop-pill {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 4px;
+  font-size: 12px; font-weight: 500; line-height: 1.45; background: var(--bg-alt); border: 1px solid var(--border); text-decoration: none;
+}
+.note-properties a.prop-pill { color: var(--link, var(--accent)); border-bottom-width: 1px; }
 .note-properties .prop-tag { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.note-properties .prop-pill.pill-viridian { background: color-mix(in srgb, var(--green) 14%, transparent); border-color: color-mix(in srgb, var(--green) 24%, transparent); color: var(--green); }
+.note-properties .prop-pill.pill-cobalt { background: color-mix(in srgb, var(--accent) 13%, transparent); border-color: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--accent-strong, var(--accent)); }
+.note-properties .prop-pill.pill-ochre { background: color-mix(in srgb, var(--yellow) 14%, transparent); border-color: color-mix(in srgb, var(--yellow) 26%, transparent); color: var(--yellow); }
+.note-properties .prop-pill.pill-mauve { background: color-mix(in srgb, var(--purple) 14%, transparent); border-color: color-mix(in srgb, var(--purple) 26%, transparent); color: var(--purple); }
+.note-properties .prop-pill.pill-vermilion { background: color-mix(in srgb, var(--red) 14%, transparent); border-color: color-mix(in srgb, var(--red) 24%, transparent); color: var(--red); }
+.note-properties .prop-pill.has-dot::before { content: "●"; font-size: 7.5px; line-height: 1; }
 .note-properties .prop-empty { color: var(--text-faint); font-style: italic; }
 .note-properties .prop-error { color: var(--red); }
 
@@ -188,13 +228,13 @@ html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone 
 .markdown .drawing-svg { display: block; max-width: 100%; height: auto; }
 .markdown .drawing-embed.is-missing { color: var(--text-faint); font-size: .9em; border: 1px dashed var(--border-strong); border-radius: 6px; padding: .4em .7em; }
 /* mentions (editor/mentions.ts): @citekey and plugin entities as chips */
-.markdown .atlas-mention { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 2px; cursor: pointer; }
-.markdown .atlas-mention.is-missing { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
-.atlas-mention-card { padding: 8px 10px; max-width: 420px; font-family: var(--font-ui); font-size: calc(12.5px * var(--ui-scale, 1)); }
-.atlas-mention-card .t { font-weight: 600; color: var(--heading); }
-.atlas-mention-card .s { color: var(--text-muted); margin-top: 2px; }
-.atlas-mention-card .p { color: var(--text-faint); font-family: var(--font-mono); font-size: .9em; }
-.atlas-mention-card .hint { color: var(--text-faint); font-size: .85em; margin-top: 4px; }
+.markdown .kandinsky-mention { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 2px; cursor: pointer; }
+.markdown .kandinsky-mention.is-missing { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+.kandinsky-mention-card { padding: 8px 10px; max-width: 420px; font-family: var(--font-ui); font-size: calc(12.5px * var(--ui-scale, 1)); }
+.kandinsky-mention-card .t { font-weight: 600; color: var(--heading); }
+.kandinsky-mention-card .s { color: var(--text-muted); margin-top: 2px; }
+.kandinsky-mention-card .p { color: var(--text-faint); font-family: var(--font-mono); font-size: .9em; }
+.kandinsky-mention-card .hint { color: var(--text-faint); font-size: .85em; margin-top: 4px; }
 /* view blocks (lib/views.ts): a framed, quiet panel inside the note */
 .markdown .view-block { margin: .6em 0; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); font-family: var(--font-ui); white-space: normal; }
 /* a Today part brings its own card: no second frame around it */

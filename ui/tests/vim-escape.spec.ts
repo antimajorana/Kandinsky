@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { openFile } from "./open";
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 // Regression (depth audit): in a note, the completion sources are still pending right after a
 // keystroke; their closeCompletion used to swallow Escape, so vim stayed in INSERT and `u` was typed.

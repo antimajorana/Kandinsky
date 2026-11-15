@@ -1,6 +1,6 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
-import org.atlas.capture.Host;
+import org.kandinsky.capture.Host;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -13,11 +13,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** The user's shapes, kept to train better recognisers: each snap as one JSON line in the vault, a file a day —
- *  `.atlas/datasets/shapes/<date>.jsonl` — the stroke as drawn (scene units, pressure, ms), what it became, which
+ *  `.kandinsky/datasets/shapes/<date>.jsonl` — the stroke as drawn (scene units, pressure, ms), what it became, which
  *  recogniser, and the user's verdict: kept, or undone (a snap taken back is a "not that shape"). In the vault so it
  *  syncs to the computer, where boox_5c_re's trainers read it; small files, so an append (read + write) stays cheap. */
 final class Dataset {
-    static final String DIR = ".atlas/datasets/shapes/";
+    static final String DIR = ".kandinsky/datasets/shapes/";
     private static final ExecutorService ONE = Executors.newSingleThreadExecutor(); // in order, off the UI thread
     private final Host host;
 

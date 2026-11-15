@@ -1,7 +1,7 @@
 import { test, expect, type Browser } from "@playwright/test";
 import { appChord, keyText, matches, onThisSystem, parseChord } from "../src/lib/keys";
 
-// Atlas's app keys are written with Super; on a Mac Super is Ctrl+Cmd (Cmd is the system's copy and paste), on Windows
+// Kandinsky's app keys are written with Super; on a Mac Super is Ctrl+Cmd (Cmd is the system's copy and paste), on Windows
 // Ctrl+Alt (Windows keeps its Win keys), and a Windows default already on that Ctrl+Alt key moves to Ctrl+Alt+Shift.
 
 test("Super is typed as each system's own modifiers", () => {

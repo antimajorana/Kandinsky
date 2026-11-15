@@ -1,10 +1,10 @@
 //! What the box offers while typing. `[[` lists what the editor's `[[` lists, from the same core function
-//! (atlas_core::link_targets: the same files, ranking and exclusions); a to-do's fields come from the core too
-//! (atlas_core::task_suggest). Tags and `@days` as the web boxes do (ui/src/lib/textarea-complete.ts — kept in step by
-//! hand). This module is the desktop capture's and the phone app's (crates/atlas-android) alike.
-use atlas_core::config::TaskSuggestMode;
+//! (kandinsky_core::link_targets: the same files, ranking and exclusions); a to-do's fields come from the core too
+//! (kandinsky_core::task_suggest). Tags and `@days` as the web boxes do (ui/src/lib/textarea-complete.ts — kept in step by
+//! hand). This module is the desktop capture's and the phone app's (crates/kandinsky-android) alike.
+use kandinsky_core::config::TaskSuggestMode;
 use crate::icons::Icon;
-use atlas_core::task_suggest::TaskIcon;
+use kandinsky_core::task_suggest::TaskIcon;
 use chrono::Local;
 use std::ops::Range;
 
@@ -26,14 +26,14 @@ const MOST: usize = 7;
 
 /// A to-do in capture's short forms (`[] x`, `- [ ] x`, `todo x`, `TODO: x`…): the core's own rule.
 pub fn is_todo(text: &str) -> bool {
-    atlas_core::capture::starts_as_task(text)
+    kandinsky_core::capture::starts_as_task(text)
 }
 
 /// What the lists draw on: the vault's note names and tags, and when its tasks offer their fields.
 #[derive(Debug, Clone, Default)]
 pub struct Names {
     /// the vault, for the `[[` list (the core's link_targets); None in tests, which list `notes` instead
-    pub vault: Option<(std::path::PathBuf, atlas_core::config::Config)>,
+    pub vault: Option<(std::path::PathBuf, kandinsky_core::config::Config)>,
     pub notes: Vec<String>,
     pub tags: Vec<String>,
     /// `[editor] task_suggest`, as in a note.
@@ -45,17 +45,17 @@ impl Names {
     /// are the ones the editor's `[[` offers: not the templates nor the agent's files (`index_excluded`, as the core's
     /// link_targets.rs).
     pub fn load(root: &std::path::Path) -> Option<Names> {
-        let ws = atlas_core::Workspace::open(root).ok()?;
+        let ws = kandinsky_core::Workspace::open(root).ok()?;
         let cfg = ws.config().ok()?;
-        let mut notes: Vec<String> = atlas_core::walk::files(ws.root(), &cfg)
+        let mut notes: Vec<String> = kandinsky_core::walk::files(ws.root(), &cfg)
             .filter(|(_, rel)| rel.ends_with(".md") && !cfg.index_excluded(rel))
             .map(|(_, rel)| rel.rsplit('/').next().unwrap_or(&rel).trim_end_matches(".md").to_string())
             .collect();
         notes.sort();
         notes.dedup();
-        let tags = atlas_core::tags::all(ws.root(), &cfg).into_iter().map(|t| t.tag.trim_start_matches('#').to_string()).collect();
+        let tags = kandinsky_core::tags::all(ws.root(), &cfg).into_iter().map(|t| t.tag.trim_start_matches('#').to_string()).collect();
         // warms the link index here, off the typing thread: each `[[` keystroke then only ranks
-        let _ = atlas_core::link_targets::targets(ws.root(), &cfg, "", None);
+        let _ = kandinsky_core::link_targets::targets(ws.root(), &cfg, "", None);
         Some(Names { vault: Some((ws.root().to_path_buf(), cfg.clone())), notes, tags, tasks: cfg.editor.task_suggest })
     }
 }
@@ -69,7 +69,7 @@ pub fn suggest(text: &str, caret: usize, names: &Names) -> Vec<Suggestion> {
         let typed = &before[open + 2..];
         if !typed.contains(']') && !typed.contains('\n') {
             if let Some((root, cfg)) = &names.vault {
-                return atlas_core::link_targets::targets(root, cfg, typed, None).into_iter().take(MOST).map(|t| link_row(t, open + 2..caret)).collect();
+                return kandinsky_core::link_targets::targets(root, cfg, typed, None).into_iter().take(MOST).map(|t| link_row(t, open + 2..caret)).collect();
             }
             let q = typed.to_lowercase();
             let mut hits: Vec<&String> = notes.iter().filter(|n| n.to_lowercase().starts_with(&q)).collect();
@@ -87,12 +87,12 @@ pub fn suggest(text: &str, caret: usize, names: &Names) -> Vec<Suggestion> {
     if let Some(typed) = word.strip_prefix('@') {
         let today = Local::now().date_naive();
         let typed = typed.to_lowercase(); // `@Tom` as `@tom`, as the web boxes read it
-        return atlas_core::capture::DAY_WORDS
+        return kandinsky_core::capture::DAY_WORDS
             .iter()
             .filter(|d| d.starts_with(&typed) && **d != typed)
             .take(MOST)
             .map(|d| {
-                let when = atlas_core::capture::day_of(d, today).map(atlas_core::task_suggest::say).unwrap_or_default();
+                let when = kandinsky_core::capture::day_of(d, today).map(kandinsky_core::task_suggest::say).unwrap_or_default();
                 s(&format!("@{d}"), &when, Icon::Calendar, &format!("{d} "), word_start + 1..caret)
             })
             .collect();
@@ -105,14 +105,14 @@ pub fn suggest(text: &str, caret: usize, names: &Names) -> Vec<Suggestion> {
 
 /// What the text will become once sent: "a to-do, due tomorrow", "a line in today's log" — the core's words
 /// (`capture::describe`), with the vault's own settings when it is known.
-pub fn what_it_becomes(at: Option<(&std::path::Path, &atlas_core::config::Config)>, text: &str) -> String {
-    atlas_core::capture::describe(at, text, Local::now().date_naive()).says
+pub fn what_it_becomes(at: Option<(&std::path::Path, &kandinsky_core::config::Config)>, text: &str) -> String {
+    kandinsky_core::capture::describe(at, text, Local::now().date_naive()).says
 }
 
 /// One `[[` row as the editor draws it (ui/src/lib/editor/md-complete.ts): the alias or name, the folder, `[[link|alias]]`.
-fn link_row(t: atlas_core::api::LinkTarget, replace: Range<usize>) -> Suggestion {
+fn link_row(t: kandinsky_core::api::LinkTarget, replace: Range<usize>) -> Suggestion {
     let folder = t.path.rsplit_once('/').map_or("", |(d, _)| d);
-    let icon = if matches!(t.kind, atlas_core::api::TargetKind::Image) { Icon::Image } else { Icon::Note };
+    let icon = if matches!(t.kind, kandinsky_core::api::TargetKind::Image) { Icon::Image } else { Icon::Note };
     let insert = match &t.alias {
         Some(a) => format!("{}|{a}]] ", t.link),
         None => format!("{}]] ", t.link),
@@ -139,15 +139,15 @@ pub fn task_icon(t: TaskIcon) -> Icon {
     }
 }
 
-/// A to-do's fields, dates and rules (atlas_core::task_suggest), on the line the caret is in.
+/// A to-do's fields, dates and rules (kandinsky_core::task_suggest), on the line the caret is in.
 fn task(before: &str, caret: usize, mode: TaskSuggestMode) -> Vec<Suggestion> {
     let line = &before[before.rfind('\n').map_or(0, |i| i + 1)..];
     // as in a note (Obsidian Tasks' rules, `[editor] task_suggest`); Enter (the ⏎ row) still saves
     if mode == TaskSuggestMode::Off {
         return vec![];
     }
-    let ask = atlas_core::task_suggest::Ask { browse: mode == TaskSuggestMode::Always, keep_enter: true, ..Default::default() };
-    let Some(found) = atlas_core::task_suggest::suggest(line, Local::now().date_naive(), ask) else { return vec![] };
+    let ask = kandinsky_core::task_suggest::Ask { browse: mode == TaskSuggestMode::Always, keep_enter: true, ..Default::default() };
+    let Some(found) = kandinsky_core::task_suggest::suggest(line, Local::now().date_naive(), ask) else { return vec![] };
     // what a row replaces is plain ASCII (a word, a typed date): characters are bytes
     let from = caret - found.replace;
     found
@@ -179,8 +179,8 @@ mod tests {
         let names = Names::load(d.path()).unwrap();
         let t = "see [[dai";
         let got: Vec<String> = suggest(t, t.len(), &names).into_iter().map(|s| s.insert).collect();
-        let cfg = atlas_core::Workspace::open(d.path()).unwrap().config().unwrap();
-        let editor: Vec<String> = atlas_core::link_targets::targets(d.path(), &cfg, "dai", None).into_iter().map(|t| format!("{}]] ", t.link)).collect();
+        let cfg = kandinsky_core::Workspace::open(d.path()).unwrap().config().unwrap();
+        let editor: Vec<String> = kandinsky_core::link_targets::targets(d.path(), &cfg, "dai", None).into_iter().map(|t| format!("{}]] ", t.link)).collect();
         assert_eq!(got, vec!["Daily plan]] ".to_string()], "the template is not offered");
         assert_eq!(got, editor, "the same list as the editor's");
     }

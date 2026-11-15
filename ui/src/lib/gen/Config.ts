@@ -35,7 +35,7 @@ log_template: string,
  */
 log_folders: string, 
 /**
- * Your focus file, shown on Today. Atlas only displays it, never writes it.
+ * Your focus file, shown on Today. Kandinsky only displays it, never writes it.
  */
 focus: string, 
 /**

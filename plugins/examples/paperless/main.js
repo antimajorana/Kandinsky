@@ -4,18 +4,18 @@
 //   query: invoice 2026
 //   ```
 // One GET to Paperless-ngx's REST API (`/api/documents/?query=…`); the token goes in as
-// `Authorization: Token …`, put in by Atlas's core. Check the API against your server's version.
+// `Authorization: Token …`, put in by Kandinsky's core. Check the API against your server's version.
 const el = (tag, style, text) => { const e = document.createElement(tag); if (style) e.style.cssText = style; if (text !== undefined) e.textContent = text; return e; };
 
-export function register(atlas) {
-  const base = () => String(atlas.plugin.settings.server ?? "").trim().replace(/\/+$/, "");
+export function register(kandinsky) {
+  const base = () => String(kandinsky.plugin.settings.server ?? "").trim().replace(/\/+$/, "");
   const get = async (path) => {
-    const res = await atlas.fetch(`${base()}${path}`, { headers: { Authorization: { secret: "token", prefix: "Token " }, Accept: "application/json" } });
+    const res = await kandinsky.fetch(`${base()}${path}`, { headers: { Authorization: { secret: "token", prefix: "Token " }, Accept: "application/json" } });
     if (!res.ok) throw new Error(`Paperless answered ${res.status}`);
     return res.json();
   };
   // a document named in a note: `@paperless:12` shows its title, its date, and opens it in Paperless
-  atlas.registerEntities({
+  kandinsky.registerEntities({
     prefix: "paperless",
     get: async (id) => {
       try { const d = await get(`/api/documents/${encodeURIComponent(id)}/`); return { title: d.title ?? `document ${id}`, subtitle: String(d.created_date ?? d.created ?? "").slice(0, 10) }; }
@@ -23,15 +23,15 @@ export function register(atlas) {
     },
     list: async () => ((await get("/api/documents/?page_size=50&ordering=-added")).results ?? []).map((d) => ({ id: String(d.id), title: d.title ?? `document ${d.id}` })),
   });
-  atlas.registerBlock("paperless.search", (host, block) => {
-    const s = atlas.plugin.settings, base = String(s.server ?? "").trim().replace(/\/+$/, "");
+  kandinsky.registerBlock("paperless.search", (host, block) => {
+    const s = kandinsky.plugin.settings, base = String(s.server ?? "").trim().replace(/\/+$/, "");
     const query = String(block.options.query ?? "").trim();
     if (!base) { host.textContent = "Set the Paperless server in Settings → Plugins → Paperless."; return; }
     host.replaceChildren(el("p", "color: var(--text-faint)", "Searching Paperless…"));
     let gone = false;
     void (async () => {
       try {
-        const res = await atlas.fetch(`${base}/api/documents/?page_size=${Number(block.options.limit ?? 10)}${query ? `&query=${encodeURIComponent(query)}` : ""}`, {
+        const res = await kandinsky.fetch(`${base}/api/documents/?page_size=${Number(block.options.limit ?? 10)}${query ? `&query=${encodeURIComponent(query)}` : ""}`, {
           headers: { Authorization: { secret: "token", prefix: "Token " }, Accept: "application/json" },
         });
         if (!res.ok) throw new Error(`Paperless answered ${res.status}`);

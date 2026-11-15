@@ -1,8 +1,8 @@
 <script lang="ts">
   // The vault's libraries in one page (docs/design/DESIGN-libraries-everywhere.md): a tab per library the vault shows
-  // (`atlas.libraries`: those Atlas's features and the plugins register, as `[ui] libraries` says; those of one
+  // (`kandinsky.libraries`: those Kandinsky's features and the plugins register, as `[ui] libraries` says; those of one
   // subject one tab), the chosen one drawn by the library page. Opened at one (`at`, the pane's anchor; later ones
-  // come to `atlas.pane.onAnchor`), else at the last one seen here.
+  // come to `kandinsky.pane.onAnchor`), else at the last one seen here.
   import { onMount, untrack } from "svelte";
   import { load, save } from "../../../../../ui/src/lib/prefs";
   import { errText } from "../../../../../ui/src/lib/text";
@@ -11,14 +11,14 @@
   import Library from "./Library.svelte";
   import Icon from "./Icon.svelte";
 
-  let { atlas }: { atlas: PluginApi } = $props();
-  const LAST = "atlas.libraries.last";
-  let entries = $state.raw<LibraryEntry[]>(untrack(() => atlas.libraries.list()));
+  let { kandinsky }: { kandinsky: PluginApi } = $props();
+  const LAST = "kandinsky.libraries.last";
+  let entries = $state.raw<LibraryEntry[]>(untrack(() => kandinsky.libraries.list()));
   const list = $derived(bySubject(entries));
-  let chosen = $state(untrack(() => atlas.anchor) || load<string>(LAST, ""));
+  let chosen = $state(untrack(() => kandinsky.anchor) || load<string>(LAST, ""));
   onMount(() => {
-    const offList = atlas.libraries.onChange((l) => (entries = l));
-    const offAt = atlas.pane?.onAnchor((at) => (chosen = at)); // opened again at another library
+    const offList = kandinsky.libraries.onChange((l) => (entries = l));
+    const offAt = kandinsky.pane?.onAnchor((at) => (chosen = at)); // opened again at another library
     return () => { offList(); offAt?.(); };
   });
   const current = $derived(list.find((e) => e.id === chosen || e.members?.includes(chosen)) ?? list[0]);
@@ -46,11 +46,11 @@
     </div>
   {/if}
   {#if !current}
-    <p class="none">No library in this vault: Atlas and its plugins give them (Drawings is Atlas's own; Settings → Appearance → Libraries chooses which show).</p>
+    <p class="none">No library in this vault: Kandinsky and its plugins give them (Drawings is Kandinsky's own; Settings → Appearance → Libraries chooses which show).</p>
   {:else if error}
     <p class="none">{error}</p>
   {:else if source}
-    {#key source}<Library {atlas} {source} />{/key}
+    {#key source}<Library {kandinsky} {source} />{/key}
   {/if}
 </div>
 

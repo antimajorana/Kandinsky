@@ -46,7 +46,7 @@ export function wordFreq(lang: string, get: (lang: string) => Promise<Response>)
   if (!p) {
     p = get(lang)
       .then((r) => (r.ok ? r.text().then((t) => parseWordFreq(lang, t)) : null))
-      .catch((e) => { console.warn(`[atlas] the ${lang} word list did not load`, e); return null; });
+      .catch((e) => { console.warn(`[kandinsky] the ${lang} word list did not load`, e); return null; });
     loaded.set(lang, p);
   }
   return p;

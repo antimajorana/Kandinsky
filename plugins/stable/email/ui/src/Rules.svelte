@@ -35,7 +35,7 @@
 </script>
 
 <div class={frame}>
-    <span class="faint">for new mail in an inbox · kept in <button class="link" onclick={() => { mail.atlas.open(path, undefined, { beside: true }); onclose(); }}>{path || "mail/rules.md"}</button></span>
+    <span class="faint">for new mail in an inbox · kept in <button class="link" onclick={() => { mail.kandinsky.open(path, undefined, { beside: true }); onclose(); }}>{path || "mail/rules.md"}</button></span>
     <p class="hint">When new mail matches the search, do the actions in order. A search is written as in the search box: <code>from:shop.example</code>, <code>subject:invoice has:attachment</code>, <code>list:physics</code>, <code>-from:boss</code>, several people at once: <code>from:ana@uni.example,bo@uni.example</code>. <b>important</b> stars it and keeps the conversation as a note at once; <b>not-important</b> moves it out of the inbox; <b>stop</b> keeps later rules from seeing it; <b>save</b> keeps the conversation as a note.</p>
     {#each rules as r, i (i)}
       <div class="rule">
@@ -51,10 +51,10 @@
     <datalist id="email-rule-actions">{#each ACTIONS as a (a)}<option value={a}></option>{/each}</datalist>
     {#if error}<p class="error">{error}</p>{/if}
     <footer>
-      <button class="atlas-btn" onclick={add}><Icon name="plus" size={14} /> Add a rule</button>
+      <button class="kandinsky-btn" onclick={add}><Icon name="plus" size={14} /> Add a rule</button>
       <span class="grow"></span>
-      {#if !inline}<button class="atlas-btn" onclick={onclose}>Cancel</button>{/if}
-      <button class="atlas-btn primary" onclick={save} disabled={saving}>{inline ? "Save rules" : "Save"}</button>
+      {#if !inline}<button class="kandinsky-btn" onclick={onclose}>Cancel</button>{/if}
+      <button class="kandinsky-btn primary" onclick={save} disabled={saving}>{inline ? "Save rules" : "Save"}</button>
     </footer>
 </div>
 
@@ -73,7 +73,7 @@
   .tool { all: unset; cursor: pointer; padding: 6px; border-radius: var(--radius-sm); color: var(--text-muted); }
   .tool:hover { background: var(--bg-hover); color: var(--text); }
   footer { display: flex; gap: 8px; align-items: center; padding-top: 6px; }
-  footer .atlas-btn { display: inline-flex; gap: 6px; align-items: center; }
+  footer .kandinsky-btn { display: inline-flex; gap: 6px; align-items: center; }
   .primary { background: var(--accent) !important; color: var(--accent-fg) !important; border-color: transparent !important; }
   .grow { flex: 1; }
   .error { color: var(--red); margin: 0; }

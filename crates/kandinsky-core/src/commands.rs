@@ -1,5 +1,5 @@
 //! The command registry: built-ins are an enum (each id has exactly one argument shape), scripts
-//! are `.atlas/commands/<id>.toml` manifests re-read on every listing, so no recompile is needed.
+//! are `.kandinsky/commands/<id>.toml` manifests re-read on every listing, so no recompile is needed.
 use crate::api::{CommandInfo, CommandSource, Event, FocusPane};
 use crate::events::EventBus;
 use crate::{capture, today, Error, Result, Workspace};
@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use ts_rs::TS;
 
-pub const COMMANDS_DIR: &str = ".atlas/commands";
+pub const COMMANDS_DIR: &str = ".kandinsky/commands";
 pub const SCRIPT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// A built-in call as it arrives: `{"id": "...", "args": {...}}`.
@@ -110,7 +110,7 @@ impl Builtin {
     }
 }
 
-/// `.atlas/commands/<id>.toml`.
+/// `.kandinsky/commands/<id>.toml`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ScriptManifest {
     pub title: String,
@@ -123,7 +123,7 @@ pub struct ScriptManifest {
     /// Seconds before the run is killed (default [`SCRIPT_TIMEOUT`]); long jobs (audits, builds) raise it.
     #[serde(default)]
     pub timeout_secs: Option<u64>,
-    /// Run by itself while Atlas is open: `daily 03:00`, `every 2h`, `hourly` (see schedule.rs).
+    /// Run by itself while Kandinsky is open: `daily 03:00`, `every 2h`, `hourly` (see schedule.rs).
     #[serde(default)]
     pub schedule: Option<String>,
 }
@@ -155,23 +155,23 @@ fn load_script(path: &Path) -> Result<ScriptCommand> {
 /// Valid script manifests, sorted by id. Broken manifests and ids shadowing a built-in are
 /// reported on stderr and skipped, never fatal.
 pub fn scripts(root: &Path) -> Vec<ScriptCommand> {
-    let Ok(entries) = std::fs::read_dir(root.join(COMMANDS_DIR)) else { return Vec::new() };
+    let Ok(entries) = std::fs::read_dir(crate::state_dir::join(root, COMMANDS_DIR)) else { return Vec::new() };
     let mut out: Vec<ScriptCommand> = entries
         .flatten()
         .map(|e| e.path())
         .filter(|p| p.extension().is_some_and(|x| x == "toml"))
         .filter_map(|p| match load_script(&p) {
             Ok(s) if !valid_script_id(&s.id) => {
-                eprintln!("atlas: skipping {}: invalid command id", p.display());
+                eprintln!("kandinsky: skipping {}: invalid command id", p.display());
                 None
             }
             Ok(s) if BuiltinId::from_id(&s.id).is_some() => {
-                eprintln!("atlas: skipping {}: shadows built-in `{}`", p.display(), s.id);
+                eprintln!("kandinsky: skipping {}: shadows built-in `{}`", p.display(), s.id);
                 None
             }
             Ok(s) => Some(s),
             Err(e) => {
-                eprintln!("atlas: skipping command: {e}");
+                eprintln!("kandinsky: skipping command: {e}");
                 None
             }
         })
@@ -182,7 +182,7 @@ pub fn scripts(root: &Path) -> Vec<ScriptCommand> {
 
 pub fn list(root: &Path) -> Vec<CommandInfo> {
     let builtins = BuiltinId::ALL.into_iter().map(BuiltinId::info);
-    let runs = crate::schedule::records(&root.join(".atlas/cache"));
+    let runs = crate::schedule::records(&crate::state_dir::dir(root).join("cache"));
     let mut origins = crate::git::file_origins(root, COMMANDS_DIR);
     let scripts = scripts(root).into_iter().map(|s| {
         let file = format!("{COMMANDS_DIR}/{}.toml", s.id);
@@ -216,7 +216,7 @@ pub fn create(root: &Path, c: &crate::api::NewCommand) -> Result<CommandInfo> {
             "`{id}` cannot be a command id (letters, digits, . _ -; not a built-in)"
         )));
     }
-    let path = root.join(COMMANDS_DIR).join(format!("{id}.toml"));
+    let path = crate::state_dir::join(root, COMMANDS_DIR).join(format!("{id}.toml"));
     let mut doc = toml_edit::DocumentMut::new();
     doc["title"] = toml_edit::value(title);
     if !c.description.trim().is_empty() {
@@ -247,7 +247,7 @@ impl Command {
         if !valid_script_id(id) {
             return Err(Error::NotFound(format!("command `{id}`")));
         }
-        let path: PathBuf = root.join(COMMANDS_DIR).join(format!("{id}.toml"));
+        let path: PathBuf = crate::state_dir::join(root, COMMANDS_DIR).join(format!("{id}.toml"));
         if !path.is_file() {
             return Err(Error::NotFound(format!("command `{id}`")));
         }
@@ -297,11 +297,11 @@ pub async fn run_script(root: &Path, script: &ScriptCommand, args: &Value, timeo
     run_script_with(root, script, &[], args, timeout).await
 }
 
-/// [`run_script`] with `env` set for the process and its line's `$VAR`s (a plugin's `ATLAS_PLUGIN_DIR`).
+/// [`run_script`] with `env` set for the process and its line's `$VAR`s (a plugin's `KANDINSKY_PLUGIN_DIR`).
 pub async fn run_script_with(root: &Path, script: &ScriptCommand, env: &[(String, std::ffi::OsString)], args: &Value, timeout: Duration) -> Result<Value> {
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt;
-    let mut vars = vec![("ATLAS_ROOT".to_string(), root.as_os_str().to_owned()), ("ATLAS_COMMAND".to_string(), script.id.clone().into())];
+    let mut vars = vec![("KANDINSKY_ROOT".to_string(), root.as_os_str().to_owned()), ("KANDINSKY_COMMAND".to_string(), script.id.clone().into())];
     vars.extend_from_slice(env);
     let mut cmd = crate::platform::run_line::command(&script.manifest.run, root, &vars).map_err(|e| Error::CommandFailed(format!("{}: {e}", script.id)))?;
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
@@ -387,8 +387,8 @@ mod tests {
     }
 
     fn write_cmd(root: &Path, id: &str, toml: &str) {
-        std::fs::create_dir_all(root.join(COMMANDS_DIR)).unwrap();
-        std::fs::write(root.join(COMMANDS_DIR).join(format!("{id}.toml")), toml).unwrap();
+        std::fs::create_dir_all(crate::state_dir::join(root, COMMANDS_DIR)).unwrap();
+        std::fs::write(crate::state_dir::join(root, COMMANDS_DIR).join(format!("{id}.toml")), toml).unwrap();
     }
 
     #[tokio::test]
@@ -468,13 +468,13 @@ mod tests {
 
     #[test]
     fn real_phd_manifests_parse() {
-        // Shapes copied from a real vault's .atlas/commands (read-only fixture).
+        // Shapes copied from a real vault's .kandinsky/commands (read-only fixture).
         let tmp = tempfile::tempdir().unwrap();
         write_cmd(
             tmp.path(),
             "refs.bib",
             "title = \"Papers: rebuild refs.bib\"\ndescription = \"Regenerate refs/refs.bib from the notes of refs/papers/*\"\n\
-             run = \"uv run --script ~/src/atlas/scripts/vault/refs_bib.py refs/papers refs/refs.bib\"\n",
+             run = \"uv run --script ~/src/kandinsky/scripts/vault/refs_bib.py refs/papers refs/refs.bib\"\n",
         );
         let l = list(tmp.path());
         let c = l.iter().find(|c| c.id == "refs.bib").unwrap();

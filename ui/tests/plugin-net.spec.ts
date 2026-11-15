@@ -2,9 +2,9 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
-// Plugins v4, network and secrets (docs/guides/PLUGINS.md "v4"): `atlas.fetch` goes through the core, only to
+// Plugins v4, network and secrets (docs/guides/PLUGINS.md "v4"): `kandinsky.fetch` goes through the core, only to
 // hosts the manifest lists, and a header can be a secret the core fills in — the page never sends it.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 let server: Server, port = 0;
 const seen: { url: string; auth: string }[] = [];
@@ -17,23 +17,23 @@ test.beforeAll(async ({ request }) => {
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   port = (server.address() as AddressInfo).port;
-  const main = `export function register(atlas) {
-  const cell = atlas.shell.statusItem({ id: "out", text: "idle" });
-  atlas.registerCommand({ id: "go", title: "Net demo: call the server", run: async () => {
-    await atlas.secrets.set("token", "tok-abc");
-    const r = await atlas.fetch("http://127.0.0.1:${port}/things?x=1", { headers: { Authorization: { secret: "token", prefix: "Bearer " } } });
+  const main = `export function register(kandinsky) {
+  const cell = kandinsky.shell.statusItem({ id: "out", text: "idle" });
+  kandinsky.registerCommand({ id: "go", title: "Net demo: call the server", run: async () => {
+    await kandinsky.secrets.set("token", "tok-abc");
+    const r = await kandinsky.fetch("http://127.0.0.1:${port}/things?x=1", { headers: { Authorization: { secret: "token", prefix: "Bearer " } } });
     const j = await r.json();
-    cell.set(r.status + " " + j.hello + " " + j.path + " has:" + (await atlas.secrets.has("token")));
+    cell.set(r.status + " " + j.hello + " " + j.path + " has:" + (await kandinsky.secrets.has("token")));
   } });
-  atlas.registerCommand({ id: "stray", title: "Net demo: call a host that is not listed", run: async () => {
-    try { await atlas.fetch("http://localhost:${port}/x"); cell.set("went through"); } catch (e) { cell.set("refused: " + e.message); }
+  kandinsky.registerCommand({ id: "stray", title: "Net demo: call a host that is not listed", run: async () => {
+    try { await kandinsky.fetch("http://localhost:${port}/x"); cell.set("went through"); } catch (e) { cell.set("refused: " + e.message); }
   } });
 }\n`;
-  await put(request, ".atlas/plugins/netdemo/main.js", main);
-  await put(request, ".atlas/plugins/netdemo/plugin.toml", 'title = "Net demo"\n\n[permissions]\nnet = ["127.0.0.1"]\nsecrets = true\n');
+  await put(request, ".kandinsky/plugins/netdemo/main.js", main);
+  await put(request, ".kandinsky/plugins/netdemo/plugin.toml", 'title = "Net demo"\n\n[permissions]\nnet = ["127.0.0.1"]\nsecrets = true\n');
 });
 test.afterAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/netdemo/main.js", "export function register() {}\n");
+  await put(request, ".kandinsky/plugins/netdemo/main.js", "export function register() {}\n");
   await new Promise((done) => server.close(done));
 });
 

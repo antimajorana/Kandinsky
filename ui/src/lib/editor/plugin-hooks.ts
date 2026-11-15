@@ -1,4 +1,4 @@
-// What plugins add to the editor (`atlas.editor.*`, docs/guides/PLUGINS.md "v4"): completions, keys,
+// What plugins add to the editor (`kandinsky.editor.*`, docs/guides/PLUGINS.md "v4"): completions, keys,
 // paste / drop handlers, decorations for a pattern, and — the escape hatch — raw CodeMirror
 // extensions. One extension per editor (`pluginHooks`) reads module-level lists at the moment of
 // use, so a plugin registering, changing or leaving needs no rebuild of the editor; only the
@@ -62,7 +62,7 @@ function pushRaw(): void {
       for (const r of [...raws]) {
         try { v.dispatch({ effects: slot.reconfigure(r.ext) }); } catch (bad) { raws.delete(r); logPlugin(r.plugin, "editor.extension", bad); }
       }
-      try { v.dispatch({ effects: slot.reconfigure([...raws].map((r) => r.ext)) }); } catch { logPlugin("atlas", "editor.extension", e); }
+      try { v.dispatch({ effects: slot.reconfigure([...raws].map((r) => r.ext)) }); } catch { logPlugin("kandinsky", "editor.extension", e); }
     }
   }
 }

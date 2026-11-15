@@ -29,7 +29,7 @@
 
   let { panel: _panel }: PaneProps<"settings"> = $props();
 
-  const PAGE_KEY = "atlas.settings.page";
+  const PAGE_KEY = "kandinsky.settings.page";
   const ACCOUNTS = "accounts";
   let current = $state(load<string>(PAGE_KEY, "overview"));
   let filter = $state("");

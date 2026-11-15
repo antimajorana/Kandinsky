@@ -10,7 +10,7 @@ use serde_json::Value;
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Contribution {
-    /// kinds this plugin brings (a vault's `.atlas/kinds/` file of the same name wins)
+    /// kinds this plugin brings (a vault's `.kandinsky/kinds/` file of the same name wins)
     pub kinds: Vec<Kind>,
     /// text → (kind, ID) by a regular expression, so recognising starts no process
     pub recognize: Vec<PatternSpec>,
@@ -181,7 +181,7 @@ pub struct Registry {
     pub recognizers: Vec<(PluginId, RecognizerSpec)>,
     pub sources: Vec<Source>,
     pub links: Vec<Link>,
-    /// the vault's `.atlas/catalog/rules.yaml` (filled in by the engine's load)
+    /// the vault's `.kandinsky/catalog/rules.yaml` (filled in by the engine's load)
     pub rules: Vec<crate::rules::Rule>,
     /// kinds filed as another while the plugin that says so is installed (`instead`)
     pub instead: Vec<Instead>,

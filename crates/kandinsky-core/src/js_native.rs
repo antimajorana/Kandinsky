@@ -1,6 +1,6 @@
 //! The heavy primitives of a JavaScript helper, done natively (docs/design/DESIGN-plugin-runtimes.md): QuickJS
 //! interprets, so parsing HTML, CSV or a zip in script would be slow and written once per plugin. Each is one
-//! synchronous call, `__host.native(op, json)` → json, behind `atlas.html` / `atlas.csv` / `atlas.zip` / `atlas.hash` / `atlas.convert`
+//! synchronous call, `__host.native(op, json)` → json, behind `kandinsky.html` / `kandinsky.csv` / `kandinsky.zip` / `kandinsky.hash` / `kandinsky.convert`
 //! (sdk/js/prelude.js). Files are the vault's (a vault-relative path, checked by `paths::safe_join`), or the plugin's
 //! own cache for `cache.head`.
 use serde_json::{json, Value};
@@ -103,13 +103,13 @@ fn zip_read(file: &Path, name: &str) -> Result<Value, String> {
     Ok(json!(String::from_utf8_lossy(&bytes)))
 }
 
-/// The first bytes of a file of the plugin's cache (what `atlas.download` saved), as text: a PDF starts `%PDF`.
+/// The first bytes of a file of the plugin's cache (what `kandinsky.download` saved), as text: a PDF starts `%PDF`.
 fn cache_head(root: &Path, id: &str, name: &str, n: u64) -> Result<Value, String> {
     let clean = name.trim_start_matches('/');
     if clean.split('/').any(|p| p.is_empty() || p == "..") {
         return Err(format!("cache.head: {name:?}"));
     }
-    let file = root.join(".atlas/cache/plugins").join(id).join(clean);
+    let file = crate::state_dir::dir(root).join("cache/plugins").join(id).join(clean);
     let mut bytes = vec![];
     std::fs::File::open(&file).and_then(|f| f.take(n.min(4096)).read_to_end(&mut bytes)).map_err(|e| format!("cache.head: {name}: {e}"))?;
     Ok(json!(bytes.iter().map(|&b| b as char).collect::<String>()))
@@ -143,7 +143,7 @@ mod tests {
         assert!(r("zip.read", json!({ "path": "../e.zip", "name": "x" })).is_err(), "outside the vault");
 
         assert_eq!(r("hash.sha256", json!({ "text": "abc" })).unwrap(), json!("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
-        let cache = t.path().join(".atlas/cache/plugins/demo/pdf");
+        let cache = t.path().join(".kandinsky/cache/plugins/demo/pdf");
         std::fs::create_dir_all(&cache).unwrap();
         std::fs::write(cache.join("k.pdf"), b"%PDF-1.7 rest").unwrap();
         assert_eq!(r("cache.head", json!({ "name": "pdf/k.pdf", "bytes": 4 })).unwrap(), json!("%PDF"));

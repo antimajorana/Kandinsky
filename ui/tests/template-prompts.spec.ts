@@ -1,9 +1,9 @@
 import { test, expect } from "@playwright/test";
 
-// Atlas's own templates (docs/guides/TEMPLATES.md): a template's {{prompt:…}} questions are asked after the
+// Kandinsky's own templates (docs/guides/TEMPLATES.md): a template's {{prompt:…}} questions are asked after the
 // name, together in one form (a choice as a list, a date as a date), and its values, filters and blocks fill the note.
 test("a template asks its questions after the name and fills values, filters and blocks", async ({ page, request }) => {
-  const H = { "x-atlas": "1" };
+  const H = { "x-kandinsky": "1" };
   await request.put("/api/file", { headers: H, data: { path: "templates/meeting.md", text: "---\ntype: meeting\nwith: {{prompt:Who | link}}\nkind: {{prompt:Kind | choice:weekly,ad hoc}}\nwhen: {{prompt:When | date}}\n---\n# {{title}} — {{prompt:Who}}\n\nAbout: {{prompt:Topic | default:anything}}\n{{#if day}}Day: {{day:dddd}}{{/if}}\n{{cursor}}\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();

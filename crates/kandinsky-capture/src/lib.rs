@@ -1,6 +1,6 @@
-//! Atlas's capture box as a library. With the `window` feature (the default): the desktop's box, a native window
+//! Kandinsky's capture box as a library. With the `window` feature (the default): the desktop's box, a native window
 //! (src/main.rs). Without it: only what a capture means — the completions, what the text becomes, the icons as
-//! SVG paths, writing it — which the phone app uses under its own screen (crates/atlas-android, docs/guides/ANDROID.md).
+//! SVG paths, writing it — which the phone app uses under its own screen (crates/kandinsky-android, docs/guides/ANDROID.md).
 #[cfg(feature = "window")]
 pub mod app;
 pub mod complete;

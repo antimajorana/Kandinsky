@@ -11,7 +11,7 @@ export type Plugin = { id: string, title: string, description?: string, icon?: s
  */
 view?: string, 
 /**
- * Workspace-relative path of the startup module (`register(atlas)`).
+ * Workspace-relative path of the startup module (`register(kandinsky)`).
  */
 main?: string, 
 /**

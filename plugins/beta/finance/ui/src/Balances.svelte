@@ -16,7 +16,7 @@
       </span>
     </button>
   {:else}
-    <div class="atlas-empty">No accounts yet: an account is a note with <code>type: finance-account</code>.</div>
+    <div class="kandinsky-empty">No accounts yet: an account is a note with <code>type: finance-account</code>.</div>
   {/each}
 </div>
 

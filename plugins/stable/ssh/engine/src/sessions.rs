@@ -1,4 +1,4 @@
-//! Long-lived remote shells an agent (atlas mcp) or the page talks to. Each is one `ssh -T <host>` running the remote
+//! Long-lived remote shells an agent (kandinsky mcp) or the page talks to. Each is one `ssh -T <host>` running the remote
 //! login shell, kept open between calls, so `cd`, variables and an activated environment stay. A command is written
 //! to the shell followed by a marker line carrying its exit status; its output is what comes before the marker.
 //! Sessions run with BatchMode (nobody can type into them): a host that wants a passphrase or 2FA is logged in to in
@@ -167,7 +167,7 @@ fn find_marker(buf: &[u8], from: usize, marker: &str) -> Option<(usize, usize, i
 }
 
 fn marker() -> String {
-    format!("__ATLAS_{}__", ssh::token())
+    format!("__KANDINSKY_{}__", ssh::token())
 }
 
 /// A shell on `host` over the shared connection, or ssh's answer when it needs a login first.
@@ -197,7 +197,7 @@ fn open_named(s: &Settings, host: &str, name: &str) -> Answer {
     let mut made = start(name, host, s)?;
     if made.is_err() && !s.connected(host) {
         if !ssh::login(s, host, CALL_WAIT, ssh::Asker::Background("a shell session (an agent or another plugin)")) {
-            return Ok(json!({ "waiting_for_login": host, "message": format!("{host} needs the user to log in (passphrase / 2FA): Atlas offered it in its status bar. Call ssh_open again once connected.") }));
+            return Ok(json!({ "waiting_for_login": host, "message": format!("{host} needs the user to log in (passphrase / 2FA): Kandinsky offered it in its status bar. Call ssh_open again once connected.") }));
         }
         made = start(name, host, s)?;
     }
@@ -285,7 +285,7 @@ pub fn close(p: &Value) -> Answer {
 }
 
 pub fn list(_p: &Value) -> Answer {
-    let root = ssh::absolute(std::path::Path::new(&std::env::var("ATLAS_ROOT").unwrap_or_else(|_| ".".into())));
+    let root = ssh::absolute(std::path::Path::new(&std::env::var("KANDINSKY_ROOT").unwrap_or_else(|_| ".".into())));
     let pending = lock(&PENDING).clone();
     let mut out: Vec<Value> = lock(&SESSIONS)
         .values()

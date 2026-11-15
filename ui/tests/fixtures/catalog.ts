@@ -5,8 +5,8 @@ import type { APIRequestContext } from "@playwright/test";
 // from its ui/), under its manifest's top keys — no helper, no tools, no main.js, so it asks nothing of a helper the
 // tests do not have. A spec that needs its kinds or blocks puts main.js and a stand-in helper with `withCatalog`, and
 // gives the vault's copy back with `restoreCatalog`. No import of the config: the config imports this.
-const H = { "x-atlas": "1" };
-export const CATALOG_DIR = ".atlas/plugins/catalog";
+const H = { "x-kandinsky": "1" };
+export const CATALOG_DIR = ".kandinsky/plugins/catalog";
 export const catalogFile = (f: string): string => readFileSync(new URL(`../../../plugins/beta/catalog/${f}`, import.meta.url), "utf8");
 /** The manifest's keys before its first table (title, rail, provides…), then `more`. */
 export const catalogManifest = (more = ""): string => `${catalogFile("plugin.toml").split(/\n\[/)[0].trimEnd()}\n${more}`;
@@ -22,7 +22,7 @@ const put = (request: APIRequestContext, path: string, text: string) => request.
 export async function withCatalog(request: APIRequestContext, helperPy: string, files: string[] = ["main.js"]): Promise<void> {
   await put(request, `${CATALOG_DIR}/helper.py`, helperPy);
   for (const f of files) await put(request, `${CATALOG_DIR}/${f}`, catalogFile(f));
-  await put(request, `${CATALOG_DIR}/plugin.toml`, catalogManifest(`\n[helper]\nrun = "python3 -u \\"$ATLAS_PLUGIN_DIR/helper.py\\""\n`));
+  await put(request, `${CATALOG_DIR}/plugin.toml`, catalogManifest(`\n[helper]\nrun = "python3 -u \\"$KANDINSKY_PLUGIN_DIR/helper.py\\""\n`));
 }
 
 /** Back to the vault's copy: the helper stopped, what `withCatalog` added gone (left, main.js asked a missing helper on

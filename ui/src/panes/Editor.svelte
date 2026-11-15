@@ -1,7 +1,7 @@
 <script lang="ts">
   // Editor pane: load, autosave (600 ms, base_mtime → 409 conflict banner), reload on fs events. Code files
   // are saved only by Ctrl+S (`[editor] autosave_code`, off); their unsaved text is kept meanwhile in a
-  // recovery copy (.atlas/cache/recovery/<path>), offered back when the file is opened again.
+  // recovery copy (.kandinsky/cache/recovery/<path>), offered back when the file is opened again.
   import { errText } from "../lib/text";
   import { inPhoneApp } from "../lib/eink";
   import { shownName, shownPath } from "../lib/paths";
@@ -18,12 +18,14 @@
   import { app, toast } from "../lib/state.svelte";
   import { setDirty, closePanel, open } from "../lib/dock";
   import { editors, noteEditorActive, openIntent } from "../lib/registry";
-  import { createEditor, isMarkdown, type AtlasEditor } from "../lib/editor/create";
+  import { createEditor, isMarkdown, type KandinskyEditor } from "../lib/editor/create";
   import FormatBar from "../components/FormatBar.svelte";
+  import OracleBar from "../components/OracleBar.svelte";
   import SyncCopies from "../components/SyncCopies.svelte";
   import { refreshGitGutter } from "../lib/editor/git-gutter";
   import CodeBar from "../components/CodeBar.svelte";
   import { openWikilink } from "../lib/links";
+  import { loadMath } from "../lib/math";
   import { applyMove } from "../lib/section-move";
   import { vaultReady } from "../lib/vault";
   import type { PaneProps } from "../lib/dock";
@@ -52,7 +54,7 @@
   const path = spec.path;
 
   let host: HTMLDivElement;
-  let ed: AtlasEditor | null = null;
+  let ed: KandinskyEditor | null = null;
   // the last headings() answer and the text it was read from (one scan per version of the text)
   let headCache: { doc: Text; heads: { level: number; text: string; line: number }[] } | null = null;
   let status = $state<"loading" | "ready" | "error">("loading");
@@ -204,7 +206,7 @@
   let textTimer: ReturnType<typeof setTimeout> | undefined;
   function schedule(text?: string, typed = false, keys = false) {
     if (text !== undefined) docText = text;
-    window.dispatchEvent(new CustomEvent("atlas-doc-change", { detail: panel.id }));
+    window.dispatchEvent(new CustomEvent("kandinsky-doc-change", { detail: panel.id }));
     if (typed) setDirty(panel.id, true); // the user's change: unsaved at once — not a load or a reload, which may leave it as saved
     if (keys) {
       // keys: the text read when typing pauses (a big note's text is not free to build on every key)
@@ -243,13 +245,19 @@
       let text = "";
       askMirror();
       try {
-        // links and embeds resolve against the workspace file list: have it before the first render
-        const [f] = await Promise.all([api.file(path), vaultReady()]);
+        // links, embeds, and KaTeX resolve before the first render so inline math never paints unhydrated
+        const [f] = await Promise.all([
+          api.file(path),
+          vaultReady(),
+          ...(isMarkdown(path) ? [loadMath().catch(() => null)] : []),
+        ]);
         text = fromDisk(f.text);
         mtime = f.mtime;
       } catch (err) {
-        if (err instanceof ApiError && err.status === 404) isNew = true;
-        else { status = "error"; loadError = errText(err); return; }
+        if (err instanceof ApiError && err.status === 404) {
+          isNew = true;
+          if (isMarkdown(path)) await loadMath().catch(() => null);
+        } else { status = "error"; loadError = errText(err); return; }
       }
       if (disposed) return;
       saved = text;
@@ -375,7 +383,7 @@
       }, () => {});
     });
     // linked, unlinked or linked elsewhere in the vault switcher: the chip follows
-    window.addEventListener("atlas-mirror-unlinked", askMirror);
+    window.addEventListener("kandinsky-mirror-unlinked", askMirror);
     const offActive = panel.onDidActiveChange((e) => {
       if (e.isActive && ed) { app.vimMode = ed.vimMode(); app.problems = ed.problems(); if (!inPhoneApp()) requestAnimationFrame(() => ed?.view.focus()); }
     });
@@ -395,7 +403,7 @@
       clearTimeout(recoveryTimer);
       clearTimeout(textTimer);
       live?.close();
-      window.removeEventListener("atlas-mirror-unlinked", askMirror);
+      window.removeEventListener("kandinsky-mirror-unlinked", askMirror);
       editors.delete(panel.id);
       setDirty(panel.id, false);
       ed?.destroy();
@@ -428,17 +436,30 @@
   {/if}
   {#if settings.config?.editor.breadcrumbs ?? true}
     <nav class="crumbs" aria-label="Path">
-      {#each path.split("/") as seg, i}
-        {#if i > 0}<span class="sep">›</span>{/if}
-        {#if i < path.split("/").length - 1}
-          <!-- a folder of the path: the explorer there, the next step down (the folder or this note) selected -->
-          <button class="seg" title="Show {path.split("/").slice(0, i + 1).join("/")} in the explorer"
-            onclick={() => open({ kind: "explorer", source: "vault", place: "", path: path.split("/").slice(0, i + 1).join("/"), select: path.split("/")[i + 1] })}>{seg}</button>
-        {:else}
-          <span class="seg file"><Icon name={fileIcon(path)} size={13} />{shownName(seg)}</span>
-        {/if}
-      {/each}
+      <div class="crumbs-trail">
+        {#each path.split("/") as seg, i}
+          {#if i > 0}<span class="sep">›</span>{/if}
+          {#if i < path.split("/").length - 1}
+            <!-- a folder of the path: the explorer there, the next step down (the folder or this note) selected -->
+            <button class="seg" title="Show {path.split("/").slice(0, i + 1).join("/")} in the explorer"
+              onclick={() => open({ kind: "explorer", source: "vault", place: "", path: path.split("/").slice(0, i + 1).join("/"), select: path.split("/")[i + 1] })}>{seg}</button>
+          {:else}
+            <span class="seg file"><Icon name={fileIcon(path)} size={13} />{shownName(seg)}</span>
+          {/if}
+        {/each}
+      </div>
+      {#if isMarkdown(path) && status === "ready"}
+        <div class="crumbs-actions">
+          <OracleBar {path} flush={() => save(false)} gotoLine={(line) => ed?.gotoLine(line)} />
+        </div>
+      {/if}
     </nav>
+  {:else if isMarkdown(path) && status === "ready"}
+    <div class="crumbs oracle-strip">
+      <div class="crumbs-actions">
+        <OracleBar {path} flush={() => save(false)} gotoLine={(line) => ed?.gotoLine(line)} />
+      </div>
+    </div>
   {/if}
   {#if conflict}
     <div class="banner banner-warn" role="alert">
@@ -500,8 +521,11 @@
   .editor-row { flex: 1; min-height: 0; display: flex; position: relative; } /* the phone's properties sheet covers it */
   .editor-col { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
   .editor-host { flex: 1; min-width: 0; min-height: 0; }
-  .crumbs { flex: none; display: flex; align-items: center; gap: 2px; padding: 4px 14px; min-height: 26px; overflow: hidden; white-space: nowrap;
+  .crumbs { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 16px; min-height: 30px; overflow: visible; white-space: nowrap; position: relative; z-index: 5;
     font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint); border-bottom: 1px solid var(--border); }
+  .crumbs-trail { display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .crumbs-actions { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 6px; }
+  .crumbs.oracle-strip { padding-block: 3px; min-height: 28px; }
   .crumbs .seg { padding: 1px 4px; border-radius: 4px; color: var(--text-muted); }
   .crumbs button.seg:hover { background: var(--bg-hover); color: var(--text); }
   .crumbs .seg.file { display: inline-flex; gap: 5px; align-items: center; color: var(--text); }

@@ -362,7 +362,7 @@ fn eval_scoped(e: &Expr, ctx: &dyn Context, scope: Option<&Val>) -> Val {
         // A bare identifier: `value` is the filter scope; the reserved roots
         // (file/note/this/formula) only mean something with a `.member` after them, so
         // alone they're Null; anything else is looked up as a note property — including
-        // `date` / `link`, which are functions only when called (Atlas change: a `date`
+        // `date` / `link`, which are functions only when called (Kandinsky change: a `date`
         // property is common in the user's notes).
         Expr::Ident(name) => match name.as_str() {
             "value" => scope.cloned().unwrap_or(Val::Null),
@@ -525,7 +525,7 @@ fn eval_call(callee: &Expr, args: &[Expr], ctx: &dyn Context, scope: Option<&Val
     // methods: obj.method(args)
     if let Expr::Member(obj, method) = callee {
         // file.hasProperty("x") / inFolder("dir") / hasTag("a", "b") / hasLink("note") — Obsidian's
-        // file functions (Atlas addition: obsidian-web had only hasProperty)
+        // file functions (Kandinsky addition: obsidian-web had only hasProperty)
         if matches!(obj.as_ref(), Expr::Ident(i) if i == "file") {
             let plain: Vec<String> = args.iter().map(|e| to_plain(&eval_scoped(e, ctx, scope))).collect();
             let first = plain.first().cloned().unwrap_or_default();
@@ -595,7 +595,7 @@ fn eval_call(callee: &Expr, args: &[Expr], ctx: &dyn Context, scope: Option<&Val
             "startsWith" => Val::Bool(to_plain(&recv).starts_with(&to_plain(&arg0.unwrap_or(Val::Null)))),
             "endsWith" => Val::Bool(to_plain(&recv).ends_with(&to_plain(&arg0.unwrap_or(Val::Null)))),
             // `.format("YY.MM-DD")` on a date gives that string, as in Obsidian
-            // (Atlas change: obsidian-web kept the Date and reformatted it in its UI).
+            // (Kandinsky change: obsidian-web kept the Date and reformatted it in its UI).
             "format" => match (recv, arg0) {
                 (Val::Date(d), Some(f)) => Val::Str(dates::format(&d, &to_plain(&f))),
                 (Val::Date(d), None) => Val::Date(d),

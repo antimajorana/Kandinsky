@@ -4,13 +4,13 @@
 //! elements link to (so they get the drawing in their backlinks) and its text. Written on every save of the drawing,
 //! by the desktop (`file_put`) and by the Boox's Notepad (JNI), from this one function.
 //!
-//! The note is the user's too: only the frontmatter keys below and the part between the two markers are Atlas's;
+//! The note is the user's too: only the frontmatter keys below and the part between the two markers are Kandinsky's;
 //! anything written around them stays. A `x.md` that does not name the drawing in `drawing:` is someone else's note
 //! and is never touched. The output depends only on the drawing (no dates), so two devices write the same note.
 use serde_json::Value;
 
-const START: &str = "<!-- atlas:drawing — written from the drawing on each save; write outside these lines -->";
-const END: &str = "<!-- /atlas:drawing -->";
+const START: &str = "<!-- kandinsky:drawing — written from the drawing on each save; write outside these lines -->";
+const END: &str = "<!-- /kandinsky:drawing -->";
 
 /// `notes/a.excalidraw` → `notes/a.md`; None for anything that is not a drawing.
 pub fn note_path(drawing: &str) -> Option<String> {
@@ -30,6 +30,7 @@ pub fn ink_of(drawing: &str) -> Option<&str> {
 
 /// A note's body without the generated part: what the user wrote around it.
 pub fn outside(body: &str) -> String {
+    let body = &*crate::legacy::current_markers(body); // a note written before the rename: `<!-- atlas:drawing …`
     match (body.find(START), body.find(END)) {
         (Some(a), Some(b)) if a < b => format!("{}{}", &body[..a], &body[b + END.len()..]),
         _ => body.to_string(),
@@ -90,10 +91,10 @@ pub fn facts(scene: &Value) -> Facts {
 
 /// The frontmatter's lines (empty without one).
 fn frontmatter(text: &str) -> &str {
-    atlas_text::frontmatter::split(text).0.unwrap_or("")
+    kandinsky_text::frontmatter::split(text).0.unwrap_or("")
 }
 
-/// Atlas's part of the body, between the markers.
+/// Kandinsky's part of the body, between the markers.
 fn generated(name: &str, f: &Facts) -> String {
     let mut out = format!("{START}\n![[{name}]]\n");
     if !f.pages.is_empty() {
@@ -132,6 +133,7 @@ pub fn note(name: &str, f: &Facts, existing: Option<&str>) -> Option<String> {
         // a new note is a hidden companion (the drawing is what you meet); `shown: true` makes it a note of the tree
         None => crate::frontmatter::set_property(&props(&format!("{body}\n")), "shown", &serde_yaml::Value::Bool(false)),
         Some(text) => {
+            let text = &*crate::legacy::current_markers(text); // written before the rename: rewritten with the current markers
             if !frontmatter(text).lines().any(|l| l.starts_with("drawing:") && l.contains(&link)) {
                 return None; // a note of the same name the user wrote: not ours
             }
@@ -195,6 +197,16 @@ pub fn update(ws: &crate::Workspace, rel: &str, scene: &str) -> crate::Result<Op
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_note_written_before_the_rename_has_its_generated_part_found() {
+        let old = "mine\n<!-- atlas:drawing — written from the drawing on each save; write outside these lines -->\n![[a.excalidraw]]\n<!-- /atlas:drawing -->\nafter\n";
+        assert_eq!(outside(old), "mine\n\nafter\n", "the old markers bound the generated part");
+        let text = format!("---\ndrawing: '[[a.excalidraw]]'\n---\n{old}");
+        let new = note("a.excalidraw", &Facts::default(), Some(&text)).expect("rewritten with the current markers");
+        assert!(new.contains(START) && new.contains(END) && !new.contains("atlas:drawing"), "{new}");
+        assert!(new.contains("mine") && new.contains("after"), "what the user wrote is kept: {new}");
+    }
 
     #[test]
     fn a_renamed_drawing_takes_its_note_along() {
@@ -265,7 +277,7 @@ mod tests {
         let mine = first.replace("---\n<!--", "---\n# My lecture\n\nWhat I think.\n\n<!--").replace("shown: false\n", "shown: true\ntags: [lecture]\n") + "\nAfter.\n";
         let fewer = Facts { pages: vec!["Intro".into()], ..Facts::default() };
         let next = note("qft 1.excalidraw", &fewer, Some(&mine)).unwrap();
-        assert!(next.contains("# My lecture\n\nWhat I think.\n\n<!-- atlas:drawing") && next.ends_with("<!-- /atlas:drawing -->\n\nAfter.\n"), "{next}");
+        assert!(next.contains("# My lecture\n\nWhat I think.\n\n<!-- kandinsky:drawing") && next.ends_with("<!-- /kandinsky:drawing -->\n\nAfter.\n"), "{next}");
         assert!(next.contains("pages: 1") && next.contains("tags: [lecture]") && !next.contains("[[Peskin]]"), "{next}");
         assert!(next.contains("shown: true"), "the user's choice to show it is kept: {next}");
     }

@@ -4,7 +4,7 @@ title = "Run tools"
 description = "Run, test, build and project tasks above code files: Python, Rust, Go, JavaScript / TypeScript, C / C++, Julia, shell, LaTeX"
 icon = "terminal"
 version = "0.3.0"
-api = 17             # atlas.terminal.shell(): each command written for the terminal's own shell
+api = 17             # kandinsky.terminal.shell(): each command written for the terminal's own shell
 
 [[setting]]
 key = "python"

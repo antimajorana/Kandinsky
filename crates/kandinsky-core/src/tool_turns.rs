@@ -38,7 +38,7 @@ mod tests {
     use std::time::Duration;
 
     fn plugin(root: &Path, schedule: bool) {
-        let dir = root.join(".atlas/plugins/demo");
+        let dir = root.join(".kandinsky/plugins/demo");
         std::fs::create_dir_all(&dir).unwrap();
         let every = if schedule { "schedule = \"every 5m\"\n" } else { "" };
         std::fs::write(dir.join("plugin.toml"), format!("title = \"Demo\"\ndescription = \"a test\"\n\n[helper]\njs = \"helper.js\"\n\n[[tool]]\nname = \"tick\"\ndescription = \"a round\"\n{every}")).unwrap();

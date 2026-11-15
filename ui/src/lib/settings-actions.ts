@@ -11,18 +11,18 @@ import { slug } from "./paths";
 const fail = (what: string) => (e: unknown) => toast(what, errText(e), "error");
 
 export async function newSnippet(name: string): Promise<void> {
-  const file = `.atlas/snippets/${slug(name.replace(/\.css$/i, "")) || "snippet"}.css`;
+  const file = `.kandinsky/snippets/${slug(name.replace(/\.css$/i, "")) || "snippet"}.css`;
   try { await api.putFile(file, SNIPPET_TEMPLATE); openPath(file); } catch (e) { fail("Could not create the snippet")(e); }
 }
 
-const PLUGIN_VIEW = `// A plugin view (docs/guides/PLUGINS.md): draw into \`host\` with plain DOM; \`atlas\` is the plugin API.
+const PLUGIN_VIEW = `// A plugin view (docs/guides/PLUGINS.md): draw into \`host\` with plain DOM; \`kandinsky\` is the plugin API.
 // Saving this file reloads the view. Style with the app's variables so it follows the theme.
-export default function mount(host, atlas) {
+export default function mount(host, kandinsky) {
   const box = document.createElement("div");
   box.style.cssText = "padding: 16px; color: var(--text); font-size: calc(14px * var(--ui-scale, 1))";
   const show = (c) => { box.textContent = "Looking at: " + (c.active?.path ?? c.active?.kind ?? "nothing"); };
-  show(atlas.context());
-  const off = atlas.onContext(show); // follows what you look at (the shared context)
+  show(kandinsky.context());
+  const off = kandinsky.onContext(show); // follows what you look at (the shared context)
   host.append(box);
   return off; // cleanup
 }
@@ -30,8 +30,8 @@ export default function mount(host, atlas) {
 
 export async function newPlugin(name: string): Promise<void> {
   const id = slug(name) || "my-plugin"; // plugin ids: letters, digits, - and _
-  const dir = `.atlas/plugins/${id}`;
-  const toml = `# A workspace plugin: only \`title\` is required (docs/guides/PLUGINS.md).\ntitle = ${JSON.stringify(name.trim() || id)}\ndescription = "what it shows, in one line"\nicon = "plugin"\n# keys = "Ctrl+Alt+P"\n# data = "python3 \\"$ATLAS_PLUGIN_DIR/data.py\\""\n\n# Where it runs: works, untested or no, per platform (linux, macos, windows, android, server); unnamed: untested.\n# phone = true  # starts in the phone app too\n[platforms]\nlinux = "untested"\n`;
+  const dir = `.kandinsky/plugins/${id}`;
+  const toml = `# A workspace plugin: only \`title\` is required (docs/guides/PLUGINS.md).\ntitle = ${JSON.stringify(name.trim() || id)}\ndescription = "what it shows, in one line"\nicon = "plugin"\n# keys = "Ctrl+Alt+P"\n# data = "python3 \\"$KANDINSKY_PLUGIN_DIR/data.py\\""\n\n# Where it runs: works, untested or no, per platform (linux, macos, windows, android, server); unnamed: untested.\n# phone = true  # starts in the phone app too\n[platforms]\nlinux = "untested"\n`;
   try {
     await api.putFile(`${dir}/plugin.toml`, toml);
     await api.putFile(`${dir}/view.js`, PLUGIN_VIEW);
@@ -47,17 +47,17 @@ const blockCode = (type: string, title: string) => `// A block (docs/guides/EXTE
 //                            type: ${type}
 //                            \`\`\`
 //   in a page or the sidebar: - [{ view: ${type} }]   (or "+" while arranging a page)
-export function register(atlas) {
-  atlas.registerBlock("${type}", (host, block) => {
+export function register(kandinsky) {
+  kandinsky.registerBlock("${type}", (host, block) => {
     const draw = async () => {
       // block.options: what the note or page says; block.note: the file the block is in;
       // block.props(): that note's properties (frontmatter and \`key:: value\` of the section)
       const props = await block.props();
-      host.textContent = String(block.options.text ?? atlas.plugin.settings.greeting ?? "Hello") + " — " + Object.keys(props).length + " properties in " + block.note;
+      host.textContent = String(block.options.text ?? kandinsky.plugin.settings.greeting ?? "Hello") + " — " + Object.keys(props).length + " properties in " + block.note;
       host.style.cssText = "padding: 8px 0; color: var(--text-muted)"; // the app's variables follow the theme
     };
     void draw();
-    return atlas.onFilesChanged((paths) => { if (!paths.length || paths.includes(block.note)) void draw(); });
+    return kandinsky.onFilesChanged((paths) => { if (!paths.length || paths.includes(block.note)) void draw(); });
   }, {
     title: ${JSON.stringify(title)},
     // the fields of the page's "Options…" form (kinds: text, number, toggle, list, choice)
@@ -69,8 +69,8 @@ export function register(atlas) {
 /** "New block from a template": a plugin folder with one block, opened ready to edit. */
 export async function newBlock(name: string): Promise<void> {
   const id = slug(name) || "my-block";
-  const dir = `.atlas/plugins/${id}`, type = `${id}.block`, title = name.trim() || id;
-  const toml = `# A workspace plugin with one block, \`${type}\` (docs/guides/PLUGINS.md).\ntitle = ${JSON.stringify(title)}\ndescription = "what the block shows, in one line"\nicon = "plugin"\n\n# A setting: Settings → Plugins shows a form for it; the code reads atlas.plugin.settings.greeting.\n# kind: text, number, toggle, list or choice (with choices = [...]).\n[[setting]]\nkey = "greeting"\nlabel = "Greeting"\nkind = "text"\nhint = "what the block says when the page gives it no text"\ndefault = "Hello"\n\n# Where it runs: works, untested or no, per platform (linux, macos, windows, android, server); unnamed: untested.\n[platforms]\nlinux = "untested"\n`;
+  const dir = `.kandinsky/plugins/${id}`, type = `${id}.block`, title = name.trim() || id;
+  const toml = `# A workspace plugin with one block, \`${type}\` (docs/guides/PLUGINS.md).\ntitle = ${JSON.stringify(title)}\ndescription = "what the block shows, in one line"\nicon = "plugin"\n\n# A setting: Settings → Plugins shows a form for it; the code reads kandinsky.plugin.settings.greeting.\n# kind: text, number, toggle, list or choice (with choices = [...]).\n[[setting]]\nkey = "greeting"\nlabel = "Greeting"\nkind = "text"\nhint = "what the block says when the page gives it no text"\ndefault = "Hello"\n\n# Where it runs: works, untested or no, per platform (linux, macos, windows, android, server); unnamed: untested.\n[platforms]\nlinux = "untested"\n`;
   try {
     // the manifest last: writing it is what makes the app load the plugin, and its code must be there
     await api.putFile(`${dir}/main.js`, blockCode(type, title));

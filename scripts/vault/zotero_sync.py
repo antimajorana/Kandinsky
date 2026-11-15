@@ -6,10 +6,10 @@
 """Keep refs/papers in step with a Zotero library — one way, Zotero → files; Zotero is never written.
 
 Per item: <dest>/<citekey>/<citekey>.md, whose properties are every Zotero field (ref_entry.py; arbitrary keys), its PDFs (hard-linked), its Zotero
-notes in its reading note `<citekey>.md` (each between `<!-- zotero:note KEY -->` markers, so text written in Atlas around
+notes in its reading note `<citekey>.md` (each between `<!-- zotero:note KEY -->` markers, so text written in Kandinsky around
 them stays; a legacy `notes.md` is renamed first — reading_note.py).
 Runs incrementally: the state file remembers what each item looked like at the last sync, so a field is updated
-only when Zotero changed it AND it was not edited in Atlas since; when both changed, Atlas's value stays and the
+only when Zotero changed it AND it was not edited in Kandinsky since; when both changed, Kandinsky's value stays and the
 conflict is listed in the report for the user to decide. Items moved to Zotero's trash are reported, never deleted.
 
 Usage: zotero_sync.py [--zotero DIR|auto] [--dest refs/papers] [--state FILE] [--report FILE] [--dry-run]
@@ -137,10 +137,10 @@ def sync_notes(path: Path, znotes: dict, last: dict, report: list, title: str) -
             cur = blocks[nkey].group(2)
             if cur == md:
                 continue
-            if last.get(nkey) == digest(cur):  # untouched in Atlas since the last sync → take Zotero's
+            if last.get(nkey) == digest(cur):  # untouched in Kandinsky since the last sync → take Zotero's
                 new = new.replace(blocks[nkey].group(0), block)
             else:
-                report.append(f"- `{title}`: Zotero note {nkey} changed in Zotero and in Atlas — kept Atlas's text")
+                report.append(f"- `{title}`: Zotero note {nkey} changed in Zotero and in Kandinsky — kept Kandinsky's text")
         elif md in text:  # imported before markers existed: already there
             continue
         else:
@@ -204,16 +204,16 @@ def sync(zdir: Path, dest: Path, state_path: Path, dry: bool) -> tuple[dict, lis
                         info[k] = zv
                     else:
                         counts["conflicts"] += 1
-                        report.append(f"- `{d.name}` **{k}**: Atlas `{str(av)[:60]}` ≠ Zotero `{str(zv)[:60]}` (first sync — kept Atlas's)")
+                        report.append(f"- `{d.name}` **{k}**: Kandinsky `{str(av)[:60]}` ≠ Zotero `{str(zv)[:60]}` (first sync — kept Kandinsky's)")
                     continue
-                if zv == sv:  # only Atlas changed it: Atlas's edit stands
+                if zv == sv:  # only Kandinsky changed it: Kandinsky's edit stands
                     continue
                 if av == sv:  # only Zotero changed it
                     if zv is MISSING: info.pop(k, None)
                     else: info[k] = zv
                 else:
                     counts["conflicts"] += 1
-                    report.append(f"- `{d.name}` **{k}**: changed in Zotero (`{str(zv)[:50]}`) and in Atlas (`{str(av)[:50]}`) — kept Atlas's")
+                    report.append(f"- `{d.name}` **{k}**: changed in Zotero (`{str(zv)[:50]}`) and in Kandinsky (`{str(av)[:50]}`) — kept Kandinsky's")
             have = set(info.get("files") or [])
             for f in present:
                 if f.name not in have:
@@ -232,7 +232,7 @@ def sync(zdir: Path, dest: Path, state_path: Path, dry: bool) -> tuple[dict, lis
         note = reading_note.note_path(d) if not dry else next((p for p in (d / f"{reading_note.citekey(d)}.md", d / reading_note.LEGACY) if p.exists()), d / "none.md")
         notes_text, seen = sync_notes(note, e["notes"], (last or {}).get("notes", {}), report, d.name)
         if notes_text is not None and not dry:
-            # a new note starts like one Atlas makes: properties, the paper's block, a place to write
+            # a new note starts like one Kandinsky makes: properties, the paper's block, a place to write
             note.write_text(notes_text if note.exists() else reading_note.new_text(d) + notes_text, encoding="utf-8")
         items_state[zkey] = {"meta": zmeta, "notes": seen, "dir": d.name}
     for zkey in sorted(trashed & set(existing)):
@@ -246,10 +246,13 @@ def sync(zdir: Path, dest: Path, state_path: Path, dry: bool) -> tuple[dict, lis
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--zotero", default="auto"); ap.add_argument("--dest", type=Path, default=Path("refs/papers"))
-    ap.add_argument("--state", type=Path, default=Path(".atlas/cache/zotero-sync.json"))
+    ap.add_argument("--state", type=Path, default=Path(".kandinsky/cache/zotero-sync.json"))
     ap.add_argument("--report", type=Path, default=Path("refs/ZOTERO-SYNC.md"))
     ap.add_argument("--dry-run", action="store_true"); ap.add_argument("--apply", action="store_true", help="(default; kept for old commands)")
     a = ap.parse_args()
+    # a vault from before the project was renamed keeps its state in `.atlas/` until the app renames it: no second folder
+    if a.state == Path(".kandinsky/cache/zotero-sync.json") and not Path(".kandinsky").is_dir() and Path(".atlas").is_dir():
+        a.state = Path(".atlas/cache/zotero-sync.json")
     zdir = find_zotero_dir() if a.zotero == "auto" else Path(os.path.expanduser(a.zotero))
     if not zdir or not (zdir / "zotero.sqlite").is_file():
         sys.exit("No Zotero library found (looked for extensions.zotero.dataDir in Zotero's prefs.js and ~/Zotero); pass --zotero DIR.")

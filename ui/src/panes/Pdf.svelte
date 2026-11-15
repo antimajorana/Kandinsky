@@ -31,8 +31,13 @@
   import PdfMarksList from "../components/PdfMarksList.svelte";
   import { settings } from "../lib/settings.svelte";
   import { chosenEngine, engine, otherEngine, type EngineName } from "../lib/pdf-engine";
+  import { extractArxivId, formatPdfPassagePrompt, sendPassageToAgent, type AgentTarget } from "../lib/editor-insert-bus";
+  import { toast } from "../lib/state.svelte";
 
   let { spec, panel }: PaneProps<"pdf"> = $props();
+  const arxivId = $derived(extractArxivId(spec.path));
+  let selPassage = $state(""), selPage = $state(1), selAt = $state<{ left: number; top: number } | null>(null);
+  let toolbarSendOpen = $state(false);
   let container: HTMLDivElement;
   let r = $state.raw<Reader | null>(null); // raw: the reader holds DOM and workers, not state
   let tools: Tools | null = null;
@@ -68,14 +73,14 @@
   let outlineOpen = $state(false);
   let side = $state<"outline" | "pages" | "marks">("outline");
   let current = $state(1);
-  let dark = $state(loadRaw("atlas.pdf.dark") === "1");
+  let dark = $state(loadRaw("kandinsky.pdf.dark") === "1");
   let outline = $state.raw<OutlineItem[]>([]);
-  // older marks, in the PDF's companion drawing: shown and erasable until moved into the note (`atlas pdf-marks migrate`)
+  // older marks, in the PDF's companion drawing: shown and erasable until moved into the note (`kandinsky pdf-marks migrate`)
   let marks: MarksView | null = null;
   let findInput = $state<HTMLInputElement | null>(null);
 
   // per-viewer conveniences (which page, which zoom, dark pages): browser storage, never required
-  const posKey = () => `atlas.pdf.pos:${spec.path}`;
+  const posKey = () => `kandinsky.pdf.pos:${spec.path}`;
   let posTimer = 0;
   function rememberPosition() {
     if (!container?.clientWidth) return; // hidden: nothing being read to remember
@@ -95,7 +100,7 @@
       return { ...(pos.page ? { page: pos.page, y: typeof pos.y === "number" ? pos.y : null } : {}), ...(z !== undefined ? { zoom: z } : {}) };
     } catch { return {}; }
   }
-  function toggleDark() { dark = !dark; saveRaw("atlas.pdf.dark", dark ? "1" : "0"); }
+  function toggleDark() { dark = !dark; saveRaw("kandinsky.pdf.dark", dark ? "1" : "0"); }
   function toggleSide(which: "outline" | "pages" | "marks") { if (outlineOpen && side === which) outlineOpen = false; else { side = which; outlineOpen = true; } }
 
   function flash(s: string, ms = 2500) { status = s; setTimeout(() => { if (status === s) status = ""; }, ms); }
@@ -139,7 +144,7 @@
   // the picked mark's bar (the select tool's click): under the mark, over it near the bottom
   let picked = $state.raw<Mark | null>(null), barAt = $state<{ left: number; top: number } | null>(null), wrap = $state<HTMLElement | null>(null);
   function placeBar() {
-    const g = picked && container?.querySelector(`svg.atlas-marks [data-mark="${picked.id}"]`);
+    const g = picked && container?.querySelector(`svg.kandinsky-marks [data-mark="${picked.id}"]`);
     if (!g || !wrap) { barAt = null; return; }
     const b = g.getBoundingClientRect(), w = wrap.getBoundingClientRect();
     const below = b.bottom - w.top + 8, above = b.top - w.top - 44;
@@ -308,10 +313,41 @@
     void openViewer();
   }
 
+  let selTimer = 0;
+  function placeSelPill() {
+    const domSel = document.getSelection();
+    if (!domSel || domSel.isCollapsed || !domSel.rangeCount || !wrap || !container?.contains(domSel.anchorNode)) { selAt = null; return; }
+    const b = domSel.getRangeAt(0).getBoundingClientRect(), w = wrap.getBoundingClientRect();
+    if (!b.width && !b.height) { selAt = null; return; }
+    const below = b.bottom - w.top + 8, above = b.top - w.top - 40;
+    selAt = { left: Math.max(145, Math.min(w.width - 145, b.left + b.width / 2 - w.left)), top: below + 38 > w.height && above > 0 ? above : below };
+  }
+  async function syncSelection() {
+    const domSel = document.getSelection();
+    if (!r || !domSel || domSel.isCollapsed || !container?.contains(domSel.anchorNode)) { selPassage = ""; selAt = null; return; }
+    const parts = await r.selection(), text = parts.map((s) => s.text).join("\n").trim() || domSel.toString().trim();
+    if (!text) { selPassage = ""; selAt = null; return; }
+    selPassage = text; selPage = parts[0]?.page ?? current ?? 1; placeSelPill();
+  }
+  async function sendToAgent(target: AgentTarget) {
+    toolbarSendOpen = false;
+    let passage = selPassage, page = selPage || current || 1;
+    if (!passage && r) { const live = await r.selection(); if (live.length) { passage = live.map((s) => s.text).join("\n").trim(); page = live[0].page; } }
+    if (!passage) passage = `[Page ${page} of ${shownName(spec.path)}]`;
+    const { prompt, arxivId: detected } = formatPdfPassagePrompt({ path: spec.path, page, passage }), finalArxiv = arxivId ?? detected;
+    const ok = await sendPassageToAgent({ target, prompt, path: spec.path, page, arxivId: finalArxiv });
+    const label = target === "antigravity" ? "Antigravity" : target === "claude" ? "Claude" : "Solver";
+    if (ok) toast(`Sent passage (p. ${page}${finalArxiv ? ` · arXiv:${finalArxiv}` : ""}) to ${label}`, undefined, "success");
+  }
+
   onMount(() => {
     void openViewer();
     pdfPages.set(panel.id, (n, at) => { goto(n); if (at) mark(n, at); });
     const offActive = panel.onDidActiveChange((e) => { if (e.isActive && r) requestAnimationFrame(takeFreeKeys); });
+    const onSelChange = () => { clearTimeout(selTimer); selTimer = window.setTimeout(() => void syncSelection(), 60); };
+    const onWinClick = () => { if (toolbarSendOpen) toolbarSendOpen = false; };
+    document.addEventListener("selectionchange", onSelChange);
+    window.addEventListener("click", onWinClick);
     // refit on a real width change only: a background tab leaves the page (width 0) and comes back at the same
     // width — refitting then re-laid out every page on each tab switch
     let fittedAt = 0;
@@ -329,7 +365,9 @@
     ro.observe(container);
     return () => {
       disposed = true;
-      marks?.stop(); offPan(); offActive.dispose(); pdfPages.delete(panel.id); ro.disconnect(); clearTimeout(posTimer); clearTimeout(exportTimer);
+      document.removeEventListener("selectionchange", onSelChange);
+      window.removeEventListener("click", onWinClick);
+      marks?.stop(); offPan(); offActive.dispose(); pdfPages.delete(panel.id); ro.disconnect(); clearTimeout(posTimer); clearTimeout(exportTimer); clearTimeout(selTimer);
       // closed within the export's wait: the note still follows the last marks, once they are saved
       const reader = r;
       void (tools?.destroy() ?? Promise.resolve()).finally(() => { reader?.destroy(); if (exportTimer !== 0) { exportTimer = 0; void toNotes(); } });
@@ -350,7 +388,7 @@
     <button class="icon-btn" class:on={outlineOpen && side === "marks"} title="Marks: every highlight, post-it, clip and bookmark, kept in the PDF's note" aria-label="Marks" onclick={() => toggleSide("marks")} disabled={!pages}>
       <Icon name="notes" size={15} />{#if markList.length}<span class="count">{markList.length}</span>{/if}
     </button>
-    <span class="title" title={spec.path}><Icon name="pdf" size={14} /><span class="name">{shownName(spec.path)}</span>{#if engineName !== "pdfium"}<span class="engine faint small" title="Read by {ENGINE_LABEL[engineName]} (Settings → PDF → engine)">{ENGINE_LABEL[engineName]}</span>{/if}</span>
+    <span class="title" title={spec.path}><Icon name="pdf" size={14} /><span class="name">{shownName(spec.path)}</span>{#if arxivId}<span class="arxiv-tag" title="Detected arXiv paper ID">arXiv:{arxivId}</span>{/if}{#if engineName !== "pdfium"}<span class="engine faint small" title="Read by {ENGINE_LABEL[engineName]} (Settings → PDF → engine)">{ENGINE_LABEL[engineName]}</span>{/if}</span>
     <span class="spacer"></span>
 
     <div class="tools" role="toolbar" aria-label="Annotation tools">
@@ -423,7 +461,17 @@
     <button class="icon-btn" title="This paper's note (its <citekey>.md), beside the PDF" aria-label="Paper's note" onclick={() => void notesBeside(spec.path)}><Icon name="file-text" size={14} /></button>
     <button class="icon-btn" title="Export a copy with the marks inside, as annotations any PDF reader shows — x (marked).pdf, beside this one. Shift+click: drawn into the pages, for printing — x (marked, flat).pdf" aria-label="Export with marks" onclick={(e) => void exportWithMarks(spec.path, e.shiftKey ? "flat" : "annotations")}><Icon name="pdf" size={14} /></button>
     <button class="icon-btn" title="Write the highlights and their comments into the paper's note — the same <citekey>.md the note button opens" aria-label="Highlights into the note" onclick={toNotes}><Icon name="quote" size={14} /></button>
+    <span class="sep"></span>
+    <button class="send-agent-btn" title="Send selected passage or equation to Antigravity, Claude, or Solver" onclick={(e) => { e.stopPropagation(); toolbarSendOpen = !toolbarSendOpen; }}>Send to Agent ▾</button>
   </div>
+  {#if toolbarSendOpen}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="agent-menu" tabindex="-1" onclick={(e) => e.stopPropagation()} role="menu">
+      <button role="menuitem" onclick={() => void sendToAgent("antigravity")}>Send to Antigravity</button>
+      <button role="menuitem" onclick={() => void sendToAgent("claude")}>Send to Claude</button>
+      <button role="menuitem" onclick={() => void sendToAgent("solver")}>Send to Solver</button>
+    </div>
+  {/if}
 
   {#if findOpen}
     <div class="findbar">
@@ -448,9 +496,17 @@
     {/if}
     <div class="viewer-wrap" bind:this={wrap}>
       {#if picked && barAt}
-        <PdfMarkBar mark={picked} at={barAt} onrecolor={(hex) => editPicked(recoloured(picked!, hex))} onreword={(t) => editPicked(reworded(picked!, t))} ondelete={deletePicked} onclose={unpick} />
+        <PdfMarkBar mark={picked} at={barAt} path={spec.path} onrecolor={(hex) => editPicked(recoloured(picked!, hex))} onreword={(t) => editPicked(reworded(picked!, t))} ondelete={deletePicked} onclose={unpick} />
+      {:else if selPassage && selAt}
+        <div class="sel-pill" style:left="{selAt.left}px" style:top="{selAt.top}px" role="toolbar" aria-label="Send selected PDF passage to agent" data-testid="pdf-selection-bar">
+          {#if arxivId}<span class="arxiv-tag">arXiv:{arxivId}</span>{/if}
+          <span class="sel-lbl">Send p.{selPage}:</span>
+          <button onclick={() => void sendToAgent("antigravity")}>Antigravity</button>
+          <button onclick={() => void sendToAgent("claude")}>Claude</button>
+          <button onclick={() => void sendToAgent("solver")}>Solver</button>
+        </div>
       {/if}
-      <div class="viewer-container" tabindex="-1" onscroll={() => { if (picked) placeBar(); }} class:inking={tool === "ink"} class:noting={tool === "text" || tool === "postit" || tool === "clip" || tool === "stamp"} class:can-pan={tool === "select" && !erasing} class:erasing class:dark bind:this={container} onwheel={pinch} onclickcapture={eraseClick}>
+      <div class="viewer-container" tabindex="-1" onscroll={() => { if (picked) placeBar(); else if (selPassage) placeSelPill(); }} class:inking={tool === "ink"} class:noting={tool === "text" || tool === "postit" || tool === "clip" || tool === "stamp"} class:can-pan={tool === "select" && !erasing} class:erasing class:dark bind:this={container} onwheel={pinch} onclickcapture={eraseClick}>
         <div class="pdfViewer"></div>
       </div>
       {#if error}
@@ -523,11 +579,21 @@
   /* dark reading: invert the rendered page (Zotero/Okular-style); annotation layers keep their colours */
   .viewer-container.dark :global(.pdfViewer .page .canvasWrapper) { filter: invert(.88) hue-rotate(180deg); }
   /* a link's annotation (#annotation=…), pointed at once it is drawn */
-  .viewer-container :global(.atlas-flash-mark) { animation: atlas-flash-mark 1.6s ease-out 2; }
-  @keyframes -global-atlas-flash-mark { 0%, 40% { filter: drop-shadow(0 0 3px var(--accent)) drop-shadow(0 0 8px var(--accent)); } 100% { filter: none; } }
-  .viewer-container :global(.atlas-flash) { animation: atlas-flash 1.6s ease-out 2; border-radius: 2px; }
-  @keyframes -global-atlas-flash { 0%, 40% { box-shadow: 0 0 0 3px var(--accent), 0 0 18px 4px var(--accent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+  .viewer-container :global(.kandinsky-flash-mark) { animation: kandinsky-flash-mark 1.6s ease-out 2; }
+  @keyframes -global-kandinsky-flash-mark { 0%, 40% { filter: drop-shadow(0 0 3px var(--accent)) drop-shadow(0 0 8px var(--accent)); } 100% { filter: none; } }
+  .viewer-container :global(.kandinsky-flash) { animation: kandinsky-flash 1.6s ease-out 2; border-radius: 2px; }
+  @keyframes -global-kandinsky-flash { 0%, 40% { box-shadow: 0 0 0 3px var(--accent), 0 0 18px 4px var(--accent); } 100% { box-shadow: 0 0 0 3px transparent; } }
   .overlay { position: absolute; inset: 0; }
   .status { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--bg-elev); border: 1px solid var(--border); border-radius: 999px; padding: 5px 14px; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text); box-shadow: var(--shadow-pop); pointer-events: none; }
   .viewer-container.erasing :global(.page) { cursor: crosshair; }
+  .arxiv-tag { font-family: var(--font-mono); font-size: 10.5px; padding: 1px 6px; border-radius: 999px; color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); flex: none; }
+  .send-agent-btn { padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 500; color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); cursor: pointer; white-space: nowrap; }
+  .send-agent-btn:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+  .agent-menu { position: absolute; right: 8px; top: 38px; z-index: 40; min-width: 155px; padding: 4px; border-radius: 6px; background: var(--bg-elev); border: 1px solid var(--border-strong); box-shadow: var(--shadow-pop); display: flex; flex-direction: column; font-size: 12px; }
+  .agent-menu button { text-align: left; padding: 5px 8px; border-radius: 4px; color: var(--text); cursor: pointer; }
+  .agent-menu button:hover { background: var(--bg-hover); color: var(--accent); }
+  .sel-pill { position: absolute; z-index: 22; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border-radius: 6px; background: var(--bg-elev); border: 1px solid var(--border-strong); box-shadow: var(--shadow-pop); font-size: 11.5px; white-space: nowrap; }
+  .sel-lbl { color: var(--text-muted); padding: 0 2px; }
+  .sel-pill button { padding: 2px 7px; border-radius: 4px; color: var(--accent); font-weight: 500; background: color-mix(in srgb, var(--accent) 11%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); cursor: pointer; }
+  .sel-pill button:hover { background: color-mix(in srgb, var(--accent) 19%, transparent); }
 </style>

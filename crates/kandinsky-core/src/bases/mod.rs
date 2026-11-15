@@ -1,8 +1,8 @@
 //! Obsidian Bases: a `.base` file (YAML) is a database view over the notes' frontmatter —
 //! `filters`, `formulas`, `properties` (display names) and `views` (tables). The expression
 //! engine (`expr`, `value`, `dates`) is lifted verbatim from obsidian-web (DECISION doc);
-//! this module feeds it Atlas's link index and returns typed cells for the UI.
-pub(crate) use atlas_template::dates;
+//! this module feeds it Kandinsky's link index and returns typed cells for the UI.
+pub(crate) use kandinsky_template::dates;
 mod edit;
 mod expr;
 mod summary;
@@ -56,7 +56,7 @@ struct View {
     /// Obsidian's `groupBy: { property: x }` (a bare string works too); a `board` view's columns.
     #[serde(rename = "groupBy", default)]
     group_by: Option<GroupBy>,
-    /// Obsidian's `summaries: {note.x: Sum}`; a name Atlas does not know (a custom formula summary) is left out.
+    /// Obsidian's `summaries: {note.x: Sum}`; a name Kandinsky does not know (a custom formula summary) is left out.
     #[serde(default)]
     summaries: BTreeMap<String, serde_yaml::Value>,
     /// A cards view's picture: the property holding it (`note.cover`).

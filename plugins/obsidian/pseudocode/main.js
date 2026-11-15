@@ -691,7 +691,7 @@ function unescapeTextChunk(chunk) {
 }
 
 /** Render mixed prose, inline LaTeX formatting/keywords (`\CALL`, `\textbf`, `\TO`…), and `$...$` math into `host`. */
-export function renderInline(host, rawText, atlas) {
+export function renderInline(host, rawText, kandinsky) {
   const s = String(rawText ?? "");
   let buf = "";
   const flushBuf = () => {
@@ -717,7 +717,7 @@ export function renderInline(host, rawText, atlas) {
       if (end !== -1) {
         flushBuf();
         const span = document.createElement("span");
-        atlas.editor.drawMath(span, normalizeMathLatex(s.slice(i + 2, end).trim()), false);
+        kandinsky.editor.drawMath(span, normalizeMathLatex(s.slice(i + 2, end).trim()), false);
         host.appendChild(span);
         i = end + 2;
         continue;
@@ -741,7 +741,7 @@ export function renderInline(host, rawText, atlas) {
         flushBuf();
         const latex = s.slice(i + delim.length, j).trim();
         const span = document.createElement("span");
-        atlas.editor.drawMath(span, normalizeMathLatex(latex), false);
+        kandinsky.editor.drawMath(span, normalizeMathLatex(latex), false);
         host.appendChild(span);
         i = j + delim.length;
         continue;
@@ -762,11 +762,11 @@ export function renderInline(host, rawText, atlas) {
             const callWrap = document.createElement("span");
             const fnSpan = document.createElement("span");
             fnSpan.className = "pseudo-sc";
-            renderInline(fnSpan, fnGrp.value.trim(), atlas);
+            renderInline(fnSpan, fnGrp.value.trim(), kandinsky);
             callWrap.appendChild(fnSpan);
             if (argsGrp) {
               callWrap.append("(");
-              renderInline(callWrap, argsGrp.value.trim(), atlas);
+              renderInline(callWrap, argsGrp.value.trim(), kandinsky);
               callWrap.append(")");
               i = argsGrp.next;
             } else {
@@ -794,7 +794,7 @@ export function renderInline(host, rawText, atlas) {
             } else {
               el = document.createElement("span");
             }
-            renderInline(el, grp.value, atlas);
+            renderInline(el, grp.value, kandinsky);
             host.appendChild(el);
             i = grp.next;
             continue;
@@ -843,7 +843,7 @@ export function renderInline(host, rawText, atlas) {
       const grp = readBraced(s, i, false);
       if (grp) {
         flushBuf();
-        renderInline(host, grp.value, atlas);
+        renderInline(host, grp.value, kandinsky);
         i = grp.next;
         continue;
       }
@@ -862,18 +862,18 @@ function makeKw(text) {
   return span;
 }
 
-function makeCommentNode(commentText, standalone, atlas) {
+function makeCommentNode(commentText, standalone, kandinsky) {
   const wrap = document.createElement("span");
   wrap.className = standalone ? "pseudo-comment-standalone" : "pseudo-comment";
   const sym = document.createElement("span");
   sym.className = "pseudo-comment-sym";
   sym.textContent = "▷";
   wrap.appendChild(sym);
-  renderInline(wrap, commentText, atlas);
+  renderInline(wrap, commentText, kandinsky);
   return wrap;
 }
 
-function renderAlgorithmCard(alg, fallbackTitle, showLineNumbers, atlas) {
+function renderAlgorithmCard(alg, fallbackTitle, showLineNumbers, kandinsky) {
   const card = document.createElement("div");
   card.className = "pseudo-alg";
   if (alg.label) card.dataset.label = alg.label;
@@ -889,7 +889,7 @@ function renderAlgorithmCard(alg, fallbackTitle, showLineNumbers, atlas) {
     if (captionText) {
       const titleSpan = document.createElement("span");
       titleSpan.className = "pseudo-caption-title";
-      renderInline(titleSpan, captionText, atlas);
+      renderInline(titleSpan, captionText, kandinsky);
       cap.appendChild(titleSpan);
     }
     if (alg.label) {
@@ -909,10 +909,10 @@ function renderAlgorithmCard(alg, fallbackTitle, showLineNumbers, atlas) {
       row.className = "pseudo-preamble-row";
       row.appendChild(makeKw(p.tag));
       row.append(" ");
-      renderInline(row, p.body, atlas);
+      renderInline(row, p.body, kandinsky);
       if (p.comment) {
         row.append(" ");
-        row.appendChild(makeCommentNode(p.comment, false, atlas));
+        row.appendChild(makeCommentNode(p.comment, false, kandinsky));
       }
       pre.appendChild(row);
     }
@@ -959,16 +959,16 @@ function renderAlgorithmCard(alg, fallbackTitle, showLineNumbers, atlas) {
       textSpan.append(" ");
       const nameEl = document.createElement("span");
       nameEl.className = "pseudo-sc";
-      renderInline(nameEl, step.name, atlas);
+      renderInline(nameEl, step.name, kandinsky);
       textSpan.appendChild(nameEl);
       textSpan.append("(");
-      if (step.args) renderInline(textSpan, step.args, atlas);
+      if (step.args) renderInline(textSpan, step.args, kandinsky);
       textSpan.append(")");
     } else if (step.kind === "cond-open") {
       textSpan.appendChild(makeKw(step.kw));
       if (step.cond) {
         textSpan.append(" ");
-        renderInline(textSpan, step.cond, atlas);
+        renderInline(textSpan, step.cond, kandinsky);
       }
       if (step.suffix) {
         textSpan.append(" ");
@@ -979,22 +979,22 @@ function renderAlgorithmCard(alg, fallbackTitle, showLineNumbers, atlas) {
     } else if (step.kind === "preamble") {
       textSpan.appendChild(makeKw(step.tag));
       textSpan.append(" ");
-      renderInline(textSpan, step.body, atlas);
+      renderInline(textSpan, step.body, kandinsky);
     } else if (step.kind === "lead-kw") {
       textSpan.appendChild(makeKw(step.kw));
       if (step.body) {
         textSpan.append(" ");
-        renderInline(textSpan, step.body, atlas);
+        renderInline(textSpan, step.body, kandinsky);
       }
     } else if (step.kind === "state") {
-      renderInline(textSpan, step.body, atlas);
+      renderInline(textSpan, step.body, kandinsky);
     } else if (step.kind === "comment") {
-      textSpan.appendChild(makeCommentNode(step.comment, true, atlas));
+      textSpan.appendChild(makeCommentNode(step.comment, true, kandinsky));
     }
 
     body.appendChild(textSpan);
     if (step.kind !== "comment" && step.comment) {
-      body.appendChild(makeCommentNode(step.comment, false, atlas));
+      body.appendChild(makeCommentNode(step.comment, false, kandinsky));
     }
     row.appendChild(body);
     stepsBox.appendChild(row);
@@ -1004,20 +1004,20 @@ function renderAlgorithmCard(alg, fallbackTitle, showLineNumbers, atlas) {
   return card;
 }
 
-export function register(atlas) {
+export function register(kandinsky) {
   const removeStyles = ensureStyles();
 
   const renderFence = (host, fence) => {
-    const showLineNumbers = atlas.plugin?.settings?.line_numbers !== false;
+    const showLineNumbers = kandinsky.plugin?.settings?.line_numbers !== false;
     const algs = parsePseudocode(fence.source);
     const infoTitle = typeof fence.info === "string" ? fence.info.trim() : "";
     for (let idx = 0; idx < algs.length; idx++) {
-      host.appendChild(renderAlgorithmCard(algs[idx], idx === 0 ? infoTitle : "", showLineNumbers, atlas));
+      host.appendChild(renderAlgorithmCard(algs[idx], idx === 0 ? infoTitle : "", showLineNumbers, kandinsky));
     }
   };
 
-  atlas.editor.registerFence("pseudo", renderFence);
-  atlas.editor.registerFence("pseudocode", renderFence);
+  kandinsky.editor.registerFence("pseudo", renderFence);
+  kandinsky.editor.registerFence("pseudocode", renderFence);
 
   return () => {
     removeStyles();

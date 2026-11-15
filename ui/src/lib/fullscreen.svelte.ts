@@ -20,7 +20,7 @@ const hid = new Set<string>();
 let wanted = false;
 
 const zoneOf = (g: DockviewGroupPanel): Zone => (g.panels.length ? panelZone(g.panels[0]) : "main");
-const changed = () => window.dispatchEvent(new Event("atlas-layout")); // dockview emits nothing for visibility
+const changed = () => window.dispatchEvent(new Event("kandinsky-layout")); // dockview emits nothing for visibility
 
 function show(g: DockviewGroupPanel, on: boolean): void { g.api.setVisible(on); setContentVisible(g, on); }
 
@@ -45,8 +45,8 @@ function leave(d: DockviewApi): void {
 }
 
 /** Inside the phone app the page is always one pane (`one`, lib/phone): asked for, fullscreen is the app's — its bars
- *  and the system's gone (AtlasActivity.setFull). Older apps lack it. */
-const app = (globalThis as unknown as { AtlasNative?: { toggleFullscreen?(): void } }).AtlasNative;
+ *  and the system's gone (KandinskyActivity.setFull). Older apps lack it. */
+const app = (globalThis as unknown as { KandinskyNative?: { toggleFullscreen?(): void } }).KandinskyNative;
 
 /** The active tab's zone over the whole window (`one`: its group alone), or back to the layout as it was. */
 export async function toggleFullscreen(one = false): Promise<void> {

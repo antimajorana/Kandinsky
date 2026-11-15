@@ -3,12 +3,14 @@
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 
-/// Resolve a client path (`a/b.md`, `""` = root) inside `root` (which must be canonical): atlas-text's guard.
+/// Resolve a client path (`a/b.md`, `""` = root) inside `root` (which must be canonical): kandinsky-text's guard.
+/// `root/rel`, refused when `rel` leaves `root`. A leading state folder in either spelling (`.kandinsky/…`, `.atlas/…`)
+/// names the one the vault has (`state_dir::live_rel`), so plugins written for an earlier build reach the same files.
 pub fn safe_join(root: &Path, rel: &str) -> Result<PathBuf> {
-    atlas_text::paths::safe_join(root, rel).map_err(Error::BadPath)
+    kandinsky_text::paths::safe_join(root, &crate::state_dir::live_rel(root, rel)).map_err(Error::BadPath)
 }
 
-pub use atlas_text::paths::{real, rel_path};
+pub use kandinsky_text::paths::{real, rel_path};
 
 #[cfg(test)]
 mod tests {

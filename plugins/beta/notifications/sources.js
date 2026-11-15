@@ -1,9 +1,9 @@
-// The sources in a dialog (atlas.openDialog with view "sources.js", from "Notifications: mute a source…"): each source
+// The sources in a dialog (kandinsky.openDialog with view "sources.js", from "Notifications: mute a source…"): each source
 // with what is unread and how long it is muted, changed in place — one form instead of two lists in a row. A source's
 // name opens its note.
 import { MUTE_CHOICES, muteSource, mutedOf, sourceName, sourceNotes } from "./main.js";
 
-export default function mount(host, atlas) {
+export default function mount(host, kandinsky) {
   const el = (tag, props = {}, kids = []) => {
     const e = Object.assign(document.createElement(tag), props);
     e.append(...kids);
@@ -27,14 +27,14 @@ export default function mount(host, atlas) {
   const said = el("p", { className: "hint", textContent: "Reading the sources…" });
   const list = el("ul", { ariaLabel: "Sources" });
   const close = el("button", { textContent: "Close" });
-  close.addEventListener("click", () => atlas.pane.close());
+  close.addEventListener("click", () => kandinsky.pane.close());
   host.append(style, said, list, el("div", { className: "nts-go" }, [close]));
 
   let gone = false;
   const row = (path, props) => {
-    const name = sourceName(atlas, path);
+    const name = sourceName(kandinsky, path);
     const open = el("button", { className: "name", textContent: name, title: path });
-    open.addEventListener("click", () => { atlas.open(path); atlas.pane.close(); });
+    open.addEventListener("click", () => { kandinsky.open(path); kandinsky.pane.close(); });
     const unread = Number(props.unread) || 0;
     const muted = mutedOf(props);
     // the mute as it stands, then the choices; "off" reads "Not muted" here, as the state it leaves
@@ -49,15 +49,15 @@ export default function mount(host, atlas) {
       if (select.value === "until") return;
       select.disabled = true;
       try {
-        const until = await muteSource(atlas, path, select.value);
+        const until = await muteSource(kandinsky, path, select.value);
         done.textContent = select.value === "off" ? "unmuted" : select.value === "always" ? "muted" : `until ${until}`;
       } catch (e) { done.textContent = e instanceof Error ? e.message : String(e); }
       finally { select.disabled = false; }
     });
     return el("li", {}, [open, ...(unread ? [el("span", { className: "unread", textContent: `${unread} unread` })] : []), select, done]);
   };
-  sourceNotes(atlas).then(async (paths) => {
-    const rows = await Promise.all(paths.map(async (p) => row(p, await atlas.noteProps(p).catch(() => ({})))));
+  sourceNotes(kandinsky).then(async (paths) => {
+    const rows = await Promise.all(paths.map(async (p) => row(p, await kandinsky.noteProps(p).catch(() => ({})))));
     if (gone) return;
     said.textContent = rows.length ? "A muted source is still logged in its note; it only stops showing as a toast." : "No source has sent anything yet.";
     list.append(...rows);

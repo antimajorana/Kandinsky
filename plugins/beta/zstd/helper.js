@@ -6,9 +6,9 @@
 	const MB = 1048576;
 	/** The plugin's cache folder, vault-relative. Nothing outside it is ever deleted. */
 	function cacheDir(id) {
-		return `.atlas/cache/plugins/${id}`;
+		return `.kandinsky/cache/plugins/${id}`;
 	}
-	/** Where `x/y.tsv.zst` is read from: `.atlas/cache/plugins/<id>/x/y.tsv` (the name without `.zst` keeps its view). */
+	/** Where `x/y.tsv.zst` is read from: `.kandinsky/cache/plugins/<id>/x/y.tsv` (the name without `.zst` keeps its view). */
 	function copyPath(id, path) {
 		return `${cacheDir(id)}/${path.replace(/\.zst$/i, "")}`;
 	}
@@ -47,7 +47,7 @@
 	const limit = (v, dflt) => typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : dflt;
 	/** Runs a program for the pruning; its output, or an error with its message. */
 	async function run(program, args) {
-		const r = await atlas.exec(program, args, {
+		const r = await kandinsky.exec(program, args, {
 			locale: "C",
 			timeout: 120
 		});
@@ -56,7 +56,7 @@
 	}
 	/** Deletes old and surplus copies from the cache, then the folders left empty; never `keep` (cache-relative). */
 	async function prune(keep, settings) {
-		const dir = `./${cacheDir(atlas.id)}`;
+		const dir = `./${cacheDir(kandinsky.id)}`;
 		const gone = victims(parseListing(await run("find", [
 			dir,
 			"-type",
@@ -79,9 +79,9 @@
 		const path = String(params.path ?? "").trim().replace(/^\/+/, "");
 		if (!/[^/]\.zst$/i.test(path)) throw new Error(`not a .zst file: ${path || "(none)"}`);
 		if (path.split("/").some((p) => p === ".." || p === ".")) throw new Error(`not a vault path: ${path}`);
-		const out = copyPath(atlas.id, path);
-		await atlas.write(out, "");
-		const r = await atlas.exec("zstd", [
+		const out = copyPath(kandinsky.id, path);
+		await kandinsky.write(out, "");
+		const r = await kandinsky.exec("zstd", [
 			"-d",
 			"-q",
 			"-f",
@@ -92,18 +92,18 @@
 			locale: "C",
 			timeout: 600
 		}).catch((e) => {
-			throw new Error(/not installed/.test(e.message) ? "zstd is not installed on the machine running Atlas" : e.message);
+			throw new Error(/not installed/.test(e.message) ? "zstd is not installed on the machine running Kandinsky" : e.message);
 		});
 		if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim() || `zstd failed (${r.status ?? "killed"})`);
 		try {
 			await run("touch", ["-c", `./${out}`]);
-			await prune(out.slice(cacheDir(atlas.id).length + 1), params.settings ?? {});
+			await prune(out.slice(cacheDir(kandinsky.id).length + 1), params.settings ?? {});
 		} catch (e) {
 			console.warn(`zstd: the cache was not pruned: ${e.message}`);
 		}
 		return { path: out };
 	}
-	atlas.methods({ open });
+	kandinsky.methods({ open });
 	//#endregion
 	exports.cacheDir = cacheDir;
 	exports.copyPath = copyPath;

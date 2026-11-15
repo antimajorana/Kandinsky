@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["pyyaml>=6"]
 # ///
-"""Copy the notes ticked in a vault_score.py review list into an Atlas workspace.
+"""Copy the notes ticked in a vault_score.py review list into an Kandinsky workspace.
 
 - Placement: Lecture/Course notes → <lectures>/<course-slug>/, everything else → notes/.
   Filenames are kept so [[wikilinks]] keep resolving.

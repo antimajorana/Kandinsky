@@ -16,11 +16,11 @@
   let over = $state<string | null>(null);
 
   function loadFolded(): Record<string, boolean> {
-    try { return JSON.parse(localStorage.getItem("atlas-email-folded") ?? "{}"); } catch { return {}; }
+    try { return JSON.parse(localStorage.getItem("kandinsky-email-folded") ?? "{}"); } catch { return {}; }
   }
   function fold(key: string) {
     folded = { ...folded, [key]: !folded[key] };
-    try { localStorage.setItem("atlas-email-folded", JSON.stringify(folded)); } catch { /* a private window */ }
+    try { localStorage.setItem("kandinsky-email-folded", JSON.stringify(folded)); } catch { /* a private window */ }
   }
 
   interface Node { f: Folder; depth: number; children: number }
@@ -55,7 +55,7 @@
   function drop(e: DragEvent, f: Folder) {
     e.preventDefault();
     over = null;
-    const ids: number[] = JSON.parse(e.dataTransfer?.getData("application/x-atlas-mail") || "[]");
+    const ids: number[] = JSON.parse(e.dataTransfer?.getData("application/x-kandinsky-mail") || "[]");
     const rows = mail.rows.filter((r) => ids.includes(r.id) && r.account === f.account);
     if (rows.length) mail.moveTo(f.path, f.label, rows);
     else if (ids.length) mail.toast("Mail moves within its own account", "error");
@@ -94,8 +94,8 @@
       {#if a.error || a.status?.state === "error"}
         <div class="err" role="alert">
           <span>{#if !a.error && a.status?.trouble === "sign-in"}<b>Sign-in needed.</b> {/if}{a.error ?? a.status?.error}</span>
-          {#if a.outlook}<button class="link" onclick={() => window.dispatchEvent(new CustomEvent("atlas-email:signin", { detail: a.name }))}>Sign in…</button>{/if}
-          <button class="link" onclick={() => mail.atlas.plugin.openSettings()}>Settings…</button>
+          {#if a.outlook}<button class="link" onclick={() => window.dispatchEvent(new CustomEvent("kandinsky-email:signin", { detail: a.name }))}>Sign in…</button>{/if}
+          <button class="link" onclick={() => mail.kandinsky.plugin.openSettings()}>Settings…</button>
         </div>
       {/if}
       {#if !folded[key] && !a.error}
@@ -119,14 +119,14 @@
             {/each}
           {/if}
         {/if}
-        {#if !rail}<button class="row faint add" onclick={() => window.dispatchEvent(new CustomEvent("atlas-email:new-folder", { detail: a.name }))}><Icon name="plus" size={14} /><span class="name">New folder…</span></button>{/if}
+        {#if !rail}<button class="row faint add" onclick={() => window.dispatchEvent(new CustomEvent("kandinsky-email:new-folder", { detail: a.name }))}><Icon name="plus" size={14} /><span class="name">New folder…</span></button>{/if}
       {/if}
     </div>
   {:else}
     {#if !rail}
       <div class="empty">
         <p>No mail account yet.</p>
-        <button class="atlas-btn" onclick={() => mail.atlas.plugin.openSettings()}>Add an account…</button>
+        <button class="kandinsky-btn" onclick={() => mail.kandinsky.plugin.openSettings()}>Add an account…</button>
       </div>
     {/if}
   {/each}

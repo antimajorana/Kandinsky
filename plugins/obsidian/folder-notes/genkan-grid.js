@@ -11,7 +11,7 @@ import {
   summarizeNote,
 } from "./folder-note-utils.js";
 
-const STYLE_ID = "atlas-folder-notes-genkan-styles";
+const STYLE_ID = "kandinsky-folder-notes-genkan-styles";
 const CSS = `
 .gk-wrap { margin:8px 0; display:flex; flex-direction:column; gap:10px; color:var(--text); font-size:13px; }
 .gk-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:4px 2px; border-bottom:1px solid var(--border); }
@@ -76,7 +76,7 @@ function sortEntries(items, sortKey) {
 }
 
 /** Mount a Genkan card grid into `host`. Returns cleanup function. */
-export function mountGenkanGrid(host, atlas, notePath, options = {}) {
+export function mountGenkanGrid(host, kandinsky, notePath, options = {}) {
   ensureStyles();
   let disposed = false;
   let drawRun = 0;
@@ -88,7 +88,7 @@ export function mountGenkanGrid(host, atlas, notePath, options = {}) {
 
   async function createChildNote() {
     const label = folderDisplayName(targetFolder);
-    const name = await atlas.input(`New note in ${label}`, {
+    const name = await kandinsky.input(`New note in ${label}`, {
       hint: "Note title (creates <title>.md in this folder)",
       ok: "Create",
     });
@@ -96,24 +96,24 @@ export function mountGenkanGrid(host, atlas, notePath, options = {}) {
     const slug = name.trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\.md$/i, "");
     if (!slug) return;
     const path = targetFolder ? `${targetFolder}/${slug}.md` : `${slug}.md`;
-    await atlas.createFile(path, `# ${name.trim()}\n\n`);
-    atlas.open(path);
+    await kandinsky.createFile(path, `# ${name.trim()}\n\n`);
+    kandinsky.open(path);
   }
 
   async function draw() {
     const myRun = ++drawRun;
-    if (!(targetFolder === "" || await atlas.exists(targetFolder))) {
+    if (!(targetFolder === "" || await kandinsky.exists(targetFolder))) {
       if (disposed || myRun !== drawRun) return;
       host.replaceChildren(el("div", "gk-empty", `Folder “${targetFolder}” does not exist yet.`));
       return;
     }
 
-    const entries = await atlas.list(targetFolder).catch(() => []);
+    const entries = await kandinsky.list(targetFolder).catch(() => []);
     if (disposed || myRun !== drawRun) return;
 
     const selfNotes = new Set([
       ...(notePath ? [cleanFolder(notePath)] : []),
-      ...candidateFolderNotePaths(atlas, targetFolder),
+      ...candidateFolderNotePaths(kandinsky, targetFolder),
     ]);
 
     const visible = entries.filter((e) => !e.ignored && !e.name.startsWith("."));
@@ -124,19 +124,19 @@ export function mountGenkanGrid(host, atlas, notePath, options = {}) {
 
     const [folderCardsData, noteCardsData] = await Promise.all([
       Promise.all(subfolders.map(async (dir) => {
-        const children = (await atlas.list(dir.path).catch(() => [])).filter((c) => !c.ignored && !c.name.startsWith("."));
-        const subFolderNote = await findExistingFolderNote(atlas, dir.path);
+        const children = (await kandinsky.list(dir.path).catch(() => [])).filter((c) => !c.ignored && !c.name.startsWith("."));
+        const subFolderNote = await findExistingFolderNote(kandinsky, dir.path);
         const subDirs = children.filter((c) => c.dir).length;
         const subNotes = children.filter((c) => !c.dir && /\.md$/i.test(c.name) && c.path !== subFolderNote).length;
         let meta = { title: dir.name, excerpt: "", tags: [] };
         if (subFolderNote) {
-          try { meta = summarizeNote(subFolderNote, await atlas.readText(subFolderNote)); } catch { /* ignore */ }
+          try { meta = summarizeNote(subFolderNote, await kandinsky.readText(subFolderNote)); } catch { /* ignore */ }
         }
         return { dir, subFolderNote, subDirs, subNotes, meta };
       })),
       Promise.all(mdFiles.map(async (file) => {
         let meta = { title: file.name.replace(/\.md$/i, ""), excerpt: "", tags: [] };
-        try { meta = summarizeNote(file.path, await atlas.readText(file.path)); } catch { /* ignore */ }
+        try { meta = summarizeNote(file.path, await kandinsky.readText(file.path)); } catch { /* ignore */ }
         return { file, meta };
       })),
     ]);
@@ -190,10 +190,10 @@ export function mountGenkanGrid(host, atlas, notePath, options = {}) {
         card.append(tgWrap);
       }
       if (subFolderNote) {
-        card.onmouseenter = () => atlas.hover(subFolderNote);
-        card.onmouseleave = () => atlas.hover(null);
+        card.onmouseenter = () => kandinsky.hover(subFolderNote);
+        card.onmouseleave = () => kandinsky.hover(null);
       }
-      card.onclick = (ev) => void openOrCreateFolderNote(atlas, dir.path, { beside: !!(ev.ctrlKey || ev.metaKey) });
+      card.onclick = (ev) => void openOrCreateFolderNote(kandinsky, dir.path, { beside: !!(ev.ctrlKey || ev.metaKey) });
       grid.append(card);
     }
 
@@ -212,9 +212,9 @@ export function mountGenkanGrid(host, atlas, notePath, options = {}) {
         for (const t of meta.tags) tgWrap.append(el("span", "gk-tag", `#${t}`));
         card.append(tgWrap);
       }
-      card.onmouseenter = () => atlas.hover(file.path);
-      card.onmouseleave = () => atlas.hover(null);
-      card.onclick = (ev) => atlas.open(file.path, undefined, { beside: !!(ev.ctrlKey || ev.metaKey) });
+      card.onmouseenter = () => kandinsky.hover(file.path);
+      card.onmouseleave = () => kandinsky.hover(null);
+      card.onclick = (ev) => kandinsky.open(file.path, undefined, { beside: !!(ev.ctrlKey || ev.metaKey) });
       grid.append(card);
     }
 
@@ -223,7 +223,7 @@ export function mountGenkanGrid(host, atlas, notePath, options = {}) {
   }
 
   let timer;
-  const offFs = atlas.onFilesChanged((paths) => {
+  const offFs = kandinsky.onFilesChanged((paths) => {
     if (paths.length) {
       const relevant = paths.some((p) => {
         const pf = parentFolder(p);
@@ -240,6 +240,6 @@ export function mountGenkanGrid(host, atlas, notePath, options = {}) {
     disposed = true;
     clearTimeout(timer);
     offFs();
-    atlas.hover(null);
+    kandinsky.hover(null);
   };
 }

@@ -164,9 +164,9 @@ export function convertFakeLinksInMarkdown(text) {
   return { text: restored, count };
 }
 
-export function register(atlas) {
+export function register(kandinsky) {
   const styleEl = document.createElement("style");
-  styleEl.dataset.atlasPlugin = "obsidian-footnotes";
+  styleEl.dataset.kandinskyPlugin = "obsidian-footnotes";
   styleEl.textContent = STYLE_CSS;
   document.head.appendChild(styleEl);
 
@@ -176,7 +176,7 @@ export function register(atlas) {
   let lastFocusedView = null;
 
   const viewPath = (view) => {
-    try { return atlas.editor.path(view) || ""; } catch { return ""; }
+    try { return kandinsky.editor.path(view) || ""; } catch { return ""; }
   };
 
   const findViewForPath = (path) => {
@@ -193,7 +193,7 @@ export function register(atlas) {
   const refreshDefsFromDisk = async (path) => {
     if (!isNotePath(path)) return;
     try {
-      const text = await atlas.readText(path);
+      const text = await kandinsky.readText(path);
       if (!findViewForPath(path)) {
         defsByPath.set(path, parseFootnoteDefinitions(text));
       }
@@ -203,9 +203,9 @@ export function register(atlas) {
   };
 
   // Track live editor buffers so tooltips stay up to date as the user types and edits avoid 409 conflicts
-  if (atlas.editor.codemirror?.view?.ViewPlugin) {
-    const { ViewPlugin } = atlas.editor.codemirror.view;
-    atlas.editor.extension(
+  if (kandinsky.editor.codemirror?.view?.ViewPlugin) {
+    const { ViewPlugin } = kandinsky.editor.codemirror.view;
+    kandinsky.editor.extension(
       ViewPlugin.fromClass(class {
         constructor(view) {
           this.view = view;
@@ -236,11 +236,11 @@ export function register(atlas) {
       if (isNotePath(pane.path) && !defsByPath.has(pane.path)) void refreshDefsFromDisk(pane.path);
     }
   };
-  syncContextNotes(atlas.context());
-  atlas.onContext(syncContextNotes);
-  atlas.onFilesChanged((paths) => {
+  syncContextNotes(kandinsky.context());
+  kandinsky.onContext(syncContextNotes);
+  kandinsky.onFilesChanged((paths) => {
     if (!paths.length) {
-      const activePath = atlas.context().active?.path;
+      const activePath = kandinsky.context().active?.path;
       if (isNotePath(activePath)) void refreshDefsFromDisk(activePath);
       return;
     }
@@ -250,7 +250,7 @@ export function register(atlas) {
   });
 
   const lookupFootnote = (id) => {
-    const activePath = atlas.context().active?.path;
+    const activePath = kandinsky.context().active?.path;
     if (activePath && defsByPath.get(activePath)?.has(id)) {
       return defsByPath.get(activePath).get(id);
     }
@@ -261,18 +261,18 @@ export function register(atlas) {
   };
 
   async function insertNumberedFootnote(touch) {
-    const path = touch?.path || atlas.context().active?.path;
+    const path = touch?.path || kandinsky.context().active?.path;
     if (!isNotePath(path)) {
-      atlas.toast("Footnotes", "Open a Markdown note first.", "info");
+      kandinsky.toast("Footnotes", "Open a Markdown note first.", "info");
       return;
     }
 
-    const diskText = await atlas.readText(path).catch(() => "");
+    const diskText = await kandinsky.readText(path).catch(() => "");
     const liveView = findViewForPath(path);
     const liveText = liveView ? liveView.state.doc.toString() : "";
     const n = nextFootnoteNumber(diskText, liveText);
 
-    const footnoteText = await atlas.input("Footnote text", {
+    const footnoteText = await kandinsky.input("Footnote text", {
       hint: "Appended as [^" + n + "]: at the end of the note",
       ok: "Insert",
     });
@@ -297,9 +297,9 @@ export function register(atlas) {
         return;
       }
       // Fallback if EditorView handle is unavailable: write appended definition to note
-      const latestDisk = await atlas.readText(path).catch(() => diskText);
+      const latestDisk = await kandinsky.readText(path).catch(() => diskText);
       const updated = latestDisk + buildFootnoteSuffix(latestDisk, n, footnoteText);
-      await atlas.writeText(path, updated);
+      await kandinsky.writeText(path, updated);
       defsByPath.set(path, parseFootnoteDefinitions(updated));
       return;
     }
@@ -330,25 +330,25 @@ export function register(atlas) {
     // Fallback when triggered from command palette without a live CodeMirror view
     const suffix = buildFootnoteSuffix(diskText, n, footnoteText);
     const updated = diskText + suffix;
-    await atlas.writeText(path, updated);
+    await kandinsky.writeText(path, updated);
     defsByPath.set(path, parseFootnoteDefinitions(updated));
-    atlas.toast("Footnotes", `Added [^${n}] to the end of ${path.split("/").pop()}.`, "success");
+    kandinsky.toast("Footnotes", `Added [^${n}] to the end of ${path.split("/").pop()}.`, "success");
   }
 
   async function convertNoteFakeLinks() {
-    const path = atlas.context().active?.path;
+    const path = kandinsky.context().active?.path;
     if (!isNotePath(path)) {
-      atlas.toast("FakeLink", "Open a Markdown note first.", "info");
+      kandinsky.toast("FakeLink", "Open a Markdown note first.", "info");
       return;
     }
 
-    const diskText = await atlas.readText(path).catch(() => "");
+    const diskText = await kandinsky.readText(path).catch(() => "");
     const liveView = findViewForPath(path);
     const sourceText = liveView ? liveView.state.doc.toString() : diskText;
     const { text: converted, count } = convertFakeLinksInMarkdown(sourceText);
 
     if (count === 0) {
-      atlas.toast("FakeLink", "No [fake links] found in this note.", "info");
+      kandinsky.toast("FakeLink", "No [fake links] found in this note.", "info");
       return;
     }
 
@@ -361,10 +361,10 @@ export function register(atlas) {
       });
       liveView.focus();
     } else {
-      await atlas.writeText(path, converted);
+      await kandinsky.writeText(path, converted);
     }
 
-    atlas.toast(
+    kandinsky.toast(
       "FakeLink",
       `Converted ${count} fake link${count === 1 ? "" : "s"} to [[wikilinks]].`,
       "success"
@@ -372,7 +372,7 @@ export function register(atlas) {
   }
 
   // 1. Editor shortcut Alt+Shift+F (in Markdown notes)
-  atlas.editor.registerKey(
+  kandinsky.editor.registerKey(
     "Alt+Shift+F",
     (t) => {
       void insertNumberedFootnote(t);
@@ -381,7 +381,7 @@ export function register(atlas) {
   );
 
   // 2. Command: Footnotes: Insert numbered footnote
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "insert-footnote",
     title: "Footnotes: Insert numbered footnote",
     keys: "Alt+Shift+F",
@@ -389,7 +389,7 @@ export function register(atlas) {
   });
 
   // 3. Decoration: Superscript [^n] / [^id] references with hover preview tooltip
-  atlas.editor.registerDecoration(FOOTNOTE_REF_RE, (m) => {
+  kandinsky.editor.registerDecoration(FOOTNOTE_REF_RE, (m) => {
     const id = m[1];
     const text = lookupFootnote(id);
     return {
@@ -399,7 +399,7 @@ export function register(atlas) {
   });
 
   // 4. Decoration: Single-bracket [fake link] placeholders
-  atlas.editor.registerDecoration(FAKELINK_RE, (m) => {
+  kandinsky.editor.registerDecoration(FAKELINK_RE, (m) => {
     const label = m[1].trim();
     if (!label) return null;
     return {
@@ -409,14 +409,14 @@ export function register(atlas) {
   });
 
   // 5. Command: FakeLink: Convert [fake links] in note to [[wikilinks]]
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "convert-fakelinks",
     title: "FakeLink: Convert [fake links] in note to [[wikilinks]]",
     run: () => convertNoteFakeLinks(),
   });
 
   // 6. Autocomplete existing [^id] footnotes in the active note when typing [^
-  atlas.editor.registerCompletion({
+  kandinsky.editor.registerCompletion({
     where: "note",
     trigger: /\[\^[\w-]*/,
     complete: ({ path }) => {
@@ -432,7 +432,7 @@ export function register(atlas) {
   });
 
   // 7. Editor context menu helpers
-  atlas.shell.menu("editor", (target) => {
+  kandinsky.shell.menu("editor", (target) => {
     if (!isNotePath(target.path)) return null;
     const items = [
       {

@@ -3,14 +3,14 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 // Settings v2 (docs/refactor/REFACTOR-settings-v2.md): a records field with `account = {…}` is listed on Settings →
 // Accounts with the helper's status, opened in place, tested before saving, saved one card at a time (the plugin's
 // other settings and cards kept), and added from a preset. A section the plugin draws shows on its page.
-const H = { "x-atlas": "1" };
-const DIR = ".atlas/plugins/hosts";
+const H = { "x-kandinsky": "1" };
+const DIR = ".kandinsky/plugins/hosts";
 const TOML = `title = "Hosts"
 icon = "server"
 api = 12
 
 [helper]
-run = "python3 -u \\"$ATLAS_PLUGIN_DIR/helper.py\\""
+run = "python3 -u \\"$KANDINSKY_PLUGIN_DIR/helper.py\\""
 
 [[setting]]
 key = "servers"
@@ -57,9 +57,9 @@ for line in sys.stdin:
         out = None
     print(json.dumps({"id": req["id"], "result": out}), flush=True)
 `;
-const MAIN = `export function register(atlas) {
-  atlas.registerCommand({ id: "settings", title: "Hosts: settings", run: () => atlas.plugin.openSettings() });
-  atlas.plugin.registerSettingsSection?.({ id: "map", title: "Map of hosts", mount(host, ctx) {
+const MAIN = `export function register(kandinsky) {
+  kandinsky.registerCommand({ id: "settings", title: "Hosts: settings", run: () => kandinsky.plugin.openSettings() });
+  kandinsky.plugin.registerSettingsSection?.({ id: "map", title: "Map of hosts", mount(host, ctx) {
     host.textContent = "drawn by the plugin: every " + ctx.settings().every;
     return () => { host.textContent = ""; };
   } });
@@ -68,7 +68,7 @@ const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/fi
 const read = async (r: APIRequestContext, path: string) => ((await (await r.get(`/api/file?path=${encodeURIComponent(path)}`, { headers: H })).json()) as { text: string }).text;
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugin-settings/hosts.toml", SETTINGS);
+  await put(request, ".kandinsky/plugin-settings/hosts.toml", SETTINGS);
   for (const [path, text] of [["helper.py", HELPER], ["main.js", MAIN], ["plugin.toml", TOML]]) await put(request, `${DIR}/${path}`, text);
 });
 test.afterAll(async ({ request }) => { await request.post("/api/plugins/hosts/remove", { headers: H }); });
@@ -88,7 +88,7 @@ async function openSettings(page: import("@playwright/test").Page) {
 test("accounts: listed with their status, tested unsaved, saved alone, added from a preset", async ({ page, request }) => {
   await openSettings(page);
   // opened from elsewhere: its own entry is the lit one, scrolled into sight (Plugins' list runs below the fold)
-  const lit = page.locator('.atlas-pane-settings nav [aria-current="page"]');
+  const lit = page.locator('.kandinsky-pane-settings nav [aria-current="page"]');
   await expect(lit).toHaveText(/Hosts/);
   await expect(lit).toBeInViewport();
   // the plugin's page: its accounts above the form, which shows neither them nor the hidden field; advanced folded
@@ -115,11 +115,11 @@ test("accounts: listed with their status, tested unsaved, saved alone, added fro
   await host.fill("other.good.example");
   await page.locator(".edit .btn", { hasText: "Test" }).click();
   await expect(page.locator(".tested.ok")).toHaveText(/answers at other\.good\.example/);
-  expect(await read(request, ".atlas/plugin-settings/hosts.toml"), "Test writes nothing").toContain('host = "bad.example"');
+  expect(await read(request, ".kandinsky/plugin-settings/hosts.toml"), "Test writes nothing").toContain('host = "bad.example"');
   await page.locator(".edit .btn.primary").click();
   await expect(page.locator(".edit")).toHaveCount(0);
-  await expect.poll(() => read(request, ".atlas/plugin-settings/hosts.toml")).toContain('host = "other.good.example"');
-  const saved = await read(request, ".atlas/plugin-settings/hosts.toml");
+  await expect.poll(() => read(request, ".kandinsky/plugin-settings/hosts.toml")).toContain('host = "other.good.example"');
+  const saved = await read(request, ".kandinsky/plugin-settings/hosts.toml");
   expect(saved, "the other card and settings are kept").toContain('host = "good.example"');
   expect(saved).toContain("every = 9");
   expect(saved).toContain('colors = ["a: #fff"]');
@@ -131,6 +131,6 @@ test("accounts: listed with their status, tested unsaved, saved alone, added fro
   await expect(page.locator('.fresh [data-field="host"] input')).toHaveValue("cloud.example");
   await page.locator('.fresh [data-field="name"] input').fill("cloud");
   await page.locator(".fresh .btn.primary").click();
-  await expect.poll(() => read(request, ".atlas/plugin-settings/hosts.toml")).toContain('name = "cloud"');
+  await expect.poll(() => read(request, ".kandinsky/plugin-settings/hosts.toml")).toContain('name = "cloud"');
   await expect(page.locator('[data-accounts="hosts/servers"] .acct')).toHaveCount(3);
 });

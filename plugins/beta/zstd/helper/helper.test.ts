@@ -2,13 +2,13 @@
 // against a fake cache: `find` lists `cache`, `rm` deletes from it, `touch` stamps a copy with the current time.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { harness } from "atlas-helper/testing";
+import { harness } from "kandinsky-helper/testing";
 import { copyPath, parseListing, victims } from "./helper";
 import "./helper";
 
 const HOUR = 3600;
 const MB = 1024 * 1024;
-const DIR = "./.atlas/cache/plugins/test";
+const DIR = "./.kandinsky/cache/plugins/test";
 
 let written: string[] = [];
 /** The fake cache: path inside it → last open (seconds) and size. */
@@ -54,14 +54,14 @@ beforeEach(() => {
 const ago = (hours: number) => Date.now() / 1000 - hours * HOUR;
 
 test("the copy keeps the folders and the inner name, so it opens in that file's view", () => {
-  assert.equal(copyPath("zstd", "runs/a/b.tsv.zst"), ".atlas/cache/plugins/zstd/runs/a/b.tsv");
-  assert.equal(copyPath("zstd", "x.ZST"), ".atlas/cache/plugins/zstd/x");
+  assert.equal(copyPath("zstd", "runs/a/b.tsv.zst"), ".kandinsky/cache/plugins/zstd/runs/a/b.tsv");
+  assert.equal(copyPath("zstd", "x.ZST"), ".kandinsky/cache/plugins/zstd/x");
 });
 
 test("open decompresses into the cache and answers the copy's path", async () => {
   const r = await harness.call("open", { path: "runs/a/b.tsv.zst" });
   const out = r.path;
-  assert.equal(out, ".atlas/cache/plugins/test/runs/a/b.tsv");
+  assert.equal(out, ".kandinsky/cache/plugins/test/runs/a/b.tsv");
   assert.deepEqual(written, [out], "the folder is made through the core first");
   assert.equal(harness.ran[0].program, "zstd");
   assert.deepEqual(harness.ran[0].args, ["-d", "-q", "-f", "-o", `./${out}`, "./runs/a/b.tsv.zst"]);
@@ -136,7 +136,7 @@ test("a pruning failure is logged, never the open's", async () => {
   harness.exec = (program) =>
     program === "find" ? { status: 1, stdout: "", stderr: "find: -printf: unknown primary\n" } : { status: 0, stdout: "", stderr: "" };
   const r = await harness.call("open", { path: "x.tsv.zst" });
-  assert.equal(r.path, ".atlas/cache/plugins/test/x.tsv");
+  assert.equal(r.path, ".kandinsky/cache/plugins/test/x.tsv");
   assert.equal(warned.length, 1);
   assert.match(warned[0], /not pruned: find: -printf: unknown primary/);
 });

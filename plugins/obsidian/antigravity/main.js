@@ -1,77 +1,93 @@
-// Antigravity agent integration (main.js): live status-bar model switcher & subagent monitor, palette commands, and context-menu handoff.
+// Antigravity agent integration (main.js): model & vault @specialist sync with StatusBar.svelte,
+// live subagent status broadcaster, palette commands, and @path#Lfrom-to selection handoff.
 
 import {
+  AGY_CONFIG_EVENT,
   FALLBACK_MODELS,
   applyModelSwitch,
+  buildCommandLine,
   getActiveConfig,
-  mountSwitcherWidget,
+  loadVaultSpecialists,
+  normalizeSpecialist,
   openAgyTerminal,
+  persistAndBroadcastAgyState,
+  resolveCliSlug,
   shortModelName,
 } from "./switcher-ui.js";
 
-function formatRef(path, selectionText) {
-  if (!path) return selectionText ? `${selectionText}\n` : "";
-  if (selectionText) return `@${path} — "${selectionText.replace(/\s+/g, " ").slice(0, 200)}" `;
-  return `@${path} `;
+function formatRef(path, selectionText, specialist, lines) {
+  const prefix = specialist ? `${specialist} ` : "";
+  if (!path) return selectionText ? `${prefix}${selectionText}\n` : prefix;
+  if (lines && lines.from && lines.to) return `${prefix}@${path}#L${lines.from}-${lines.to} `;
+  if (selectionText) return `${prefix}@${path} — "${selectionText.replace(/\s+/g, " ").slice(0, 200)}" `;
+  return `${prefix}@${path} `;
 }
 
-export function register(atlas) {
-  const s = (atlas.plugin && atlas.plugin.settings) || {};
-  let cell = null;
+export function register(kandinsky) {
+  const s = (kandinsky.plugin && kandinsky.plugin.settings) || {};
   let pollTimer = null;
+  let disposed = false;
 
-  async function syncStatusCell() {
-    if (!cell) return;
-    const cur = getActiveConfig(atlas);
-    const shortM = shortModelName(cur.model);
-    try {
-      const live = await atlas.helper.call("liveStatus", {}, { timeout: 8 });
-      if (!cell || !live || !live.ok) {
-        if (cell) cell.set(`AGY · ${shortM}`, `Antigravity model: ${cur.model} — click to switch models or view subagents`);
-        return;
-      }
-      const nSub = live.liveSubagentCount || 0;
-      const nRoot = live.liveRootCount || 0;
-      const text =
-        nSub > 0
-          ? `AGY · ${shortM} · ⚡ ${nSub} subagent${nSub === 1 ? "" : "s"}`
-          : nRoot > 0
-            ? `AGY · ${shortM} · ● ${nRoot} live`
-            : `AGY · ${shortM}`;
-      const title = `Google Antigravity (${cur.model}, mode: ${cur.mode}) — ${nRoot} active session(s), ${nSub} live subagent(s). Click to switch model or inspect subagents.`;
-      cell.set(text, title);
-    } catch {
-      if (cell) cell.set(`AGY · ${shortM}`, "Google Antigravity — click to switch models or inspect subagents");
+  // Ensure initial localStorage & plugin settings stay synchronized
+  const initial = getActiveConfig(kandinsky);
+  persistAndBroadcastAgyState(
+    { pillId: initial.pillId, model: initial.model, specialist: initial.specialist },
+    "main-init",
+  );
+
+  // Sync changes coming from StatusBar.svelte popover into plugin settings
+  const onConfigEvent = (ev) => {
+    if (disposed) return;
+    const d = ev && ev.detail;
+    if (!d || d.source === "plugin" || d.source === "main-init") return;
+    const cur = getActiveConfig(kandinsky);
+    const nextModel = resolveCliSlug(d.modelSlug || d.model || cur.model);
+    const nextSpec = normalizeSpecialist(d.specialist !== undefined ? d.specialist : cur.specialist);
+    const nextCmd = buildCommandLine(cur.rawCmd, nextModel, cur.mode, cur.effort);
+    if (kandinsky.plugin && typeof kandinsky.plugin.saveSettings === "function") {
+      void kandinsky.plugin
+        .saveSettings({
+          model: nextModel,
+          specialist: nextSpec,
+          default_mode: cur.mode,
+          default_effort: cur.effort,
+          command: nextCmd,
+        })
+        .catch(() => {});
     }
+  };
+  if (typeof window !== "undefined") {
+    window.addEventListener(AGY_CONFIG_EVENT, onConfigEvent);
+  }
+
+  async function pollLiveStatus() {
+    if (disposed) return;
+    try {
+      const live = await kandinsky.helper.call("liveStatus", {}, { timeout: 8 });
+      if (!disposed && live && live.ok && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("kandinsky:agy-live", { detail: live }));
+      }
+    } catch {}
   }
 
   if (s.status_bar !== false) {
-    const cur = getActiveConfig(atlas);
-    cell = atlas.shell.statusItem({
-      id: "agy",
-      text: `AGY · ${shortModelName(cur.model)}`,
-      title: "Click to switch Antigravity model (Carbon / Argon / Hydrogen) & view live subagents",
-      panelWidth: 440,
-      panel: (host, close) => mountSwitcherWidget(host, atlas, { compact: true, onClose: close }),
-      run: () => atlas.openView(),
-    });
-    void syncStatusCell();
-    pollTimer = setInterval(() => void syncStatusCell(), 15000);
+    void pollLiveStatus();
+    pollTimer = setInterval(() => void pollLiveStatus(), 15000);
   }
 
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "switch-model",
-    title: "Antigravity: Switch active model (Carbon / Argon / Hydrogen)…",
+    title: "Antigravity: Switch active model (Carbon / Argon / Hydrogen / Flash)…",
     run: () => {
-      const cur = getActiveConfig(atlas);
-      atlas.pick({
+      const cur = getActiveConfig(kandinsky);
+      kandinsky.pick({
         placeholder: `Current model: ${shortModelName(cur.model)} — choose an Antigravity model…`,
         tag: "AGY Model",
         icon: "claude",
         items: async () => {
           let list = FALLBACK_MODELS;
           try {
-            const fetched = await atlas.helper.call("models", { refresh: false }, { timeout: 10 });
+            const fetched = await kandinsky.helper.call("models", { refresh: false }, { timeout: 10 });
             if (Array.isArray(fetched) && fetched.length) list = fetched;
           } catch {}
           return list.map((m) => ({
@@ -83,69 +99,131 @@ export function register(atlas) {
           }));
         },
         onpick: async (val) => {
-          const next = await applyModelSwitch(atlas, { model: val });
-          atlas.toast("Switched Antigravity model", `Now using ${shortModelName(next.model)} (${next.command})`, "success");
+          const next = await applyModelSwitch(kandinsky, { model: val }, "plugin");
+          kandinsky.toast("Switched Antigravity model", `Now using ${shortModelName(next.model)} (${next.command})`, "success");
         },
       });
     },
   });
 
-  atlas.registerCommand({
+  kandinsky.registerCommand({
+    id: "switch-specialist",
+    title: "Antigravity: Switch vault @specialist (.agents/agents)…",
+    run: () => {
+      const cur = getActiveConfig(kandinsky);
+      kandinsky.pick({
+        placeholder: cur.specialist
+          ? `Active specialist: ${cur.specialist} — choose a vault @specialist…`
+          : "Coordinator active — choose a vault @specialist…",
+        tag: "@specialist",
+        icon: "claude",
+        items: async () => {
+          const specs = await loadVaultSpecialists(kandinsky, false);
+          return [
+            {
+              value: "",
+              title: "Coordinator (no @specialist)",
+              detail: !cur.specialist ? "Active · Direct vault coordinator" : "Direct vault coordinator",
+              section: "Coordinator",
+              icon: "claude",
+            },
+            ...specs.map((sp) => ({
+              value: sp.handle,
+              title: `${sp.handle} · ${sp.title}`,
+              detail: sp.description || sp.handle,
+              section: "Vault @specialists",
+              icon: "claude",
+            })),
+          ];
+        },
+        onpick: async (val) => {
+          const next = await applyModelSwitch(kandinsky, { specialist: val }, "plugin");
+          kandinsky.toast(
+            "Updated Antigravity specialist",
+            next.specialist ? `Active specialist: ${next.specialist}` : "Coordinator (no @specialist)",
+            "success",
+          );
+        },
+      });
+    },
+  });
+
+  kandinsky.registerCommand({
     id: "new-session",
     title: "Antigravity: Start new terminal session",
-    run: () => openAgyTerminal(atlas, [], "Antigravity"),
+    run: () => openAgyTerminal(kandinsky, []),
   });
 
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "continue-session",
     title: "Antigravity: Resume most recent conversation (--continue)",
-    run: () => openAgyTerminal(atlas, ["--continue"], "Antigravity (Resume)"),
+    run: () => openAgyTerminal(kandinsky, ["--continue"], "Antigravity (Resume)"),
   });
 
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "plan-session",
     title: "Antigravity: Start session in Plan mode",
-    run: () => openAgyTerminal(atlas, ["--mode", "plan"], "Antigravity (Plan)"),
+    run: () => openAgyTerminal(kandinsky, ["--mode", "plan"], "Antigravity (Plan)"),
   });
 
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "hub",
     title: "Antigravity: Open live subagent monitor, model switcher & MCP hub",
-    run: () => atlas.openView(),
+    run: () => kandinsky.openView(),
   });
 
-  atlas.shell.menu("editor", (target) => {
+  kandinsky.shell.menu("editor", (target) => {
     const sel = target && typeof target.selection === "string" ? target.selection.trim() : "";
+    const cur = getActiveConfig(kandinsky);
+    const labelTarget = cur.specialist ? `Antigravity (${cur.specialist})` : "Antigravity";
     return [
       {
-        label: sel ? "Ask Antigravity about selection" : "Open Antigravity on this note",
+        label: sel ? `Send selection to ${labelTarget}` : `Open ${labelTarget} on this note`,
         icon: "claude",
         run: async () => {
-          const prompt = formatRef(target?.path || "", sel);
-          if (prompt) {
-            try {
-              await navigator.clipboard?.writeText(prompt);
-            } catch {}
+          const ctx = typeof kandinsky.context === "function" ? kandinsky.context() : null;
+          const ctxSel = ctx && ctx.selection && ctx.selection.text && ctx.selection.path === target?.path
+            ? { from: ctx.selection.from_line, to: ctx.selection.to_line }
+            : null;
+          const prompt = formatRef(target?.path || "", sel, cur.specialist, ctxSel);
+          const sendBus = typeof window !== "undefined" ? window.__kandinskySendPassageToAgent : null;
+          if (prompt && typeof sendBus === "function") {
+            await sendBus({ target: "antigravity", prompt, path: target?.path });
+            return;
           }
-          await openAgyTerminal(atlas, prompt ? ["-i", prompt] : [], "Antigravity");
+          if (prompt) {
+            try { await navigator.clipboard?.writeText(prompt); } catch {}
+          }
+          await openAgyTerminal(kandinsky, prompt ? ["-i", prompt] : []);
         },
       },
     ];
   });
 
-  atlas.shell.menu("file", (target) => {
+  kandinsky.shell.menu("file", (target) => {
     if (!target || target.dir || !target.path) return null;
+    const cur = getActiveConfig(kandinsky);
+    const prefix = cur.specialist ? `${cur.specialist} ` : "";
     return [
       {
-        label: "Open in Antigravity session",
+        label: cur.specialist ? `Open in Antigravity (${cur.specialist})` : "Open in Antigravity session",
         icon: "claude",
-        run: () => openAgyTerminal(atlas, ["-i", `Inspect @${target.path}`], "Antigravity"),
+        run: async () => {
+          const prompt = `${prefix}@${target.path} `;
+          const sendBus = typeof window !== "undefined" ? window.__kandinskySendPassageToAgent : null;
+          if (typeof sendBus === "function") {
+            await sendBus({ target: "antigravity", prompt, path: target.path });
+            return;
+          }
+          await openAgyTerminal(kandinsky, ["-i", `Inspect @${target.path}`]);
+        },
       },
     ];
   });
 
   return () => {
+    disposed = true;
     if (pollTimer) clearInterval(pollTimer);
-    if (cell) cell.remove();
+    if (typeof window !== "undefined") window.removeEventListener(AGY_CONFIG_EVENT, onConfigEvent);
   };
 }

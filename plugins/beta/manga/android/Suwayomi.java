@@ -1,7 +1,7 @@
-package org.atlas.plugins.manga;
+package org.kandinsky.plugins.manga;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.Web;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.Web;
 import org.json.JSONArray;
 import org.json.JSONObject;
 

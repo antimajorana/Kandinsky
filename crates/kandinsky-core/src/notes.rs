@@ -132,11 +132,11 @@ fn templater(text: &str, title: &str, now: NaiveDateTime) -> (String, Option<u32
     (out, cursor)
 }
 
-/// `{{…}}` filled in by Atlas's template language (template.rs); `{{cursor}}`'s line comes back.
+/// `{{…}}` filled in by Kandinsky's template language (template.rs); `{{cursor}}`'s line comes back.
 /// `{{include:name}}` reads the vault's templates folder when there is a vault: the other template's
 /// body, its frontmatter left out (an included piece is text, not a second note's properties).
 fn fill(vault: Option<(&Path, &Config)>, template: &str, title: &str, now: NaiveDateTime, values: &Map<String, Value>) -> (String, Option<u32>) {
-    let body = |t: String| match atlas_text::frontmatter::split(&t) {
+    let body = |t: String| match kandinsky_text::frontmatter::split(&t) {
         (Some(_), rest) => rest.trim_start_matches(['\r', '\n']).to_string(),
         (None, _) => t,
     };
@@ -196,7 +196,7 @@ struct TemplateOwn {
 /// The template's text without its own properties, and those properties.
 fn take_own(template: &str) -> (String, TemplateOwn) {
     let mut own = TemplateOwn::default();
-    let (Some(yaml), after) = atlas_text::frontmatter::split(template) else { return (template.to_string(), own) };
+    let (Some(yaml), after) = kandinsky_text::frontmatter::split(template) else { return (template.to_string(), own) };
     let value = |v: &str| Some(v.trim().trim_matches(|c| c == '"' || c == '\'').to_string()).filter(|f| !f.is_empty());
     let mut taken = false;
     // `apply_when:` spans the lines indented under it (template_rules.rs reads it)
@@ -419,7 +419,7 @@ fn end_line(text: &str) -> u32 {
 /// The top-level keys of a text's frontmatter, in order: a `key:` line at the left margin (Templater
 /// script lines and list items are not keys).
 fn frontmatter_keys(text: &str) -> Vec<String> {
-    let Some(yaml) = atlas_text::frontmatter::split(text).0 else { return vec![] };
+    let Some(yaml) = kandinsky_text::frontmatter::split(text).0 else { return vec![] };
     yaml.lines()
         .filter(|l| !l.starts_with([' ', '\t', '-', '#']))
         .filter_map(|l| l.split_once(':').map(|(k, _)| k.trim()))
@@ -428,7 +428,7 @@ fn frontmatter_keys(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// A template as an agent sees it (`atlas_templates`): the name to pass as `template`, the folder its
+/// A template as an agent sees it (`kandinsky_templates`): the name to pass as `template`, the folder its
 /// notes are filed in (for a note made now), and the properties its frontmatter defines.
 #[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[ts(export)]
@@ -521,7 +521,7 @@ pub fn templates(root: &Path, cfg: &Config) -> Result<Vec<TemplateInfo>> {
     Ok(out)
 }
 
-/// `atlas_new_note`: a note at exactly `path` (`.md` added when missing), from a template, with
+/// `kandinsky_new_note`: a note at exactly `path` (`.md` added when missing), from a template, with
 /// properties set from `fields`. Unlike [`new_note`] a taken path is refused, not numbered: an agent
 /// that names a note means that note, and a " 2" beside it would be a duplicate.
 #[derive(Debug, Clone, Default)]

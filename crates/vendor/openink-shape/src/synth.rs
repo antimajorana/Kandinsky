@@ -290,7 +290,7 @@ fn quad(rng: &mut Rng, size: f32) -> (Vec<Pt>, ShapeClass) {
     let h = w * rng.range(0.35, 0.8);
     match rng.int(0, 5) {
         0 => ([pt(-w, -w), pt(w, -w), pt(w, w), pt(-w, w)].iter().map(|p| p.scale(0.75)).collect(), ShapeClass::Square),
-        // Rectangles go thinner (to ~7:1): long label boxes, Atlas's 200×40 case.
+        // Rectangles go thinner (to ~7:1): long label boxes, Kandinsky's 200×40 case.
         1 | 2 => {
             let h = w * rng.range(0.15, 0.8);
             (vec![pt(-w, -h), pt(w, -h), pt(w, h), pt(-w, h)], ShapeClass::Rectangle)
@@ -415,7 +415,7 @@ fn humanise(rng: &mut Rng, strokes: &[IdealStroke], size: f32, ends_are_corners:
     let jitter = rng.range(0.1, 0.8);
     let vmax = rng.range(0.6, 3.5); // px per ms
     let dt = rng.range(3.0, 8.0); // ms between samples
-    // Speed kept at corners: most people brake (0.25), some draw at an almost even pace (Atlas's case).
+    // Speed kept at corners: most people brake (0.25), some draw at an almost even pace (Kandinsky's case).
     let corner_speed = if rng.chance(0.35) { rng.range(0.7, 1.0) } else { 0.25 };
     let mut t = 0.0f32;
     let mut inks = Vec::new();

@@ -4,18 +4,18 @@ import { join } from "node:path";
 import { WS } from "../playwright.config";
 
 // A scanned book in the PDF pane (scanned books were seen slow to draw and scroll in WebKit): pages that are big JPEG
-// pictures. A measurement, not a gate: ATLAS_PERF=1 and ATLAS_PERF_SCAN=<a scanned PDF> run it (any engine:
+// pictures. A measurement, not a gate: KANDINSKY_PERF=1 and KANDINSKY_PERF_SCAN=<a scanned PDF> run it (any engine:
 // `--browser=webkit` too); it prints `[perf]` lines — the first page drawn, then scrolling through the book.
-test.skip(!process.env.ATLAS_PERF || !process.env.ATLAS_PERF_SCAN, "a measurement: ATLAS_PERF=1 ATLAS_PERF_SCAN=<scanned.pdf>");
+test.skip(!process.env.KANDINSKY_PERF || !process.env.KANDINSKY_PERF_SCAN, "a measurement: KANDINSKY_PERF=1 KANDINSKY_PERF_SCAN=<scanned.pdf>");
 
 test("a scanned book: the first page, and scrolling through it", async ({ page, browserName }, info) => {
   test.setTimeout(180_000);
   mkdirSync(join(WS, "books"), { recursive: true });
-  copyFileSync(process.env.ATLAS_PERF_SCAN!, join(WS, "books/perf-scan.pdf"));
+  copyFileSync(process.env.KANDINSKY_PERF_SCAN!, join(WS, "books/perf-scan.pdf"));
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   const t0 = Date.now();
-  await page.evaluate(() => (window as unknown as { __atlas: { open(p: string): void } }).__atlas.open("books/perf-scan.pdf"));
+  await page.evaluate(() => (window as unknown as { __kandinsky: { open(p: string): void } }).__kandinsky.open("books/perf-scan.pdf"));
   const pane = page.locator(".pdf-pane").last();
   await expect(pane.locator(".page canvas").first()).toBeVisible({ timeout: 60_000 });
   const first = Date.now() - t0;

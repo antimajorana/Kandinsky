@@ -1,6 +1,6 @@
 //! Shape snapping by openink's recogniser (`openink-shape`, vendored from boox_5c_re: a trained classifier +
 //! segmenter, geometric fits, specialisation — FROM-BOOX.md, 2026-10-17 evening; weights include Google's Quick, Draw!
-//! data, CC BY 4.0), mapped onto what Excalidraw draws. The Notepad setting `shapes = "openink"` picks it over Atlas's
+//! data, CC BY 4.0), mapped onto what Excalidraw draws. The Notepad setting `shapes = "openink"` picks it over Kandinsky's
 //! own (shape.rs): its first version read an upright 200×80 box as an ellipse and rejected boxes turned ≥ 0.3 rad;
 //! fixed upstream (3e1a009: smoothed features, Douglas–Peucker corners beside the segmenter; FROM-BOOX.md).
 //!
@@ -233,8 +233,8 @@ mod tests {
         assert_eq!(recognize_wire(&[]), vec![0.0]);
     }
 
-    /// What openink itself says (family odds, class, cost, primitives; `>` marks an arrowhead) and what Atlas
-    /// maps it to, for `--nocapture`. Returns openink's best class and Atlas's shape.
+    /// What openink itself says (family odds, class, cost, primitives; `>` marks an arrowhead) and what Kandinsky
+    /// maps it to, for `--nocapture`. Returns openink's best class and Kandinsky's shape.
     fn report(name: &str, pts: &[P]) -> (Option<ShapeClass>, Option<Shape>) {
         let ink = vec![timed(pts).iter().map(|p| Sample { x: p[0], y: p[1], t: p[2] }).collect::<Vec<_>>()];
         if let Some(n) = openink_shape::features::Norm::new(&ink) {
@@ -256,7 +256,7 @@ mod tests {
             other => { eprintln!("{name}: {other:?}"); None }
         };
         let s = of(pts);
-        eprintln!("{name}: atlas -> {s:?}");
+        eprintln!("{name}: kandinsky -> {s:?}");
         (best, s)
     }
 
@@ -282,7 +282,7 @@ mod tests {
     }
 
     /// Every polygon openink finds must reach the pad with its n corners; openink's own misses (a small one taken
-    /// for a circle) are listed, not failed — FROM-ATLAS.md, 2026-10-18.
+    /// for a circle) are listed, not failed — FROM-KANDINSKY.md, 2026-10-18.
     #[test]
     fn hexagons_and_pentagons_are_closed_paths() {
         let (mut bad, mut openink_misses) = (Vec::new(), Vec::new());

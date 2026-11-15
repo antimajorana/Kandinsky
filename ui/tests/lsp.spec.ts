@@ -19,7 +19,7 @@ test("a code file talks to its language server: diagnostics, hover, completion",
 // basedpyright / rust-analyzer answer a rename with `documentChanges`, which @codemirror/lsp-client
 // 6.3 ignored (nothing happened), and it skips files not open in an editor; vim also swallowed F2.
 test("F2 renames through the server, in the open file and in a closed one, with vim on", async ({ page, request }) => {
-  const H = { "x-atlas": "1" };
+  const H = { "x-kandinsky": "1" };
   await request.put("/api/file", { headers: H, data: { path: "projects/lsp_main.py", text: "old_name = 1\nprint(old_name)\n" } });
   await request.put("/api/file", { headers: H, data: { path: "projects/lsp_other.py", text: "old_name\n" } });
   await page.goto("/");
@@ -40,7 +40,7 @@ test("F2 renames through the server, in the open file and in a closed one, with 
 // VS Code's Ctrl+. : the server's quick fixes for the caret's place, chosen in the palette; the
 // problem under the caret is sent along, and the chosen action's edit lands in the editor.
 test("Ctrl+. offers the server's code actions and applies the one chosen", async ({ page, request }) => {
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "projects/lsp_fix.py", text: "import os\nprint(1)\n" } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "projects/lsp_fix.py", text: "import os\nprint(1)\n" } });
   await page.goto("/");
   await openFile(page, "lsp_fix.py");
   await expect(page.locator(".cm-lintRange-warning")).toHaveCount(1, { timeout: 10000 });
@@ -60,7 +60,7 @@ test("in code Tab takes the server's completion; without a list it indents at th
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "run.py");
   await expect(page.locator(".cm-lintRange-warning")).toHaveCount(1, { timeout: 10000 });
-  const text = () => page.evaluate(() => (window as any).__atlas.editor().text as string);
+  const text = () => page.evaluate(() => (window as any).__kandinsky.editor().text as string);
   await page.locator(".cm-line", { hasText: "def energy" }).click();
   if (await page.locator(".cm-fat-cursor").count()) await page.keyboard.press("o"); else { await page.keyboard.press("End"); await page.keyboard.press("Enter"); }
   await page.keyboard.type("x = fa");
@@ -74,11 +74,11 @@ test("in code Tab takes the server's completion; without a list it indents at th
 
 // A `$` in a code file is not math: it must not hand Tab to the LaTeX snippets, away from the list.
 test("in code Tab takes the completion after a dollar sign on the line", async ({ page, request }) => {
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "projects/lsp_dollar.py", text: "def f():\n    pass\n" } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "projects/lsp_dollar.py", text: "def f():\n    pass\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await request.post("/api/cmd/open", { headers: { "x-atlas": "1" }, data: { args: { path: "projects/lsp_dollar.py" } } });
-  const text = () => page.evaluate(() => (window as any).__atlas.editor().text as string);
+  await request.post("/api/cmd/open", { headers: { "x-kandinsky": "1" }, data: { args: { path: "projects/lsp_dollar.py" } } });
+  const text = () => page.evaluate(() => (window as any).__kandinsky.editor().text as string);
   await page.locator(".cm-line", { hasText: "pass" }).click();
   if (await page.locator(".cm-fat-cursor").count()) await page.keyboard.press("o"); else { await page.keyboard.press("End"); await page.keyboard.press("Enter"); }
   await page.keyboard.type('x = "$" + fa');
@@ -92,7 +92,7 @@ test("in code Tab takes the completion after a dollar sign on the line", async (
 // Symbols in the project (workspace/symbol): the server's list in the chooser, with kind and place; the one chosen
 // opens at its line.
 test("go to a symbol in the project: the server's symbols, the chosen one opened at its line", async ({ page, request }, info) => {
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "projects/lsp_sym.py", text: "# shapes\n\nclass Lattice:\n    pass\n" } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "projects/lsp_sym.py", text: "# shapes\n\nclass Lattice:\n    pass\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "run.py");
@@ -112,7 +112,7 @@ test("go to a symbol in the project: the server's symbols, the chosen one opened
   await page.keyboard.type("Latt");
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("sidebar").locator(".tab", { hasText: "lsp_sym" })).toHaveCount(1);
-  await expect.poll(() => page.evaluate(() => (window as any).__atlas.editor().text as string)).toContain("class Lattice");
+  await expect.poll(() => page.evaluate(() => (window as any).__kandinsky.editor().text as string)).toContain("class Lattice");
 });
 
 // Inlay hints (textDocument/inlayHint): the server's words drawn faint inside the code; `[lsp] inlay_hints` off, none.
@@ -142,7 +142,7 @@ for (const shown of [true, false]) {
 // The environment picker: a venv in the vault is found; choosing it restarts the Python server inside it (the fake
 // server's hover names its VIRTUAL_ENV), and the setting says so. Automatic again at the end.
 test("Python: choose the environment — found in the vault, and the server runs in it", async ({ page, request }, info) => {
-  const H = { "x-atlas": "1" };
+  const H = { "x-kandinsky": "1" };
   await request.put("/api/file", { headers: H, data: { path: "simenv/.venv/pyvenv.cfg", text: "home = /usr/bin\n" } });
   await request.put("/api/file", { headers: H, data: { path: "simenv/.venv/bin/python3", text: "" } });
   await page.goto("/");

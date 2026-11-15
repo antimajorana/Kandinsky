@@ -2,12 +2,12 @@ import { test, expect, type Page } from "@playwright/test";
 
 // Speed on a phone (docs/guides/MOBILE.md, "Speed on a phone"): a phone-sized page with the CPU slowed as a phone runs
 // it (Chromium's CPU throttling: 4× a mid-range phone, 6× a slow one), measuring what a person waits for — a big
-// note opening, a key typed into it, Files and Search opening. A measurement, not a gate: run with ATLAS_PERF=1; the
+// note opening, a key typed into it, Files and Search opening. A measurement, not a gate: run with KANDINSKY_PERF=1; the
 // numbers are printed (`[perf]`) and kept in MOBILE.md. The bounds only catch a regression by an order of magnitude.
-test.skip(!process.env.ATLAS_PERF, "a measurement: ATLAS_PERF=1 runs it");
+test.skip(!process.env.KANDINSKY_PERF, "a measurement: KANDINSKY_PERF=1 runs it");
 test.use({ viewport: { width: 390, height: 760 }, hasTouch: true, isMobile: true });
 
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const BIG = "notes/perf-big.md";
 const body = Array.from({ length: 1000 }, (_, i) => (i % 10 === 0 ? `## Part ${i / 10}` : `Line ${i} with $x^${i % 9}$, **bold**, a [[hubbard]] link and #tag${i % 7}.`)).join("\n\n");
 
@@ -45,7 +45,7 @@ for (const rate of [1, 4, 6]) {
     await page.goto("/");
     await expect(page.locator(".phone-bar")).toBeVisible();
     await cdp.send("Emulation.setCPUThrottlingRate", { rate });
-    const open = await timed(page, () => page.evaluate((p) => (window as unknown as { __atlas: { open(p: string): void } }).__atlas.open(p), BIG), () => expect(page.locator(".cm-content", { hasText: "Perf big" })).toBeVisible({ timeout: 60_000 }));
+    const open = await timed(page, () => page.evaluate((p) => (window as unknown as { __kandinsky: { open(p: string): void } }).__kandinsky.open(p), BIG), () => expect(page.locator(".cm-content", { hasText: "Perf big" })).toBeVisible({ timeout: 60_000 }));
     await page.locator(".cm-line", { hasText: "Line 1 with" }).first().click();
     await page.keyboard.press("Escape");
     await page.keyboard.press("A"); // vim (the test vault): append at the end of the line

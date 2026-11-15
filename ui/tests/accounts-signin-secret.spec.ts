@@ -3,8 +3,8 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 // A sign-in that finishes later (in the browser) keeps its token through the helper's `_secrets`: Settings → Accounts,
 // already open, shows the card's token set without being reopened — it used to say "Not set yet" until a reload while
 // the plugin was already using the token.
-const H = { "x-atlas": "1" };
-const DIR = ".atlas/plugins/keyed";
+const H = { "x-kandinsky": "1" };
+const DIR = ".kandinsky/plugins/keyed";
 const TOML = `title = "Keyed"
 icon = "server"
 api = 12
@@ -13,7 +13,7 @@ api = 12
 secrets = true
 
 [helper]
-run = "python3 -u \\"$ATLAS_PLUGIN_DIR/helper.py\\""
+run = "python3 -u \\"$KANDINSKY_PLUGIN_DIR/helper.py\\""
 
 [[setting]]
 key = "servers"
@@ -32,13 +32,13 @@ for line in sys.stdin:
     out = {"ok": True, "_secrets": {"servers.main.token": "t0k"}} if req["method"] == "signin_done" else None
     print(json.dumps({"id": req["id"], "result": out}), flush=True)
 `;
-const MAIN = `export function register(atlas) {
-  atlas.registerCommand({ id: "settings", title: "Keyed: settings", run: () => atlas.plugin.openSettings() });
+const MAIN = `export function register(kandinsky) {
+  kandinsky.registerCommand({ id: "settings", title: "Keyed: settings", run: () => kandinsky.plugin.openSettings() });
 }\n`;
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugin-settings/keyed.toml", `[[servers]]\nname = "main"\nhost = "one.example"\n`);
+  await put(request, ".kandinsky/plugin-settings/keyed.toml", `[[servers]]\nname = "main"\nhost = "one.example"\n`);
   for (const [path, text] of [["helper.py", HELPER], ["main.js", MAIN], ["plugin.toml", TOML]]) await put(request, `${DIR}/${path}`, text);
 });
 test.afterAll(async ({ request }) => { await request.post("/api/plugins/keyed/remove", { headers: H }); });

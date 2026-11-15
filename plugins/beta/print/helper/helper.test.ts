@@ -1,7 +1,7 @@
 // The helper through the SDK's harness, CUPS faked (`harness.exec`): no job ever reaches a real printer.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { harness, Status } from "atlas-helper/testing";
+import { harness, Status } from "kandinsky-helper/testing";
 import "./helper";
 
 const ok = (stdout: string) => ({ status: 0, stdout, stderr: "" });
@@ -42,7 +42,7 @@ test("a note without the Export plugin, and a machine without CUPS, say so", asy
   harness.api = () => { throw new Status(404, 'no plugin that can run provides the role "pdf-export"'); };
   await assert.rejects(harness.call("print", { path: "notes/n.md", settings: {} }), /Export plugin/);
   harness.exec = () => { throw new Error('exec: "lp" is not installed on this machine (not on the PATH)'); };
-  await assert.rejects(harness.call("print", { path: "a.pdf", settings: {} }), /lp is not installed on the machine running Atlas \(CUPS\)/);
+  await assert.rejects(harness.call("print", { path: "a.pdf", settings: {} }), /lp is not installed on the machine running Kandinsky \(CUPS\)/);
 });
 
 test("lp's refusal is the answer", async () => {

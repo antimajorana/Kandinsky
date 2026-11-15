@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 // VS Code's replace in files: Ctrl+Shift+H, a preview on every hit, files can be left out, a confirm.
 test("replace across files: preview, exclude a file, confirm, written to disk", async ({ page, request }) => {

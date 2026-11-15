@@ -549,8 +549,8 @@ pub enum TriageAction {
     /// Link the capture to the note at `note` (a vault path, already there: the note the catalog made of it) without
     /// copying the capture into it.
     Link { note: String },
-    /// Take it out: a log's line and the lines under it leave the log (kept as a file in `.atlas/trash/`), a note of the
-    /// inbox goes to `.atlas/trash/`.
+    /// Take it out: a log's line and the lines under it leave the log (kept as a file in `.kandinsky/trash/`), a note of the
+    /// inbox goes to `.kandinsky/trash/`.
     Delete,
 }
 
@@ -745,7 +745,7 @@ pub struct CommandOrigin {
     pub time: Mtime,
 }
 
-/// `POST /api/commands`: a new workspace script command (`.atlas/commands/<id>.toml`).
+/// `POST /api/commands`: a new workspace script command (`.kandinsky/commands/<id>.toml`).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct NewCommand {
@@ -764,7 +764,7 @@ pub struct NewCommand {
     pub schedule: Option<String>,
 }
 
-/// `.atlas/keys.toml`: command id → chord (`""` = unbound). Overrides every default.
+/// `.kandinsky/keys.toml`: command id → chord (`""` = unbound). Overrides every default.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Keymap {
@@ -833,7 +833,7 @@ pub enum FocusPane {
     Editor,
 }
 
-/// How much a notice matters (Apprise's types): a failure reaches the system even while Atlas is being looked at.
+/// How much a notice matters (Apprise's types): a failure reaches the system even while Kandinsky is being looked at.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
@@ -854,7 +854,7 @@ pub struct Notice {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub body: Option<String>,
-    /// Who says it: `atlas`, a plugin's id, a notifications source (the system's group, a mute's key).
+    /// Who says it: `kandinsky`, a plugin's id, a notifications source (the system's group, a mute's key).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub source: Option<String>,
@@ -924,7 +924,7 @@ pub enum Event {
     Focus {
         pane: FocusPane,
     },
-    /// A sign-in window of the desktop app reached its return address (`atlas.signIn`): the whole
+    /// A sign-in window of the desktop app reached its return address (`kandinsky.signIn`): the whole
     /// address, carrying the provider's `code` or `error`.
     Signin {
         url: String,
@@ -938,7 +938,7 @@ pub enum Event {
     SignedIn {
         host: String,
     },
-    /// From a plugin's helper process: a line it printed without an id (`atlas.helper.on`), or
+    /// From a plugin's helper process: a line it printed without an id (`kandinsky.helper.on`), or
     /// `helper:exit` when it stopped.
     Plugin {
         plugin: String,
@@ -1007,7 +1007,7 @@ pub enum PtyControl {
     End,
 }
 
-/// `.atlas/cache/server.json`: how the CLI and scripts find a running server.
+/// `.kandinsky/cache/server.json`: how the CLI and scripts find a running server.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct ServerFile {
@@ -1019,7 +1019,7 @@ pub struct ServerFile {
     pub path: String,
 }
 
-/// What the user is looking at, as last reported by the UI — lets Claude (via `atlas mcp`) see
+/// What the user is looking at, as last reported by the UI — lets Claude (via `kandinsky mcp`) see
 /// the current file and selection without the user pasting it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -1071,7 +1071,7 @@ pub struct ConfigDoc {
 /// Separate from ConfigDoc: detection spawns processes, config reads must stay cheap.
 pub type Suggestions = std::collections::BTreeMap<String, Vec<Suggestion>>;
 
-/// A diagnostic from the UI (uncaught errors, layout self-checks) → `.atlas/cache/ui.log`.
+/// A diagnostic from the UI (uncaught errors, layout self-checks) → `.kandinsky/cache/ui.log`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct UiLog {
@@ -1510,7 +1510,7 @@ pub struct HomeDoc {
     pub title: Option<String>,
 }
 
-/// A tool Atlas drafted from how the workspace is used (`GET /api/tools/suggestions`). Nothing is
+/// A tool Kandinsky drafted from how the workspace is used (`GET /api/tools/suggestions`). Nothing is
 /// written until it is kept.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -1791,7 +1791,7 @@ pub struct TagRenamed {
     pub notes: Vec<String>,
 }
 
-/// `POST /api/fs/trash` → where it went (`the Trash` or `.atlas/trash/<stamp>`).
+/// `POST /api/fs/trash` → where it went (`the Trash` or `.kandinsky/trash/<stamp>`).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Trashed {

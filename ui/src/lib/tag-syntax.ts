@@ -1,4 +1,4 @@
-// What a `#tag` in a note's text is: the core's rule (crates/atlas-core/src/tags.rs `inline_tags`, `clean`), so what
+// What a `#tag` in a note's text is: the core's rule (crates/kandinsky-core/src/tags.rs `inline_tags`, `clean`), so what
 // the editor and the reading view draw as a tag is what the tag pane counts and `tag:` finds. Letters, digits, `_`,
 // `-` and `/`, at least one of them neither a digit nor `/` (`#1984` is a number, `#1a` a tag), no `//`; after a
 // blank, the line's start or one of `( [ , ;` (so `a#b` and a URL's `#section` are not tags) — but not where it starts

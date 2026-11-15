@@ -2,21 +2,21 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 import { openFile } from "./open";
 
 // "a bar on top of that tab with this options": above a code file — find, replace, go to line,
-// format, problems — and the tools a plugin adds for the file (`atlas.editor.toolbar`). Not on notes.
-const H = { "x-atlas": "1" };
+// format, problems — and the tools a plugin adds for the file (`kandinsky.editor.toolbar`). Not on notes.
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
-const MAIN = `export function register(atlas) {
-  const cell = atlas.shell.statusItem({ id: "ran", text: "not run" });
-  atlas.editor.toolbar((file) => file.path.endsWith(".py") ? [{ label: "Run", title: "Run this file", run: () => cell.set("ran " + file.path) }] : []);
+const MAIN = `export function register(kandinsky) {
+  const cell = kandinsky.shell.statusItem({ id: "ran", text: "not run" });
+  kandinsky.editor.toolbar((file) => file.path.endsWith(".py") ? [{ label: "Run", title: "Run this file", run: () => cell.set("ran " + file.path) }] : []);
 }\n`;
 
 test.beforeAll(async ({ request }) => {
   await put(request, "code/bar_demo.py", "def f(x):\n    return x + 1\n\nprint(f(41))\n");
   await put(request, "code/bar_demo.txt", "plain text\n");
-  await put(request, ".atlas/plugins/runtool/plugin.toml", 'title = "Run tool"\n');
-  await put(request, ".atlas/plugins/runtool/main.js", MAIN);
+  await put(request, ".kandinsky/plugins/runtool/plugin.toml", 'title = "Run tool"\n');
+  await put(request, ".kandinsky/plugins/runtool/main.js", MAIN);
 });
-test.afterAll(async ({ request }) => { await put(request, ".atlas/plugins/runtool/main.js", "export function register() {}\n"); });
+test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/runtool/main.js", "export function register() {}\n"); });
 
 test("a code tab has a tool bar: find, go to line, a plugin's Run for its files; a note has none", async ({ page }) => {
   await page.goto("/");

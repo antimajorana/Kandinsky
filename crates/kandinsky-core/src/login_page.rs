@@ -16,7 +16,7 @@ pub fn page(vault: &str, next: &str, problem: Option<&str>) -> String {
 <input id="password" name="password" type="password" autocomplete="current-password" autofocus required>
 <button type="submit">Sign in</button>
 </form>
-<p class="foot">Signed in on this browser for 30 days of use. Sign out from Atlas's command bar.</p>"#,
+<p class="foot">Signed in on this browser for 30 days of use. Sign out from Kandinsky's command bar.</p>"#,
         next = esc(next),
     );
     shell("Sign in", vault, &body)
@@ -40,11 +40,11 @@ pub fn app_page(vault: &str, app: &str, who: &str, name: &str, scope: &str) -> S
     shell("Sign in the phone", vault, &body)
 }
 
-/// A locked local core (local_lock.rs) reached without its key: say where Atlas is opened from instead.
+/// A locked local core (local_lock.rs) reached without its key: say where Kandinsky is opened from instead.
 pub fn locked_page() -> String {
-    let body = r#"<p>This Atlas answers only its own apps, so other programs on this machine (or other apps on this phone) cannot read your notes.</p>
-<p class="foot">Open it from the Atlas app. For a browser tab, use the app's command “Open in browser”: it gives a link that works once.</p>"#;
-    shell("Atlas is locked", "this computer", body)
+    let body = r#"<p>This Kandinsky answers only its own apps, so other programs on this machine (or other apps on this phone) cannot read your notes.</p>
+<p class="foot">Open it from the Kandinsky app. For a browser tab, use the app's command “Open in browser”: it gives a link that works once.</p>"#;
+    shell("Kandinsky is locked", "this computer", body)
 }
 
 fn shell(title: &str, vault: &str, body: &str) -> String {
@@ -72,7 +72,7 @@ p b {{ font-weight: 600; }}
 .foot {{ color: var(--muted); font-size: 12px; margin: 18px 0 0; }}
 </style>
 <body><main>
-<h1>Atlas</h1>
+<h1>Kandinsky</h1>
 <p class="vault">{vault}</p>
 {body}
 </main></body></html>

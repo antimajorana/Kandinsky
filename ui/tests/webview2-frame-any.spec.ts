@@ -4,12 +4,12 @@ import { cpSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// The Windows app's WebView2 extension (crates/atlas-app/webview2/frame-any) checked in Chromium, the same engine: a page
+// The Windows app's WebView2 extension (crates/kandinsky-app/webview2/frame-any) checked in Chromium, the same engine: a page
 // on the core's address frames a site that forbids framing (X-Frame-Options DENY, CSP frame-ancestors 'none'). Without
 // the extension the frame stays empty; with it the site shows. A site framed by any other page keeps its headers.
-// Needs a full Chromium (Playwright's headless shell loads no extensions): ATLAS_PW_CHROME=/usr/bin/chromium-browser.
-const EXT = join(process.cwd(), "../crates/atlas-app/webview2/frame-any"); // Playwright runs in ui/
-const chrome = process.env.ATLAS_PW_CHROME;
+// Needs a full Chromium (Playwright's headless shell loads no extensions): KANDINSKY_PW_CHROME=/usr/bin/chromium-browser.
+const EXT = join(process.cwd(), "../crates/kandinsky-app/webview2/frame-any"); // Playwright runs in ui/
+const chrome = process.env.KANDINSKY_PW_CHROME;
 let closed: Server, parent: Server, cport = 0, pport = 0;
 test.beforeAll(async () => {
   closed = createServer((_q, r) => {
@@ -27,7 +27,7 @@ test.beforeAll(async () => {
 test.afterAll(() => { closed.close(); parent.close(); });
 
 async function framedText(withExtension: boolean, host: string): Promise<string> {
-  const dir = mkdtempSync(join(tmpdir(), "atlas-wv2-"));
+  const dir = mkdtempSync(join(tmpdir(), "kandinsky-wv2-"));
   // a copy: Chromium writes its `_metadata/` into an unpacked extension's folder, never into the repository
   const ext = join(dir, "frame-any");
   cpSync(EXT, ext, { recursive: true });
@@ -43,8 +43,8 @@ async function framedText(withExtension: boolean, host: string): Promise<string>
   } finally { await ctx.close(); rmSync(dir, { recursive: true, force: true }); }
 }
 
-test("the WebView2 extension lets Atlas's own page frame a site that forbids it, and no other page", async () => {
-  test.skip(!chrome, "needs a full Chromium: set ATLAS_PW_CHROME (the headless shell loads no extensions)");
+test("the WebView2 extension lets Kandinsky's own page frame a site that forbids it, and no other page", async () => {
+  test.skip(!chrome, "needs a full Chromium: set KANDINSKY_PW_CHROME (the headless shell loads no extensions)");
   test.setTimeout(60_000);
   expect(await framedText(false, "127.0.0.1")).not.toContain("closed site");
   expect(await framedText(true, "127.0.0.1")).toContain("closed site");

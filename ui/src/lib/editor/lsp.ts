@@ -1,5 +1,5 @@
 // Language servers for code files (@codemirror/lsp-client): one client per language, shared by all
-// editors, talking to atlas-core's `/api/lsp/{lang}` relay (which runs the server in the workspace).
+// editors, talking to kandinsky-core's `/api/lsp/{lang}` relay (which runs the server in the workspace).
 import { errText } from "../text";
 import { LSPClient, LSPPlugin, Workspace, findReferences, formatDocument, jumpToImplementation, languageServerExtensions, renameSymbol, signatureKeymap, type Transport, type WorkspaceFile } from "@codemirror/lsp-client";
 import { ChangeSet, Prec, type Extension, type Text } from "@codemirror/state";
@@ -16,7 +16,7 @@ import { goToDefinition } from "./definition";
 
 let servers: Promise<LspServerInfo[]> | null = null;
 const clients = new Map<LspLang, Promise<LSPClient | null>>();
-const workspaces = new Map<LspLang, AtlasWorkspace>();
+const workspaces = new Map<LspLang, KandinskyWorkspace>();
 const sockets = new Map<LspLang, WebSocket>(); // each client's current connection (restartLanguage closes it)
 // a settings change may pick another server: new editors re-resolve, running clients stay
 onSettings(() => { servers = null; });
@@ -38,8 +38,8 @@ function languageId(lang: LspLang, e: string): string {
 type File = WorkspaceFile & { view: EditorView; views: EditorView[]; doc: Text; stale: boolean };
 
 /** Like the library's default workspace, with every view of a file counted (the file closes for the server only
- *  with its last view), plus `displayFile`: a definition in another workspace file opens it in an Atlas tab. */
-class AtlasWorkspace extends Workspace {
+ *  with its last view), plus `displayFile`: a definition in another workspace file opens it in an Kandinsky tab. */
+class KandinskyWorkspace extends Workspace {
   files: File[] = [];
   private versions: Record<string, number> = Object.create(null);
   constructor(client: LSPClient, private rootUri: string) { super(client); }
@@ -256,7 +256,7 @@ const reported = new Set<LspLang>();
 async function reportDead(lang: LspLang, why: string): Promise<void> {
   if (reported.has(lang)) return;
   reported.add(lang);
-  const log = `.atlas/cache/lsp-${lang}.log`;
+  const log = `.kandinsky/cache/lsp-${lang}.log`;
   const last = await api.file(log).then((f) => f.text.trim().split("\n").pop() ?? "", () => "");
   toast(`The ${lang} language server did not start`, `${last || `It ${why || "closed"} without a message.`} (No completion, hover or errors for ${lang} files until this is fixed: Settings → Code; log: ${log})`, "error", 15000);
 }
@@ -302,7 +302,7 @@ function client(info: LspServerInfo): Promise<LSPClient | null> {
       (t) => {
         const made = new LSPClient({
           rootUri: info.root_uri,
-          workspace: (c) => { const w = new AtlasWorkspace(c, info.root_uri); workspaces.set(info.lang, w); return w; },
+          workspace: (c) => { const w = new KandinskyWorkspace(c, info.root_uri); workspaces.set(info.lang, w); return w; },
           // code actions come back as objects with their edits only when the client says it reads them
           // inlay hints come only to a client that says it shows them
           extensions: [...languageServerExtensions(), { clientCapabilities: { textDocument: { codeAction: { codeActionLiteralSupport: { codeActionKind: { valueSet: ["", "quickfix", "refactor", "source"] } } }, inlayHint: { dynamicRegistration: false } } } }],
@@ -311,7 +311,7 @@ function client(info: LspServerInfo): Promise<LSPClient | null> {
         roots.set(made, info.root_uri);
         return made.connect(t);
       },
-      (err) => { console.warn("[atlas]", err); clients.delete(info.lang); return null; },
+      (err) => { console.warn("[kandinsky]", err); clients.delete(info.lang); return null; },
     );
     clients.set(info.lang, c);
   }

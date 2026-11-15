@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // The core's side of a JS helper, faked for node tests (testing.ts): set before prelude.js runs. Separate from testing.ts
 // because imports run in order, and the prelude must find `__host` already there.
-import type { ExecResult, FetchRequest } from "./atlas-helper";
+import type { ExecResult, FetchRequest } from "./kandinsky-helper";
 
 export type Answer = string | object | null | Reply;
 /** An explicit answer: a status, a body, headers (`reply(429, "", { "retry-after": "0" })`). */
@@ -24,10 +24,10 @@ export const state = {
   logs: [] as string[],
   /** The vault's zip files: path → entry name → its text. */
   zips: {} as Record<string, Record<string, string>>,
-  /** What `atlas.exec` answers: the program's result, or throw for a refusal. */
+  /** What `kandinsky.exec` answers: the program's result, or throw for a refusal. */
   exec: (program: string, _args: string[], _opts: { stdin?: string; cwd?: string; timeout?: number; locale?: "C" }): ExecResult => { throw new Error(`exec: no answer for ${program} (set harness.exec)`); },
   /** The runs asked, in order. */
-  /** Native ops the fake core does not do itself (`atlas.convert`, `atlas.hash`): the test's answer. */
+  /** Native ops the fake core does not do itself (`kandinsky.convert`, `kandinsky.hash`): the test's answer. */
   native: undefined as undefined | ((op: string, args: any) => unknown),
   ran: [] as { program: string; args: string[]; stdin?: string; cwd?: string; timeout?: number; locale?: "C" }[],
   waiting: new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>(),
@@ -36,7 +36,7 @@ export const state = {
 /** The fetch route's answer for what `web` returned: null → 404, text → 200, an object → its JSON. */
 function fetched(a: Answer, req: FetchRequest) {
   const r = a instanceof Reply ? a : a === null ? new Reply(404) : new Reply(200, typeof a === "string" ? a : JSON.stringify(a));
-  return { status: r.status, ok: r.status >= 200 && r.status < 300, headers: r.headers, text: r.text, url: req.url, ...(req.save_to && r.status < 300 ? { saved: `.atlas/cache/plugins/test/${req.save_to}` } : {}) };
+  return { status: r.status, ok: r.status >= 200 && r.status < 300, headers: r.headers, text: r.text, url: req.url, ...(req.save_to && r.status < 300 ? { saved: `.kandinsky/cache/plugins/test/${req.save_to}` } : {}) };
 }
 
 async function answer(verb: string, path: string, body: unknown): Promise<[number, unknown]> {
@@ -86,7 +86,7 @@ function zipOf(path: string): Record<string, string> {
   return z;
 }
 
-const receive = (msg: object) => (globalThis as any).__atlas_receive(JSON.stringify(msg));
+const receive = (msg: object) => (globalThis as any).__kandinsky_receive(JSON.stringify(msg));
 
 (globalThis as any).__host = {
   id: "test",
@@ -96,7 +96,7 @@ const receive = (msg: object) => (globalThis as any).__atlas_receive(JSON.string
     const a = JSON.parse(ask);
     state.ran.push(a);
     void Promise.resolve().then(() => state.exec(a.program, a.args ?? [], a)).then((r) => r, (e: Error) => ({ error: e.message }))
-      .then((r) => setImmediate(() => (globalThis as any).__atlas_exec(n, JSON.stringify(r))));
+      .then((r) => setImmediate(() => (globalThis as any).__kandinsky_exec(n, JSON.stringify(r))));
   },
   native: (op: string, args: string) => {
     const a = JSON.parse(args);
@@ -109,7 +109,7 @@ const receive = (msg: object) => (globalThis as any).__atlas_receive(JSON.string
       return JSON.stringify(z[a.name]);
     }
     if (state.native) return JSON.stringify(state.native(op, a));
-    throw new Error(`atlas.${op} runs in the core: test it with cargo test (js_native.rs)`);
+    throw new Error(`kandinsky.${op} runs in the core: test it with cargo test (js_native.rs)`);
   },
   send(line: string) {
     const m = JSON.parse(line);

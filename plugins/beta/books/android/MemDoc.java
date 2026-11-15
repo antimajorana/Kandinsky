@@ -1,4 +1,4 @@
-package org.atlas.plugins.books;
+package org.kandinsky.plugins.books;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;

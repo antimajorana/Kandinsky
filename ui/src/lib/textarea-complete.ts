@@ -4,7 +4,7 @@
 // side has more room, and never past the window's edge (it scrolls instead); ↑ ↓ and Tab / Shift+Tab
 // choose (as in the editor), Enter takes it, Esc closes the list (and only the list). On a task's
 // "new line" row Enter is the box's own again. Every row is icon, name, hint — the same rows as the
-// native box (crates/atlas-capture). Nothing here knows about the editor.
+// native box (crates/kandinsky-capture). Nothing here knows about the editor.
 import { settings } from "./settings.svelte";
 import { api } from "./api";
 import { on, touches } from "./bus";

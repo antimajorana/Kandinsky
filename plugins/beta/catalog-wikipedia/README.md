@@ -15,8 +15,8 @@ a web page. A subplugin of the Library (`catalog`).
 
 ## Needs
 
-The Catalog plugin (`requires = ["catalog"]`); nothing installed: the helper is JavaScript run inside Atlas's core
-(`helper.js`, built from `helper/helper.ts`). Requests go through Atlas's core.
+The Catalog plugin (`requires = ["catalog"]`); nothing installed: the helper is JavaScript run inside Kandinsky's core
+(`helper.js`, built from `helper/helper.ts`). Requests go through Kandinsky's core.
 
 ## Platforms
 

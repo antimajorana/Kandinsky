@@ -2,8 +2,8 @@ import { test, expect, type Page } from "@playwright/test";
 
 // Typing in a code file: the file's own indentation (as VS Code detects it), Tab at once even while the language
 // server is asked for completions, and a language server's answer for lines the file no longer has.
-const H = { "x-atlas": "1" };
-const text = (page: Page) => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string } } }).__atlas.editor().text);
+const H = { "x-kandinsky": "1" };
+const text = (page: Page) => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } } }).__kandinsky.editor().text);
 
 async function edit(page: Page, path: string, body: string, line: number) {
   await page.request.put("/api/file", { headers: H, data: { path, text: body } });

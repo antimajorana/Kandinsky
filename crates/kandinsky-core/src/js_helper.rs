@@ -1,7 +1,7 @@
 //! A plugin's helper written in JavaScript (`[helper] js = "helper.js"`), run inside the core by QuickJS instead of as
 //! a process (docs/design/DESIGN-js-helpers.md). One runtime and context per plugin, on a thread of its own, speaking
 //! the same JSON lines as a process helper (helper.rs reads them the same way): the SDK prelude (sdk/js/prelude.js)
-//! turns `atlas.*` into those lines, so calls back, `fetch` within `[permissions] net` and secrets go through the
+//! turns `kandinsky.*` into those lines, so calls back, `fetch` within `[permissions] net` and secrets go through the
 //! vault's routes exactly as a Python helper's do.
 //!
 //! Limits, per context: [`Limits::memory`] (QuickJS's allocator refuses more; the allocation throws), and
@@ -21,7 +21,7 @@ use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
-/// The SDK every JS helper starts with: `atlas.*`, `console`, timers.
+/// The SDK every JS helper starts with: `kandinsky.*`, `console`, timers.
 pub const PRELUDE: &str = include_str!("../sdk/js/prelude.js");
 
 #[derive(Clone, Copy, Debug)]
@@ -68,7 +68,7 @@ pub enum Out {
 
 enum In {
     Line(String),
-    /// An `atlas.exec` run ended: the script's run number and its answer (js_exec.rs), as JSON.
+    /// An `kandinsky.exec` run ended: the script's run number and its answer (js_exec.rs), as JSON.
     Exec(u64, String),
     Stop,
 }
@@ -116,7 +116,7 @@ pub fn start(root: &std::path::Path, id: &str, file: PathBuf, limits: Limits, ex
     Ok((Handle { tx, stop }, outs))
 }
 
-/// What `atlas.exec` may run, and where a finished run's answer goes (the engine's own inbox: one more turn).
+/// What `kandinsky.exec` may run, and where a finished run's answer goes (the engine's own inbox: one more turn).
 pub(crate) struct Exec {
     allowed: Vec<String>,
     inbox: mpsc::Sender<In>,
@@ -177,7 +177,7 @@ impl Engine {
                     Err(why) => Err(rquickjs::Exception::throw_message(&ctx, &why)),
                 }
             })?)?;
-            // a program run off the context's thread; its answer comes back as a turn (`__atlas_exec`), so the
+            // a program run off the context's thread; its answer comes back as a turn (`__kandinsky_exec`), so the
             // script's other calls and timers go on meanwhile
             // the helper stopped (a Stop in its page, switched off): its programs are ended too
             let (root, Exec { allowed, inbox }, halt) = (root.to_path_buf(), exec, stop.clone());
@@ -215,16 +215,16 @@ impl Engine {
         Ok(())
     }
 
-    /// An `atlas.exec` run's answer, to the promise the script holds for it.
+    /// An `kandinsky.exec` run's answer, to the promise the script holds for it.
     fn exec_ended(&self, n: u64, answer: &str) -> Result<(), Fatal> {
-        let failed = self.turn(|ctx| ctx.globals().get::<_, Function>("__atlas_exec")?.call::<_, ()>((n as f64, answer)))?;
+        let failed = self.turn(|ctx| ctx.globals().get::<_, Function>("__kandinsky_exec")?.call::<_, ()>((n as f64, answer)))?;
         self.uncaught(failed);
         Ok(())
     }
 
     /// One protocol line from the core.
     fn receive(&self, line: &str) -> Result<(), Fatal> {
-        let failed = self.turn(|ctx| ctx.globals().get::<_, Function>("__atlas_receive")?.call::<_, ()>((line,)))?;
+        let failed = self.turn(|ctx| ctx.globals().get::<_, Function>("__kandinsky_receive")?.call::<_, ()>((line,)))?;
         self.uncaught(failed);
         Ok(())
     }
@@ -247,7 +247,7 @@ impl Engine {
                 }
             };
             if let Some(n) = due {
-                let failed = self.turn(|ctx| ctx.globals().get::<_, Function>("__atlas_timer")?.call::<_, ()>((n as f64,)))?;
+                let failed = self.turn(|ctx| ctx.globals().get::<_, Function>("__kandinsky_timer")?.call::<_, ()>((n as f64,)))?;
                 self.uncaught(failed);
             }
         }
@@ -368,14 +368,14 @@ mod tests {
 
     const ECHO: &str = r#"
         let n = 0;
-        atlas.method("echo", (p) => ({ got: p, calls: ++n }));
-        atlas.method("later", async (p) => { await atlas.sleep(p.ms); return "waited"; });
-        atlas.method("fail", () => { throw new Error("no such thing"); });
-        atlas.method("note", async () => (await atlas.read("a.md")).toUpperCase());
-        atlas.method("web", async () => atlas.fetchJson("https://api.example.org/x", { waits: [0] }));
-        atlas.method("links", (p) => atlas.html.select(p.html, "a").map((a) => a.attrs.href));
-        atlas.method("bad", () => atlas.html.select("", "a["));
-        atlas.method("ping", () => { atlas.event("progress", { n }); console.log("pinged", { n }); return null; });
+        kandinsky.method("echo", (p) => ({ got: p, calls: ++n }));
+        kandinsky.method("later", async (p) => { await kandinsky.sleep(p.ms); return "waited"; });
+        kandinsky.method("fail", () => { throw new Error("no such thing"); });
+        kandinsky.method("note", async () => (await kandinsky.read("a.md")).toUpperCase());
+        kandinsky.method("web", async () => kandinsky.fetchJson("https://api.example.org/x", { waits: [0] }));
+        kandinsky.method("links", (p) => kandinsky.html.select(p.html, "a").map((a) => a.attrs.href));
+        kandinsky.method("bad", () => kandinsky.html.select("", "a["));
+        kandinsky.method("ping", () => { kandinsky.event("progress", { n }); console.log("pinged", { n }); return null; });
     "#;
 
     #[tokio::test]
@@ -408,15 +408,15 @@ mod tests {
         assert_eq!(exit(&mut rx).await, "stopped");
     }
 
-    /// `atlas.exec`: a program its manifest names runs off the context's thread, so a call waiting on it does not hold
+    /// `kandinsky.exec`: a program its manifest names runs off the context's thread, so a call waiting on it does not hold
     /// up the next; one it does not name is refused with the reason.
     #[cfg(unix)]
     #[tokio::test]
     async fn exec_runs_a_named_program_while_the_helper_answers_other_calls() {
         let (h, mut rx, _t) = helper(r#"
-            atlas.method("run", (p) => atlas.exec("sh", ["-c", p.cmd], { stdin: p.stdin }));
-            atlas.method("echo", (p) => p);
-            atlas.method("denied", () => atlas.exec("cat"));
+            kandinsky.method("run", (p) => kandinsky.exec("sh", ["-c", p.cmd], { stdin: p.stdin }));
+            kandinsky.method("echo", (p) => p);
+            kandinsky.method("denied", () => kandinsky.exec("cat"));
         "#, LIMITS);
         let mut logs = vec![];
         h.send(r#"{"id":1,"method":"run","params":{"cmd":"cat; sleep 0.3; echo done >&2; exit 4","stdin":"in"}}"#).unwrap();
@@ -427,7 +427,7 @@ mod tests {
         assert!(line(&mut rx, &mut logs).await["error"].as_str().unwrap().contains("not in the manifest's [permissions] exec (sh)"));
     }
 
-    /// `atlas.read` and `atlas.fetch*` are calls back (`{"call"}`), answered by the core (`{"reply"}`).
+    /// `kandinsky.read` and `kandinsky.fetch*` are calls back (`{"call"}`), answered by the core (`{"reply"}`).
     #[tokio::test]
     async fn calls_back_and_fetch_go_through_the_core() {
         let (h, mut rx, _t) = helper(ECHO, LIMITS);
@@ -474,14 +474,23 @@ mod tests {
         assert!(stuck.over(limit), "the wall backstop");
     }
 
+    #[tokio::test]
+    async fn a_helper_written_before_the_rename_still_runs() {
+        let code = r#"atlas.method("legacy", () => [atlas.id, atlas.AtlasError === kandinsky.KandinskyError, globalThis.AtlasError === kandinsky.KandinskyError]);"#;
+        let (h, mut rx, _t) = helper(code, LIMITS);
+        let mut logs = vec![];
+        h.send(r#"{"id":1,"method":"legacy"}"#).unwrap();
+        assert_eq!(line(&mut rx, &mut logs).await, json!({ "id": 1, "result": ["demo", true, true] }));
+    }
+
     /// The SDK's text helpers run in QuickJS, not only in node's V8 (the helpers' own tests): Unicode classes, lookbehind.
     #[tokio::test]
     async fn the_sdks_text_helpers_work_in_quickjs() {
-        let code = r#"atlas.method("t", () => [
-            atlas.url.quote("10.1/A b!(x)"), atlas.url.quote("a/b c", ""),
-            atlas.url.resolve("//m.example.org/1/x.pdf", "https://h.example.org/"), atlas.url.resolve("/d/x.pdf?a=1", "https://h.example.org/p/q"),
-            atlas.url.resolve("x.pdf", "http://10.0.0.1:8080/"), atlas.url.resolve("y.pdf", "https://h.example.org/p/q"),
-            atlas.html.unescape("a&amp;b &#39;c&#x27; &eacute; &lt;"), atlas.text.title("arrakis (imaginary place) álbum 3d"),
+        let code = r#"kandinsky.method("t", () => [
+            kandinsky.url.quote("10.1/A b!(x)"), kandinsky.url.quote("a/b c", ""),
+            kandinsky.url.resolve("//m.example.org/1/x.pdf", "https://h.example.org/"), kandinsky.url.resolve("/d/x.pdf?a=1", "https://h.example.org/p/q"),
+            kandinsky.url.resolve("x.pdf", "http://10.0.0.1:8080/"), kandinsky.url.resolve("y.pdf", "https://h.example.org/p/q"),
+            kandinsky.html.unescape("a&amp;b &#39;c&#x27; &eacute; &lt;"), kandinsky.text.title("arrakis (imaginary place) álbum 3d"),
             "álbum de Rosalía".replace(/(?<![\p{L}])álbum/u, "ALBUM"),
         ]);"#;
         let (h, mut rx, _t) = helper(code, LIMITS);
@@ -494,7 +503,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_turn_that_never_ends_stops_the_helper() {
-        let (h, mut rx, _t) = helper(r#"atlas.method("spin", () => { for (;;) {} });"#, Limits { turn: Duration::from_millis(200), ..LIMITS });
+        let (h, mut rx, _t) = helper(r#"kandinsky.method("spin", () => { for (;;) {} });"#, Limits { turn: Duration::from_millis(200), ..LIMITS });
         let t0 = Instant::now();
         h.send(r#"{"id":1,"method":"spin"}"#).unwrap();
         let why = exit(&mut rx).await;
@@ -506,8 +515,8 @@ mod tests {
     #[tokio::test]
     async fn the_memory_limit_fails_the_call_not_the_core() {
         let code = r#"
-            atlas.method("hog", () => { const a = []; for (;;) a.push("x".repeat(1 << 16) + a.length); });
-            atlas.method("small", () => 1);
+            kandinsky.method("hog", () => { const a = []; for (;;) a.push("x".repeat(1 << 16) + a.length); });
+            kandinsky.method("small", () => 1);
         "#;
         let (h, mut rx, _t) = helper(code, Limits { memory: 16 << 20, ..LIMITS });
         let mut logs = vec![];
@@ -533,7 +542,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_broken_script_says_where() {
-        let (_h, mut rx, _t) = helper("atlas.method('x', () => 1);\nthis is not javascript", LIMITS);
+        let (_h, mut rx, _t) = helper("kandinsky.method('x', () => 1);\nthis is not javascript", LIMITS);
         let why = exit(&mut rx).await;
         assert!(why.contains("helper.js:2"), "the file and line: {why}");
     }

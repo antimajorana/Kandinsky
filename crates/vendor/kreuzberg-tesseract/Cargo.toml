@@ -102,7 +102,7 @@ version = "0.1.58"
 optional = true
 
 [build-dependencies.zip]
-# Atlas: below 9 (zip 9 changed `mangled_name`, which build.rs reads); the one change from the crates.io source
+# Kandinsky: below 9 (zip 9 changed `mangled_name`, which build.rs reads); the one change from the crates.io source
 version = ">=7.0.0, <9"
 features = ["deflate-flate2-zlib-rs"]
 optional = true

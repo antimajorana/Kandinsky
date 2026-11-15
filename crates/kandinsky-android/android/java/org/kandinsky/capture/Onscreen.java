@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import java.util.List;
 import java.util.Locale;
@@ -182,7 +182,7 @@ final class Onscreen {
     private static final Pattern WIKI = Pattern.compile("^https?://([a-z-]+)\\.(?:m\\.)?wikipedia\\.org/(?:wiki/|api/rest_v1/page/mobile-html/)([^?#]+)(#\\S*)?", Pattern.CASE_INSENSITIVE);
     private static final Pattern SPOTIFY_INTL = Pattern.compile("^(https?://open\\.spotify\\.com/)intl-[a-z]+/", Pattern.CASE_INSENSITIVE);
 
-    /** The share-tracking parameters taken off an address: the core's rule (Core.untracked, atlas-text links.rs), the
+    /** The share-tracking parameters taken off an address: the core's rule (Core.untracked, kandinsky-text links.rs), the
      *  one every capture passes through; a field so the desktop JVM's test, which has no native library, stands in. */
     static java.util.function.UnaryOperator<String> untrack = s -> Core.untracked(s);
 

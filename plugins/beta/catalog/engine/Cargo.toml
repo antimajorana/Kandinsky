@@ -1,5 +1,5 @@
 [package]
-name = "atlas-catalog"
+name = "kandinsky-catalog"
 description = "The catalog meta plugin's helper: recognise → fetch → merge → dedupe → write (docs/refactor/REFACTOR-catalog.md)"
 version = "0.1.0"
 edition.workspace = true
@@ -14,9 +14,9 @@ name = "catalog"
 path = "src/main.rs"
 
 [dependencies]
-atlas-plugin = { path = "../../../../crates/kandinsky-plugin" }
-atlas-template = { path = "../../../../crates/kandinsky-template" }
-atlas-text = { path = "../../../../crates/kandinsky-text" }
+kandinsky-plugin = { path = "../../../../crates/kandinsky-plugin" }
+kandinsky-template = { path = "../../../../crates/kandinsky-template" }
+kandinsky-text = { path = "../../../../crates/kandinsky-text" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"

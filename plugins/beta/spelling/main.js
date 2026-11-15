@@ -314,7 +314,7 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 		if (typeof e == "string" || n(e) ? (typeof t == "string" || n(t)) && (o = [{ dic: t }]) : e && ("length" in e ? (o = e, e = e[0] && e[0].aff) : (e.dic && (o = [e]), e = e.aff)), !e) throw Error("Missing `aff` in dictionary");
 		if (e = r(e), this.data = Object.create(null), this.compoundRuleCodes = e.compoundRuleCodes, this.replacementTable = e.replacementTable, this.conversion = e.conversion, this.compoundRules = e.compoundRules, this.rules = e.rules, this.flags = e.flags, o) for (; ++i < o.length;) o[i].dic && this.dictionary(o[i].dic);
 	}
-})))()), k = /* @__PURE__ */ new Set([
+})))(), 1), k = /* @__PURE__ */ new Set([
 	"FencedCode",
 	"CodeBlock",
 	"InlineCode",
@@ -534,7 +534,7 @@ function ie(e, t, n = 6) {
 }
 //#endregion
 //#region plugins/beta/spelling/ui/src/words.ts
-var q = ".atlas/spelling/words.md", J = /^```words[ \t]*\n([\s\S]*?)^```/m;
+var q = ".kandinsky/spelling/words.md", J = /^```words[ \t]*\n([\s\S]*?)^```/m;
 function Y(e) {
 	let t = J.exec(e)?.[1] ?? "";
 	return new Set(t.split("\n").map((e) => e.trim()).filter(Boolean));
@@ -602,7 +602,7 @@ function se(e, t, n) {
 		}, t.name)), Q("td", {
 			class: "dict",
 			title: t.others.length ? `Also installed: ${t.others.join(", ")}` : ""
-		}, t.dictionaries, t.others.length ? Q("span", { class: "none" }, ` · ${t.others.length} more installed`) : null), Q("td", { class: "none" }, `${t.learned} words learned from the vault`)))) : Q("div", { class: "none" }, "No Hunspell dictionary here, nor in the vault's .atlas/dictionaries: install one (hunspell-en, hunspell-es…) on a computer that opens this vault, or name a folder below."), Q("div", { class: "about" }, "A note's language is its lang: property, else guessed from its words; the highlighted one is used when a note says too little. Another variant (en_GB, es_MX…) is chosen under Dictionaries below.")), o = Q("input", {
+		}, t.dictionaries, t.others.length ? Q("span", { class: "none" }, ` · ${t.others.length} more installed`) : null), Q("td", { class: "none" }, `${t.learned} words learned from the vault`)))) : Q("div", { class: "none" }, "No Hunspell dictionary here, nor in the vault's .kandinsky/dictionaries: install one (hunspell-en, hunspell-es…) on a computer that opens this vault, or name a folder below."), Q("div", { class: "about" }, "A note's language is its lang: property, else guessed from its words; the highlighted one is used when a note says too little. Another variant (en_GB, es_MX…) is chosen under Dictionaries below.")), o = Q("input", {
 			"aria-label": "A word to add",
 			placeholder: "a word…",
 			spellcheck: "false"
@@ -625,7 +625,7 @@ function se(e, t, n) {
 //#region plugins/beta/spelling/ui/src/main.ts
 async function $(e) {
 	let { state: t, view: n, language: r } = e.editor.codemirror, i = (t) => e.plugin.settings[t], a = () => Number(i("min_uses") ?? 3), o = () => Number(i("min_notes") ?? 2), s = (t, n) => {
-		let r = `atlas.spelling.told.${t}`;
+		let r = `kandinsky.spelling.told.${t}`;
 		try {
 			if (localStorage.getItem(r)) return;
 			localStorage.setItem(r, "1");
@@ -641,11 +641,11 @@ async function $(e) {
 		ca: "Catalan",
 		nl: "Dutch"
 	};
-	c.length || s("no-dictionary", "No Hunspell dictionary here, nor in the vault's .atlas/dictionaries: only the vault's own words are known, so nothing is marked. Open the vault once on a computer that has one (Settings → Spelling keeps it in the vault), or name a folder there."), i("keep_in_vault") !== !1 && l.size && e.helper.call("keep", {
+	c.length || s("no-dictionary", "No Hunspell dictionary here, nor in the vault's .kandinsky/dictionaries: only the vault's own words are known, so nothing is marked. Open the vault once on a computer that has one (Settings → Spelling keeps it in the vault), or name a folder there."), i("keep_in_vault") !== !1 && l.size && e.helper.call("keep", {
 		names: [...new Set([...l.values()].flat())],
 		folder: i("folder")
 	}, { timeout: 120 }).then((e) => {
-		e.length && console.info(`spelling: kept ${e.join(", ")} in the vault (.atlas/dictionaries) for the devices that have none`);
+		e.length && console.info(`spelling: kept ${e.join(", ")} in the vault (.kandinsky/dictionaries) for the devices that have none`);
 	}).catch((e) => console.warn("spelling: the dictionaries were not kept in the vault:", e));
 	let p = /* @__PURE__ */ new Map(), m = (t) => {
 		let n = p.get(t);
@@ -674,7 +674,7 @@ async function $(e) {
 			letters: ne[e]
 		});
 	}, v = /* @__PURE__ */ new Map(), y = /* @__PURE__ */ new Set(), b = async () => {
-		y = await e.exists(".atlas/spelling/words.md") ? Y(await e.readText(q)) : /* @__PURE__ */ new Set(), M();
+		y = await e.exists(".kandinsky/spelling/words.md") ? Y(await e.readText(q)) : /* @__PURE__ */ new Set(), M();
 	}, x = ee(async (t) => await e.helper.call("count", {
 		paths: t,
 		langs: u.length ? u : [d],
@@ -746,7 +746,7 @@ async function $(e) {
 		};
 	}
 	let U = async (t) => {
-		let n = await e.exists(".atlas/spelling/words.md") ? await e.readText(q) : "";
+		let n = await e.exists(".kandinsky/spelling/words.md") ? await e.readText(q) : "";
 		await e.writeText(q, t(n)), await b();
 	}, W = (e) => [...v.get(e)?.values() ?? []].filter(([e, t]) => e >= a() && t >= o() || e >= 8).length;
 	e.plugin.registerSettingsSection?.({
@@ -904,8 +904,8 @@ async function $(e) {
 			}
 		];
 	}), e.onFilesChanged((e) => {
-		(!e.length || e.includes(".atlas/spelling/words.md")) && b();
-		let t = e.filter((e) => /\.md$/i.test(e) && !e.startsWith(".atlas/"));
+		(!e.length || e.includes(".kandinsky/spelling/words.md")) && b();
+		let t = e.filter((e) => /\.md$/i.test(e) && !e.startsWith(".kandinsky/"));
 		x.counted && t.length && x.count(t).then(M);
 	}), await b(), S().catch((e) => console.warn("spelling: the vault's words were not counted:", e));
 }

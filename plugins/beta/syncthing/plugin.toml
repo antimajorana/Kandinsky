@@ -33,12 +33,12 @@ hint = "empty: the Syncthing folder that holds this vault, found by its path"
 
 [helper]
 # built by engine/build.sh: one static binary per platform (Rust); Syncthing reached through the core's fetch
-run = "\"$ATLAS_PLUGIN_DIR/bin/$ATLAS_PLUGIN_TARGET/syncthing\""
+run = "\"$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET/syncthing\""
 idle = "10m"                       # it only answers: stopped when unused, started again by the next call
 
 [[tool]]
 name = "scan"
-description = "Ask Syncthing to scan the given vault paths now. Called by Atlas after files change; answers what was asked."
+description = "Ask Syncthing to scan the given vault paths now. Called by Kandinsky after files change; answers what was asked."
 input = { paths = "array" }
 secrets = ["api_key"]
 timeout_secs = 15

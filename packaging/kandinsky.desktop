@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=Atlas
+Name=Kandinsky
 Comment=Notes, papers, code, runs and Claude in one workspace
-Exec=atlas-app
-Icon=atlas
+Exec=kandinsky-app
+Icon=kandinsky
 Categories=Office;Development;Science;
-StartupWMClass=atlas
+StartupWMClass=kandinsky

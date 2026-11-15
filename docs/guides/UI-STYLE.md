@@ -1,6 +1,6 @@
-# UI style — the rules Atlas's interface is built and reviewed against
+# UI style — the rules Kandinsky's interface is built and reviewed against
 
-The UI matters, and its rules come from reading on style. What was read: Anthropic's design fundamentals for pages (the `artifact-design` skill), Vercel's *Web Interface Guidelines* (vercel.com/design/guidelines), Butterick's *Practical Typography* ("Typography in ten minutes"), and the desktop human interface guidelines of GNOME (developer.gnome.org/hig) and KDE (develop.kde.org/hig), the two desktops Atlas mostly runs on (§9). This file keeps the parts that apply to a desktop workspace app, phrased as checks. Every visible change is judged against them **from a screenshot**, in both themes.
+The UI matters, and its rules come from reading on style. What was read: Anthropic's design fundamentals for pages (the `artifact-design` skill), Vercel's *Web Interface Guidelines* (vercel.com/design/guidelines), Butterick's *Practical Typography* ("Typography in ten minutes"), and the desktop human interface guidelines of GNOME (developer.gnome.org/hig) and KDE (develop.kde.org/hig), the two desktops Kandinsky mostly runs on (§9). This file keeps the parts that apply to a desktop workspace app, phrased as checks. Every visible change is judged against them **from a screenshot**, in both themes.
 
 ## 1. Use the system that exists
 - Colors, radii, shadows, fonts and sizes come from `ui/src/styles/tokens.css`. No literal colors in components; a new need becomes a token.
@@ -8,7 +8,7 @@ The UI matters, and its rules come from reading on style. What was read: Anthrop
   stylesheet; a line that must keep one (paper is white, a highlighter yellow, e-ink pure black) says why with a
   `/* literal: … */` comment. Dialogs, menus and popovers cast `--shadow-pop`, small raised things `--shadow-sm`.
 - Sizes scale with `--ui-scale` (`calc(12px * var(--ui-scale, 1))`), as everywhere else.
-- A task's checkbox outside a note (a block's task list) takes `class="atlas-check"`: the note's own box
+- A task's checkbox outside a note (a block's task list) takes `class="kandinsky-check"`: the note's own box
   (`markdown.css`), never the browser's, so a task looks the same in a note, a block and a page.
 - Fonts: Inter for the interface, the user's prose font for notes, JetBrains Mono for code and data.
 
@@ -22,7 +22,7 @@ The UI matters, and its rules come from reading on style. What was read: Anthrop
 - A border, a fill, a radius and a shadow each say "this is a separate object". Use them **by role**, not on every block; the same card around everything flattens the page.
 - A block on a page (Home, a `.page`) is set apart by its fill alone (`--card-bg`); `--card-border` is transparent
   except on e-ink, where a fill does not show. A border around every block is the "same card everywhere" look (§8).
-- One choice among a few lists or scopes is the shared segmented control, `.atlas-seg` (`base.css`): one sunken
+- One choice among a few lists or scopes is the shared segmented control, `.kandinsky-seg` (`base.css`): one sunken
   track, the chosen one raised — never loose pills that wrap. Navigation between places stays tabs.
 - Nested radii are concentric: a child's radius is never larger than its parent's.
 - Shadows are layered (ambient + direct); borders are semi-transparent tokens so they stay crisp on any surface.
@@ -31,7 +31,7 @@ The UI matters, and its rules come from reading on style. What was read: Anthrop
 - **The left bar has one left edge** (`--side-inset`, `base.css`): every heading label, every row's icon and the first tool/footer button start there; headings are the one `.side-head` (28 px in the bar, small caps, faint), icon buttons 28 px. A hint that is only useful during an action ("drop here to pin") appears during that action, floating, never as a standing box.
 
 ### Palettes and shapes (Settings → Appearance)
-- **A palette** (`ui.palette`: `atlas`, `ink`, `clay`; `styles/palettes.css`) is a colour family over `tokens.css`, in
+- **A palette** (`ui.palette`: `kandinsky`, `ink`, `clay`; `styles/palettes.css`) is a colour family over `tokens.css`, in
   light and dark alike, set as `<html data-palette>`. It only redefines tokens; components never test the palette. E-ink
   keeps its own; an accent set in Settings and a VS Code theme (inline on `<html>`) win over it.
 - **High contrast** (`ui.contrast`; `styles/contrast.css`, `<html data-contrast="high">`) sits over any palette: it
@@ -76,12 +76,12 @@ The UI matters, and its rules come from reading on style. What was read: Anthrop
 The looks that read as generated: everything centered, the same rounded card everywhere, an accent stripe on every card, emoji as section markers, gradients as decoration.
 
 ## 9. From the GNOME and KDE guidelines
-What they add to the above, as checks. Where the two disagree, Atlas keeps one rule.
+What they add to the above, as checks. Where the two disagree, Kandinsky keeps one rule.
 - **Capitalisation: sentence case everywhere** (buttons, headings, menus, tooltips). GNOME wants title case on
-  buttons and headings, KDE on most labels; Atlas has always written sentence case, and one rule beats two.
+  buttons and headings, KDE on most labels; Kandinsky has always written sentence case, and one rule beats two.
 - **Labels**: a button starts with its verb ("Show info", not "Info"; "Apply", not "Yes"), no longer than
   "Configure keyboard shortcuts". No final period in a label or a one-sentence text. Avoid acronyms where a word
-  does ("link", not "URL"); "Delete" only for removing from disk, and Atlas's deletions go to the trash.
+  does ("link", not "URL"); "Delete" only for removing from disk, and Kandinsky's deletions go to the trash.
 - **Placeholders**: an example when a label names the field, else a short imperative; never ending with "…" when
   it is not a search box. A placeholder fits its field whole (clipped text is a bug, §6).
 - **Dialogs**: one to three buttons; a confirmation has exactly two, Cancel first and the specific verb last

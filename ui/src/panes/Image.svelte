@@ -1,6 +1,6 @@
 <script lang="ts">
   // Image viewer: fetched through the API (header-guarded) as a blob URL. Fit by default; Ctrl+wheel (a touchpad pinch
-  // arrives as one: atlas-app pinch_to_wheel) zooms around the pointer, the wheel or a drag pans, a double-click goes
+  // arrives as one: kandinsky-app pinch_to_wheel) zooms around the pointer, the wheel or a drag pans, a double-click goes
   // fit ⇄ 100 %.
   import { onMount } from "svelte";
   import { blobUrl } from "../lib/raw";

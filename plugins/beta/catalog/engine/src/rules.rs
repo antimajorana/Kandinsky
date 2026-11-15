@@ -1,4 +1,4 @@
-//! The vault's own routing, without code: `.atlas/catalog/rules.yaml`, a list of `when` → `then`, applied in order
+//! The vault's own routing, without code: `.kandinsky/catalog/rules.yaml`, a list of `when` → `then`, applied in order
 //! after the merge. A rule can send a thing to another folder, add tags, set properties, and switch a linked service
 //! off or give it options (a Linkwarden collection). The kind's own `links:` is the starting point; rules refine it.
 //!
@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
-pub const RULES_FILE: &str = ".atlas/catalog/rules.yaml";
+pub const RULES_FILE: &str = ".kandinsky/catalog/rules.yaml";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]

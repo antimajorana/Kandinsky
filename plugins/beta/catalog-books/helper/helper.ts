@@ -1,7 +1,7 @@
 // Open Library for the catalog: `lookup` finds a book by ISBN (an edition, then its work) or by its Open Library id, and
-// answers the catalog's fields. Requests go through Atlas's core. Tests: books.test.ts (cut-down copies of Open
+// answers the catalog's fields. Requests go through Kandinsky's core. Tests: books.test.ts (cut-down copies of Open
 // Library's answers).
-import type { Params } from "atlas-helper";
+import type { Params } from "kandinsky-helper";
 
 const OL = "https://openlibrary.org";
 
@@ -29,7 +29,7 @@ function genres(subjects: unknown[] | undefined): string[] | undefined {
   const out: string[] = [];
   for (const s of subjects ?? []) {
     if (typeof s !== "string" || s.includes(":") || s.includes(",") || BOOKKEEPING.has(s.toLowerCase())) continue;
-    const t = atlas.text.title(s.trim()); // "Arrakis (Imaginary place)" → "Arrakis (Imaginary Place)"
+    const t = kandinsky.text.title(s.trim()); // "Arrakis (Imaginary place)" → "Arrakis (Imaginary Place)"
     if (!out.includes(t)) out.push(t);
   }
   return out.length ? out.slice(0, 5) : undefined;
@@ -60,7 +60,7 @@ export function withCoauthors(authors: string[], edition: EditionMore): string[]
 
 interface Work { title?: string; authors?: { author?: { key?: string } }[]; covers?: number[]; first_publish_date?: string; description?: unknown; subjects?: unknown[] }
 
-const get = <T>(url: string) => atlas.fetchJson<T>(url);
+const get = <T>(url: string) => kandinsky.fetchJson<T>(url);
 const nameOf = async (key: string | undefined) => (key ? (await get<{ name?: string }>(`${OL}${key}.json`))?.name : undefined);
 
 export async function lookup(params: Params) {
@@ -101,4 +101,4 @@ export async function lookup(params: Params) {
   return out; // book or reference book is the vault's choice (Catalog · Science installed or not), never a guess
 }
 
-atlas.methods({ lookup });
+kandinsky.methods({ lookup });

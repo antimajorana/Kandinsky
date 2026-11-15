@@ -10,7 +10,7 @@ key = "templates_folder"
 label = "Templates folder"
 kind = "text"
 default = "zMeta/Templates"
-hint = "Folder containing Markdown templates (also checks Templates/ and .atlas/templates/)"
+hint = "Folder containing Markdown templates (also checks Templates/ and .kandinsky/templates/)"
 
 [[setting]]
 key = "auto_folder_templates"

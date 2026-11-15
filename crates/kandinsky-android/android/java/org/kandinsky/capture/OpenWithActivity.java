@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Activity;
 import android.database.Cursor;
@@ -13,7 +13,7 @@ import java.io.OutputStream;
 
 /**
  * Another app's file — a book, a comic, a PDF from a file manager, a download, a mail — read in this app's own reader
- * ("Open with → Atlas"; docs/design/DESIGN-libraries-everywhere.md, step 7: "an easy to use ebook reader, comic reader,
+ * ("Open with → Kandinsky"; docs/design/DESIGN-libraries-everywhere.md, step 7: "an easy to use ebook reader, comic reader,
  * pdf reader"). The file is copied into the app's folder `Opened/`, a vault of its own, so the reader keeps its place
  * and notes beside it as in any vault; then the native plugin that reads its kind opens it. No window of its own.
  */
@@ -24,7 +24,7 @@ public final class OpenWithActivity extends Activity {
         Uri uri = getIntent().getData();
         if (uri == null) { finish(); return; }
         File dir = new File(getFilesDir(), "Opened");
-        new File(dir, ".atlas").mkdirs(); // a vault: what the readers write about it (its notes, its place) goes here
+        Legacy.madeStateDir(dir); // a vault: what the readers write about it (its notes, its place) goes here
         new Thread(() -> {
             String name = nameOf(uri), why = null;
             File f = new File(dir, name);

@@ -54,7 +54,7 @@
   });
 
   // List or Thumbnails: remembered in this browser (one choice for every explorer tab)
-  const VIEW = "atlas.explorer.view";
+  const VIEW = "kandinsky.explorer.view";
   let view = $state<"list" | "thumbs">(loadRaw(VIEW) === "thumbs" ? "thumbs" : "list");
   const setView = (v: typeof view) => { view = v; saveRaw(VIEW, v); };
   let sort = $state<{ by: "name" | "size" | "modified"; desc: boolean }>({ by: "name", desc: false });
@@ -64,7 +64,7 @@
   let filterEl = $state<HTMLInputElement>();
   let underHere = $state<Entry[] | null>(null);
   // the preview at the right: remembered in this browser, as the view is
-  const PREVIEW = "atlas.explorer.preview";
+  const PREVIEW = "kandinsky.explorer.preview";
   let preview = $state(loadRaw(PREVIEW) === "1");
   const setPreview = (v: boolean) => { preview = v; saveRaw(PREVIEW, v ? "1" : "0"); };
   let typing = $state(false);
@@ -160,7 +160,7 @@
     if (ed) run(act.finishEdit, ed, value, ok); else focusList();
   }
 
-  /** The mouse's side buttons and a swipe over the explorer (lib/nav-input.ts `atlas-nav`): its own folders first. */
+  /** The mouse's side buttons and a swipe over the explorer (lib/nav-input.ts `kandinsky-nav`): its own folders first. */
   let rootEl = $state<HTMLDivElement>();
   // a long path in a narrow pane: the crumbs scrolled to their end, so the folder shown is the one in view
   let crumbsEl = $state<HTMLDivElement>();
@@ -174,8 +174,8 @@
       e.preventDefault();
       b.travel(way);
     };
-    el.addEventListener("atlas-nav", onNav);
-    return () => el.removeEventListener("atlas-nav", onNav);
+    el.addEventListener("kandinsky-nav", onNav);
+    return () => el.removeEventListener("kandinsky-nav", onNav);
   });
 
   // the tab keeps where it is (a restored layout opens there) and says it in its title
@@ -184,7 +184,7 @@
     untrack(() => {
       panel.updateParameters({ ...spec, source, place, path }); panel.setTitle(title);
       // in front, in the vault: the sidebar tree shows this folder as where you are
-      if (source === vaultSource.id && panel.isActive) window.dispatchEvent(new CustomEvent("atlas-active-file", { detail: path }));
+      if (source === vaultSource.id && panel.isActive) window.dispatchEvent(new CustomEvent("kandinsky-active-file", { detail: path }));
     });
   });
   // a plugin's source can arrive after the tab (a restored layout): load once it is there

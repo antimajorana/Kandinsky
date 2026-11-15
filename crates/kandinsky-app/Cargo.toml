@@ -1,11 +1,11 @@
 [package]
-name = "atlas-app"
+name = "kandinsky-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Atlas desktop window: runs atlas-core in-process and points a webview at it"
+description = "Kandinsky desktop window: runs kandinsky-core in-process and points a webview at it"
 
 [[bin]]
 name = "kandinsky-app"
@@ -15,7 +15,7 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-atlas-core.workspace = true
+kandinsky-core.workspace = true
 anyhow.workspace = true
 tauri = { version = "2", features = [] }
 # the system's folder dialog for opening or making a vault (main.rs; the core asks through vaults::on_pick_folder)
@@ -24,14 +24,14 @@ tokio = { workspace = true }
 serde_json.workspace = true
 serde.workspace = true
 reqwest = { workspace = true, features = ["blocking", "rustls-tls"] }
-# the tray icon's pixels (main.rs `tray_pixels`), as atlas-capture reads its own
+# the tray icon's pixels (main.rs `tray_pixels`), as kandinsky-capture reads its own
 png = "0.17"
 
 [dev-dependencies]
 tempfile = "3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-# a global key for the capture box while Atlas runs (main.rs `capture_key`): macOS has no desktop setting that gives a
+# a global key for the capture box while Kandinsky runs (main.rs `capture_key`): macOS has no desktop setting that gives a
 # program a key, as KDE's shortcuts and a Windows Start-menu shortcut do
 tauri-plugin-global-shortcut = "2"
 

@@ -4,6 +4,7 @@
 import { EditorView } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
 import type { SyntaxNode } from "@lezer/common";
+import { findEquationLine } from "./pigment-pills";
 
 /** The URL of the markdown link `[text](url)` at `pos`, if there is one. */
 function markdownLinkAt(view: EditorView, pos: number): string | null {
@@ -27,6 +28,8 @@ function linkTarget(view: EditorView, el: HTMLElement | null, onOpenLink?: OpenL
   if (!onOpenLink) return null; // an editor that opens no files: the click edits
   const rendered = el.closest<HTMLElement>("a.internal-link");
   if (rendered) return rendered.dataset.href ?? "";
+  const eqEl = el.closest<HTMLElement>("[data-eqref]");
+  if (eqEl?.dataset.eqref) return `#^${eqEl.dataset.eqref}`;
   const link = el.closest<HTMLElement>(".cm-hmd-internal-link");
   // the label goes along: a PDF link's label is the words to select on its page (lib/pdf-place.ts)
   if (link) return link.dataset.target ? link.dataset.target + (link.dataset.label ? `|${link.dataset.label}` : "")
@@ -35,8 +38,8 @@ function linkTarget(view: EditorView, el: HTMLElement | null, onOpenLink?: OpenL
 }
 
 export function linkClicks(onOpenLink?: OpenLink) {
-  // the web in the browser, a file of the vault in Atlas
-  // Shift on a web link: the system's browser, as everywhere in Atlas
+  // the web in the browser, a file of the vault in Kandinsky
+  // Shift on a web link: the system's browser, as everywhere in Kandinsky
   const follow = (target: string, opts?: { beside?: boolean; outside?: boolean }) => {
     if (/^[a-z][a-z0-9+.-]*:/i.test(target)) void import("../web-links").then((m) => (opts?.outside ? m.openOutside(target) : m.openWeb(target)));
     else onOpenLink?.(target, opts);
@@ -54,6 +57,17 @@ export function linkClicks(onOpenLink?: OpenLink) {
       if (e.altKey) return false; // Obsidian: Alt+click puts the caret in a link to edit it
       const target = at(view, e.target);
       if (target === null) return false;
+      // Direct jump within the current editor for `\eqref{label}` / `#^label` (supports `\label{…}`, `\tag{…}`, and `^id`)
+      if (target.startsWith("#^") && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        const lineNum = findEquationLine(view.state.doc.toString(), target.slice(2));
+        if (lineNum !== null && lineNum >= 1 && lineNum <= view.state.doc.lines) {
+          e.preventDefault();
+          const line = view.state.doc.line(lineNum);
+          view.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: "center" }) });
+          view.focus();
+          return true;
+        }
+      }
       e.preventDefault();
       follow(target, { outside: e.shiftKey });
       return true;

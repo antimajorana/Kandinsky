@@ -19,7 +19,7 @@ const DROP: [&str; 13] = [
 ];
 
 /// The server behind `host` (`host` or `host:port`) when it is a server vault on the vault list or a local vault's mirror
-/// — the only places the bridge goes: its scheme and authority (`https://atlas.example.org`).
+/// — the only places the bridge goes: its scheme and authority (`https://kandinsky.example.org`).
 pub fn base(host: &str) -> Option<String> {
     base_in(&crate::vaults::list(&crate::vaults::list_file()), host)
 }
@@ -109,7 +109,7 @@ pub async fn connect(store: &Store, http: &str) -> Option<Upstream> {
     if let Some(c) = cookie.and_then(|c| c.parse().ok()) {
         req.headers_mut().insert("cookie", c);
     }
-    req.headers_mut().insert("x-atlas", axum::http::HeaderValue::from_static("1"));
+    req.headers_mut().insert("x-kandinsky", axum::http::HeaderValue::from_static("1"));
     let connecting = tokio_tungstenite::connect_async(req);
     match tokio::time::timeout(std::time::Duration::from_secs(6), connecting).await {
         Ok(Ok((upstream, _))) => Some(upstream),

@@ -1,9 +1,9 @@
 //! Measures the core's in-memory note index (links.rs) on a real-shaped vault: its build time, the heap it keeps,
-//! the peak a request costs, and representative queries. Never point it at the user's own vault while Atlas runs on
+//! the peak a request costs, and representative queries. Never point it at the user's own vault while Kandinsky runs on
 //! it — it only reads, but use a copy.
 //!
-//! `cargo run --release -p atlas-core --example index_probe -- <vault> [note-for-backlinks] [base-file]`
-use atlas_core::config::Config;
+//! `cargo run --release -p kandinsky-core --example index_probe -- <vault> [note-for-backlinks] [base-file]`
+use kandinsky_core::config::Config;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::path::Path;
 use std::sync::atomic::{AtomicIsize, Ordering::Relaxed};
@@ -96,46 +96,46 @@ fn main() {
     let base_src = std::fs::read_to_string(root.join(&base)).unwrap_or_default();
     println!("vault {}  (rss at start {})", root.display(), rss());
 
-    let (ms, kept, peak, bl) = once(|| atlas_core::links::backlinks(&root, &cfg, &note));
+    let (ms, kept, peak, bl) = once(|| kandinsky_core::links::backlinks(&root, &cfg, &note));
     println!("BUILD (first backlinks)       {ms:>8.1} ms   kept {}   peak +{}   rss {}", mb(kept), mb(peak), rss());
     println!("  backlinks of {note}: {} links, {} unlinked", bl.links.len(), bl.unlinked.len());
     drop(bl);
-    let (ms, kept, peak, _) = once(|| atlas_core::links::backlinks(&root, &cfg, &note));
+    let (ms, kept, peak, _) = once(|| kandinsky_core::links::backlinks(&root, &cfg, &note));
     println!("REFRESH (second, no change)   {ms:>8.1} ms   kept {}   peak +{}", mb(kept), mb(peak));
 
     let n = 7;
-    warm("backlinks", n, || atlas_core::links::backlinks(&root, &cfg, &note), |b| b.links.len() + b.unlinked.len());
+    warm("backlinks", n, || kandinsky_core::links::backlinks(&root, &cfg, &note), |b| b.links.len() + b.unlinked.len());
     warm(
         "base (Papers.base)",
         n,
-        || atlas_core::bases::evaluate(&root, &cfg, &base_src, None),
+        || kandinsky_core::bases::evaluate(&root, &cfg, &base_src, None),
         |r| r.views.iter().map(|v| v.rows.len()).sum(),
     );
-    warm("link targets [[cond", n, || atlas_core::link_targets::targets(&root, &cfg, "cond", None), Vec::len);
-    warm("link targets [[ (empty)", n, || atlas_core::link_targets::targets(&root, &cfg, "", Some(&note)), Vec::len);
-    warm("tags::all", n, || atlas_core::tags::all(&root, &cfg), Vec::len);
-    warm("property_spec::known", n, || atlas_core::property_spec::known(&root, &cfg), Vec::len);
-    warm("graph", n, || atlas_core::links::graph(&root, &cfg), |g| g.edges.len());
-    warm("relink plan (move a note)", n, || atlas_core::relink::plan(&root, &cfg, &note, "notes/CM.md"), |_| 0);
-    warm("search names 'condensed'", n, || atlas_core::search::match_files(&root, &cfg, "condensed", false), Vec::len);
+    warm("link targets [[cond", n, || kandinsky_core::link_targets::targets(&root, &cfg, "cond", None), Vec::len);
+    warm("link targets [[ (empty)", n, || kandinsky_core::link_targets::targets(&root, &cfg, "", Some(&note)), Vec::len);
+    warm("tags::all", n, || kandinsky_core::tags::all(&root, &cfg), Vec::len);
+    warm("property_spec::known", n, || kandinsky_core::property_spec::known(&root, &cfg), Vec::len);
+    warm("graph", n, || kandinsky_core::links::graph(&root, &cfg), |g| g.edges.len());
+    warm("relink plan (move a note)", n, || kandinsky_core::relink::plan(&root, &cfg, &note, "notes/CM.md"), |_| 0);
+    warm("search names 'condensed'", n, || kandinsky_core::search::match_files(&root, &cfg, "condensed", false), Vec::len);
 
     // the same with the vault's watcher running, as in the app: an unchanged vault need not be walked again
-    let _watch = atlas_core::events::spawn_watcher(&root, cfg.clone(), atlas_core::events::EventBus::default())
+    let _watch = kandinsky_core::events::spawn_watcher(&root, cfg.clone(), kandinsky_core::events::EventBus::default())
         .expect("watcher");
     warm(
         "backlinks (watched)",
         n,
-        || atlas_core::links::backlinks(&root, &cfg, &note),
+        || kandinsky_core::links::backlinks(&root, &cfg, &note),
         |b| b.links.len() + b.unlinked.len(),
     );
     warm(
         "base (watched)",
         n,
-        || atlas_core::bases::evaluate(&root, &cfg, &base_src, None),
+        || kandinsky_core::bases::evaluate(&root, &cfg, &base_src, None),
         |r| r.views.iter().map(|v| v.rows.len()).sum(),
     );
-    warm("link targets [[cond (watched)", n, || atlas_core::link_targets::targets(&root, &cfg, "cond", None), Vec::len);
-    warm("graph (watched)", n, || atlas_core::links::graph(&root, &cfg), |g| g.edges.len());
+    warm("link targets [[cond (watched)", n, || kandinsky_core::link_targets::targets(&root, &cfg, "cond", None), Vec::len);
+    warm("graph (watched)", n, || kandinsky_core::links::graph(&root, &cfg), |g| g.edges.len());
     println!("live heap at end {}   rss {}", mb(LIVE.load(Relaxed)), rss());
     if let Ok(other) = std::env::var("INDEX_PROBE_DAY") {
         day(&root, Path::new(&other).canonicalize().expect("second vault"), &base_src);
@@ -151,10 +151,10 @@ fn day(a: &Path, b: std::path::PathBuf, base_src: &str) {
         .iter()
         .zip(&cfgs)
         .map(|(v, c)| {
-            atlas_core::events::spawn_watcher(v, c.clone(), atlas_core::events::EventBus::default()).expect("watcher")
+            kandinsky_core::events::spawn_watcher(v, c.clone(), kandinsky_core::events::EventBus::default()).expect("watcher")
         })
         .collect();
-    let notes: Vec<String> = atlas_core::search::match_files(a, &cfgs[0], ".md", false);
+    let notes: Vec<String> = kandinsky_core::search::match_files(a, &cfgs[0], ".md", false);
     let edited = b.join("FOCUS.md");
     let original = std::fs::read(&edited).unwrap_or_default();
     let t = Instant::now();
@@ -163,14 +163,14 @@ fn day(a: &Path, b: std::path::PathBuf, base_src: &str) {
     for i in 0..rounds {
         let (v, c) = (&vaults[i % 2], &cfgs[i % 2]);
         let note = &notes[i % notes.len()];
-        let _ = atlas_core::links::backlinks(v, c, note);
-        let _ = atlas_core::bases::evaluate(v, c, base_src, Some(note));
+        let _ = kandinsky_core::links::backlinks(v, c, note);
+        let _ = kandinsky_core::bases::evaluate(v, c, base_src, Some(note));
         for q in ["c", "co", "con", "cond"] {
-            let _ = atlas_core::link_targets::targets(v, c, q, Some(note));
+            let _ = kandinsky_core::link_targets::targets(v, c, q, Some(note));
         }
         if i % 5 == 0 {
-            let _ = atlas_core::tags::all(v, c);
-            let _ = atlas_core::links::graph(v, c);
+            let _ = kandinsky_core::tags::all(v, c);
+            let _ = kandinsky_core::links::graph(v, c);
         }
         if i % 10 == 0 {
             #[allow(clippy::disallowed_methods)] // the harness's own copy of a vault
@@ -192,7 +192,7 @@ fn day(a: &Path, b: std::path::PathBuf, base_src: &str) {
 
 /// The answers of every reader of the index, for a set of notes and every `.base` of the vault.
 fn dump(root: &Path, cfg: &Config, out: &Path) {
-    use atlas_core::links;
+    use kandinsky_core::links;
     let notes = [
         "notes/Condensed Matter.md",
         "notes/Physics.md",
@@ -205,13 +205,13 @@ fn dump(root: &Path, cfg: &Config, out: &Path) {
         j.insert(format!("backlinks {n}"), serde_json::to_value(links::backlinks(root, cfg, n)).unwrap());
         j.insert(
             format!("targets from {n}"),
-            serde_json::to_value(atlas_core::link_targets::targets(root, cfg, "", Some(n))).unwrap(),
+            serde_json::to_value(kandinsky_core::link_targets::targets(root, cfg, "", Some(n))).unwrap(),
         );
     }
     for q in ["cond", "phys", "mail", "2024"] {
         j.insert(
             format!("targets {q}"),
-            serde_json::to_value(atlas_core::link_targets::targets(root, cfg, q, None)).unwrap(),
+            serde_json::to_value(kandinsky_core::link_targets::targets(root, cfg, q, None)).unwrap(),
         );
     }
     for b in [
@@ -225,13 +225,13 @@ fn dump(root: &Path, cfg: &Config, out: &Path) {
         let src = std::fs::read_to_string(root.join(b)).unwrap_or_default();
         j.insert(
             format!("base {b}"),
-            serde_json::to_value(atlas_core::bases::evaluate(root, cfg, &src, Some("notes/Condensed Matter.md")))
+            serde_json::to_value(kandinsky_core::bases::evaluate(root, cfg, &src, Some("notes/Condensed Matter.md")))
                 .unwrap(),
         );
     }
-    j.insert("tags".into(), serde_json::to_value(atlas_core::tags::all(root, cfg)).unwrap());
-    j.insert("tag notes".into(), serde_json::to_value(atlas_core::tags::notes(root, cfg, "physics")).unwrap());
-    j.insert("known".into(), serde_json::to_value(atlas_core::property_spec::known(root, cfg)).unwrap());
+    j.insert("tags".into(), serde_json::to_value(kandinsky_core::tags::all(root, cfg)).unwrap());
+    j.insert("tag notes".into(), serde_json::to_value(kandinsky_core::tags::notes(root, cfg, "physics")).unwrap());
+    j.insert("known".into(), serde_json::to_value(kandinsky_core::property_spec::known(root, cfg)).unwrap());
     j.insert("graph".into(), serde_json::to_value(links::graph(root, cfg)).unwrap());
     #[allow(clippy::disallowed_methods)] // the dump goes to a scratch file, never into a vault
     std::fs::write(out, serde_json::to_string_pretty(&j).unwrap()).unwrap();

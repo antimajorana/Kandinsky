@@ -64,7 +64,7 @@ test("a to-do in the capture box offers the task fields as in a note; Enter stil
 // note's `[[`; and the list is drawn
 // in the window's coordinates, over whatever block comes next ("shows hidden below the other things")
 test("the box's [[ list leaves out the agent's files and is drawn over the next block", async ({ page, request }) => {
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: "docs/memory/hubbard-agent-note.md", text: "# agent\n" } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: "docs/memory/hubbard-agent-note.md", text: "# agent\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   const box = page.getByTestId("capture"), list = page.locator(".ta-complete");
@@ -82,7 +82,7 @@ test("the box's [[ list leaves out the agent's files and is drawn over the next 
 // navigation, the editor's selection in it; Enter saves to the day's log and closes. Super+E twice carries what was
 // typed in the command bar into it; Esc keeps a draft for the next time.
 test("Super+C and Super+E twice open the capture popup over the current pane, Enter saves it", async ({ page, request }) => {
-  const H = { "x-atlas": "1" };
+  const H = { "x-kandinsky": "1" };
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await request.post("/api/cmd/open", { headers: H, data: { args: { path: "notes/hubbard.md" } } });
@@ -134,7 +134,7 @@ test("a capture from the command bar that fails comes back in the capture popup"
 
 // A picture pasted or dropped into the popup goes beside today's log, its embed into the text; Enter saves both.
 test("a picture pasted into the capture popup is attached beside today's log and embedded in the capture", async ({ page, request }) => {
-  const H = { "x-atlas": "1" };
+  const H = { "x-kandinsky": "1" };
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+c");

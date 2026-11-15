@@ -12,7 +12,7 @@ import { installEmailPlugin } from "./fixtures/plugins";
 // against the engine's stand-in server (engine/src/fake.rs, the `fake-mail` binary: IMAP and SMTP on 127.0.0.1, three
 // messages in the inbox) — never a real account. It writes what it holds to state.json and what it was sent to
 // sent/<n>.eml, which is what these tests read back.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const REPO = fileURLToPath(new URL("../..", import.meta.url));
 const STATE = `${WS}-mail`;
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
@@ -24,21 +24,21 @@ const subjects = (name: string) => box(name).map((m) => m.subject);
 let server: ChildProcess;
 test.beforeAll(async ({ request }) => {
   test.setTimeout(300_000); // the stand-in server is built once
-  const built = spawnSync("cargo", ["build", "-q", "-p", "atlas-email", "--bin", "fake-mail"], { cwd: REPO, stdio: "inherit" });
+  const built = spawnSync("cargo", ["build", "-q", "-p", "kandinsky-email", "--bin", "fake-mail"], { cwd: REPO, stdio: "inherit" });
   if (built.status !== 0) throw new Error("cannot build fake-mail");
   rmSync(STATE, { recursive: true, force: true });
   mkdirSync(STATE, { recursive: true });
   server = spawn(join(REPO, "target/debug/fake-mail"), [STATE], { stdio: ["ignore", "pipe", "inherit"] });
   const ports = await new Promise<{ imap: number; smtp: number }>((ok) => createInterface({ input: server.stdout! }).once("line", (l) => ok(JSON.parse(l))));
   installEmailPlugin(); // the plugin as shipped, its helper built from this checkout
-  await put(request, ".atlas/plugin-settings/email.toml",
+  await put(request, ".kandinsky/plugin-settings/email.toml",
     `undo_send = 1\nprefetch = 50\n\n[[accounts]]\nname = "test"\nuser = "me@example.org"\nfrom = "Me <me@example.org>"\nsignature = "Me\\nPhysics dept."\nimap_host = "127.0.0.1"\nimap_port = ${ports.imap}\nsmtp_host = "127.0.0.1"\nsmtp_port = ${ports.smtp}\nsecurity = "none"\n`);
   await request.put(`/api/plugins/email/secrets/${encodeURIComponent("accounts.test.password")}`, { headers: H, data: { value: "pw" } });
   await request.post("/api/plugins/email/helper/stop", { headers: H });
 });
 test.afterAll(async ({ request }) => {
   await request.post("/api/plugins/email/helper/stop", { headers: H });
-  rmSync(join(WS, ".atlas/plugins/email"), { recursive: true, force: true });
+  rmSync(join(WS, ".kandinsky/plugins/email"), { recursive: true, force: true });
   await request.delete(`/api/plugins/email/secrets/${encodeURIComponent("accounts.test.password")}`, { headers: H });
   server?.kill();
 });
@@ -46,7 +46,7 @@ test.afterAll(async ({ request }) => {
 async function openPane(page: Page) {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __atlas: { commands(): { id: string }[] } }).__atlas.commands().some((c) => c.id === "plugin.email.open")), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __kandinsky: { commands(): { id: string }[] } }).__kandinsky.commands().some((c) => c.id === "plugin.email.open")), { timeout: 20_000 }).toBe(true);
   await runCommand(page, "Email: open mail", "Email: open mail");
   const mail = page.locator(".mail");
   await expect(mail).toBeVisible();
@@ -132,7 +132,7 @@ test("search with operators, an HTML mail drawn safely, and Save as note drawn a
   await expect(frame.locator("a", { hasText: "the talk page" })).toHaveAttribute("href", "https://example.org/talk");
   await expect(frame.locator("script")).toHaveCount(0);
   await expect(frame.locator("img[alt=logo]")).toHaveAttribute("src", /^data:image\/png;base64,/);
-  await expect(frame.locator("details.atlas-quoted")).toHaveCount(1);
+  await expect(frame.locator("details.kandinsky-quoted")).toHaveCount(1);
   await expect(reader.getByRole("button", { name: "Unsubscribe" }).first()).toBeVisible();
   await expect(reader.locator(".fname")).toHaveText(["photo.png"]);
 
@@ -155,7 +155,7 @@ test("Claude's read of an account asks in the window first; Always is kept on th
   test.setTimeout(90_000);
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __atlas: { commands(): { id: string }[] } }).__atlas.commands().some((c) => c.id === "plugin.email.check")), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __kandinsky: { commands(): { id: string }[] } }).__kandinsky.commands().some((c) => c.id === "plugin.email.check")), { timeout: 20_000 }).toBe(true);
   const asked = request.post("/api/plugins/email/tools/inbox", { headers: H, data: { limit: 2 } });
   const palette = page.getByTestId("palette");
   await expect(palette.getByRole("textbox")).toHaveAttribute("placeholder", /Claude asks to read test/, { timeout: 30_000 });
@@ -166,7 +166,7 @@ test("Claude's read of an account asks in the window first; Always is kept on th
   await expect(palette.getByRole("textbox")).toHaveAttribute("placeholder", /Claude asks to read test/, { timeout: 15_000 });
   await palette.getByText("Always allow for test").click();
   expect(((await (await again).json()) as { messages: unknown[] }).messages).toHaveLength(1);
-  await expect.poll(async () => (await read(request, ".atlas/plugin-settings/email.toml")) ?? "").toMatch(/claude = "always"/);
+  await expect.poll(async () => (await read(request, ".kandinsky/plugin-settings/email.toml")) ?? "").toMatch(/claude = "always"/);
 });
 
 test("important: i pins it on top and keeps it as a note; n sends it to Not important, g n shows it there", async ({ page }) => {
@@ -207,9 +207,9 @@ test("Ctrl+F finds in the conversation's frames; a pasted picture goes in the te
   await find.fill("ATTACHED");
   await expect(reader.locator(".find .count")).toHaveText(/^1 of \d+$/);
   const frame = reader.frameLocator("iframe.frame").first();
-  await expect(frame.locator("mark.atlas-find.cur")).toHaveText("attached");
+  await expect(frame.locator("mark.kandinsky-find.cur")).toHaveText("attached");
   await find.press("Escape");
-  await expect(frame.locator("mark.atlas-find")).toHaveCount(0);
+  await expect(frame.locator("mark.kandinsky-find")).toHaveCount(0);
   await page.screenshot({ path: "target/email-find.png" });
 
   // a new message; a long subject never widens the window (the popup stays put)
@@ -233,7 +233,7 @@ test("Ctrl+F finds in the conversation's frames; a pasted picture goes in the te
   await expect(menu.locator('[data-label="Task…"]')).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
-  // the text is the app's prose editor (atlas.editor.prose): the caret to its end, then the paste
+  // the text is the app's prose editor (kandinsky.editor.prose): the caret to its end, then the paste
   await body.press("Control+End");
   await body.evaluate(async (t: HTMLElement) => {
     // a 1×1 PNG on the clipboard, as a screenshot tool leaves it

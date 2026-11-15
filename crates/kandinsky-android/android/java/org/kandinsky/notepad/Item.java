@@ -1,9 +1,9 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.graphics.Canvas;
 import android.graphics.RectF;
 
-import org.atlas.capture.Host;
+import org.kandinsky.capture.Host;
 import org.json.JSONException;
 import org.json.JSONObject;
 

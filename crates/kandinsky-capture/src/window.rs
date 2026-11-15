@@ -55,11 +55,11 @@ fn attributes(el: &ActiveEventLoop, floating: bool) -> WindowAttributes {
         .with_decorations(false)
         .with_window_level(WindowLevel::AlwaysOnTop)
         .with_active(true);
-    // the desktop's name for it (a shortcut, a window rule): atlas-capture
+    // the desktop's name for it (a shortcut, a window rule): kandinsky-capture
     #[cfg(target_os = "linux")]
     {
-        a = winit::platform::wayland::WindowAttributesExtWayland::with_name(a, "atlas-capture", "atlas-capture");
-        a = winit::platform::x11::WindowAttributesExtX11::with_name(a, "atlas-capture", "atlas-capture");
+        a = winit::platform::wayland::WindowAttributesExtWayland::with_name(a, "kandinsky-capture", "kandinsky-capture");
+        a = winit::platform::x11::WindowAttributesExtX11::with_name(a, "kandinsky-capture", "kandinsky-capture");
     }
     // the window's own icon (X11; Wayland takes it from the desktop file the app id names)
     a = a.with_window_icon(window_icon());
@@ -71,7 +71,7 @@ fn attributes(el: &ActiveEventLoop, floating: bool) -> WindowAttributes {
     a
 }
 
-/// Atlas's icon (packaging/icon/atlas.svg, at 64 px by scripts/dev/icons.mjs), built into the program.
+/// Kandinsky's icon (packaging/icon/kandinsky.svg, at 64 px by scripts/dev/icons.mjs), built into the program.
 fn window_icon() -> Option<winit::window::Icon> {
     let mut dec = png::Decoder::new(&include_bytes!("../../kandinsky-app/icons/64x64.png")[..]);
     dec.set_transformations(png::Transformations::normalize_to_color8());
@@ -87,12 +87,12 @@ fn window_icon() -> Option<winit::window::Icon> {
 impl Run {
     fn show(&mut self, el: &ActiveEventLoop) -> anyhow::Result<()> {
         // floating on Wayland, where the compositor takes the alpha (and the box cannot place a second window);
-        // ATLAS_CAPTURE_FLOAT=0 keeps the growing box there too
+        // KANDINSKY_CAPTURE_FLOAT=0 keeps the growing box there too
         #[cfg(target_os = "linux")]
         let wayland = winit::platform::wayland::ActiveEventLoopExtWayland::is_wayland(el);
         #[cfg(not(target_os = "linux"))]
         let wayland = false;
-        self.cap.floating = wayland && std::env::var("ATLAS_CAPTURE_FLOAT").map_or(true, |v| v != "0");
+        self.cap.floating = wayland && kandinsky_core::env::var("CAPTURE_FLOAT").map_or(true, |v| v != "0");
         if self.cap.floating {
             self.cap.asked = FLOAT_HEIGHT;
         }
@@ -103,12 +103,12 @@ impl Run {
         let mut info = ViewportInfo::default();
         egui_winit::update_viewport_info(&mut info, &self.ctx, &window, true);
         if self.timing {
-            eprintln!("atlas-capture: window ready after {} ms", self.started.elapsed().as_millis());
+            eprintln!("kandinsky-capture: window ready after {} ms", self.started.elapsed().as_millis());
         }
         window.request_redraw();
         let region = if self.cap.floating { InputRegion::new(&window) } else { None };
         if self.cap.floating && region.is_none() {
-            eprintln!("atlas-capture: no input region: the whole window takes the pointer");
+            eprintln!("kandinsky-capture: no input region: the whole window takes the pointer");
         }
         self.shown = Some(Shown { region, surface, window, input, info });
         Ok(())
@@ -144,14 +144,14 @@ impl Run {
                 self.canvas.paint(&mut buf, size.width as usize, size.height as usize, out.pixels_per_point, bg, &prims);
                 s.window.pre_present_notify();
                 if let Err(e) = buf.present() {
-                    eprintln!("atlas-capture: could not show the frame: {e}");
+                    eprintln!("kandinsky-capture: could not show the frame: {e}");
                 }
             }
         }
         self.canvas.free(&out.textures_delta);
         self.frames += 1;
         if self.timing && self.frames == 1 {
-            eprintln!("atlas-capture: first frame shown after {} ms", self.started.elapsed().as_millis());
+            eprintln!("kandinsky-capture: first frame shown after {} ms", self.started.elapsed().as_millis());
         }
         self.next = match delay {
             d if d.is_zero() => {
@@ -168,7 +168,7 @@ impl ApplicationHandler for Run {
     fn resumed(&mut self, el: &ActiveEventLoop) {
         if self.shown.is_none() {
             if let Err(e) = self.show(el) {
-                eprintln!("atlas-capture: no window: {e}");
+                eprintln!("kandinsky-capture: no window: {e}");
                 el.exit();
             }
         }

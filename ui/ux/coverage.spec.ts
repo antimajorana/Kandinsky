@@ -1,6 +1,6 @@
-// Coverage journeys: not a chosen path but EVERYTHING — every command Atlas lists, every on/off
+// Coverage journeys: not a chosen path but EVERYTHING — every command Kandinsky lists, every on/off
 // setting, every file type in the sample, the git flow. Inventories come from the app itself
-// (`window.__atlas`), so a new command or pane kind is covered (or reported uncovered) automatically.
+// (`window.__kandinsky`), so a new command or pane kind is covered (or reported uncovered) automatically.
 import { expect, type Page } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -32,13 +32,13 @@ function skipReason(c: CmdInfo, description: string): string | null {
   return null;
 }
 
-journey("Every command", "Run each command Atlas lists, from the palette, the way a user would", async (u) => {
+journey("Every command", "Run each command Kandinsky lists, from the palette, the way a user would", async (u) => {
   const p = u.page;
   await ready(p);
-  const cmds: CmdInfo[] = await p.evaluate(() => (window as unknown as { __atlas: { commands(): CmdInfo[] } }).__atlas.commands());
-  const kinds: string[] = await p.evaluate(() => (window as unknown as { __atlas: { paneKinds: string[] } }).__atlas.paneKinds);
+  const cmds: CmdInfo[] = await p.evaluate(() => (window as unknown as { __kandinsky: { commands(): CmdInfo[] } }).__kandinsky.commands());
+  const kinds: string[] = await p.evaluate(() => (window as unknown as { __kandinsky: { paneKinds: string[] } }).__kandinsky.paneKinds);
   const descs: Record<string, string> = Object.fromEntries(
-    ((await p.request.get("/api/commands", { headers: { "x-atlas": "1" } }).then((r) => r.json())) as { id: string; description?: string }[])
+    ((await p.request.get("/api/commands", { headers: { "x-kandinsky": "1" } }).then((r) => r.json())) as { id: string; description?: string }[])
       .map((c) => [c.id, c.description ?? ""]),
   );
   writeFileSync(join(OUT, "inventory.json"), JSON.stringify({ commands: cmds, paneKinds: kinds }, null, 1));
@@ -53,7 +53,7 @@ journey("Every command", "Run each command Atlas lists, from the palette, the wa
       await u.click(p.getByTestId("palette-item").filter({ hasText: c.title }).first());
       u.ranCommand(c.id);
       if (c.id === "ui.web") {
-        // the URL prompt: open Atlas's own page (always reachable) in a web pane
+        // the URL prompt: open Kandinsky's own page (always reachable) in a web pane
         await u.type(new URL(p.url()).origin + "/");
         await u.press("Enter");
         await expect(p.locator(".web-pane")).toBeVisible(T);
@@ -122,7 +122,7 @@ journey("Every file type", "Open one file of each kind found in the workspace an
   const p = u.page;
   await ready(p);
   for (const [ext, kind, proof] of TYPES) {
-    const hits: string[] = await p.request.get(`/api/search?q=${encodeURIComponent("." + ext)}`, { headers: { "x-atlas": "1" } })
+    const hits: string[] = await p.request.get(`/api/search?q=${encodeURIComponent("." + ext)}`, { headers: { "x-kandinsky": "1" } })
       .then((r) => r.json()).then((j) => (j.files as string[]).filter((f) => f.toLowerCase().endsWith("." + ext)), () => []);
     if (!hits.length) { u.skip(`Open a .${ext} file`, "none in the workspace sample"); continue; }
     const name = hits[0].split("/").pop()!;
@@ -131,7 +131,7 @@ journey("Every file type", "Open one file of each kind found in the workspace an
       await u.openFile(name);
       await expect(p.locator(proof).first()).toBeVisible({ timeout: 10_000 });
       // the UI reports its state to the core a moment later: poll, then judge
-      await expect.poll(async () => (await p.request.get("/api/ui/state", { headers: { "x-atlas": "1" } }).then((r) => r.json())).active?.kind,
+      await expect.poll(async () => (await p.request.get("/api/ui/state", { headers: { "x-kandinsky": "1" } }).then((r) => r.json())).active?.kind,
         { timeout: 3000, message: `pane kind for .${ext}` }).toBe(kind);
     });
   }
@@ -156,6 +156,6 @@ journey("Git", "See what changed, read a diff, look at a commit", async (u) => {
   });
   await u.step("Open a commit from the history", { budget: 1500 }, async () => {
     await u.click(p.locator(".side-pane.git button.commit").first());
-    await expect.poll(async () => (await p.request.get("/api/ui/state", { headers: { "x-atlas": "1" } }).then((r) => r.json())).active?.kind, T).toBe("commit");
+    await expect.poll(async () => (await p.request.get("/api/ui/state", { headers: { "x-kandinsky": "1" } }).then((r) => r.json())).active?.kind, T).toBe("commit");
   });
 });

@@ -1,4 +1,4 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 /** Small geometry for the canvas: distances, the lasso's inside test, rounding for the file. */
 final class Geometry {

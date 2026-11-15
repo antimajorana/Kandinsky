@@ -1,6 +1,6 @@
-// Things that happen in Atlas, told to plugins (`atlas.on(type, fn)`). The events are sent from the
+// Things that happen in Kandinsky, told to plugins (`kandinsky.on(type, fn)`). The events are sent from the
 // few places everything passes through (the API client for saves, moves and deletes; `open` for
-// tabs), so no pane has to remember to announce what it did. They are about what is done IN Atlas:
+// tabs), so no pane has to remember to announce what it did. They are about what is done IN Kandinsky:
 // a change made by another program arrives through `onFilesChanged` as before.
 import { guard } from "./plugin-log.svelte";
 import { isBookkeeping } from "./bus";

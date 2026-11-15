@@ -1,32 +1,45 @@
-# Atlas in server mode: every folder in ./vaults (or $ATLAS_VAULTS) is a vault at http://<host>:7700/v/<folder>/.
+# Kandinsky in server mode: every folder in ./vaults (or $KANDINSKY_VAULTS) is a vault at http://<host>:7700/v/<folder>/.
 #
 #   cp .env.example .env                                     # then edit it
-#   docker compose run --rm atlas server password            # once: the owner's password (asked twice, never echoed)
+#   docker compose run --rm kandinsky server password            # once: the owner's password (asked twice, never echoed)
 #   docker compose up -d
 #
 # Behind a reverse proxy with a sign-in in front (Authelia, Authentik, oauth2-proxy…): see the commented lines below and
 # docs/guides/SERVER.md, "Behind a proxy".
-name: atlas
+#
+# Coming from Atlas (this project's earlier name): its compose project `atlas` kept the sign-in and sessions in the
+# volumes `atlas_atlas-config` and `atlas_atlas-state`, each with an `atlas/` folder, and read `ATLAS_*` from .env.
+# Docker cannot rename a volume, so once, before the first `up`, copy them by hand into the new names (the old volumes
+# stay until you remove them yourself), and rename the variables in .env to `KANDINSKY_*` (the server's files are then
+# in kandinsky/, read there by either image: see `environment` below):
+#   for v in config state; do docker run --rm -v atlas_atlas-$v:/from:ro -v kandinsky_kandinsky-$v:/to alpine \
+#     sh -c 'cp -a /from/. /to/ && if [ -d /to/atlas ] && [ ! -e /to/kandinsky ]; then mv /to/atlas /to/kandinsky; fi'; done
+name: kandinsky
 
 services:
-  atlas:
-    image: ${ATLAS_IMAGE:-ghcr.io/alneb/atlas:latest}
+  kandinsky:
+    image: ${KANDINSKY_IMAGE:-ghcr.io/alneb/atlas:latest}
     build:
       context: .
       dockerfile: packaging/docker/Dockerfile
     # the vault files keep their owner on the host: run as that user (`id -u` / `id -g`)
-    user: "${ATLAS_UID:-1000}:${ATLAS_GID:-1000}"
+    user: "${KANDINSKY_UID:-1000}:${KANDINSKY_GID:-1000}"
     ports:
-      - "${ATLAS_PORT:-7700}:7700"
+      - "${KANDINSKY_PORT:-7700}:7700"
     volumes:
-      - ${ATLAS_VAULTS:-./vaults}:/vaults          # your notes: one folder per vault
-      - atlas-config:/config                       # server.toml: the sign-in mode, the password's hash
-      - atlas-state:/state                         # sessions, device tokens, caches
+      - ${KANDINSKY_VAULTS:-./vaults}:/vaults          # your notes: one folder per vault
+      - kandinsky-config:/config                       # server.toml: the sign-in mode, the password's hash
+      - kandinsky-state:/state                         # sessions, device tokens, caches
       # plugins' secrets as read-only files (/secrets/<plugin>/<name>), as Docker secrets are:
       # - ./secrets:/secrets:ro
     environment:
       TZ: ${TZ:-UTC}
-      # ATLAS_SECRET_FILES: /secrets
+      # The default image is upstream Atlas's (built from this repository it is Kandinsky's), which reads the sign-in and
+      # the sessions from the files these name: the same files as Kandinsky's own image, so the folders moved below
+      # (atlas/ -> kandinsky/) are found whichever image runs.
+      ATLAS_SERVER_CONFIG: /config/kandinsky/server.toml
+      ATLAS_SERVER_STATE: /state/kandinsky/server.json
+      # KANDINSKY_SECRET_FILES: /secrets
     restart: unless-stopped
     healthcheck:
       # any HTTP answer means the server is up (the sign-in page answers whether or not one is signed in)
@@ -41,5 +54,5 @@ services:
     # and publish the port only to the proxy, e.g. `ports: ["127.0.0.1:7700:7700"]`.
 
 volumes:
-  atlas-config:
-  atlas-state:
+  kandinsky-config:
+  kandinsky-state:

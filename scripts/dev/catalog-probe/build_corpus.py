@@ -10,7 +10,7 @@ import time
 import urllib.parse
 import urllib.request
 
-UA = {"User-Agent": "Atlas/0.1 (personal notes app; catalog test corpus)", "Accept": "application/json"}
+UA = {"User-Agent": "Kandinsky/0.1 (personal notes app; catalog test corpus)", "Accept": "application/json"}
 random.seed(17)
 
 
@@ -62,7 +62,7 @@ for lang, cat, n, kind, folder in [
     add(wiki_category(lang, cat, n), kind, folder, f"wikipedia {cat}")
 
 # Letterboxd: a public member's watched films, as film links in three shapes
-page = get("https://letterboxd.com/davidehrlich/films/page/2/", raw=True, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Atlas/0.1.0"}) or ""
+page = get("https://letterboxd.com/davidehrlich/films/page/2/", raw=True, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Kandinsky/0.1.0"}) or ""
 slugs = list(dict.fromkeys(re.findall(r'data-item-slug="([\w-]+)"', page)))[:70]
 add([random.choice([f"https://letterboxd.com/film/{s}/", f"letterboxd.com/film/{s}", f"https://letterboxd.com/davidehrlich/film/{s}/"]) for s in slugs], "movie", "Films", "letterboxd")
 
@@ -95,7 +95,7 @@ for typ, kind, folder in [("MANGA", "manga", "Manga"), ("ANIME", "anime", "Anime
     add([random.choice([f"https://anilist.co/{kind}/{m['id']}/", f"https://myanimelist.net/{kind}/{m['idMal']}"]) if m.get("idMal") else f"https://anilist.co/{kind}/{m['id']}/" for m in media], kind, folder, f"anilist {kind}")
 
 # YouTube: videos from a big public playlist, in every link shape; some as YouTube Music songs
-html = get("https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSU", raw=True, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Atlas/0.1.0"}) or ""
+html = get("https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSU", raw=True, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Kandinsky/0.1.0"}) or ""
 vids = list(dict.fromkeys(re.findall(r'"videoId":"([\w-]{11})"', html)))
 add([random.choice([f"https://www.youtube.com/watch?v={v}", f"https://youtu.be/{v}?si=Xy12", f"https://m.youtube.com/watch?v={v}&feature=share", f"https://www.youtube.com/watch?v={v}&t=42s"]) for v in vids[:60]], "video", "Videos", "youtube")
 add([f"https://music.youtube.com/watch?v={v}&si=abc" for v in vids[60:80]], "song", "Music", "youtube music")

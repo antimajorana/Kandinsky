@@ -1,15 +1,15 @@
 import { test, expect } from "@playwright/test";
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
-// docs/guides/MALLEABLE.md rung 2 (Stylish / Obsidian snippets): a .css file in .atlas/snippets restyles
-// Atlas on save, a switch in Settings turns it off, "New snippet" starts one and opens it.
+// docs/guides/MALLEABLE.md rung 2 (Stylish / Obsidian snippets): a .css file in .kandinsky/snippets restyles
+// Kandinsky on save, a switch in Settings turns it off, "New snippet" starts one and opens it.
 test("CSS snippets: live on save, switch off in Settings, new snippet", async ({ page, request }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   const outline = () => page.evaluate(() => getComputedStyle(document.querySelector(".status")!).outlineColor);
-  await request.put("/api/file", { headers: H, data: { path: ".atlas/snippets/pink.css", text: ".status { outline: 2px solid rgb(255, 0, 255); }\n" } });
+  await request.put("/api/file", { headers: H, data: { path: ".kandinsky/snippets/pink.css", text: ".status { outline: 2px solid rgb(255, 0, 255); }\n" } });
   await expect.poll(outline).toBe("rgb(255, 0, 255)");
-  await request.put("/api/file", { headers: H, data: { path: ".atlas/snippets/pink.css", text: ".status { outline: 2px solid rgb(0, 128, 0); }\n" } });
+  await request.put("/api/file", { headers: H, data: { path: ".kandinsky/snippets/pink.css", text: ".status { outline: 2px solid rgb(0, 128, 0); }\n" } });
   await expect.poll(outline).toBe("rgb(0, 128, 0)"); // edited → re-applied, no reload
   await page.keyboard.press("Meta+,");
   await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: "Appearance" }).click();
@@ -23,5 +23,5 @@ test("CSS snippets: live on save, switch off in Settings, new snippet", async ({
   await page.getByRole("dialog").getByRole("textbox").fill("wide notes");
   await page.keyboard.press("Enter");
   await expect(page.locator(".dv-tab.dv-active-tab")).toContainText("wide-notes.css");
-  await request.put("/api/file", { headers: H, data: { path: ".atlas/snippets/pink.css", text: "" } });
+  await request.put("/api/file", { headers: H, data: { path: ".kandinsky/snippets/pink.css", text: "" } });
 });

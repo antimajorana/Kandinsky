@@ -7,7 +7,7 @@ import type { TemplateRule } from "./TemplateRule";
  */
 export type NotesConfig = { 
 /**
- * What capture (Super+C, the capture box, `atlas capture`) writes: a bullet in today's log, or a note of its own.
+ * What capture (Super+C, the capture box, `kandinsky capture`) writes: a bullet in today's log, or a note of its own.
  */
 capture: CaptureMode, 
 /**
@@ -24,7 +24,7 @@ capture_template: string,
  */
 capture_thumbnail: number, 
 /**
- * Folder of note templates for "New note from a template…": notes in Atlas's template language —
+ * Folder of note templates for "New note from a template…": notes in Kandinsky's template language —
  * `{{title}}`, `{{date:dddd D MMMM}}`, `{{day-1d}}`, `{{prompt:Who}}`, `{{#if …}}`… (docs/guides/TEMPLATES.md).
  * A template may say where its notes go with a `create_in: <folder>` line in its frontmatter
  * (the line is not copied into the note).

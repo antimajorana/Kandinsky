@@ -6,15 +6,15 @@
  */
 export type Permissions = { 
 /**
- * Hosts `atlas.fetch` may reach: `"links.example.org"`, or `"*.example.org"` for any host under it.
+ * Hosts `kandinsky.fetch` may reach: `"links.example.org"`, or `"*.example.org"` for any host under it.
  */
 net: Array<string>, 
 /**
- * May keep secrets (`atlas.secrets`, a header filled in from one).
+ * May keep secrets (`kandinsky.secrets`, a header filled in from one).
  */
 secrets: boolean, 
 /**
- * Programs a JavaScript helper may run with `atlas.exec` (`["pandoc"]`): by name, found on the PATH, no shell
+ * Programs a JavaScript helper may run with `kandinsky.exec` (`["pandoc"]`): by name, found on the PATH, no shell
  * (js_exec.rs).
  */
 exec: Array<string>, };

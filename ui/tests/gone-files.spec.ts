@@ -4,7 +4,7 @@ import { shownName } from "../src/lib/paths";
 
 // "when you delete a file the tab does not close": a tab closes with its file, however the file
 // went (the Files pane, a terminal, git); a file renamed in the Files pane keeps its tab, at the new name.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("a deleted file's tab closes; a file renamed in Files reopens under its new name", async ({ page, request }) => {
   // the rename's target must not be there (a run before left it; a move never overwrites a file)

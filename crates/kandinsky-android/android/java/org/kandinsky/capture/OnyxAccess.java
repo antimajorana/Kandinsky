@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Activity;
 import android.app.AlarmManager;
@@ -17,7 +17,7 @@ enum OnyxAccess {
     BLOCKED, // Onyx's class is there, its methods hidden from this app: the whitelist is needed
     OPEN;
 
-    private static final String TAG = "AtlasInk", ACTION = "com.onyx.action.disable_restriction", ASKED = "onyxWhitelistAsked";
+    private static final String TAG = "KandinskyInk", ACTION = "com.onyx.action.disable_restriction", ASKED = "onyxWhitelistAsked";
 
     static OnyxAccess here() {
         Class<?> h;
@@ -30,13 +30,13 @@ enum OnyxAccess {
      *  (never a prompt at every drawing). Changing Onyx's settings is the user's call, so never without the dialog. */
     static void offer(Activity a) {
         if (here() != BLOCKED) return;
-        android.content.SharedPreferences p = a.getSharedPreferences("atlas-onyx", Activity.MODE_PRIVATE);
+        android.content.SharedPreferences p = a.getSharedPreferences("kandinsky-onyx", Activity.MODE_PRIVATE);
         if (p.getBoolean(ASKED, false)) { Log.w(TAG, "still blocked after asking Onyx to whitelist " + a.getPackageName()); return; }
         new AlertDialog.Builder(a)
             .setTitle("Instant ink")
-            .setMessage("This Boox lets only the apps on its list draw the pen's line at once; Atlas draws it a moment later.\n\n"
-                + "Ask the Boox to add Atlas to that list? It is Onyx's own setting (kept in its system settings) and Atlas restarts once.")
-            .setPositiveButton("Add Atlas and restart", (d, w) -> { p.edit().putBoolean(ASKED, true).apply(); whitelist(a); })
+            .setMessage("This Boox lets only the apps on its list draw the pen's line at once; Kandinsky draws it a moment later.\n\n"
+                + "Ask the Boox to add Kandinsky to that list? It is Onyx's own setting (kept in its system settings) and Kandinsky restarts once.")
+            .setPositiveButton("Add Kandinsky and restart", (d, w) -> { p.edit().putBoolean(ASKED, true).apply(); whitelist(a); })
             .setNegativeButton("Not now", null)
             .show();
     }
@@ -44,7 +44,7 @@ enum OnyxAccess {
     private static void whitelist(Activity a) {
         a.sendBroadcast(new Intent(ACTION).putExtra("package", a.getPackageName()));
         Log.i(TAG, "asked Onyx to whitelist " + a.getPackageName() + "; restarting");
-        android.widget.Toast.makeText(a, "Atlas restarts with instant ink (if it does not come back, open it again)", android.widget.Toast.LENGTH_LONG).show();
+        android.widget.Toast.makeText(a, "Kandinsky restarts with instant ink (if it does not come back, open it again)", android.widget.Toast.LENGTH_LONG).show();
         // back in a moment, in a new process (the whitelist also lets Onyx's alarms run for it); then this one ends
         Intent open = a.getPackageManager().getLaunchIntentForPackage(a.getPackageName());
         if (open != null) {

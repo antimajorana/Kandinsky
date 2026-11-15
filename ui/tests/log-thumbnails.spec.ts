@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 // A capture's picture in the day's log is a thumbnail: the capture writes `![[x|160]]`, Home draws the line with its time in a column and the picture
 // small, and the log note keeps the entry and its picture on the timeline, the markdown under the caret quieted.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const TALL = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="900"><rect width="400" height="900" fill="#345"/></svg>`;
 
 test("a captured picture is a thumbnail on Home and in the log note; the log line is drawn as a timeline", async ({ page, request }) => {

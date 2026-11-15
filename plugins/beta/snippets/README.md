@@ -5,7 +5,7 @@ generated, a body computed, and any place tested with code.
 
 ## A file
 
-Every module in `.atlas/snippets/` with an `export default` is read, in name order, and read again when it changes.
+Every module in `.kandinsky/snippets/` with an `export default` is read, in name order, and read again when it changes.
 
 ```js
 export default ({ math, text, code, visual, anywhere, commands, words, vars, std, option, options }) => [
@@ -56,14 +56,14 @@ typed. A Space right after an expansion that left the caret inside its bracket o
 ## An old LaTeX Suite file
 
 The file named by `[latex] snippets_file` keeps working until you convert it, from Settings → Snippets or the palette
-(*Snippets: convert the old snippet file*). That writes `.atlas/snippets/converted.js` and leaves the old file as it was.
+(*Snippets: convert the old snippet file*). That writes `.kandinsky/snippets/converted.js` and leaves the old file as it was.
 The conversion mends rules known to misfire, as one batch, and lists each change at the top of the new file.
 
 ## The plugin's set, and your own files
 
-Snippets come only from the files in `.atlas/snippets/`. The LaTeX set is the plugin's: `starter.js` beside the
-plugin, kept in the vault as `.atlas/snippets/latex.js` and **kept current by the plugin** — written when missing,
-replaced when a new version of the plugin brings a different set (the copy it replaces goes to `.atlas/trash/`). Turn
+Snippets come only from the files in `.kandinsky/snippets/`. The LaTeX set is the plugin's: `starter.js` beside the
+plugin, kept in the vault as `.kandinsky/snippets/latex.js` and **kept current by the plugin** — written when missing,
+replaced when a new version of the plugin brings a different set (the copy it replaces goes to `.kandinsky/trash/`). Turn
 any snippet or option of it on or off in Settings → Snippets (the switches are kept in the plugin's settings, so an
 update keeps them). Snippets of your own go in another `.js` file in that folder, read beside the set. While a vault
 still has an old LaTeX Suite file that is not converted, the set waits, so the two never both fire.

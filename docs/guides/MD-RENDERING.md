@@ -6,13 +6,13 @@ properties.
 
 ## The tool that checks "every single one": `npm run audit:md`
 `ui/audit/render.spec.ts` (+ `render.config.ts`, `sample.ts`) copies the note folders of a workspace
-(a real vault, `ATLAS_AUDIT_SOURCE`; dirs `notes,log` + FOCUS.md; env `ATLAS_AUDIT_DIRS`, `ATLAS_AUDIT_WS`,
-`ATLAS_AUDIT_OUT`, `ATLAS_AUDIT_PORT`=7750, `ATLAS_PW_CHROME`), serves the copy with the real `atlas` binary,
+(a real vault, `KANDINSKY_AUDIT_SOURCE`; dirs `notes,log` + FOCUS.md; env `KANDINSKY_AUDIT_DIRS`, `KANDINSKY_AUDIT_WS`,
+`KANDINSKY_AUDIT_OUT`, `KANDINSKY_AUDIT_PORT`=7750, `KANDINSKY_PW_CHROME`), serves the copy with the real `kandinsky` binary,
 opens **every** `.md` in the live-preview editor and scrolls it end to end. On each screen it flags, shape-based
 (no per-note lists): raw `$math$` / `$$` / `![[embed]]` / HTML tags in rendered prose (caret line excluded),
 KaTeX errors, missing embeds and broken images, tables that overflow (hidden columns), fold arrows not on their
 line, a bare "Properties" chip, page errors. Output: `audit-report/REPORT.md` (totals per kind, then per note).
-Build first: `npm run build && (cd .. && cargo build -p atlas)`. ~5–7 min for 104 notes.
+Build first: `npm run build && (cd .. && cargo build -p kandinsky)`. ~5–7 min for 104 notes.
 
 | run | notes with problems | findings |
 |---|---|---|
@@ -100,7 +100,7 @@ The vault's 21 Excalidraw embeds name `x.excalidraw` while the file is the Obsid
 (Obsidian appends `.md`; `vault.ts` now tries `<target>.md` after an exact name). The renderer emits a
 placeholder (`.drawing-embed[data-src]`, with `|600` / `|center`); `lib/draw-embed.ts` fills it: the scene JSON
 comes from the ```` ```compressed-json ```` block (LZString base64, `lz-string`) or ```` ```json ````, or the file
-itself for Atlas's own `.excalidraw`; Excalidraw's `exportToSvg` draws it for the app theme (dark mode inverts
+itself for Kandinsky's own `.excalidraw`; Excalidraw's `exportToSvg` draws it for the app theme (dark mode inverts
 strokes, as the plugin does). Excalidraw loads only when a note has a drawing. Natural size from the scene,
 never wider than the note. A file that does not resolve or decode shows a dashed "drawing …: reason" box (the
 audit counts those as "drawing not rendered").
@@ -135,7 +135,7 @@ compressed-json fixture, an Ink block). Fixtures are written through the API.
 ## Line breaks inside a paragraph
 
 Obsidian's "Strict line breaks" is off by default (and in the real vaults tested): a single newline inside a paragraph
-shows as a line break in rendered Markdown. Atlas's renderer had `breaks: false` (CommonMark's rule), so rendered
+shows as a line break in rendered Markdown. Kandinsky's renderer had `breaks: false` (CommonMark's rule), so rendered
 views — the Today log, embeds, previews, callouts in HTML — ran such lines together (seen: the OCR plugin's callout of
 a screenshot's lines). Now `breaks: true`, and `[editor] strict_line_breaks = true` gives the CommonMark rule for a
 vault that turned Obsidian's setting on (markdown.ts follows the setting; each render cache clears when it changes).
@@ -144,7 +144,7 @@ Live preview was never affected: its lines are the source's. Spec: `line-breaks.
 
 ## Foldable callouts in rendered views
 
-`> [!x]-` is folded in Obsidian's reading view and `> [!x]+` open but foldable; Atlas's rendered HTML ignored the marker
+`> [!x]-` is folded in Obsidian's reading view and `> [!x]+` open but foldable; Kandinsky's rendered HTML ignored the marker
 (the OCR plugin's folded text showed in full in Today's log). Now a foldable callout renders as `<details>` (open for
 `+`) with its title as the `<summary>` and a chevron; a plain `[!x]` stays a `<div>`. Spec: `line-breaks.spec.ts`; audit
 unchanged (117 notes, the same 2 with known findings).

@@ -1,4 +1,4 @@
-//! The toolsmith (docs/guides/MALLEABLE.md R5: tools should not have to be asked for): Atlas
+//! The toolsmith (docs/guides/MALLEABLE.md R5: tools should not have to be asked for): Kandinsky
 //! notices what the workspace already does and drafts a tool for it. Drafts are computed, never
 //! written until kept (inert, reversible); a dismissed one does not come back.
 //!
@@ -15,13 +15,13 @@ use crate::{links, usage};
 use crate::{Error, Result, Workspace};
 use std::collections::{BTreeMap, BTreeSet};
 
-const DISMISSED: &str = ".atlas/suggestions-dismissed.txt";
+const DISMISSED: &str = ".kandinsky/suggestions-dismissed.txt";
 const MIN_NOTES: usize = 4;
 /// Keys that say nothing about the notes' own shape.
 const GENERIC: &[&str] = &["tags", "tag", "aliases", "alias", "cssclasses", "cssclass", "title", "publish", "permalink"];
 
 fn dismissed(ws: &Workspace) -> BTreeSet<String> {
-    std::fs::read_to_string(ws.root().join(DISMISSED)).unwrap_or_default().lines().map(str::to_string).collect()
+    std::fs::read_to_string(crate::state_dir::join(ws.root(), DISMISSED)).unwrap_or_default().lines().map(str::to_string).collect()
 }
 
 /// Notes a plugin wrote (`excalidraw-plugin: parsed`…): their frontmatter is the tool's, not yours.
@@ -58,7 +58,7 @@ fn base_draft(dir: &str, keys: &[String], props: &[&crate::note_props::Props], f
     let name = dir.rsplit('/').next().unwrap_or(dir);
     let order = std::iter::once("file.name".to_string()).chain(keys.iter().cloned()).collect::<Vec<_>>().join(", ");
     let mut text = format!(
-        "# Made by Atlas from the notes in {dir}/ (they share {}). Edit freely.\nfilters: 'file.inFolder({})'\nviews:\n  - type: table\n    name: All\n    order: [{order}]\n",
+        "# Made by Kandinsky from the notes in {dir}/ (they share {}). Edit freely.\nfilters: 'file.inFolder({})'\nviews:\n  - type: table\n    name: All\n    order: [{order}]\n",
         keys.join(", "),
         folder_literal(dir)
     );
@@ -202,7 +202,7 @@ fn notes_together(ws: &Workspace, log: &[usage::Entry], existing: &[String]) -> 
                 files: vec![DraftFile {
                     path: file,
                     text: format!(
-                        "# Made by Atlas: you open these two together. Reshape freely (Edit layout).\ntitle: {}\nrows:\n  - columns:\n      - [{{ note: {} }}]\n      - [{{ note: {} }}]\n",
+                        "# Made by Kandinsky: you open these two together. Reshape freely (Edit layout).\ntitle: {}\nrows:\n  - columns:\n      - [{{ note: {} }}]\n      - [{{ note: {} }}]\n",
                         q(&format!("{sa} + {sb}")),
                         q(a),
                         q(b)
@@ -232,7 +232,7 @@ fn repeated_searches(log: &[usage::Entry], existing: &[String]) -> Vec<ToolDraft
             why: format!("You searched “{k}” and opened a result {n} times over {} days — a page keeps the results live.", days.len()),
             files: vec![DraftFile {
                 path: format!("pages/search-{}.page", crate::paths::slugify(&k)),
-                text: format!("# Made by Atlas: a search you keep running. The block re-runs as files change.\ntitle: {}\nrows:\n  - [{{ view: search, q: {} }}]\n", q(&format!("Search: {k}")), q(&k)),
+                text: format!("# Made by Kandinsky: a search you keep running. The block re-runs as files change.\ntitle: {}\nrows:\n  - [{{ view: search, q: {} }}]\n", q(&format!("Search: {k}")), q(&k)),
             }],
         })
         .collect()
@@ -265,7 +265,7 @@ pub fn keep(ws: &Workspace, id: &str) -> Result<Vec<String>> {
 }
 
 pub fn dismiss(ws: &Workspace, id: &str) -> Result<()> {
-    crate::vault_write::append(&ws.root().join(DISMISSED), format!("{id}\n").as_bytes())
+    crate::vault_write::append(&crate::state_dir::join(ws.root(), DISMISSED), format!("{id}\n").as_bytes())
 }
 
 #[cfg(test)]

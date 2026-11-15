@@ -4,7 +4,7 @@
   // one, a tile tinted by the title with its first letter, so items without covers still read as covers.
   import type { LibraryItem, PluginApi } from "../../../../../ui/src/lib/plugin-api";
 
-  let { atlas, cover, title, big = false }: { atlas: PluginApi; cover: LibraryItem["cover"]; title: string; big?: boolean } = $props();
+  let { kandinsky, cover, title, big = false }: { kandinsky: PluginApi; cover: LibraryItem["cover"]; title: string; big?: boolean } = $props();
   let url = $state<string | null>(null);
   let box = $state<HTMLElement>();
 
@@ -13,7 +13,7 @@
     if (!raw) return null;
     if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
     // a link's alias is no part of its target; the target is found as a link is, a PDF drawn as its first page
-    return atlas.thumbUrl(raw.replace(/^!?\[\[|\]\]$/g, "").split("|")[0], big ? 520 : 260);
+    return kandinsky.thumbUrl(raw.replace(/^!?\[\[|\]\]$/g, "").split("|")[0], big ? 520 : 260);
   }
 
   $effect(() => {

@@ -5,18 +5,18 @@
   import { addDays, call, evStart, notePath, sameDay, startOfDay, timeText, hourCycle, ymd, type Ev, type PluginApi } from "./api";
   import { onDay } from "./layout";
 
-  let { atlas, options, onopen }: { atlas: PluginApi; options: Record<string, unknown>; onopen: (date: string) => void } = $props();
+  let { kandinsky, options, onopen }: { kandinsky: PluginApi; options: Record<string, unknown>; onopen: (date: string) => void } = $props();
   let events = $state<Ev[]>([]);
   let error = $state("");
   let loaded = $state(false);
   // svelte-ignore state_referenced_locally
   const days = Math.max(1, Math.min(31, Number(options.days ?? 7) || 7));
   const today = startOfDay(new Date());
-  const h12 = $derived(hourCycle(atlas.plugin.settings.time_format));
+  const h12 = $derived(hourCycle(kandinsky.plugin.settings.time_format));
 
   async function load() {
     try {
-      const r = await call<{ events: Ev[] }>(atlas, "range", { from: ymd(today), to: ymd(addDays(today, days - 1)), notes: atlas.plugin.settings.show_notes !== false }, 30);
+      const r = await call<{ events: Ev[] }>(kandinsky, "range", { from: ymd(today), to: ymd(addDays(today, days - 1)), notes: kandinsky.plugin.settings.show_notes !== false }, 30);
       events = r.events;
       error = "";
     } catch (e) { error = (e as Error).message; }
@@ -24,30 +24,30 @@
   }
   onMount(() => {
     void load();
-    void call(atlas, "watch", {}, 30).then(load, () => {});
+    void call(kandinsky, "watch", {}, 30).then(load, () => {});
     // a sync of several calendars says `changed` for each: one reload for the burst
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const off = atlas.helper.on("changed", () => { clearTimeout(timer); timer = setTimeout(() => void load(), 250); });
+    const off = kandinsky.helper.on("changed", () => { clearTimeout(timer); timer = setTimeout(() => void load(), 250); });
     return () => { clearTimeout(timer); off(); };
   });
   const groups = $derived(Array.from({ length: days }, (_, i) => addDays(today, i)).map((d) => ({ d, evs: onDay(events, d).sort((a, b) => Number(!a.all_day) - Number(!b.all_day) || evStart(a).getTime() - evStart(b).getTime()) })).filter((g, i) => i < 2 || g.evs.length));
   const label = (d: Date) => (sameDay(d, today) ? "Today" : sameDay(d, addDays(today, 1)) ? "Tomorrow" : d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" }));
   function open(e: Ev | null, d: Date) {
     const note = e ? notePath(e) : null;
-    if (note) atlas.open(note); else onopen(ymd(d));
+    if (note) kandinsky.open(note); else onopen(ymd(d));
   }
 </script>
 
 <div class="up">
   {#if error}
-    <div class="atlas-notice error">{error}<div class="actions"><button class="atlas-btn" onclick={() => atlas.plugin.openSettings()}>Settings…</button></div></div>
+    <div class="kandinsky-notice error">{error}<div class="actions"><button class="kandinsky-btn" onclick={() => kandinsky.plugin.openSettings()}>Settings…</button></div></div>
   {:else if !loaded}
-    <div class="atlas-empty">Reading the calendar…</div>
+    <div class="kandinsky-empty">Reading the calendar…</div>
   {:else}
     {#each groups as g (g.d.getTime())}
       <section>
         <button class="day" onclick={() => open(null, g.d)}>{label(g.d)}</button>
-        {#if !g.evs.length}<div class="atlas-empty">Nothing.</div>{/if}
+        {#if !g.evs.length}<div class="kandinsky-empty">Nothing.</div>{/if}
         {#each g.evs.slice(0, 6) as e (e.calendar + e.uid + (e.rid ?? ""))}
           <button class="ev" style:--c={e.color ?? "var(--accent)"} onclick={() => open(e, g.d)} title={e.calendar_name}>
             <span class="bar" aria-hidden="true"></span>

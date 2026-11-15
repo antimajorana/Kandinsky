@@ -120,7 +120,7 @@ function applyHeaders(d: DockviewApi): void {
   for (const g of d.groups) {
     const side = groupZone(g) === "side", hide = vertical() && !side;
     if (g.header.hidden !== hide) g.header.hidden = hide;
-    g.element.classList.toggle("atlas-side-group", side && vertical());
+    for (const c of ["kandinsky-side-group", "atlas-side-group"]) g.element.classList.toggle(c, side && vertical()); // the old name: user CSS
   }
   halfCloses(d);
 }
@@ -149,7 +149,7 @@ export function attachTabs(d: DockviewApi): void {
   d.panels.forEach(watchTitle);
   d.onDidAddPanel((p) => { watchTitle(p); schedule(); });
   d.onDidAddGroup(() => { applyHeaders(d); schedule(); });
-  window.addEventListener("atlas-layout", schedule); // panel shown / hidden (no dockview event for it)
+  window.addEventListener("kandinsky-layout", schedule); // panel shown / hidden (no dockview event for it)
   for (const ev of [d.onDidRemovePanel, d.onDidMovePanel, d.onDidActivePanelChange, d.onDidActiveGroupChange, d.onDidRemoveGroup, d.onDidLayoutChange]) ev(schedule);
   applyHeaders(d);
   trackRecent(d);
@@ -323,7 +323,7 @@ export function unsplit(zone: PaneZone): void {
 export function revealInTree(path: string): void {
   open({ kind: "files" });
   // the tree listens once mounted; a first open mounts it a moment later
-  const tell = () => window.dispatchEvent(new CustomEvent("atlas-active-file", { detail: path }));
+  const tell = () => window.dispatchEvent(new CustomEvent("kandinsky-active-file", { detail: path }));
   for (const ms of [60, 500]) setTimeout(tell, ms);
 }
 
@@ -403,7 +403,7 @@ export function endDrag(): void {
 }
 
 /** Asks the sidebar to take the keyboard (it expands first when collapsed). */
-export const focusTabList = () => window.dispatchEvent(new Event("atlas-tabs-focus"));
+export const focusTabList = () => window.dispatchEvent(new Event("kandinsky-tabs-focus"));
 
 const nth = (n: number): Action => ({ id: `ui.tabs.${n}`, title: `Go to tab ${n}`, keys: `Ctrl+${n}`, run: () => gotoTab(n) });
 export const tabActions: Action[] = [

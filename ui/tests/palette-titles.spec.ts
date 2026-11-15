@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // Open file (Ctrl+P) finds a note by its title too, as the [[ list does: a paper by the words of its title.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("open file finds a note by its title, tags shown as text", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "refs/papers/smith2020x/smith2020x.md", text: "---\ntitle: Quantum <i>spin</i> liquids on kagome lattices\n---\n\nnotes\n" } });

@@ -73,7 +73,7 @@ fn rows<'a>(b: &'a BookedTxn, notes: &Notes, lots: &mut bool) -> Vec<Row<'a>> {
 }
 
 pub fn hledger(l: &Ledger, notes: &Notes) -> Export {
-    let mut s = String::from("; Exported from Atlas's finance journal (one-way; DESIGN-finance-format.md \"Export to hledger\").\n\n");
+    let mut s = String::from("; Exported from Kandinsky's finance journal (one-way; DESIGN-finance-format.md \"Export to hledger\").\n\n");
     for (a, n) in &notes.accounts {
         let _ = writeln!(s, "account {a}  ; type:{}, note:{}", a.root().hledger_type(), n.path);
     }

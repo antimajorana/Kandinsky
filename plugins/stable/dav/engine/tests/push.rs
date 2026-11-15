@@ -2,9 +2,9 @@
 //! `DAV_TEST_PASSWORD`; skipped without). The push resource is a stand-in ntfy on this machine, so the server must
 //! reach 127.0.0.1 (podman `--network host`). A calendar is subscribed, an event put in it, and the server's push must
 //! arrive at the calendar's topic.
-use atlas_dav::caldav::{Account, Client};
-use atlas_dav::push;
-use atlas_dav::store::Store;
+use kandinsky_dav::caldav::{Account, Client};
+use kandinsky_dav::push;
+use kandinsky_dav::store::Store;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::sync::mpsc;
 use std::time::Duration;

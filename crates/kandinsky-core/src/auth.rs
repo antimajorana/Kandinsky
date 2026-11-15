@@ -1,11 +1,11 @@
 //! Server mode's sign-in (docs/design/DESIGN-server-and-android.md, docs/guides/SERVER.md). Off on the desktop: there the core
-//! listens on 127.0.0.1 only and nothing here runs. With `atlas serve --listen`, every request is either the owner
+//! listens on 127.0.0.1 only and nothing here runs. With `kandinsky serve --listen`, every request is either the owner
 //! (a session from the sign-in page, a trusted proxy's `Remote-User`) or a device (a bearer token with a scope), or
 //! it meets the sign-in page / a 401.
 //!
 //! Kept outside the vault (the vault is synced to other machines and the phone): the settings and the password's
-//! Argon2id hash in `~/.config/atlas/server.toml`, the sessions and tokens — only their SHA-256 — in
-//! `~/.local/state/atlas/server.json`.
+//! Argon2id hash in `~/.config/kandinsky/server.toml`, the sessions and tokens — only their SHA-256 — in
+//! `~/.local/state/kandinsky/server.json`.
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
 use axum::http::{header, HeaderMap};
@@ -17,9 +17,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-pub const SESSION_COOKIE: &str = "atlas_session";
-/// The header `atlas mcp` marks its requests with (`x-atlas-client: mcp`), so a server can turn agents away.
-pub const CLIENT_HEADER: &str = "x-atlas-client";
+pub const SESSION_COOKIE: &str = "kandinsky_session";
+/// The header `kandinsky mcp` marks its requests with (`x-kandinsky-client: mcp`), so a server can turn agents away.
+pub const CLIENT_HEADER: &str = "x-kandinsky-client";
 /// A session unused this long is gone.
 const SESSION_IDLE: Duration = Duration::from_secs(30 * 24 * 3600);
 /// The longest wait after wrong passwords (each one doubles it, from 1 s).
@@ -32,7 +32,7 @@ const TOUCH_EVERY: Duration = Duration::from_secs(600);
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum AuthMode {
-    /// The owner's password, on Atlas's own sign-in page.
+    /// The owner's password, on Kandinsky's own sign-in page.
     #[default]
     Password,
     /// Only a trusted reverse proxy (Authelia's forward-auth) saying who it is.
@@ -104,7 +104,7 @@ impl<'de> Deserialize<'de> for ProxyRule {
     }
 }
 
-/// `~/.config/atlas/server.toml`.
+/// `~/.config/kandinsky/server.toml`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ServerSettings {
@@ -116,9 +116,9 @@ pub struct ServerSettings {
     /// Allow the password over plain HTTP from another machine (a LAN or VPN one trusts). Off: only HTTPS (through a
     /// trusted proxy) or this machine itself.
     pub allow_plain_http: bool,
-    /// Argon2id, PHC string. Set with `atlas server password`.
+    /// Argon2id, PHC string. Set with `kandinsky server password`.
     pub password_hash: Option<String>,
-    /// AI agents through `atlas mcp` on this server. Off by default; the desktop is not affected.
+    /// AI agents through `kandinsky mcp` on this server. Off by default; the desktop is not affected.
     pub mcp: bool,
 }
 
@@ -188,7 +188,17 @@ impl Who {
 
 /// All a `capture` token reaches: writing a capture and its attachments (never overwriting), and the names its completions offer.
 /// Where a client may put its device token instead of `Authorization` (left to the sign-in in front).
-pub const TOKEN_HEADER: &str = "x-atlas-token";
+pub const TOKEN_HEADER: &str = "x-kandinsky-token";
+
+/// A request header by its name (`x-kandinsky…`), else by the name an older client sends (`x-atlas…`, `legacy`).
+pub fn header<'a>(h: &'a axum::http::HeaderMap, name: &str) -> Option<&'a axum::http::HeaderValue> {
+    h.get(name).or_else(|| name.strip_prefix("x-kandinsky").and_then(|rest| h.get(format!("{}{rest}", crate::legacy::HEADER))))
+}
+
+/// Whether the request carries the header a web page cannot send (`x-kandinsky: 1`, or `x-atlas: 1` from an older client).
+pub fn has_api_header(h: &axum::http::HeaderMap) -> bool {
+    header(h, "x-kandinsky").is_some_and(|v| v.as_bytes() == b"1")
+}
 
 pub const CAPTURE_PATHS: &[&str] = &["/api/capture", "/api/attach", "/api/workspace", "/api/link-targets", "/api/tasks/suggest", "/api/tags", "/api/auth/me"];
 
@@ -198,7 +208,7 @@ pub enum Refused {
     Wrong,
     /// Too many wrong passwords from there: try again after this long.
     Wait(Duration),
-    /// No password has been set (`atlas server password`), or this server takes only the proxy's word.
+    /// No password has been set (`kandinsky server password`), or this server takes only the proxy's word.
     NoPassword,
     /// A password over plain HTTP from another machine, which `allow_plain_http` does not allow.
     PlainHttp,
@@ -211,14 +221,19 @@ pub struct Auth {
     state_file: PathBuf,
     stored: Mutex<Stored>,
     failures: Mutex<HashMap<IpAddr, (u32, SystemTime)>>,
-    /// This run's local key ([`LocalKeyFile`]) and its hash: the `atlas` CLI on this machine, as the owner.
+    /// This run's local key ([`LocalKeyFile`]) and its hash: the `kandinsky` CLI on this machine, as the owner.
     local: Mutex<Option<(String, LocalKeyFile)>>,
 }
 
-/// Where a server-mode core leaves the key the `atlas` CLI of this machine signs in with: the user's runtime
+/// Where a server-mode core leaves the key the `kandinsky` CLI of this machine signs in with: the user's runtime
 /// folder (memory, owner-only, never synced — unlike the vault), named by the port.
 pub fn local_key_file(port: u16) -> PathBuf {
-    crate::platform::dirs::atlas(crate::platform::dirs::Base::Runtime).join(format!("server-{port}.key"))
+    runtime_dir(crate::platform::dirs::APP_DIR).join(format!("server-{port}.key"))
+}
+
+/// The runtime folder named `name` (nothing there is migrated: it lasts one login).
+fn runtime_dir(name: &str) -> PathBuf {
+    crate::platform::dirs::base(crate::platform::dirs::Base::Runtime).join(name)
 }
 
 /// A run's key in [`local_key_file`], the one writer of it (a locked desktop core and a server-mode core alike). Removed
@@ -277,7 +292,9 @@ fn prune_dead_keys(own: u16) {
 
 /// The key the core on `port` left for this machine's user (a locked or server-mode core), if any.
 pub fn local_key(port: u16) -> Option<String> {
-    std::fs::read_to_string(local_key_file(port)).ok().map(|k| k.trim().to_string()).filter(|k| !k.is_empty())
+    // a core from before the rename keeps its key in the runtime folder's old name (legacy.rs)
+    let old = runtime_dir(crate::legacy::APP_DIR).join(format!("server-{port}.key"));
+    [local_key_file(port), old].into_iter().find_map(|f| std::fs::read_to_string(f).ok().map(|k| k.trim().to_string()).filter(|k| !k.is_empty()))
 }
 
 /// `authorization: Bearer <key>\r\n` for a raw request to the local core at `host` (`127.0.0.1:<port>`), or "".
@@ -305,14 +322,14 @@ pub(crate) fn random_hex(bytes: usize) -> String {
     random_bytes(bytes).iter().map(|x| format!("{x:02x}")).collect()
 }
 
-/// Where the settings live: `server.toml` in Atlas's config folder (`ATLAS_SERVER_CONFIG` names another, for tests).
+/// Where the settings live: `server.toml` in Kandinsky's config folder (`KANDINSKY_SERVER_CONFIG` names another, for tests).
 pub fn settings_file() -> PathBuf {
-    std::env::var_os("ATLAS_SERVER_CONFIG").map(PathBuf::from).unwrap_or_else(|| crate::platform::dirs::atlas(crate::platform::dirs::Base::Config).join("server.toml"))
+    crate::env::var_os("SERVER_CONFIG").map(PathBuf::from).unwrap_or_else(|| crate::platform::dirs::app(crate::platform::dirs::Base::Config).join("server.toml"))
 }
 
-/// Where sessions and tokens live: `server.json` in Atlas's state folder (`ATLAS_SERVER_STATE` names another).
+/// Where sessions and tokens live: `server.json` in Kandinsky's state folder (`KANDINSKY_SERVER_STATE` names another).
 pub fn state_file() -> PathBuf {
-    std::env::var_os("ATLAS_SERVER_STATE").map(PathBuf::from).unwrap_or_else(|| crate::platform::dirs::atlas(crate::platform::dirs::Base::State).join("server.json"))
+    crate::env::var_os("SERVER_STATE").map(PathBuf::from).unwrap_or_else(|| crate::platform::dirs::app_entry(crate::platform::dirs::Base::State, "server.json"))
 }
 
 pub fn load_settings() -> anyhow::Result<ServerSettings> {
@@ -332,7 +349,7 @@ fn save_settings_to(file: &std::path::Path, s: &ServerSettings) -> anyhow::Resul
     write_private(file, toml::to_string_pretty(s)?.as_bytes())
 }
 
-/// Atlas's own server settings and keys, outside every vault (~/.config/atlas).
+/// Kandinsky's own server settings and keys, outside every vault (~/.config/kandinsky).
 pub(crate) fn write_private(path: &std::path::Path, data: &[u8]) -> anyhow::Result<()> {
     Ok(crate::vault_write::outside::write_private(path, data)?)
 }
@@ -467,14 +484,14 @@ impl Auth {
             return Some(format!("auth = \"{:?}\" needs trusted_proxies (the proxy's address) in {}", s.auth, settings_file().display()).to_lowercase());
         }
         if s.auth != AuthMode::Proxy && s.password_hash.is_none() {
-            return Some("no password yet: run `atlas server password` first".into());
+            return Some("no password yet: run `kandinsky server password` first".into());
         }
         None
     }
 
     fn save(&self, stored: &Stored) {
         if let Err(e) = serde_json::to_vec_pretty(stored).map_err(anyhow::Error::from).and_then(|b| write_private(&self.state_file, &b)) {
-            eprintln!("atlas: could not keep the sessions in {}: {e}", self.state_file.display());
+            eprintln!("kandinsky: could not keep the sessions in {}: {e}", self.state_file.display());
         }
     }
 
@@ -511,10 +528,10 @@ impl Auth {
             }
         }
         let t = now_secs(now);
-        // Atlas's own token: `Authorization: Bearer atl_…`, or `x-atlas-token` when `Authorization` carries the sign-in in
+        // Kandinsky's own token: `Authorization: Bearer atl_…`, or `x-kandinsky-token` when `Authorization` carries the sign-in in
         // front's token (an OIDC access token for Authelia, Authentik…: not ours, so it is passed over, not refused)
         let bearer = h.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).filter(|t| t.trim().starts_with("atl_"));
-        let own = h.get(TOKEN_HEADER).and_then(|v| v.to_str().ok());
+        let own = header(h, TOKEN_HEADER).and_then(|v| v.to_str().ok());
         if let Some(token) = bearer.or(own) {
             let hash = sha256(token.trim());
             if self.local.lock().unwrap().as_ref().is_some_and(|(h, _)| *h == hash) {
@@ -574,7 +591,7 @@ impl Auth {
             n
         };
         if !password_ok(hash, password) {
-            eprintln!("atlas: wrong password from {ip} ({n} in a row)");
+            eprintln!("kandinsky: wrong password from {ip} ({n} in a row)");
             return Err(Refused::Wrong);
         }
         self.failures.lock().unwrap().remove(&from);
@@ -585,7 +602,7 @@ impl Auth {
         st.sessions.retain(|s| t.saturating_sub(s.last_used) <= SESSION_IDLE.as_secs());
         st.sessions.push(Session { hash: sha256(&token), created: t, last_used: t, agent });
         self.save(&st);
-        eprintln!("atlas: signed in from {ip}");
+        eprintln!("kandinsky: signed in from {ip}");
         Ok(token)
     }
 
@@ -625,6 +642,24 @@ pub fn cookie(h: &HeaderMap, name: &str) -> Option<String> {
 mod tests {
     use super::*;
     use axum::http::HeaderValue;
+
+    #[test]
+    fn headers_are_accepted_under_their_old_names_too() {
+        let mut h = axum::http::HeaderMap::new();
+        assert!(!has_api_header(&h));
+        h.insert("x-atlas", HeaderValue::from_static("1"));
+        assert!(has_api_header(&h), "an older client's guard header");
+        h.insert("x-kandinsky", HeaderValue::from_static("0"));
+        assert!(!has_api_header(&h), "the current name, when sent, is the one read");
+        let mut h = axum::http::HeaderMap::new();
+        h.insert("x-atlas-token", HeaderValue::from_static("atl_old"));
+        h.insert("x-atlas-client", HeaderValue::from_static("mcp"));
+        assert_eq!(header(&h, TOKEN_HEADER).unwrap(), "atl_old");
+        assert_eq!(header(&h, CLIENT_HEADER).unwrap(), "mcp");
+        h.insert("x-kandinsky-token", HeaderValue::from_static("atl_new"));
+        assert_eq!(header(&h, TOKEN_HEADER).unwrap(), "atl_new");
+        assert!(header(&h, "x-other").is_none());
+    }
 
     const LAN: &str = "192.168.1.20:5000";
     const PROXY: &str = "10.0.0.2:4000";
@@ -757,7 +792,7 @@ mod tests {
         let bare = Auth::new(ServerSettings { auth: AuthMode::Proxy, ..Default::default() }, dir.path().join("s3.json"));
         assert!(bare.not_ready().unwrap().contains("trusted_proxies"));
         let nopw = Auth::new(ServerSettings::default(), dir.path().join("s4.json"));
-        assert!(nopw.not_ready().unwrap().contains("atlas server password"));
+        assert!(nopw.not_ready().unwrap().contains("kandinsky server password"));
     }
 
     #[test]

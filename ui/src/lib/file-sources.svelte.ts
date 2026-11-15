@@ -1,6 +1,6 @@
 // File sources: what the explorer (panes/Explorer.svelte) browses — one explorer for the vault, SSH hosts
-// and copyparty servers. The vault is built in; a plugin adds one with `atlas.files.source(…)`.
-// A remote file opens from its local copy, `.atlas/remote/<plugin>/…`, in the same editor or viewer as any
+// and copyparty servers. The vault is built in; a plugin adds one with `kandinsky.files.source(…)`.
+// A remote file opens from its local copy, `.kandinsky/remote/<plugin>/…`, in the same editor or viewer as any
 // file, and every save of that copy goes back through its source (`save`). docs/REFACTOR-explorer.md.
 import { errText } from "./text";
 import { load, save } from "./prefs";
@@ -40,7 +40,7 @@ export type Saved = { saved: string } | { changed: string } | { waiting: string 
 
 /** Everything but `places`, `list` and `local` is optional: a missing one hides its button. */
 export interface FileSource {
-  /** The plugin's id (the vault's: "vault"); its copies live in `.atlas/remote/<id>/`. */
+  /** The plugin's id (the vault's: "vault"); its copies live in `.kandinsky/remote/<id>/`. */
   id: string;
   title: string;
   icon: IconName;
@@ -59,7 +59,7 @@ export interface FileSource {
   /** Into a vault folder → the vault path written. */
   download?(place: string, path: string, folder: string, dir: boolean): Promise<string>;
   /** The file a web address names on this source (a copyparty server's file link), or null: a link to it in a note
-   *  opens that file in Atlas, as the explorer opens it (web-links.ts `openWeb`). */
+   *  opens that file in Kandinsky, as the explorer opens it (web-links.ts `openWeb`). */
   owns?(url: string): { place: string; path: string } | null;
   /** No group in the explorer while it has no places (nothing to set up: the other vaults). */
   hideEmpty?: boolean;
@@ -76,7 +76,7 @@ const TEXT_THUMB = /\.(md|markdown|txt|tex|bib|org|rst|csv|py|rs|js|mjs|ts|json|
 const EXCERPT_BYTES = 1200;
 
 
-export const REMOTE = ".atlas/remote/";
+export const REMOTE = ".kandinsky/remote/";
 /** Pictures the core can thumbnail (`/api/thumb`): IMAGE_RE (paths.ts) without the drawn kinds (svg, ico). */
 export const IMAGE = /\.(png|jpe?g|gif|webp|avif|bmp)$/i;
 /** The last listings of the folders seen in this run ("source\nplace\npath", the newest 300: browse.svelte.ts): a
@@ -135,7 +135,7 @@ export function pluginSource(plugin: { id: string; title: string }, s: Partial<O
 
 // Each remote file's last local copy ("source\nplace\npath" → its vault path, when fetched), kept between runs: with the
 // server out of reach (offline, the VPN down) the copy fetched before opens, said so, for every source and every caller
-const KEPT = "atlas.remote.kept", MAX_KEPT = 2000;
+const KEPT = "kandinsky.remote.kept", MAX_KEPT = 2000;
 type Kept = Record<string, { local: string; at: number }>;
 const kept: Kept = load<Kept>(KEPT, {});
 function keepKept(): void {
@@ -230,7 +230,7 @@ export const vaultSource: FileSource = {
       return { text: excerptOf(head.text, head.whole) };
     }
     if (!/\.(pdf|epub)$/i.test(path)) return null;
-    // the core's picture — a PDF's first page, an EPUB's cover — made once and kept in .atlas/cache/thumbs (thumbs.rs);
+    // the core's picture — a PDF's first page, an EPUB's cover — made once and kept in .kandinsky/cache/thumbs (thumbs.rs);
     // a PDF is drawn here only where the core cannot (no poppler: a phone)
     try { return await api.thumb(path, width); } catch (e) { if (/\.epub$/i.test(path)) return null; void e; }
     return (await import("./pdf-pages")).pageBlob(path, 1, width, "image/webp"); // the first page

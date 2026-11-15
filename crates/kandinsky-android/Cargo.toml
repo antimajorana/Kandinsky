@@ -1,11 +1,11 @@
 [package]
-name = "atlas-android"
+name = "kandinsky-android"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Atlas on the phone: the Rust half of the capture app and of the full app (captures, notes, search, tasks, through JNI); the screens are Java (docs/guides/ANDROID.md)"
+description = "Kandinsky on the phone: the Rust half of the capture app and of the full app (captures, notes, search, tasks, through JNI); the screens are Java (docs/guides/ANDROID.md)"
 
 [lib]
 # Android loads it from the Java side (System.loadLibrary); on a desktop the plain functions are tested
@@ -13,15 +13,15 @@ crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
 
 [features]
-# the full app (atlas.apk): Atlas's server inside the app, carrying the web interface (src/serve.rs); without it the
+# the full app (kandinsky.apk): Kandinsky's server inside the app, carrying the web interface (src/serve.rs); without it the
 # library is the capture app's, a megabyte, not 27
 full = []
 
 [dependencies]
-atlas-capture = { path = "../kandinsky-capture", default-features = false }
-atlas-core.workspace = true
+kandinsky-capture = { path = "../kandinsky-capture", default-features = false }
+kandinsky-core.workspace = true
 # the core's text rules the Java screens call (src/text.rs): links, a note's properties
-atlas-text.workspace = true
+kandinsky-text.workspace = true
 serde_yaml = "0.9"
 serde_json.workspace = true
 serde = { version = "1", features = ["derive"] }
@@ -32,8 +32,8 @@ chrono = "0.4"
 reqwest.workspace = true
 # the Boox pens (src/ink.rs): openink's engine, vendored from openink (scripts/dev/sync-openink.sh)
 openink-stroke = { path = "../vendor/openink-stroke" }
-# the pen's shape snapping: atlas-pen (Atlas's and openink's recognisers, arrows, regular shapes), shared with the core
-atlas-pen = { path = "../kandinsky-pen" }
+# the pen's shape snapping: kandinsky-pen (Kandinsky's and openink's recognisers, arrows, regular shapes), shared with the core
+kandinsky-pen = { path = "../kandinsky-pen" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"

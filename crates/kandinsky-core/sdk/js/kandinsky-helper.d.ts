@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-// The global `atlas` of a JavaScript helper (`[helper] js`), as prelude.js defines it — docs/guides/PLUGIN-API.md,
-// "JavaScript helpers". The page side's `atlas` is a different object: ui/src/lib/plugin-api.ts. Both share the
+// The global `kandinsky` of a JavaScript helper (`[helper] js`), as prelude.js defines it — docs/guides/PLUGIN-API.md,
+// "JavaScript helpers". The page side's `kandinsky` is a different object: ui/src/lib/plugin-api.ts. Both share the
 // core's generated wire types (ui/src/lib/gen), so a fetch answer has one shape everywhere.
 import type { FetchRequest } from "../../../../ui/src/lib/gen/FetchRequest";
 import type { FetchResponse } from "../../../../ui/src/lib/gen/FetchResponse";
@@ -12,7 +12,7 @@ export type { FetchRequest, FetchResponse, HeaderValue };
 export type Params = Record<string, unknown> & { settings?: Record<string, unknown>; secrets?: Record<string, string> };
 export type Method = (params: Params) => unknown | Promise<unknown>;
 
-/** What `atlas.exec` answers: the exit status (null when killed past its time: `timedOut`), and the output as text,
+/** What `kandinsky.exec` answers: the exit status (null when killed past its time: `timedOut`), and the output as text,
  *  each stream kept to 8 MB (`truncated` past it). */
 export interface ExecResult { status: number | null; stdout: string; stderr: string; timedOut?: true; truncated?: true }
 
@@ -46,23 +46,23 @@ export interface Download extends FetchResponse {
   head: string;
 }
 
-export interface AtlasError extends Error {
+export interface KandinskyError extends Error {
   /** The API's own status (403, 404…), when the core answered one. */
   status?: number;
 }
 
-export interface AtlasHelper {
+export interface KandinskyHelper {
   /** This plugin's id. */
   readonly id: string;
-  readonly AtlasError: new (why: string, status?: number) => AtlasError;
+  readonly KandinskyError: new (why: string, status?: number) => KandinskyError;
 
-  /** Registers a method the core calls (a tool, a page's `atlas.helper.call`, a schedule, a capture hook). */
+  /** Registers a method the core calls (a tool, a page's `kandinsky.helper.call`, a schedule, a capture hook). */
   method(name: string, fn: Method): void;
   methods(table: Record<string, Method>): void;
-  /** An event for the page's `atlas.helper.on(name, …)`. */
+  /** An event for the page's `kandinsky.helper.on(name, …)`. */
   event(name: string, data?: unknown): void;
 
-  /** Any endpoint of the core's API, as the pages use it (`/api/…`); the JSON answer, or an AtlasError. */
+  /** Any endpoint of the core's API, as the pages use it (`/api/…`); the JSON answer, or an KandinskyError. */
   call<T = any>(verb: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown, query?: Record<string, unknown>): Promise<T>;
   get<T = any>(path: string, query?: Record<string, unknown>): Promise<T>;
   post<T = any>(path: string, body?: unknown): Promise<T>;
@@ -96,7 +96,7 @@ export interface AtlasHelper {
   fetchJson<T = any>(url: string, opts?: FetchOptions): Promise<T | null>;
   /** The core's whole answer (status, headers, `signin`, `saved`), for a request built by hand. */
   fetchResponse(req: FetchRequest): Promise<FetchResponse>;
-  /** `url` streamed by the core into the plugin's cache at `saveTo` (or `.atlas/remote/<id>/` with `in: "remote"`). */
+  /** `url` streamed by the core into the plugin's cache at `saveTo` (or `.kandinsky/remote/<id>/` with `in: "remote"`). */
   download(url: string, saveTo: string, opts?: { headers?: Record<string, HeaderValue>; timeout?: number; in?: "cache" | "remote"; quiet?: boolean }): Promise<Download>;
   /** For a papers PDF source: true when `url` gave a PDF, now in this plugin's cache where catalog-papers takes it.
    *  Quiet by default (a source is one try among several); `quiet: false` offers a sign-in met. */
@@ -123,5 +123,5 @@ export interface AtlasHelper {
 }
 
 declare global {
-  const atlas: AtlasHelper;
+  const kandinsky: KandinskyHelper;
 }

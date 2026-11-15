@@ -3,7 +3,7 @@ import { writePdf } from "./fixtures/pdf";
 
 // The PDF pane's page thumbnails (components/PdfThumbs.svelte): each slot sized from its page's size before it is
 // drawn (no reflow as they come in), turned with the reader's rotation, and a long strip scrolled smoothly.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const DIR = "pdf-thumbs-test";
 const PATH = `${DIR}/long.pdf`;
 const PAGES = 200;
@@ -36,7 +36,7 @@ async function openThumbs(page: Page, theme?: "light" | "dark") {
   });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("atlas.pdf")) localStorage.removeItem(k); });
+  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("kandinsky.pdf")) localStorage.removeItem(k); });
   await page.request.post("/api/cmd/open", { headers: H, data: { args: { path: PATH } } });
   const pane = page.locator(".pdf-pane").last();
   await expect(pane.locator(".pager .faint")).toHaveText(`/ ${PAGES}`, { timeout: 20000 });

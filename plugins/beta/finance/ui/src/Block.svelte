@@ -6,8 +6,8 @@
   import Register from "./Register.svelte";
 
   export type Kind = "balance" | "spending" | "register";
-  let { atlas, kind, options }: { atlas: PluginApi; kind: Kind; options: Record<string, unknown> } = $props();
-  const cur = $derived(String(options.currency ?? currency(atlas)));
+  let { kandinsky, kind, options }: { kandinsky: PluginApi; kind: Kind; options: Record<string, unknown> } = $props();
+  const cur = $derived(String(options.currency ?? currency(kandinsky)));
   const account = $derived(String(options.account ?? "Assets"));
   const limit = $derived(Number(options.limit ?? (kind === "register" ? 10 : 8)));
   let summary = $state<Summary | null>(null);
@@ -16,26 +16,26 @@
 
   async function load() {
     try {
-      if (kind === "register") rows = (await call<{ rows: RegisterRow[] }>(atlas, "register", { account })).rows;
-      else summary = await call<Summary>(atlas, "summary");
+      if (kind === "register") rows = (await call<{ rows: RegisterRow[] }>(kandinsky, "register", { account })).rows;
+      else summary = await call<Summary>(kandinsky, "summary");
       error = "";
     } catch (e) { error = (e as Error).message; }
   }
   $effect(() => {
     load();
-    return atlas.on("file:save", (e) => { if ((e as { path?: string }).path?.startsWith(`${folder(atlas)}/`)) load(); });
+    return kandinsky.on("file:save", (e) => { if ((e as { path?: string }).path?.startsWith(`${folder(kandinsky)}/`)) load(); });
   });
 </script>
 
 <div class="finance-block">
   {#if error}
-    <div class="atlas-notice error">{error}</div>
+    <div class="kandinsky-notice error">{error}</div>
   {:else if kind === "register"}
-    <Register {rows} {account} {limit} onopen={(r) => atlas.open(r.path, r.line)} />
+    <Register {rows} {account} {limit} onopen={(r) => kandinsky.open(r.path, r.line)} />
   {:else if !summary}
-    <div class="atlas-empty">Reading the journal…</div>
+    <div class="kandinsky-empty">Reading the journal…</div>
   {:else if kind === "balance"}
-    <Balances accounts={summary.accounts} {cur} onpick={() => atlas.openView("accounts", { title: "Finance" })} />
+    <Balances accounts={summary.accounts} {cur} onpick={() => kandinsky.openView("accounts", { title: "Finance" })} />
   {:else}
     <Spending budget={summary.budget} {cur} {limit} />
   {/if}

@@ -1,7 +1,7 @@
-// A tab does not outlive its file: when the file is deleted, moved or renamed (in Atlas, a terminal
-// or git), its tab closes; a move made in Atlas reopens it at the new place, and so does a rename
+// A tab does not outlive its file: when the file is deleted, moved or renamed (in Kandinsky, a terminal
+// or git), its tab closes; a move made in Kandinsky reopens it at the new place, and so does a rename
 // made elsewhere when the new name is plain to see (`findMoved`). Tabs restored from the layout are
-// checked too: a folder renamed while Atlas was closed showed "GET /api/file: 404" in its tab. A tab
+// checked too: a folder renamed while Kandinsky was closed showed "GET /api/file: 404" in its tab. A tab
 // with unsaved text stays — closing would lose the text, saving would bring the file back unasked.
 import type { DockviewApi, IDockviewPanel } from "dockview-core";
 import { on, touches } from "./bus";
@@ -76,7 +76,7 @@ async function closeIfGone(p: IDockviewPanel, path: string): Promise<void> {
   await settle(p, path);
 }
 
-/** The tabs a layout brought back whose files are gone (renamed while Atlas was closed). */
+/** The tabs a layout brought back whose files are gone (renamed while Kandinsky was closed). */
 async function checkRestored(): Promise<void> {
   for (const p of dock?.panels ?? []) {
     const f = fileOf(p);

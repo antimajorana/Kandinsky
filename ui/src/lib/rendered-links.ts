@@ -1,4 +1,4 @@
-// A click on a link the reader drew (an <a> in renderMarkdown's HTML): a vault link opens in Atlas, beside for the
+// A click on a link the reader drew (an <a> in renderMarkdown's HTML): a vault link opens in Kandinsky, beside for the
 // middle button as a browser's new tab; a web link is left to its own handling. The one rule for the reading view
 // (components/Markdown.svelte) and the blocks the editor shows rendered (tables, nested callouts, embeds).
 import { openWikilink } from "./links";

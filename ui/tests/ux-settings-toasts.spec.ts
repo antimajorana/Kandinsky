@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // A notice with the focus in it (a keyboard user on its Close or Undo) stays, as one under the pointer does.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("a notice holding the focus stays past its time, and goes once the focus leaves", async ({ page, request }) => {
   await page.goto("/");

@@ -6,7 +6,7 @@ import { installedDictionaries, keepInVault, latin1, machineFiles, VAULT_DICTION
 // The Spelling plugin (plugins/beta/spelling): a word neither the machine's Hunspell dictionary nor the vault knows
 // is marked; math, links and the vault's own words are not; a right-click offers suggestions and "Add to this
 // vault's words". Installed for this file only, as a vault holds it, and switched off after.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const built = (f: string) => readFileSync(new URL(`../../plugins/beta/spelling/${f}`, import.meta.url), "utf8");
 const DICT = "/usr/share/hunspell/en_US.dic";
@@ -53,12 +53,12 @@ test("an ISO-8859-1 dictionary is read as its characters and kept in the vault a
 test.skip(!existsSync(DICT), `needs an English Hunspell dictionary (${DICT})`);
 
 test.beforeAll(async ({ request }) => {
-  for (const f of ["plugin.toml", "main.js", "helper.js"]) await put(request, `.atlas/plugins/spelling/${f}`, built(f));
+  for (const f of ["plugin.toml", "main.js", "helper.js"]) await put(request, `.kandinsky/plugins/spelling/${f}`, built(f));
   await put(request, "notes/spell-a.md", "# Spell A\n\nThe electrons teh insulator carry Wannier centers and self-energy's sub-bath, $\\alpha teh$ and [[Mott|teh link]].\n\nAnother blochy line, where we met Hubbardo and Sénéchalz.\n");
   await put(request, "notes/spell-b.md", "# Spell B\n\nWannier functions, Wannier centres and Wannier bands.\n");
 });
 test.afterAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/spelling/main.js", "export function register() {}\n");
+  await put(request, ".kandinsky/plugins/spelling/main.js", "export function register() {}\n");
   await request.post("/api/plugins/spelling/helper/stop", { headers: H });
 });
 
@@ -87,7 +87,7 @@ test("a misspelled word is marked, math, links, names and the vault's words are 
   await page.locator('[data-label="Add “blochy” to this vault\'s words"]').click();
   await expect(marked).toHaveCount(0);
   await expect(page.locator('.status [data-cell="spelling:spelling"]')).toHaveText("EN ✓");
-  const words = await (await page.request.get("/api/file?path=.atlas/spelling/words.md", { headers: H })).json();
+  const words = await (await page.request.get("/api/file?path=.kandinsky/spelling/words.md", { headers: H })).json();
   expect(words.text).toContain("```words\nblochy\n```");
 });
 
@@ -117,7 +117,7 @@ test("the lower bar's Spelling panel: the marked words with their fixes, words a
   await expect(panel.locator("li.word")).toHaveCount(0);
   await panel.getByRole("button", { name: "Remove wierd" }).click();
   await expect(panel.locator(".chip", { hasText: "wierd" })).toHaveCount(0);
-  expect((await (await request.get("/api/file?path=.atlas/spelling/words.md", { headers: H })).json()).text).not.toContain("wierd");
+  expect((await (await request.get("/api/file?path=.kandinsky/spelling/words.md", { headers: H })).json()).text).not.toContain("wierd");
   // Escape closes it; the language buttons write the note's lang: property
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
@@ -141,7 +141,7 @@ test("Settings → Spelling: the languages, the main one, and the words added by
   await section.getByLabel("A word to add").fill("Sénéchalz");
   await section.getByRole("button", { name: "Add", exact: true }).click();
   await expect(section.locator(".chip", { hasText: "Sénéchalz" })).toHaveCount(1);
-  expect((await (await request.get("/api/file?path=.atlas/spelling/words.md", { headers: H })).json()).text).toContain("Sénéchalz");
+  expect((await (await request.get("/api/file?path=.kandinsky/spelling/words.md", { headers: H })).json()).text).toContain("Sénéchalz");
   for (const theme of ["light", "dark"]) {
     await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
     await section.screenshot({ path: `../target/snip/spell-settings-${theme}.png` });

@@ -20,11 +20,11 @@
 
   let { oncontext, onnewfile, onnewfolder }: { oncontext: (e: MouseEvent) => void; onnewfile: (dir: string) => void; onnewfolder: (dir: string) => void } = $props();
 
-  const DIR_KEY = "atlas.phone.files.dir";
+  const DIR_KEY = "kandinsky.phone.files.dir";
   let dir = $state(load<string>(DIR_KEY, ""));
   let entries = $state<TreeEntry[]>([]);
   let error = $state("");
-  let byDate = $state(load<boolean>("atlas.phone.files.byDate", false));
+  let byDate = $state(load<boolean>("kandinsky.phone.files.byDate", false));
   let lit = $state(""); // the file revealed (Show in Files)
   const parentOf = dirOf;
   let root = $state<HTMLElement>();
@@ -70,8 +70,8 @@
       lit = path;
       setTimeout(() => document.querySelector(`.pf .row[data-path="${CSS.escape(path)}"]`)?.scrollIntoView({ block: "center" }), 250);
     };
-    window.addEventListener("atlas-active-file", reveal);
-    return () => { off(); window.removeEventListener("atlas-active-file", reveal); };
+    window.addEventListener("kandinsky-active-file", reveal);
+    return () => { off(); window.removeEventListener("kandinsky-active-file", reveal); };
   });
 </script>
 
@@ -90,7 +90,7 @@
       {/if}
     </div>
     <button class="act" aria-label={byDate ? "Sort by name" : "Newest first"} title={byDate ? "Sorted by date: by name" : "Sorted by name: newest first"}
-      onclick={() => { byDate = !byDate; save("atlas.phone.files.byDate", byDate); }}><Icon name={byDate ? "clock" : "rows"} size={20} /></button>
+      onclick={() => { byDate = !byDate; save("kandinsky.phone.files.byDate", byDate); }}><Icon name={byDate ? "clock" : "rows"} size={20} /></button>
     <button class="act" aria-label="New note here" title="New note here" onclick={() => onnewfile(dir)}><Icon name="plus" size={20} /></button>
     <button class="act" aria-label="New folder here" title="New folder here" onclick={() => onnewfolder(dir)}><Icon name="folder" size={20} /></button>
   </div>

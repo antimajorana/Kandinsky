@@ -1,21 +1,21 @@
 import { $ as e, A as t, B as n, H as r, J as i, K as a, M as o, O as s, P as c, Q as l, V as u, W as d, X as f, Y as p, Z as m, a as h, i as g, j as _, k as v, n as y, o as b, r as x, t as S, tt as C, w } from "./ui-lib/Spending.js";
 //#region plugins/beta/finance/ui/src/Block.svelte
-var T = c("<div class=\"atlas-notice error\"> </div>"), E = c("<div class=\"atlas-empty\">Reading the journal…</div>"), D = c("<div class=\"finance-block svelte-duo2s6\"><!></div>"), O = {
+var T = c("<div class=\"kandinsky-notice error\"> </div>"), E = c("<div class=\"kandinsky-empty\">Reading the journal…</div>"), D = c("<div class=\"finance-block svelte-duo2s6\"><!></div>"), O = {
 	hash: "svelte-duo2s6",
 	code: ".finance-block.svelte-duo2s6 {font-size:0.95em;}"
 };
 function k(c, _) {
 	e(_, !0), w(c, O);
-	let v = m(() => String(_.options.currency ?? h(_.atlas))), k = m(() => String(_.options.account ?? "Assets")), A = m(() => Number(_.options.limit ?? (_.kind === "register" ? 10 : 8))), j = f(null), M = f(i([])), N = f("");
+	let v = m(() => String(_.options.currency ?? h(_.kandinsky))), k = m(() => String(_.options.account ?? "Assets")), A = m(() => Number(_.options.limit ?? (_.kind === "register" ? 10 : 8))), j = f(null), M = f(i([])), N = f("");
 	async function P() {
 		try {
-			_.kind === "register" ? p(M, (await g(_.atlas, "register", { account: n(k) })).rows, !0) : p(j, await g(_.atlas, "summary"), !0), p(N, "");
+			_.kind === "register" ? p(M, (await g(_.kandinsky, "register", { account: n(k) })).rows, !0) : p(j, await g(_.kandinsky, "summary"), !0), p(N, "");
 		} catch (e) {
 			p(N, e.message, !0);
 		}
 	}
-	r(() => (P(), _.atlas.on("file:save", (e) => {
-		e.path?.startsWith(`${b(_.atlas)}/`) && P();
+	r(() => (P(), _.kandinsky.on("file:save", (e) => {
+		e.path?.startsWith(`${b(_.kandinsky)}/`) && P();
 	})));
 	var F = D(), I = d(F), L = (e) => {
 		var r = T(), i = a(r, !0);
@@ -31,7 +31,7 @@ function k(c, _) {
 			get limit() {
 				return n(A);
 			},
-			onopen: (e) => _.atlas.open(e.path, e.line)
+			onopen: (e) => _.kandinsky.open(e.path, e.line)
 		});
 	}, z = (e) => {
 		var t = E();
@@ -44,7 +44,7 @@ function k(c, _) {
 			get cur() {
 				return n(v);
 			},
-			onpick: () => _.atlas.openView("accounts", { title: "Finance" })
+			onpick: () => _.kandinsky.openView("accounts", { title: "Finance" })
 		});
 	}, V = (e) => {
 		S(e, {
@@ -90,7 +90,7 @@ function j(e) {
 		let i = v(k, {
 			target: n,
 			props: {
-				atlas: e,
+				kandinsky: e,
 				kind: t,
 				options: r.options
 			}

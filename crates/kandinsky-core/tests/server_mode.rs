@@ -2,8 +2,8 @@
 //! is checked over HTTP — the redirect to the sign-in page, wrong and right passwords, the session cookie, a
 //! capture-only device token, a WebSocket from another site, and that the desktop mode is unchanged.
 #![allow(clippy::disallowed_methods)] // a test writes its fixtures directly
-use atlas_core::auth::{hash_password, Auth, AuthMode, Scope, ServerSettings};
-use atlas_core::server::{serve_on, Listen};
+use kandinsky_core::auth::{hash_password, Auth, AuthMode, Scope, ServerSettings};
+use kandinsky_core::server::{serve_on, Listen};
 use reqwest::{redirect, StatusCode};
 
 #[tokio::test]
@@ -17,7 +17,7 @@ async fn a_served_vault_lets_in_only_who_signed_in() {
     let srv = serve_on(vault.path().to_path_buf(), Listen::Server { addr: "127.0.0.1:0".parse().unwrap(), auth: Box::new(auth) }).await.unwrap();
     let base = format!("http://127.0.0.1:{}", srv.port());
     let http = reqwest::Client::builder().redirect(redirect::Policy::none()).build().unwrap();
-    let get = |path: &str| http.get(format!("{base}{path}")).header("x-atlas", "1");
+    let get = |path: &str| http.get(format!("{base}{path}")).header("x-kandinsky", "1");
 
     // nobody yet: pages go to the sign-in page (coming back here after), the API says 401
     let r = get("/notes?x=1").send().await.unwrap();
@@ -49,25 +49,25 @@ async fn a_served_vault_lets_in_only_who_signed_in() {
 
     // the phone's token: a capture goes in; reading a file does not
     let bearer = format!("Bearer {phone}");
-    let cap = http.post(format!("{base}/api/capture")).header("x-atlas", "1").header("authorization", &bearer).json(&serde_json::json!({ "text": "from the phone" })).send().await.unwrap();
+    let cap = http.post(format!("{base}/api/capture")).header("x-kandinsky", "1").header("authorization", &bearer).json(&serde_json::json!({ "text": "from the phone" })).send().await.unwrap();
     assert!(cap.status().is_success(), "{:?}", cap.text().await);
     assert_eq!(get("/api/file?path=note.md").header("authorization", &bearer).send().await.unwrap().status(), StatusCode::FORBIDDEN);
 
     // signing a phone in (the browser, signed in, opens /auth/app): asked once, then a token handed to the app's address
-    let ask = get("/auth/app?app=capture&name=Pixel").header("cookie", &session).send().await.unwrap();
+    let ask = get("/auth/app?app=kandinsky-capture&name=Pixel").header("cookie", &session).send().await.unwrap();
     let page = ask.text().await.unwrap();
-    assert!(page.contains("Let it in") && page.contains("Pixel") && page.contains("Atlas capture"), "{page}");
+    assert!(page.contains("Let it in") && page.contains("Pixel") && page.contains("Kandinsky capture"), "{page}");
     assert_eq!(get("/auth/app?app=capture").send().await.unwrap().status(), StatusCode::SEE_OTHER, "not signed in: the sign-in first");
     assert_eq!(get("/auth/app?app=capture").header("authorization", &bearer).send().await.unwrap().status(), StatusCode::FORBIDDEN, "a device cannot let a device in");
     let post = |origin: &str, app: &str| http.post(format!("{base}/auth/app?app={app}&name=Pixel")).header("cookie", &session).header("origin", origin).form(&[("confirm", "1")]);
     assert_eq!(post("https://evil.example", "capture").send().await.unwrap().status(), StatusCode::FORBIDDEN);
     assert_eq!(post(&base, "elsewhere").send().await.unwrap().status(), StatusCode::BAD_REQUEST, "only the apps' own addresses");
-    let given = post(&base, "capture").send().await.unwrap();
+    let given = post(&base, "kandinsky-capture").send().await.unwrap();
     assert_eq!(given.status(), StatusCode::SEE_OTHER);
     let to = given.headers()["location"].to_str().unwrap().to_string();
-    let token = to.strip_prefix("org.atlas.capture://signed-in?token=").and_then(|r| r.split('&').next()).unwrap_or_else(|| panic!("{to}")).to_string();
-    // the token in x-atlas-token, Authorization left to the sign-in in front (a token that is not Atlas's is passed over)
-    let cap = http.post(format!("{base}/api/capture")).header("x-atlas", "1").header("x-atlas-token", &token).header("authorization", "Bearer eyJhbGciOi.from-the-proxy")
+    let token = to.strip_prefix("org.kandinsky.capture://signed-in?token=").and_then(|r| r.split('&').next()).unwrap_or_else(|| panic!("{to}")).to_string();
+    // the token in x-kandinsky-token, Authorization left to the sign-in in front (a token that is not Kandinsky's is passed over)
+    let cap = http.post(format!("{base}/api/capture")).header("x-kandinsky", "1").header("x-kandinsky-token", &token).header("authorization", "Bearer eyJhbGciOi.from-the-proxy")
         .json(&serde_json::json!({ "text": "signed in from the phone" })).send().await.unwrap();
     assert!(cap.status().is_success(), "{:?}", cap.text().await);
     let me: serde_json::Value = get("/api/auth/me").header("cookie", &session).header("authorization", "Bearer eyJhbGciOi.from-the-proxy").send().await.unwrap().json().await.unwrap();
@@ -78,18 +78,18 @@ async fn a_served_vault_lets_in_only_who_signed_in() {
         .header("sec-websocket-version", "13").header("sec-websocket-key", "dGhlIHNhbXBsZSBub25jZQ==").send().await.unwrap();
     assert_eq!(ws.status(), StatusCode::FORBIDDEN);
 
-    // AI agents (atlas mcp) are kept out by default, even signed in
-    assert_eq!(get("/api/auth/me").header("cookie", &session).header("x-atlas-client", "mcp").send().await.unwrap().status(), StatusCode::FORBIDDEN);
+    // AI agents (kandinsky mcp) are kept out by default, even signed in
+    assert_eq!(get("/api/auth/me").header("cookie", &session).header("x-kandinsky-client", "mcp").send().await.unwrap().status(), StatusCode::FORBIDDEN);
 
     // signing out ends the session
-    http.post(format!("{base}/api/auth/logout")).header("x-atlas", "1").header("cookie", &session).send().await.unwrap();
+    http.post(format!("{base}/api/auth/logout")).header("x-kandinsky", "1").header("cookie", &session).send().await.unwrap();
     assert_eq!(get("/api/file?path=note.md").header("cookie", &session).send().await.unwrap().status(), StatusCode::UNAUTHORIZED);
     srv.shutdown().await.unwrap();
 
     // the desktop mode is unchanged: no sign-in, /login does not exist
-    let local = atlas_core::serve(vault.path().to_path_buf(), 0).await.unwrap();
+    let local = kandinsky_core::serve(vault.path().to_path_buf(), 0).await.unwrap();
     let lbase = format!("http://127.0.0.1:{}", local.port());
-    assert_eq!(http.get(format!("{lbase}/api/file?path=note.md")).header("x-atlas", "1").send().await.unwrap().status(), StatusCode::OK);
+    assert_eq!(http.get(format!("{lbase}/api/file?path=note.md")).header("x-kandinsky", "1").send().await.unwrap().status(), StatusCode::OK);
     assert_eq!(http.get(format!("{lbase}/login")).send().await.unwrap().status(), StatusCode::NOT_FOUND);
     local.shutdown().await.unwrap();
 }
@@ -98,7 +98,7 @@ async fn a_served_vault_lets_in_only_who_signed_in() {
 /// one sign-in for all, the vault list giving each one's address, the page told where its API is.
 #[tokio::test]
 async fn one_server_several_vaults_one_sign_in() {
-    use atlas_core::server::{serve_vaults, Served, Vaults};
+    use kandinsky_core::server::{serve_vaults, Served, Vaults};
     let (a, b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     std::fs::write(a.path().join("a.md"), "# In A\n").unwrap();
     std::fs::write(b.path().join("b.md"), "# In B\n").unwrap();
@@ -117,7 +117,7 @@ async fn one_server_several_vaults_one_sign_in() {
     let ok = http.post(format!("{base}/login")).header("origin", &base).form(&[("password", "a long password"), ("next", "/v/work/")]).send().await.unwrap();
     assert_eq!(ok.status(), StatusCode::SEE_OTHER);
     let session = ok.headers()["set-cookie"].to_str().unwrap().split(';').next().unwrap().to_string();
-    let get = |path: String| http.get(format!("{base}{path}")).header("x-atlas", "1").header("cookie", &session);
+    let get = |path: String| http.get(format!("{base}{path}")).header("x-kandinsky", "1").header("cookie", &session);
 
     // one session opens both; each vault's API reads its own files
     let fa: serde_json::Value = get("/v/notes/api/file?path=a.md".into()).send().await.unwrap().json().await.unwrap();
@@ -127,14 +127,14 @@ async fn one_server_several_vaults_one_sign_in() {
     // `/` goes to the first; a vault's page knows where its API is
     assert_eq!(get("/".into()).send().await.unwrap().headers()["location"], "/v/notes/");
     let page = get("/v/work/".into()).send().await.unwrap().text().await.unwrap();
-    assert!(page.contains(r#"window.__ATLAS_API__="/v/work""#), "{page}");
+    assert!(page.contains(r#"window.__KANDINSKY_API__="/v/work""#), "{page}");
     // an address naming no vault here (an old one, `/v/obsidian/…`): a page of the vaults that are, never the app
     for gone in ["/v/obsidian/", "/v/obsidian/notes/x.md", "/v/obsidian"] {
         let r = get(gone.into()).send().await.unwrap();
         assert_eq!(r.status(), StatusCode::NOT_FOUND, "{gone}");
         let page = r.text().await.unwrap();
         assert!(page.contains(r#"href="/v/notes/""#) && page.contains(r#"href="/v/work/""#), "{gone}: {page}");
-        assert!(!page.contains("__ATLAS_API__"), "{gone}: {page}");
+        assert!(!page.contains("__KANDINSKY_API__"), "{gone}: {page}");
     }
     // the asked name is shown, escaped
     let page = get("/v/%3Cscript%3E/".into()).send().await.unwrap().text().await.unwrap();
@@ -143,23 +143,23 @@ async fn one_server_several_vaults_one_sign_in() {
     let list: serde_json::Value = get("/v/work/api/vaults".into()).send().await.unwrap().json().await.unwrap();
     let urls: Vec<_> = list["vaults"].as_array().unwrap().iter().map(|v| v["url"].as_str().unwrap().to_string()).collect();
     assert_eq!(urls, ["/v/notes/", "/v/work/"]);
-    assert_eq!(list["current"].as_str().unwrap(), atlas_core::paths::real(b.path()).unwrap().to_string_lossy(), "the vault's own path (macOS: /private/var…)");
-    let open = http.post(format!("{base}/v/work/api/vaults/open")).header("x-atlas", "1").header("cookie", &session).json(&serde_json::json!({ "path": "/etc" })).send().await.unwrap();
+    assert_eq!(list["current"].as_str().unwrap(), kandinsky_core::paths::real(b.path()).unwrap().to_string_lossy(), "the vault's own path (macOS: /private/var…)");
+    let open = http.post(format!("{base}/v/work/api/vaults/open")).header("x-kandinsky", "1").header("cookie", &session).json(&serde_json::json!({ "path": "/etc" })).send().await.unwrap();
     assert_eq!(open.status(), StatusCode::BAD_REQUEST);
     // the phone's capture-only token reaches a vault's capture, and nothing else of it
     let bearer = format!("Bearer {phone}");
-    let cap = http.post(format!("{base}/v/work/api/capture")).header("x-atlas", "1").header("authorization", &bearer).json(&serde_json::json!({ "text": "from the phone" })).send().await.unwrap();
+    let cap = http.post(format!("{base}/v/work/api/capture")).header("x-kandinsky", "1").header("authorization", &bearer).json(&serde_json::json!({ "text": "from the phone" })).send().await.unwrap();
     assert!(cap.status().is_success(), "{:?}", cap.text().await);
-    assert_eq!(http.get(format!("{base}/v/work/api/file?path=b.md")).header("x-atlas", "1").header("authorization", &bearer).send().await.unwrap().status(), StatusCode::FORBIDDEN);
+    assert_eq!(http.get(format!("{base}/v/work/api/file?path=b.md")).header("x-kandinsky", "1").header("authorization", &bearer).send().await.unwrap().status(), StatusCode::FORBIDDEN);
     // this machine's CLI finds each vault at its prefix
-    let sf: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(b.path().join(".atlas/cache/server.json")).unwrap()).unwrap();
+    let sf: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(b.path().join(".kandinsky/cache/server.json")).unwrap()).unwrap();
     assert_eq!(sf["path"], "/v/work");
     srv.shutdown().await.unwrap();
-    assert!(!b.path().join(".atlas/cache/server.json").exists(), "removed on shutdown");
+    assert!(!b.path().join(".kandinsky/cache/server.json").exists(), "removed on shutdown");
 }
 
 // Behind a gate (Authelia, Authentik…: Remote-User from a trusted proxy): signing a phone in hands it the gate's cookies
-// too — the browser passed the gate with the security key, the phone then passes it the same way. Never Atlas's own.
+// too — the browser passed the gate with the security key, the phone then passes it the same way. Never Kandinsky's own.
 #[tokio::test]
 async fn behind_a_gate_the_phone_gets_the_gates_cookies() {
     let vault = tempfile::tempdir().unwrap();
@@ -169,79 +169,80 @@ async fn behind_a_gate_the_phone_gets_the_gates_cookies() {
     let srv = serve_on(vault.path().to_path_buf(), Listen::Server { addr: "127.0.0.1:0".parse().unwrap(), auth: Box::new(auth) }).await.unwrap();
     let base = format!("http://127.0.0.1:{}", srv.port());
     let http = reqwest::Client::builder().redirect(redirect::Policy::none()).build().unwrap();
-    let r = http.post(format!("{base}/auth/app?app=atlas&name=Pixel")).header("remote-user", "alice").header("origin", &base)
-        .header("cookie", "authelia_session=s3cret; atlas_session=ours").form(&[("confirm", "1")]).send().await.unwrap();
+    let r = http.post(format!("{base}/auth/app?app=kandinsky&name=Pixel")).header("remote-user", "alice").header("origin", &base)
+        .header("cookie", "authelia_session=s3cret; kandinsky_session=ours").form(&[("confirm", "1")]).send().await.unwrap();
     assert_eq!(r.status(), StatusCode::SEE_OTHER);
     let to = r.headers()["location"].to_str().unwrap().to_string();
-    assert!(to.starts_with("org.atlas.app://signed-in?token=atl_"), "{to}");
+    assert!(to.starts_with("org.kandinsky.app://signed-in?token=atl_"), "{to}");
     assert!(to.contains("&gate=authelia_session%3Ds3cret"), "the gate's cookie: {to}");
-    assert!(!to.contains("ours"), "never Atlas's own session: {to}");
-    // each app gets its token at its own package's address (the Boox app is not the plain Atlas app)
-    for (app, scheme) in [("boox", "org.atlas.boox"), ("capture", "org.atlas.capture")] {
-        let r = http.post(format!("{base}/auth/app?app={app}&name=Boox")).header("remote-user", "alice").header("origin", &base).form(&[("confirm", "1")]).send().await.unwrap();
+    assert!(!to.contains("ours"), "never Kandinsky's own session: {to}");
+    // each app gets its token at its own package's address (the Boox app is not the plain Kandinsky app)
+    // the editions installed before the rename (`app=capture`, `app=boox`) answer to their old schemes
+    for (app, scheme) in [("kandinsky-boox", "org.kandinsky.boox"), ("kandinsky-capture", "org.kandinsky.capture"), ("boox", "org.atlas.boox"), ("capture", "org.atlas.capture")] {
+        let r = http.post(format!("{base}/auth/app?app={app}&name=Tablet-{app}")).header("remote-user", "alice").header("origin", &base).form(&[("confirm", "1")]).send().await.unwrap();
         let to = r.headers()["location"].to_str().unwrap().to_string();
         assert!(to.starts_with(&format!("{scheme}://signed-in?token=atl_")), "{app}: {to}");
     }
 }
 
-// The phone app shows its own interface for a server's vault (AtlasActivity.ownUi): the same lookup the server uses,
+// The phone app shows its own interface for a server's vault (KandinskyActivity.ownUi): the same lookup the server uses,
 // the page told its prefix; and the version both sides compare.
 #[test]
 fn the_interface_and_its_version_for_the_phone_app() {
-    let (page, mime) = atlas_core::server::ui_file("", "/v/work").expect("the app's page");
+    let (page, mime) = kandinsky_core::server::ui_file("", "/v/work").expect("the app's page");
     assert!(mime.starts_with("text/html"), "{mime}");
-    assert!(String::from_utf8_lossy(&page).contains(r#"window.__ATLAS_API__="/v/work""#));
-    let (deep, _) = atlas_core::server::ui_file("notes/x", "/v/work").expect("a page address is the app");
+    assert!(String::from_utf8_lossy(&page).contains(r#"window.__KANDINSKY_API__="/v/work""#));
+    let (deep, _) = kandinsky_core::server::ui_file("notes/x", "/v/work").expect("a page address is the app");
     assert_eq!(deep, page);
-    assert!(atlas_core::server::ui_file("assets/missing-file.js", "/v/work").is_none(), "a missing file is not the page");
-    let v = atlas_core::server::version_info();
-    assert_eq!(v["api"], atlas_core::server::API_LEVEL);
+    assert!(kandinsky_core::server::ui_file("assets/missing-file.js", "/v/work").is_none(), "a missing file is not the page");
+    let v = kandinsky_core::server::version_info();
+    assert_eq!(v["api"], kandinsky_core::server::API_LEVEL);
     assert_eq!(v["ui"].as_str().unwrap().len(), 12);
 }
 
 /// The desktop's one core (server_desktop.rs): the window's vault at /v/<name>/ at once, another vault of the list only when first asked for, each
-/// with its own files, `/` going to the window's own, and a vault another Atlas runs never started twice.
+/// with its own files, `/` going to the window's own, and a vault another Kandinsky runs never started twice.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_desktop_core_serves_every_vault_of_its_list_each_started_when_first_opened() {
-    use atlas_core::server::{serve_vaults, Vaults};
+    use kandinsky_core::server::{serve_vaults, Vaults};
     let home = tempfile::tempdir().unwrap();
     let (a, b, c) = (home.path().join("Work"), home.path().join("My Notes"), home.path().join("Busy"));
     for (v, note) in [(&a, "a.md"), (&b, "b.md"), (&c, "c.md")] {
-        std::fs::create_dir_all(v.join(".atlas/cache")).unwrap();
+        std::fs::create_dir_all(v.join(".kandinsky/cache")).unwrap();
         std::fs::write(v.join(note), "# here\n").unwrap();
     }
-    // Busy is open in another Atlas: a live process that is not this one (a child waiting on its input; pid 1 is no
+    // Busy is open in another Kandinsky: a live process that is not this one (a child waiting on its input; pid 1 is no
     // process on Windows)
-    let mut other_atlas = if cfg!(windows) { std::process::Command::new("cmd").args(["/C", "pause"]).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).spawn() } else { std::process::Command::new("cat").stdin(std::process::Stdio::piped()).spawn() }.unwrap();
-    let busy = serde_json::json!({ "port": 1, "pid": other_atlas.id(), "root": c.canonicalize().unwrap(), "path": "" });
-    std::fs::write(c.join(".atlas/cache/server.json"), busy.to_string()).unwrap();
+    let mut other_kandinsky = if cfg!(windows) { std::process::Command::new("cmd").args(["/C", "pause"]).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).spawn() } else { std::process::Command::new("cat").stdin(std::process::Stdio::piped()).spawn() }.unwrap();
+    let busy = serde_json::json!({ "port": 1, "pid": other_kandinsky.id(), "root": c.canonicalize().unwrap(), "path": "" });
+    std::fs::write(c.join(".kandinsky/cache/server.json"), busy.to_string()).unwrap();
     let list = home.path().join("vaults.toml");
     std::fs::write(&list, format!("[[vault]]\nname = \"My Notes\"\npath = {:?}\nlast_opened = 2\n\n[[vault]]\nname = \"Busy\"\npath = {:?}\nlast_opened = 1\n", b, c)).unwrap();
-    let srv = serve_vaults(Vaults::Desktop { first: a.clone(), list }, Listen::Local(0, atlas_core::local_lock::Lock::Open)).await.unwrap();
+    let srv = serve_vaults(Vaults::Desktop { first: a.clone(), list }, Listen::Local(0, kandinsky_core::local_lock::Lock::Open)).await.unwrap();
     let base = format!("http://127.0.0.1:{}", srv.port());
     let http = reqwest::Client::builder().redirect(redirect::Policy::none()).build().unwrap();
-    let get = |p: &str| http.get(format!("{base}{p}")).header("x-atlas", "1").send();
+    let get = |p: &str| http.get(format!("{base}{p}")).header("x-kandinsky", "1").send();
 
     let to = get("/?k=x").await.unwrap();
     assert_eq!(to.headers()["location"], "/v/Work/?k=x", "the window's own vault, the one-time code kept");
-    assert!(a.join(".atlas/cache/server.json").is_file(), "started with the window");
-    assert!(!b.join(".atlas/cache/server.json").exists(), "the other one waits until it is opened");
+    assert!(a.join(".kandinsky/cache/server.json").is_file(), "started with the window");
+    assert!(!b.join(".kandinsky/cache/server.json").exists(), "the other one waits until it is opened");
 
     assert_eq!(get("/v/Work/api/file?path=a.md").await.unwrap().status(), StatusCode::OK);
     let other = get("/v/My-Notes/api/file?path=b.md").await.unwrap();
     assert_eq!(other.status(), StatusCode::OK, "a folder name with a space has a clean address");
     assert_eq!(get("/v/My-Notes/api/file?path=a.md").await.unwrap().status(), StatusCode::NOT_FOUND, "each vault its own files");
-    let sf: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(b.join(".atlas/cache/server.json")).unwrap()).unwrap();
+    let sf: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(b.join(".kandinsky/cache/server.json")).unwrap()).unwrap();
     assert_eq!(sf["path"], "/v/My-Notes", "the CLI and agents find it at its place");
     let page = get("/v/My-Notes/").await.unwrap().text().await.unwrap();
-    assert!(page.contains(r#"__ATLAS_API__="/v/My-Notes""#), "the page is told where its API is");
+    assert!(page.contains(r#"__KANDINSKY_API__="/v/My-Notes""#), "the page is told where its API is");
 
-    assert_eq!(get("/v/Busy/").await.unwrap().status(), StatusCode::CONFLICT, "open in another Atlas: not started twice");
-    let _ = other_atlas.kill();
-    let _ = other_atlas.wait();
+    assert_eq!(get("/v/Busy/").await.unwrap().status(), StatusCode::CONFLICT, "open in another Kandinsky: not started twice");
+    let _ = other_kandinsky.kill();
+    let _ = other_kandinsky.wait();
     assert_eq!(get("/v/Nowhere/").await.unwrap().status(), StatusCode::NOT_FOUND);
     srv.shutdown().await.unwrap();
-    assert!(!b.join(".atlas/cache/server.json").exists(), "a vault started on demand is cleaned up too");
+    assert!(!b.join(".kandinsky/cache/server.json").exists(), "a vault started on demand is cleaned up too");
 }
 
 /// A guest folder (guest.rs; SHELL.md "Guest folders"): opened from a vault's window it is served by the same core at its
@@ -249,20 +250,20 @@ async fn the_desktop_core_serves_every_vault_of_its_list_each_started_when_first
 /// is a vault opens as one.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_guest_folder_is_served_beside_the_vault_read_only_until_edit_and_never_remembered() {
-    use atlas_core::server::{serve_vaults, Vaults};
+    use kandinsky_core::server::{serve_vaults, Vaults};
     let home = tempfile::tempdir().unwrap();
-    std::env::set_var("ATLAS_GUESTS", home.path().join("guests")); // this test's own, never this machine's
+    std::env::set_var("KANDINSKY_GUESTS", home.path().join("guests")); // this test's own, never this machine's
     let (vault, docs) = (home.path().join("Work"), home.path().join("docs"));
-    std::fs::create_dir_all(vault.join(".atlas/plugins/viewer")).unwrap();
-    std::fs::write(vault.join(".atlas/plugins/viewer/plugin.toml"), "title = \"Viewer\"\n").unwrap();
+    std::fs::create_dir_all(vault.join(".kandinsky/plugins/viewer")).unwrap();
+    std::fs::write(vault.join(".kandinsky/plugins/viewer/plugin.toml"), "title = \"Viewer\"\n").unwrap();
     std::fs::create_dir_all(&docs).unwrap();
     std::fs::write(docs.join("readme.md"), "# Docs\n").unwrap();
     let list = home.path().join("vaults.toml");
-    let srv = serve_vaults(Vaults::Desktop { first: vault.clone(), list: list.clone() }, Listen::Local(0, atlas_core::local_lock::Lock::Open)).await.unwrap();
+    let srv = serve_vaults(Vaults::Desktop { first: vault.clone(), list: list.clone() }, Listen::Local(0, kandinsky_core::local_lock::Lock::Open)).await.unwrap();
     let base = format!("http://127.0.0.1:{}", srv.port());
     let http = reqwest::Client::builder().redirect(redirect::Policy::none()).build().unwrap();
-    let post = |p: &str, body: serde_json::Value| http.post(format!("{base}{p}")).header("x-atlas", "1").json(&body).send();
-    let get = |p: &str| http.get(format!("{base}{p}")).header("x-atlas", "1").send();
+    let post = |p: &str, body: serde_json::Value| http.post(format!("{base}{p}")).header("x-kandinsky", "1").json(&body).send();
+    let get = |p: &str| http.get(format!("{base}{p}")).header("x-kandinsky", "1").send();
 
     let opened: serde_json::Value = post("/v/Work/api/vaults/open", serde_json::json!({ "path": docs, "guest": true })).await.unwrap().json().await.unwrap();
     assert_eq!(opened["guest"], true, "{opened}");
@@ -275,7 +276,7 @@ async fn a_guest_folder_is_served_beside_the_vault_read_only_until_edit_and_neve
     let plugins: serde_json::Value = get(&format!("{at}/api/plugins")).await.unwrap().json().await.unwrap();
     assert!(plugins.to_string().contains("viewer"), "the opener's plugins: {plugins}");
 
-    let put = |text: &str| http.put(format!("{base}{at}/api/file")).header("x-atlas", "1").json(&serde_json::json!({ "path": "readme.md", "text": text })).send();
+    let put = |text: &str| http.put(format!("{base}{at}/api/file")).header("x-kandinsky", "1").json(&serde_json::json!({ "path": "readme.md", "text": text })).send();
     assert!(!put("# Changed\n").await.unwrap().status().is_success(), "read-only until Edit");
     assert_eq!(std::fs::read_to_string(docs.join("readme.md")).unwrap(), "# Docs\n");
     let on: serde_json::Value = post(&format!("{at}/api/guest/edit"), serde_json::json!({ "on": true })).await.unwrap().json().await.unwrap();
@@ -286,24 +287,24 @@ async fn a_guest_folder_is_served_beside_the_vault_read_only_until_edit_and_neve
     // a window of it taking the focus does not put it on the list
     assert!(post(&format!("{at}/api/vaults/active"), serde_json::json!({})).await.unwrap().status().is_success());
     assert!(!std::fs::read_to_string(&list).unwrap_or_default().contains("docs"), "never remembered");
-    // a folder with its own .atlas is a vault, opened as one
+    // a folder with its own .kandinsky is a vault, opened as one
     let other = home.path().join("Other");
-    std::fs::create_dir_all(other.join(".atlas")).unwrap();
+    std::fs::create_dir_all(other.join(".kandinsky")).unwrap();
     let as_vault: serde_json::Value = post("/v/Work/api/vaults/open", serde_json::json!({ "path": other, "guest": true })).await.unwrap().json().await.unwrap();
     assert!(as_vault["guest"].is_null(), "{as_vault}");
     srv.shutdown().await.unwrap();
-    assert_eq!(atlas_core::guest::sweep(), 1);
-    assert!(docs.join(".atlas").symlink_metadata().is_err() && docs.join("readme.md").is_file());
+    assert_eq!(kandinsky_core::guest::sweep(), 1);
+    assert!(docs.join(".kandinsky").symlink_metadata().is_err() && docs.join("readme.md").is_file());
 }
 
-/// A plugin's own files by URL (plugin_files.rs; PLUGIN-API.md "A plugin's own files"): no `x-atlas` header (an `<img>`,
+/// A plugin's own files by URL (plugin_files.rs; PLUGIN-API.md "A plugin's own files"): no `x-kandinsky` header (an `<img>`,
 /// a font, an `import()` cannot send one), but the sign-in still holds; under a vault's `/v/<name>/` too; the right type,
 /// a 304 for an unchanged file, nothing outside the plugin's folder.
 #[tokio::test]
 async fn a_plugins_own_files_by_url_signed_in_and_inside_its_folder() {
-    use atlas_core::server::{serve_vaults, Served, Vaults};
+    use kandinsky_core::server::{serve_vaults, Served, Vaults};
     let v = tempfile::tempdir().unwrap();
-    let books = v.path().join(".atlas/plugins/books");
+    let books = v.path().join(".kandinsky/plugins/books");
     std::fs::create_dir_all(books.join("fonts")).unwrap();
     std::fs::write(books.join("view.js"), "import { zipIndex } from \"../zip/zip.js\";\n").unwrap();
     std::fs::write(books.join("fonts/serif.woff2"), [0x77, 0x4f, 0x46, 0x32]).unwrap();
@@ -317,35 +318,35 @@ async fn a_plugins_own_files_by_url_signed_in_and_inside_its_folder() {
     let url = |rest: &str| format!("{base}/v/work/plugin-files/{rest}");
 
     // not signed in: the sign-in page, never the file
-    let r = http.get(url("0/.atlas/plugins/books/view.js")).send().await.unwrap();
+    let r = http.get(url("0/.kandinsky/plugins/books/view.js")).send().await.unwrap();
     assert_eq!(r.status(), StatusCode::SEE_OTHER);
     let ok = http.post(format!("{base}/login")).header("origin", &base).form(&[("password", "a long password"), ("next", "/v/work/")]).send().await.unwrap();
     let session = ok.headers()["set-cookie"].to_str().unwrap().split(';').next().unwrap().to_string();
-    let get = |rest: &str| http.get(url(rest)).header("cookie", &session); // no x-atlas: as a browser's <img> / import()
+    let get = |rest: &str| http.get(url(rest)).header("cookie", &session); // no x-kandinsky: as a browser's <img> / import()
 
-    let js = get("0/.atlas/plugins/books/view.js").send().await.unwrap();
+    let js = get("0/.kandinsky/plugins/books/view.js").send().await.unwrap();
     assert_eq!(js.status(), StatusCode::OK);
     assert_eq!(js.headers()["content-type"], "text/javascript; charset=utf-8");
     assert_eq!((js.headers()["cache-control"].to_str().unwrap(), js.headers()["x-content-type-options"].to_str().unwrap()), ("no-cache", "nosniff"));
     let etag = js.headers()["etag"].to_str().unwrap().to_string();
     assert!(js.text().await.unwrap().contains("../zip/zip.js"));
-    let again = get("7/.atlas/plugins/books/view.js").header("if-none-match", &etag).send().await.unwrap();
+    let again = get("7/.kandinsky/plugins/books/view.js").header("if-none-match", &etag).send().await.unwrap();
     assert_eq!(again.status(), StatusCode::NOT_MODIFIED, "unchanged: no body again, whatever the page's revision");
-    let font = get("0/.atlas/plugins/books/fonts/serif.woff2").send().await.unwrap();
+    let font = get("0/.kandinsky/plugins/books/fonts/serif.woff2").send().await.unwrap();
     assert_eq!((font.status(), font.headers()["content-type"].to_str().unwrap()), (StatusCode::OK, "font/woff2"));
     assert_eq!(font.bytes().await.unwrap().as_ref(), [0x77, 0x4f, 0x46, 0x32]);
 
     // outside the plugin's folder: refused (the URL's own `..` the client folds away, so it is sent escaped)
-    for rest in ["0/note.md", "0/.atlas/plugins/books/%2e%2e/%2e%2e/%2e%2e/note.md", "0/.atlas/plugins/books/..%2f..%2f..%2fnote.md", "0/.atlas/config.toml", "BAD/.atlas/plugins/books/view.js"] {
+    for rest in ["0/note.md", "0/.kandinsky/plugins/books/%2e%2e/%2e%2e/%2e%2e/note.md", "0/.kandinsky/plugins/books/..%2f..%2f..%2fnote.md", "0/.kandinsky/config.toml", "BAD/.kandinsky/plugins/books/view.js"] {
         let r = get(rest).send().await.unwrap();
         assert_eq!(r.status(), StatusCode::BAD_REQUEST, "{rest}");
     }
-    assert_eq!(get("0/.atlas/plugins/books/none.js").send().await.unwrap().status(), StatusCode::NOT_FOUND);
+    assert_eq!(get("0/.kandinsky/plugins/books/none.js").send().await.unwrap().status(), StatusCode::NOT_FOUND);
     srv.shutdown().await.unwrap();
 
     // the desktop's core: the same, at its top, no header needed
-    let local = atlas_core::serve(v.path().to_path_buf(), 0).await.unwrap();
-    let r = http.get(format!("http://127.0.0.1:{}/plugin-files/0/.atlas/plugins/books/view.js", local.port())).send().await.unwrap();
+    let local = kandinsky_core::serve(v.path().to_path_buf(), 0).await.unwrap();
+    let r = http.get(format!("http://127.0.0.1:{}/plugin-files/0/.kandinsky/plugins/books/view.js", local.port())).send().await.unwrap();
     assert_eq!(r.status(), StatusCode::OK);
     local.shutdown().await.unwrap();
 }

@@ -1,16 +1,16 @@
 <script lang="ts">
   // Outlook's sign-in in one dialog (view.ts, arg signinDialog(…)), the way Thunderbird does it (the card's flow):
   // automatic — Microsoft's page in the user's own browser, the answer caught on localhost by the engine; code — a
-  // device code typed at microsoft.com/devicelogin, shown here with a copy button; window — Atlas's sign-in window,
+  // device code typed at microsoft.com/devicelogin, shown here with a copy button; window — Kandinsky's sign-in window,
   // whose return address finishes it (pasted in the box here, in a browser). The engine keeps the refresh token in
-  // Atlas's secret store (oauth.rs). The account is chosen here when several sign in with Outlook.
+  // Kandinsky's secret store (oauth.rs). The account is chosen here when several sign in with Outlook.
   import { untrack } from "svelte";
   import { call, type PluginApi } from "./api";
 
   type Card = { name: string; auth?: string; user?: string };
-  let { atlas, account: given, record, onclose }: { atlas: PluginApi; account?: string; record?: Card; onclose: () => void } = $props();
+  let { kandinsky, account: given, record, onclose }: { kandinsky: PluginApi; account?: string; record?: Card; onclose: () => void } = $props();
 
-  const outlook = untrack(() => ((atlas.plugin.settings.accounts as Card[] | undefined) ?? []).filter((c) => c?.name && c.auth === "outlook"));
+  const outlook = untrack(() => ((kandinsky.plugin.settings.accounts as Card[] | undefined) ?? []).filter((c) => c?.name && c.auth === "outlook"));
   let account = $state(untrack(() => given ?? record?.name ?? (outlook.length === 1 ? outlook[0].name : "")));
 
   type Step =
@@ -23,12 +23,12 @@
   let pasted = $state("");
   let gone = false;
 
-  const open = (url: string) => void call(atlas, "signin_reopen", { url }).catch(() => window.open(url, "_blank"));
+  const open = (url: string) => void call(kandinsky, "signin_reopen", { url }).catch(() => window.open(url, "_blank"));
   const done = () => {
     if (gone) return;
     step = { kind: "done" };
-    window.dispatchEvent(new CustomEvent("atlas-email:signed-in", { detail: { account } }));
-    void call(atlas, "watch", {}, 30).catch(() => {});
+    window.dispatchEvent(new CustomEvent("kandinsky-email:signed-in", { detail: { account } }));
+    void call(kandinsky, "watch", {}, 30).catch(() => {});
   };
   const fail = (e: unknown) => { if (!gone) step = { kind: "failed", why: String((e as Error)?.message ?? e) }; };
 
@@ -36,14 +36,14 @@
   function finishWith(redirect: string) {
     if (settled || !redirect.trim()) return;
     settled = true;
-    call(atlas, "signin_finish", { redirect: redirect.trim(), account }, 60).then(done, (e) => { settled = false; fail(e); });
+    call(kandinsky, "signin_finish", { redirect: redirect.trim(), account }, 60).then(done, (e) => { settled = false; fail(e); });
   }
 
   async function start() {
     step = { kind: "starting" };
     settled = false;
     try {
-      const s = await call<{ flow: string; url: string; opened?: boolean; code?: string; redirect?: string }>(atlas, "signin_start", record && record.name === account ? { record } : { account }, 60);
+      const s = await call<{ flow: string; url: string; opened?: boolean; code?: string; redirect?: string }>(kandinsky, "signin_start", record && record.name === account ? { record } : { account }, 60);
       if (gone) return;
       if (s.flow === "automatic" || s.flow === "code") {
         // these belong to the user's own browser: the engine opens it, here and when asked again
@@ -51,11 +51,11 @@
         if (s.code) copied = await navigator.clipboard?.writeText(s.code).then(() => true, () => false) ?? false;
         if (!s.opened) open(s.url);
         step = { kind: "waiting", flow: s.flow, url: s.url, code: s.code, copied };
-        await call(atlas, "signin_finish", { account }, s.flow === "code" ? 900 : 660);
+        await call(kandinsky, "signin_finish", { account }, s.flow === "code" ? 900 : 660);
         return done();
       }
       step = { kind: "waiting", flow: "window", url: s.url };
-      const back = atlas.signIn ? atlas.signIn(s.url, s.redirect ?? "https://localhost") : (window.open(s.url, "_blank"), null);
+      const back = kandinsky.signIn ? kandinsky.signIn(s.url, s.redirect ?? "https://localhost") : (window.open(s.url, "_blank"), null);
       back?.then(finishWith, () => {});
     } catch (e) { fail(e); }
   }
@@ -69,7 +69,7 @@
   {#if step.kind === "choose"}
     {#if !outlook.length}
       <p>No account signs in with Outlook: set one's Sign-in to <b>outlook</b> in Email's settings.</p>
-      <div class="go"><button onclick={() => atlas.plugin.openSettings()}>Open Email's settings</button></div>
+      <div class="go"><button onclick={() => kandinsky.plugin.openSettings()}>Open Email's settings</button></div>
     {:else}
       <p>Which account?</p>
       <ul>
@@ -95,7 +95,7 @@
         <button type="submit" disabled={!pasted.trim()}>Finish</button>
       </form>
     {:else}
-      <p class="hint"><span class="dot"></span>Atlas finishes by itself when Microsoft sends you back.</p>
+      <p class="hint"><span class="dot"></span>Kandinsky finishes by itself when Microsoft sends you back.</p>
       <div class="go"><button onclick={() => step.kind === "waiting" && open(step.url)}>Open the Microsoft page again</button></div>
     {/if}
   {:else if step.kind === "done"}

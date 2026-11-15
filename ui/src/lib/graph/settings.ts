@@ -1,6 +1,6 @@
 // The graph view's settings, in Obsidian's graph.json shape (the same names, ranges and defaults), so a vault
-// that comes from Obsidian opens its graph as it was there: read from `.atlas/graph.json`, or the first time from
-// `.obsidian/graph.json`. Changes are kept in `.atlas/graph.json` only — Obsidian's own file is never written.
+// that comes from Obsidian opens its graph as it was there: read from `.kandinsky/graph.json`, or the first time from
+// `.obsidian/graph.json`. Changes are kept in `.kandinsky/graph.json` only — Obsidian's own file is never written.
 import { api } from "../api";
 
 export interface ColorGroup { query: string; color: { a: number; rgb: number } }
@@ -45,7 +45,7 @@ export const RANGES: Record<"textFadeMultiplier" | "nodeSizeMultiplier" | "lineS
   centerStrength: [0, 1, 0.01], repelStrength: [0, 20, 0.1], linkStrength: [0, 1, 0.01], linkDistance: [30, 500, 1],
 };
 
-const OWN = ".atlas/graph.json", OBSIDIAN = ".obsidian/graph.json";
+const OWN = ".kandinsky/graph.json", OBSIDIAN = ".obsidian/graph.json";
 
 /** Only the keys it knows, each of the right kind, numbers kept in their range. */
 export function clean(raw: unknown): GraphSettings {
@@ -84,7 +84,7 @@ export async function loadGraphSettings(): Promise<{ settings: GraphSettings; fr
 }
 
 let timer: ReturnType<typeof setTimeout> | undefined;
-/** Saves to `.atlas/graph.json` a moment after the last change (a slider sends many). */
+/** Saves to `.kandinsky/graph.json` a moment after the last change (a slider sends many). */
 export function saveGraphSettings(s: GraphSettings): void {
   if (timer) clearTimeout(timer);
   const text = JSON.stringify(s, null, 2) + "\n";

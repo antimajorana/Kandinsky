@@ -30,6 +30,7 @@ import "./styles/syntax.css";
 import "./styles/touch.css";
 import "./styles/shape-paper.css";
 import { attachPenBridge } from "./lib/pen-bridge";
+import "./lib/editor-insert-bus";
 // first, before any pointer listener: a Wacom pen in the Linux app arrives as a mouse (pen-bridge.ts)
 attachPenBridge();
 import { mount } from "svelte";
@@ -47,9 +48,9 @@ export default app;
 // Base-oAVxpisc.js"): the new page instead, once a minute at most (never a reload loop)
 window.addEventListener("vite:preloadError", (e) => {
   try {
-    const last = Number(sessionStorage.getItem("atlas.chunkReload") ?? 0);
+    const last = Number(sessionStorage.getItem("kandinsky.chunkReload") ?? 0);
     if (Date.now() - last < 60_000) return;
-    sessionStorage.setItem("atlas.chunkReload", String(Date.now()));
+    sessionStorage.setItem("kandinsky.chunkReload", String(Date.now()));
   } catch { /* no storage: reload all the same */ }
   e.preventDefault();
   location.reload();
@@ -68,6 +69,6 @@ document.addEventListener("click", (e) => {
 }, true);
 
 // the desktop app's hand-off: a page a plugin, a mail or a PDF opened with window.open (or a link that would have
-// replaced the app) comes back here as a Web tab when `[web] open_links = "tab"` (crates/atlas-app main.rs `web_link`)
-(window as unknown as { __atlasOpenWeb?: (url: string) => void }).__atlasOpenWeb = (url) =>
+// replaced the app) comes back here as a Web tab when `[web] open_links = "tab"` (crates/kandinsky-app main.rs `web_link`)
+(window as unknown as { __kandinskyOpenWeb?: (url: string) => void }).__kandinskyOpenWeb = (url) =>
   void import("./lib/dock").then((m) => m.open({ kind: "web", url }));

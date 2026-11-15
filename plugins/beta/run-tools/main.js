@@ -1,10 +1,10 @@
 // Run tools: buttons in the bar above a code file that run it, test it or build it in the shell terminal, so nothing is
 // hidden — the command is there to read, its output scrolls by, ↑ runs it again (docs/guides/PLUGIN-API.md,
-// `atlas.editor.toolbar`, `atlas.terminal`). What a file gets is found from the file and the project around it (the
+// `kandinsky.editor.toolbar`, `kandinsky.terminal`). What a file gets is found from the file and the project around it (the
 // nearest Cargo.toml, package.json, go.mod, Makefile, justfile, .venv…), and each command is written for the shell the
 // terminal runs (POSIX, PowerShell or cmd), so the same buttons work on Linux, macOS and Windows.
 
-// --- the shell's words: pure, exported for the tests; the app's `atlas.terminal.quote` / `line` (API 23) are the same
+// --- the shell's words: pure, exported for the tests; the app's `kandinsky.terminal.quote` / `line` (API 23) are the same
 // rule (a spec checks they agree), these kept for an older app ---
 
 /** One argument, as `shell` reads it back unchanged. */
@@ -84,38 +84,38 @@ export const LATEX = "latexmk -lualatex -interaction=nonstopmode -file-line-erro
 
 // --- the plugin ---
 
-export function register(atlas) {
-  const settings = atlas.plugin.settings;
+export function register(kandinsky) {
+  const settings = kandinsky.plugin.settings;
   const own = (key) => String(settings[key] ?? "").trim();
   // is there such a file? (a failed read is "no"; kept, as the bar asks at every redraw; forgotten when files change)
   const known = new Map();
-  const read = (path) => { if (!known.has(path)) known.set(path, atlas.readText(path).then((t) => t, () => null)); return known.get(path); };
-  atlas.onFilesChanged((paths) => { if (!paths.length) known.clear(); for (const p of paths) known.delete(p); });
+  const read = (path) => { if (!known.has(path)) known.set(path, kandinsky.readText(path).then((t) => t, () => null)); return known.get(path); };
+  kandinsky.onFilesChanged((paths) => { if (!paths.length) known.clear(); for (const p of paths) known.delete(p); });
   /** The nearest folder, from the file upwards, that holds `name`; null when none does. */
   const nearest = async (path, name) => { for (const d of upwards(path)) if ((await read(d ? `${d}/${name}` : name)) !== null) return d; return null; };
-  const shellOf = async () => (await atlas.terminal.shell?.().catch(() => null)) ?? "posix";
+  const shellOf = async () => (await kandinsky.terminal.shell?.().catch(() => null)) ?? "posix";
   /** Runs `make(shell)` in the terminal: the command is built once the shell is known. */
-  const go = async (make) => { const sh = await shellOf(); const cmd = await make(sh); if (cmd) return atlas.terminal.run(cmd); };
-  const say = (text) => atlas.toast("Run tools", text, "error");
+  const go = async (make) => { const sh = await shellOf(); const cmd = await make(sh); if (cmd) return kandinsky.terminal.run(cmd); };
+  const say = (text) => kandinsky.toast("Run tools", text, "error");
 
   /** The tests of `path` in the chooser ("All" first) → `run(one)`; with none named, all at once. */
   async function pickTest(path, run) {
     const names = testsIn(path, (await read(path)) ?? "");
     if (!names.length) return run("");
-    atlas.pick({
+    kandinsky.pick({
       placeholder: "Which test…", tag: "Test",
       items: [{ value: "", title: "All tests in this file" }, ...names.map((n) => ({ value: n, title: n }))],
       onpick: (v) => run(v),
     });
   }
   /** One of `items` (names) in the chooser → `run(name)`. */
-  const pickOne = (tag, items, run) => atlas.pick({ placeholder: `Which ${tag.toLowerCase()}…`, tag, items: items.map((n) => ({ value: n, title: n })), onpick: (v) => run(v) });
+  const pickOne = (tag, items, run) => kandinsky.pick({ placeholder: `Which ${tag.toLowerCase()}…`, tag, items: items.map((n) => ({ value: n, title: n })), onpick: (v) => run(v) });
 
   /** The interpreter for a Python file: the setting, else the vault's environment (Python: choose the environment —
    *  the one its language server and terminals use), else a project run by uv, else the nearest .venv, else python. */
   async function python(sh, path) {
     if (own("python")) return own("python"); // the person's own words, typed as they are (`conda run -n env python`)
-    const envs = await fetch("/api/python-envs", { headers: { "x-atlas": "1" } }).then((r) => (r.ok ? r.json() : null), () => null);
+    const envs = await fetch("/api/python-envs", { headers: { "x-kandinsky": "1" } }).then((r) => (r.ok ? r.json() : null), () => null);
     const chosen = envs?.found?.find((e) => e.path === envs.chosen);
     if (chosen) return quote(chosen.python, sh);
     if ((await nearest(path, "uv.lock")) !== null) return "uv run python";
@@ -158,7 +158,7 @@ export function register(atlas) {
     return [{ label: "Task", title: "A script, target or recipe of the project (package.json, Makefile, justfile)", run: async () => {
       const all = (await Promise.all(kinds.map(async (k) => (await k.names()).map((n) => ({ k, n }))))).flat();
       if (!all.length) return say("The project names no script, target or recipe.");
-      atlas.pick({ placeholder: "Which task…", tag: "Task", items: all.map(({ k, n }, i) => ({ value: String(i), title: n, detail: k.cmd("posix", n) })),
+      kandinsky.pick({ placeholder: "Which task…", tag: "Task", items: all.map(({ k, n }, i) => ({ value: String(i), title: n, detail: k.cmd("posix", n) })),
         onpick: (v) => { const { k, n } = all[Number(v)]; void go((sh) => k.cmd(sh, n)); } });
     } }];
   }
@@ -173,7 +173,7 @@ export function register(atlas) {
   };
   // asked again only when a file the Task button reads changes, not at every save (each would redraw the bar)
   const TASK_FILES = /(^|\/)(package\.json|Makefile|justfile)$/;
-  atlas.onFilesChanged((paths) => { if (!paths.length || paths.some((p) => TASK_FILES.test(p))) tasks.clear(); });
+  kandinsky.onFilesChanged((paths) => { if (!paths.length || paths.some((p) => TASK_FILES.test(p))) tasks.clear(); });
 
   const tools = (file) => {
     const p = file.path, name = baseOf(p);
@@ -204,10 +204,10 @@ export function register(atlas) {
           { label: "Build", title: "Build the PDF with LuaLaTeX (latexmk), the whole document this file belongs to; the PDF opens beside and follows each build", run: async () => {
             const root = await rootOf(p);
             await go((sh) => latex(sh, root));
-            if ((await read(pdfOf(root))) !== null) atlas.open(pdfOf(root), undefined, { beside: true });
+            if ((await read(pdfOf(root))) !== null) kandinsky.open(pdfOf(root), undefined, { beside: true });
           } },
           { label: "Watch", title: "Build again at every save (latexmk -pvc), until Ctrl+C in the terminal", run: async () => { const root = await rootOf(p); await go((sh) => latex(sh, root, "-pvc", "-view=none")); } },
-          { label: "PDF", title: "Open the PDF beside", run: async () => atlas.open(pdfOf(await rootOf(p)), undefined, { beside: true }) },
+          { label: "PDF", title: "Open the PDF beside", run: async () => kandinsky.open(pdfOf(await rootOf(p)), undefined, { beside: true }) },
           { label: "Clean", title: "Remove the build files (latexmk -c), the PDF kept", run: async () => { const root = await rootOf(p); await go((sh) => [own("latex") || LATEX, "-c", "-cd", quote(root, sh)].join(" ")); } },
         ];
       }
@@ -223,6 +223,6 @@ export function register(atlas) {
     })();
     return [...own_, ...tasksOf(p)];
   };
-  let off = atlas.editor.toolbar(tools);
-  const redraw = () => { off(); off = atlas.editor.toolbar(tools); };
+  let off = kandinsky.editor.toolbar(tools);
+  const redraw = () => { off(); off = kandinsky.editor.toolbar(tools); };
 }

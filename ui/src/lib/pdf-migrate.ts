@@ -11,12 +11,13 @@ import { engine } from "./pdf-engine";
 import { convert, pagesOf, placeKey, type Converted, type Space } from "./pdf-ink-to-marks";
 import { toast } from "./state.svelte";
 import type { El } from "./pdf-ink-scene";
+import { parseDrawing } from "./legacy-names";
 
 interface Plan { drawing: string; pdf: string; got: Converted }
 
 async function plan(drawing: string): Promise<Plan | null> {
   const pdf = drawing.replace(/\.excalidraw$/i, "");
-  const scene = JSON.parse((await api.file(drawing)).text) as { elements?: El[] };
+  const scene = parseDrawing((await api.file(drawing)).text) as { elements?: El[] };
   const els = scene.elements ?? [];
   const eng = await engine(), spaces = new Map<number, Space>();
   for (const n of pagesOf(els)) {

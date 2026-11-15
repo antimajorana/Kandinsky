@@ -1,10 +1,10 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.graphics.Bitmap;
 import android.os.Build;
 
 /** A drawing kept small on disk. The same rules as the web's draw-compact.ts and
- *  `atlas drawings compact`: pictures as WebP (transparency kept), pen points to 0.1 px, pressures to 0.01.
+ *  `kandinsky drawings compact`: pictures as WebP (transparency kept), pen points to 0.1 px, pressures to 0.01.
  *  docs/design/DESIGN-drawing-size.md. */
 final class DrawingSize {
     private DrawingSize() {}

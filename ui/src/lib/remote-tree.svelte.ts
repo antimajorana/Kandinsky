@@ -16,7 +16,7 @@ export const servers = () => sources.list.filter((s) => !SKIP.has(s.id));
 /** A row's key: the source, then its place, then the path in it ("" the place's top). */
 export const remoteKey = (src: string, place = "", path?: string) => (path === undefined ? (place ? `${src}\n${place}` : src) : `${src}\n${place}\n${path}`);
 
-const OPEN_KEY = "atlas.tree.remote-open";
+const OPEN_KEY = "kandinsky.tree.remote-open";
 /** Groups, places and folders unfolded (by key), kept per device. */
 export const remoteOpen = new SvelteSet<string>(load<string[]>(OPEN_KEY, []));
 export function setRemoteOpen(key: string, open: boolean): void {

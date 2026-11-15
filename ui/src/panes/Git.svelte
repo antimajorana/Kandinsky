@@ -89,7 +89,7 @@
   const failed = (what: string) => (e: unknown) => toast(what, errText(e), "error", 12000);
   function discard(paths: string[]) {
     const one = paths.length === 1 ? paths[0] : `${paths.length} files`;
-    ask = { title: `Discard the changes to ${one}?`, confirm: "Discard", hint: "Back to the last staged / committed version (new files go to the Trash). A copy is kept in .atlas/cache/discarded/.",
+    ask = { title: `Discard the changes to ${one}?`, confirm: "Discard", hint: "Back to the last staged / committed version (new files go to the Trash). A copy is kept in .kandinsky/cache/discarded/.",
       spot: focusSpot(), // taken before the dialog has the keys
       run: async () => { const r = await api.gitDiscard(paths); toast("Discarded", `A copy is in ${r.kept}`); await refreshStatus(); } };
   }

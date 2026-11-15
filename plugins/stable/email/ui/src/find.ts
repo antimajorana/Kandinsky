@@ -1,8 +1,8 @@
 // Find in a conversation (Ctrl+F): the messages are sandboxed frames, so the window's own find cannot reach them.
-// Every match in the given documents is wrapped in <mark class="atlas-find"> (MailFrame styles it), one is the current
+// Every match in the given documents is wrapped in <mark class="kandinsky-find"> (MailFrame styles it), one is the current
 // one; folded quotes holding a match open. Case and accents are ignored ("e" finds "é").
 
-const CLASS = "atlas-find";
+const CLASS = "kandinsky-find";
 
 /** A text's folded form and, for each folded character, where it came from. */
 function folded(text: string): { s: string; at: number[] } {

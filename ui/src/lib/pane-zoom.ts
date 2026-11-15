@@ -18,7 +18,7 @@ let dock: DockviewApi | undefined;
 /** How much larger than the settings' sizes this pane draws (1 = as set). */
 export const paneZoom = (id: string): number => STEP ** (steps.get(id) ?? 0);
 /** Fired on `window` with the pane id when a pane's zoom changed (a terminal refits). */
-export const PANE_ZOOM_EVENT = "atlas-pane-zoom";
+export const PANE_ZOOM_EVENT = "kandinsky-pane-zoom";
 
 /** The lower bar's zoom cell follows the tab in front. */
 function showActive(): void {

@@ -105,7 +105,7 @@ pub fn names_with(root: &Path, cfg: &Config, q: &str, o: Opts) -> Vec<String> {
 /// The PDFs' text (pdf_text.rs's cache), each hit mapped back to its PDF and page, most matches first; only PDFs this
 /// walk found: the text of one deleted, moved or now excluded stays in the cache until the next pass.
 fn pdf_lines(root: &Path, cfg: &Config, q: &str, o: Opts, walked: &[(std::path::PathBuf, String)]) -> Vec<FileLines> {
-    if !root.join(crate::pdf_text::CACHE).is_dir() {
+    if !crate::state_dir::join(root, crate::pdf_text::CACHE).is_dir() {
         return Vec::new();
     }
     let pdfs: std::collections::HashSet<&str> = walked.iter().map(|(_, rel)| rel.as_str()).filter(|r| r.to_lowercase().ends_with(".pdf")).collect();

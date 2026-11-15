@@ -34,7 +34,7 @@ pub fn fetch(url: &str, etag: Option<&str>, modified: Option<&str>) -> Result<Fe
     let to = address(url)?;
     let http = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(60))
-        .user_agent(concat!("Atlas-calendar/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("Kandinsky-calendar/", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|e| e.to_string())?;
     let mut req = http.get(&to).header("Accept", "text/calendar, */*;q=0.5");

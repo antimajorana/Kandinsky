@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { openFile } from "./open";
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (request: import("@playwright/test").APIRequestContext, path: string, text: string) =>
   request.put("/api/file", { headers: H, data: { path, text } });
 
@@ -16,22 +16,22 @@ test("hover sync between a note's links and an embedded base", async ({ page, re
   const rows = page.locator(".cm-content .base tbody tr");
   await expect(rows).toHaveCount(2);
   await rows.filter({ hasText: "hov-b" }).hover();
-  await expect(page.locator(".cm-content .atlas-hover-link")).toHaveCount(1);
-  await expect(page.locator(".cm-content .atlas-hover-link")).toHaveText(/hov-b/);
+  await expect(page.locator(".cm-content .kandinsky-hover-link")).toHaveCount(1);
+  await expect(page.locator(".cm-content .kandinsky-hover-link")).toHaveText(/hov-b/);
   await page.locator(".cm-content .cm-hmd-internal-link", { hasText: "hov-a" }).hover();
   await expect(rows.filter({ hasText: "hov-a" })).toHaveClass(/lit/);
 });
 
 // PluginApi v2: context, query (Bases YAML without a file), writeProperty.
 test("a plugin reads the shared context, queries notes and writes a property", async ({ page, request }) => {
-  await put(request, ".atlas/plugins/ctx/plugin.toml", 'title = "Ctx"\nrail = true\nkeys = "Ctrl+Alt+Y"\n');
-  await put(request, ".atlas/plugins/ctx/view.js", `export default async function mount(host, atlas) {
-  const r = await atlas.query("filters: 'kind == \\"hov\\"'\\nviews:\\n  - type: table\\n    order: [file.name]\\n");
+  await put(request, ".kandinsky/plugins/ctx/plugin.toml", 'title = "Ctx"\nrail = true\nkeys = "Ctrl+Alt+Y"\n');
+  await put(request, ".kandinsky/plugins/ctx/view.js", `export default async function mount(host, kandinsky) {
+  const r = await kandinsky.query("filters: 'kind == \\"hov\\"'\\nviews:\\n  - type: table\\n    order: [file.name]\\n");
   host.innerHTML = '<div class="ctx"><p class="n">' + r.views[0].rows.length + '</p><p class="act"></p><button>tag</button></div>';
   const show = (c) => { host.querySelector(".act").textContent = c.selection?.path ?? "none"; };
-  show(atlas.context());
-  const off = atlas.onContext(show);
-  host.querySelector("button").onclick = () => atlas.writeProperty("notes/hov-a.md", "seen", "yes");
+  show(kandinsky.context());
+  const off = kandinsky.onContext(show);
+  host.querySelector("button").onclick = () => kandinsky.writeProperty("notes/hov-a.md", "seen", "yes");
   return off;
 }\n`);
   await put(request, "notes/hov-a.md", "---\nkind: hov\n---\n");

@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 // The Search pane's text hits, best first and a page at a time (search.rs `rank`, Search.svelte): a note whose heading
 // says the word leads, a file shows a few lines and counts them all, and "Show more" brings the next page.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test.beforeAll(async ({ request }) => {
   const put = (path: string, text: string) => request.put("/api/file", { headers: H, data: { path, text } });

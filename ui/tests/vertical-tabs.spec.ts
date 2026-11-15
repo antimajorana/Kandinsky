@@ -4,8 +4,8 @@ import { mkdirSync } from "node:fs";
 
 // Vertical tabs (docs/design/VERTICAL-TABS.md), driven the way a person would: Ctrl+P to open notes, the
 // sidebar to find, pin, reorder, split, close and collapse, a reload to see it all come back —
-// then once by keyboard only. Screenshots of each step go to ATLAS_SHOTS (looked at by hand).
-const SHOTS = process.env.ATLAS_SHOTS ?? "test-results/vtabs";
+// then once by keyboard only. Screenshots of each step go to KANDINSKY_SHOTS (looked at by hand).
+const SHOTS = process.env.KANDINSKY_SHOTS ?? "test-results/vtabs";
 mkdirSync(SHOTS, { recursive: true });
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png` });
 
@@ -29,7 +29,7 @@ async function openFile(page: Page, q: string, name: string) {
 
 // pins live in a file of the vault (shared by every test): each test starts without any
 test.beforeEach(async ({ page, request }) => {
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: ".atlas/bookmarks.yaml", text: "pins: []\nbookmarks: []\n" } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: ".kandinsky/bookmarks.yaml", text: "pins: []\nbookmarks: []\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
 });
@@ -172,7 +172,7 @@ test("vertical tabs by keyboard only: Ctrl+Tab, Ctrl+1..9, pin, the tab list wit
 });
 
 test("horizontal tabs (setting) keep the classic strips and the activity rail", async ({ page, request }) => {
-  const h = { "x-atlas": "1" };
+  const h = { "x-kandinsky": "1" };
   const cfg = (await (await request.get("/api/config", { headers: h })).json()).config;
   await request.put("/api/config", { headers: h, data: { ...cfg, ui: { ...cfg.ui, tabs: "horizontal" } } });
   try {

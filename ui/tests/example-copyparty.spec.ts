@@ -8,8 +8,8 @@ import { WS } from "../playwright.config";
 
 // The copyparty example plugin: a copyparty server's files in the shared explorer. The server is
 // a stand-in (scripts/vault/tests/fake_copyparty.py) with a password; the address names a folder of it (…/hdd1), as the user's does.
-const H = { "x-atlas": "1" };
-const DIR = ".atlas/plugins/copyparty";
+const H = { "x-kandinsky": "1" };
+const DIR = ".kandinsky/plugins/copyparty";
 const ROOT = `${WS}-copyparty`;
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const read = async (r: APIRequestContext, path: string) => { const res = await r.get(`/api/file?path=${encodeURIComponent(path)}`, { headers: H }); return res.ok() ? ((await res.json()) as { text: string }).text : null; };
@@ -26,7 +26,7 @@ test.beforeAll(async ({ request }) => {
   const { port } = await new Promise<{ port: number }>((ok) => createInterface({ input: server.stdout! }).once("line", (l) => ok(JSON.parse(l))));
   await put(request, `${DIR}/main.js`, example("main.js"));
   await put(request, `${DIR}/plugin.toml`, example("plugin.toml"));
-  await put(request, ".atlas/plugin-settings/copyparty.toml", `[[servers]]\nname = "nas"\nurl = "http://127.0.0.1:${port}/hdd1/"\n`); // the vault's values, never in the manifest
+  await put(request, ".kandinsky/plugin-settings/copyparty.toml", `[[servers]]\nname = "nas"\nurl = "http://127.0.0.1:${port}/hdd1/"\n`); // the vault's values, never in the manifest
   await request.put(`/api/plugins/copyparty/secrets/${encodeURIComponent("servers.nas.password")}`, { headers: H, data: { value: "s3cret" } });
 });
 test.afterAll(async ({ request }) => {
@@ -57,9 +57,9 @@ test("a copyparty server in the explorer: browse, open and save back, make, rena
   await page.keyboard.press("Control+End");
   if (await page.locator(".cm-fat-cursor").count()) await page.keyboard.press("o");
   else await page.keyboard.press("Enter");
-  await page.keyboard.type("Edited in Atlas.");
+  await page.keyboard.type("Edited in Kandinsky.");
   await page.keyboard.press("Control+s");
-  await expect.poll(() => readFileSync(join(ROOT, "hdd1/Physics/readme.md"), "utf8")).toContain("Edited in Atlas.");
+  await expect.poll(() => readFileSync(join(ROOT, "hdd1/Physics/readme.md"), "utf8")).toContain("Edited in Kandinsky.");
   // someone else changed it there: not overwritten unseen; a click on the notice saves over it
   await new Promise((r) => setTimeout(r, 1100)); // copyparty's dates are in seconds
   writeFileSync(join(ROOT, "hdd1/Physics/readme.md"), "# The library\n\nChanged on the server, by someone else.\n");
@@ -69,7 +69,7 @@ test("a copyparty server in the explorer: browse, open and save back, make, rena
   await expect(notice).toBeVisible({ timeout: 15_000 });
   expect(readFileSync(join(ROOT, "hdd1/Physics/readme.md"), "utf8")).toContain("someone else");
   await page.locator(".toast", { has: notice }).getByRole("button", { name: "Save over it" }).click();
-  await expect.poll(() => readFileSync(join(ROOT, "hdd1/Physics/readme.md"), "utf8")).toContain("Edited in Atlas. Again.");
+  await expect.poll(() => readFileSync(join(ROOT, "hdd1/Physics/readme.md"), "utf8")).toContain("Edited in Kandinsky. Again.");
 
   // a new folder, a rename (copyparty's move names the target from its own root), an upload from the computer
   await page.getByTestId("sidebar").locator(".tab", { hasText: "(nas)" }).click();
@@ -121,14 +121,14 @@ const JPEG = "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFh
 
 // Books' remote folders: the plugin's `remote`
 // setting names a folder of a copyparty server; the Libraries page's Books lists its books beside the vault's, and
-// Read fetches the book through copyparty's file source (atlas.files.local) into its local copy and opens it.
+// Read fetches the book through copyparty's file source (kandinsky.files.local) into its local copy and opens it.
 // A plugin started again (its settings saved) replaces its file source: the server is listed once, not once per start
 // (the old source stayed: the list keeps a proxy of each source, which indexOf(source) never found).
 test("a plugin started again lists its server once", async ({ page, request }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  const settings = await read(request, ".atlas/plugin-settings/copyparty.toml");
-  await put(request, ".atlas/plugin-settings/copyparty.toml", `${settings}\n`); // saved again: the plugin restarts
+  const settings = await read(request, ".kandinsky/plugin-settings/copyparty.toml");
+  await put(request, ".kandinsky/plugin-settings/copyparty.toml", `${settings}\n`); // saved again: the plugin restarts
   await page.waitForTimeout(1500);
   await page.keyboard.press("F1");
   await page.keyboard.type("the explorer");
@@ -147,10 +147,10 @@ test("Books lists a server folder's books beside the vault's, and a server's boo
   mkdirSync(join(ROOT, "hdd1/Physics/Books/.hist"), { recursive: true });
   writeFileSync(join(ROOT, "hdd1/Physics/Books/.hist/Hidden Copy.epub"), "PK\n");
   const books = (f: string) => readFileSync(fileURLToPath(new URL(`../../plugins/beta/books/${f}`, import.meta.url)), "utf8");
-  const BOOKS = ".atlas/plugins/books";
+  const BOOKS = ".kandinsky/plugins/books";
   for (const f of ["main.js", "view.js", "shared/marks.js"]) await put(request, `${BOOKS}/${f}`, books(f));
   await put(request, `${BOOKS}/plugin.toml`, books("plugin.toml"));
-  await put(request, ".atlas/plugin-settings/books.toml", 'folder = "books-remote-spec"\n\n[[remote]]\nserver = "nas"\nfolder = "/Physics/Books"\n');
+  await put(request, ".kandinsky/plugin-settings/books.toml", 'folder = "books-remote-spec"\n\n[[remote]]\nserver = "nas"\nfolder = "/Physics/Books"\n');
   await request.put("/api/file", { headers: H, data: { path: "books-remote-spec/Local Tales.epub", text: "PK not a book either\n" } });
   try {
     await page.goto("/");
@@ -170,7 +170,7 @@ test("Books lists a server folder's books beside the vault's, and a server's boo
     await expect(titles.filter({ hasText: "Local Tales" })).toHaveCount(0);
     await titles.filter({ hasText: "Remote Quanta" }).click();
     await libs.getByRole("button", { name: "Read" }).click();
-    await expect.poll(async () => (await request.get(`/api/file?path=${encodeURIComponent(".atlas/remote/copyparty/nas/Physics/Books/Shelf/Remote Quanta.epub")}`, { headers: H })).status(), "its local copy").toBe(200);
+    await expect.poll(async () => (await request.get(`/api/file?path=${encodeURIComponent(".kandinsky/remote/copyparty/nas/Physics/Books/Shelf/Remote Quanta.epub")}`, { headers: H })).status(), "its local copy").toBe(200);
   } finally {
     await put(request, `${BOOKS}/plugin.toml`, books("plugin.toml"));
   }

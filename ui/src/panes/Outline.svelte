@@ -61,10 +61,10 @@
     refresh();
     let t: ReturnType<typeof setTimeout> | undefined;
     const onDoc = (e: Event) => { if ((e as CustomEvent).detail === editorId) { clearTimeout(t); t = setTimeout(refresh, 250); } };
-    window.addEventListener("atlas-doc-change", onDoc);
+    window.addEventListener("kandinsky-doc-change", onDoc);
     const sub = getDock()?.onDidActivePanelChange(() => setTimeout(refresh, 50));
     const sub2 = getDock()?.onDidRemovePanel(() => setTimeout(refresh, 50));
-    return () => { window.removeEventListener("atlas-doc-change", onDoc); sub?.dispose(); sub2?.dispose(); clearTimeout(t); };
+    return () => { window.removeEventListener("kandinsky-doc-change", onDoc); sub?.dispose(); sub2?.dispose(); clearTimeout(t); };
   });
 </script>
 

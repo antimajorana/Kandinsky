@@ -50,7 +50,7 @@ export const COMMANDS: Command[] = [
   { id: "sidebar", title: "Show / hide the side panel", group: "Pane", keys: "s", run: (_c, ui) => ui.sidebar() },
   { id: "palette", title: "All commands…", group: "Pane", keys: "ctrl+k", run: (_c, ui) => ui.palette() },
   { id: "help", title: "Keyboard shortcuts", group: "Pane", keys: "?", run: (_c, ui) => ui.help() },
-  { id: "settings", title: "Calendar settings…", group: "Pane", run: (c) => c.atlas.plugin.openSettings() },
+  { id: "settings", title: "Calendar settings…", group: "Pane", run: (c) => c.kandinsky.plugin.openSettings() },
 ];
 
 export function keyOf(e: KeyboardEvent): string {

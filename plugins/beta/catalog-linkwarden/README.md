@@ -17,9 +17,9 @@ page…), and the note keeps its Linkwarden address. A kind or a vault rule can 
 ## Settings
 
 - **Linkwarden address**: `https://links.example.org`.
-- **Access token** (a secret): Linkwarden → Settings → Access Tokens. Behind a sign-in proxy with no token, Atlas
+- **Access token** (a secret): Linkwarden → Settings → Access Tokens. Behind a sign-in proxy with no token, Kandinsky
   offers the sign-in.
-- **Tags on every link** (`atlas`).
+- **Tags on every link** (`kandinsky`).
 
 ## How it fits
 
@@ -27,7 +27,7 @@ page…), and the note keeps its Linkwarden address. A kind or a vault rule can 
 
 ## Platforms
 
-Linux works; the others are untested. The helper is JavaScript run inside Atlas's core.
+Linux works; the others are untested. The helper is JavaScript run inside Kandinsky's core.
 
 ## Status
 

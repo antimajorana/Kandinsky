@@ -168,9 +168,9 @@ function Se(e) {
 }
 //#endregion
 //#region plugins/beta/finance/ui/src/FlowChart.svelte
-var Ce = o("<path role=\"presentation\"><title> </title></path><rect class=\"node\" rx=\"2\"></rect><text class=\"lab svelte-11eix8t\" text-anchor=\"end\" dominant-baseline=\"middle\"><tspan class=\"n svelte-11eix8t\"> </tspan><tspan class=\"v svelte-11eix8t\" dx=\"6\"> </tspan></text>", 1), we = o("<path role=\"presentation\"><title> </title></path><rect rx=\"2\" role=\"presentation\"></rect><text class=\"lab svelte-11eix8t\" dominant-baseline=\"middle\"><tspan class=\"n svelte-11eix8t\"> </tspan><tspan class=\"v svelte-11eix8t\" dx=\"6\"> </tspan></text>", 1), Te = o("<svg role=\"img\" aria-label=\"Money in and out by category\" class=\"svelte-11eix8t\"><!><!><rect class=\"mid svelte-11eix8t\" rx=\"2\"></rect></svg>"), Ee = g("<div class=\"atlas-empty\">No income or spending in this period.</div>"), De = g("<div class=\"flow svelte-11eix8t\"><!></div>"), Oe = {
+var Ce = o("<path role=\"presentation\"><title> </title></path><rect class=\"node\" rx=\"2\"></rect><text class=\"lab svelte-11eix8t\" text-anchor=\"end\" dominant-baseline=\"middle\"><tspan class=\"n svelte-11eix8t\"> </tspan><tspan class=\"v svelte-11eix8t\" dx=\"6\"> </tspan></text>", 1), we = o("<path role=\"presentation\"><title> </title></path><rect rx=\"2\" role=\"presentation\"></rect><text class=\"lab svelte-11eix8t\" dominant-baseline=\"middle\"><tspan class=\"n svelte-11eix8t\"> </tspan><tspan class=\"v svelte-11eix8t\" dx=\"6\"> </tspan></text>", 1), Te = o("<svg role=\"img\" aria-label=\"Money in and out by category\" class=\"svelte-11eix8t\"><!><!><rect class=\"mid svelte-11eix8t\" rx=\"2\"></rect></svg>"), Ee = g("<div class=\"kandinsky-empty\">No income or spending in this period.</div>"), De = g("<div class=\"flow svelte-11eix8t\"><!></div>"), Oe = {
 	hash: "svelte-11eix8t",
-	code: ".flow.svelte-11eix8t {min-width:0;}svg.svelte-11eix8t {display:block;overflow:visible;}.band.svelte-11eix8t {opacity:0.32;transition:opacity 120ms;}.band.svelte-11eix8t:hover {opacity:0.6;}.band.dim.svelte-11eix8t {opacity:0.12;}.node.pick.svelte-11eix8t {cursor:pointer;}.mid.svelte-11eix8t {fill:var(--text-faint);}.lab.svelte-11eix8t {font-size:12px;}.lab.svelte-11eix8t .n:where(.svelte-11eix8t) {fill:var(--text);font-weight:500;}.lab.svelte-11eix8t .v:where(.svelte-11eix8t) {fill:var(--text-muted);font-variant-numeric:tabular-nums;}\n  @media (prefers-reduced-motion: reduce) {.band.svelte-11eix8t {transition:none;} }"
+	code: ".flow.svelte-11eix8t {min-width:0;}svg.svelte-11eix8t {display:block;overflow:visible;}.band.svelte-11eix8t {opacity:0.32;transition:opacity 120ms;}.band.svelte-11eix8t:hover {opacity:0.6;}.band.dim.svelte-11eix8t {opacity:0.12;}.node.pick.svelte-11eix8t {cursor:pointer;}.mid.svelte-11eix8t {fill:var(--text-faint);}.lab.svelte-11eix8t {font-size:12px;}.lab.svelte-11eix8t .n:where(.svelte-11eix8t) {fill:var(--text);font-weight:500;}.lab.svelte-11eix8t .v:where(.svelte-11eix8t) {fill:var(--text-muted);font-variant-numeric:tabular-nums;}\r\n  @media (prefers-reduced-motion: reduce) {.band.svelte-11eix8t {transition:none;} }"
 };
 function ke(r, i) {
 	e(i, !0), ne(r, Oe);
@@ -281,7 +281,7 @@ function ke(r, i) {
 f(["click"]);
 //#endregion
 //#region plugins/beta/finance/ui/src/WealthChart.svelte
-var Ae = o("<line class=\"grid svelte-1indv8k\"></line><text class=\"tick svelte-1indv8k\" text-anchor=\"end\" dominant-baseline=\"middle\"> </text>", 1), je = o("<text class=\"tick svelte-1indv8k\"> </text>"), Me = o("<line class=\"cross svelte-1indv8k\"></line><circle class=\"dot svelte-1indv8k\" r=\"4.5\"></circle>", 1), Ne = g("<div class=\"tip svelte-1indv8k\"><span> </span> <b class=\"svelte-1indv8k\"> </b></div>"), Pe = g("<tr><td class=\"svelte-1indv8k\"> </td><td class=\"svelte-1indv8k\"> </td></tr>"), Fe = g("<svg role=\"img\" aria-label=\"Net worth by month\" class=\"svelte-1indv8k\"><!><!><path class=\"area svelte-1indv8k\"></path><path class=\"line svelte-1indv8k\"></path><!></svg> <!> <details class=\"table svelte-1indv8k\"><summary class=\"svelte-1indv8k\">As a table</summary> <table class=\"svelte-1indv8k\"><tbody></tbody></table></details>", 1), Ie = g("<div class=\"atlas-empty\">One month of history so far: the line starts with the second.</div>"), Le = g("<div class=\"chart svelte-1indv8k\"><!></div>"), Re = {
+var Ae = o("<line class=\"grid svelte-1indv8k\"></line><text class=\"tick svelte-1indv8k\" text-anchor=\"end\" dominant-baseline=\"middle\"> </text>", 1), je = o("<text class=\"tick svelte-1indv8k\"> </text>"), Me = o("<line class=\"cross svelte-1indv8k\"></line><circle class=\"dot svelte-1indv8k\" r=\"4.5\"></circle>", 1), Ne = g("<div class=\"tip svelte-1indv8k\"><span> </span> <b class=\"svelte-1indv8k\"> </b></div>"), Pe = g("<tr><td class=\"svelte-1indv8k\"> </td><td class=\"svelte-1indv8k\"> </td></tr>"), Fe = g("<svg role=\"img\" aria-label=\"Net worth by month\" class=\"svelte-1indv8k\"><!><!><path class=\"area svelte-1indv8k\"></path><path class=\"line svelte-1indv8k\"></path><!></svg> <!> <details class=\"table svelte-1indv8k\"><summary class=\"svelte-1indv8k\">As a table</summary> <table class=\"svelte-1indv8k\"><tbody></tbody></table></details>", 1), Ie = g("<div class=\"kandinsky-empty\">One month of history so far: the line starts with the second.</div>"), Le = g("<div class=\"chart svelte-1indv8k\"><!></div>"), Re = {
 	hash: "svelte-1indv8k",
 	code: ".chart.svelte-1indv8k {position:relative;min-width:0;}svg.svelte-1indv8k {display:block;touch-action:none;}.grid.svelte-1indv8k {stroke:var(--border);stroke-width:1;}.tick.svelte-1indv8k {fill:var(--text-faint);font-size:11px;font-variant-numeric:tabular-nums;}.line.svelte-1indv8k {fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;}.area.svelte-1indv8k {fill:var(--accent-soft);}.cross.svelte-1indv8k {stroke:var(--text-faint);stroke-width:1;stroke-dasharray:3 3;}.dot.svelte-1indv8k {fill:var(--accent);stroke:var(--bg-elev);stroke-width:2;}.tip.svelte-1indv8k {position:absolute;pointer-events:none;display:flex;flex-direction:column;padding:6px 10px;border-radius:var(--radius-sm);background:var(--bg-elev);border:1px solid var(--border-strong);box-shadow:var(--shadow-sm);font-size:0.85em;color:var(--text-muted);white-space:nowrap;}.tip.svelte-1indv8k b:where(.svelte-1indv8k) {color:var(--text);font-variant-numeric:tabular-nums;font-size:1.1em;}.table.svelte-1indv8k {margin-top:4px;font-size:0.82em;color:var(--text-muted);}.table.svelte-1indv8k summary:where(.svelte-1indv8k) {cursor:pointer;}.table.svelte-1indv8k table:where(.svelte-1indv8k) {border-collapse:collapse;margin-top:4px;}.table.svelte-1indv8k td:where(.svelte-1indv8k) {padding:1px 12px 1px 0;font-variant-numeric:tabular-nums;}"
 };
@@ -412,7 +412,7 @@ function Ge(r, i) {
 		l = setTimeout(async () => {
 			let t = ++u;
 			try {
-				let n = await I(i.atlas, "parse", { text: e });
+				let n = await I(i.kandinsky, "parse", { text: e });
 				t === u && T(o, n, !0);
 			} catch (e) {
 				t === u && T(o, { skipped: e.message }, !0);
@@ -423,10 +423,10 @@ function Ge(r, i) {
 		if (n(a).trim() && !n(c)) {
 			T(c, !0);
 			try {
-				let e = await I(i.atlas, "add", { text: n(a).trim() });
-				i.atlas.toast("Added to review", e.hint.replace(/^→ /, "")), T(a, ""), T(o, null), i.onchange();
+				let e = await I(i.kandinsky, "add", { text: n(a).trim() });
+				i.kandinsky.toast("Added to review", e.hint.replace(/^→ /, "")), T(a, ""), T(o, null), i.onchange();
 			} catch (e) {
-				i.atlas.toast("Not added", e.message, "error");
+				i.kandinsky.toast("Not added", e.message, "error");
 			} finally {
 				T(c, !1);
 			}
@@ -464,9 +464,9 @@ function Ge(r, i) {
 f(["input", "keydown"]);
 //#endregion
 //#region plugins/beta/finance/ui/src/Import.svelte
-var Ke = g("<div class=\"atlas-notice error\"> </div>"), qe = g("<div class=\"atlas-empty\">Reading the inbox…</div>"), Je = g("<div class=\"atlas-empty\">The inbox is empty. Drop a bank's export there (Norma 43, CSV, Excel, PDF): the preset that reads it is found from the file.</div>"), Ye = g("<span class=\"bad svelte-16ysgc\"> </span>"), Xe = g("<span class=\"good svelte-16ysgc\"> </span>"), Ze = g("<span class=\"faint svelte-16ysgc\">—</span>"), Qe = g("<span class=\"good svelte-16ysgc\">✓</span>"), $e = g("<tr><td class=\"svelte-16ysgc\"><span class=\"name svelte-16ysgc\"> </span><span class=\"faint svelte-16ysgc\"> </span></td><td class=\"n svelte-16ysgc\"> </td><td> </td><td class=\"n svelte-16ysgc\"> </td><td class=\"n svelte-16ysgc\"> </td><td class=\"n svelte-16ysgc\"> </td><td class=\"svelte-16ysgc\"><!></td></tr>"), et = g("<span class=\"faint svelte-16ysgc\">Fix the errors above first.</span>"), tt = g("<pre class=\"svelte-16ysgc\"> </pre>"), nt = g("<p class=\"head svelte-16ysgc\"><b class=\"svelte-16ysgc\"> </b> files, <b class=\"svelte-16ysgc\"> </b> statements, <b class=\"svelte-16ysgc\"> </b> new transactions · <!> <!></p> <!> <table class=\"svelte-16ysgc\"><thead><tr><th class=\"svelte-16ysgc\">Statement</th><th class=\"n svelte-16ysgc\">rows</th><th class=\"n svelte-16ysgc\">new</th><th class=\"n svelte-16ysgc\">known</th><th class=\"n svelte-16ysgc\">transfers</th><th class=\"n svelte-16ysgc\">skipped</th><th class=\"svelte-16ysgc\">balances</th></tr></thead><tbody></tbody></table> <div class=\"actions svelte-16ysgc\"><button class=\"atlas-btn primary\"> </button> <button class=\"atlas-btn\">Check again</button> <button class=\"atlas-btn\"> </button> <!></div> <!>", 1), rt = g("<h3 class=\"svelte-16ysgc\">Statements <span class=\"faint svelte-16ysgc\"> </span></h3> <!>", 1), it = {
+var Ke = g("<div class=\"kandinsky-notice error\"> </div>"), qe = g("<div class=\"kandinsky-empty\">Reading the inbox…</div>"), Je = g("<div class=\"kandinsky-empty\">The inbox is empty. Drop a bank's export there (Norma 43, CSV, Excel, PDF): the preset that reads it is found from the file.</div>"), Ye = g("<span class=\"bad svelte-16ysgc\"> </span>"), Xe = g("<span class=\"good svelte-16ysgc\"> </span>"), Ze = g("<span class=\"faint svelte-16ysgc\">—</span>"), Qe = g("<span class=\"good svelte-16ysgc\">✓</span>"), $e = g("<tr><td class=\"svelte-16ysgc\"><span class=\"name svelte-16ysgc\"> </span><span class=\"faint svelte-16ysgc\"> </span></td><td class=\"n svelte-16ysgc\"> </td><td> </td><td class=\"n svelte-16ysgc\"> </td><td class=\"n svelte-16ysgc\"> </td><td class=\"n svelte-16ysgc\"> </td><td class=\"svelte-16ysgc\"><!></td></tr>"), et = g("<span class=\"faint svelte-16ysgc\">Fix the errors above first.</span>"), tt = g("<pre class=\"svelte-16ysgc\"> </pre>"), nt = g("<p class=\"head svelte-16ysgc\"><b class=\"svelte-16ysgc\"> </b> files, <b class=\"svelte-16ysgc\"> </b> statements, <b class=\"svelte-16ysgc\"> </b> new transactions · <!> <!></p> <!> <table class=\"svelte-16ysgc\"><thead><tr><th class=\"svelte-16ysgc\">Statement</th><th class=\"n svelte-16ysgc\">rows</th><th class=\"n svelte-16ysgc\">new</th><th class=\"n svelte-16ysgc\">known</th><th class=\"n svelte-16ysgc\">transfers</th><th class=\"n svelte-16ysgc\">skipped</th><th class=\"svelte-16ysgc\">balances</th></tr></thead><tbody></tbody></table> <div class=\"actions svelte-16ysgc\"><button class=\"kandinsky-btn primary\"> </button> <button class=\"kandinsky-btn\">Check again</button> <button class=\"kandinsky-btn\"> </button> <!></div> <!>", 1), rt = g("<h3 class=\"svelte-16ysgc\">Statements <span class=\"faint svelte-16ysgc\"> </span></h3> <!>", 1), it = {
 	hash: "svelte-16ysgc",
-	code: "h3.svelte-16ysgc {margin:0 0 10px;font-size:0.82em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;}.faint.svelte-16ysgc {color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;}.head.svelte-16ysgc {margin:0 0 10px;color:var(--text-muted);}.head.svelte-16ysgc b:where(.svelte-16ysgc) {color:var(--text);font-variant-numeric:tabular-nums;}.good.svelte-16ysgc {color:var(--green);}.bad.svelte-16ysgc {color:var(--red);font-weight:600;}.warm.svelte-16ysgc {color:var(--yellow);font-weight:600;}table.svelte-16ysgc {width:100%;border-collapse:collapse;margin-bottom:12px;font-variant-numeric:tabular-nums;}th.svelte-16ysgc {text-align:left;font-weight:500;color:var(--text-faint);font-size:0.85em;padding:2px 8px;border-bottom:1px solid var(--border);}td.svelte-16ysgc {padding:4px 8px;border-bottom:1px solid var(--border);vertical-align:top;}.n.svelte-16ysgc {text-align:right;width:4.5em;}td.svelte-16ysgc .name:where(.svelte-16ysgc) {display:block;}td.svelte-16ysgc .faint:where(.svelte-16ysgc) {font-size:0.85em;overflow-wrap:anywhere;}.actions.svelte-16ysgc {display:flex;gap:8px;align-items:center;flex-wrap:wrap;}pre.svelte-16ysgc {white-space:pre-wrap;overflow-wrap:anywhere;font-size:0.85em;color:var(--text-muted);max-height:420px;overflow:auto;background:var(--bg);padding:10px;border-radius:var(--radius-sm);}\n  @media (max-width: 700px) {th.svelte-16ysgc:nth-child(4), td.svelte-16ysgc:nth-child(4), th.svelte-16ysgc:nth-child(5), td.svelte-16ysgc:nth-child(5), th.svelte-16ysgc:nth-child(6), td.svelte-16ysgc:nth-child(6) {display:none;} }"
+	code: "h3.svelte-16ysgc {margin:0 0 10px;font-size:0.82em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;}.faint.svelte-16ysgc {color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;}.head.svelte-16ysgc {margin:0 0 10px;color:var(--text-muted);}.head.svelte-16ysgc b:where(.svelte-16ysgc) {color:var(--text);font-variant-numeric:tabular-nums;}.good.svelte-16ysgc {color:var(--green);}.bad.svelte-16ysgc {color:var(--red);font-weight:600;}.warm.svelte-16ysgc {color:var(--yellow);font-weight:600;}table.svelte-16ysgc {width:100%;border-collapse:collapse;margin-bottom:12px;font-variant-numeric:tabular-nums;}th.svelte-16ysgc {text-align:left;font-weight:500;color:var(--text-faint);font-size:0.85em;padding:2px 8px;border-bottom:1px solid var(--border);}td.svelte-16ysgc {padding:4px 8px;border-bottom:1px solid var(--border);vertical-align:top;}.n.svelte-16ysgc {text-align:right;width:4.5em;}td.svelte-16ysgc .name:where(.svelte-16ysgc) {display:block;}td.svelte-16ysgc .faint:where(.svelte-16ysgc) {font-size:0.85em;overflow-wrap:anywhere;}.actions.svelte-16ysgc {display:flex;gap:8px;align-items:center;flex-wrap:wrap;}pre.svelte-16ysgc {white-space:pre-wrap;overflow-wrap:anywhere;font-size:0.85em;color:var(--text-muted);max-height:420px;overflow:auto;background:var(--bg);padding:10px;border-radius:var(--radius-sm);}\r\n  @media (max-width: 700px) {th.svelte-16ysgc:nth-child(4), td.svelte-16ysgc:nth-child(4), th.svelte-16ysgc:nth-child(5), td.svelte-16ysgc:nth-child(5), th.svelte-16ysgc:nth-child(6), td.svelte-16ysgc:nth-child(6) {display:none;} }"
 };
 function at(r, i) {
 	e(i, !0), ne(r, it);
@@ -474,7 +474,7 @@ function at(r, i) {
 	async function g(e = !1) {
 		T(c, !0);
 		try {
-			T(o, await I(i.atlas, "import", { write: e }), !0), T(u, ""), n(o).written && (i.atlas.toast("Imported", `${n(o).new} transactions to review; the originals are in each account's archive.`), i.onchange(), T(o, await I(i.atlas, "import"), !0));
+			T(o, await I(i.kandinsky, "import", { write: e }), !0), T(u, ""), n(o).written && (i.kandinsky.toast("Imported", `${n(o).new} transactions to review; the originals are in each account's archive.`), i.onchange(), T(o, await I(i.kandinsky, "import"), !0));
 		} catch (e) {
 			T(u, e.message, !0);
 		} finally {
@@ -563,14 +563,14 @@ function at(r, i) {
 	};
 	h(P, (e) => {
 		n(u) ? e(F) : n(o) ? n(o).files.length ? e(z, -1) : e(R, 2) : e(L, 1);
-	}), S((e) => t(N, `${e ?? ""}/statements/inbox/`), [() => H(i.atlas)]), p(r, A), _();
+	}), S((e) => t(N, `${e ?? ""}/statements/inbox/`), [() => H(i.kandinsky)]), p(r, A), _();
 }
 f(["click"]);
 //#endregion
 //#region plugins/beta/finance/ui/src/Overview.svelte
 var ot = g("<span> </span>"), st = g("<small class=\"svelte-jdlm6a\"> </small>"), ct = g("<button class=\"svelte-jdlm6a\"><b> </b> to review</button>"), lt = g("<button class=\"svelte-jdlm6a\"><b> </b> booked by judgement (#guess): confirm or fix</button>"), ut = g("<button class=\"err svelte-jdlm6a\"> </button>"), dt = g("<span class=\"svelte-jdlm6a\"> </span>"), ft = g("<section class=\"attention svelte-jdlm6a\" aria-label=\"Needs you\"><!> <!> <!> <!> <!></section>"), pt = g("<button role=\"radio\"> </button>"), mt = g("<option> </option>"), ht = g("<select aria-label=\"Measured in\" class=\"svelte-jdlm6a\"></select>"), gt = g("<li><button class=\"svelte-jdlm6a\"><span> </span><span class=\"v svelte-jdlm6a\"> </span></button></li>"), _t = g("<div class=\"overview svelte-jdlm6a\"><section class=\"hero svelte-jdlm6a\"><div class=\"big svelte-jdlm6a\"><span class=\"k svelte-jdlm6a\">Net worth</span> <span class=\"n svelte-jdlm6a\"> </span> <span class=\"deltas svelte-jdlm6a\"></span></div> <div class=\"stat svelte-jdlm6a\"><span class=\"k svelte-jdlm6a\"> </span><button class=\"n link svelte-jdlm6a\"> </button></div> <div class=\"stat svelte-jdlm6a\"><span class=\"k svelte-jdlm6a\">came in</span><span class=\"n svelte-jdlm6a\"> </span></div> <div class=\"stat svelte-jdlm6a\"><span class=\"k svelte-jdlm6a\"> </span><span> <!></span></div></section> <!> <section class=\"panel svelte-jdlm6a\"><header class=\"svelte-jdlm6a\"><h3 class=\"svelte-jdlm6a\">Where the money came from and went</h3> <div class=\"seg svelte-jdlm6a\" role=\"radiogroup\" aria-label=\"Period\"></div></header> <!></section> <div class=\"two svelte-jdlm6a\"><section class=\"panel svelte-jdlm6a\"><header class=\"svelte-jdlm6a\"><h3 class=\"svelte-jdlm6a\">Net worth</h3> <!></header> <!></section> <section class=\"panel svelte-jdlm6a\"><header class=\"svelte-jdlm6a\"><h3 class=\"svelte-jdlm6a\">Accounts</h3></header> <ul class=\"accts svelte-jdlm6a\"></ul></section></div> <div class=\"two svelte-jdlm6a\"><section class=\"panel svelte-jdlm6a\"><!></section> <section class=\"panel svelte-jdlm6a\"><!></section></div></div>"), vt = {
 	hash: "svelte-jdlm6a",
-	code: ".overview.svelte-jdlm6a {display:flex;flex-direction:column;gap:16px;max-width:1180px;}.hero.svelte-jdlm6a {display:flex;flex-wrap:wrap;gap:12px 40px;align-items:flex-end;padding:4px 2px 8px;}.big.svelte-jdlm6a {display:flex;flex-direction:column;gap:2px;margin-right:auto;}.k.svelte-jdlm6a {font-size:0.78em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;}.big.svelte-jdlm6a .n:where(.svelte-jdlm6a) {font-size:2.3em;font-weight:650;color:var(--heading);font-variant-numeric:tabular-nums;line-height:1.1;}.deltas.svelte-jdlm6a {display:flex;gap:14px;font-size:0.9em;color:var(--text-muted);flex-wrap:wrap;}.stat.svelte-jdlm6a {display:flex;flex-direction:column;gap:2px;}.stat.svelte-jdlm6a .n:where(.svelte-jdlm6a) {font-size:1.35em;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text);}.stat.svelte-jdlm6a small:where(.svelte-jdlm6a) {font-size:0.7em;color:var(--text-muted);font-weight:500;}.up.svelte-jdlm6a {color:var(--green) !important;}.down.svelte-jdlm6a {color:var(--red) !important;}.link.svelte-jdlm6a {all:unset;cursor:pointer;border-bottom:1px dashed var(--border-strong);}.link.svelte-jdlm6a:hover {color:var(--accent) !important;}.link.svelte-jdlm6a:focus-visible {outline:2px solid var(--accent);}.attention.svelte-jdlm6a {display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;border-radius:var(--radius);background:var(--highlight-bg);}.attention.svelte-jdlm6a button:where(.svelte-jdlm6a) {all:unset;cursor:pointer;padding:3px 10px;border-radius:999px;background:var(--bg-elev);border:1px solid var(--border-strong);font-size:0.9em;}.attention.svelte-jdlm6a button:where(.svelte-jdlm6a):hover {border-color:var(--accent);}.attention.svelte-jdlm6a button:where(.svelte-jdlm6a):focus-visible {outline:2px solid var(--accent);}.attention.svelte-jdlm6a .err:where(.svelte-jdlm6a) {color:var(--red);}.attention.svelte-jdlm6a span:where(.svelte-jdlm6a) {font-size:0.9em;align-self:center;}.panel.svelte-jdlm6a {background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;min-width:0;}.panel.svelte-jdlm6a header:where(.svelte-jdlm6a) {display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;}h3.svelte-jdlm6a {margin:0;font-size:0.78em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;}.seg.svelte-jdlm6a {display:flex;flex-wrap:wrap;border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;}.seg.svelte-jdlm6a button:where(.svelte-jdlm6a) {all:unset;cursor:pointer;padding:4px 9px;font-size:0.85em;color:var(--text-muted);}.seg.svelte-jdlm6a button:where(.svelte-jdlm6a) + button:where(.svelte-jdlm6a) {border-left:1px solid var(--border);}.seg.svelte-jdlm6a button:where(.svelte-jdlm6a):hover {background:var(--bg-hover);color:var(--text);}.seg.svelte-jdlm6a button.on:where(.svelte-jdlm6a) {background:var(--accent-soft);color:var(--accent-strong);font-weight:600;}.seg.svelte-jdlm6a button:where(.svelte-jdlm6a):focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}select.svelte-jdlm6a {font:inherit;font-size:0.88em;color:var(--text);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:3px 6px;}.two.svelte-jdlm6a {display:grid;grid-template-columns:minmax(0, 3fr) minmax(0, 2fr);gap:16px;}\n  @container (max-width: 820px) {.two.svelte-jdlm6a {grid-template-columns:minmax(0, 1fr);} }.accts.svelte-jdlm6a {list-style:none;margin:0;padding:0;}.accts.svelte-jdlm6a button:where(.svelte-jdlm6a) {all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:flex;justify-content:space-between;gap:12px;padding:7px 4px;border-bottom:1px solid var(--border);}.accts.svelte-jdlm6a button:where(.svelte-jdlm6a):hover {background:var(--bg-hover);}.accts.svelte-jdlm6a button:where(.svelte-jdlm6a):focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}.accts.svelte-jdlm6a .v:where(.svelte-jdlm6a) {font-family:var(--font-mono);font-size:0.9em;font-variant-numeric:tabular-nums;text-align:right;}"
+	code: ".overview.svelte-jdlm6a {display:flex;flex-direction:column;gap:16px;max-width:1180px;}.hero.svelte-jdlm6a {display:flex;flex-wrap:wrap;gap:12px 40px;align-items:flex-end;padding:4px 2px 8px;}.big.svelte-jdlm6a {display:flex;flex-direction:column;gap:2px;margin-right:auto;}.k.svelte-jdlm6a {font-size:0.78em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;}.big.svelte-jdlm6a .n:where(.svelte-jdlm6a) {font-size:2.3em;font-weight:650;color:var(--heading);font-variant-numeric:tabular-nums;line-height:1.1;}.deltas.svelte-jdlm6a {display:flex;gap:14px;font-size:0.9em;color:var(--text-muted);flex-wrap:wrap;}.stat.svelte-jdlm6a {display:flex;flex-direction:column;gap:2px;}.stat.svelte-jdlm6a .n:where(.svelte-jdlm6a) {font-size:1.35em;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text);}.stat.svelte-jdlm6a small:where(.svelte-jdlm6a) {font-size:0.7em;color:var(--text-muted);font-weight:500;}.up.svelte-jdlm6a {color:var(--green) !important;}.down.svelte-jdlm6a {color:var(--red) !important;}.link.svelte-jdlm6a {all:unset;cursor:pointer;border-bottom:1px dashed var(--border-strong);}.link.svelte-jdlm6a:hover {color:var(--accent) !important;}.link.svelte-jdlm6a:focus-visible {outline:2px solid var(--accent);}.attention.svelte-jdlm6a {display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;border-radius:var(--radius);background:var(--highlight-bg);}.attention.svelte-jdlm6a button:where(.svelte-jdlm6a) {all:unset;cursor:pointer;padding:3px 10px;border-radius:999px;background:var(--bg-elev);border:1px solid var(--border-strong);font-size:0.9em;}.attention.svelte-jdlm6a button:where(.svelte-jdlm6a):hover {border-color:var(--accent);}.attention.svelte-jdlm6a button:where(.svelte-jdlm6a):focus-visible {outline:2px solid var(--accent);}.attention.svelte-jdlm6a .err:where(.svelte-jdlm6a) {color:var(--red);}.attention.svelte-jdlm6a span:where(.svelte-jdlm6a) {font-size:0.9em;align-self:center;}.panel.svelte-jdlm6a {background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;min-width:0;}.panel.svelte-jdlm6a header:where(.svelte-jdlm6a) {display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;}h3.svelte-jdlm6a {margin:0;font-size:0.78em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;}.seg.svelte-jdlm6a {display:flex;flex-wrap:wrap;border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;}.seg.svelte-jdlm6a button:where(.svelte-jdlm6a) {all:unset;cursor:pointer;padding:4px 9px;font-size:0.85em;color:var(--text-muted);}.seg.svelte-jdlm6a button:where(.svelte-jdlm6a) + button:where(.svelte-jdlm6a) {border-left:1px solid var(--border);}.seg.svelte-jdlm6a button:where(.svelte-jdlm6a):hover {background:var(--bg-hover);color:var(--text);}.seg.svelte-jdlm6a button.on:where(.svelte-jdlm6a) {background:var(--accent-soft);color:var(--accent-strong);font-weight:600;}.seg.svelte-jdlm6a button:where(.svelte-jdlm6a):focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}select.svelte-jdlm6a {font:inherit;font-size:0.88em;color:var(--text);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:3px 6px;}.two.svelte-jdlm6a {display:grid;grid-template-columns:minmax(0, 3fr) minmax(0, 2fr);gap:16px;}\r\n  @container (max-width: 820px) {.two.svelte-jdlm6a {grid-template-columns:minmax(0, 1fr);} }.accts.svelte-jdlm6a {list-style:none;margin:0;padding:0;}.accts.svelte-jdlm6a button:where(.svelte-jdlm6a) {all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:flex;justify-content:space-between;gap:12px;padding:7px 4px;border-bottom:1px solid var(--border);}.accts.svelte-jdlm6a button:where(.svelte-jdlm6a):hover {background:var(--bg-hover);}.accts.svelte-jdlm6a button:where(.svelte-jdlm6a):focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}.accts.svelte-jdlm6a .v:where(.svelte-jdlm6a) {font-family:var(--font-mono);font-size:0.9em;font-variant-numeric:tabular-nums;text-align:right;}"
 };
 function yt(r, i) {
 	e(i, !0), ne(r, vt);
@@ -585,7 +585,7 @@ function yt(r, i) {
 			T(f, null);
 			return;
 		}
-		I(i.atlas, "wealth", { unit: e.unit }).then((t) => {
+		I(i.kandinsky, "wealth", { unit: e.unit }).then((t) => {
 			n(l) === e && T(f, t.months, !0);
 		}).catch(() => T(f, null));
 	});
@@ -643,7 +643,7 @@ function yt(r, i) {
 		var u = W(c, 2);
 		b(u, 17, () => n(te).slice(0, 3), a, (e, r) => {
 			var a = ut(), o = d(a, !0);
-			S(() => t(o, n(r).message)), v("click", a, () => i.atlas.open(n(r).path, n(r).line)), p(e, a);
+			S(() => t(o, n(r).message)), v("click", a, () => i.kandinsky.open(n(r).path, n(r).line)), p(e, a);
 		});
 		var f = W(u, 2), m = (e) => {
 			var r = dt(), i = d(r);
@@ -705,8 +705,8 @@ function yt(r, i) {
 	}), q(Ie), q(Fe), q(Ae);
 	var Le = W(Ae, 2), Re = C(Le);
 	Ge(C(Re), {
-		get atlas() {
-			return i.atlas;
+		get kandinsky() {
+			return i.kandinsky;
 		},
 		get onchange() {
 			return i.onchange;
@@ -714,8 +714,8 @@ function yt(r, i) {
 	}), q(Re);
 	var Be = W(Re, 2);
 	at(C(Be), {
-		get atlas() {
-			return i.atlas;
+		get kandinsky() {
+			return i.kandinsky;
 		},
 		get onchange() {
 			return i.onchange;
@@ -735,7 +735,7 @@ function yt(r, i) {
 f(["click", "change"]);
 //#endregion
 //#region ui/src/lib/local-day.ts
-var bt = (e = /* @__PURE__ */ new Date()) => `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, "0")}-${String(e.getDate()).padStart(2, "0")}`, xt = g("<b class=\"svelte-ht6n60\"> </b>"), St = g("<div class=\"route svelte-ht6n60\" aria-label=\"Where the money went\"><span class=\"side svelte-ht6n60\"></span> <span class=\"arrow svelte-ht6n60\" aria-hidden=\"true\">→</span> <span class=\"side svelte-ht6n60\"></span></div>"), Ct = g("<div class=\"posting svelte-ht6n60\"><input class=\"acct svelte-ht6n60\" list=\"fin-accounts\" placeholder=\"Expenses:Food\" aria-label=\"Account\"/> <input class=\"amt svelte-ht6n60\" aria-label=\"Amount\"/> <button class=\"x svelte-ht6n60\" aria-label=\"Remove this posting\" title=\"Remove\">−</button></div>"), wt = g("<dt class=\"svelte-ht6n60\"> </dt><dd class=\"svelte-ht6n60\"> </dd>", 1), Tt = g("<h3 class=\"svelte-ht6n60\">From the bank</h3> <dl class=\"meta svelte-ht6n60\"></dl>", 1), Et = g("<div class=\"atlas-notice error\"> </div>"), Dt = g("<button class=\"atlas-btn\">Open in the journal</button> <button class=\"atlas-btn danger svelte-ht6n60\">Delete</button>", 1), Ot = g("<option></option>"), kt = g("<div class=\"editor svelte-ht6n60\" role=\"dialog\" tabindex=\"-1\"><header class=\"svelte-ht6n60\"><h2 class=\"svelte-ht6n60\"> </h2> <button class=\"x svelte-ht6n60\" aria-label=\"Close\" title=\"Close (Esc)\">×</button></header> <!> <div class=\"fields svelte-ht6n60\"><label class=\"date svelte-ht6n60\">Date<input type=\"date\" class=\"svelte-ht6n60\"/></label> <label class=\"mark svelte-ht6n60\">Status <select class=\"svelte-ht6n60\"><option>Cleared</option><option>To review</option></select></label> <label class=\"wide svelte-ht6n60\">Payee — who it was with<input list=\"fin-payees\" placeholder=\"Mercadona\" class=\"svelte-ht6n60\"/></label> <label class=\"wide svelte-ht6n60\">Note<input placeholder=\"what it was for\" class=\"svelte-ht6n60\"/></label> <label class=\"wide svelte-ht6n60\">Tags<input placeholder=\"e.g. #trip\" class=\"svelte-ht6n60\"/></label></div> <h3 class=\"svelte-ht6n60\">Postings <span class=\"faint svelte-ht6n60\">money leaves the negative ones and arrives in the positive ones; leave one amount empty to take the rest</span></h3> <div class=\"postings svelte-ht6n60\"><!> <button class=\"atlas-btn add svelte-ht6n60\">Add a posting</button></div> <p role=\"status\"><!></p> <!> <!> <footer class=\"svelte-ht6n60\"><button class=\"atlas-btn primary\" title=\"Ctrl+Enter\"> </button> <!> <span class=\"faint where svelte-ht6n60\"> </span></footer> <datalist id=\"fin-accounts\"></datalist> <datalist id=\"fin-payees\"></datalist></div>"), At = {
+var bt = (e = /* @__PURE__ */ new Date()) => `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, "0")}-${String(e.getDate()).padStart(2, "0")}`, xt = g("<b class=\"svelte-ht6n60\"> </b>"), St = g("<div class=\"route svelte-ht6n60\" aria-label=\"Where the money went\"><span class=\"side svelte-ht6n60\"></span> <span class=\"arrow svelte-ht6n60\" aria-hidden=\"true\">→</span> <span class=\"side svelte-ht6n60\"></span></div>"), Ct = g("<div class=\"posting svelte-ht6n60\"><input class=\"acct svelte-ht6n60\" list=\"fin-accounts\" placeholder=\"Expenses:Food\" aria-label=\"Account\"/> <input class=\"amt svelte-ht6n60\" aria-label=\"Amount\"/> <button class=\"x svelte-ht6n60\" aria-label=\"Remove this posting\" title=\"Remove\">−</button></div>"), wt = g("<dt class=\"svelte-ht6n60\"> </dt><dd class=\"svelte-ht6n60\"> </dd>", 1), Tt = g("<h3 class=\"svelte-ht6n60\">From the bank</h3> <dl class=\"meta svelte-ht6n60\"></dl>", 1), Et = g("<div class=\"kandinsky-notice error\"> </div>"), Dt = g("<button class=\"kandinsky-btn\">Open in the journal</button> <button class=\"kandinsky-btn danger svelte-ht6n60\">Delete</button>", 1), Ot = g("<option></option>"), kt = g("<div class=\"editor svelte-ht6n60\" role=\"dialog\" tabindex=\"-1\"><header class=\"svelte-ht6n60\"><h2 class=\"svelte-ht6n60\"> </h2> <button class=\"x svelte-ht6n60\" aria-label=\"Close\" title=\"Close (Esc)\">×</button></header> <!> <div class=\"fields svelte-ht6n60\"><label class=\"date svelte-ht6n60\">Date<input type=\"date\" class=\"svelte-ht6n60\"/></label> <label class=\"mark svelte-ht6n60\">Status <select class=\"svelte-ht6n60\"><option>Cleared</option><option>To review</option></select></label> <label class=\"wide svelte-ht6n60\">Payee — who it was with<input list=\"fin-payees\" placeholder=\"Mercadona\" class=\"svelte-ht6n60\"/></label> <label class=\"wide svelte-ht6n60\">Note<input placeholder=\"what it was for\" class=\"svelte-ht6n60\"/></label> <label class=\"wide svelte-ht6n60\">Tags<input placeholder=\"e.g. #trip\" class=\"svelte-ht6n60\"/></label></div> <h3 class=\"svelte-ht6n60\">Postings <span class=\"faint svelte-ht6n60\">money leaves the negative ones and arrives in the positive ones; leave one amount empty to take the rest</span></h3> <div class=\"postings svelte-ht6n60\"><!> <button class=\"kandinsky-btn add svelte-ht6n60\">Add a posting</button></div> <p role=\"status\"><!></p> <!> <!> <footer class=\"svelte-ht6n60\"><button class=\"kandinsky-btn primary\" title=\"Ctrl+Enter\"> </button> <!> <span class=\"faint where svelte-ht6n60\"> </span></footer> <datalist id=\"fin-accounts\"></datalist> <datalist id=\"fin-payees\"></datalist></div>"), At = {
 	hash: "svelte-ht6n60",
 	code: ".editor.svelte-ht6n60 {display:flex;flex-direction:column;gap:12px;padding:16px 18px;background:var(--bg-elev);border-left:1px solid var(--border);height:100%;overflow:auto;min-width:0;box-sizing:border-box;outline:none;}header.svelte-ht6n60 {display:flex;align-items:center;justify-content:space-between;}h2.svelte-ht6n60 {margin:0;font-size:1.05em;color:var(--heading);}h3.svelte-ht6n60 {margin:4px 0 0;font-size:0.78em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;}h3.svelte-ht6n60 .faint:where(.svelte-ht6n60) {text-transform:none;letter-spacing:0;font-weight:400;}.faint.svelte-ht6n60 {color:var(--text-faint);}.x.svelte-ht6n60 {all:unset;cursor:pointer;width:28px;height:28px;display:grid;place-items:center;border-radius:var(--radius-sm);color:var(--text-muted);font-size:1.2em;}.x.svelte-ht6n60:hover:not(:disabled) {background:var(--bg-hover);color:var(--text);}.x.svelte-ht6n60:focus-visible {outline:2px solid var(--accent);}.x.svelte-ht6n60:disabled {opacity:0.35;cursor:default;}.route.svelte-ht6n60 {display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius);background:var(--accent-soft);flex-wrap:wrap;}.route.svelte-ht6n60 .side:where(.svelte-ht6n60) {display:flex;flex-direction:column;gap:2px;min-width:0;}.route.svelte-ht6n60 b:where(.svelte-ht6n60) {font-weight:600;overflow-wrap:anywhere;}.arrow.svelte-ht6n60 {color:var(--accent);font-size:1.2em;}.fields.svelte-ht6n60 {display:grid;grid-template-columns:1fr 1fr;gap:10px;}.fields.svelte-ht6n60 .wide:where(.svelte-ht6n60) {grid-column:1 / -1;}label.svelte-ht6n60 {display:flex;flex-direction:column;gap:4px;font-size:0.82em;color:var(--text-muted);min-width:0;}input.svelte-ht6n60, select.svelte-ht6n60 {font:inherit;font-size:1.1em;color:var(--text);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:6px 8px;min-width:0;}input.svelte-ht6n60:focus-visible, select.svelte-ht6n60:focus-visible {outline:2px solid var(--accent);outline-offset:-1px;}.postings.svelte-ht6n60 {display:flex;flex-direction:column;gap:6px;}.posting.svelte-ht6n60 {display:grid;grid-template-columns:minmax(0, 1fr) 9.5em 28px;gap:6px;align-items:center;}.amt.svelte-ht6n60 {font-family:var(--font-mono);text-align:right;font-variant-numeric:tabular-nums;}.add.svelte-ht6n60 {align-self:flex-start;}.balance.svelte-ht6n60 {margin:0;font-size:0.88em;color:var(--green);}.balance.bad.svelte-ht6n60 {color:var(--red);}.meta.svelte-ht6n60 {display:grid;grid-template-columns:max-content minmax(0, 1fr);gap:4px 12px;margin:0;font-size:0.88em;}.meta.svelte-ht6n60 dt:where(.svelte-ht6n60) {color:var(--text-muted);}.meta.svelte-ht6n60 dd:where(.svelte-ht6n60) {margin:0;overflow-wrap:anywhere;font-family:var(--font-mono);font-size:0.95em;}footer.svelte-ht6n60 {display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:auto;padding-top:8px;border-top:1px solid var(--border);}.where.svelte-ht6n60 {margin-left:auto;font-size:0.82em;}.danger.svelte-ht6n60 {color:var(--red);}"
 };
@@ -773,14 +773,14 @@ function jt(r, i) {
 					path: i.txn.path,
 					line: i.txn.line,
 					text: i.txn.text
-				} : {}, t = await I(i.atlas, "txn_save", {
+				} : {}, t = await I(i.kandinsky, "txn_save", {
 					draft: {
 						...m,
 						tags: R()
 					},
 					...e
 				});
-				i.atlas.toast(i.txn ? "Saved" : "Added", `${m.payee} · ${m.date}`, "success"), i.onsaved(t.path);
+				i.kandinsky.toast(i.txn ? "Saved" : "Added", `${m.payee} · ${m.date}`, "success"), i.onsaved(t.path);
 			} catch (e) {
 				T(O, e.message, !0);
 			} finally {
@@ -792,17 +792,17 @@ function jt(r, i) {
 		if (i.txn && !n(x)) {
 			T(x, !0), T(O, "");
 			try {
-				let e = await I(i.atlas, "txn_delete", {
+				let e = await I(i.kandinsky, "txn_delete", {
 					path: i.txn.path,
 					line: i.txn.line,
 					text: i.txn.text
 				}), t = `${i.txn.payee} · ${i.txn.date}`;
-				i.atlas.toast("Deleted", t, "info", {
+				i.kandinsky.toast("Deleted", t, "info", {
 					label: "Undo",
-					run: () => void I(i.atlas, "txn_restore", {
+					run: () => void I(i.kandinsky, "txn_restore", {
 						path: e.path,
 						text: e.removed
-					}).then(() => i.atlas.toast("Restored", t, "success")).catch((e) => i.atlas.toast("Not restored", e.message, "error"))
+					}).then(() => i.kandinsky.toast("Restored", t, "success")).catch((e) => i.kandinsky.toast("Not restored", e.message, "error"))
 				}), i.onsaved();
 			} catch (e) {
 				T(O, e.message, !0);
@@ -894,7 +894,7 @@ function jt(r, i) {
 	});
 	var Pe = W(Me, 2), Fe = C(Pe), Ie = d(Fe, !0), Le = W(Fe, 2), Re = (e) => {
 		var t = Dt(), r = s(t), a = W(r, 2);
-		S(() => a.disabled = n(x)), v("click", r, () => i.atlas.open(i.txn.path, i.txn.line)), v("click", a, H), p(e, t);
+		S(() => a.disabled = n(x)), v("click", r, () => i.kandinsky.open(i.txn.path, i.txn.line)), v("click", a, H), p(e, t);
 	};
 	h(Le, (e) => {
 		i.txn && e(Re);
@@ -926,9 +926,9 @@ function jt(r, i) {
 f(["keydown", "click"]);
 //#endregion
 //#region plugins/beta/finance/ui/src/Transactions.svelte
-var Mt = g("<button role=\"radio\"> </button>"), Nt = g("<button class=\"link svelte-aipwz8\">clear the search</button>"), Pt = g("<div class=\"month svelte-aipwz8\"> </div>"), Ft = g("<span class=\"chip warn svelte-aipwz8\">review</span>"), It = g("<span> </span>"), Lt = g("<span class=\"note svelte-aipwz8\"> </span>"), Rt = g("<!>  <button role=\"option\"><span class=\"date svelte-aipwz8\"> </span> <span class=\"who svelte-aipwz8\"><span class=\"payee svelte-aipwz8\"> <!><!></span> <!></span> <span class=\"route svelte-aipwz8\"><span class=\"from svelte-aipwz8\"> </span><span class=\"arr svelte-aipwz8\" aria-label=\"to\">→</span><span class=\"to svelte-aipwz8\"> </span></span> <span> </span></button>", 1), zt = g("<div class=\"atlas-empty\"> </div>"), Bt = g("<button class=\"atlas-btn more svelte-aipwz8\"> </button>"), Vt = g("<div><section class=\"main svelte-aipwz8\"><div class=\"bar svelte-aipwz8\"><input class=\"search svelte-aipwz8\" placeholder=\"Search payee, account, bank text · #guess · >100 · 2025-03 · !\" aria-label=\"Search transactions\"/> <div class=\"seg svelte-aipwz8\" role=\"radiogroup\" aria-label=\"Kind\"></div> <button class=\"atlas-btn primary\" title=\"n\">New…</button></div> <p class=\"count svelte-aipwz8\"><b class=\"svelte-aipwz8\"> </b> <!> <!></p> <div class=\"list svelte-aipwz8\" role=\"listbox\" aria-label=\"Transactions\" tabindex=\"-1\"><!> <!></div></section> <!></div>"), Ht = {
+var Mt = g("<button role=\"radio\"> </button>"), Nt = g("<button class=\"link svelte-aipwz8\">clear the search</button>"), Pt = g("<div class=\"month svelte-aipwz8\"> </div>"), Ft = g("<span class=\"chip warn svelte-aipwz8\">review</span>"), It = g("<span> </span>"), Lt = g("<span class=\"note svelte-aipwz8\"> </span>"), Rt = g("<!>  <button role=\"option\"><span class=\"date svelte-aipwz8\"> </span> <span class=\"who svelte-aipwz8\"><span class=\"payee svelte-aipwz8\"> <!><!></span> <!></span> <span class=\"route svelte-aipwz8\"><span class=\"from svelte-aipwz8\"> </span><span class=\"arr svelte-aipwz8\" aria-label=\"to\">→</span><span class=\"to svelte-aipwz8\"> </span></span> <span> </span></button>", 1), zt = g("<div class=\"kandinsky-empty\"> </div>"), Bt = g("<button class=\"kandinsky-btn more svelte-aipwz8\"> </button>"), Vt = g("<div><section class=\"main svelte-aipwz8\"><div class=\"bar svelte-aipwz8\"><input class=\"search svelte-aipwz8\" placeholder=\"Search payee, account, bank text · #guess · >100 · 2025-03 · !\" aria-label=\"Search transactions\"/> <div class=\"seg svelte-aipwz8\" role=\"radiogroup\" aria-label=\"Kind\"></div> <button class=\"kandinsky-btn primary\" title=\"n\">New…</button></div> <p class=\"count svelte-aipwz8\"><b class=\"svelte-aipwz8\"> </b> <!> <!></p> <div class=\"list svelte-aipwz8\" role=\"listbox\" aria-label=\"Transactions\" tabindex=\"-1\"><!> <!></div></section> <!></div>"), Ht = {
 	hash: "svelte-aipwz8",
-	code: ".tx.svelte-aipwz8 {display:grid;grid-template-columns:minmax(0, 1fr);gap:0;height:100%;min-height:0;}.tx.with.svelte-aipwz8 {grid-template-columns:minmax(0, 1fr) min(460px, 45%);}.main.svelte-aipwz8 {display:flex;flex-direction:column;min-width:0;min-height:0;padding-right:12px;}.bar.svelte-aipwz8 {display:flex;gap:8px;align-items:center;flex-wrap:wrap;}.search.svelte-aipwz8 {flex:1;min-width:220px;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius);padding:8px 10px;}.search.svelte-aipwz8:focus-visible {outline:2px solid var(--accent);outline-offset:-1px;}.seg.svelte-aipwz8 {display:flex;border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;}.seg.svelte-aipwz8 button:where(.svelte-aipwz8) {all:unset;cursor:pointer;padding:6px 10px;font-size:0.9em;color:var(--text-muted);}.seg.svelte-aipwz8 button:where(.svelte-aipwz8) + button:where(.svelte-aipwz8) {border-left:1px solid var(--border);}.seg.svelte-aipwz8 button:where(.svelte-aipwz8):hover {background:var(--bg-hover);color:var(--text);}.seg.svelte-aipwz8 button.on:where(.svelte-aipwz8) {background:var(--accent-soft);color:var(--accent-strong);font-weight:600;}.seg.svelte-aipwz8 button:where(.svelte-aipwz8):focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}.count.svelte-aipwz8 {margin:10px 0 6px;color:var(--text-muted);font-size:0.88em;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;}.count.svelte-aipwz8 b:where(.svelte-aipwz8) {color:var(--text);font-variant-numeric:tabular-nums;}.link.svelte-aipwz8 {all:unset;cursor:pointer;color:var(--accent);}.list.svelte-aipwz8 {overflow:auto;min-height:0;flex:1;outline:none;}.month.svelte-aipwz8 {position:sticky;top:0;z-index:1;background:var(--bg);padding:10px 8px 4px;font-size:0.78em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--border);}.row.svelte-aipwz8 {all:unset;box-sizing:border-box;cursor:pointer;display:grid;grid-template-columns:4.2em minmax(0, 1.3fr) minmax(0, 1.2fr) 8.5em;gap:12px;align-items:center;width:100%;padding:7px 8px;border-bottom:1px solid var(--border);min-height:40px;}.row.svelte-aipwz8:hover {background:var(--bg-hover);}.row.sel.svelte-aipwz8 {box-shadow:inset 2px 0 0 var(--accent);background:var(--bg-hover);}.row.open.svelte-aipwz8 {background:var(--accent-soft);}.row.svelte-aipwz8:focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}.date.svelte-aipwz8 {color:var(--text-muted);font-size:0.88em;font-variant-numeric:tabular-nums;}.who.svelte-aipwz8 {display:flex;flex-direction:column;min-width:0;}.payee.svelte-aipwz8 {font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.note.svelte-aipwz8 {color:var(--text-faint);font-size:0.85em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.chip.svelte-aipwz8 {display:inline-block;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--tag-bg);color:var(--tag-color);font-size:0.75em;font-weight:500;vertical-align:1px;}.chip.warn.svelte-aipwz8 {background:var(--highlight-bg);color:var(--text);}.route.svelte-aipwz8 {display:flex;gap:6px;align-items:baseline;min-width:0;font-size:0.88em;color:var(--text-muted);}.route.svelte-aipwz8 .from:where(.svelte-aipwz8), .route.svelte-aipwz8 .to:where(.svelte-aipwz8) {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}.route.svelte-aipwz8 .to:where(.svelte-aipwz8) {color:var(--text);flex:1;}.arr.svelte-aipwz8 {color:var(--text-faint);}.amt.svelte-aipwz8 {text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:0.92em;}.amt.in.svelte-aipwz8 {color:var(--green);}.amt.moved.svelte-aipwz8 {color:var(--text-muted);}.more.svelte-aipwz8 {margin:10px auto;display:block;}\n  @container (max-width: 640px) {.row.svelte-aipwz8 {grid-template-columns:3.6em minmax(0, 1fr) 7em;}.route.svelte-aipwz8 {display:none;} }"
+	code: ".tx.svelte-aipwz8 {display:grid;grid-template-columns:minmax(0, 1fr);gap:0;height:100%;min-height:0;}.tx.with.svelte-aipwz8 {grid-template-columns:minmax(0, 1fr) min(460px, 45%);}.main.svelte-aipwz8 {display:flex;flex-direction:column;min-width:0;min-height:0;padding-right:12px;}.bar.svelte-aipwz8 {display:flex;gap:8px;align-items:center;flex-wrap:wrap;}.search.svelte-aipwz8 {flex:1;min-width:220px;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius);padding:8px 10px;}.search.svelte-aipwz8:focus-visible {outline:2px solid var(--accent);outline-offset:-1px;}.seg.svelte-aipwz8 {display:flex;border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;}.seg.svelte-aipwz8 button:where(.svelte-aipwz8) {all:unset;cursor:pointer;padding:6px 10px;font-size:0.9em;color:var(--text-muted);}.seg.svelte-aipwz8 button:where(.svelte-aipwz8) + button:where(.svelte-aipwz8) {border-left:1px solid var(--border);}.seg.svelte-aipwz8 button:where(.svelte-aipwz8):hover {background:var(--bg-hover);color:var(--text);}.seg.svelte-aipwz8 button.on:where(.svelte-aipwz8) {background:var(--accent-soft);color:var(--accent-strong);font-weight:600;}.seg.svelte-aipwz8 button:where(.svelte-aipwz8):focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}.count.svelte-aipwz8 {margin:10px 0 6px;color:var(--text-muted);font-size:0.88em;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;}.count.svelte-aipwz8 b:where(.svelte-aipwz8) {color:var(--text);font-variant-numeric:tabular-nums;}.link.svelte-aipwz8 {all:unset;cursor:pointer;color:var(--accent);}.list.svelte-aipwz8 {overflow:auto;min-height:0;flex:1;outline:none;}.month.svelte-aipwz8 {position:sticky;top:0;z-index:1;background:var(--bg);padding:10px 8px 4px;font-size:0.78em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--border);}.row.svelte-aipwz8 {all:unset;box-sizing:border-box;cursor:pointer;display:grid;grid-template-columns:4.2em minmax(0, 1.3fr) minmax(0, 1.2fr) 8.5em;gap:12px;align-items:center;width:100%;padding:7px 8px;border-bottom:1px solid var(--border);min-height:40px;}.row.svelte-aipwz8:hover {background:var(--bg-hover);}.row.sel.svelte-aipwz8 {box-shadow:inset 2px 0 0 var(--accent);background:var(--bg-hover);}.row.open.svelte-aipwz8 {background:var(--accent-soft);}.row.svelte-aipwz8:focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}.date.svelte-aipwz8 {color:var(--text-muted);font-size:0.88em;font-variant-numeric:tabular-nums;}.who.svelte-aipwz8 {display:flex;flex-direction:column;min-width:0;}.payee.svelte-aipwz8 {font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.note.svelte-aipwz8 {color:var(--text-faint);font-size:0.85em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.chip.svelte-aipwz8 {display:inline-block;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--tag-bg);color:var(--tag-color);font-size:0.75em;font-weight:500;vertical-align:1px;}.chip.warn.svelte-aipwz8 {background:var(--highlight-bg);color:var(--text);}.route.svelte-aipwz8 {display:flex;gap:6px;align-items:baseline;min-width:0;font-size:0.88em;color:var(--text-muted);}.route.svelte-aipwz8 .from:where(.svelte-aipwz8), .route.svelte-aipwz8 .to:where(.svelte-aipwz8) {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}.route.svelte-aipwz8 .to:where(.svelte-aipwz8) {color:var(--text);flex:1;}.arr.svelte-aipwz8 {color:var(--text-faint);}.amt.svelte-aipwz8 {text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:0.92em;}.amt.in.svelte-aipwz8 {color:var(--green);}.amt.moved.svelte-aipwz8 {color:var(--text-muted);}.more.svelte-aipwz8 {margin:10px auto;display:block;}\r\n  @container (max-width: 640px) {.row.svelte-aipwz8 {grid-template-columns:3.6em minmax(0, 1fr) 7em;}.route.svelte-aipwz8 {display:none;} }"
 };
 function Ut(r, a) {
 	e(a, !0), ne(r, Ht);
@@ -1073,8 +1073,8 @@ function Ut(r, a) {
 			{
 				let t = E(() => u() === "new" ? null : u());
 				jt(e, {
-					get atlas() {
-						return a.atlas;
+					get kandinsky() {
+						return a.kandinsky;
 					},
 					get txn() {
 						return n(t);
@@ -1201,9 +1201,9 @@ function Zt(r, i) {
 f(["click"]);
 //#endregion
 //#region plugins/beta/finance/ui/src/Spend.svelte
-var Qt = g("<button role=\"radio\"> </button>"), $t = g("<span class=\"chip svelte-qqjett\"> </span>"), en = g("<button class=\"link svelte-qqjett\">all categories</button>"), tn = g("<span class=\"usual svelte-qqjett\"></span>"), nn = g("<tr><td class=\"svelte-qqjett\"><button class=\"link svelte-qqjett\"> </button></td><td class=\"n svelte-qqjett\"> </td><td class=\"n svelte-qqjett\"> </td></tr>"), rn = g("<div class=\"who svelte-qqjett\"><table class=\"svelte-qqjett\"><thead><tr><th class=\"svelte-qqjett\">Paid to</th><th class=\"n svelte-qqjett\">Times</th><th class=\"n svelte-qqjett\">Total</th></tr></thead><tbody></tbody></table> <button class=\"atlas-btn\"> </button></div>"), an = g("<li><button class=\"cat svelte-qqjett\"><span class=\"swatch svelte-qqjett\"></span> <span class=\"name svelte-qqjett\"> </span> <span class=\"track svelte-qqjett\"><span class=\"fill svelte-qqjett\"></span><!></span> <span class=\"v svelte-qqjett\"> </span> <span class=\"pct svelte-qqjett\"> </span> <span> </span></button> <!></li>"), on = g("<li class=\"atlas-empty svelte-qqjett\">Nothing spent in this period.</li>"), sn = g("<div class=\"spend svelte-qqjett\"><div class=\"bar svelte-qqjett\"><div class=\"seg svelte-qqjett\" role=\"radiogroup\" aria-label=\"Period\"></div> <!></div> <section><h3 class=\"svelte-qqjett\"> <span class=\"faint svelte-qqjett\"> </span><!></h3> <!></section> <section><h3 class=\"svelte-qqjett\"> <span class=\"faint svelte-qqjett\"> </span></h3> <ol class=\"cats svelte-qqjett\"></ol></section></div>"), cn = {
+var Qt = g("<button role=\"radio\"> </button>"), $t = g("<span class=\"chip svelte-qqjett\"> </span>"), en = g("<button class=\"link svelte-qqjett\">all categories</button>"), tn = g("<span class=\"usual svelte-qqjett\"></span>"), nn = g("<tr><td class=\"svelte-qqjett\"><button class=\"link svelte-qqjett\"> </button></td><td class=\"n svelte-qqjett\"> </td><td class=\"n svelte-qqjett\"> </td></tr>"), rn = g("<div class=\"who svelte-qqjett\"><table class=\"svelte-qqjett\"><thead><tr><th class=\"svelte-qqjett\">Paid to</th><th class=\"n svelte-qqjett\">Times</th><th class=\"n svelte-qqjett\">Total</th></tr></thead><tbody></tbody></table> <button class=\"kandinsky-btn\"> </button></div>"), an = g("<li><button class=\"cat svelte-qqjett\"><span class=\"swatch svelte-qqjett\"></span> <span class=\"name svelte-qqjett\"> </span> <span class=\"track svelte-qqjett\"><span class=\"fill svelte-qqjett\"></span><!></span> <span class=\"v svelte-qqjett\"> </span> <span class=\"pct svelte-qqjett\"> </span> <span> </span></button> <!></li>"), on = g("<li class=\"kandinsky-empty svelte-qqjett\">Nothing spent in this period.</li>"), sn = g("<div class=\"spend svelte-qqjett\"><div class=\"bar svelte-qqjett\"><div class=\"seg svelte-qqjett\" role=\"radiogroup\" aria-label=\"Period\"></div> <!></div> <section><h3 class=\"svelte-qqjett\"> <span class=\"faint svelte-qqjett\"> </span><!></h3> <!></section> <section><h3 class=\"svelte-qqjett\"> <span class=\"faint svelte-qqjett\"> </span></h3> <ol class=\"cats svelte-qqjett\"></ol></section></div>"), cn = {
 	hash: "svelte-qqjett",
-	code: ".spend.svelte-qqjett {display:flex;flex-direction:column;gap:18px;max-width:980px;}.bar.svelte-qqjett {display:flex;gap:8px;align-items:center;flex-wrap:wrap;}.seg.svelte-qqjett {display:flex;flex-wrap:wrap;border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;}.seg.svelte-qqjett button:where(.svelte-qqjett) {all:unset;cursor:pointer;padding:6px 10px;font-size:0.9em;color:var(--text-muted);}.seg.svelte-qqjett button:where(.svelte-qqjett) + button:where(.svelte-qqjett) {border-left:1px solid var(--border);}.seg.svelte-qqjett button:where(.svelte-qqjett):hover {background:var(--bg-hover);color:var(--text);}.seg.svelte-qqjett button.on:where(.svelte-qqjett) {background:var(--accent-soft);color:var(--accent-strong);font-weight:600;}.seg.svelte-qqjett button:where(.svelte-qqjett):focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}.chip.svelte-qqjett {padding:3px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent-strong);font-size:0.88em;font-weight:600;}h3.svelte-qqjett {margin:0 0 8px;font-size:0.78em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;}.faint.svelte-qqjett {color:var(--text-faint);text-transform:none;letter-spacing:0;font-weight:400;}.link.svelte-qqjett {all:unset;cursor:pointer;color:var(--accent);text-transform:none;letter-spacing:0;font-weight:400;}.link.svelte-qqjett:focus-visible {outline:2px solid var(--accent);}.cats.svelte-qqjett {list-style:none;margin:0;padding:0;}.cats.svelte-qqjett li:where(.svelte-qqjett) {border-bottom:1px solid var(--border);}.cat.svelte-qqjett {all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:grid;grid-template-columns:10px minmax(7em, 1fr) minmax(80px, 2fr) 7.5em 3em 9.5em;gap:10px;align-items:center;padding:8px 6px;}.cat.svelte-qqjett:hover {background:var(--bg-hover);}.cat.svelte-qqjett:focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}.open.svelte-qqjett .cat:where(.svelte-qqjett) {background:var(--bg-hover);}.swatch.svelte-qqjett {width:10px;height:10px;border-radius:3px;}.name.svelte-qqjett {font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.track.svelte-qqjett {position:relative;height:10px;background:var(--bg-hover);border-radius:3px;}.fill.svelte-qqjett {position:absolute;inset:0 auto 0 0;border-radius:3px;}.usual.svelte-qqjett {position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text);border-radius:1px;}.v.svelte-qqjett, .pct.svelte-qqjett, .vs.svelte-qqjett {text-align:right;font-variant-numeric:tabular-nums;}.v.svelte-qqjett {font-family:var(--font-mono);font-size:0.92em;}.pct.svelte-qqjett {color:var(--text-muted);font-size:0.88em;}.vs.svelte-qqjett {color:var(--text-faint);font-size:0.82em;}.vs.up.svelte-qqjett {color:var(--red);}.vs.down.svelte-qqjett {color:var(--green);}.who.svelte-qqjett {padding:4px 6px 12px 26px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;}table.svelte-qqjett {border-collapse:collapse;width:100%;max-width:560px;font-size:0.9em;}th.svelte-qqjett {text-align:left;color:var(--text-muted);font-weight:500;font-size:0.85em;padding:2px 8px 4px 0;}td.svelte-qqjett {padding:3px 8px 3px 0;border-top:1px solid var(--border);}.n.svelte-qqjett {text-align:right;font-variant-numeric:tabular-nums;}\n  @container (max-width: 700px) {.cat.svelte-qqjett {grid-template-columns:10px minmax(6em, 1fr) minmax(60px, 1fr) 7em;}.pct.svelte-qqjett, .vs.svelte-qqjett {display:none;} }"
+	code: ".spend.svelte-qqjett {display:flex;flex-direction:column;gap:18px;max-width:980px;}.bar.svelte-qqjett {display:flex;gap:8px;align-items:center;flex-wrap:wrap;}.seg.svelte-qqjett {display:flex;flex-wrap:wrap;border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;}.seg.svelte-qqjett button:where(.svelte-qqjett) {all:unset;cursor:pointer;padding:6px 10px;font-size:0.9em;color:var(--text-muted);}.seg.svelte-qqjett button:where(.svelte-qqjett) + button:where(.svelte-qqjett) {border-left:1px solid var(--border);}.seg.svelte-qqjett button:where(.svelte-qqjett):hover {background:var(--bg-hover);color:var(--text);}.seg.svelte-qqjett button.on:where(.svelte-qqjett) {background:var(--accent-soft);color:var(--accent-strong);font-weight:600;}.seg.svelte-qqjett button:where(.svelte-qqjett):focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}.chip.svelte-qqjett {padding:3px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent-strong);font-size:0.88em;font-weight:600;}h3.svelte-qqjett {margin:0 0 8px;font-size:0.78em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;}.faint.svelte-qqjett {color:var(--text-faint);text-transform:none;letter-spacing:0;font-weight:400;}.link.svelte-qqjett {all:unset;cursor:pointer;color:var(--accent);text-transform:none;letter-spacing:0;font-weight:400;}.link.svelte-qqjett:focus-visible {outline:2px solid var(--accent);}.cats.svelte-qqjett {list-style:none;margin:0;padding:0;}.cats.svelte-qqjett li:where(.svelte-qqjett) {border-bottom:1px solid var(--border);}.cat.svelte-qqjett {all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:grid;grid-template-columns:10px minmax(7em, 1fr) minmax(80px, 2fr) 7.5em 3em 9.5em;gap:10px;align-items:center;padding:8px 6px;}.cat.svelte-qqjett:hover {background:var(--bg-hover);}.cat.svelte-qqjett:focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}.open.svelte-qqjett .cat:where(.svelte-qqjett) {background:var(--bg-hover);}.swatch.svelte-qqjett {width:10px;height:10px;border-radius:3px;}.name.svelte-qqjett {font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.track.svelte-qqjett {position:relative;height:10px;background:var(--bg-hover);border-radius:3px;}.fill.svelte-qqjett {position:absolute;inset:0 auto 0 0;border-radius:3px;}.usual.svelte-qqjett {position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text);border-radius:1px;}.v.svelte-qqjett, .pct.svelte-qqjett, .vs.svelte-qqjett {text-align:right;font-variant-numeric:tabular-nums;}.v.svelte-qqjett {font-family:var(--font-mono);font-size:0.92em;}.pct.svelte-qqjett {color:var(--text-muted);font-size:0.88em;}.vs.svelte-qqjett {color:var(--text-faint);font-size:0.82em;}.vs.up.svelte-qqjett {color:var(--red);}.vs.down.svelte-qqjett {color:var(--green);}.who.svelte-qqjett {padding:4px 6px 12px 26px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;}table.svelte-qqjett {border-collapse:collapse;width:100%;max-width:560px;font-size:0.9em;}th.svelte-qqjett {text-align:left;color:var(--text-muted);font-weight:500;font-size:0.85em;padding:2px 8px 4px 0;}td.svelte-qqjett {padding:3px 8px 3px 0;border-top:1px solid var(--border);}.n.svelte-qqjett {text-align:right;font-variant-numeric:tabular-nums;}\r\n  @container (max-width: 700px) {.cat.svelte-qqjett {grid-template-columns:10px minmax(6em, 1fr) minmax(60px, 1fr) 7em;}.pct.svelte-qqjett, .vs.svelte-qqjett {display:none;} }"
 };
 function ln(r, i) {
 	e(i, !0), ne(r, cn);
@@ -1335,7 +1335,7 @@ function ln(r, i) {
 f(["click"]);
 //#endregion
 //#region plugins/beta/finance/ui/src/Review.svelte
-var un = g("<div class=\"atlas-notice error\"> <div class=\"actions\"><button class=\"atlas-btn\">Try again</button></div></div>"), dn = g("<div class=\"atlas-empty\">Reading the journal…</div>"), fn = g("<div class=\"atlas-empty\">Nothing to review.</div>"), pn = g("<span class=\"faint svelte-12excp\"> </span>"), mn = g("<button> </button>"), hn = g("<button title=\"c: choose the category\"> </button>"), gn = g("<button class=\"atlas-btn\" title=\"a\"> </button>"), _n = g("<!> <button class=\"atlas-btn primary\" title=\"Enter\">Accept</button>", 1), vn = g("<div class=\"why faint svelte-12excp\"> </div>"), yn = g("<span><span class=\"faint svelte-12excp\"> </span> </span>"), bn = g("<span class=\"faint bank svelte-12excp\"> </span>"), xn = g("<div role=\"option\" tabindex=\"-1\"><div class=\"line1 svelte-12excp\"><span class=\"date svelte-12excp\"> </span> <span class=\"payee svelte-12excp\"> </span> <!> <span class=\"grow svelte-12excp\"></span> <!> <!></div> <!> <div class=\"posts svelte-12excp\"><!> <!></div></div>"), Sn = g("<div class=\"keys svelte-12excp\"><kbd class=\"svelte-12excp\">j</kbd><kbd class=\"svelte-12excp\">k</kbd> move · <kbd class=\"svelte-12excp\">Enter</kbd> accept · <kbd class=\"svelte-12excp\">a</kbd> accept all like it · <kbd class=\"svelte-12excp\">c</kbd> category · <kbd class=\"svelte-12excp\">s</kbd> split · <kbd class=\"svelte-12excp\">o</kbd> </div> <!>", 1), Cn = g("<div class=\"review svelte-12excp\" role=\"listbox\" aria-label=\"Transactions to review\" tabindex=\"0\"><!></div>"), wn = {
+var un = g("<div class=\"kandinsky-notice error\"> <div class=\"actions\"><button class=\"kandinsky-btn\">Try again</button></div></div>"), dn = g("<div class=\"kandinsky-empty\">Reading the journal…</div>"), fn = g("<div class=\"kandinsky-empty\">Nothing to review.</div>"), pn = g("<span class=\"faint svelte-12excp\"> </span>"), mn = g("<button> </button>"), hn = g("<button title=\"c: choose the category\"> </button>"), gn = g("<button class=\"kandinsky-btn\" title=\"a\"> </button>"), _n = g("<!> <button class=\"kandinsky-btn primary\" title=\"Enter\">Accept</button>", 1), vn = g("<div class=\"why faint svelte-12excp\"> </div>"), yn = g("<span><span class=\"faint svelte-12excp\"> </span> </span>"), bn = g("<span class=\"faint bank svelte-12excp\"> </span>"), xn = g("<div role=\"option\" tabindex=\"-1\"><div class=\"line1 svelte-12excp\"><span class=\"date svelte-12excp\"> </span> <span class=\"payee svelte-12excp\"> </span> <!> <span class=\"grow svelte-12excp\"></span> <!> <!></div> <!> <div class=\"posts svelte-12excp\"><!> <!></div></div>"), Sn = g("<div class=\"keys svelte-12excp\"><kbd class=\"svelte-12excp\">j</kbd><kbd class=\"svelte-12excp\">k</kbd> move · <kbd class=\"svelte-12excp\">Enter</kbd> accept · <kbd class=\"svelte-12excp\">a</kbd> accept all like it · <kbd class=\"svelte-12excp\">c</kbd> category · <kbd class=\"svelte-12excp\">s</kbd> split · <kbd class=\"svelte-12excp\">o</kbd> </div> <!>", 1), Cn = g("<div class=\"review svelte-12excp\" role=\"listbox\" aria-label=\"Transactions to review\" tabindex=\"0\"><!></div>"), wn = {
 	hash: "svelte-12excp",
 	code: ".review.svelte-12excp {outline:none;display:grid;grid-template-columns:minmax(0, 1fr);gap:4px;}.keys.svelte-12excp {color:var(--text-faint);font-size:0.9em;margin-bottom:6px;}kbd.svelte-12excp {font-family:var(--font-mono);font-size:0.85em;padding:0 4px;border:1px solid var(--border);border-radius:3px;margin-right:2px;}.txn.svelte-12excp {padding:8px 10px;border-radius:var(--radius);border:1px solid transparent;}.txn.svelte-12excp:hover {background:var(--bg-hover);}.txn.sel.svelte-12excp {border-color:var(--accent);background:var(--accent-soft);}.line1.svelte-12excp {display:flex;align-items:center;gap:10px;min-height:26px;}.date.svelte-12excp {color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap;}.payee.svelte-12excp {font-weight:600;white-space:nowrap;}.line1.svelte-12excp > .faint:where(.svelte-12excp) {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}.bank.svelte-12excp {font-style:italic;}.grow.svelte-12excp {flex:1;}.faint.svelte-12excp {color:var(--text-faint);}.cat.svelte-12excp {all:unset;cursor:pointer;padding:2px 10px;border-radius:999px;background:var(--bg-hover);color:var(--text-muted);}.cat.unknown.svelte-12excp {box-shadow:inset 0 0 0 1px var(--yellow);}.cat.guess.svelte-12excp {box-shadow:inset 0 0 0 1px var(--accent);font-style:italic;}.cat.guess.sure.svelte-12excp {font-style:normal;}.why.svelte-12excp {font-size:0.85em;margin:2px 0 0;}.cat.svelte-12excp:hover {color:var(--text);}.posts.svelte-12excp {display:flex;flex-wrap:wrap;gap:4px 16px;font-size:0.92em;font-variant-numeric:tabular-nums;margin-top:2px;}"
 };
@@ -1344,7 +1344,7 @@ function Tn(r, i) {
 	let o = w(u([])), c = w(0), l = w(""), f = w(!0), m = w(void 0);
 	async function g() {
 		try {
-			let e = await I(i.atlas, "review");
+			let e = await I(i.kandinsky, "review");
 			T(o, e.transactions.slice().reverse(), !0), T(c, Math.min(n(c), Math.max(n(o).length - 1, 0)), !0), T(l, "");
 		} catch (e) {
 			T(l, e.message, !0);
@@ -1361,7 +1361,7 @@ function Tn(r, i) {
 	};
 	async function A(e, t, r = !1) {
 		try {
-			return await I(i.atlas, "review_edit", {
+			return await I(i.kandinsky, "review_edit", {
 				path: e.path,
 				line: e.line,
 				text: e.text,
@@ -1369,14 +1369,14 @@ function Tn(r, i) {
 				...t
 			}), T(o, n(o).filter((t) => t !== e), !0), T(c, Math.min(n(c), Math.max(n(o).length - 1, 0)), !0), r || i.onchange(), !0;
 		} catch (e) {
-			return i.atlas.toast("Not changed", e.message, "error"), g(), !1;
+			return i.kandinsky.toast("Not changed", e.message, "error"), g(), !1;
 		}
 	}
 	function j(e) {
 		let t = O(e)?.account;
 		if (!t) return;
 		let n = e.postings.map((e) => e.amount?.split(" ")[1]).find(Boolean) ?? "EUR";
-		i.atlas.pick({
+		i.kandinsky.pick({
 			placeholder: `Split ${e.payee}: Account amount, Account (the last takes the rest)`,
 			tag: "Finance",
 			items: [],
@@ -1390,10 +1390,10 @@ function Tn(r, i) {
 						return [t[1].includes(":") ? t[1] : `Expenses:${t[1]}`, t[2] ? `${t[2].replace(",", ".")} ${t[3] ?? n}` : null];
 					});
 				} catch (e) {
-					i.atlas.toast("Not split", e.message, "error");
+					i.kandinsky.toast("Not split", e.message, "error");
 					return;
 				}
-				I(i.atlas, "review_edit", {
+				I(i.kandinsky, "review_edit", {
 					path: e.path,
 					line: e.line,
 					text: e.text,
@@ -1401,7 +1401,7 @@ function Tn(r, i) {
 					split: a
 				}).then(() => {
 					g(), i.onchange();
-				}, (e) => i.atlas.toast("Not split", e.message, "error"));
+				}, (e) => i.kandinsky.toast("Not split", e.message, "error"));
 			}
 		});
 	}
@@ -1416,17 +1416,17 @@ function Tn(r, i) {
 	async function N(e) {
 		let t = M(e);
 		for (let e of t) if (!await A(e, k(e), !0)) break;
-		i.onchange(), i.atlas.toast("Accepted", `${t.length} × ${e.payee}`);
+		i.onchange(), i.kandinsky.toast("Accepted", `${t.length} × ${e.payee}`);
 	}
 	function P(e) {
 		let t = O(e)?.account;
-		if (!t) return i.atlas.toast("Nothing to categorize", "every posting of this transaction is an account");
+		if (!t) return i.kandinsky.toast("Nothing to categorize", "every posting of this transaction is an account");
 		let n = t.split(":")[0], r = i.known.filter((e) => e.startsWith(`${n}:`) && !e.endsWith(":Unknown")).map((e) => ({
 			value: e,
 			title: G(e),
 			detail: e
 		}));
-		i.atlas.pick({
+		i.kandinsky.pick({
 			placeholder: `Category for ${e.payee}`,
 			tag: "Finance",
 			items: r,
@@ -1448,7 +1448,7 @@ function Tn(r, i) {
 		else if (e.key === "a") N(t);
 		else if (e.key === "s") j(t);
 		else if (e.key === "c") P(t);
-		else if (e.key === "o") i.atlas.open(t.path, t.line);
+		else if (e.key === "o") i.kandinsky.open(t.path, t.line);
 		else return;
 		e.preventDefault();
 	}
@@ -1543,7 +1543,7 @@ function Tn(r, i) {
 f(["keydown", "click"]);
 //#endregion
 //#region plugins/beta/finance/ui/src/Budget.svelte
-var En = g("<span class=\"faint svelte-48f9vs\">*</span>"), Dn = g("<div class=\"mrow svelte-48f9vs\"><span class=\"mname svelte-48f9vs\"> </span> <span class=\"pair svelte-48f9vs\"><span class=\"in svelte-48f9vs\"></span><span class=\"in hatch svelte-48f9vs\"></span> <br/> <span class=\"out svelte-48f9vs\"></span><span class=\"out hatch svelte-48f9vs\"></span></span> <span> <!></span></div>"), On = g("<button class=\"rec svelte-48f9vs\"><span class=\"payee svelte-48f9vs\"> <span class=\"faint svelte-48f9vs\"> </span></span> <span> <span class=\"faint svelte-48f9vs\"> </span></span> <span class=\"next faint svelte-48f9vs\"> </span></button>"), kn = g("<div class=\"atlas-empty\">Nothing comes back regularly yet: three payments at a steady period and amount make a recurring one.</div>"), An = g("<div class=\"grid svelte-48f9vs\"><section class=\"card wide svelte-48f9vs\"><!></section> <section class=\"card svelte-48f9vs\"><h3 class=\"svelte-48f9vs\">Saved per month <span class=\"faint svelte-48f9vs\">income − spending, the uncategorised drawn hatched</span></h3> <!> <div class=\"faint legend svelte-48f9vs\"><span class=\"sw in svelte-48f9vs\"></span> income <span class=\"sw out svelte-48f9vs\"></span> spending · * counting the uncategorised as income and spending</div></section> <section class=\"card svelte-48f9vs\"><h3 class=\"svelte-48f9vs\">Recurring <span class=\"faint svelte-48f9vs\"> <!></span></h3> <!></section></div>"), jn = {
+var En = g("<span class=\"faint svelte-48f9vs\">*</span>"), Dn = g("<div class=\"mrow svelte-48f9vs\"><span class=\"mname svelte-48f9vs\"> </span> <span class=\"pair svelte-48f9vs\"><span class=\"in svelte-48f9vs\"></span><span class=\"in hatch svelte-48f9vs\"></span> <br/> <span class=\"out svelte-48f9vs\"></span><span class=\"out hatch svelte-48f9vs\"></span></span> <span> <!></span></div>"), On = g("<button class=\"rec svelte-48f9vs\"><span class=\"payee svelte-48f9vs\"> <span class=\"faint svelte-48f9vs\"> </span></span> <span> <span class=\"faint svelte-48f9vs\"> </span></span> <span class=\"next faint svelte-48f9vs\"> </span></button>"), kn = g("<div class=\"kandinsky-empty\">Nothing comes back regularly yet: three payments at a steady period and amount make a recurring one.</div>"), An = g("<div class=\"grid svelte-48f9vs\"><section class=\"card wide svelte-48f9vs\"><!></section> <section class=\"card svelte-48f9vs\"><h3 class=\"svelte-48f9vs\">Saved per month <span class=\"faint svelte-48f9vs\">income − spending, the uncategorised drawn hatched</span></h3> <!> <div class=\"faint legend svelte-48f9vs\"><span class=\"sw in svelte-48f9vs\"></span> income <span class=\"sw out svelte-48f9vs\"></span> spending · * counting the uncategorised as income and spending</div></section> <section class=\"card svelte-48f9vs\"><h3 class=\"svelte-48f9vs\">Recurring <span class=\"faint svelte-48f9vs\"> <!></span></h3> <!></section></div>"), jn = {
 	hash: "svelte-48f9vs",
 	code: ".grid.svelte-48f9vs {display:grid;grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));gap:14px;}.card.svelte-48f9vs {background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;min-width:0;}.wide.svelte-48f9vs {grid-column:1 / -1;}h3.svelte-48f9vs {margin:0 0 10px;font-size:0.82em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;}.faint.svelte-48f9vs {color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;}.mrow.svelte-48f9vs {display:grid;grid-template-columns:5.5em 1fr 5em;gap:8px;align-items:center;padding:2px 0;}.mname.svelte-48f9vs {color:var(--text-muted);font-variant-numeric:tabular-nums;}.pair.svelte-48f9vs {line-height:0;}.pair.svelte-48f9vs span:where(.svelte-48f9vs) {display:inline-block;height:6px;vertical-align:top;}.in.svelte-48f9vs {background:var(--green);opacity:0.8;border-radius:3px 0 0 3px;}.out.svelte-48f9vs {background:var(--accent);opacity:0.8;border-radius:3px 0 0 3px;}.hatch.svelte-48f9vs {opacity:0.35;border-radius:0 3px 3px 0;background-image:repeating-linear-gradient(45deg, transparent 0 2px, var(--bg-elev) 2px 4px);}.rate.svelte-48f9vs {text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}.rate.neg.svelte-48f9vs {color:var(--red);}.legend.svelte-48f9vs {margin-top:8px;font-size:0.85em;}.sw.svelte-48f9vs {display:inline-block;width:10px;height:6px;border-radius:2px;margin:0 2px 0 6px;}.rec.svelte-48f9vs {all:unset;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:0 10px;padding:5px 8px;border-radius:var(--radius-sm);}.rec.svelte-48f9vs:hover {background:var(--bg-hover);}.payee.svelte-48f9vs {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.num.svelte-48f9vs {text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}.num.income.svelte-48f9vs {color:var(--green);}.next.svelte-48f9vs {grid-column:1 / -1;font-size:0.85em;}"
 };
@@ -1559,7 +1559,7 @@ function Mn(r, i) {
 			title: "Unpin",
 			detail: `back to the usual month (${z(t, i.cur, { whole: !0 })})`
 		}] : []];
-		i.atlas.pick({
+		i.kandinsky.pick({
 			placeholder: `Monthly target for ${G(e.account)} (e.g. 250)`,
 			tag: "Finance",
 			items: n,
@@ -1567,13 +1567,13 @@ function Mn(r, i) {
 			onpick: async (t) => {
 				let n = t && !/[A-Za-z]/.test(t) ? `${t} ${i.cur}` : t;
 				try {
-					let t = await I(i.atlas, "set_target", {
+					let t = await I(i.kandinsky, "set_target", {
 						account: e.account,
 						target: n
 					});
-					i.atlas.toast(n ? "Target pinned" : "Target unpinned", `${G(e.account)}: ${n || "the usual month"} (${t.path})`), i.onchange();
+					i.kandinsky.toast(n ? "Target pinned" : "Target unpinned", `${G(e.account)}: ${n || "the usual month"} (${t.path})`), i.onchange();
 				} catch (e) {
-					i.atlas.toast("Not pinned", e.message, "error");
+					i.kandinsky.toast("Not pinned", e.message, "error");
 				}
 			}
 		});
@@ -1645,7 +1645,7 @@ function Mn(r, i) {
 			() => G(n(r).account),
 			() => j(n(r).amount) < 0,
 			() => z(Math.abs(j(n(r).amount)), i.cur)
-		]), v("click", a, () => i.atlas.open(n(r).path, n(r).line)), p(e, a);
+		]), v("click", a, () => i.kandinsky.open(n(r).path, n(r).line)), p(e, a);
 	}, (e) => {
 		var t = kn();
 		p(e, t);
@@ -1654,16 +1654,16 @@ function Mn(r, i) {
 f(["click"]);
 //#endregion
 //#region plugins/beta/finance/ui/src/Invest.svelte
-var Nn = g("<div class=\"atlas-notice error\"> <div class=\"actions\"><button class=\"atlas-btn\">Try again</button></div></div>"), Pn = g("<div class=\"atlas-empty\">Reading the lots…</div>"), Fn = g("<tr><td class=\"svelte-aqy484\"> </td><td class=\"num svelte-aqy484\"> </td><td class=\"num svelte-aqy484\"> </td></tr>"), In = g("<table class=\"lots svelte-aqy484\"><thead><tr><th class=\"svelte-aqy484\">bought</th><th class=\"num svelte-aqy484\">units</th><th class=\"num svelte-aqy484\">cost</th></tr></thead><tbody></tbody></table>"), Ln = g("<button class=\"hold svelte-aqy484\"><span class=\"name\"> <span class=\"faint svelte-aqy484\"> </span></span> <span class=\"num svelte-aqy484\"> </span> <span class=\"num svelte-aqy484\"> </span> <span> </span> <span class=\"faint small svelte-aqy484\"> </span></button> <!>", 1), Rn = g("<div class=\"atlas-empty\">Nothing held in lots now (funds, stocks). Gains realised before are below.</div>"), zn = g("<span><b> </b> </span>"), Bn = g("<div class=\"realised svelte-aqy484\"><!><span class=\"faint svelte-aqy484\">realised gains (the booked Income:Gains)</span></div>"), Vn = g("<div class=\"plot svelte-aqy484\"></div>"), Hn = g("<div class=\"fx svelte-aqy484\"><div class=\"fxhead svelte-aqy484\"><span class=\"name\"><b> </b></span> <span class=\"num svelte-aqy484\"> </span> <span class=\"faint svelte-aqy484\"> </span> <span> </span></div> <!></div>"), Un = g("<div class=\"atlas-empty\"> </div>"), Wn = g("<span><b> </b> <span class=\"faint svelte-aqy484\"> </span></span>"), Gn = g("<div class=\"grid svelte-aqy484\"><section class=\"card tiles wide svelte-aqy484\"><div class=\"tile svelte-aqy484\"><span class=\"n svelte-aqy484\"> </span><span>held in lots</span></div> <div class=\"tile svelte-aqy484\"><span> </span><span>unrealised</span></div> <div class=\"tile svelte-aqy484\"><span> </span><span>realised, all years</span></div> <div class=\"tile svelte-aqy484\"><span class=\"n svelte-aqy484\"> </span><span>a year (XIRR, money-weighted)</span></div></section> <section class=\"card wide svelte-aqy484\"><h3 class=\"svelte-aqy484\">Holdings</h3> <!> <!></section> <section class=\"card wide svelte-aqy484\"><h3 class=\"svelte-aqy484\">Currencies <span class=\"faint svelte-aqy484\"> </span></h3> <!></section> <section class=\"card wide svelte-aqy484\"><h3 class=\"svelte-aqy484\">Prices <span class=\"faint svelte-aqy484\">finance/prices/, kept sparse; fetched daily</span></h3> <div class=\"quotes svelte-aqy484\"></div> <button class=\"atlas-btn\"> </button></section></div>"), Kn = {
+var Nn = g("<div class=\"kandinsky-notice error\"> <div class=\"actions\"><button class=\"kandinsky-btn\">Try again</button></div></div>"), Pn = g("<div class=\"kandinsky-empty\">Reading the lots…</div>"), Fn = g("<tr><td class=\"svelte-aqy484\"> </td><td class=\"num svelte-aqy484\"> </td><td class=\"num svelte-aqy484\"> </td></tr>"), In = g("<table class=\"lots svelte-aqy484\"><thead><tr><th class=\"svelte-aqy484\">bought</th><th class=\"num svelte-aqy484\">units</th><th class=\"num svelte-aqy484\">cost</th></tr></thead><tbody></tbody></table>"), Ln = g("<button class=\"hold svelte-aqy484\"><span class=\"name\"> <span class=\"faint svelte-aqy484\"> </span></span> <span class=\"num svelte-aqy484\"> </span> <span class=\"num svelte-aqy484\"> </span> <span> </span> <span class=\"faint small svelte-aqy484\"> </span></button> <!>", 1), Rn = g("<div class=\"kandinsky-empty\">Nothing held in lots now (funds, stocks). Gains realised before are below.</div>"), zn = g("<span><b> </b> </span>"), Bn = g("<div class=\"realised svelte-aqy484\"><!><span class=\"faint svelte-aqy484\">realised gains (the booked Income:Gains)</span></div>"), Vn = g("<div class=\"plot svelte-aqy484\"></div>"), Hn = g("<div class=\"fx svelte-aqy484\"><div class=\"fxhead svelte-aqy484\"><span class=\"name\"><b> </b></span> <span class=\"num svelte-aqy484\"> </span> <span class=\"faint svelte-aqy484\"> </span> <span> </span></div> <!></div>"), Un = g("<div class=\"kandinsky-empty\"> </div>"), Wn = g("<span><b> </b> <span class=\"faint svelte-aqy484\"> </span></span>"), Gn = g("<div class=\"grid svelte-aqy484\"><section class=\"card tiles wide svelte-aqy484\"><div class=\"tile svelte-aqy484\"><span class=\"n svelte-aqy484\"> </span><span>held in lots</span></div> <div class=\"tile svelte-aqy484\"><span> </span><span>unrealised</span></div> <div class=\"tile svelte-aqy484\"><span> </span><span>realised, all years</span></div> <div class=\"tile svelte-aqy484\"><span class=\"n svelte-aqy484\"> </span><span>a year (XIRR, money-weighted)</span></div></section> <section class=\"card wide svelte-aqy484\"><h3 class=\"svelte-aqy484\">Holdings</h3> <!> <!></section> <section class=\"card wide svelte-aqy484\"><h3 class=\"svelte-aqy484\">Currencies <span class=\"faint svelte-aqy484\"> </span></h3> <!></section> <section class=\"card wide svelte-aqy484\"><h3 class=\"svelte-aqy484\">Prices <span class=\"faint svelte-aqy484\">finance/prices/, kept sparse; fetched daily</span></h3> <div class=\"quotes svelte-aqy484\"></div> <button class=\"kandinsky-btn\"> </button></section></div>"), Kn = {
 	hash: "svelte-aqy484",
-	code: ".grid.svelte-aqy484 {display:grid;grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));gap:14px;}.card.svelte-aqy484 {background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;min-width:0;}.wide.svelte-aqy484 {grid-column:1 / -1;}h3.svelte-aqy484 {margin:0 0 10px;font-size:0.82em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;}.faint.svelte-aqy484 {color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;}.small.svelte-aqy484 {font-size:0.85em;}.tiles.svelte-aqy484 {display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:10px;}.tile.svelte-aqy484 {display:flex;flex-direction:column;gap:2px;padding:4px 6px;color:var(--text-muted);}.tile.svelte-aqy484 .n:where(.svelte-aqy484) {font-size:1.5em;font-weight:650;color:var(--text);font-variant-numeric:tabular-nums;}.pos.svelte-aqy484 {color:var(--green) !important;}.neg.svelte-aqy484 {color:var(--red) !important;}.hold.svelte-aqy484 {all:unset;cursor:pointer;display:grid;grid-template-columns:1fr auto auto 7em;gap:2px 14px;padding:6px 8px;border-radius:var(--radius-sm);width:100%;box-sizing:border-box;}.hold.svelte-aqy484:hover {background:var(--bg-hover);}.hold.svelte-aqy484 .small:where(.svelte-aqy484) {grid-column:1 / -1;}.num.svelte-aqy484 {text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}.lots.svelte-aqy484 {margin:0 0 8px 16px;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:0.92em;}.lots.svelte-aqy484 th:where(.svelte-aqy484) {text-align:left;font-weight:500;color:var(--text-faint);padding:2px 10px;}.lots.svelte-aqy484 td:where(.svelte-aqy484) {padding:2px 10px;border-top:1px solid var(--border);}.realised.svelte-aqy484 {display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;font-variant-numeric:tabular-nums;}.fx.svelte-aqy484 {padding:4px 0 10px;border-bottom:1px solid var(--border);}.fx.svelte-aqy484:last-child {border-bottom:0;}.fxhead.svelte-aqy484 {display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline;}.plot.svelte-aqy484 {margin-top:8px;max-width:980px;}.quotes.svelte-aqy484 {display:flex;flex-wrap:wrap;gap:4px 18px;margin-bottom:10px;font-variant-numeric:tabular-nums;}\n  @media (max-width: 700px) {.hold.svelte-aqy484 {grid-template-columns:1fr auto;} }"
+	code: ".grid.svelte-aqy484 {display:grid;grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));gap:14px;}.card.svelte-aqy484 {background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;min-width:0;}.wide.svelte-aqy484 {grid-column:1 / -1;}h3.svelte-aqy484 {margin:0 0 10px;font-size:0.82em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;}.faint.svelte-aqy484 {color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;}.small.svelte-aqy484 {font-size:0.85em;}.tiles.svelte-aqy484 {display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:10px;}.tile.svelte-aqy484 {display:flex;flex-direction:column;gap:2px;padding:4px 6px;color:var(--text-muted);}.tile.svelte-aqy484 .n:where(.svelte-aqy484) {font-size:1.5em;font-weight:650;color:var(--text);font-variant-numeric:tabular-nums;}.pos.svelte-aqy484 {color:var(--green) !important;}.neg.svelte-aqy484 {color:var(--red) !important;}.hold.svelte-aqy484 {all:unset;cursor:pointer;display:grid;grid-template-columns:1fr auto auto 7em;gap:2px 14px;padding:6px 8px;border-radius:var(--radius-sm);width:100%;box-sizing:border-box;}.hold.svelte-aqy484:hover {background:var(--bg-hover);}.hold.svelte-aqy484 .small:where(.svelte-aqy484) {grid-column:1 / -1;}.num.svelte-aqy484 {text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}.lots.svelte-aqy484 {margin:0 0 8px 16px;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:0.92em;}.lots.svelte-aqy484 th:where(.svelte-aqy484) {text-align:left;font-weight:500;color:var(--text-faint);padding:2px 10px;}.lots.svelte-aqy484 td:where(.svelte-aqy484) {padding:2px 10px;border-top:1px solid var(--border);}.realised.svelte-aqy484 {display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;font-variant-numeric:tabular-nums;}.fx.svelte-aqy484 {padding:4px 0 10px;border-bottom:1px solid var(--border);}.fx.svelte-aqy484:last-child {border-bottom:0;}.fxhead.svelte-aqy484 {display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline;}.plot.svelte-aqy484 {margin-top:8px;max-width:980px;}.quotes.svelte-aqy484 {display:flex;flex-wrap:wrap;gap:4px 18px;margin-bottom:10px;font-variant-numeric:tabular-nums;}\r\n  @media (max-width: 700px) {.hold.svelte-aqy484 {grid-template-columns:1fr auto;} }"
 };
 function qn(o, c) {
 	e(c, !0), ne(o, Kn);
 	let l = w(null), u = w(""), f = w(!1), g = w(null);
 	async function x() {
 		try {
-			T(l, await I(c.atlas, "invest"), !0), T(u, "");
+			T(l, await I(c.kandinsky, "invest"), !0), T(u, "");
 		} catch (e) {
 			T(u, e.message, !0);
 		}
@@ -1672,10 +1672,10 @@ function qn(o, c) {
 	async function O() {
 		T(f, !0);
 		try {
-			let e = await I(c.atlas, "prices", {});
-			c.atlas.toast("Prices", e.errors.length ? `${e.summary}: ${e.errors.join("; ")}` : e.summary, e.errors.length ? "error" : void 0), await x();
+			let e = await I(c.kandinsky, "prices", {});
+			c.kandinsky.toast("Prices", e.errors.length ? `${e.summary}: ${e.errors.join("; ")}` : e.summary, e.errors.length ? "error" : void 0), await x();
 		} catch (e) {
-			c.atlas.toast("Prices not fetched", e.message, "error");
+			c.kandinsky.toast("Prices not fetched", e.message, "error");
 		} finally {
 			T(f, !1);
 		}
@@ -1683,7 +1683,7 @@ function qn(o, c) {
 	let k = E(() => n(l)?.holdings.reduce((e, t) => e + j(t.value), 0) ?? 0), A = E(() => n(l)?.holdings.reduce((e, t) => e + j(t.cost), 0) ?? 0), N = E(() => n(l)?.realised.reduce((e, t) => e + j(t.gain), 0) ?? 0), P = (e) => Number(e).toLocaleString(void 0, { maximumFractionDigits: 6 }), F = (e) => Math.round((Date.now() - (/* @__PURE__ */ new Date(`${e}T12:00:00`)).getTime()) / 864e5);
 	function L(e, t) {
 		let n = t.map((e, n) => n - (t.length - 1));
-		return { destroy: c.atlas.plot(e, {
+		return { destroy: c.kandinsky.plot(e, {
 			x: n,
 			ys: [t.map(([, e]) => j(e))],
 			xLabel: `months before ${t.at(-1)?.[0] ?? ""}`,
@@ -1827,15 +1827,15 @@ function qn(o, c) {
 f(["click"]);
 //#endregion
 //#region plugins/beta/finance/ui/src/Sources.svelte
-var Jn = g("<button class=\"atlas-btn\">Renew</button>"), Yn = g("<div class=\"atlas-notice error\"> </div>"), Xn = g("<div class=\"src svelte-er8fe7\"><button class=\"name svelte-er8fe7\"> <span class=\"faint svelte-er8fe7\"> </span></button> <span> </span> <span class=\"faint svelte-er8fe7\"> </span> <!> <div class=\"accts faint svelte-er8fe7\"> </div> <!></div>"), Zn = g("<div class=\"atlas-empty\"> </div>"), Qn = g("<option> </option>"), $n = g("<span class=\"faint svelte-er8fe7\"> </span>"), er = g("<button class=\"site svelte-er8fe7\"><b> </b><!></button>"), tr = g("<span class=\"faint svelte-er8fe7\">No bank matches.</span>"), nr = g("<div class=\"step svelte-er8fe7\" role=\"group\" aria-label=\"Choose a bank\"><div class=\"steps faint svelte-er8fe7\"><b class=\"svelte-er8fe7\">1 Bank</b> · 2 Consent · 3 Accounts</div> <input aria-label=\"Bank\" class=\"svelte-er8fe7\"/> <div class=\"banks svelte-er8fe7\"></div> <button class=\"atlas-btn svelte-er8fe7\">Cancel</button></div>"), rr = g("<label class=\"link-row svelte-er8fe7\"><span class=\"svelte-er8fe7\"> </span> <select class=\"svelte-er8fe7\"><option>not now</option><!></select></label>"), ir = g("<div class=\"step svelte-er8fe7\" role=\"group\" aria-label=\"Link the accounts\"><div class=\"steps faint svelte-er8fe7\">1 Bank · 2 Consent · <b class=\"svelte-er8fe7\">3 Accounts</b></div> <p class=\"svelte-er8fe7\"> <!></p> <!> <button class=\"atlas-btn primary svelte-er8fe7\">Done</button></div>"), ar = g("(<a target=\"_blank\" rel=\"noopener\">open it</a> if no tab appeared)", 1), or = g("<div class=\"paste svelte-er8fe7\"><span class=\"steps faint svelte-er8fe7\">1 Bank · <b class=\"svelte-er8fe7\">2 Consent</b> · 3 Accounts</span> <span> <!>. It comes back here by itself; if it does not, paste the address it ended on:</span> <input class=\"svelte-er8fe7\"/> <button class=\"atlas-btn primary\">Finish</button></div>"), sr = g("<p> <button class=\"atlas-btn\">Stop</button></p>"), cr = g("<p class=\"faint svelte-er8fe7\"> </p>"), lr = g("<section class=\"card wide svelte-er8fe7\"><h3 class=\"svelte-er8fe7\">From the bank's site <span class=\"faint svelte-er8fe7\"> </span></h3> <div class=\"sites svelte-er8fe7\"></div> <!> <!></section>"), ur = g(": <code class=\"svelte-er8fe7\"> </code>", 1), dr = g("<div class=\"grid svelte-er8fe7\"><section class=\"card wide svelte-er8fe7\"><h3 class=\"svelte-er8fe7\">Banks <span class=\"faint svelte-er8fe7\">read through Enable Banking with your consent; on the server, four times a day at most</span></h3> <!> <div class=\"actions svelte-er8fe7\"><button class=\"atlas-btn primary\"> </button> <select aria-label=\"Country\" class=\"svelte-er8fe7\"></select> <button class=\"atlas-btn\"> </button></div> <!> <!> <!> <!></section> <!> <section class=\"card wide svelte-er8fe7\"><h3 class=\"svelte-er8fe7\">Enable Banking <span class=\"faint svelte-er8fe7\">what connecting needs</span></h3> <ol class=\"setup svelte-er8fe7\"><li>An application at <b>enablebanking.com</b> (free for your own accounts) and its id in <button class=\"link svelte-er8fe7\">Settings</button><!>.</li> <li>Its redirect address, the server's https address, in Settings too<!>.</li> <li>Its private key (the .pem the control panel gave): <button class=\"atlas-btn\"> </button> <span class=\"faint svelte-er8fe7\">kept as a secret of the plugin, outside the vault</span></li></ol> <p class=\"faint svelte-er8fe7\">Desjardins (Canada) has no such access yet: fetch its PDF statements from its site above.</p></section></div>"), fr = {
+var Jn = g("<button class=\"kandinsky-btn\">Renew</button>"), Yn = g("<div class=\"kandinsky-notice error\"> </div>"), Xn = g("<div class=\"src svelte-er8fe7\"><button class=\"name svelte-er8fe7\"> <span class=\"faint svelte-er8fe7\"> </span></button> <span> </span> <span class=\"faint svelte-er8fe7\"> </span> <!> <div class=\"accts faint svelte-er8fe7\"> </div> <!></div>"), Zn = g("<div class=\"kandinsky-empty\"> </div>"), Qn = g("<option> </option>"), $n = g("<span class=\"faint svelte-er8fe7\"> </span>"), er = g("<button class=\"site svelte-er8fe7\"><b> </b><!></button>"), tr = g("<span class=\"faint svelte-er8fe7\">No bank matches.</span>"), nr = g("<div class=\"step svelte-er8fe7\" role=\"group\" aria-label=\"Choose a bank\"><div class=\"steps faint svelte-er8fe7\"><b class=\"svelte-er8fe7\">1 Bank</b> · 2 Consent · 3 Accounts</div> <input aria-label=\"Bank\" class=\"svelte-er8fe7\"/> <div class=\"banks svelte-er8fe7\"></div> <button class=\"kandinsky-btn svelte-er8fe7\">Cancel</button></div>"), rr = g("<label class=\"link-row svelte-er8fe7\"><span class=\"svelte-er8fe7\"> </span> <select class=\"svelte-er8fe7\"><option>not now</option><!></select></label>"), ir = g("<div class=\"step svelte-er8fe7\" role=\"group\" aria-label=\"Link the accounts\"><div class=\"steps faint svelte-er8fe7\">1 Bank · 2 Consent · <b class=\"svelte-er8fe7\">3 Accounts</b></div> <p class=\"svelte-er8fe7\"> <!></p> <!> <button class=\"kandinsky-btn primary svelte-er8fe7\">Done</button></div>"), ar = g("(<a target=\"_blank\" rel=\"noopener\">open it</a> if no tab appeared)", 1), or = g("<div class=\"paste svelte-er8fe7\"><span class=\"steps faint svelte-er8fe7\">1 Bank · <b class=\"svelte-er8fe7\">2 Consent</b> · 3 Accounts</span> <span> <!>. It comes back here by itself; if it does not, paste the address it ended on:</span> <input class=\"svelte-er8fe7\"/> <button class=\"kandinsky-btn primary\">Finish</button></div>"), sr = g("<p> <button class=\"kandinsky-btn\">Stop</button></p>"), cr = g("<p class=\"faint svelte-er8fe7\"> </p>"), lr = g("<section class=\"card wide svelte-er8fe7\"><h3 class=\"svelte-er8fe7\">From the bank's site <span class=\"faint svelte-er8fe7\"> </span></h3> <div class=\"sites svelte-er8fe7\"></div> <!> <!></section>"), ur = g(": <code class=\"svelte-er8fe7\"> </code>", 1), dr = g("<div class=\"grid svelte-er8fe7\"><section class=\"card wide svelte-er8fe7\"><h3 class=\"svelte-er8fe7\">Banks <span class=\"faint svelte-er8fe7\">read through Enable Banking with your consent; on the server, four times a day at most</span></h3> <!> <div class=\"actions svelte-er8fe7\"><button class=\"kandinsky-btn primary\"> </button> <select aria-label=\"Country\" class=\"svelte-er8fe7\"></select> <button class=\"kandinsky-btn\"> </button></div> <!> <!> <!> <!></section> <!> <section class=\"card wide svelte-er8fe7\"><h3 class=\"svelte-er8fe7\">Enable Banking <span class=\"faint svelte-er8fe7\">what connecting needs</span></h3> <ol class=\"setup svelte-er8fe7\"><li>An application at <b>enablebanking.com</b> (free for your own accounts) and its id in <button class=\"link svelte-er8fe7\">Settings</button><!>.</li> <li>Its redirect address, the server's https address, in Settings too<!>.</li> <li>Its private key (the .pem the control panel gave): <button class=\"kandinsky-btn\"> </button> <span class=\"faint svelte-er8fe7\">kept as a secret of the plugin, outside the vault</span></li></ol> <p class=\"faint svelte-er8fe7\">Desjardins (Canada) has no such access yet: fetch its PDF statements from its site above.</p></section></div>"), fr = {
 	hash: "svelte-er8fe7",
-	code: ".grid.svelte-er8fe7 {display:grid;gap:14px;}.card.svelte-er8fe7 {background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;min-width:0;}h3.svelte-er8fe7 {margin:0 0 10px;font-size:0.82em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;}.faint.svelte-er8fe7 {color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;}.bad.svelte-er8fe7 {color:var(--red);}.src.svelte-er8fe7 {display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--border);}.src.svelte-er8fe7 .name:where(.svelte-er8fe7) {all:unset;cursor:pointer;font-weight:600;}.accts.svelte-er8fe7 {flex-basis:100%;font-size:0.88em;}.actions.svelte-er8fe7, .paste.svelte-er8fe7 {display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;}.paste.svelte-er8fe7 input:where(.svelte-er8fe7), select.svelte-er8fe7 {font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 8px;}.paste.svelte-er8fe7 input:where(.svelte-er8fe7) {flex:1;min-width:240px;}.setup.svelte-er8fe7 {margin:0;padding-left:1.4em;display:grid;gap:6px;}.setup.svelte-er8fe7 li.done:where(.svelte-er8fe7)::marker {color:var(--green);}.setup.svelte-er8fe7 li.done:where(.svelte-er8fe7) {color:var(--text-muted);}.link.svelte-er8fe7 {all:unset;cursor:pointer;color:var(--accent);}code.svelte-er8fe7 {font-size:0.9em;}.sites.svelte-er8fe7 {display:flex;flex-wrap:wrap;gap:8px;}.site.svelte-er8fe7 {all:unset;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);}.site.svelte-er8fe7:hover {background:var(--bg-hover);border-color:var(--accent);}.site.svelte-er8fe7 .faint:where(.svelte-er8fe7) {font-size:0.85em;}.step.svelte-er8fe7 {display:grid;gap:8px;margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);}.steps.svelte-er8fe7 {font-size:0.85em;}.steps.svelte-er8fe7 b:where(.svelte-er8fe7) {color:var(--text);}.step.svelte-er8fe7 input:where(.svelte-er8fe7) {font:inherit;color:var(--text);background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 8px;}.banks.svelte-er8fe7 {display:flex;flex-wrap:wrap;gap:8px;max-height:260px;overflow:auto;}.step.svelte-er8fe7 > .atlas-btn:where(.svelte-er8fe7) {justify-self:start;}.step.svelte-er8fe7 p:where(.svelte-er8fe7) {margin:0;}.link-row.svelte-er8fe7 {display:flex;gap:10px;align-items:center;flex-wrap:wrap;}.link-row.svelte-er8fe7 span:where(.svelte-er8fe7) {min-width:200px;}"
+	code: ".grid.svelte-er8fe7 {display:grid;gap:14px;}.card.svelte-er8fe7 {background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;min-width:0;}h3.svelte-er8fe7 {margin:0 0 10px;font-size:0.82em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;}.faint.svelte-er8fe7 {color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;}.bad.svelte-er8fe7 {color:var(--red);}.src.svelte-er8fe7 {display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--border);}.src.svelte-er8fe7 .name:where(.svelte-er8fe7) {all:unset;cursor:pointer;font-weight:600;}.accts.svelte-er8fe7 {flex-basis:100%;font-size:0.88em;}.actions.svelte-er8fe7, .paste.svelte-er8fe7 {display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;}.paste.svelte-er8fe7 input:where(.svelte-er8fe7), select.svelte-er8fe7 {font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 8px;}.paste.svelte-er8fe7 input:where(.svelte-er8fe7) {flex:1;min-width:240px;}.setup.svelte-er8fe7 {margin:0;padding-left:1.4em;display:grid;gap:6px;}.setup.svelte-er8fe7 li.done:where(.svelte-er8fe7)::marker {color:var(--green);}.setup.svelte-er8fe7 li.done:where(.svelte-er8fe7) {color:var(--text-muted);}.link.svelte-er8fe7 {all:unset;cursor:pointer;color:var(--accent);}code.svelte-er8fe7 {font-size:0.9em;}.sites.svelte-er8fe7 {display:flex;flex-wrap:wrap;gap:8px;}.site.svelte-er8fe7 {all:unset;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);}.site.svelte-er8fe7:hover {background:var(--bg-hover);border-color:var(--accent);}.site.svelte-er8fe7 .faint:where(.svelte-er8fe7) {font-size:0.85em;}.step.svelte-er8fe7 {display:grid;gap:8px;margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);}.steps.svelte-er8fe7 {font-size:0.85em;}.steps.svelte-er8fe7 b:where(.svelte-er8fe7) {color:var(--text);}.step.svelte-er8fe7 input:where(.svelte-er8fe7) {font:inherit;color:var(--text);background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 8px;}.banks.svelte-er8fe7 {display:flex;flex-wrap:wrap;gap:8px;max-height:260px;overflow:auto;}.step.svelte-er8fe7 > .kandinsky-btn:where(.svelte-er8fe7) {justify-self:start;}.step.svelte-er8fe7 p:where(.svelte-er8fe7) {margin:0;}.link-row.svelte-er8fe7 {display:flex;gap:10px;align-items:center;flex-wrap:wrap;}.link-row.svelte-er8fe7 span:where(.svelte-er8fe7) {min-width:200px;}"
 };
 function pr(r, i) {
 	e(i, !0), ne(r, fr);
-	let a = N(i, "assets", 19, () => []), o = w(null), f = w("ES"), m = w(u([])), g = w(!1), x = w(""), O = E(() => n(m).filter((e) => e.name.toLowerCase().includes(n(x).trim().toLowerCase()))), k = w(null), A = w(""), j = w(""), L = w(""), R = E(() => String(i.atlas.plugin.settings.bank_app_id ?? "")), z = E(() => String(i.atlas.plugin.settings.bank_redirect ?? ""));
+	let a = N(i, "assets", 19, () => []), o = w(null), f = w("ES"), m = w(u([])), g = w(!1), x = w(""), O = E(() => n(m).filter((e) => e.name.toLowerCase().includes(n(x).trim().toLowerCase()))), k = w(null), A = w(""), j = w(""), L = w(""), R = E(() => String(i.kandinsky.plugin.settings.bank_app_id ?? "")), z = E(() => String(i.kandinsky.plugin.settings.bank_redirect ?? ""));
 	c(() => {
-		i.atlas.secrets.has("enable_banking_key").then((e) => T(o, e, !0)).catch(() => T(o, !1));
+		i.kandinsky.secrets.has("enable_banking_key").then((e) => T(o, e, !0)).catch(() => T(o, !1));
 	});
 	async function B(e, t) {
 		T(j, e, !0), T(L, "");
@@ -1857,21 +1857,21 @@ function pr(r, i) {
 				T(L, `${t.name} is not a PEM private key`);
 				return;
 			}
-			await i.atlas.secrets.set("enable_banking_key", n.trim()), T(o, !0), i.atlas.toast("Key kept", "the application's private key is a secret of the finance plugin, outside the vault");
+			await i.kandinsky.secrets.set("enable_banking_key", n.trim()), T(o, !0), i.kandinsky.toast("Key kept", "the application's private key is a secret of the finance plugin, outside the vault");
 		}, e.click();
 	}
 	async function ee() {
-		let e = await B("list", () => I(i.atlas, "bank_list", { country: n(f) }));
+		let e = await B("list", () => I(i.kandinsky, "bank_list", { country: n(f) }));
 		e && (T(m, e.banks, !0), T(x, ""), T(g, !0));
 	}
 	let U = w("");
 	c(() => {
-		let e = n(z) && i.atlas.signInReturned?.(n(z));
+		let e = n(z) && i.kandinsky.signInReturned?.(n(z));
 		e && (T(A, e, !0), G());
 	});
 	async function te(e) {
 		T(g, !1);
-		let t = await B("connect", () => I(i.atlas, "bank_connect", {
+		let t = await B("connect", () => I(i.kandinsky, "bank_connect", {
 			bank: e,
 			country: n(f)
 		}));
@@ -1880,14 +1880,14 @@ function pr(r, i) {
 			bank: e,
 			country: n(f)
 		}, !0), T(U, t.url, !0);
-		let r = await i.atlas.signIn(t.url, n(z)).catch(() => "");
+		let r = await i.kandinsky.signIn(t.url, n(z)).catch(() => "");
 		r && (T(A, r, !0), await G());
 	}
 	async function G() {
 		let e = n(A).trim();
 		if (!e || n(j) === "finish") return;
 		T(A, "");
-		let t = await B("finish", () => I(i.atlas, "bank_finish", {
+		let t = await B("finish", () => I(i.kandinsky, "bank_finish", {
 			address: e,
 			...n(k) ?? {}
 		}));
@@ -1897,7 +1897,7 @@ function pr(r, i) {
 	async function ie() {
 		for (let e of n(J)) {
 			let t = n(X)[e.uid];
-			if (t && await B("link", () => I(i.atlas, "bank_link", {
+			if (t && await B("link", () => I(i.kandinsky, "bank_link", {
 				account: t,
 				uid: e.uid
 			})) === void 0) return;
@@ -1905,19 +1905,19 @@ function pr(r, i) {
 		T(J, [], !0), T(K, ""), i.onchange();
 	}
 	async function ae() {
-		let e = await B("sync", () => I(i.atlas, "bank_sync", {}));
-		e && (i.atlas.toast("Synced", e.summary ?? e.skipped ?? ""), i.onchange());
+		let e = await B("sync", () => I(i.kandinsky, "bank_sync", {}));
+		e && (i.kandinsky.toast("Synced", e.summary ?? e.skipped ?? ""), i.onchange());
 	}
 	let oe = w(u([])), se = w(null), Q = w(null), $ = w(u([]));
 	c(() => {
-		I(i.atlas, "banks").then((e) => {
+		I(i.kandinsky, "banks").then((e) => {
 			T(oe, e.banks, !0), T(se, e.downloads, !0);
 		}).catch(() => {});
 	});
 	let ce;
 	c(() => () => clearInterval(ce));
 	function le(e, t = !1) {
-		i.atlas.openLink ? i.atlas.openLink(e.url, { outside: t }) : window.open(e.url, "_blank", "noopener");
+		i.kandinsky.openLink ? i.kandinsky.openLink(e.url, { outside: t }) : window.open(e.url, "_blank", "noopener");
 		let r = Math.floor(Date.now() / 1e3) - 5;
 		T(Q, {
 			name: e.name,
@@ -1928,8 +1928,8 @@ function pr(r, i) {
 				return;
 			}
 			try {
-				let e = await I(i.atlas, "downloads", { since: r });
-				e.taken.length && (T($, [...n($), ...e.taken.map((e) => `${e.name} (${e.preset})`)], !0), i.atlas.toast("Statement taken", e.taken.map((e) => e.name).join(", ") + " → the inbox"), i.onchange());
+				let e = await I(i.kandinsky, "downloads", { since: r });
+				e.taken.length && (T($, [...n($), ...e.taken.map((e) => `${e.name} (${e.preset})`)], !0), i.kandinsky.toast("Statement taken", e.taken.map((e) => e.name).join(", ") + " → the inbox"), i.onchange());
 			} catch (e) {
 				T(L, e.message, !0), clearInterval(ce), T(Q, null);
 			}
@@ -1958,10 +1958,10 @@ function pr(r, i) {
 			n(r).error && e(k);
 		}), q(o), S((e) => {
 			t(c, n(r).bank), t(u, `· ${n(r).country ?? ""}`), m = y(f, 1, "faint svelte-er8fe7", null, m, { bad: n(a) !== null && n(a) < 14 }), t(g, n(a) === null ? "consent: unknown" : n(a) < 0 ? `consent ended ${n(r).until}` : `consent ${n(a)} days left`), t(b, n(r).synced ? `synced ${n(r).synced}` : "never synced"), t(D, e);
-		}, [() => n(r).accounts.map((e) => `${e.name || "account"} ${e.iban ? `…${e.iban.slice(-4)}` : ""}`).join(" · ")]), v("click", s, () => i.atlas.open(n(r).path)), p(e, o);
+		}, [() => n(r).accounts.map((e) => `${e.name || "account"} ${e.iban ? `…${e.iban.slice(-4)}` : ""}`).join(" · ")]), v("click", s, () => i.kandinsky.open(n(r).path)), p(e, o);
 	}, (e) => {
 		var n = Zn(), r = d(n);
-		S((e) => t(r, `No bank connected. Statements dropped into ${e ?? ""}/statements/inbox/ always work (Overview → Statements).`), [() => H(i.atlas)]), p(e, n);
+		S((e) => t(r, `No bank connected. Statements dropped into ${e ?? ""}/statements/inbox/ always work (Overview → Statements).`), [() => H(i.kandinsky)]), p(e, n);
 	});
 	var me = W(pe, 2), he = C(me), ge = d(he, !0), _e = W(he, 2);
 	b(_e, 20, () => [
@@ -2118,14 +2118,14 @@ function pr(r, i) {
 	var Ue = W(C(Ve)), We = d(Ue, !0);
 	M(2), q(Ve), q(je), M(2), q(Ae), q(de), S(() => {
 		he.disabled = !!n(j) || !n(o) || !n(R) || !n(z), t(ge, n(j) === "list" || n(j) === "connect" ? "Asking…" : "Connect a bank"), ve.disabled = !!n(j) || !i.sources.length, t(ye, n(j) === "sync" ? "Syncing…" : "Sync now"), Ne = y(Me, 1, "svelte-er8fe7", null, Ne, { done: !!n(R) }), Re = y(Le, 1, "svelte-er8fe7", null, Re, { done: !!n(z) }), He = y(Ve, 1, "svelte-er8fe7", null, He, { done: !!n(o) }), t(We, n(o) ? "Replace the key" : "Choose the key file");
-	}), v("click", he, ee), Y(_e, () => n(f), (e) => T(f, e)), v("click", ve, ae), v("click", Pe, () => i.atlas.plugin.openSettings()), v("click", Ue, V), p(r, de), _();
+	}), v("click", he, ee), Y(_e, () => n(f), (e) => T(f, e)), v("click", ve, ae), v("click", Pe, () => i.kandinsky.plugin.openSettings()), v("click", Ue, V), p(r, de), _();
 }
 f(["click", "keydown"]);
 //#endregion
 //#region plugins/beta/finance/ui/src/App.svelte
-var mr = g("<span class=\"badge svelte-1oymcr8\"> </span>"), hr = g("<button> <!></button>"), gr = g("<div class=\"atlas-notice error\"> <div class=\"actions\"><button class=\"atlas-btn\">Try again</button><button class=\"atlas-btn\">Settings…</button></div></div>"), _r = g("<div class=\"atlas-empty\">Reading the journal…</div>"), vr = g("<button> <span class=\"faint svelte-1oymcr8\"> </span></button>"), yr = g("<h3 class=\"svelte-1oymcr8\"> <button class=\"link svelte-1oymcr8\">as transactions</button></h3> <!>", 1), br = g("<div class=\"atlas-empty\">Choose an account or a category: its postings with the running balance, newest first; a row opens the transaction.</div>"), xr = g("<div class=\"split svelte-1oymcr8\"><aside class=\"svelte-1oymcr8\"><h3 class=\"svelte-1oymcr8\">Accounts</h3> <!> <h3 class=\"svelte-1oymcr8\">Categories</h3> <!></aside> <main><!></main></div>"), Sr = g("<div><header class=\"top svelte-1oymcr8\"><nav aria-label=\"Finance\" class=\"svelte-1oymcr8\"></nav> <button class=\"atlas-btn\">Settings…</button></header> <!></div>"), Cr = {
+var mr = g("<span class=\"badge svelte-1oymcr8\"> </span>"), hr = g("<button> <!></button>"), gr = g("<div class=\"kandinsky-notice error\"> <div class=\"actions\"><button class=\"kandinsky-btn\">Try again</button><button class=\"kandinsky-btn\">Settings…</button></div></div>"), _r = g("<div class=\"kandinsky-empty\">Reading the journal…</div>"), vr = g("<button> <span class=\"faint svelte-1oymcr8\"> </span></button>"), yr = g("<h3 class=\"svelte-1oymcr8\"> <button class=\"link svelte-1oymcr8\">as transactions</button></h3> <!>", 1), br = g("<div class=\"kandinsky-empty\">Choose an account or a category: its postings with the running balance, newest first; a row opens the transaction.</div>"), xr = g("<div class=\"split svelte-1oymcr8\"><aside class=\"svelte-1oymcr8\"><h3 class=\"svelte-1oymcr8\">Accounts</h3> <!> <h3 class=\"svelte-1oymcr8\">Categories</h3> <!></aside> <main><!></main></div>"), Sr = g("<div><header class=\"top svelte-1oymcr8\"><nav aria-label=\"Finance\" class=\"svelte-1oymcr8\"></nav> <button class=\"kandinsky-btn\">Settings…</button></header> <!></div>"), Cr = {
 	hash: "svelte-1oymcr8",
-	code: "\n  /* The categorical slots (dataviz reference palette, validated on --bg-elev in both themes) and the two flow ends. */.finance.svelte-1oymcr8 {--fin-c1: #3987e5;--fin-c2: #d95926;--fin-c3: #199e70;--fin-c4: #c98500;--fin-c5: #d55181;--fin-c6: #008300;--fin-c7: #9085e9;--fin-c8: #e66767;--fin-other: #6b7280;--fin-income: #3f8f6a;--fin-saved: #7d8590;}[data-theme=\"light\"] .finance.svelte-1oymcr8 {--fin-c1: #2a78d6;--fin-c2: #eb6834;--fin-c3: #1baf7a;--fin-c4: #eda100;--fin-c5: #e87ba4;--fin-c6: #008300;--fin-c7: #6250d6;--fin-c8: #e34948;--fin-other: #9ca3af;--fin-income: #2f9e5c;--fin-saved: #8c939f;}.finance.svelte-1oymcr8 {padding:14px 18px 28px;color:var(--text);font-size:calc(14px * var(--ui-scale, 1));container-type:inline-size;box-sizing:border-box;}.finance.full.svelte-1oymcr8 {height:100%;display:flex;flex-direction:column;padding-bottom:0;}.finance.full.svelte-1oymcr8 > :last-child {flex:1;min-height:0;}.top.svelte-1oymcr8 {display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}nav.svelte-1oymcr8 {display:flex;gap:2px;background:var(--bg-hover);padding:3px;border-radius:var(--radius);flex-wrap:wrap;}nav.svelte-1oymcr8 button:where(.svelte-1oymcr8) {all:unset;cursor:pointer;padding:5px 12px;border-radius:var(--radius-sm);color:var(--text-muted);display:flex;gap:6px;align-items:center;min-height:24px;}nav.svelte-1oymcr8 button:where(.svelte-1oymcr8):hover {color:var(--text);}nav.svelte-1oymcr8 button.on:where(.svelte-1oymcr8) {background:var(--bg);color:var(--text);box-shadow:var(--shadow-sm);font-weight:500;}nav.svelte-1oymcr8 button:where(.svelte-1oymcr8):focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}.badge.svelte-1oymcr8 {font-size:0.8em;padding:0 6px;border-radius:999px;background:var(--yellow);color:var(--bg);font-weight:600;}h3.svelte-1oymcr8 {margin:0 0 10px;font-size:0.78em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;display:flex;gap:10px;align-items:baseline;}.faint.svelte-1oymcr8 {color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;}.link.svelte-1oymcr8 {all:unset;cursor:pointer;color:var(--accent);text-transform:none;letter-spacing:0;font-weight:400;}.split.svelte-1oymcr8 {display:grid;grid-template-columns:minmax(220px, 300px) minmax(0, 1fr);gap:18px;align-items:start;max-width:1180px;}aside.svelte-1oymcr8 {position:sticky;top:0;display:grid;gap:4px;}aside.svelte-1oymcr8 h3:where(.svelte-1oymcr8):not(:first-child) {margin-top:14px;}.cat.svelte-1oymcr8 {all:unset;cursor:pointer;display:flex;justify-content:space-between;padding:4px 8px;border-radius:var(--radius-sm);color:var(--text-muted);}.cat.svelte-1oymcr8:hover, .cat.on.svelte-1oymcr8 {background:var(--bg-hover);color:var(--text);}\n  @container (max-width: 700px) {.split.svelte-1oymcr8 {grid-template-columns:minmax(0, 1fr);}aside.svelte-1oymcr8 {position:static;} }"
+	code: "\r\n  /* The categorical slots (dataviz reference palette, validated on --bg-elev in both themes) and the two flow ends. */.finance.svelte-1oymcr8 {--fin-c1: #3987e5;--fin-c2: #d95926;--fin-c3: #199e70;--fin-c4: #c98500;--fin-c5: #d55181;--fin-c6: #008300;--fin-c7: #9085e9;--fin-c8: #e66767;--fin-other: #6b7280;--fin-income: #3f8f6a;--fin-saved: #7d8590;}[data-theme=\"light\"] .finance.svelte-1oymcr8 {--fin-c1: #2a78d6;--fin-c2: #eb6834;--fin-c3: #1baf7a;--fin-c4: #eda100;--fin-c5: #e87ba4;--fin-c6: #008300;--fin-c7: #6250d6;--fin-c8: #e34948;--fin-other: #9ca3af;--fin-income: #2f9e5c;--fin-saved: #8c939f;}.finance.svelte-1oymcr8 {padding:14px 18px 28px;color:var(--text);font-size:calc(14px * var(--ui-scale, 1));container-type:inline-size;box-sizing:border-box;}.finance.full.svelte-1oymcr8 {height:100%;display:flex;flex-direction:column;padding-bottom:0;}.finance.full.svelte-1oymcr8 > :last-child {flex:1;min-height:0;}.top.svelte-1oymcr8 {display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}nav.svelte-1oymcr8 {display:flex;gap:2px;background:var(--bg-hover);padding:3px;border-radius:var(--radius);flex-wrap:wrap;}nav.svelte-1oymcr8 button:where(.svelte-1oymcr8) {all:unset;cursor:pointer;padding:5px 12px;border-radius:var(--radius-sm);color:var(--text-muted);display:flex;gap:6px;align-items:center;min-height:24px;}nav.svelte-1oymcr8 button:where(.svelte-1oymcr8):hover {color:var(--text);}nav.svelte-1oymcr8 button.on:where(.svelte-1oymcr8) {background:var(--bg);color:var(--text);box-shadow:var(--shadow-sm);font-weight:500;}nav.svelte-1oymcr8 button:where(.svelte-1oymcr8):focus-visible {outline:2px solid var(--accent);outline-offset:-2px;}.badge.svelte-1oymcr8 {font-size:0.8em;padding:0 6px;border-radius:999px;background:var(--yellow);color:var(--bg);font-weight:600;}h3.svelte-1oymcr8 {margin:0 0 10px;font-size:0.78em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:600;display:flex;gap:10px;align-items:baseline;}.faint.svelte-1oymcr8 {color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;}.link.svelte-1oymcr8 {all:unset;cursor:pointer;color:var(--accent);text-transform:none;letter-spacing:0;font-weight:400;}.split.svelte-1oymcr8 {display:grid;grid-template-columns:minmax(220px, 300px) minmax(0, 1fr);gap:18px;align-items:start;max-width:1180px;}aside.svelte-1oymcr8 {position:sticky;top:0;display:grid;gap:4px;}aside.svelte-1oymcr8 h3:where(.svelte-1oymcr8):not(:first-child) {margin-top:14px;}.cat.svelte-1oymcr8 {all:unset;cursor:pointer;display:flex;justify-content:space-between;padding:4px 8px;border-radius:var(--radius-sm);color:var(--text-muted);}.cat.svelte-1oymcr8:hover, .cat.on.svelte-1oymcr8 {background:var(--bg-hover);color:var(--text);}\r\n  @container (max-width: 700px) {.split.svelte-1oymcr8 {grid-template-columns:minmax(0, 1fr);}aside.svelte-1oymcr8 {position:static;} }"
 };
 function wr(r, i) {
 	e(i, !0), ne(r, Cr);
@@ -2138,14 +2138,14 @@ function wr(r, i) {
 		["review", "Review"],
 		["invest", "Investments"],
 		["sources", "Sources"]
-	], o = () => i.atlas.arg, l = w(u(a.find(([e]) => e === o())?.[0] ?? "overview")), f = w(null), m = w(u([])), g = w(""), k = w(u([])), A = w(""), j = w(u([])), M = w(""), N = w(null), P = w(void 0), F = w(void 0), L = E(() => O(i.atlas)), R = E(() => n(m)[0]?.date.slice(0, 7) ?? pe(/* @__PURE__ */ new Date())), z = E(() => he(n(R))), B = w(null), K = E(() => n(B) ?? n(z)[3]), J = E(() => [..._e(n(m), "Expenses")].sort((e, t) => t[1] - e[1]).slice(0, 8).map(([e]) => e)), Y = (e) => {
+	], o = () => i.kandinsky.arg, l = w(u(a.find(([e]) => e === o())?.[0] ?? "overview")), f = w(null), m = w(u([])), g = w(""), k = w(u([])), A = w(""), j = w(u([])), M = w(""), N = w(null), P = w(void 0), F = w(void 0), L = E(() => O(i.kandinsky)), R = E(() => n(m)[0]?.date.slice(0, 7) ?? pe(/* @__PURE__ */ new Date())), z = E(() => he(n(R))), B = w(null), K = E(() => n(B) ?? n(z)[3]), J = E(() => [..._e(n(m), "Expenses")].sort((e, t) => t[1] - e[1]).slice(0, 8).map(([e]) => e)), Y = (e) => {
 		let t = n(J).indexOf(ae(e));
 		return t < 0 ? "var(--fin-other)" : `var(--fin-c${t + 1})`;
 	};
 	async function X() {
 		try {
-			let [e, t] = await Promise.all([I(i.atlas, "summary"), I(i.atlas, "transactions")]);
-			if (T(f, e, !0), T(m, t.transactions, !0), T(g, ""), T(k, e.errors + e.warnings ? (await I(i.atlas, "check")).diagnostics : [], !0), n(A) && await re(n(A), !1), n(N) && n(N) !== "new") {
+			let [e, t] = await Promise.all([I(i.kandinsky, "summary"), I(i.kandinsky, "transactions")]);
+			if (T(f, e, !0), T(m, t.transactions, !0), T(g, ""), T(k, e.errors + e.warnings ? (await I(i.kandinsky, "check")).diagnostics : [], !0), n(A) && await re(n(A), !1), n(N) && n(N) !== "new") {
 				let e = n(N);
 				T(N, n(m).find((t) => t.path === e.path && t.line === e.line && t.text === e.text) ?? null, !0);
 			}
@@ -2154,17 +2154,17 @@ function wr(r, i) {
 		}
 	}
 	async function re(e, t = !0) {
-		T(A, e, !0), t && T(l, "accounts"), T(j, (await I(i.atlas, "register", { account: e })).rows, !0);
+		T(A, e, !0), t && T(l, "accounts"), T(j, (await I(i.kandinsky, "register", { account: e })).rows, !0);
 	}
 	function ie(e) {
 		T(M, e, !0), T(N, null), T(l, "transactions");
 	}
 	function oe(e, t) {
 		let r = n(m).find((n) => n.path === e && n.line === t);
-		r ? (T(N, r, !0), T(l, "transactions")) : i.atlas.open(e, t);
+		r ? (T(N, r, !0), T(l, "transactions")) : i.kandinsky.open(e, t);
 	}
 	X();
-	let se, Q = (e) => !!e && e.startsWith(`${H(i.atlas)}/`), $ = () => {
+	let se, Q = (e) => !!e && e.startsWith(`${H(i.kandinsky)}/`), $ = () => {
 		clearTimeout(se), se = setTimeout(() => {
 			X(), n(P)?.load(), n(F)?.load();
 		}, 300);
@@ -2174,10 +2174,10 @@ function wr(r, i) {
 			"file:save",
 			"file:create",
 			"file:delete"
-		].map((e) => i.atlas.on(e, (e) => {
+		].map((e) => i.kandinsky.on(e, (e) => {
 			Q(e.path) && $();
 		}));
-		return e.push(i.atlas.on("file:rename", (e) => {
+		return e.push(i.kandinsky.on("file:rename", (e) => {
 			let t = e;
 			(Q(t.from) || Q(t.to)) && $();
 		})), () => {
@@ -2226,15 +2226,15 @@ function wr(r, i) {
 	q(fe);
 	var ve = W(fe, 2), ye = (e) => {
 		var r = gr(), a = C(r, !0), o = W(a), s = C(o), c = W(s);
-		q(o), q(r), S(() => t(a, n(g))), v("click", s, X), v("click", c, () => i.atlas.plugin.openSettings()), p(e, r);
+		q(o), q(r), S(() => t(a, n(g))), v("click", s, X), v("click", c, () => i.kandinsky.plugin.openSettings()), p(e, r);
 	}, be = (e) => {
 		var t = _r();
 		p(e, t);
 	}, xe = (e) => {
 		var t = () => n(K), r = (e) => T(B, e, !0);
 		yt(e, {
-			get atlas() {
-				return i.atlas;
+			get kandinsky() {
+				return i.kandinsky;
 			},
 			get summary() {
 				return n(f);
@@ -2265,8 +2265,8 @@ function wr(r, i) {
 		});
 	}, Se = (e) => {
 		Ut(e, {
-			get atlas() {
-				return i.atlas;
+			get kandinsky() {
+				return i.kandinsky;
 			},
 			get rows() {
 				return n(m);
@@ -2354,8 +2354,8 @@ function wr(r, i) {
 		}), q(c), q(r), p(e, r);
 	}, Te = (e) => {
 		Mn(e, {
-			get atlas() {
-				return i.atlas;
+			get kandinsky() {
+				return i.kandinsky;
 			},
 			get budget() {
 				return n(f).budget;
@@ -2367,8 +2367,8 @@ function wr(r, i) {
 		});
 	}, Ee = (e) => {
 		U(Tn(e, {
-			get atlas() {
-				return i.atlas;
+			get kandinsky() {
+				return i.kandinsky;
 			},
 			get known() {
 				return n(f).known;
@@ -2377,8 +2377,8 @@ function wr(r, i) {
 		}), (e) => T(P, e, !0), () => n(P));
 	}, De = (e) => {
 		U(qn(e, {
-			get atlas() {
-				return i.atlas;
+			get kandinsky() {
+				return i.kandinsky;
 			},
 			get cur() {
 				return n(L);
@@ -2388,8 +2388,8 @@ function wr(r, i) {
 		{
 			let t = E(() => n(f).known.filter((e) => e.startsWith("Assets:")));
 			pr(e, {
-				get atlas() {
-					return i.atlas;
+				get kandinsky() {
+					return i.kandinsky;
 				},
 				get sources() {
 					return n(f).sources;
@@ -2403,7 +2403,7 @@ function wr(r, i) {
 	};
 	h(ve, (e) => {
 		n(g) ? e(ye) : n(f) ? n(l) === "overview" ? e(xe, 2) : n(l) === "transactions" ? e(Se, 3) : n(l) === "spending" ? e(Ce, 4) : n(l) === "accounts" ? e(we, 5) : n(l) === "budget" ? e(Te, 6) : n(l) === "review" ? e(Ee, 7) : n(l) === "invest" ? e(De, 8) : e(Oe, -1) : e(be, 1);
-	}), q(ue), S(() => de = y(ue, 1, "finance svelte-1oymcr8", null, de, { full: n(l) === "transactions" })), v("click", ge, () => i.atlas.plugin.openSettings()), p(r, ue), _();
+	}), q(ue), S(() => de = y(ue, 1, "finance svelte-1oymcr8", null, de, { full: n(l) === "transactions" })), v("click", ge, () => i.kandinsky.plugin.openSettings()), p(r, ue), _();
 }
 f(["click"]);
 //#endregion
@@ -2411,7 +2411,7 @@ f(["click"]);
 function Tr(e, t) {
 	let n = R(wr, {
 		target: e,
-		props: { atlas: t }
+		props: { kandinsky: t }
 	});
 	return () => L(n);
 }

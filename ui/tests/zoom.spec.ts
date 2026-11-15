@@ -4,7 +4,7 @@ import { shownName } from "../src/lib/paths";
 
 // "ctrl + + magnifies everything not just one of the tabs": Ctrl++ / Ctrl+- / Ctrl+0 zoom the tab
 // that has the keys (lib/pane-zoom.ts). Everything at once is Ctrl+Alt with the same keys: those
-// move the text sizes of the settings, so they are in .atlas/config.toml like any other choice.
+// move the text sizes of the settings, so they are in .kandinsky/config.toml like any other choice.
 const rootVar = (page: import("@playwright/test").Page, name: string) => page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(n), name);
 
 test("Ctrl++ zooms the tab it is pressed in, not the others; Ctrl+0 puts it back", async ({ page }) => {

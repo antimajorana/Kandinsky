@@ -2,9 +2,9 @@
 // (own homes, ports, no discovery; their watchers on), a server core on side B with the password sign-in, a desktop
 // core on side A whose vault is mirrored to it. Two writers append to one note at once, one through each core, as the
 // editor saves (read, add, PUT with base_mtime, retry on 409). Passes when no conflict copy appears, no line is lost and
-// both copies end the same. Nothing touches the user's own Syncthing, vaults or Atlas settings.
+// both copies end the same. Nothing touches the user's own Syncthing, vaults or Kandinsky settings.
 //
-//   node scripts/dev/mirror-stress.mjs [--control] [--lines 25] [--atlas target/debug/atlas] [--dir /tmp/mirror-stress]
+//   node scripts/dev/mirror-stress.mjs [--control] [--lines 25] [--kandinsky target/debug/kandinsky] [--dir /tmp/mirror-stress]
 //   --control: the desktop without the mirror (no leases) — expected to FAIL (a conflict copy, lines lost)
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, realpathSync, openSync } from "node:fs";
@@ -13,7 +13,7 @@ import { join, relative } from "node:path";
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const CONTROL = process.argv.includes("--control");
 const N = Number(arg("--lines", "25"));
-const ATLAS = arg("--atlas", "target/debug/atlas");
+const KANDINSKY = arg("--kandinsky", "target/debug/kandinsky");
 const ROOT = arg("--dir", "/tmp/mirror-stress");
 const ST = { A: { gui: 8421, listen: 22121 }, B: { gui: 8422, listen: 22122 } };
 const SRV = 7821, DESK = 7822;
@@ -61,17 +61,17 @@ async function syncthings() {
   throw new Error("the two Syncthings never connected");
 }
 
-/** An Atlas core's own home: its settings, vault list, sign-ins and server state, nothing of the user's. */
+/** An Kandinsky core's own home: its settings, vault list, sign-ins and server state, nothing of the user's. */
 function homeEnv(name) {
   const home = join(ROOT, `home-${name}`);
   rmSync(home, { recursive: true, force: true }); mkdirSync(home, { recursive: true });
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("ATLAS_")));
-  return { ...env, HOME: home, XDG_CONFIG_HOME: `${home}/.config`, XDG_STATE_HOME: `${home}/.state`, XDG_CACHE_HOME: `${home}/.cache`, ATLAS_NO_BROWSER: "1",
-    ATLAS_VAULTS: `${home}/vaults.toml`, ATLAS_SECRETS_DIR: `${home}/secrets`, ATLAS_SERVER_CONFIG: `${home}/server.toml`, ATLAS_SERVER_STATE: `${home}/server.json` };
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("KANDINSKY_")));
+  return { ...env, HOME: home, XDG_CONFIG_HOME: `${home}/.config`, XDG_STATE_HOME: `${home}/.state`, XDG_CACHE_HOME: `${home}/.cache`, KANDINSKY_NO_BROWSER: "1",
+    KANDINSKY_VAULTS: `${home}/vaults.toml`, KANDINSKY_SECRETS_DIR: `${home}/secrets`, KANDINSKY_SERVER_CONFIG: `${home}/server.toml`, KANDINSKY_SERVER_STATE: `${home}/server.json` };
 }
 
 function core(args, env, name) {
-  kids.push(spawn(ATLAS, args, { env, stdio: ["ignore", openSync(join(ROOT, `${name}.log`), "w"), openSync(join(ROOT, `${name}.log`), "a")] }));
+  kids.push(spawn(KANDINSKY, args, { env, stdio: ["ignore", openSync(join(ROOT, `${name}.log`), "w"), openSync(join(ROOT, `${name}.log`), "a")] }));
 }
 
 async function up(port) {
@@ -81,7 +81,7 @@ async function up(port) {
 
 /** Appends `who-i` N times as the editor saves; `pace`: the most it waits between lines (ms). */
 async function writer(base, who, headers, out, pace) {
-  const H = { "x-atlas": "1", "Content-Type": "application/json", ...headers };
+  const H = { "x-kandinsky": "1", "Content-Type": "application/json", ...headers };
   for (let i = 0; i < N; i++) {
     const t0 = Date.now();
     for (;;) {
@@ -101,24 +101,24 @@ async function writer(base, who, headers, out, pace) {
 
 function files(d) {
   const out = [];
-  const walk = (p) => { for (const e of readdirSync(p)) { const f = join(p, e); if (e === ".stfolder" || e === ".atlas") continue; if (statSync(f).isDirectory()) walk(f); else if (!e.startsWith(".st")) out.push(relative(d, f)); } };
+  const walk = (p) => { for (const e of readdirSync(p)) { const f = join(p, e); if (e === ".stfolder" || e === ".kandinsky") continue; if (statSync(f).isDirectory()) walk(f); else if (!e.startsWith(".st")) out.push(relative(d, f)); } };
   walk(d);
   return out;
 }
 
 try {
-  if (!existsSync(ATLAS)) throw new Error(`${ATLAS}: build it first (cargo build -p atlas)`);
+  if (!existsSync(KANDINSKY)) throw new Error(`${KANDINSKY}: build it first (cargo build -p kandinsky)`);
   mkdirSync(ROOT, { recursive: true });
   await syncthings();
   const [a, b] = [join(ROOT, "dirA"), join(ROOT, "dirB")];
-  for (const d of [a, b]) writeFileSync(join(d, ".stignore"), ".atlas/cache\n");
+  for (const d of [a, b]) writeFileSync(join(d, ".stignore"), ".kandinsky/cache\n");
   mkdirSync(join(a, "notes"));
   writeFileSync(join(a, "notes/log.md"), "# Log\n");
   await settle(15000);
   if (!existsSync(join(b, "notes/log.md"))) throw new Error("the note did not sync first");
 
   const es = homeEnv("server");
-  spawnSync(ATLAS, ["server", "password"], { input: "a long password\n", env: es });
+  spawnSync(KANDINSKY, ["server", "password"], { input: "a long password\n", env: es });
   core(["serve", b, "--listen", `127.0.0.1:${SRV}`], es, "server");
   await up(SRV);
   const login = await fetch(`http://127.0.0.1:${SRV}/login`, { method: "POST", redirect: "manual", headers: { Origin: `http://127.0.0.1:${SRV}`, "Content-Type": "application/x-www-form-urlencoded" }, body: "password=a+long+password&next=%2F" });
@@ -126,11 +126,11 @@ try {
   if (!session) throw new Error(`no session from the server's sign-in (${login.status})`);
 
   const ed = homeEnv("desktop");
-  writeFileSync(ed.ATLAS_VAULTS, `[[vault]]\nname = "dirA"\npath = ${JSON.stringify(realpathSync(a))}\nlast_opened = 1\n${CONTROL ? "" : `mirror = "http://127.0.0.1:${SRV}/"\n`}`);
+  writeFileSync(ed.KANDINSKY_VAULTS, `[[vault]]\nname = "dirA"\npath = ${JSON.stringify(realpathSync(a))}\nlast_opened = 1\n${CONTROL ? "" : `mirror = "http://127.0.0.1:${SRV}/"\n`}`);
   core(["serve", a, "--port", String(DESK)], ed, "desktop");
   await up(DESK);
   const [name, value] = [session.slice(0, session.indexOf("=")), session.slice(session.indexOf("=") + 1)];
-  const kept = await fetch(`http://127.0.0.1:${DESK}/api/signin/door`, { method: "POST", headers: { "x-atlas": "1", "Content-Type": "application/json" }, body: JSON.stringify({ host: "127.0.0.1", cookies: [{ name, value, domain: "127.0.0.1", host_only: true, path: "/", secure: false }] }) });
+  const kept = await fetch(`http://127.0.0.1:${DESK}/api/signin/door`, { method: "POST", headers: { "x-kandinsky": "1", "Content-Type": "application/json" }, body: JSON.stringify({ host: "127.0.0.1", cookies: [{ name, value, domain: "127.0.0.1", host_only: true, path: "/", secure: false }] }) });
   log(`cores up (${CONTROL ? "control: no mirror" : "mirrored"}); the desktop keeps the server's sign-in: ${kept.status}`);
 
   const stats = { desktop: { refused: 0, gaveUp: 0 }, server: { refused: 0, gaveUp: 0 } };

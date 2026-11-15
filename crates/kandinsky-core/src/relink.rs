@@ -64,7 +64,7 @@ pub fn apply(ws: &Workspace, plan: &Plan) -> Result<Relinked> {
                 out.notes.push(src_new.clone());
             }
             Ok(()) => {}
-            Err(e) => eprintln!("atlas: the links of {src_new} were not rewritten after the move: {e}"),
+            Err(e) => eprintln!("kandinsky: the links of {src_new} were not rewritten after the move: {e}"),
         }
     }
     out.notes.sort();

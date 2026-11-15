@@ -22,9 +22,9 @@ export function folderDisplayName(folder) {
 }
 
 /** Preferred and fallback folder-note paths for `folder` according to the `naming` setting. */
-export function candidateFolderNotePaths(atlas, folder) {
+export function candidateFolderNotePaths(kandinsky, folder) {
   const clean = cleanFolder(folder);
-  const mode = atlas.plugin.settings?.naming === "index" ? "index" : "folder-name";
+  const mode = kandinsky.plugin.settings?.naming === "index" ? "index" : "folder-name";
   if (!clean) return mode === "index" ? ["index.md", "Vault.md"] : ["index.md", "Vault.md"];
   const leaf = clean.split("/").pop();
   const byName = `${clean}/${leaf}.md`;
@@ -33,9 +33,9 @@ export function candidateFolderNotePaths(atlas, folder) {
 }
 
 /** Return the existing folder note path if present, otherwise null. */
-export async function findExistingFolderNote(atlas, folder) {
-  for (const p of candidateFolderNotePaths(atlas, folder)) {
-    if (await atlas.exists(p)) return p;
+export async function findExistingFolderNote(kandinsky, folder) {
+  for (const p of candidateFolderNotePaths(kandinsky, folder)) {
+    if (await kandinsky.exists(p)) return p;
   }
   return null;
 }
@@ -46,19 +46,19 @@ export function buildFolderNoteSeed(folder) {
   return `---\ntags: [moc]\n---\n# ${title}\n\n\`\`\`genkan\nsort: name\n\`\`\`\n`;
 }
 
-/** Find or create the folder note for `folder`, then open it in Atlas. */
-export async function openOrCreateFolderNote(atlas, folder, opts = {}) {
+/** Find or create the folder note for `folder`, then open it in Kandinsky. */
+export async function openOrCreateFolderNote(kandinsky, folder, opts = {}) {
   const clean = cleanFolder(folder);
-  const existing = await findExistingFolderNote(atlas, clean);
+  const existing = await findExistingFolderNote(kandinsky, clean);
   if (existing) {
-    atlas.open(existing, undefined, { beside: !!opts.beside });
+    kandinsky.open(existing, undefined, { beside: !!opts.beside });
     return existing;
   }
-  const [target] = candidateFolderNotePaths(atlas, clean);
-  const created = await atlas.createFile(target, buildFolderNoteSeed(clean));
-  atlas.open(target, undefined, { beside: !!opts.beside });
+  const [target] = candidateFolderNotePaths(kandinsky, clean);
+  const created = await kandinsky.createFile(target, buildFolderNoteSeed(clean));
+  kandinsky.open(target, undefined, { beside: !!opts.beside });
   if (created) {
-    atlas.toast("Folder Notes", `Created folder overview note ${target}`, "success");
+    kandinsky.toast("Folder Notes", `Created folder overview note ${target}`, "success");
   }
   return target;
 }

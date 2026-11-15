@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 // The example Paperless plugin installed as it is, against a stand-in Paperless API: a block in a
 // note lists the documents matching its query, each a link into Paperless.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const example = (f: string) => readFileSync(fileURLToPath(new URL(`../../plugins/examples/paperless/${f}`, import.meta.url)), "utf8");
 let server: Server, port = 0;
@@ -21,12 +21,12 @@ test.beforeAll(async ({ request }) => {
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   port = (server.address() as AddressInfo).port;
-  await put(request, ".atlas/plugins/paperless/main.js", example("main.js"));
-  await put(request, ".atlas/plugins/paperless/plugin.toml", example("plugin.toml"));
+  await put(request, ".kandinsky/plugins/paperless/main.js", example("main.js"));
+  await put(request, ".kandinsky/plugins/paperless/plugin.toml", example("plugin.toml"));
   await put(request, "notes/papers-office.md", "# Office\n\n```view\ntype: paperless.search\nquery: invoice\n```\n\nend\n");
 });
 test.afterAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/paperless/main.js", "export function register() {}\n");
+  await put(request, ".kandinsky/plugins/paperless/main.js", "export function register() {}\n");
   await new Promise((done) => server.close(done));
 });
 

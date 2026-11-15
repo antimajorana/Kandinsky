@@ -3,12 +3,12 @@
 import { extractNoteInfo, normalizeTag, renameTagInText } from "./tag-engine.js";
 
 /** Recursively list all non-ignored .md files in the vault. */
-export async function listVaultMarkdownFiles(atlas, dir = "") {
+export async function listVaultMarkdownFiles(kandinsky, dir = "") {
   const out = [];
   const queue = [dir];
   while (queue.length) {
     const batch = queue.splice(0, 12);
-    const results = await Promise.all(batch.map((d) => atlas.list(d).catch(() => [])));
+    const results = await Promise.all(batch.map((d) => kandinsky.list(d).catch(() => [])));
     for (const entries of results) {
       for (const e of entries) {
         if (e.ignored || e.name.startsWith(".")) continue;
@@ -21,15 +21,15 @@ export async function listVaultMarkdownFiles(atlas, dir = "") {
 }
 
 /** Scan all .md files in parallel chunks and build a complete tag index. */
-export async function scanVaultTags(atlas) {
-  const files = await listVaultMarkdownFiles(atlas);
+export async function scanVaultTags(kandinsky) {
+  const files = await listVaultMarkdownFiles(kandinsky);
   const notes = new Map();
   const CHUNK = 24;
   for (let i = 0; i < files.length; i += CHUNK) {
     const slice = files.slice(i, i + CHUNK);
     const infos = await Promise.all(slice.map(async (path) => {
       try {
-        const text = await atlas.readText(path);
+        const text = await kandinsky.readText(path);
         return extractNoteInfo(path, text);
       } catch {
         return null;
@@ -93,27 +93,27 @@ export function sortedChildren(node, sortMode = "count") {
   return arr;
 }
 
-/** Interactive Rename / Merge workflow using atlas.input and atlas.confirm. */
-export async function promptRenameTag(atlas, oldRaw, existingIndex = null) {
+/** Interactive Rename / Merge workflow using kandinsky.input and kandinsky.confirm. */
+export async function promptRenameTag(kandinsky, oldRaw, existingIndex = null) {
   const oldTag = normalizeTag(oldRaw);
   if (!oldTag) {
-    atlas.toast("Tag Wrangler", "Select a valid tag to rename.", "error");
+    kandinsky.toast("Tag Wrangler", "Select a valid tag to rename.", "error");
     return null;
   }
 
-  const index = existingIndex ?? await scanVaultTags(atlas);
-  const includeSubtags = atlas.plugin.settings?.include_subtags !== false;
+  const index = existingIndex ?? await scanVaultTags(kandinsky);
+  const includeSubtags = kandinsky.plugin.settings?.include_subtags !== false;
   const node = index.byTag.get(oldTag);
   const candidatePaths = node
     ? [...(includeSubtags ? node.allNotes : node.directNotes)]
     : [];
 
   if (!candidatePaths.length) {
-    atlas.toast("Tag Wrangler", `No notes currently contain #${oldTag}.`, "info");
+    kandinsky.toast("Tag Wrangler", `No notes currently contain #${oldTag}.`, "info");
     return null;
   }
 
-  const typed = await atlas.input(`Rename or merge #${oldTag}`, {
+  const typed = await kandinsky.input(`Rename or merge #${oldTag}`, {
     value: oldTag,
     hint: includeSubtags
       ? "New tag name (without #). Subtags move with it; existing tags merge cleanly."
@@ -124,14 +124,14 @@ export async function promptRenameTag(atlas, oldRaw, existingIndex = null) {
 
   const newTag = normalizeTag(typed);
   if (!newTag) {
-    atlas.toast("Tag Wrangler", `“${typed}” is not a valid tag name.`, "error");
+    kandinsky.toast("Tag Wrangler", `“${typed}” is not a valid tag name.`, "error");
     return null;
   }
   if (newTag === oldTag) return null;
 
   const merging = index.byTag.has(newTag);
   const n = candidatePaths.length;
-  const confirmed = await atlas.confirm(
+  const confirmed = await kandinsky.confirm(
     `Rename #${oldTag} to #${newTag} across ${n} ${n === 1 ? "note" : "notes"}?`,
     {
       ok: merging ? "Merge tags" : "Rename",
@@ -144,15 +144,15 @@ export async function promptRenameTag(atlas, oldRaw, existingIndex = null) {
 
   let rewritten = 0;
   for (const path of candidatePaths) {
-    const before = await atlas.readText(path);
+    const before = await kandinsky.readText(path);
     const after = renameTagInText(before, oldTag, newTag, includeSubtags);
     if (after !== before) {
-      await atlas.writeText(path, after);
+      await kandinsky.writeText(path, after);
       rewritten++;
     }
   }
 
-  atlas.toast(
+  kandinsky.toast(
     "Tag Wrangler",
     `Renamed #${oldTag} → #${newTag} in ${rewritten} ${rewritten === 1 ? "note" : "notes"}.`,
     "success",

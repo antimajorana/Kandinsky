@@ -8,8 +8,8 @@
   import Capture from "./Capture.svelte";
   import Import from "./Import.svelte";
 
-  let { atlas, summary, rows, diags, cur, period = $bindable(), periods, color, onshow, ontab, onaccount, onchange }: {
-    atlas: PluginApi; summary: Summary; rows: Row[]; diags: Diagnostic[]; cur: string; period: Period; periods: Period[];
+  let { kandinsky, summary, rows, diags, cur, period = $bindable(), periods, color, onshow, ontab, onaccount, onchange }: {
+    kandinsky: PluginApi; summary: Summary; rows: Row[]; diags: Diagnostic[]; cur: string; period: Period; periods: Period[];
     color: (g: string) => string; onshow: (query: string) => void; ontab: (tab: "review" | "spending" | "sources") => void;
     onaccount: (account: string) => void; onchange: () => void;
   } = $props();
@@ -21,7 +21,7 @@
   $effect(() => {
     const u = unit;
     if (u.unit === summary.unit) { other = null; return; }
-    call<{ months: WealthMonth[] }>(atlas, "wealth", { unit: u.unit }).then((r) => { if (unit === u) other = r.months; }).catch(() => (other = null));
+    call<{ months: WealthMonth[] }>(kandinsky, "wealth", { unit: u.unit }).then((r) => { if (unit === u) other = r.months; }).catch(() => (other = null));
   });
   const worth = $derived((other ?? summary.net_worth).map((m) => ({ month: m.month, value: num(m.total) })));
   const now = $derived(worth.at(-1)?.value ?? 0);
@@ -61,7 +61,7 @@
     <section class="attention" aria-label="Needs you">
       {#if summary.review}<button onclick={() => ontab("review")}><b>{summary.review}</b> to review</button>{/if}
       {#if guesses}<button onclick={() => onshow("#guess")}><b>{guesses}</b> booked by judgement (#guess): confirm or fix</button>{/if}
-      {#each errors.slice(0, 3) as d, i (i)}<button class="err" onclick={() => atlas.open(d.path, d.line)}>{d.message}</button>{/each}
+      {#each errors.slice(0, 3) as d, i (i)}<button class="err" onclick={() => kandinsky.open(d.path, d.line)}>{d.message}</button>{/each}
       {#if errors.length > 3}<span>and {errors.length - 3} more errors</span>{/if}
       {#each summary.sources.filter((s) => s.error) as s (s.path)}<button class="err" onclick={() => ontab("sources")}>{s.bank}: {s.error}</button>{/each}
     </section>
@@ -100,8 +100,8 @@
   </div>
 
   <div class="two">
-    <section class="panel"><Capture {atlas} {onchange} /></section>
-    <section class="panel"><Import {atlas} {onchange} /></section>
+    <section class="panel"><Capture {kandinsky} {onchange} /></section>
+    <section class="panel"><Import {kandinsky} {onchange} /></section>
   </div>
 </div>
 

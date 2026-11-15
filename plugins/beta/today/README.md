@@ -24,7 +24,7 @@ Everything is read from the notes; nothing is written.
   name needs to be shown.
 - **`home.areas`** (block "Areas of the vault"): each top folder as a tile — how many notes, when it was last touched,
   how busy it was this month, its latest notes — busiest first. Options: how many areas, how many notes each, folders
-  left out. Mail, templates and Atlas's own folders are always left out.
+  left out. Mail, templates and Kandinsky's own folders are always left out.
 
 The blocks keep the ids they had (`daily.header`, `home.map`, `home.areas`), so notes that use them go on working.
 
@@ -38,7 +38,7 @@ The blocks keep the ids they had (`daily.header`, `home.map`, `home.areas`), so 
 
 No requirements. Weather (its greeting chips and the log's `weather`) and Calendar (`dav`, the day's events) add to
 the same day when they are on. It replaces the **Daily** and **Home** plugins (`replaces`): installing it carries
-their settings over (Home's language first) and moves their folders to `.atlas/trash/`.
+their settings over (Home's language first) and moves their folders to `.kandinsky/trash/`.
 
 ## Platforms
 

@@ -12,34 +12,34 @@ function showError(container, prefix, err) {
   container.replaceChildren(box);
 }
 
-export function register(atlas) {
-  const settings = atlas.plugin.settings ?? {};
+export function register(kandinsky) {
+  const settings = kandinsky.plugin.settings ?? {};
   const getDefaultFmt = () => String(settings.date_format || "YYYY-MM-DD").trim() || "YYYY-MM-DD";
   const getMaxRows = () => Math.max(1, Number(settings.max_rows) || 500);
 
   const removeStyles = injectDataviewStyles();
-  const index = createVaultIndex(atlas, getDefaultFmt);
+  const index = createVaultIndex(kandinsky, getDefaultFmt);
 
   // Keep the Markdown metadata cache warm and incrementally updated on file events
   void index.ensureReady();
-  atlas.onFilesChanged((paths) => {
+  kandinsky.onFilesChanged((paths) => {
     void index.refreshPaths(paths);
   });
 
   // Palette command to force a full vault metadata re-index if ever needed
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "refresh",
     title: "Dataview: Rebuild metadata index",
     run: async () => {
       const t0 = performance.now();
       await index.forceRescan();
       const ms = Math.round(performance.now() - t0);
-      atlas.toast("Dataview", `Indexed ${index.allPages().length} notes in ${ms} ms`, "success", { timeout: 2500 });
+      kandinsky.toast("Dataview", `Indexed ${index.allPages().length} notes in ${ms} ms`, "success", { timeout: 2500 });
     },
   });
 
   // ```dataview (DQL: TABLE, LIST, TASK)
-  atlas.editor.registerFence("dataview", (host, fence) => {
+  kandinsky.editor.registerFence("dataview", (host, fence) => {
     const root = document.createElement("div");
     root.className = "dv-fence-root";
     host.appendChild(root);
@@ -60,7 +60,7 @@ export function register(atlas) {
         });
         root.replaceChildren();
         renderDqlResult(root, res, {
-          atlas,
+          kandinsky,
           index,
           fromPath: fence.path,
           getDefaultFmt,
@@ -79,7 +79,7 @@ export function register(atlas) {
   });
 
   // ```dataviewjs (JavaScript execution with `dv` and `app`)
-  atlas.editor.registerFence("dataviewjs", (host, fence) => {
+  kandinsky.editor.registerFence("dataviewjs", (host, fence) => {
     const root = document.createElement("div");
     root.className = "dv-fence-root";
     host.appendChild(root);
@@ -106,7 +106,7 @@ export function register(atlas) {
 
         root.replaceChildren();
         await runDataviewJs(fence.source, root, {
-          atlas,
+          kandinsky,
           index,
           currentPath: fence.path,
           liveProps,

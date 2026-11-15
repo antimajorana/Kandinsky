@@ -1,5 +1,5 @@
 // Where each device of the vault is — the file it shows and a PDF's page — told to the others through one live room
-// (`.atlas/cache/where`, never a file; core live.rs, the server's room for a mirrored vault). Glance mode follows
+// (`.kandinsky/cache/where`, never a file; core live.rs, the server's room for a mirrored vault). Glance mode follows
 // another device: what it shows opens here full screen, without the app's bars, and moves when it moves.
 import { joinLive, type Live } from "./live";
 import { openPath } from "./dock";
@@ -9,7 +9,7 @@ import { pick } from "./palette.svelte";
 import { toast } from "./state.svelte";
 import { shownHooks } from "./registry";
 
-const ROOM = ".atlas/cache/where";
+const ROOM = ".kandinsky/cache/where";
 /** A place on a device: the file it shows, and the page when it is a PDF. */
 export interface At { path: string; page?: number }
 

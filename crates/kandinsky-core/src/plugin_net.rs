@@ -1,4 +1,4 @@
-//! The network, for plugins: `atlas.fetch(url, init)` is a request made here, by the core, on the
+//! The network, for plugins: `kandinsky.fetch(url, init)` is a request made here, by the core, on the
 //! plugin's behalf (docs/guides/PLUGINS.md "v4"). Why here and not in the page: no CORS; a timeout and a
 //! size limit; **only the hosts the plugin's manifest lists** (`[permissions] net = [...]`); and a
 //! header may name a secret instead of carrying it, so a token never has to exist in the page.
@@ -32,7 +32,7 @@ pub enum HeaderValue {
         #[ts(as = "Option<String>", optional)]
         prefix: String,
     },
-    /// `{ oauth: "authelia" }`: the plugin's sign-in of that name (`atlas.oauth.signIn`), renewed when needed.
+    /// `{ oauth: "authelia" }`: the plugin's sign-in of that name (`kandinsky.oauth.signIn`), renewed when needed.
     Oauth { oauth: String },
 }
 
@@ -52,7 +52,7 @@ pub struct FetchRequest {
     #[serde(default)]
     #[ts(as = "Option<u32>", optional)]
     pub timeout_secs: Option<u64>,
-    /// Write the answer's body to this file of the plugin's cache (`.atlas/cache/plugins/<id>/<save_to>`)
+    /// Write the answer's body to this file of the plugin's cache (`.kandinsky/cache/plugins/<id>/<save_to>`)
     /// instead of returning it as text: pictures, PDFs, anything large. The path comes back in `saved`.
     #[serde(default)]
     #[ts(optional)]
@@ -82,10 +82,10 @@ pub struct FetchRequest {
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum SaveIn {
-    /// `.atlas/cache/plugins/<id>/`: thumbnails, covers, anything the plugin can fetch again.
+    /// `.kandinsky/cache/plugins/<id>/`: thumbnails, covers, anything the plugin can fetch again.
     #[default]
     Cache,
-    /// `.atlas/remote/<id>/`: the local copy of a remote file, opened in the editor and saved back
+    /// `.kandinsky/remote/<id>/`: the local copy of a remote file, opened in the editor and saved back
     /// (ui lib/file-sources.svelte.ts). Out of the vault's git, its search and `[[`.
     Remote,
 }
@@ -154,7 +154,7 @@ fn save_path(root: &Path, id: &str, save_to: &str, into: SaveIn) -> Result<(std:
         return Err(Error::BadPath(format!("save_to: {save_to:?}")));
     }
     let rel = match into {
-        SaveIn::Cache => format!(".atlas/cache/plugins/{id}/{clean}"),
+        SaveIn::Cache => format!(".kandinsky/cache/plugins/{id}/{clean}"),
         SaveIn::Remote => {
             remote_ignored(root)?;
             format!("{REMOTE}/{id}/{clean}")
@@ -163,12 +163,12 @@ fn save_path(root: &Path, id: &str, save_to: &str, into: SaveIn) -> Result<(std:
     Ok((crate::paths::safe_join(root, &rel)?, rel))
 }
 
-/// The local copies of remote files (every plugin's): `.atlas/remote/<plugin>/<place>/<path>`.
-pub const REMOTE: &str = ".atlas/remote";
+/// The local copies of remote files (every plugin's): `.kandinsky/remote/<plugin>/<place>/<path>`.
+pub const REMOTE: &str = ".kandinsky/remote";
 
 /// Copies of remote files are not the vault's history: the folder carries a `.gitignore` of its own.
 fn remote_ignored(root: &Path) -> Result<()> {
-    crate::vault_write::ignored_folder(&root.join(REMOTE), "local copies of remote files (SSH, copyparty…)")
+    crate::vault_write::ignored_folder(&crate::state_dir::join(root, REMOTE), "local copies of remote files (SSH, copyparty…)")
 }
 
 /// One request for plugin `id`. Blocking: call it from a blocking task.
@@ -212,7 +212,7 @@ pub fn fetch(root: &Path, secrets: &Store, id: &str, req: &FetchRequest) -> Resu
     let first_host = url.host_str().unwrap_or_default().to_ascii_lowercase();
     let client = reqwest::blocking::Client::builder().use_preconfigured_tls(crate::tls_chain::config())
         .timeout(Duration::from_secs(req.timeout_secs.unwrap_or(DEFAULT_TIMEOUT).clamp(1, MAX_TIMEOUT)))
-        .user_agent(concat!("Atlas/", env!("CARGO_PKG_VERSION"), " (plugin)"))
+        .user_agent(concat!("Kandinsky/", env!("CARGO_PKG_VERSION"), " (plugin)"))
         // a redirect is followed only to a host the plugin may reach: an allowed host cannot hand it on to another
         .redirect(reqwest::redirect::Policy::custom(move |a| {
             let host = a.url().host_str().unwrap_or_default();
@@ -338,7 +338,7 @@ mod tests {
     }
 
     fn plugin(root: &Path, toml: &str) {
-        let d = root.join(".atlas/plugins/net");
+        let d = root.join(".kandinsky/plugins/net");
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("plugin.toml"), toml).unwrap();
     }
@@ -382,22 +382,22 @@ mod tests {
         let (port, server) = serve_once("HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\n\u{1}\u{2}\u{3}\u{4}");
         let r = fetch(vault.path(), &secrets, "net", &req(format!("http://127.0.0.1:{port}/p.bin"), Some("covers/p.bin"))).unwrap();
         server.join().unwrap();
-        assert_eq!(r.saved.as_deref(), Some(".atlas/cache/plugins/net/covers/p.bin"));
-        assert_eq!(std::fs::read(vault.path().join(".atlas/cache/plugins/net/covers/p.bin")).unwrap(), [1, 2, 3, 4]);
+        assert_eq!(r.saved.as_deref(), Some(".kandinsky/cache/plugins/net/covers/p.bin"));
+        assert_eq!(std::fs::read(vault.path().join(".kandinsky/cache/plugins/net/covers/p.bin")).unwrap(), [1, 2, 3, 4]);
         assert!(fetch(vault.path(), &secrets, "net", &req("http://127.0.0.1:9/x".into(), Some("../../config.toml"))).is_err());
         assert!(fetch(vault.path(), &secrets, "net", &req("file:///etc/passwd".into(), None)).is_err());
 
-        // a remote file's local copy: in .atlas/remote/<id>/, which keeps out of the vault's git
+        // a remote file's local copy: in .kandinsky/remote/<id>/, which keeps out of the vault's git
         let (port, server) = serve_once("HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\nabc");
         let r = fetch(vault.path(), &secrets, "net", &FetchRequest { save_in: Some(SaveIn::Remote), ..req(format!("http://127.0.0.1:{port}/a.txt"), Some("srv/dir/a.txt")) }).unwrap();
         server.join().unwrap();
-        assert_eq!(r.saved.as_deref(), Some(".atlas/remote/net/srv/dir/a.txt"));
-        assert!(std::fs::read_to_string(vault.path().join(".atlas/remote/.gitignore")).unwrap().contains("\n*\n"));
+        assert_eq!(r.saved.as_deref(), Some(".kandinsky/remote/net/srv/dir/a.txt"));
+        assert!(std::fs::read_to_string(vault.path().join(".kandinsky/remote/.gitignore")).unwrap().contains("\n*\n"));
 
         // and sent back as a body, bytes as they are
-        std::fs::write(vault.path().join(".atlas/remote/net/srv/dir/a.txt"), b"new \x00 bytes").unwrap();
+        std::fs::write(vault.path().join(".kandinsky/remote/net/srv/dir/a.txt"), b"new \x00 bytes").unwrap();
         let (port, server) = serve_once("HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-        let up = FetchRequest { method: Some("PUT".into()), body_file: Some(".atlas/remote/net/srv/dir/a.txt".into()), ..req(format!("http://127.0.0.1:{port}/dir/a.txt"), None) };
+        let up = FetchRequest { method: Some("PUT".into()), body_file: Some(".kandinsky/remote/net/srv/dir/a.txt".into()), ..req(format!("http://127.0.0.1:{port}/dir/a.txt"), None) };
         assert_eq!(fetch(vault.path(), &secrets, "net", &up).unwrap().status, 201);
         let sent = server.join().unwrap();
         assert!(sent.starts_with("PUT /dir/a.txt ") && sent.ends_with("new \0 bytes"), "{sent:?}");
@@ -437,16 +437,16 @@ mod tests {
         assert_eq!((r.status, r.ok, r.signin), (401, false, token(9)));
 
         // signed in, but the service refuses the token with a Bearer challenge: sign in again
-        secrets.set("net", "oauth.svc", r#"{"access":"acc-1","token_endpoint":"http://127.0.0.1:9/token","client_id":"atlas"}"#).unwrap();
+        secrets.set("net", "oauth.svc", r#"{"access":"acc-1","token_endpoint":"http://127.0.0.1:9/token","client_id":"kandinsky"}"#).unwrap();
         let (port, server) = serve_once("HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Bearer error=\"invalid_token\"\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}");
         let r = fetch(vault.path(), &secrets, "net", &req(port)).unwrap();
         assert!(server.join().unwrap().to_ascii_lowercase().contains("authorization: bearer acc-1"));
         assert_eq!(r.signin, token(port));
 
         // ended with no refresh token: as good as none
-        secrets.set("net", "oauth.svc", r#"{"access":"old","expires":1,"token_endpoint":"http://127.0.0.1:9/token","client_id":"atlas"}"#).unwrap();
+        secrets.set("net", "oauth.svc", r#"{"access":"old","expires":1,"token_endpoint":"http://127.0.0.1:9/token","client_id":"kandinsky"}"#).unwrap();
         assert_eq!(fetch(vault.path(), &secrets, "net", &req(9)).unwrap().signin, token(9));
-        secrets.set("net", "oauth.svc", r#"{"access":"acc-1","token_endpoint":"http://127.0.0.1:9/token","client_id":"atlas"}"#).unwrap();
+        secrets.set("net", "oauth.svc", r#"{"access":"acc-1","token_endpoint":"http://127.0.0.1:9/token","client_id":"kandinsky"}"#).unwrap();
 
         // accepted: an answer, no sign-in
         let (port, server) = serve_once("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n[]");
@@ -479,7 +479,7 @@ mod tests {
         let sent = server.join().unwrap().to_ascii_lowercase();
         assert!(!sent.contains("cookie:"), "nothing kept yet: {sent}");
         assert_eq!(r.signin, Some(crate::service_signin::Needed::Door { host: "127.0.0.1".into(), page: format!("http://127.0.0.1:{port}/api/links") }));
-        assert!(!r.ok && r.saved.is_none() && !vault.path().join(".atlas/cache/plugins/net/never.json").exists());
+        assert!(!r.ok && r.saved.is_none() && !vault.path().join(".kandinsky/cache/plugins/net/never.json").exists());
 
         // signed in (the desktop's window kept the gate's cookie): the next request carries it and is answered
         let cookie = crate::service_signin::Cookie { name: "authelia_session".into(), value: "s3cr3t".into(), domain: "127.0.0.1".into(), host_only: true, path: "/".into(), secure: false, expires: None };

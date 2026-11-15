@@ -13,9 +13,9 @@ description = "A workspace over plain files: notes, papers, mail, code and runs,
 readme = "README.md"
 
 [workspace.dependencies]
-atlas-core = { path = "crates/kandinsky-core" }
-atlas-template = { path = "crates/kandinsky-template" }
-atlas-text = { path = "crates/kandinsky-text" }
+kandinsky-core = { path = "crates/kandinsky-core" }
+kandinsky-template = { path = "crates/kandinsky-template" }
+kandinsky-text = { path = "crates/kandinsky-text" }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -35,10 +35,10 @@ reqwest = { version = "0.12", default-features = false, features = ["json"] }
 softbuffer = { path = "crates/vendor/softbuffer" }
 kreuzberg-tesseract = { path = "crates/vendor/kreuzberg-tesseract" }
 
-# Debug builds keep full debug info for Atlas's own crates and none for the dependencies: the debug target/ had grown
+# Debug builds keep full debug info for Kandinsky's own crates and none for the dependencies: the debug target/ had grown
 # to 47 GB, mostly dependencies' debug info.
 # A backtrace still names every function; only the dependencies' line numbers go.
-# The phone apps' native library (crates/atlas-android/build-apk.sh): built for size (the APK had grown
+# The phone apps' native library (crates/kandinsky-android/build-apk.sh): built for size (the APK had grown
 # large). Slower to build (one codegen unit, fat LTO); the desktop keeps `release`.
 [profile.android]
 inherits = "release"
@@ -79,7 +79,7 @@ opt-level = 3
 [profile.dev.package."*"]
 debug = false
 
-# Atlas's own crates: line tables only (file:line in backtraces, no variable info) — debug builds were 56 GB
+# Kandinsky's own crates: line tables only (file:line in backtraces, no variable info) — debug builds were 56 GB
 # of target/.
 [profile.dev]
 debug = "line-tables-only"

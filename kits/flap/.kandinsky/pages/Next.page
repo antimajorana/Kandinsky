@@ -5,4 +5,4 @@ rows:
       - [{view: list, from: next-actions, filters: 'type == "project"', title: Next actions}]
       - [{view: calendar, from: tasks, dated: true, title: Calendar}]
     widths: [3, 2]
-  - [{base: .atlas/pages/Projects.base, title: Projects}]
+  - [{base: .kandinsky/pages/Projects.base, title: Projects}]

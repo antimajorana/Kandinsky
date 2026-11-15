@@ -3,7 +3,7 @@
 //! A second account (`DAV_TEST_USER2` + `DAV_TEST_PASSWORD2`, another principal on the same server) checks several
 //! accounts: calendars grouped by account, writing to either, moving an event across them, each account's state.
 //! One test, in process: the engine's cache and undo list are the process's.
-use atlas_dav::api;
+use kandinsky_dav::api;
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -61,12 +61,12 @@ fn the_calendar_against_a_real_server() {
         eprintln!("calendar test: skipped — set DAV_TEST_URL/USER/PASSWORD (RustiCal in podman: README.md)");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("atlas-cal-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("kandinsky-cal-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("vault/notes")).unwrap();
     // SAFETY: set before the engine starts, in the test's only thread
     unsafe {
-        std::env::set_var("ATLAS_ROOT", dir.join("vault"));
-        std::env::set_var("ATLAS_PLUGIN_CACHE", dir.join("cache"));
+        std::env::set_var("KANDINSKY_ROOT", dir.join("vault"));
+        std::env::set_var("KANDINSKY_PLUGIN_CACHE", dir.join("cache"));
     }
     std::fs::write(dir.join("vault/notes/Thesis.md"), "---\nimportant: true\ndue: 2026-11-20\n---\n# Thesis draft\n").unwrap();
     let tag = format!("{:x}", chrono::Utc::now().timestamp_micros());
@@ -239,5 +239,5 @@ fn the_calendar_against_a_real_server() {
 
 /// The machine's zone (the agenda's "today" must be the test's).
 fn chrono_tz_local() -> String {
-    atlas_dav::zone::user_zone(None).name()
+    kandinsky_dav::zone::user_zone(None).name()
 }

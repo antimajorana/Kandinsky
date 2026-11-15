@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { WS } from "../playwright.config";
 
 // How fast a big PDF opens and scrolls ("PDFs slow to open / scroll jank"), measured on the user's
-// own books. A measurement, not a check by default: ATLAS_PDF_SPEED=1 runs it and prints the numbers.
-const PAPERS = process.env.ATLAS_TEST_PAPERS ?? "";
+// own books. A measurement, not a check by default: KANDINSKY_PDF_SPEED=1 runs it and prints the numbers.
+const PAPERS = process.env.KANDINSKY_TEST_PAPERS ?? "";
 const BOOKS = ["mahan2000manyparticle", "altland2023condensed"].filter((k) => existsSync(join(PAPERS, k)));
-test.skip(!process.env.ATLAS_PDF_SPEED || !BOOKS.length, "set ATLAS_PDF_SPEED=1 (needs those books in ATLAS_TEST_PAPERS)");
+test.skip(!process.env.KANDINSKY_PDF_SPEED || !BOOKS.length, "set KANDINSKY_PDF_SPEED=1 (needs those books in KANDINSKY_TEST_PAPERS)");
 
 // copied once, and the core given time to index them: a book indexed during the open measured the index, not the PDF
 test.beforeAll(async () => {

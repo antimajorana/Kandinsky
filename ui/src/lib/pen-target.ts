@@ -1,7 +1,7 @@
-// The phone app's native pen over a part of the page (AtlasActivity's Bridge.ink → Onyx's instant ink + PenCatcher, the
+// The phone app's native pen over a part of the page (KandinskyActivity's Bridge.ink → Onyx's instant ink + PenCatcher, the
 // user: "make the excalidraw webview as good in terms of stroke as the native notepad"): the app catches the pen as
 // Notepad does (every sample, its pressure), the firmware draws the quick line, and each finished stroke comes back
-// here for whoever holds the region — a drawing (draw-excalidraw.ts), a plugin's view (`atlas.eink.pen`: the book
+// here for whoever holds the region — a drawing (draw-excalidraw.ts), a plugin's view (`kandinsky.eink.pen`: the book
 // reader's pen highlights). The app has ONE such region, so one holder at a time. A module of its own so the shell
 // (native-shell.svelte.ts) reaches the holder without loading Excalidraw.
 
@@ -13,10 +13,10 @@ type Bridge = {
   ink?(left: number, top: number, width: number, height: number, lineWidth: number, style: number): void;
   /** the screen under the quick ink shown again: what the page drew meanwhile (another device's stroke) appears */
   inkRepaint?(): void;
-  /** whether the app sends the stroke so far as it is drawn (`atlasShell.penDraft`) */
+  /** whether the app sends the stroke so far as it is drawn (`kandinskyShell.penDraft`) */
   penDrafts?(on: boolean): void;
 };
-const bridge = (): Bridge | undefined => (window as unknown as { AtlasNative?: Bridge }).AtlasNative;
+const bridge = (): Bridge | undefined => (window as unknown as { KandinskyNative?: Bridge }).KandinskyNative;
 
 /** Whether this app has the native pen (the Android app; never a browser or the desktop). */
 export const nativePen = (): boolean => !!bridge()?.ink;
@@ -69,7 +69,7 @@ export function penOver(host: HTMLElement, take: (samples: NativeSample[]) => vo
     last = key;
     if (!on && holder !== null && holder.owner !== me) return; // another holds the region: leave it on
     holder = on ? { owner: me, take, draft: opts.draft } : null;
-    console.info(`native pen ${on ? `over ${key}` : "off"}`); // logcat AtlasPage
+    console.info(`native pen ${on ? `over ${key}` : "off"}`); // logcat KandinskyPage
     b.ink!(...args);
   };
   const seen = new ResizeObserver(send);

@@ -1,4 +1,4 @@
-package org.atlas.notepad;
+package org.kandinsky.notepad;
 
 import android.app.AlertDialog;
 import android.app.Dialog;
@@ -30,7 +30,7 @@ final class PageOverview {
         this.n = n;
         this.a = n.host.activity();
         painter.files(n.scene.files);
-        painter.linked((file, page, px) -> org.atlas.capture.PageSource.page(n.host, file, page, px, this::pagesCame)); // linked PDF pages, drawn on the fly
+        painter.linked((file, page, px) -> org.kandinsky.capture.PageSource.page(n.host, file, page, px, this::pagesCame)); // linked PDF pages, drawn on the fly
         dialog = new Dialog(a, android.R.style.Theme_DeviceDefault_Light_NoActionBar_Fullscreen);
         LinearLayout root = new LinearLayout(a);
         root.setOrientation(LinearLayout.VERTICAL);

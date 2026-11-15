@@ -1,6 +1,6 @@
 # A plugin with a helper: JavaScript the core runs for it and keeps running (docs/guides/PLUGIN-API.md, "JavaScript
 # helpers"): work that should not wait for a window, a cache shared by every window. Copy this folder into a vault's
-# .atlas/plugins/ and run "Word stats: count".
+# .kandinsky/plugins/ and run "Word stats: count".
 title = "Word stats"
 description = "counts the words of every note in a JavaScript helper (an example of [helper] js)"
 icon = "chart"

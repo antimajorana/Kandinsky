@@ -6,14 +6,14 @@ import { runCommand } from "./open";
 // keeps the selection's place after a delete, words its errors; the sidebar tree moves with the arrow keys, keeps a
 // renamed folder open, scrolls back to the file opened again, folds back what it unfolded only to show a file, and
 // marks the explorer's folder; both explorers hide the same things behind one toggle.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text = `# ${path}\n`) => r.put("/api/file", { headers: H, data: { path, text } });
 
 async function start(page: Page) {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
 }
-const openNote = (page: Page, path: string) => page.evaluate((p) => (window as any).__atlas.open(p), path);
+const openNote = (page: Page, path: string) => page.evaluate((p) => (window as any).__kandinsky.open(p), path);
 const xrow = (page: Page, name: string) => page.locator(".explorer .x-row", { has: page.locator(".label", { hasText: new RegExp(`^${name.replace(/[.[\]]/g, "\\$&")}$`) }) });
 const treeRow = (page: Page, path: string) => page.locator(`.tree .row[data-path="${path}"]`);
 

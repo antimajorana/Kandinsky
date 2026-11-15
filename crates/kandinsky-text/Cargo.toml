@@ -1,5 +1,5 @@
 [package]
-name = "atlas-text"
+name = "kandinsky-text"
 description = "Pure helpers shared by the core and the plugin engines: frontmatter edits that keep the rest of a note byte for byte, the vault-path guard, iCalendar text, wall-clock times"
 version = "0.1.0"
 edition.workspace = true

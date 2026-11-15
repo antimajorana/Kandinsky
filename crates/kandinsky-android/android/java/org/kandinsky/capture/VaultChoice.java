@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -12,7 +12,7 @@ import android.widget.LinearLayout;
 import java.io.File;
 import java.util.function.Consumer;
 
-/** Choosing where captures go — the folders' permission, an Atlas server, the app's own folder — for the capture box and Settings alike. */
+/** Choosing where captures go — the folders' permission, an Kandinsky server, the app's own folder — for the capture box and Settings alike. */
 final class VaultChoice {
     private VaultChoice() {}
 
@@ -30,7 +30,7 @@ final class VaultChoice {
         }
     }
 
-    /** Vault folders on the phone's storage (`.atlas` or `.obsidian` inside), off the main thread: the JSON of Core.findVaults. */
+    /** Vault folders on the phone's storage (`.kandinsky` or `.obsidian` inside), off the main thread: the JSON of Core.findVaults. */
     static void find(Consumer<String> found) {
         android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
         new Thread(() -> {
@@ -42,20 +42,20 @@ final class VaultChoice {
     /** The app's own folder, for captures with no vault on the phone yet. */
     static String inApp(android.content.Context a) {
         File f = new File(a.getFilesDir(), "Phone");
-        new File(f, ".atlas").mkdirs();
+        Legacy.madeStateDir(f);
         return f.getPath();
     }
 
     /** A server's address; then what answers there decides the ways in offered (signIn). */
     static void askServer(Activity a, Look look, Vaults vaults, Consumer<String> chosen) {
         EditText url = new EditText(a);
-        url.setHint("https://atlas.example.org/v/notes");
+        url.setHint("https://kandinsky.example.org/v/notes");
         url.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         LinearLayout form = new LinearLayout(a);
         form.setPadding(look.dp(20), look.dp(8), look.dp(20), 0);
         form.addView(url, new LinearLayout.LayoutParams(-1, -2));
         new android.app.AlertDialog.Builder(a)
-            .setTitle("An Atlas server")
+            .setTitle("An Kandinsky server")
             .setView(form)
             .setPositiveButton("Next", (d, w) -> {
                 String u = url.getText().toString().trim();
@@ -91,12 +91,12 @@ final class VaultChoice {
                 ways.add(new String[] {"check", "Use it", ""});
                 runs.add(() -> { vaults.markOpen(server, true); vaults.use(server); chosen.accept(server); }); // remembered: no sign-in asked again
                 break;
-            case ATLAS:
+            case KANDINSKY:
                 says = "This server signs in itself (its password).";
                 ways.add(new String[] {"check", "Sign in here", "in the app"});
                 runs.add(() -> web(a, server));
                 ways.add(new String[] {"link", "Sign in in the browser", ""});
-                runs.add(() -> SignIn.atlasInBrowser(a, server));
+                runs.add(() -> SignIn.kandinskyInBrowser(a, server));
                 break;
             default:
                 says = "A sign-in stands in front of this server" + (p.host == null ? "" : " (" + p.host + ")")
@@ -104,7 +104,7 @@ final class VaultChoice {
                 ways.add(new String[] {"check", "Sign in here", "password, code"});
                 runs.add(() -> web(a, server));
                 ways.add(new String[] {"link", "Sign in in the browser", "security key"});
-                runs.add(() -> SignIn.atlasInBrowser(a, server));
+                runs.add(() -> SignIn.kandinskyInBrowser(a, server));
         }
         ways.add(new String[] {"plus", "A token or a header…", "by hand"});
         runs.add(() -> manual(a, look, vaults, server, chosen));
@@ -139,13 +139,13 @@ final class VaultChoice {
         a.startActivity(new Intent(a, SignInWebActivity.class).putExtra("server", server));
     }
 
-    /** By hand: a device token (`atlas server token phone --scope capture`), and a header some front lets through — any name. */
+    /** By hand: a device token (`kandinsky server token phone --scope capture`), and a header some front lets through — any name. */
     static void manual(Activity a, Look look, Vaults vaults, String server, Consumer<String> chosen) {
         LinearLayout form = new LinearLayout(a);
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(look.dp(20), look.dp(8), look.dp(20), 0);
         EditText token = new EditText(a), header = new EditText(a);
-        token.setHint("atl_… (atlas server token phone --scope capture)");
+        token.setHint("atl_… (kandinsky server token phone --scope capture)");
         token.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         token.setText(vaults.token(server));
         header.setHint("optional: Header-Name: value");

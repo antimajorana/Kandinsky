@@ -1,7 +1,7 @@
 <script lang="ts">
   // A template's questions asked together in one form (`{{prompt:Course | choice:a,b}}`, `| date`, `| number`,
   // `| note:folder`, plain text): a list, a date, a number, a note of the vault (offered from its folder), or text.
-  // The answers go to the core as the template's values (crates/atlas-template).
+  // The answers go to the core as the template's values (crates/kandinsky-template).
   import Dialog from "./Dialog.svelte";
   import { api } from "../lib/api";
   import SuggestInput, { type Suggestion } from "./SuggestInput.svelte";

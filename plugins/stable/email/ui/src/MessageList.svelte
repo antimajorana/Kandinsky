@@ -59,7 +59,7 @@
 
   function drag(e: DragEvent, r: Row) {
     const ids = mail.checked.includes(r.thread) ? mail.rows.filter((x) => mail.checked.includes(x.thread)).map((x) => x.id) : [r.id];
-    e.dataTransfer?.setData("application/x-atlas-mail", JSON.stringify(ids));
+    e.dataTransfer?.setData("application/x-kandinsky-mail", JSON.stringify(ids));
     e.dataTransfer?.setData("text/plain", `${ids.length} conversation${ids.length === 1 ? "" : "s"}`);
     if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
   }

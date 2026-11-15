@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.content.Context;
 import android.os.Looper;
@@ -25,7 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-/** A vault's files and API for the native screens (Host, Settings), by vault: a vault on an Atlas server, or a folder on
+/** A vault's files and API for the native screens (Host, Settings), by vault: a vault on an Kandinsky server, or a folder on
  *  the phone through the core running in this app (Local) — the same calls (/api/tree, /api/raw, /api/file, /api/config…)
  *  either way, so a screen never knows which, and the core's rules (leases, companion notes) apply to both. */
 abstract class VaultFiles {
@@ -42,7 +42,7 @@ abstract class VaultFiles {
     abstract void write(String path, byte[] bytes) throws IOException;
     /** A drawing was written: its companion note follows. Null, or why it could not. */
     abstract String drawingSaved(String path, String scene);
-    /** `path` to the vault's trash, recoverable, never a hard delete (the core's files::trash: `.atlas/trash/<stamp>/`
+    /** `path` to the vault's trash, recoverable, never a hard delete (the core's files::trash: `.kandinsky/trash/<stamp>/`
      *  on the phone, which has no desktop Trash) → where it went. */
     abstract String trash(String path) throws IOException;
     /** `from` renamed or moved to `to` (folders made; an existing `to` is refused). */
@@ -105,7 +105,7 @@ abstract class VaultFiles {
     }
 
     /** The vault's plugins as `[{id, on, settings}]` (settings with the defaults filled in), or [] when it cannot say.
-     *  Never on the UI thread (AtlasActivity keeps its answer). */
+     *  Never on the UI thread (KandinskyActivity keeps its answer). */
     static JSONArray plugins(Context c, String vault) {
         OnServer s = new OnServer(c, vault);
         JSONArray out = new JSONArray();
@@ -141,7 +141,7 @@ abstract class VaultFiles {
     static String saveSettings(Context c, String vault, String id, JSONObject values) {
         try {
             // a built-in plugin's first setting: its folder in the vault first (the settings are checked against it)
-            String manifest = NativePlugins.manifest(id), at = ".atlas/plugins/" + id + "/plugin.toml";
+            String manifest = NativePlugins.manifest(id), at = ".kandinsky/plugins/" + id + "/plugin.toml";
             VaultFiles files = of(c, vault);
             if (manifest != null) {
                 // the app's manifest in the vault: written when missing, and over an older copy (whose fields would
@@ -312,9 +312,9 @@ abstract class VaultFiles {
             h.setConnectTimeout(8000);
             h.setReadTimeout(30000);
             h.setInstanceFollowRedirects(false); // a redirect is a sign-in in front: an error here, never followed
-            h.setRequestProperty("x-atlas", "1");
+            h.setRequestProperty("x-kandinsky", "1"); h.setRequestProperty("x-atlas", "1"); // and a server from before the rename
             if (here == null) Server.headers(c, base, h);
-            else if (!here.key.isEmpty()) h.setRequestProperty("x-atlas-token", here.key);
+            else if (!here.key.isEmpty()) h.setRequestProperty("x-kandinsky-token", here.key);
             return h;
         }
 
@@ -386,7 +386,7 @@ abstract class VaultFiles {
          *  while unchanged on the server: a chapter is read many times). */
         @Override File local(String path) throws IOException {
             if (folder != null) {
-                File f = new File(folder, path).getCanonicalFile();
+                File f = Legacy.inVault(folder, path).getCanonicalFile(); // `.kandinsky/…` is `.atlas/…` in a vault not yet renamed
                 if (!f.getPath().startsWith(folder.getCanonicalPath())) throw new IOException("outside the vault: " + path);
                 return f;
             }

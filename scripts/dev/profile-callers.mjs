@@ -1,7 +1,7 @@
 // Who calls a hot function, from a .cpuprofile written by profile-ui.mjs: for each name prefix
 // ("sanitize", "Y@latex-suite"), the call chains (9 frames up) that spend the most time in it, with that time.
 //
-//   node scripts/dev/profile-callers.mjs /tmp/atlas-profile/typing.cpuprofile <name-prefix>…
+//   node scripts/dev/profile-callers.mjs /tmp/kandinsky-profile/typing.cpuprofile <name-prefix>…
 import { readFileSync } from "node:fs";
 const p = JSON.parse(readFileSync(process.argv[2], "utf8"));
 const byId = new Map(p.nodes.map((n) => [n.id, n])), parent = new Map();

@@ -1,10 +1,10 @@
-# The Ubuntu libraries Atlas builds against (Tauri / WebKitGTK, the capture box's Wayland and D-Bus), in one place for
+# The Ubuntu libraries Kandinsky builds against (Tauri / WebKitGTK, the capture box's Wayland and D-Bus), in one place for
 # every job. apt installs them as usual, but the .deb files it fetched are kept in the Actions cache, so a later run
 # downloads only what changed. (A cached-packages action restored files instead of installing them, and lost
 # glib-2.0.pc; this keeps apt doing the installing.) A stalled mirror times out in 30 s and is retried, and the
 # calling step has its own limit: a hung apt once held a release's Linux job for its whole hour.
 name: System libraries
-description: apt-get install of Atlas's build libraries, with the downloaded .debs cached between runs
+description: apt-get install of Kandinsky's build libraries, with the downloaded .debs cached between runs
 inputs:
   extra:
     description: more packages for this job (space-separated)

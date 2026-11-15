@@ -1,17 +1,17 @@
 //! Where a sign-in comes back in a browser. A provider (a bank through Enable Banking, an OAuth server) ends its page on
 //! the redirect address registered with it, `…?code=…&state=…` or `…?error=…`. The desktop's sign-in window catches that
 //! address itself; a browser tab lands on the server, which answers any such address it does not otherwise serve with
-//! this page: it hands the address to the Atlas tab that asked (same origin, a BroadcastChannel read by
+//! this page: it hands the address to the Kandinsky tab that asked (same origin, a BroadcastChannel read by
 //! `ui/src/lib/signin.ts`) and closes. It also keeps the address in the browser's storage for half an hour, so a tab
-//! opened later (the one that asked was closed or reloaded) can still finish it (`atlas.signInReturned`).
+//! opened later (the one that asked was closed or reloaded) can still finish it (`kandinsky.signInReturned`).
 //! Recognised by the query's shape, never by a provider's name or a plugin's path.
 use axum::http::Uri;
 use axum::response::Html;
 
 /// The channel both sides name.
-pub const CHANNEL: &str = "atlas-signin";
+pub const CHANNEL: &str = "kandinsky-signin";
 /// The storage key both sides name: `{url, at}` of the last sign-in to come back.
-pub const KEPT: &str = "atlas-signin-return";
+pub const KEPT: &str = "kandinsky-signin-return";
 
 /// The return page, when `uri` is the end of a sign-in: a query with `code` and `state`, or `error`.
 pub fn page(uri: &Uri) -> Option<Html<String>> {
@@ -21,9 +21,9 @@ pub fn page(uri: &Uri) -> Option<Html<String>> {
         return None;
     }
     Some(Html(format!(
-        r#"<!doctype html><html><head><meta charset="utf-8"><title>Atlas — signed in</title>
+        r#"<!doctype html><html><head><meta charset="utf-8"><title>Kandinsky — signed in</title>
 <style>:root{{color-scheme:light dark}}body{{margin:0;min-height:100vh;display:grid;place-items:center;font:15px/1.5 Inter,system-ui,sans-serif}}</style></head>
-<body><p id="m">Back to Atlas…</p><script>
+<body><p id="m">Back to Kandinsky…</p><script>
 try {{ localStorage.setItem("{KEPT}", JSON.stringify({{ url: location.href, at: Date.now() }})); }} catch {{}}
 const c = new BroadcastChannel("{CHANNEL}"); c.postMessage(location.href);
 document.getElementById("m").textContent = "Done: you can close this tab and go back to Kandinsky.";

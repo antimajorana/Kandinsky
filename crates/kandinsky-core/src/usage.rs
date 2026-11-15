@@ -1,6 +1,6 @@
-//! The usage journal (docs/guides/MALLEABLE.md R5): what the user does in Atlas — files opened, searches acted
-//! on, commands run — appended to `.atlas/cache/usage.jsonl` (derived, local, rebuildable by just
-//! using Atlas; capped). The toolsmith's miners read it (`suggest.rs`), and it is the one record of the files opened
+//! The usage journal (docs/guides/MALLEABLE.md R5): what the user does in Kandinsky — files opened, searches acted
+//! on, commands run — appended to `.kandinsky/cache/usage.jsonl` (derived, local, rebuildable by just
+//! using Kandinsky; capped). The toolsmith's miners read it (`suggest.rs`), and it is the one record of the files opened
 //! lately ([`opened`]: the palette's recent files, the `[[` list's ranking, the phone's Home).
 use crate::config::Config;
 use crate::{Result, Workspace};
@@ -8,7 +8,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const JOURNAL: &str = ".atlas/cache/usage.jsonl";
+pub const JOURNAL: &str = ".kandinsky/cache/usage.jsonl";
 /// Past this size the oldest half is dropped: patterns are recent habits, not history.
 const CAP_BYTES: u64 = 2 * 1024 * 1024;
 
@@ -38,7 +38,7 @@ pub fn record(ws: &Workspace, event: UsageEvent) -> Result<()> {
 
 pub fn record_at(ws: &Workspace, event: UsageEvent, t: i64) -> Result<()> {
     use crate::vault_write::cache;
-    let path = ws.root().join(JOURNAL);
+    let path = crate::state_dir::join(ws.root(), JOURNAL);
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > CAP_BYTES) {
         // as bytes: the middle may fall inside a character (`Réunion.md`), and one bad byte must not empty the journal
         let text = std::fs::read(&path)?;
@@ -62,7 +62,7 @@ fn read_at(root: &Path) -> Vec<Entry> {
 /// The entries in the journal's last `bytes` (the line cut at the start dropped), oldest first.
 fn read_last(root: &Path, bytes: u64) -> Vec<Entry> {
     use std::io::{Read, Seek, SeekFrom};
-    let Ok(mut f) = std::fs::File::open(root.join(JOURNAL)) else { return Vec::new() };
+    let Ok(mut f) = std::fs::File::open(crate::state_dir::join(root, JOURNAL)) else { return Vec::new() };
     let len = f.metadata().map_or(0, |m| m.len());
     let from = len.saturating_sub(bytes);
     let mut raw = Vec::new();
@@ -156,7 +156,7 @@ mod recent_tests {
     fn a_full_journal_is_halved_whatever_letters_it_holds() {
         let t = tempfile::tempdir().unwrap();
         let ws = Workspace::open(t.path()).unwrap();
-        let journal = t.path().join(JOURNAL);
+        let journal = crate::state_dir::join(t.path(), JOURNAL);
         std::fs::create_dir_all(journal.parent().unwrap()).unwrap();
         // every byte offset of a line is tried as the middle by the varying lengths
         let mut text = String::new();

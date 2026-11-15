@@ -8,7 +8,7 @@ import { parseWordFreq } from "../src/lib/editor/word-freq";
 
 // The Predictor plugin (plugins/beta/predictor): the rest of a word, and the next word when the vault is sure, faint
 // after the caret; Tab or → at the end of the line takes it; never in math. The model is tested alone first.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const built = (f: string) => readFileSync(new URL(`../../plugins/beta/predictor/${f}`, import.meta.url), "utf8");
 const TEXT = "Wannier functions are local. The Wannier functions of a band. Maximally localized Wannier functions help. "
@@ -73,17 +73,17 @@ test("a note with embedded pictures: their data is no prose, dropped for the hel
 
 test.describe("in the editor", () => {
   test.beforeAll(async ({ request }) => {
-    for (const f of ["plugin.toml", "main.js", "helper.js"]) await put(request, `.atlas/plugins/predictor/${f}`, built(f));
+    for (const f of ["plugin.toml", "main.js", "helper.js"]) await put(request, `.kandinsky/plugins/predictor/${f}`, built(f));
     await put(request, "notes/predict-a.md", `# Predict A\n\n${TEXT}\n`);
     await put(request, "notes/predict-b.md", `# Predict B\n\n${TEXT}\n`);
     await put(request, "notes/predict-new.md", "# Predict new\n\n");
   });
   test.afterAll(async ({ request }) => {
-    await put(request, ".atlas/plugins/predictor/main.js", "export function register() {}\n");
+    await put(request, ".kandinsky/plugins/predictor/main.js", "export function register() {}\n");
     await request.post("/api/plugins/predictor/helper/stop", { headers: H });
   });
 
-  const lastLine = (page: Page) => page.evaluate(() => (window as unknown as { __atlas: { editor(): { text: string } | null } }).__atlas.editor()?.text.trimEnd().split("\n").pop());
+  const lastLine = (page: Page) => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } | null } }).__kandinsky.editor()?.text.trimEnd().split("\n").pop());
 
   test("a ghost after typing in prose: Tab takes it, → at the end of the line too, Escape drops it, none in math", async ({ page }) => {
     await page.goto("/");

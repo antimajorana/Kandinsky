@@ -2,6 +2,6 @@
 
 /**
  * Where a core runs, as a plugin manifest names it (`[platforms]`): a desktop system, the phone app, or a server
- * (`atlas serve`: no window, many devices, whatever the system under it).
+ * (`kandinsky serve`: no window, many devices, whatever the system under it).
  */
 export type Platform = "linux" | "macos" | "windows" | "android" | "server";

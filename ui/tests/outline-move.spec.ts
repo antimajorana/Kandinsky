@@ -3,7 +3,7 @@ import { openFile } from "./open";
 
 // Dragging a heading in the Outline moves its whole section (subsections included) in the note;
 // Alt+Up/Down on a heading does the same past its neighbour. One edit, so one undo.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const NOTE = "# Plan\n\n## One\nfirst\n\n### Deep\ninside one\n\n## Two\nsecond\n\n## Three\nthird\n";
 
 test("a heading dragged in the outline takes its section along; Alt+arrows move it too", async ({ page, request }) => {
@@ -15,7 +15,7 @@ test("a heading dragged in the outline takes its section along; Alt+arrows move 
   await page.keyboard.press("Meta+o");
   const head = (name: string) => page.locator(".outline .head", { hasText: name });
   await expect(page.locator(".outline .head")).toHaveText(["Plan", "One", "Deep", "Two", "Three"]);
-  const text = () => page.evaluate(() => (window as any).__atlas.editor().text as string);
+  const text = () => page.evaluate(() => (window as any).__kandinsky.editor().text as string);
 
   // One (with Deep) dropped on the lower half of Three: it goes to the end, the final newline stays
   const box = (await head("Three").boundingBox())!;

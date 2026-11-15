@@ -1,8 +1,8 @@
 """A paper's reading note for the scripts (zotero_sync.py, pdf_annotations.py): `<paper dir>/<citekey>.md`.
 
-The scripts' copy of crates/atlas-core/src/reading_note.rs (docs/guides/ZOTERO.md, "The reading note"): the same
+The scripts' copy of crates/kandinsky-core/src/reading_note.rs (docs/guides/ZOTERO.md, "The reading note"): the same
 name, the same migration of a legacy `notes.md`, and the same default head — except that the vault's
-`literature` template is not read here (Atlas uses it when it makes the note; a script makes one only for a
+`literature` template is not read here (Kandinsky uses it when it makes the note; a script makes one only for a
 paper whose note does not exist yet). Keep the two in step.
 """
 from __future__ import annotations
@@ -24,7 +24,7 @@ def citekey(d: Path) -> str:
     return str(_info(d).get("citekey") or d.name)
 
 def _head(d: Path, m: dict | None = None) -> str:
-    """Properties, title and the library.paper block (what Atlas writes without a template)."""
+    """Properties, title and the library.paper block (what Kandinsky writes without a template)."""
     m = _info(d) if m is None else m
     year = next((p for p in re.findall(r"\d+", str(m.get("date") or "")) if len(p) == 4), None)
     authors = m.get("author") or []

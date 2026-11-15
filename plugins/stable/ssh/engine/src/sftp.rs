@@ -1,7 +1,7 @@
-//! A host's files in Atlas's explorer (main.js `atlas.files.source`) over sftp: each call runs `sftp -b -` once with a
+//! A host's files in Kandinsky's explorer (main.js `kandinsky.files.source`) over sftp: each call runs `sftp -b -` once with a
 //! few commands, on the plugin's shared connection (so sftp opens none of its own). A failing command stops the batch;
 //! its message is the error. Paths sent to sftp are escaped (sftp reads its own quoting and expands globs in every
-//! path), absolute, and never start with "-". Local paths stay inside the vault (`ATLAS_ROOT`), and nothing there is
+//! path), absolute, and never start with "-". Local paths stay inside the vault (`KANDINSKY_ROOT`), and nothing there is
 //! overwritten: a second file of the same name gets a number.
 use crate::proc;
 use chrono::TimeZone;
@@ -15,17 +15,17 @@ type Answer = Result<Value, String>;
 
 /// Larger files are downloaded into a folder of the vault, not opened from a copy.
 const COPY_LIMIT: u64 = 512_000_000;
-/// Working copies of remote files, in the vault so the editor is the one for any file. Not under .atlas/cache: saves there are the app's bookkeeping and tell plugins
-/// nothing. Out of the vault's git by a .gitignore of its own, out of search and [[ (the walk keeps only .atlas/pages).
-const EDIT_DIR: &str = ".atlas/remote/ssh";
+/// Working copies of remote files, in the vault so the editor is the one for any file. Not under .kandinsky/cache: saves there are the app's bookkeeping and tell plugins
+/// nothing. Out of the vault's git by a .gitignore of its own, out of search and [[ (the walk keeps only .kandinsky/pages).
+const EDIT_DIR: &str = ".kandinsky/remote/ssh";
 /// copy (vault path) → {host, path, size, modified} as last seen on the host
-const EDIT_INDEX: &str = ".atlas/remote/ssh/index.json";
+const EDIT_INDEX: &str = ".kandinsky/remote/ssh/index.json";
 
 /// `drwxr-xr-x    ? user  group   4096 Oct 15 02:43 name` (sftp's `ls -l`; the link count may be "?")
 static LS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([-dlbcps?])[-rwxsStTl+.@]{9}\S*\s+\S+\s+\S+\s+\S+\s+(\d+)\s+(\w{3}\s+\d{1,2}\s+(?:\d{1,2}:\d{2}|\d{4}))\s(.+)$").expect("the ls pattern"));
 
 pub fn root() -> PathBuf {
-    let r = crate::ssh::absolute(Path::new(&std::env::var("ATLAS_ROOT").unwrap_or_else(|_| ".".into())));
+    let r = crate::ssh::absolute(Path::new(&std::env::var("KANDINSKY_ROOT").unwrap_or_else(|_| ".".into())));
     r.canonicalize().unwrap_or(r)
 }
 
@@ -154,7 +154,7 @@ fn free_path(folder: &Path, name: &str) -> PathBuf {
 }
 
 fn edit_index(update: Option<(&str, Value)>) -> serde_json::Map<String, Value> {
-    let full = root().join(EDIT_INDEX);
+    let full = kandinsky_plugin::state_dir(&root()).join(EDIT_INDEX.trim_start_matches(".kandinsky/"));
     let mut index = std::fs::read_to_string(&full).ok().and_then(|t| serde_json::from_str::<serde_json::Map<String, Value>>(&t).ok()).unwrap_or_default();
     if let Some((k, v)) = update {
         index.insert(k.to_string(), v);
@@ -194,7 +194,7 @@ fn edit_rel(host: &str, path: &str) -> Result<String, String> {
     Ok(format!("{EDIT_DIR}/{dir}/{}", parts.join("/")))
 }
 
-/// A remote file copied into EDIT_DIR/<host>/<path> → {local}: the vault path Atlas opens.
+/// A remote file copied into EDIT_DIR/<host>/<path> → {local}: the vault path Kandinsky opens.
 pub fn fetch_for_edit(argv: &[String], p: &Value) -> Answer {
     let (host, path) = (text(p, "host")?, text(p, "path")?);
     let e = stat(argv, path)?.ok_or_else(|| format!("{path}: no such file"))?;
@@ -205,7 +205,7 @@ pub fn fetch_for_edit(argv: &[String], p: &Value) -> Answer {
     if size > COPY_LIMIT {
         return Err(format!("{path} is {:.0} MB: too large to open from a copy, download it instead", size as f64 / 1e6));
     }
-    let ignore = root().join(".atlas/remote/.gitignore");
+    let ignore = kandinsky_plugin::state_dir(&root()).join("remote/.gitignore");
     if !ignore.exists() {
         let _ = std::fs::create_dir_all(ignore.parent().unwrap_or(&root()));
         let _ = std::fs::write(&ignore, "# working copies of remote files (the SSH plugin): not part of the vault's history\n*\n");
@@ -326,9 +326,9 @@ mod tests {
 
     #[test]
     fn a_copy_stays_in_its_hosts_folder() {
-        assert_eq!(edit_rel("me@box", "/srv/../etc/x.conf").unwrap(), ".atlas/remote/ssh/me@box/etc/x.conf");
-        assert_eq!(edit_rel("box", "/../../../notes/a.md").unwrap(), ".atlas/remote/ssh/box/notes/a.md");
-        assert_eq!(edit_rel("box", "~/a.txt").unwrap(), ".atlas/remote/ssh/box/~/a.txt");
+        assert_eq!(edit_rel("me@box", "/srv/../etc/x.conf").unwrap(), ".kandinsky/remote/ssh/me@box/etc/x.conf");
+        assert_eq!(edit_rel("box", "/../../../notes/a.md").unwrap(), ".kandinsky/remote/ssh/box/notes/a.md");
+        assert_eq!(edit_rel("box", "~/a.txt").unwrap(), ".kandinsky/remote/ssh/box/~/a.txt");
         assert!(edit_rel("..", "/index.json").is_err());
         assert!(edit_rel("box", "/a/..").is_err());
     }

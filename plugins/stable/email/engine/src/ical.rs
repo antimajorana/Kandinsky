@@ -4,7 +4,7 @@
 use chrono::{DateTime, FixedOffset, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
 use serde::Serialize;
-use atlas_text::ical::{fold, unescape, unfold, Line};
+use kandinsky_text::ical::{fold, unescape, unfold, Line};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Default)]
@@ -150,7 +150,7 @@ fn when(value: &str, params: &[(String, String)], vtz: &HashMap<String, Vtz>) ->
         Some(id) => {
             if let Some(tz) = zone(id) {
                 // a time the zone's clocks skip is still that zone's (an hour on), not the reader's own
-                if let Some(d) = atlas_text::wall_clock::at(naive, &tz) {
+                if let Some(d) = kandinsky_text::wall_clock::at(naive, &tz) {
                     return (rfc(d.fixed_offset()), false, tz.name().to_string());
                 }
             }
@@ -175,7 +175,7 @@ fn when(value: &str, params: &[(String, String)], vtz: &HashMap<String, Vtz>) ->
 
 /// A time with no zone is wall-clock (RFC 5545 "floating"): the user's own hour.
 fn floating(naive: NaiveDateTime) -> (String, bool, String) {
-    match atlas_text::wall_clock::at(naive, &Local) {
+    match kandinsky_text::wall_clock::at(naive, &Local) {
         Some(d) => (d.fixed_offset().to_rfc3339(), false, String::new()),
         None => (naive.format("%Y-%m-%dT%H:%M:%S").to_string(), false, String::new()),
     }
@@ -280,7 +280,7 @@ pub fn read(ics: &str) -> Invite {
 /// Thunderbird, Outlook and Google send. `partstat`: ACCEPTED, TENTATIVE, DECLINED.
 pub fn reply(inv: &Invite, me: &str, my_name: &str, partstat: &str) -> String {
     let text = unfold(&inv.ics);
-    let mut out = String::from("BEGIN:VCALENDAR\r\nPRODID:-//Atlas//Email//EN\r\nVERSION:2.0\r\nMETHOD:REPLY\r\n");
+    let mut out = String::from("BEGIN:VCALENDAR\r\nPRODID:-//Kandinsky//Email//EN\r\nVERSION:2.0\r\nMETHOD:REPLY\r\n");
     let (mut depth, mut in_event, mut done, mut inner) = (0, false, false, 0);
     for line in text.lines() {
         let line = line.trim_end_matches('\r');

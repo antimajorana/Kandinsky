@@ -2,9 +2,9 @@
 
 import { mountTagWrangler } from "./tag-ui.js";
 
-export default function (host, atlas) {
-  return mountTagWrangler(host, atlas, {
+export default function (host, kandinsky) {
+  return mountTagWrangler(host, kandinsky, {
     compact: false,
-    initialTag: typeof atlas.arg === "string" ? atlas.arg.replace(/^#+/, "") : "",
+    initialTag: typeof kandinsky.arg === "string" ? kandinsky.arg.replace(/^#+/, "") : "",
   });
 }

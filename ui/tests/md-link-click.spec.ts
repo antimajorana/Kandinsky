@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { openFile } from "./open";
 
-// A markdown link [text](url) in a note opens on a click: a vault file in Atlas, the web outside.
-const H = { "x-atlas": "1" };
+// A markdown link [text](url) in a note opens on a click: a vault file in Kandinsky, the web outside.
+const H = { "x-kandinsky": "1" };
 
 test("a markdown link opens on a click", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/link-target.md", text: "# Link target\n\nreached\n" } });

@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { WS } from "../playwright.config";
 
 // Fixtures added at test time (the shared config stays untouched): one real paper copied read-only
-// from a papers library (`ATLAS_TEST_PAPERS`). Without that paper the tests are skipped, and say so.
-const PAPERS = process.env.ATLAS_TEST_PAPERS ?? "";
+// from a papers library (`KANDINSKY_TEST_PAPERS`). Without that paper the tests are skipped, and say so.
+const PAPERS = process.env.KANDINSKY_TEST_PAPERS ?? "";
 const PHD_PAPER = join(PAPERS, "georges1996dynamical");
-test.skip(!existsSync(PHD_PAPER), `needs the paper georges1996dynamical in ${PAPERS} (set ATLAS_TEST_PAPERS)`);
+test.skip(!existsSync(PHD_PAPER), `needs the paper georges1996dynamical in ${PAPERS} (set KANDINSKY_TEST_PAPERS)`);
 // Outside refs/papers so the Library tests keep their fixture count; notes go to <name>.notes.md.
 const PDF_REL = "pdfs/annotate-me.pdf";
 
@@ -63,7 +63,7 @@ test("PDF: ink + highlight are saved into its note as they are made (the PDF unt
   await page.screenshot({ path: "test-results/pdf-annotated.png" });
   // saved into the PDF's note (its pdf-marks block), the store every device writes: the PDF itself untouched
   type Mark = { kind: string; page: number; quote?: { exact: string }; strokes?: { samples: string }[] };
-  const marks = async (): Promise<Mark[]> => (await (await page.request.get(`/api/pdf-marks?pdf=${encodeURIComponent(PDF_REL)}`, { headers: { "x-atlas": "1" } })).json()).marks;
+  const marks = async (): Promise<Mark[]> => (await (await page.request.get(`/api/pdf-marks?pdf=${encodeURIComponent(PDF_REL)}`, { headers: { "x-kandinsky": "1" } })).json()).marks;
   await expect.poll(async () => (await marks()).map((m) => m.kind).sort().join(","), { timeout: 20_000 }).toBe("highlight,ink");
   expect(statSync(abs).size).toBe(before);
   expect(readFileSync(abs).equals(pdfBytes)).toBe(true);
@@ -73,7 +73,7 @@ test("PDF: ink + highlight are saved into its note as they are made (the PDF unt
   const quote = ms.find((m) => m.kind === "highlight")!.quote!.exact;
   expect(words.replace(/\s+/g, " ")).toContain(quote.split(" ")[0]);
   expect(readFileSync(join(WS, "pdfs/annotate-me.md"), "utf8").trimEnd().endsWith("```")).toBe(true);
-  await expect(page.locator('.page[data-page-number="1"] svg.atlas-marks [data-mark]')).toHaveCount(2, { timeout: 20_000 });
+  await expect(page.locator('.page[data-page-number="1"] svg.kandinsky-marks [data-mark]')).toHaveCount(2, { timeout: 20_000 });
 
   await page.keyboard.press("Control+f");
   await page.keyboard.type("impurity");

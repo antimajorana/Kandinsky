@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 // Travelling the history shows itself (lib/nav-signs.ts): a swipe's arrow at the edge, then a pill
 // naming where it went — "← Back · <title> · n of m".
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("a swipe back shows the edge arrow and the history pill", async ({ page, request }) => {
   for (const n of ["sign-one", "sign-two"]) await request.put("/api/file", { headers: H, data: { path: `notes/${n}.md`, text: `# ${n}\n` } });

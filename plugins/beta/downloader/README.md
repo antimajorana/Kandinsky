@@ -25,7 +25,7 @@ server, which fetches it into a library. A preset says which service:
 - *custom only*: **Method** (POST, GET or PUT); **Body (JSON)** (`{"url": "{url}"}`: `{url}`, `{kind}`, `{title}`,
   `{artist}`, `{id}` are filled in, JSON-escaped; a body that is not JSON is reported before anything is sent);
   **Token header** (the header the token goes in: `Authorization`, `X-Api-Key`).
-- **Token** (optional, a secret): TubeArchivist's API token (Settings → Integrations), or custom's; put in by Atlas's
+- **Token** (optional, a secret): TubeArchivist's API token (Settings → Integrations), or custom's; put in by Kandinsky's
   core, never seen by the helper.
 - **Kinds to send** (`song`): the catalog kinds handed over; others are left alone. TubeArchivist takes only things
   with a YouTube id (videos, YouTube Music songs).
@@ -33,18 +33,18 @@ server, which fetches it into a library. A preset says which service:
   (`links: { downloader: { send: true } }`).
 - **Property it writes** (*More*; empty: `downloaded`, TubeArchivist `tubearchivist`).
 
-Behind a sign-in proxy (Authelia and the like), Atlas offers the sign-in.
+Behind a sign-in proxy (Authelia and the like), Kandinsky offers the sign-in.
 
 ## How it fits
 
 No `requires`: the contribution is used while the catalog runs; videos and songs come from Catalog · YouTube. It
 replaces the **TubeArchivist** plugin (`replaces`): installing it carries TubeArchivist's address, token and switch
 over, with the TubeArchivist preset and `video` as the kind to send — unless this vault had Downloader set up already,
-whose own settings win (TubeArchivist's settings file is then in `.atlas/trash/`). One service per vault.
+whose own settings win (TubeArchivist's settings file is then in `.kandinsky/trash/`). One service per vault.
 
 ## Platforms
 
-Linux works; the others are untested. The helper is JavaScript run inside Atlas's core.
+Linux works; the others are untested. The helper is JavaScript run inside Kandinsky's core.
 
 ## Status
 

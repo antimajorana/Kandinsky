@@ -1,10 +1,10 @@
-package org.atlas.plugins.books;
+package org.kandinsky.plugins.books;
 
 import android.view.View;
 import android.widget.FrameLayout;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.NativePlugin;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.NativePlugin;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;

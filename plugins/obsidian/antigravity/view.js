@@ -2,7 +2,7 @@
 
 import { mountSwitcherWidget } from "./switcher-ui.js";
 
-export default function mountAntigravityPane(host, atlas) {
+export default function mountAntigravityPane(host, kandinsky) {
   let disposed = false;
   let busy = false;
   let state = {
@@ -60,7 +60,7 @@ export default function mountAntigravityPane(host, atlas) {
   const settingsBtn = document.createElement("button");
   settingsBtn.className = "agy-btn";
   settingsBtn.textContent = "Settings…";
-  settingsBtn.onclick = () => atlas.plugin.openSettings();
+  settingsBtn.onclick = () => kandinsky.plugin.openSettings();
   head.append(titleWrap, settingsBtn);
 
   const switcherMount = document.createElement("div");
@@ -69,14 +69,14 @@ export default function mountAntigravityPane(host, atlas) {
   wrap.append(head, switcherMount, mcpMount);
   host.replaceChildren(style, wrap);
 
-  const cleanupSwitcher = mountSwitcherWidget(switcherMount, atlas, { compact: false });
+  const cleanupSwitcher = mountSwitcherWidget(switcherMount, kandinsky, { compact: false });
 
   async function refreshMcp() {
     if (disposed) return;
     busy = true;
     renderMcp();
     try {
-      const res = await atlas.helper.call("status", { includeModels: false }, { timeout: 15 });
+      const res = await kandinsky.helper.call("status", { includeModels: false }, { timeout: 15 });
       if (disposed) return;
       state = { checked: true, ...res, error: res.error || "" };
     } catch (e) {
@@ -93,16 +93,16 @@ export default function mountAntigravityPane(host, atlas) {
     busy = true;
     renderMcp();
     try {
-      const res = await atlas.helper.call("connectMcp", {}, { timeout: 20 });
+      const res = await kandinsky.helper.call("connectMcp", {}, { timeout: 20 });
       if (disposed) return;
       if (res && res.ok) {
-        atlas.toast("Connected Kandinsky MCP", "Antigravity can now search, read, and navigate your vault directly.", "success");
+        kandinsky.toast("Connected Kandinsky MCP", "Antigravity can now search, read, and navigate your vault directly.", "success");
       } else {
-        atlas.toast("Could not register MCP", (res && res.stderr) || "Check agy mcp list.", "error");
+        kandinsky.toast("Could not register MCP", (res && res.stderr) || "Check agy mcp list.", "error");
       }
       if (res && res.status) state = { checked: true, ...res.status, error: "" };
     } catch (e) {
-      atlas.toast("MCP setup failed", String((e && e.message) || e), "error");
+      kandinsky.toast("MCP setup failed", String((e && e.message) || e), "error");
     } finally {
       busy = false;
       renderMcp();

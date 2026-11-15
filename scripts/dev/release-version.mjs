@@ -72,10 +72,10 @@ const PLACES = [
     get: (t) => { const a = t.match(/^  "version": "([^"]+)"/m)?.[1], b = t.match(/"": \{\n\s*"name": "[^"]+",\n\s*"version": "([^"]+)"/)?.[1]; return a === b ? a : `mixed (${a}, ${b})`; },
     set: (t, v) => t.replace(/^(  "version": ")[^"]+"/m, `$1${v}"`).replace(/("": \{\n\s*"name": "[^"]+",\n\s*"version": ")[^"]+"/, `$1${v}"`),
   }],
-  ["crates/atlas-app/tauri.conf.json", one(/^  "version": "([^"]+)"/m)],
-  ["crates/atlas-android/android/AndroidManifest.atlas.xml", manifest],
-  ["crates/atlas-android/android/AndroidManifest.capture.xml", manifest],
-  ["packaging/flatpak/io.github.alneb.Atlas.metainfo.xml", metainfo],
+  ["crates/kandinsky-app/tauri.conf.json", one(/^  "version": "([^"]+)"/m)],
+  ["crates/kandinsky-android/android/AndroidManifest.kandinsky.xml", manifest],
+  ["crates/kandinsky-android/android/AndroidManifest.capture.xml", manifest],
+  ["packaging/flatpak/io.github.alneb.Kandinsky.metainfo.xml", metainfo],
 ];
 
 const found = PLACES.map(([rel, p]) => ({ rel, p, text: read(rel), now: p.get(read(rel)) }));

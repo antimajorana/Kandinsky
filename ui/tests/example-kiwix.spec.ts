@@ -6,8 +6,8 @@ import type { AddressInfo } from "node:net";
 
 // The Kiwix plugin's pane against a stand-in kiwix-serve (its catalog, /suggest and /search as libkiwix answers them):
 // a book chosen among the server's, titles while typing, the full text on Enter, an article's link and its Save.
-const H = { "x-atlas": "1" };
-const DIR = ".atlas/plugins/kiwix";
+const H = { "x-kandinsky": "1" };
+const DIR = ".kandinsky/plugins/kiwix";
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const plugin = (f: string) => readFileSync(fileURLToPath(new URL(`../../plugins/beta/kiwix/${f}`, import.meta.url)), "utf8");
 const BOOK = "wikipedia_es_all_maxi_2026-05";
@@ -40,7 +40,7 @@ test.beforeAll(async ({ request }) => {
   await put(request, `${DIR}/main.js`, plugin("main.js"));
   await put(request, `${DIR}/view.js`, plugin("view.js"));
   // the vault's values in their own file, never in the manifest
-  await put(request, ".atlas/plugin-settings/kiwix.toml", `server = "http://127.0.0.1:${port}/"\nbooks = "wikipedia"\n`);
+  await put(request, ".kandinsky/plugin-settings/kiwix.toml", `server = "http://127.0.0.1:${port}/"\nbooks = "wikipedia"\n`);
   await put(request, `${DIR}/plugin.toml`, plugin("plugin.toml"));
 });
 test.afterAll(async ({ request }) => {

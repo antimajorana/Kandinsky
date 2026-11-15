@@ -45,14 +45,14 @@ Every drag has a menu alternative, so the whole thing works from the keyboard.
   - Pure edit functions on the model: `insertBlock`, `insertRow`, `insertColumn`, `moveBlock` (to a `Drop`: `at` / `row` / `column`), `removeBlock`, `setWidths`. Emptied rows and columns disappear (`tidy`).
   - Output style: one line per list of blocks, so a page reads — and diffs — as its layout.
 - `ui/src/panes/Page.svelte` — draws the model (each block through `mountBlock`, so a page shows exactly what a note would) and holds arrange mode: slots, the bar, the menu, column resizing, undo. Saving uses `PUT /api/file` with `base_mtime`; a conflict (the file changed on disk meanwhile) reloads the page and says so.
-- The block chooser is the palette's `pick` — Atlas's one chooser, the same as "Open with…".
+- The block chooser is the palette's `pick` — Kandinsky's one chooser, the same as "Open with…".
 - A block declares what the chooser needs to know in `lib/blocks.ts`: `file` (it shows a file: ask which), `card` (content that sits on a card surface), `height` (it fills a box).
 
 ## What to watch out for
 
 - Moving a block to another column remounts it (an embedded terminal restarts). Reordering inside one column keeps it.
 - Dragging a block's height by its corner (a framed block) is not saved yet; **Height…** in the menu is.
-- The core keeps a small `.page` reader (`crates/atlas-core/src/page.rs`) for two things only: the home page's title and checking the pages the toolsmith drafts. The route `GET /api/page` and its generated TypeScript types were removed (the UI's model is `ui/src/lib/page-doc.ts`).
+- The core keeps a small `.page` reader (`crates/kandinsky-core/src/page.rs`) for two things only: the home page's title and checking the pages the toolsmith drafts. The route `GET /api/page` and its generated TypeScript types were removed (the UI's model is `ui/src/lib/page-doc.ts`).
 - **Options…** in a block's menu (while arranging) opens a form with the block's options: where a list's rows come from, a database's view, a terminal's preset, a file's path… Saving writes them into the `.page`; an emptied field removes its key. The form is drawn from the fields the block declares (`{ key, label, hint?, kind }` with `kind` one of `text`, `number`, `toggle`, `list` (comma-separated, written as a YAML list) or `choice` (with `choices: [...]`)): built-in blocks in `ui/src/lib/block-options.ts` (`BUILTIN_FIELDS`, and `ROW_VIEW_FIELDS` shared by every row view), a plugin's block as the third argument of `registerBlock`. A block that declares nothing has no Options… and is configured as text (Edit layout). Options that are structures (`filters:`) stay text. In a note a block is its own text, so there is no form there. Code: `components/BlockOptions.svelte`, `optionFields` in `blocks.ts`; test `block-options.spec.ts`.
 
 ## Tests

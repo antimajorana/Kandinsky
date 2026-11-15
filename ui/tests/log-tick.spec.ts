@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // A to-do in today's log is ticked from the log panel (Markdown.svelte, tickable): the file says [x].
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("a to-do in today's log can be ticked from the panel", async ({ page, request }) => {
   const today = await (await request.get("/api/today", { headers: H })).json() as { log: { path: string } };

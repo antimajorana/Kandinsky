@@ -299,7 +299,7 @@ fn to_text(doc: &Value) -> Result<String> {
     serde_yaml::to_string(doc).map_err(|e| Error::BadRequest(e.to_string()))
 }
 
-/// The view types Atlas draws; anything else would silently show as a table.
+/// The view types Kandinsky draws; anything else would silently show as a table.
 fn view_kind(kind: &str) -> Result<&str> {
     match kind {
         "table" | "cards" | "list" | "board" => Ok(kind),

@@ -2,7 +2,7 @@
 (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 	//#region ui/src/lib/tex-portable.ts
-	/** The macros every formula in Atlas may use, as KaTeX's `macros` option writes them (`#1` for an argument). */
+	/** The macros every formula in Kandinsky may use, as KaTeX's `macros` option writes them (`#1` for an argument). */
 	const MACROS = {
 		"\\R": "\\mathbb{R}",
 		"\\C": "\\mathbb{C}",
@@ -192,7 +192,7 @@
 	/** A display's TeX as a lookup key: without its `$$`, a block id after them, container prefixes (`> `) and outer
 	*  blanks; the reader's token content and the editor's `$$…$$` source give the same key. */
 	const texKey = (display) => display.replace(/[ \t]*\^[A-Za-z0-9-]+[ \t]*$/, "").split("\n").map((l) => l.replace(/^[ \t>]*/, "")).join("\n").replace(/^\s*\$\$|\$\$\s*$/g, "").trim();
-	/** TeX as KaTeX should draw it: labels out (they are Atlas's), and with a number, a numbered environment made its
+	/** TeX as KaTeX should draw it: labels out (they are Kandinsky's), and with a number, a numbered environment made its
 	*  unnumbered twin (KaTeX would count from 1 in each display) and `\tag{n}` added — before the closing `$$` when the
 	*  text has them. */
 	function numberedTex(tex, n) {
@@ -291,7 +291,7 @@
 		return out;
 	}
 	/** Display math as every writer takes it: on lines of its own, a `$$align` block (and a whole `\begin{align}` in `$$`)
-	*  as pandoc's `aligned`, valid inside display math everywhere. Atlas's macros stay as written: each road carries their
+	*  as pandoc's `aligned`, valid inside display math everywhere. Kandinsky's macros stay as written: each road carries their
 	*  definitions (helper.ts). */
 	const mathPortable = (text) => text.replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => `$$\n${expandAlign(tex.trim()).replace(/^\\begin\{align\*?\}([\s\S]*)\\end\{align\*?\}$/, "\\begin{aligned}$1\\end{aligned}")}\n$$`);
 	const AUTO = "";
@@ -528,12 +528,12 @@
 			typst: "american-physics-society"
 		}
 	};
-	const CACHE = ".atlas/cache/plugins/export";
-	/** Where the dialog leaves a ```tikz picture drawn by the page's TeX (`atlas.tikz.png`), by its key. */
+	const CACHE = ".kandinsky/cache/plugins/export";
+	/** Where the dialog leaves a ```tikz picture drawn by the page's TeX (`kandinsky.tikz.png`), by its key. */
 	const tikzPng = (key) => `${CACHE}/figures/${key}.png`;
 	/** A fence's key: the hash of its source, the same for the dialog (from `describe`) and the road. */
-	const keyOf = (source) => atlas.hash.sha256(source).slice(0, 16);
-	const PLUGIN = ".atlas/plugins/export";
+	const keyOf = (source) => kandinsky.hash.sha256(source).slice(0, 16);
+	const PLUGIN = ".kandinsky/plugins/export";
 	/** The LaTeX road's layouts: `plain` is pandoc's article; `article` a KOMA article set for reading (microtype, a
 	*  little more leading, dark-coloured links, paragraphs spaced, not indented); `chapter` a KOMA report whose top
 	*  headings are chapters, numbered, with a table of contents. */
@@ -572,17 +572,17 @@
 		}
 	};
 	const layoutOf = (o) => LAYOUTS[o.layout ?? "plain"] ?? LAYOUTS.plain;
-	const progress = (stage, text) => atlas.event("progress", {
+	const progress = (stage, text) => kandinsky.event("progress", {
 		stage,
 		text
 	});
 	/** Runs a program the manifest names; its output, or why not (with its last error lines). */
 	async function run(program, args, opts = {}) {
-		return await atlas.exec(program, args, {
+		return await kandinsky.exec(program, args, {
 			...opts,
 			timeout: opts.timeout ?? 120
 		}).catch((e) => {
-			throw new Error(/not installed/.test(e.message) ? `${program} is not installed on the machine running Atlas` : e.message);
+			throw new Error(/not installed/.test(e.message) ? `${program} is not installed on the machine running Kandinsky` : e.message);
 		});
 	}
 	/** Which formats work here: pandoc for all, latexmk for the LaTeX PDF; Typst is in the core. */
@@ -639,13 +639,13 @@
 		};
 		const folder = String(o.folder ?? "exports").trim().replace(/^\/+|\/+$/g, "") || "exports";
 		const outDir = [preview ? `${CACHE}/preview` : folder, dirname(rel)].filter(Boolean).join("/");
-		const files = await atlas.files();
+		const files = await kandinsky.files();
 		const bib = findBib(files, String(o.bibliography ?? ""));
-		const keys = bib ? bibKeys(await atlas.read(bib)) : /* @__PURE__ */ new Set();
+		const keys = bib ? bibKeys(await kandinsky.read(bib)) : /* @__PURE__ */ new Set();
 		progress("translate", `reading ${rel}`);
 		const t = await translate({
 			files,
-			read: (p) => atlas.read(p)
+			read: (p) => kandinsky.read(p)
 		}, rel, outDir, keys);
 		if (t.cited.length && !bib) t.warnings.push("papers are cited but no .bib was found (the Bibliography option)");
 		const stem = rel.slice(rel.lastIndexOf("/") + 1).replace(/\.md$/i, "");
@@ -727,7 +727,7 @@
 		else if (f.lang === "tikz" && road === "latex") out[i] = "```tikz\n" + f.source + "\n```";
 		else if (f.lang === "typst" && road === "latex") {
 			const pdf = `${CACHE}/figures/${keyOf(f.source)}.pdf`;
-			atlas.convert.typstPdf(`${dirname(j.rel) || "."}/.fence.typ`, pdf, {
+			kandinsky.convert.typstPdf(`${dirname(j.rel) || "."}/.fence.typ`, pdf, {
 				source: f.source,
 				fence: true
 			});
@@ -766,17 +766,17 @@
 		].filter((k) => k < lines.length)))].sort((a, b) => a - b).map((k) => lines[k]).join("\n").slice(-3e3) || lines.slice(-30).join("\n");
 	}
 	async function typstRoad(j, format) {
-		const typ = await pandoc(j, "typst", metadata(j, "typst", (j.o.typstPreamble ? [await atlas.read(j.o.typstPreamble).catch(() => {
+		const typ = await pandoc(j, "typst", metadata(j, "typst", (j.o.typstPreamble ? [await kandinsky.read(j.o.typstPreamble).catch(() => {
 			j.t.warnings.push(`Typst preamble not found: ${j.o.typstPreamble}`);
 			return "";
 		})] : []).filter(Boolean).map((h) => "```{=typst}\n" + h + "\n```")) + await fences(j, "typst"));
 		const at = `${j.outDir}/${j.stem}.typ`;
 		if (format === "typ") {
-			await atlas.write(at, typ);
+			await kandinsky.write(at, typ);
 			return at;
 		}
 		progress("typst", "compiling the PDF with Typst");
-		return atlas.convert.typstPdf(at, `${j.outDir}/${j.stem}.pdf`, { source: typ });
+		return kandinsky.convert.typstPdf(at, `${j.outDir}/${j.stem}.pdf`, { source: typ });
 	}
 	async function latexRoad(j, format) {
 		const header = ["```{=latex}\n" + ["\\usepackage{soul}", ...layoutOf(j.o).header].join("\n") + "\n```"];
@@ -793,7 +793,7 @@
 		];
 		const tex = await pandoc(j, "latex", metadata(j, "latex", header) + await fences(j, "latex"), extra);
 		const at = `${j.outDir}/${j.stem}.tex`;
-		await atlas.write(at, tex);
+		await kandinsky.write(at, tex);
 		if (format === "tex") return [at];
 		const engine = String(j.o.engine || "lualatex");
 		const buildDir = `${CACHE}/build/${j.rel.replace(/[^\w.-]+/g, "_")}`;
@@ -813,14 +813,14 @@
 			timeout: 600
 		});
 		if (r.status !== 0) {
-			const log = await atlas.read(`${buildDir}/${j.stem}.log`).catch(() => r.stdout);
+			const log = await kandinsky.read(`${buildDir}/${j.stem}.log`).catch(() => r.stdout);
 			throw new Error(`LaTeX failed on ${at}:\n${latexErrors(log)}`);
 		}
 		return [at, `${j.outDir}/${j.stem}.pdf`];
 	}
 	async function docxRoad(j) {
 		const out = `${j.outDir}/${j.stem}.docx`;
-		await atlas.write(out, "");
+		await kandinsky.write(out, "");
 		const cite = j.t.cited.length && j.bib ? ["--citeproc"] : [];
 		await pandoc(j, "docx", metadata(j, "docx", []) + await fences(j, "docx"), [...cite, `--resource-path=${j.outDir}`], out);
 		return out;
@@ -869,7 +869,7 @@
 			ext: EXT
 		};
 	}
-	atlas.methods({
+	kandinsky.methods({
 		formats,
 		describe,
 		export: exportNote

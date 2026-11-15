@@ -1,5 +1,5 @@
 // Fenced code in Markdown, read as CommonMark (and the editor) reads it: the core's reader
-// (crates/atlas-text/src/fence.rs `Fences`), line for line, for every walk here over a note's lines that must leave code
+// (crates/kandinsky-text/src/fence.rs `Fences`), line for line, for every walk here over a note's lines that must leave code
 // out. A fence opens with three or more backticks or tildes (up to three spaces in) and closes with a run of the same
 // mark at least as long, with nothing after it: a ``` inside a ```` block, a ~~~ inside a ``` one, or ```js, do not.
 

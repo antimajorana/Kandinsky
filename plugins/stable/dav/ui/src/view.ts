@@ -5,13 +5,13 @@ import App from "./App.svelte";
 import NewEvent from "./NewEvent.svelte";
 import { newEventSeed, type PluginApi } from "./api";
 
-export default function (host: HTMLElement, atlas: PluginApi) {
-  const seed = newEventSeed(atlas.arg);
+export default function (host: HTMLElement, kandinsky: PluginApi) {
+  const seed = newEventSeed(kandinsky.arg);
   if (seed) {
-    const ne = mount(NewEvent, { target: host, props: { atlas, seed, onclose: () => atlas.pane?.close?.() } });
+    const ne = mount(NewEvent, { target: host, props: { kandinsky, seed, onclose: () => kandinsky.pane?.close?.() } });
     return () => unmount(ne);
   }
   host.style.height = "100%";
-  const app = mount(App, { target: host, props: { atlas } });
+  const app = mount(App, { target: host, props: { kandinsky } });
   return () => unmount(app);
 }

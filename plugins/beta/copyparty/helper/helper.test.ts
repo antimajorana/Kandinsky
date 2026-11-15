@@ -1,7 +1,7 @@
 // The agents' tools over a stand-in copyparty: `?ls` answers in copyparty's JSON shape (dirs/files with hrefs).
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { harness } from "atlas-helper/testing";
+import { harness } from "kandinsky-helper/testing";
 import "./helper";
 import { fileUrl, matches } from "./helper";
 

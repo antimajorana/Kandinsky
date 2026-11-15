@@ -3,7 +3,7 @@
 import { dvCompare, dvEqual, executeDql, filterPagesBySource } from "./dql.js";
 import { makeDvDate, makeDvLink, normPath, parseDateMs } from "./index.js";
 
-const STYLE_ID = "atlas-plugin-obsidian-dataview-style";
+const STYLE_ID = "kandinsky-plugin-obsidian-dataview-style";
 
 const CSS = `
 .dv-fence-root {
@@ -260,36 +260,36 @@ export class DataArray extends Array {
 
 // --- Navigation & Rich Value Rendering ------------------------------------------------------------------
 
-export function openWikiTarget(atlas, index, rawTarget, fromPath = "", opts = {}) {
+export function openWikiTarget(kandinsky, index, rawTarget, fromPath = "", opts = {}) {
   const cleaned = String(rawTarget ?? "").trim().replace(/^!?\[\[|\]\]$/g, "");
   const [pathPart] = cleaned.split("|");
   const [fileRef] = (pathPart ?? "").split("#");
   const target = (fileRef ?? "").trim();
   if (!target) return;
   const resolved = index.resolvePath(target, fromPath) ?? (/\.md$/i.test(target) ? normPath(target) : `${normPath(target)}.md`);
-  atlas.open(resolved, opts.line, { beside: Boolean(opts.beside) });
+  kandinsky.open(resolved, opts.line, { beside: Boolean(opts.beside) });
 }
 
-function makeClickableLinkEl(atlas, index, linkObj, fromPath) {
+function makeClickableLinkEl(kandinsky, index, linkObj, fromPath) {
   const a = document.createElement("a");
   a.className = "dv-link";
   a.href = "#";
   a.textContent = linkObj.display ?? linkObj.fileName();
   const resolved = index.resolvePath(linkObj.path, fromPath) ?? linkObj.path;
   a.title = resolved;
-  a.addEventListener("mouseenter", () => atlas.hover?.(resolved));
-  a.addEventListener("mouseleave", () => atlas.hover?.(null));
+  a.addEventListener("mouseenter", () => kandinsky.hover?.(resolved));
+  a.addEventListener("mouseleave", () => kandinsky.hover?.(null));
   a.addEventListener("click", (ev) => {
     ev.preventDefault();
     ev.stopPropagation();
-    openWikiTarget(atlas, index, resolved, fromPath, { beside: ev.ctrlKey || ev.metaKey || ev.shiftKey });
+    openWikiTarget(kandinsky, index, resolved, fromPath, { beside: ev.ctrlKey || ev.metaKey || ev.shiftKey });
   });
   return a;
 }
 
 const INLINE_TOKEN_RE = /(!?\[\[([^\]|#\n]+)(?:#([^\]|\n]+))?(?:\|([^\]\n]+))?\]\])|(\[([^\]]+)\]\(([^)]+)\))|(`[^`]+`)/g;
 
-function renderRichStringInto(container, text, { atlas, index, fromPath }) {
+function renderRichStringInto(container, text, { kandinsky, index, fromPath }) {
   const s = String(text ?? "");
   if (/^#[\p{L}\p{N}_/-]+$/u.test(s.trim())) {
     const chip = document.createElement("span");
@@ -305,14 +305,14 @@ function renderRichStringInto(container, text, { atlas, index, fromPath }) {
     if (m.index > cursor) container.appendChild(document.createTextNode(s.slice(cursor, m.index)));
     if (m[1]) {
       const link = makeDvLink(m[2].trim(), m[4]?.trim(), m[1].startsWith("!"), m[3]?.trim());
-      container.appendChild(makeClickableLinkEl(atlas, index, link, fromPath));
+      container.appendChild(makeClickableLinkEl(kandinsky, index, link, fromPath));
     } else if (m[5]) {
       const label = m[6], href = m[7].trim();
       if (href.startsWith("obsidian://open")) {
         let fileParam = "";
         try { fileParam = new URL(href).searchParams.get("file") ?? ""; } catch { /* ignore */ }
         if (fileParam) {
-          container.appendChild(makeClickableLinkEl(atlas, index, makeDvLink(decodeURIComponent(fileParam), label), fromPath));
+          container.appendChild(makeClickableLinkEl(kandinsky, index, makeDvLink(decodeURIComponent(fileParam), label), fromPath));
         } else {
           container.appendChild(document.createTextNode(label));
         }
@@ -324,11 +324,11 @@ function renderRichStringInto(container, text, { atlas, index, fromPath }) {
         a.addEventListener("click", (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
-          atlas.openLink(href, { outside: ev.shiftKey });
+          kandinsky.openLink(href, { outside: ev.shiftKey });
         });
         container.appendChild(a);
       } else {
-        container.appendChild(makeClickableLinkEl(atlas, index, makeDvLink(href, label), fromPath));
+        container.appendChild(makeClickableLinkEl(kandinsky, index, makeDvLink(href, label), fromPath));
       }
     } else if (m[8]) {
       const code = document.createElement("code");
@@ -354,7 +354,7 @@ export function renderValueInto(container, val, ctx) {
   }
   if (typeof val === "object") {
     if (val.__dvLink) {
-      container.appendChild(makeClickableLinkEl(ctx.atlas, ctx.index, val, ctx.fromPath));
+      container.appendChild(makeClickableLinkEl(ctx.kandinsky, ctx.index, val, ctx.fromPath));
       return;
     }
     if (val.__dvExternalLink) {
@@ -365,7 +365,7 @@ export function renderValueInto(container, val, ctx) {
       a.addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
-        ctx.atlas.openLink(val.url, { outside: ev.shiftKey });
+        ctx.kandinsky.openLink(val.url, { outside: ev.shiftKey });
       });
       container.appendChild(a);
       return;
@@ -490,7 +490,7 @@ export function renderTaskListDom(container, tasks, groupByFile, ctx) {
       ev.stopPropagation();
       if (!t.path || !t.line) return;
       try {
-        const raw = await ctx.atlas.readText(t.path);
+        const raw = await ctx.kandinsky.readText(t.path);
         const lines = raw.split(/\r?\n/);
         const idx = t.line - 1;
         if (idx >= 0 && idx < lines.length) {
@@ -498,11 +498,11 @@ export function renderTaskListDom(container, tasks, groupByFile, ctx) {
           const updated = lines[idx].replace(/^(\s*[-*+]\s+\[).(])/, `$1${nextMark}$2`);
           if (updated !== lines[idx]) {
             lines[idx] = updated;
-            await ctx.atlas.writeText(t.path, lines.join("\n"));
+            await ctx.kandinsky.writeText(t.path, lines.join("\n"));
           }
         }
       } catch {
-        ctx.atlas.open(t.path, t.line);
+        ctx.kandinsky.open(t.path, t.line);
       }
     });
     li.appendChild(cb);
@@ -520,7 +520,7 @@ export function renderTaskListDom(container, tasks, groupByFile, ctx) {
       jump.addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
-        ctx.atlas.open(t.path, t.line, { beside: ev.ctrlKey || ev.metaKey || ev.shiftKey });
+        ctx.kandinsky.open(t.path, t.line, { beside: ev.ctrlKey || ev.metaKey || ev.shiftKey });
       });
       li.appendChild(jump);
     }
@@ -549,7 +549,7 @@ export function renderTaskListDom(container, tasks, groupByFile, ctx) {
     if (filePath) {
       const head = document.createElement("div");
       head.className = "dv-task-group-head";
-      head.appendChild(makeClickableLinkEl(ctx.atlas, ctx.index, makeDvLink(filePath), ctx.fromPath));
+      head.appendChild(makeClickableLinkEl(ctx.kandinsky, ctx.index, makeDvLink(filePath), ctx.fromPath));
       head.appendChild(document.createTextNode(` (${fileTasks.length})`));
       sec.appendChild(head);
     }
@@ -572,12 +572,12 @@ export function renderDqlResult(container, result, ctx) {
 
 // --- DataviewJS (`dv` + `app`) Execution ----------------------------------------------------------------
 
-export async function runDataviewJs(source, container, { atlas, index, currentPath, liveProps = {}, getDefaultFmt = () => "YYYY-MM-DD", maxRows = 500 }) {
-  const ctx = { atlas, index, fromPath: currentPath, getDefaultFmt };
+export async function runDataviewJs(source, container, { kandinsky, index, currentPath, liveProps = {}, getDefaultFmt = () => "YYYY-MM-DD", maxRows = 500 }) {
+  const ctx = { kandinsky, index, fromPath: currentPath, getDefaultFmt };
   const appShim = {
     workspace: {
       openLinkText(linktext, sourcePath = currentPath, newLeaf = false) {
-        openWikiTarget(atlas, index, linktext, sourcePath, { beside: Boolean(newLeaf) });
+        openWikiTarget(kandinsky, index, linktext, sourcePath, { beside: Boolean(newLeaf) });
       },
     },
     vault: {

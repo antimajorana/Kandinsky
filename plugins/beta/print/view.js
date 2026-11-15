@@ -1,9 +1,9 @@
 // The print dialog: the document as it will print (a note as the PDF the Export plugin makes of it) beside the options —
 // printer, copies, pages, sides, paper, orientation, fit — prefilled from the plugin's settings; "Print" sends it to
 // CUPS (helper/helper.ts). The preview is the app's own PDF view (an embed in a text block).
-export default function mount(host, atlas) {
-  const path = String(atlas.arg ?? "");
-  const s = atlas.plugin.settings ?? {};
+export default function mount(host, kandinsky) {
+  const path = String(kandinsky.arg ?? "");
+  const s = kandinsky.plugin.settings ?? {};
   const el = (tag, props = {}, kids = []) => {
     const e = Object.assign(document.createElement(tag), props);
     e.append(...kids);
@@ -58,14 +58,14 @@ export default function mount(host, atlas) {
   let pdf = null, preparing = true;
   let unmount = () => {};
   const say = (text, err = false) => { status.textContent = text; status.classList.toggle("err", err); };
-  atlas.helper.call("printers", {}, { timeout: 30 }).then((list) => {
+  kandinsky.helper.call("printers", {}, { timeout: 30 }).then((list) => {
     for (const p of list) if (![...printer.options].some((o) => o.value === p.value)) printer.append(el("option", { value: p.value, textContent: p.label }));
     printer.value = String(s.printer ?? "");
   }, (e) => say(String(e?.message ?? e), true));
-  atlas.helper.call("prepare", { path }, { timeout: 600 }).finally(() => { preparing = false; }).then((r) => {
+  kandinsky.helper.call("prepare", { path }, { timeout: 600 }).finally(() => { preparing = false; }).then((r) => {
     pdf = r.pdf;
     preview.replaceChildren();
-    unmount = atlas.mountBlock(preview, { type: "text", text: `![[${pdf}]]` }, path);
+    unmount = kandinsky.mountBlock(preview, { type: "text", text: `![[${pdf}]]` }, path);
     go.disabled = false;
   }, (e) => {
     preview.replaceChildren(el("p", { className: "pr-status err", textContent: String(e?.message ?? e) }));
@@ -76,16 +76,16 @@ export default function mount(host, atlas) {
     say(`Sending to ${printer.value || "the default printer"}…`);
     const settings = { ...s, printer: printer.value, copies: Number(copies.value) || 1, sides: sides.value, media: media.value, pages: pages.value.trim(), landscape: landscape.checked, fit: fit.checked };
     try {
-      const r = await atlas.helper.call("print", { path: pdf, settings }, { timeout: 600 });
+      const r = await kandinsky.helper.call("print", { path: pdf, settings }, { timeout: 600 });
       say(`Printing on ${r.printer}${r.job ? ` (job ${r.job})` : ""}.`);
-      atlas.toast("Printing", `${path.split("/").pop()} on ${r.printer}`);
+      kandinsky.toast("Printing", `${path.split("/").pop()} on ${r.printer}`);
     } catch (e) {
       say(String(e?.message ?? e), true);
     } finally {
       go.disabled = false;
     }
   };
-  cancel.onclick = () => atlas.pane?.close();
+  cancel.onclick = () => kandinsky.pane?.close();
   // closed while the PDF is still being made: that is stopped (the helper restarts on the next call)
-  return () => { if (preparing) void atlas.helper.restart(); unmount(); host.replaceChildren(); host.classList.remove("pr"); };
+  return () => { if (preparing) void kandinsky.helper.restart(); unmount(); host.replaceChildren(); host.classList.remove("pr"); };
 }

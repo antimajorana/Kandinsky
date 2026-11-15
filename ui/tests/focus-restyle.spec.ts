@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 // A rule `:focus … ::selection` makes the browser restyle the whole subtree of every element whose focus changes:
 // with one (CodeMirror's drawSelection theme) opening and closing the command bar restyled a long note twice
 // (lib/editor/drawn-selection.ts). No style sheet in the page may carry such a rule once a note is open.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("no style rule ties ::selection to a focus pseudo-class (a focus change would restyle a whole note)", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/focus-restyle.md", text: "# Long\n\nSome *text* here.\n" } });

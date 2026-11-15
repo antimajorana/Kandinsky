@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 // The file tree used to reload on every file event: an autosave rewrote a known file and the tree
 // re-read itself and every open folder. Now it re-reads only when files appear or go (`gone` events); the git
 // marks still follow a save.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("a save does not reload the file tree; a new or deleted file does, and the git mark follows the save", async ({ page, request }) => {
   await request.post("/api/fs/trash?path=notes/tree-new.md", { headers: H }).catch(() => {});
@@ -13,7 +13,7 @@ test("a save does not reload the file tree; a new or deleted file does, and the 
   await page.keyboard.press("Meta+Shift+F");
   // opened, so the tree reveals it (scrolled to its row): the tree draws the rows near the screen only, and a test
   // vault late in a run has more in notes/ than one screen
-  await page.evaluate(() => (window as unknown as { __atlas: { open(p: string): void } }).__atlas.open("notes/tree-keep.md"));
+  await page.evaluate(() => (window as unknown as { __kandinsky: { open(p: string): void } }).__kandinsky.open("notes/tree-keep.md"));
   const keep = page.locator('.row[data-path="notes/tree-keep.md"]');
   await expect(keep).toBeVisible();
   await page.waitForTimeout(1500); // the opening's own reads settle

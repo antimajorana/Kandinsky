@@ -8,7 +8,7 @@
 //! `NaiveDateTime` is chrono's "a date+time with no timezone attached". We use it
 //! everywhere because Obsidian's day-granularity comparisons don't need zones.
 //!
-//! **Locale**: month/day *names* follow `editor.date_names` (Atlas: set per
+//! **Locale**: month/day *names* follow `editor.date_names` (Kandinsky: set per
 //! evaluation by `bases::evaluate`; obsidian-web set it once from `--locale`).
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Timelike};

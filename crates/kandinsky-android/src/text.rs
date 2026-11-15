@@ -1,30 +1,30 @@
-//! The text rules the Java screens once kept copies of, now the core's own: a link's tracking taken off (atlas-text
-//! links.rs), a share's text and quote (atlas-capture share.rs), a pen stroke's samples (pdf_marks.rs `Samples`) and a
-//! note's properties (atlas-text frontmatter.rs). Through glue.rs; "" stands for Java's null both ways.
-use atlas_core::pdf_marks::{Sample, Samples};
-use atlas_text::frontmatter;
+//! The text rules the Java screens once kept copies of, now the core's own: a link's tracking taken off (kandinsky-text
+//! links.rs), a share's text and quote (kandinsky-capture share.rs), a pen stroke's samples (pdf_marks.rs `Samples`) and a
+//! note's properties (kandinsky-text frontmatter.rs). Through glue.rs; "" stands for Java's null both ways.
+use kandinsky_core::pdf_marks::{Sample, Samples};
+use kandinsky_text::frontmatter;
 use serde_json::{Map, Value as Json};
 use serde_yaml::Value;
 
 /// `text` with the share-tracking parameters taken off every address in it.
 pub fn untracked(text: &str) -> String {
-    atlas_text::links::untracked(text)
+    kandinsky_text::links::untracked(text)
 }
 
 /// A share's text, its subject first when the text does not already hold it.
 pub fn share_text(subject: &str, text: &str) -> String {
-    atlas_capture::share::with_subject(subject, text)
+    kandinsky_capture::share::with_subject(subject, text)
 }
 
 /// Selected text as a Markdown quote; "" when nothing is selected.
 pub fn share_quote(text: &str) -> String {
     let t = text.trim();
-    if t.is_empty() { String::new() } else { atlas_capture::share::quote(t) }
+    if t.is_empty() { String::new() } else { kandinsky_capture::share::quote(t) }
 }
 
 /// A share goes under an unsent draft, never over it.
 pub fn under_draft(draft: &str, shared: &str) -> String {
-    atlas_capture::share::under_draft(draft, shared)
+    kandinsky_capture::share::under_draft(draft, shared)
 }
 
 /// Six numbers a sample: x, y (PDF points), pressure, tiltX, tiltY, t (ms).

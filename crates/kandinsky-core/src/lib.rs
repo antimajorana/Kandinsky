@@ -1,4 +1,4 @@
-//! atlas-core: the workspace engine behind the Atlas UI, CLI and Tauri shell.
+//! kandinsky-core: the workspace engine behind the Kandinsky UI, CLI and Tauri shell.
 //! One transport (HTTP + WS on 127.0.0.1) serves all three; see docs/ARCHITECTURE.md.
 // Tests write their fixtures freely; the core writes only through `vault_write` (clippy.toml).
 #![cfg_attr(test, allow(clippy::disallowed_methods))]
@@ -18,6 +18,7 @@ pub mod convert;
 pub mod detect;
 pub mod drawing_compact;
 pub mod drawing_note;
+pub mod env;
 pub mod error;
 pub mod events;
 pub mod file_stamp;
@@ -35,6 +36,7 @@ pub mod home;
 pub mod key_lock;
 pub mod keys;
 pub mod lease;
+pub mod legacy;
 pub mod link_targets;
 pub mod links;
 pub(crate) mod note_props;
@@ -76,6 +78,7 @@ pub mod settings_layout;
 pub mod shell;
 pub mod service_signin;
 pub mod snippets;
+pub mod state_dir;
 pub mod style;
 pub mod suggest;
 pub mod words;
@@ -83,7 +86,7 @@ pub mod sync_merge;
 pub mod tags;
 pub mod task_suggest;
 pub mod tasks;
-pub use atlas_template as template;
+pub use kandinsky_template as template;
 pub mod template_apply;
 pub mod template_rules;
 pub mod template_values;

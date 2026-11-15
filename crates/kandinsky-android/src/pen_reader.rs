@@ -1,8 +1,8 @@
-//! The Boox's stylus read from evdev, for `org.atlas.capture.PenReader` (docs/design/DESIGN-boox-pen-openink.md): a
+//! The Boox's stylus read from evdev, for `org.kandinsky.capture.PenReader` (docs/design/DESIGN-boox-pen-openink.md): a
 //! thread decodes the pen (openink-pen, vendored from boox_5c_re) and calls `Listener.onPen(action, tool, x, y,
-//! pressure, tiltX, tiltY, sideButton, timeUs)` per report. Atlas takes its pressure — linear raw/4095, as Boox Notes'
+//! pressure, tiltX, tiltY, sideButton, timeUs)` per report. Kandinsky takes its pressure — linear raw/4095, as Boox Notes'
 //! engine reads it, over the whole range — where Android's MotionEvents give Onyx's curve, cut at 1.0. Adapted from
-//! boox_5c_re `impl/crates/openink-jni/src/lib.rs` (MIT): the reader alone, under Atlas's class name.
+//! boox_5c_re `impl/crates/openink-jni/src/lib.rs` (MIT): the reader alone, under Kandinsky's class name.
 use jni::objects::{GlobalRef, JClass, JObject, JValue};
 use jni::sys::{jlong, jstring};
 use jni::{JNIEnv, JavaVM};
@@ -43,7 +43,7 @@ fn throw(env: &mut JNIEnv, msg: &str) {
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_PenReader_nativeStart(mut env: JNIEnv, _class: JClass, listener: JObject) -> jlong {
+pub extern "system" fn Java_org_kandinsky_capture_PenReader_nativeStart(mut env: JNIEnv, _class: JClass, listener: JObject) -> jlong {
     let found = match PenDevice::find() {
         Ok(r) => r,
         Err(e) => {
@@ -72,7 +72,7 @@ pub extern "system" fn Java_org_atlas_capture_PenReader_nativeStart(mut env: JNI
     };
     let stop = Arc::new(AtomicBool::new(false));
     let stop_t = stop.clone();
-    let thread = std::thread::Builder::new().name("atlas-pen".into()).spawn(move || {
+    let thread = std::thread::Builder::new().name("kandinsky-pen".into()).spawn(move || {
         let Ok(mut env) = vm.attach_current_thread_as_daemon() else { return };
         let mut dec = PenDecoder::new(dev.pressure);
         let mut fds = [libc::pollfd { fd: dev.raw_fd(), events: libc::POLLIN, revents: 0 }, libc::pollfd { fd: wake_fd, events: libc::POLLIN, revents: 0 }];
@@ -112,14 +112,14 @@ pub extern "system" fn Java_org_atlas_capture_PenReader_nativeStart(mut env: JNI
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_PenReader_nativeInfo(env: JNIEnv, _c: JClass, h: jlong) -> jstring {
+pub extern "system" fn Java_org_kandinsky_capture_PenReader_nativeInfo(env: JNIEnv, _c: JClass, h: jlong) -> jstring {
     // SAFETY: h comes from nativeStart and is freed only by nativeStop (Java guards the order).
     let r = unsafe { &*(h as *const Reader) };
     env.new_string(&r.info).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
 }
 
 #[no_mangle]
-pub extern "system" fn Java_org_atlas_capture_PenReader_nativeStop(_env: JNIEnv, _c: JClass, h: jlong) {
+pub extern "system" fn Java_org_kandinsky_capture_PenReader_nativeStop(_env: JNIEnv, _c: JClass, h: jlong) {
     // SAFETY: as above; Java zeroes its handle before calling, so this runs once.
     let mut r = unsafe { Box::from_raw(h as *mut Reader) };
     r.stop.store(true, Ordering::Release);

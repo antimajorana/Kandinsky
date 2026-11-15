@@ -1,7 +1,7 @@
 // The request the settings make (custom and MeTube), what is left alone, and what is not sent twice.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { harness, Reply, Status } from "atlas-helper/testing";
+import { harness, Reply, Status } from "kandinsky-helper/testing";
 import "./helper";
 
 const S = { address: "https://dl.example.org/add", body: '{"url": "{url}", "format": "mp3", "name": "{artist} - {title}"}', kinds: ["song"], header: "X-Api-Key" };

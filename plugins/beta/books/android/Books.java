@@ -1,9 +1,9 @@
-package org.atlas.plugins.books;
+package org.kandinsky.plugins.books;
 
 import android.view.View;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.NativePlugin;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.NativePlugin;
 
 /** The Books plugin's Android side (docs/design/DESIGN-native-book-reader.md): the reader. A book chosen in the page's
  *  library (main.js, a server's from its local copy) or the vault opens here, where it was left. */

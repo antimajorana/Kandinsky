@@ -5,7 +5,7 @@ What you watched lately on your Jellyfin server, in a block. Also an example of 
 ## What it adds
 
 - **The block `jellyfin.watched`** (option: at most how many, 10): the user's played films and episodes, newest first,
-  with the date last played. One request; the key goes in as `X-Emby-Token`, put in by Atlas's core.
+  with the date last played. One request; the key goes in as `X-Emby-Token`, put in by Kandinsky's core.
 
 ## Settings
 

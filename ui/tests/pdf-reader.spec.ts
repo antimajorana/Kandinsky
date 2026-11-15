@@ -9,7 +9,7 @@ import { writePdf } from "./fixtures/pdf";
 // saved with its words as it is made, a link copied and followed by its words, the outline, a text note, the reader's
 // rotation. Marks are saved into the PDF's note (doc.md beside it), in its pdf-marks block. Both engines must give
 // the same answers.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const DIR = "pdf-reader-test";
 const PATH = `${DIR}/doc.pdf`;
 const NOTE = `${DIR}/doc.md`;
@@ -58,7 +58,7 @@ test.beforeEach(async ({ request }) => {
 async function openReader(page: Page) {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("atlas.pdf")) localStorage.removeItem(k); });
+  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("kandinsky.pdf")) localStorage.removeItem(k); });
   await page.request.post("/api/cmd/open", { headers: H, data: { args: { path: PATH } } });
   const pane = page.locator(".pdf-pane").last();
   await expect(pane.locator(".pager .faint")).toHaveText("/ 3", { timeout: 20000 });
@@ -116,7 +116,7 @@ for (const eng of ["pdfium", "pdfjs"] as const) test.describe(`with ${eng}`, () 
       .toEqual([expect.stringContaining("quantum")]);
     // the note holds it, in its block, last; the page draws it
     expect((await noteText(page)).trimEnd()).toMatch(/```pdf-marks\nm-[0-9a-z]{8} highlight p1 \{.*quantum.*\}\n```$/s);
-    await expect(pane.locator('.page[data-page-number="1"] svg.atlas-marks [data-kind="highlight"] rect')).toHaveCount(1, { timeout: 20000 });
+    await expect(pane.locator('.page[data-page-number="1"] svg.kandinsky-marks [data-kind="highlight"] rect')).toHaveCount(1, { timeout: 20000 });
     // the note shows the block as its marks, each linked to its place
     await page.request.post("/api/cmd/open", { headers: H, data: { args: { path: NOTE } } });
     const view = page.locator('.fence-block[data-fence-name="pdf-marks"]').first();
@@ -149,7 +149,7 @@ for (const eng of ["pdfium", "pdfjs"] as const) test.describe(`with ${eng}`, () 
     await page.locator(".cm-content").getByText("that mark").click();
     const pane = page.locator(".pdf-pane").last();
     await expect(pane.locator(".page-in")).toHaveValue("2", { timeout: 20000 });
-    await expect(pane.locator(`.page[data-page-number="2"] svg.atlas-marks [data-mark="${id}"]`)).toHaveClass(/atlas-flash-mark/, { timeout: 20000 });
+    await expect(pane.locator(`.page[data-page-number="2"] svg.kandinsky-marks [data-mark="${id}"]`)).toHaveClass(/kandinsky-flash-mark/, { timeout: 20000 });
   });
 
   test("a saved mark picked with the select tool is recoloured, reworded, moved and deleted; undo brings it back", async ({ page }) => {
@@ -159,7 +159,7 @@ for (const eng of ["pdfium", "pdfjs"] as const) test.describe(`with ${eng}`, () 
       { op: "put", mark: { id: hl, page: 1, version: 1, color: "#FFE066", kind: "highlight", quads: [[72, 696, 200, 716]] } },
     ] });
     const pane = await openReader(page);
-    const box = pane.locator(`.page[data-page-number="1"] svg.atlas-marks [data-mark="${tb}"]`);
+    const box = pane.locator(`.page[data-page-number="1"] svg.kandinsky-marks [data-mark="${tb}"]`);
     await expect(box).toContainText("first words", { timeout: 20000 });
     const bar = pane.getByTestId("pdf-mark-bar");
     const c = (await box.boundingBox())!; // the marks' layer lets the pointer through: clicked where it is drawn
@@ -201,7 +201,7 @@ for (const eng of ["pdfium", "pdfjs"] as const) test.describe(`with ${eng}`, () 
     await page.keyboard.press("Control+z");
     await expect.poll(async () => (await one(tb))?.text, { timeout: 20000 }).toBe("new words #idea");
     // a highlight is picked by a click on its words; Esc lets it go
-    const hlRect = pane.locator(`.page[data-page-number="1"] svg.atlas-marks [data-mark="${hl}"] rect`);
+    const hlRect = pane.locator(`.page[data-page-number="1"] svg.kandinsky-marks [data-mark="${hl}"] rect`);
     // drawn again after the undo (perhaps more than once): found and clicked until its bar shows
     await expect(async () => {
       const h = await hlRect.boundingBox();
@@ -228,13 +228,13 @@ for (const eng of ["pdfium", "pdfjs"] as const) test.describe(`with ${eng}`, () 
     await pane.getByTitle("Text note (T)").click();
     const pg = (await pane.locator('.page[data-page-number="1"]').boundingBox())!;
     await page.mouse.click(pg.x + pg.width * 0.5, pg.y + 260);
-    const box = pane.locator("textarea.atlas-note-input");
+    const box = pane.locator("textarea.kandinsky-note-input");
     await expect(box).toBeFocused();
     await box.fill("check this #todo");
     await box.press("Enter");
     await expect.poll(async () => (await marks(page)).map((m) => [m.kind, m.text, (m as { tags?: string[] }).tags]), { timeout: 20000 })
       .toEqual([["text-box", "check this #todo", ["todo"]]]);
-    await expect(pane.locator('.page[data-page-number="1"] svg.atlas-marks [data-kind="text-box"]')).toContainText("check this");
+    await expect(pane.locator('.page[data-page-number="1"] svg.kandinsky-marks [data-kind="text-box"]')).toContainText("check this");
     await pane.getByTitle("Select (V)").click();
     await page.keyboard.press("Control+z");
     await expect.poll(async () => (await marks(page)).length, { timeout: 20000 }).toBe(0);
@@ -261,8 +261,8 @@ for (const eng of ["pdfium", "pdfjs"] as const) test.describe(`with ${eng}`, () 
     // a post-it put over the highlight belongs to it
     await pane.getByRole("button", { name: "Post-it" }).click();
     await page.mouse.click(hl.x + hl.width * 0.75, hl.y + hl.height / 2);
-    await pane.locator("textarea.atlas-note-input").fill("why? #question");
-    await pane.locator("textarea.atlas-note-input").press("Enter");
+    await pane.locator("textarea.kandinsky-note-input").fill("why? #question");
+    await pane.locator("textarea.kandinsky-note-input").press("Enter");
     await expect.poll(kinds, { timeout: 20000 }).toEqual(["highlight", "postit", "underline"]);
     const ms = await marks(page);
     const postit = ms.find((m) => m.kind === "postit") as Mark & { on?: string; tags?: string[] };
@@ -282,7 +282,7 @@ for (const eng of ["pdfium", "pdfjs"] as const) test.describe(`with ${eng}`, () 
     await pane.getByRole("button", { name: "Bookmark this page" }).click();
     await expect.poll(kinds, { timeout: 20000 }).toEqual(["bookmark", "clip", "highlight", "postit", "stamp", "underline"]);
     await expect(pane.getByRole("button", { name: "Bookmark this page" })).toHaveAttribute("aria-pressed", "true");
-    for (const k of ["underline", "highlight", "postit", "stamp", "clip", "bookmark"]) await expect(pane.locator(`.page[data-page-number="1"] svg.atlas-marks [data-kind="${k}"]`)).toHaveCount(1);
+    for (const k of ["underline", "highlight", "postit", "stamp", "clip", "bookmark"]) await expect(pane.locator(`.page[data-page-number="1"] svg.kandinsky-marks [data-kind="${k}"]`)).toHaveCount(1);
     // the Marks tab lists them by page, the post-it under its highlight; a tag filters
     await pane.getByRole("button", { name: "Marks", exact: true }).click();
     const list = pane.getByRole("navigation", { name: "Marks" });
@@ -297,7 +297,7 @@ for (const eng of ["pdfium", "pdfjs"] as const) test.describe(`with ${eng}`, () 
     await page.screenshot({ path: `test-results/pdf-marks-${eng}-dark.png` });
     // the eraser takes the stamp out; the bookmark goes on B
     await pane.getByRole("button", { name: "Eraser" }).click();
-    const st = (await pane.locator('.page[data-page-number="1"] svg.atlas-marks [data-kind="stamp"]').boundingBox())!; // the Marks tab moved the page
+    const st = (await pane.locator('.page[data-page-number="1"] svg.kandinsky-marks [data-kind="stamp"]').boundingBox())!; // the Marks tab moved the page
     await page.mouse.click(st.x + st.width / 2, st.y + st.height / 2);
     await expect.poll(kinds, { timeout: 20000 }).not.toContain("stamp");
     await pane.getByRole("button", { name: "Bookmark this page" }).click();
@@ -314,7 +314,7 @@ for (const eng of ["pdfium", "pdfjs"] as const) test.describe(`with ${eng}`, () 
     await pane.getByRole("button", { name: "Export with marks" }).click({ modifiers: ["Shift"] });
     await expect(page.getByText("doc (marked, flat).pdf: 4 marks written in.")).toBeVisible({ timeout: 20000 });
     const flat = readFileSync(join(WS, DIR, "doc (marked, flat).pdf")).toString("latin1");
-    expect(flat).toContain("/AtlasMark0_0 Do");
+    expect(flat).toContain("/KandinskyMark0_0 Do");
     for (const s of ["/Highlight", "/QuadPoints", "/IRT"]) expect(flat).not.toContain(s);
     expect(readFileSync(join(WS, PATH)).equals(before)).toBe(true);
   });

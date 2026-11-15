@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -24,7 +24,7 @@ public final class Pdfium {
                 why = Core.pdfiumInit(c.getApplicationInfo().nativeLibraryDir + "/libpdfium.so");
             } catch (UnsatisfiedLinkError e) { why = String.valueOf(e.getMessage()); }
             ready = why.isEmpty();
-            if (!ready) android.util.Log.w("AtlasPdfium", "no PDFium, PdfRenderer instead: " + why);
+            if (!ready) android.util.Log.w("KandinskyPdfium", "no PDFium, PdfRenderer instead: " + why);
         }
         return ready;
     }

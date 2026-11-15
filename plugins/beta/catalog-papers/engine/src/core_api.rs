@@ -1,11 +1,11 @@
-//! The helper's seams, through the core over the helper pipe (atlas-plugin): the network (the core's plugin fetch,
+//! The helper's seams, through the core over the helper pipe (kandinsky-plugin): the network (the core's plugin fetch,
 //! so the plugin's `net` permissions apply), a new entry's note, the Trash, captures and the plugin's settings.
 use crate::connector::Host;
 use crate::entry::{self, Companion};
 use crate::net::{only_pdf, Miss, Net};
 use crate::refs::{Res, Trash};
 use crate::settings::Settings;
-use atlas_plugin::{q, Atlas, Verb};
+use kandinsky_plugin::{q, Kandinsky, Verb};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -15,20 +15,20 @@ use std::time::{Duration, Instant};
 const ARXIV_EVERY: Duration = Duration::from_secs(3);
 
 pub struct CoreApi {
-    pub atlas: Atlas,
+    pub kandinsky: Kandinsky,
     pub plugin: String,
-    /// The vault, canonical (`ATLAS_ROOT`): the helper runs where the vault is.
+    /// The vault, canonical (`KANDINSKY_ROOT`): the helper runs where the vault is.
     pub root: PathBuf,
     arxiv_last: Mutex<Option<Instant>>,
 }
 
-fn why(e: atlas_plugin::Error) -> String {
+fn why(e: kandinsky_plugin::Error) -> String {
     e.why
 }
 
 impl CoreApi {
     pub fn new(plugin: String, root: PathBuf) -> CoreApi {
-        CoreApi { atlas: Atlas::new(), plugin, root, arxiv_last: Mutex::new(None) }
+        CoreApi { kandinsky: Kandinsky::new(), plugin, root, arxiv_last: Mutex::new(None) }
     }
 
     /// `POST /api/plugins/<id>/fetch`; a PDF is saved into the plugin's cache (`save_to`) and read back from disk.
@@ -54,7 +54,7 @@ impl CoreApi {
             }
             *last = Some(Instant::now());
         }
-        let mut req = json!({ "url": url, "timeout_secs": 25, "headers": { "user-agent": "Atlas/0.1 (research workspace)" } });
+        let mut req = json!({ "url": url, "timeout_secs": 25, "headers": { "user-agent": "Kandinsky/0.1 (research workspace)" } });
         if let Some((name, prefix)) = secret {
             req["headers"]["authorization"] = json!({ "secret": name, "prefix": prefix });
         }
@@ -64,7 +64,7 @@ impl CoreApi {
         if quiet {
             req["quiet"] = true.into();
         }
-        self.atlas.post(&format!("/api/plugins/{}/fetch", q(&self.plugin)), &req).map_err(why)
+        self.kandinsky.post(&format!("/api/plugins/{}/fetch", q(&self.plugin)), &req).map_err(why)
     }
 
     /// The plugin's settings: given with a tool's call (`params.settings`), else asked of the core (the plugin's
@@ -73,20 +73,20 @@ impl CoreApi {
         if params["settings"].is_object() {
             return Settings::from_value(&params["settings"]);
         }
-        let all = self.atlas.get("/api/plugins").unwrap_or(Value::Null);
+        let all = self.kandinsky.get("/api/plugins").unwrap_or(Value::Null);
         let mine = all.as_array().into_iter().flatten().find(|p| p["id"].as_str() == Some(self.plugin.as_str()));
         Settings::from_value(mine.map_or(&Value::Null, |p| &p["settings"]))
     }
 
     /// What the other plugins contribute to this one (`[contributes.catalog-papers]`: the PDF sources).
     pub fn contributions(&self) -> Res<serde_json::Map<String, Value>> {
-        let v = self.atlas.get(&format!("/api/plugins/{}/contributions", q(&self.plugin))).map_err(why)?;
+        let v = self.kandinsky.get(&format!("/api/plugins/{}/contributions", q(&self.plugin))).map_err(why)?;
         Ok(v.as_object().cloned().unwrap_or_default())
     }
 
     /// Another plugin's tool (a PDF source).
     pub fn tool(&self, plugin: &str, tool: &str, input: &Value) -> Res<Value> {
-        self.atlas.post(&format!("/api/plugins/{}/tools/{}", q(plugin), q(tool)), input).map_err(why)
+        self.kandinsky.post(&format!("/api/plugins/{}/tools/{}", q(plugin), q(tool)), input).map_err(why)
     }
 }
 
@@ -112,7 +112,7 @@ impl Net for CoreApi {
             return Err(Miss::Other(format!("{url}: {}", r["status"].as_u64().map_or("no answer".to_string(), |s| format!("HTTP {s}")))));
         }
         let saved = r["saved"].as_str().ok_or_else(|| Miss::Other(format!("{url}: nothing saved")))?;
-        let path = atlas_text::paths::safe_join(&self.root, saved).map_err(Miss::Other)?;
+        let path = kandinsky_text::paths::safe_join(&self.root, saved).map_err(Miss::Other)?;
         let bytes = std::fs::read(&path).map_err(|e| Miss::Other(format!("{saved}: {e}")));
         let _ = std::fs::remove_file(&path); // written into the entry by the caller; the cache keeps no second copy
         only_pdf(url, bytes?).map_err(Miss::Other)
@@ -127,26 +127,26 @@ impl Companion for CoreApi {
     /// (entry::companion_properties) and the paper's block; `entry::write` then sets the entry's other fields. No
     /// answer (an older core): the plain note the core makes without a template.
     fn make(&self, dir: &Path, key: &str, m: &serde_yaml::Mapping) -> Res<()> {
-        let rel = atlas_text::paths::rel_path(&self.root, dir).ok_or_else(|| format!("{} is outside the vault", dir.display()))?;
+        let rel = kandinsky_text::paths::rel_path(&self.root, dir).ok_or_else(|| format!("{} is outside the vault", dir.display()))?;
         let props = entry::companion_properties(key, m);
         let title = props.get("title").and_then(serde_yaml::Value::as_str).unwrap_or(key).to_string();
         // as YAML text: a JSON object would reach the core with its keys sorted (serde_json without preserve_order)
         let yaml = serde_yaml::to_string(&props).map_err(|e| e.to_string())?;
         let ask = json!({ "path": format!("{rel}/"), "title": title, "properties": yaml, "block": "library.paper" });
-        let asked = self.atlas.call(Verb::Post, "/api/companion", Some(&ask));
+        let asked = self.kandinsky.call(Verb::Post, "/api/companion", Some(&ask));
         let note = dir.join(entry::note_file(key));
         if asked.is_ok() && note.is_file() {
             return Ok(());
         }
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        atlas_plugin::write_file(&note, entry::plain_note(key, &title, &today).as_bytes()).map_err(|e| e.to_string())
+        kandinsky_plugin::write_file(&note, entry::plain_note(key, &title, &today).as_bytes()).map_err(|e| e.to_string())
     }
 }
 
 impl Trash for CoreApi {
-    /// `POST /api/fs/trash?path=`: the desktop's Trash, else `.atlas/trash/<time>/`.
+    /// `POST /api/fs/trash?path=`: the desktop's Trash, else `.kandinsky/trash/<time>/`.
     fn trash(&self, rel: &str) -> Res<String> {
-        let r = self.atlas.call(Verb::Post, &format!("/api/fs/trash?path={}", q(rel)), None).map_err(why)?;
+        let r = self.kandinsky.call(Verb::Post, &format!("/api/fs/trash?path={}", q(rel)), None).map_err(why)?;
         Ok(r["to"].as_str().unwrap_or_default().to_string())
     }
 }
@@ -168,9 +168,9 @@ impl Host for ConnectorHost {
         self.0.settings(&Value::Null)
     }
     fn capture(&self, text: &str) -> Res<()> {
-        self.0.atlas.capture(text).map(drop).map_err(why)
+        self.0.kandinsky.capture(text).map(drop).map_err(why)
     }
     fn changed(&self, paths: Vec<String>) {
-        atlas_plugin::event("papers:changed", json!({ "paths": paths }));
+        kandinsky_plugin::event("papers:changed", json!({ "paths": paths }));
     }
 }

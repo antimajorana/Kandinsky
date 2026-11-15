@@ -81,11 +81,11 @@
 	//#endregion
 	//#region ui/src/lib/editor/dictionaries.ts
 	/** The vault's folder of dictionaries (synced with the vault, unlike the machine's). */
-	const VAULT_DICTIONARIES = ".atlas/dictionaries";
-	/** The vault, through a helper's `atlas`. */
-	const vaultFiles = (atlas) => ({
-		list: (dir) => atlas.tree(dir).then((t) => t.filter((e) => e.kind === "file").map((e) => e.name), () => null),
-		read: (path) => atlas.read(path)
+	const VAULT_DICTIONARIES = ".kandinsky/dictionaries";
+	/** The vault, through a helper's `kandinsky`. */
+	const vaultFiles = (kandinsky) => ({
+		list: (dir) => kandinsky.tree(dir).then((t) => t.filter((e) => e.kind === "file").map((e) => e.name), () => null),
+		read: (path) => kandinsky.read(path)
 	});
 	/** The machine, through `ls` and `cat` (none on the phone: nothing found there). */
 	const machineFiles = (exec) => ({
@@ -179,8 +179,8 @@
 	}
 	//#endregion
 	//#region plugins/beta/spelling/helper/helper.ts
-	const exec = (cmd, args, opts) => atlas.exec(cmd, args, opts);
-	const vault = vaultFiles(atlas);
+	const exec = (cmd, args, opts) => kandinsky.exec(cmd, args, opts);
+	const vault = vaultFiles(kandinsky);
 	const machine = machineFiles(exec);
 	async function dictionaries(p) {
 		return [...(await installedDictionaries(vault, machine, p.folder)).keys()].sort();
@@ -195,11 +195,11 @@
 	}
 	/** The named dictionaries this machine has and the vault does not, copied into the vault: the names copied. */
 	async function keep(p) {
-		return keepInVault(vault, machine, p.folder, p.names ?? [], (path, text) => atlas.write(path, text));
+		return keepInVault(vault, machine, p.folder, p.names ?? [], (path, text) => kandinsky.write(path, text));
 	}
 	/** The notes to count, in order (the page asks for them in chunks). */
 	async function notes() {
-		return (await atlas.files(true)).filter((p) => /\.md$/i.test(p) && !p.startsWith(".atlas/"));
+		return (await kandinsky.files(true)).filter((p) => /\.md$/i.test(p) && !p.startsWith(".kandinsky/"));
 	}
 	/** Each of these notes' words, with its language: path → { lang, words: word → uses }. Per note, so the page can
 	*  take a note's old counts out when it changes and put the new ones in. */
@@ -211,7 +211,7 @@
 		for (const path of paths) {
 			let text;
 			try {
-				text = withoutLongRuns(await atlas.read(path), false);
+				text = withoutLongRuns(await kandinsky.read(path), false);
 			} catch {
 				continue;
 			}
@@ -226,7 +226,7 @@
 		}
 		return out;
 	}
-	atlas.methods({
+	kandinsky.methods({
 		dictionaries,
 		dictionary,
 		keep,

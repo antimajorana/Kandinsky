@@ -1,4 +1,4 @@
-package org.atlas.plugins.manga;
+package org.kandinsky.plugins.manga;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -16,12 +16,12 @@ import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.InkStore;
-import org.atlas.capture.NativePlugin;
-import org.atlas.capture.PageInk;
-import org.atlas.capture.PenBar;
-import org.atlas.capture.ReaderBars;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.InkStore;
+import org.kandinsky.capture.NativePlugin;
+import org.kandinsky.capture.PageInk;
+import org.kandinsky.capture.PenBar;
+import org.kandinsky.capture.ReaderBars;
 import org.json.JSONObject;
 
 import java.util.Iterator;

@@ -212,7 +212,7 @@ fn lines(v: &[Pt], closed: bool) -> Vec<Primitive> {
 fn polygon(ps: &[Piece]) -> Vec<Cand> {
     let sides = merge_sides(ps, true);
     let mut out = chamfered(sides.clone());
-    // A side split at a slight bend (Atlas's hexagons: one extra corner turning 8–11°) is one side: also try the
+    // A side split at a slight bend (Kandinsky's hexagons: one extra corner turning 8–11°) is one side: also try the
     // polygon with its gentlest corners merged while they turn less than GENTLE_TURN.
     let mut merged = sides;
     while let Some(next) = merge_gentlest(&merged) {

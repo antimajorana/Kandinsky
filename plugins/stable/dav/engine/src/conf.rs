@@ -1,35 +1,35 @@
-//! The plugin's settings and app password as a call brings them (or asked of Atlas over the pipe), read into what
+//! The plugin's settings and app password as a call brings them (or asked of Kandinsky over the pipe), read into what
 //! the engine needs: the accounts (cards, each with its app password), the subscriptions, the calendars hidden and
 //! their colours, the default calendar.
 use crate::caldav::Account;
 use crate::zone::{self, Zone};
-use atlas_plugin::Atlas;
+use kandinsky_plugin::Kandinsky;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use url::Url;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Serving Atlas (events and calls back are possible) rather than run from a shell.
+/// Serving Kandinsky (events and calls back are possible) rather than run from a shell.
 pub static SERVING: AtomicBool = AtomicBool::new(false);
 
 pub fn serving() -> bool {
     SERVING.load(Ordering::Relaxed)
 }
 
-/// The plugin's settings: given with a tool's call; a page's call passes its own; else asked of Atlas.
+/// The plugin's settings: given with a tool's call; a page's call passes its own; else asked of Kandinsky.
 pub fn settings(p: &Value) -> Value {
     read_settings(p).unwrap_or_else(|| json!({}))
 }
 
-/// The settings when they could be read: None when Atlas did not answer (it is reloading its plugin list, say). What
+/// The settings when they could be read: None when Kandinsky did not answer (it is reloading its plugin list, say). What
 /// forgets a calendar taken out of Settings works only from these, never from an empty stand-in.
 pub fn read_settings(p: &Value) -> Option<Value> {
     if p["settings"].is_object() {
         return Some(p["settings"].clone());
     }
     if serving() {
-        let id = std::env::var("ATLAS_PLUGIN_ID").unwrap_or_else(|_| "dav".into());
-        if let Ok(Value::Array(all)) = Atlas::new().get("/api/plugins") {
+        let id = std::env::var("KANDINSKY_PLUGIN_ID").unwrap_or_else(|_| "dav".into());
+        if let Ok(Value::Array(all)) = Kandinsky::new().get("/api/plugins") {
             // listed: its settings (none set yet is an empty table); not listed while the list is re-read: unknown
             return all.iter().find(|x| x["id"] == id.as_str()).map(|me| if me["settings"].is_object() { me["settings"].clone() } else { json!({}) });
         }
@@ -43,7 +43,7 @@ pub fn text(s: &Value, key: &str) -> String {
 }
 
 /// One CalDAV account (a card of Settings → Calendar → Accounts): its name, the server and user, the app password
-/// (`accounts.<name>.password` in Atlas's secret store), and a colour for its calendars that have none.
+/// (`accounts.<name>.password` in Kandinsky's secret store), and a colour for its calendars that have none.
 #[derive(Debug, Clone)]
 pub struct Card {
     pub name: String,
@@ -91,13 +91,13 @@ fn url_of(card: &Value, server: Server) -> String {
     }
 }
 
-/// A secret of this plugin: handed over with the call (`secrets`), else asked of Atlas over the pipe.
+/// A secret of this plugin: handed over with the call (`secrets`), else asked of Kandinsky over the pipe.
 pub fn secret(p: &Value, name: &str) -> Option<String> {
     if let Some(v) = p["secrets"][name].as_str().filter(|s| !s.is_empty()) {
         return Some(v.to_string());
     }
     if serving() {
-        if let Ok(Some(v)) = Atlas::new().secret(name) {
+        if let Ok(Some(v)) = Kandinsky::new().secret(name) {
             return Some(v).filter(|v| !v.is_empty());
         }
     }
@@ -190,11 +190,11 @@ pub fn user_zone(p: &Value) -> Zone {
 }
 
 pub fn vault_root() -> PathBuf {
-    std::env::var_os("ATLAS_ROOT").map(PathBuf::from).unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
+    std::env::var_os("KANDINSKY_ROOT").map(PathBuf::from).unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
 }
 
 pub fn cache_dir() -> PathBuf {
-    std::env::var_os("ATLAS_PLUGIN_CACHE").map(PathBuf::from).unwrap_or_else(|| vault_root().join(".atlas/cache/plugins/dav"))
+    std::env::var_os("KANDINSKY_PLUGIN_CACHE").map(PathBuf::from).unwrap_or_else(|| kandinsky_plugin::state_dir(&vault_root()).join("cache/plugins/dav"))
 }
 
 /// An ICS subscription card (Settings → Calendar → Subscriptions).
@@ -258,7 +258,7 @@ pub fn push_server(s: &Value) -> String {
 /// The Notifications plugin's ntfy server, only when that plugin can run in this vault and its server was set (not its
 /// default: an installed but unused Notifications must not send the calendar's pings to a public server).
 fn notifications_server() -> String {
-    match Atlas::new().get("/api/plugins") {
+    match Kandinsky::new().get("/api/plugins") {
         Ok(Value::Array(all)) => all.iter().find(|x| x["id"] == "notifications").map(set_server).unwrap_or_default(),
         _ => String::new(),
     }

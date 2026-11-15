@@ -1,5 +1,5 @@
 [package]
-name = "atlas-ssh"
+name = "kandinsky-ssh"
 description = "The SSH plugin's helper: long-lived shells on the user's hosts for agents and the page, the Files pane over sftp, one shared OpenSSH connection per host"
 version = "0.1.0"
 edition.workspace = true
@@ -9,13 +9,13 @@ repository.workspace = true
 
 # OpenSSH does the connecting (ssh, sftp, ControlMaster): this is the bookkeeping around it, in place of session.py,
 # sftp.py and hosts.py. Built static (musl) into the plugin's
-# bin/<target>/ by build.sh; no async runtime, a thread per call (atlas_plugin::serve_threads).
+# bin/<target>/ by build.sh; no async runtime, a thread per call (kandinsky_plugin::serve_threads).
 [[bin]]
-name = "atlas-ssh"
+name = "kandinsky-ssh"
 path = "src/main.rs"
 
 [dependencies]
-atlas-plugin = { path = "../../../../crates/kandinsky-plugin" }
+kandinsky-plugin = { path = "../../../../crates/kandinsky-plugin" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 regex = "1"

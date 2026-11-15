@@ -10,28 +10,28 @@ import { rank } from "./rank";
 import { mountSection } from "./settings";
 
 
-export async function register(atlas: PluginApi) {
-  const engine = makeEngine(atlas);
+export async function register(kandinsky: PluginApi) {
+  const engine = makeEngine(kandinsky);
   let read: Read | null = null;
   const reload = async () => {
-    read = await loadAll(atlas);
+    read = await loadAll(kandinsky);
     engine.use(read);
-    if (read.wroteStarter) atlas.toast("Snippets", `The plugin's LaTeX set is now ${STARTER}, kept current by the plugin (a replaced copy goes to .atlas/trash). Settings → Snippets switches each snippet and option; your own snippets go in another file there.`, "info");
+    if (read.wroteStarter) kandinsky.toast("Snippets", `The plugin's LaTeX set is now ${STARTER}, kept current by the plugin (a replaced copy goes to .kandinsky/trash). Settings → Snippets switches each snippet and option; your own snippets go in another file there.`, "info");
     return read;
   };
-  atlas.editor.extension(engine.extension);
-  atlas.editor.claimTab(engine.claim);
+  kandinsky.editor.extension(engine.extension);
+  kandinsky.editor.claimTab(engine.claim);
   await reload();
   // not awaited: the plugin works with its short list until the dictionaries arrive
   void engine.loadWords().catch((e) => console.warn("snippets: the word list did not load, only the short one holds:", e));
 
   // a snippet file changed, or which old file is meant: read again
-  atlas.onFilesChanged((paths) => { if (!paths.length || paths.some((p) => p.startsWith(`${FOLDER}/`) || p === ".atlas/config.toml")) void reload(); });
+  kandinsky.onFilesChanged((paths) => { if (!paths.length || paths.some((p) => p.startsWith(`${FOLDER}/`) || p === ".kandinsky/config.toml")) void reload(); });
 
   const where = (view: EditorView, pos: number) => engine.placeOf(view, pos);
   /** A body as it reads once typed: the stops' placeholders kept, their markers gone (`${0:A}` → A, `$1` → nothing). */
   const readable = (body: string) => body.replace(/\$\{\d+:([^}]*)\}/g, "$1").replace(/\$\d+/g, "").replace(/\s+/g, " ").trim();
-  atlas.editor.registerCompletion({
+  kandinsky.editor.registerCompletion({
     where: "all",
     trigger: /[A-Za-z@:][\w@:]*$/,
     applies: ({ view, pos, explicit, before }) => {
@@ -58,7 +58,7 @@ export async function register(atlas: PluginApi) {
           return {
             label: s.plain!.trim(), detail: s.name ?? readable(body).slice(0, 48), kind: "keyword",
             apply: (view, from, to) => engine.insert(view, body, from, to, "", s.legacyStops),
-            info: s.math ? () => { const host = document.createElement("div"); atlas.editor.drawMath(host, preview(body), false); return host; } : undefined,
+            info: s.math ? () => { const host = document.createElement("div"); kandinsky.editor.drawMath(host, preview(body), false); return host; } : undefined,
           };
         });
         return { from: at.pos - typed.length + i, items };
@@ -69,22 +69,22 @@ export async function register(atlas: PluginApi) {
 
   /** Writes a module from the old file; the old one stays. Run from the page or the palette: the person asked. */
   const runConvert = async (): Promise<void> => {
-    const old = read?.oldFile ?? (await atlas.editor.legacySnippets().catch(() => null));
-    if (!old?.sources.some((s) => s.trim())) { atlas.toast("Snippets", "There is no old snippet file to convert here.", "info"); return; }
+    const old = read?.oldFile ?? (await kandinsky.editor.legacySnippets().catch(() => null));
+    if (!old?.sources.some((s) => s.trim())) { kandinsky.toast("Snippets", "There is no old snippet file to convert here.", "info"); return; }
     const path = CONVERTED;
-    if (read?.modules.includes(path)) { atlas.toast("Snippets", `${path} is there already. Move it aside to convert again.`, "info"); return; }
+    if (read?.modules.includes(path)) { kandinsky.toast("Snippets", `${path} is there already. Move it aside to convert again.`, "info"); return; }
     const { text, kept, dropped } = convert(old);
-    await atlas.writeText(path, text);
+    await kandinsky.writeText(path, text);
     await reload();
-    atlas.toast("Snippets", `${kept} snippets in ${path}, ${dropped.length} changes listed at its top. The old file was left as it was.`, "success");
-    atlas.open(path);
+    kandinsky.toast("Snippets", `${kept} snippets in ${path}, ${dropped.length} changes listed at its top. The old file was left as it was.`, "success");
+    kandinsky.open(path);
   };
-  atlas.registerCommand({ id: "convert", title: "Snippets: convert the old snippet file", run: runConvert });
+  kandinsky.registerCommand({ id: "convert", title: "Snippets: convert the old snippet file", run: runConvert });
 
-  atlas.plugin.registerSettingsSection({
+  kandinsky.plugin.registerSettingsSection({
     id: "snippets", title: "Your snippets", place: "before",
     hint: "What fires, where it fires, and what is wrong. Snippet files are JavaScript and run with what a plugin may do.",
-    mount: (host, ctx) => mountSection(host, { atlas, engine, ctx, read: () => read!, reload, convert: runConvert }),
+    mount: (host, ctx) => mountSection(host, { kandinsky, engine, ctx, read: () => read!, reload, convert: runConvert }),
   });
 }
 

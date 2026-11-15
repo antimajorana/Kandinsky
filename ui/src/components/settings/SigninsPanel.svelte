@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Settings → Plugins: the sign-ins to services Atlas keeps for its plugins (docs/design/SERVICE-SIGNIN.md) — which sites,
+  // Settings → Plugins: the sign-ins to services Kandinsky keeps for its plugins (docs/design/SERVICE-SIGNIN.md) — which sites,
   // since when, kept alive until when (the core visits each now and then so the gate's idle limit never ends it), whether
 // the gate stopped taking it, and a way to forget one; and the OpenID providers signed in (plugin_oauth.rs), one token
 // per provider shared by the plugins. Cookies and tokens stay in the secrets file, never shown.

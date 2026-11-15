@@ -19,9 +19,9 @@
   import { BY_KEY, COMMANDS, keyOf, shown, type Ui } from "./keys";
   import { addDays, call, startOfDay, timeText, wall, ymd, type Ev, type PluginApi, type Quick } from "./api";
 
-  let { atlas }: { atlas: PluginApi } = $props();
+  let { kandinsky }: { kandinsky: PluginApi } = $props();
   // svelte-ignore state_referenced_locally
-  const cal = new Cal(atlas);
+  const cal = new Cal(kandinsky);
 
   let width = $state(1200);
   let root: HTMLDivElement | undefined = $state();
@@ -82,19 +82,19 @@
     if (cal.results) { searchText = ""; void cal.search(""); }
   }
   function goto() {
-    atlas.pick({
+    kandinsky.pick({
       placeholder: "Go to a date… (2026-12-01, 15 nov, next monday)", tag: "Calendar",
       items: [{ value: ymd(new Date()), title: "Today" }, { value: ymd(addDays(new Date(), 7)), title: "In a week" }],
       typed: (t) => `Go to “${t}”`,
       onpick: async (v, isNew) => {
         if (!isNew) { cal.go(new Date(`${v}T12:00`)); return; }
-        try { const q = await call<Quick>(atlas, "quick", { text: v }); cal.go(new Date(`${q.start.slice(0, 10)}T12:00`)); }
+        try { const q = await call<Quick>(kandinsky, "quick", { text: v }); cal.go(new Date(`${q.start.slice(0, 10)}T12:00`)); }
         catch (e) { cal.toast((e as Error).message, "error"); }
       },
     });
   }
   function palette() {
-    atlas.pick({
+    kandinsky.pick({
       placeholder: "Do what? (every command of the Calendar pane)", tag: "Calendar",
       items: COMMANDS.filter((c) => c.id !== "palette").map((c) => ({ value: c.id, title: c.title, detail: shown(c.keys).join("  ·  ") || undefined, section: c.group })),
       onpick: (id) => COMMANDS.find((c) => c.id === id)?.run(cal, ui),
@@ -132,12 +132,12 @@
     clearTimeout(quickTimer);
     quickTimer = setTimeout(async () => {
       if (!quickText.trim()) { quickSeen = null; return; }
-      try { quickSeen = await call<Quick>(atlas, "quick", { text: quickText }); } catch { quickSeen = null; }
+      try { quickSeen = await call<Quick>(kandinsky, "quick", { text: quickText }); } catch { quickSeen = null; }
     }, 120);
   }
   async function quickSave() {
     if (!quickText.trim()) return;
-    const q = quickSeen ?? (await call<Quick>(atlas, "quick", { text: quickText }));
+    const q = quickSeen ?? (await call<Quick>(kandinsky, "quick", { text: quickText }));
     quickOpen = false; quickText = ""; quickSeen = null;
     const ok = await cal.create({ summary: q.title || "(no title)", start: q.start, end: q.end, all_day: q.all_day, rrule: q.rrule, location: q.location, calendar: quickCal || undefined });
     if (ok) cal.go(new Date(`${q.start.slice(0, 10)}T12:00`));
@@ -160,15 +160,15 @@
     root?.focus({ preventScroll: true }); // the keys typed after opening the pane are its own
     void (async () => { await cal.loadSources(); await cal.load(); void cal.sync(false); })();
     const offs = [
-      atlas.helper.on("changed", () => { void cal.loadSources(); cal.later(); }),
+      kandinsky.helper.on("changed", () => { void cal.loadSources(); cal.later(); }),
     ];
     const tick = setInterval(() => (cal.now = new Date()), 30_000);
-    // another part of Atlas asks to show a day (the Home card, a command)
+    // another part of Kandinsky asks to show a day (the Home card, a command)
     const show = (e: Event) => { const d = (e as CustomEvent<{ date?: string; view?: View; quick?: boolean; create?: boolean }>).detail ?? {}; if (d.date) cal.go(new Date(`${d.date}T12:00`), d.view); else if (d.view) cal.setView(d.view); if (d.quick) openQuick(); if (d.create) newEvent(); };
-    window.addEventListener("atlas-calendar:show", show);
-    const pending = (window as unknown as { __atlasCalendarShow?: unknown }).__atlasCalendarShow;
-    if (pending) { show(new CustomEvent("x", { detail: pending })); (window as unknown as { __atlasCalendarShow?: unknown }).__atlasCalendarShow = undefined; }
-    return () => { offs.forEach((o) => o()); clearInterval(tick); window.removeEventListener("atlas-calendar:show", show); };
+    window.addEventListener("kandinsky-calendar:show", show);
+    const pending = (window as unknown as { __kandinskyCalendarShow?: unknown }).__kandinskyCalendarShow;
+    if (pending) { show(new CustomEvent("x", { detail: pending })); (window as unknown as { __kandinskyCalendarShow?: unknown }).__kandinskyCalendarShow = undefined; }
+    return () => { offs.forEach((o) => o()); clearInterval(tick); window.removeEventListener("kandinsky-calendar:show", show); };
   });
 </script>
 
@@ -178,7 +178,7 @@
   onpointerdown={(e) => { if (!(e.target as HTMLElement).closest("input, textarea, select, button, [tabindex='0']")) root?.focus({ preventScroll: true }); }}>
   <header class="top">
     {#if !narrow}<button class="tool" onclick={() => (sideOpen = !sideOpen)} title="Side panel (s)" aria-label="Side panel"><Icon name="menu" /></button>{/if}
-    <button class="atlas-btn today" onclick={() => cal.today()} title="Today (t)">Today</button>
+    <button class="kandinsky-btn today" onclick={() => cal.today()} title="Today (t)">Today</button>
     <div class="nav">
       <button class="tool" onclick={() => cal.step(-1)} title="Previous (k)" aria-label="Previous"><Icon name="back" /></button>
       <button class="tool" onclick={() => cal.step(1)} title="Next (j)" aria-label="Next"><Icon name="right" /></button>
@@ -214,7 +214,7 @@
         aria-label="Quick add" onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); void quickSave(); } else if (e.key === "Escape") { e.stopPropagation(); quickOpen = false; } }} />
       {#if quickSeen}<span class="qprev"><b>{quickSeen.title || "(no title)"}</b> · {quickWhen}{quickSeen.rrule ? " · repeats" : ""}{quickSeen.location ? ` · ${quickSeen.location}` : ""}</span>{/if}
       {#if quickCal}<CalendarPicker {cal} bind:value={quickCal} compact />{/if}
-      <button class="atlas-btn primary" onclick={quickSave} disabled={!quickText.trim()}>Add</button>
+      <button class="kandinsky-btn primary" onclick={quickSave} disabled={!quickText.trim()}>Add</button>
     </div>
   {/if}
 
@@ -222,9 +222,9 @@
     {#if sideShown}<aside class="side" aria-label="Calendars"><Sidebar {cal} oncreate={newEvent} /></aside>{/if}
     <main class="view">
       {#if cal.error}
-        <div class="atlas-notice error">{cal.error}<div class="actions"><button class="atlas-btn" onclick={() => cal.load()}>Try again</button><button class="atlas-btn" onclick={() => atlas.plugin.openSettings()}>Settings…</button></div></div>
+        <div class="kandinsky-notice error">{cal.error}<div class="actions"><button class="kandinsky-btn" onclick={() => cal.load()}>Try again</button><button class="kandinsky-btn" onclick={() => kandinsky.plugin.openSettings()}>Settings…</button></div></div>
       {:else if !cal.configured && !cal.sources.length}
-        <div class="atlas-notice">No calendar account yet: add one in Settings (its server address, user name and app password; as many as you have) — or subscribe to a public calendar there.<div class="actions"><button class="atlas-btn primary" onclick={() => atlas.plugin.openSettings()}>Settings…</button></div></div>
+        <div class="kandinsky-notice">No calendar account yet: add one in Settings (its server address, user name and app password; as many as you have) — or subscribe to a public calendar there.<div class="actions"><button class="kandinsky-btn primary" onclick={() => kandinsky.plugin.openSettings()}>Settings…</button></div></div>
       {/if}
       {#if cal.results}
         <AgendaView {cal} events={cal.results} from={startOfDay(new Date())} to={startOfDay(new Date())} {selected} onselect={select} search />
@@ -286,7 +286,7 @@
   .side { flex: none; width: 248px; border-right: 1px solid var(--border); background: var(--bg-alt); min-height: 0; }
   .view { flex: 1; min-width: 0; min-height: 0; position: relative; display: flex; flex-direction: column; }
   .view > :global(*) { flex: 1; min-height: 0; }
-  .view > :global(.atlas-notice) { flex: none; margin: 10px 14px; }
+  .view > :global(.kandinsky-notice) { flex: none; margin: 10px 14px; }
   .popscrim { position: absolute; inset: 0; z-index: 49; }
   .fab { all: unset; cursor: pointer; position: absolute; right: 18px; bottom: 22px; z-index: 40; width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--accent); color: var(--accent-fg); box-shadow: var(--shadow-md, 0 6px 18px rgba(0,0,0,.3)); }
   .narrow .top { flex-wrap: wrap; row-gap: 6px; padding: 8px; }

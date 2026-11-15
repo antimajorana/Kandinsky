@@ -11,18 +11,18 @@ your file server. A `.epub` anywhere in the vault opens in it on a click.
   keys, taps and the e-ink refresh turn pages and run on into the next chapter. **Contents** from the EPUB's navigation,
   nested, with anchors: `[[book.epub#Chapter 3]]` opens at that entry. **Search the book** (`/`, Ctrl+F): every place
   the words occur, by chapter.
-- **The book's note**: `book.epub` → `book.md` beside it, made through Atlas's companion-note rule (`book: [[…]]`,
+- **The book's note**: `book.epub` → `book.md` beside it, made through Kandinsky's companion-note rule (`book: [[…]]`,
   title, author). It keeps where you are (`progress`, `reading_chapter`, `reading_at`, `last_read` — the same
   properties the phone's native reader writes) and your **highlights**, appended as quotes under "Highlights" with the
   chapter; quoted passages are marked when the chapter opens. An older `<folder>/reading.json` is still read for a book
   not yet moved.
 - **The E-books library** (Libraries page, id `books`): the vault's EPUB, PDF and DjVu files under the library folder
-  and the books in the server folders of the **Folders on a server** setting, grouped by folder; covers from Atlas's
+  and the books in the server folders of the **Folders on a server** setting, grouped by folder; covers from Kandinsky's
   thumbnails (or the server's). A server's book is fetched when opened.
-- **DjVu**: made once into a PDF in the plugin's cache by Atlas's core (djvu-rs: the pages as they are, the book's
-  OCR text kept, so it can be searched and selected) and opened in Atlas's PDF viewer; the vault's file is never touched.
+- **DjVu**: made once into a PDF in the plugin's cache by Kandinsky's core (djvu-rs: the pages as they are, the book's
+  OCR text kept, so it can be searched and selected) and opened in Kandinsky's PDF viewer; the vault's file is never touched.
 - **On the phone**: a native reader (`android/`, `[android]` in the manifest) opens EPUB, MOBI, AZW/AZW3, PRC, FB2;
-  the library stays the page's, and hands a book over with `atlas.openNative`.
+  the library stays the page's, and hands a book over with `kandinsky.openNative`.
 - The command **Books: library** opens the E-books library; the reader's **‹ Library** goes back there. The pane is only
   the reader: books are listed in one place.
 
@@ -39,7 +39,7 @@ your file server. A `.epub` anywhere in the vault opens in it on a click.
 
 ## How it fits
 
-- The EPUB is read in the page with the app's own zip reader (`atlas.zip`, plugin API 20).
+- The EPUB is read in the page with the app's own zip reader (`kandinsky.zip`, plugin API 20).
 - Server folders are read through another plugin's file source (copyparty by default).
 - The catalog's **Books** library is a different list: catalogued book notes in `notes/books/`, not files.
 

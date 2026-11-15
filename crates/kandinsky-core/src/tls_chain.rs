@@ -65,8 +65,8 @@ impl Verifier {
         }
         let got = fetch_http(url).and_then(|body| certificate(&body));
         match &got {
-            Some(_) => eprintln!("atlas: tls: a server left out its intermediate certificate; fetched it from {url}"),
-            None => eprintln!("atlas: tls: a server left out its intermediate certificate and {url} gave none"),
+            Some(_) => eprintln!("kandinsky: tls: a server left out its intermediate certificate; fetched it from {url}"),
+            None => eprintln!("kandinsky: tls: a server left out its intermediate certificate and {url} gave none"),
         }
         self.found.lock().unwrap_or_else(|e| e.into_inner()).insert(url.to_string(), got.clone());
         got
@@ -153,7 +153,7 @@ fn fetch_http(url: &str) -> Option<Vec<u8>> {
     let mut s = std::net::TcpStream::connect_timeout(&target, FETCH_TIMEOUT).ok()?;
     s.set_read_timeout(Some(FETCH_TIMEOUT)).ok()?;
     s.set_write_timeout(Some(FETCH_TIMEOUT)).ok()?;
-    let ask = format!("GET {path} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: Atlas/{}\r\nAccept: */*\r\n\r\n", env!("CARGO_PKG_VERSION"));
+    let ask = format!("GET {path} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: Kandinsky/{}\r\nAccept: */*\r\n\r\n", env!("CARGO_PKG_VERSION"));
     s.write_all(ask.as_bytes()).ok()?; // one write: a server may read the request in one go
     // what arrived counts even if the connection is then reset (a server closing with bytes it did not read)
     let mut raw = Vec::new();
@@ -249,7 +249,7 @@ mod tests {
         assert_eq!(ca_issuers(&[]), None);
     }
 
-    /// On the network (`cargo test -p atlas-core tls_chain -- --ignored`): badssl's server that sends no intermediate.
+    /// On the network (`cargo test -p kandinsky-core tls_chain -- --ignored`): badssl's server that sends no intermediate.
     #[test]
     #[ignore = "reaches the network"]
     fn a_real_server_without_its_intermediate_is_reached() {

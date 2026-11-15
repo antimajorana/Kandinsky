@@ -7,8 +7,8 @@ import { fullscreen, toggleFullscreen } from "./fullscreen.svelte";
 /** Phones (and very narrow windows): the same width at which the desktop layout stops fitting — and a phone turned
  *  sideways (a touch screen too short for the desktop's bars), which is wide but no taller than a toolbar or two. */
 export const PHONE_QUERY = "(max-width: 720px), (max-height: 480px) and (pointer: coarse)";
-/** Inside the phone app (AtlasActivity's bridge) the page is a phone's whatever its shape. */
-const inApp = "AtlasNative" in globalThis;
+/** Inside the phone app (KandinskyActivity's bridge) the page is a phone's whatever its shape. */
+const inApp = "KandinskyNative" in globalThis;
 export const phone = $state({ on: false, sheet: false });
 const backToWide: (() => void)[] = [];
 /** Runs when the screen turns wide again (the side tools opened as panes go back to the left bar: lib/dock.ts). */

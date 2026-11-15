@@ -131,16 +131,16 @@ pub fn init(lib: &Path) -> Result<(), String> {
 /// The library's file name on this system.
 pub const LIB_NAME: &str = if cfg!(windows) { "pdfium.dll" } else if cfg!(target_os = "macos") { "libpdfium.dylib" } else { "libpdfium.so" };
 
-/// Where an install keeps PDFium: `ATLAS_PDFIUM`, beside the executable, `../lib/atlas/` from it (the server image),
-/// or `$XDG_DATA_HOME/atlas/lib/` (`packaging/install.sh`). Looked up once.
+/// Where an install keeps PDFium: `KANDINSKY_PDFIUM`, beside the executable, `../lib/kandinsky/` from it (the server image),
+/// or `$XDG_DATA_HOME/kandinsky/lib/` (`packaging/install.sh`). Looked up once.
 pub fn installed() -> Option<PathBuf> {
     static FOUND: OnceLock<Option<PathBuf>> = OnceLock::new();
     FOUND
         .get_or_init(|| {
             let exe = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf));
-            let mut places: Vec<PathBuf> = std::env::var_os("ATLAS_PDFIUM").map(PathBuf::from).into_iter().collect();
-            places.extend(exe.iter().flat_map(|d| [d.join(LIB_NAME), d.join("../lib/atlas").join(LIB_NAME)]));
-            places.push(crate::platform::dirs::atlas(crate::platform::dirs::Base::Data).join("lib").join(LIB_NAME));
+            let mut places: Vec<PathBuf> = crate::env::var_os("PDFIUM").map(PathBuf::from).into_iter().collect();
+            places.extend(exe.iter().flat_map(|d| [d.join(LIB_NAME), d.join("../lib/kandinsky").join(LIB_NAME)]));
+            places.push(crate::platform::dirs::app(crate::platform::dirs::Base::Data).join("lib").join(LIB_NAME));
             places.into_iter().find(|p| p.is_file())
         })
         .clone()

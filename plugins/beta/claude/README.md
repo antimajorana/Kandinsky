@@ -1,17 +1,17 @@
 # Claude
 
-Claude Code as one of Atlas's AI agents, and your Claude plan's usage in the status bar.
+Claude Code as one of Kandinsky's AI agents, and your Claude plan's usage in the status bar.
 
 ## What it adds
 
-- **An agent** (`[[agent]]`): Claude Code sessions in Atlas's terminal (the terminal's "+" menu, Super+K). Each tab
+- **An agent** (`[[agent]]`): Claude Code sessions in Kandinsky's terminal (the terminal's "+" menu, Super+K). Each tab
   resumes its own conversation (`--session-id` / `--resume`), runs the command and account of the settings, and can
   receive the editor's selection as `@path#Lfrom-to`. Commits by Claude are recognised by their co-author line.
-- **A status cell** — "Claude 42 %" — with the share of the 5-hour session limit used by the account Atlas runs Claude
+- **A status cell** — "Claude 42 %" — with the share of the 5-hour session limit used by the account Kandinsky runs Claude
   as, every limit with its reset time on hover, ⚠ from the warning level, and a notice once per window when the
   session limit passes it (remembered across restarts). A click, or **Claude: show usage**, looks again at once and opens
   the report: each account's limits as bars, red past the warning, with when each resets, the account in use first.
-- **The tool `usage`** (`claude_usage` through `atlas mcp`): the plan's limits in percent with their reset times, for
+- **The tool `usage`** (`claude_usage` through `kandinsky mcp`): the plan's limits in percent with their reset times, for
   the current account or, with `all = true`, every account found on this computer. No secrets in the answer.
 
 The numbers come from the same usage endpoint Claude Code itself uses, with the account's own access token read from
@@ -29,14 +29,14 @@ when a look fails, the last numbers are shown with their age.
 
 ## How it fits
 
-No requirements. Agents reach Atlas through `atlas mcp` with a token of their own (Settings → AI agents); this plugin
-is how Claude Code is started inside Atlas.
+No requirements. Agents reach Kandinsky through `kandinsky mcp` with a token of their own (Settings → AI agents); this plugin
+is how Claude Code is started inside Kandinsky.
 
 ## Needs
 
-Claude Code installed and signed in on the machine running Atlas's core. The usage helper is a small program of the
+Claude Code installed and signed in on the machine running Kandinsky's core. The usage helper is a small program of the
 plugin's own (Rust, `engine/`, built into `bin/<target>/` by `engine/build.sh`): it reads Claude Code's credentials and
-the session hooks' cache, outside the vault, and asks the usage endpoint through Atlas's fetch
+the session hooks' cache, outside the vault, and asks the usage endpoint through Kandinsky's fetch
 (`net = ["api.anthropic.com"]`); the token is read at each look and sent nowhere else.
 
 ## Platforms
@@ -46,5 +46,5 @@ reports the server's account.
 
 ## Status
 
-Beta. Tests: `cargo test -p atlas-claude` (accounts found by shape, their addresses, the account in use, limits from
+Beta. Tests: `cargo test -p kandinsky-claude` (accounts found by shape, their addresses, the account in use, limits from
 both answer shapes). No end-to-end spec.

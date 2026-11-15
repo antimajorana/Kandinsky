@@ -1,4 +1,4 @@
-//! After every capture — the app's box, the phone, the desktop's capture window, `atlas capture`, an agent — the
+//! After every capture — the app's box, the phone, the desktop's capture window, `kandinsky capture`, an agent — the
 //! plugins' `on = "capture"` tools run in the background (the catalog files a captured link or identifier as its
 //! note). A tool answering `{ path }` (a note) gets the capture's line linked to it (`… → [[Dune (2021)]]`) and the
 //! user a notice; `{ skipped }` (a plain thought) changes nothing. The capture itself never waits for a hook.
@@ -12,7 +12,7 @@ use crate::Workspace;
 use serde_json::{json, Value};
 use std::path::Path;
 
-/// How often the captures other devices left in `.atlas/pending` are looked for.
+/// How often the captures other devices left in `.kandinsky/pending` are looked for.
 const PENDING_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
 
 pub fn spawn(ws: Workspace, bus: EventBus, helpers: Helpers) -> tokio::task::JoinHandle<()> {
@@ -43,7 +43,7 @@ pub fn spawn(ws: Workspace, bus: EventBus, helpers: Helpers) -> tokio::task::Joi
     tokio::spawn(async move {
         let _fs = Stops(fs); // the fs hooks end with these (the vault stopped)
         let _forward = Stops(forward);
-        // what was captured while no Atlas served the vault (capture::capture_unserved), or on the phone: at start, then
+        // what was captured while no Kandinsky served the vault (capture::capture_unserved), or on the phone: at start, then
         // every minute, as Syncthing brings other devices' files in. The phone leaves a desktop the hooks it cannot run.
         let mut sweep = tokio::time::interval(PENDING_EVERY);
         loop {
@@ -135,7 +135,7 @@ fn spawn_fs(ws: Workspace, bus: EventBus, helpers: Helpers) -> tokio::task::Join
             let input = json!({ "paths": paths.into_iter().collect::<Vec<_>>() });
             for (plugin, tool) in tools {
                 if let Err(e) = crate::plugin_tools::call(ws.root(), &cfg, &helpers, &store, &plugin, &tool, input.clone()).await {
-                    eprintln!("atlas: {plugin}/{tool} on changed files: {e}");
+                    eprintln!("kandinsky: {plugin}/{tool} on changed files: {e}");
                 }
             }
         }
@@ -159,7 +159,7 @@ pub fn log_made(ws: Workspace, helpers: Helpers, path: String) {
         let store = crate::secrets::Store::for_vault(ws.root());
         for (plugin, tool) in crate::plugin_tools::listening(ws.root(), &cfg, "log") {
             if let Err(e) = crate::plugin_tools::call(ws.root(), &cfg, &helpers, &store, &plugin, &tool, json!({ "text": "", "path": path, "line": 1 })).await {
-                eprintln!("atlas: {plugin}/{tool} on the new log: {e}");
+                eprintln!("kandinsky: {plugin}/{tool} on the new log: {e}");
             }
         }
     });
@@ -185,7 +185,7 @@ pub fn started(ws: Workspace, bus: EventBus, helpers: Helpers, only: Option<Stri
 /// Whether `line` is the one the capture of `text` wrote: the capture rewrites what was typed (a link's tracking
 /// parameters dropped, `[] ` made a box, `@tomorrow` a date), so its words are looked for as written, not the text.
 fn holds(line: &str, text: &str) -> bool {
-    let text = atlas_text::links::untracked(text);
+    let text = kandinsky_text::links::untracked(text);
     let first = text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
     let first = crate::capture::as_task(first).unwrap_or(first);
     let words: Vec<&str> = first.split_whitespace().filter(|w| !w.starts_with('@')).collect();

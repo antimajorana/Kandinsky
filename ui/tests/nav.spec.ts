@@ -3,7 +3,7 @@ import { shownName } from "../src/lib/paths";
 import { openFile as openInPalette } from "./open";
 
 // Back / forward like a browser: the mouse's side buttons and a horizontal two-finger swipe (nav-input.ts).
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 
 async function openFile(page: Page, name: string) {
@@ -50,7 +50,7 @@ test("a horizontal swipe goes back; a closed pane is reopened", async ({ page, r
 
 test("a two-finger swipe on a drawing pans it and never goes back", async ({ page, request }) => {
   await put(request, "notes/nav-five.md", "# five\n");
-  await put(request, "notes/nav-pan.excalidraw", JSON.stringify({ type: "excalidraw", version: 2, source: "atlas", elements: [], appState: {}, files: {} }));
+  await put(request, "notes/nav-pan.excalidraw", JSON.stringify({ type: "excalidraw", version: 2, source: "kandinsky", elements: [], appState: {}, files: {} }));
   await page.goto("/");
   await openFile(page, "nav-five.md");
   await page.keyboard.press("Control+p");

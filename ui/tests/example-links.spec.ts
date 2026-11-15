@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 // Catalog · Linkwarden's links block (moved there from the Clip plugin), against a stand-in Linkwarden: the links listed (an
 // older server: /api/v1/search is a 404, /api/v1/links answers), the search typed reaches the server.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const example = (f: string) => readFileSync(fileURLToPath(new URL(`../../plugins/beta/catalog-linkwarden/${f}`, import.meta.url)), "utf8");
 let server: Server, port = 0;
@@ -24,13 +24,13 @@ test.beforeAll(async ({ request }) => {
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   port = (server.address() as AddressInfo).port;
-  await put(request, ".atlas/plugins/catalog-linkwarden/main.js", example("main.js"));
+  await put(request, ".kandinsky/plugins/catalog-linkwarden/main.js", example("main.js"));
   // without the catalog here (the block is the page's own; `requires` would keep it from loading)
-  await put(request, ".atlas/plugins/catalog-linkwarden/plugin.toml", example("plugin.toml").replace(/^requires = .*$/m, ""));
+  await put(request, ".kandinsky/plugins/catalog-linkwarden/plugin.toml", example("plugin.toml").replace(/^requires = .*$/m, ""));
   await put(request, "notes/links.md", "# Links\n\n```view\ntype: linkwarden.links\n```\n\nend\n");
 });
 test.afterAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/catalog-linkwarden/main.js", "export function register() {}\n");
+  await put(request, ".kandinsky/plugins/catalog-linkwarden/main.js", "export function register() {}\n");
   await new Promise((done) => server.close(done));
 });
 

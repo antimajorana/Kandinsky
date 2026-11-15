@@ -1,6 +1,6 @@
-//! The finance plugin's helper: started by Atlas with no arguments it serves the plugin's methods over the pipe
-//! (crates/atlas-plugin); with arguments it is a command line on a vault folder (checks, the migration on a copy).
-use atlas_plugin::{error, serve, Atlas, Methods};
+//! The finance plugin's helper: started by Kandinsky with no arguments it serves the plugin's methods over the pipe
+//! (crates/kandinsky-plugin); with arguments it is a command line on a vault folder (checks, the migration on a copy).
+use kandinsky_plugin::{error, serve, Kandinsky, Methods};
 use finance::book::Ledger;
 use finance::load::{load, Dir, Loaded, Source};
 use finance::model::*;
@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 
 /// The vault through the core.
-struct Vault(Atlas);
+struct Vault(Kandinsky);
 
 impl Source for Vault {
     fn files(&self, folder: &str) -> Result<Vec<String>, String> {
@@ -186,30 +186,30 @@ fn register_json(l: &Ledger, account: &str) -> Value {
 }
 
 /// The statements inbox: a dry run (the report and counts) or, with `write`, the import itself. The originals are read
-/// from this machine's copy of the vault (ATLAS_ROOT: the helper runs beside it); everything written, the archives'
+/// from this machine's copy of the vault (KANDINSKY_ROOT: the helper runs beside it); everything written, the archives'
 /// bytes too, goes through the core, so the index, open tabs and the mirror follow.
-fn import_run(p: &Value, write: bool) -> Result<Value, atlas_plugin::Error> {
+fn import_run(p: &Value, write: bool) -> Result<Value, kandinsky_plugin::Error> {
     let folder = folder(p);
-    let root = PathBuf::from(std::env::var("ATLAS_ROOT").map_err(|_| error("ATLAS_ROOT is not set"))?);
-    let atlas = Atlas::new();
-    let vault = Vault(Atlas::new());
+    let root = PathBuf::from(std::env::var("KANDINSKY_ROOT").map_err(|_| error("KANDINSKY_ROOT is not set"))?);
+    let kandinsky = Kandinsky::new();
+    let vault = Vault(Kandinsky::new());
     let inbox = format!("{folder}/statements/inbox/");
     let mut paths: Vec<String> = vault.files(&folder).map_err(error)?.into_iter().filter(|f| f.starts_with(&inbox)).collect();
     paths.sort();
     let inputs = paths.iter().map(|f| Ok(finance::statement::batch::Input { path: f.clone(), bytes: std::fs::read(root.join(f)).map_err(|e| error(format!("{f}: {e}")))? }))
-        .collect::<Result<Vec<_>, atlas_plugin::Error>>()?;
+        .collect::<Result<Vec<_>, kandinsky_plugin::Error>>()?;
     let loaded = load(&vault, &folder).map_err(error)?;
     let out = finance::statement::batch::run(&vault, &|rel| std::fs::read(root.join(rel)).ok(), &loaded, &folder, inputs, &finance::statement::pdf::text, today());
     let write = write && out.errors.is_empty();
     if write {
         for (path, text) in &out.texts {
-            atlas.write(path, text)?;
+            kandinsky.write(path, text)?;
         }
         for (path, bytes) in &out.archives {
-            atlas.write_bytes(path, bytes)?;
+            kandinsky.write_bytes(path, bytes)?;
         }
         for f in &out.consumed {
-            atlas.post(&format!("/api/fs/trash?path={}", atlas_plugin::q(f)), &json!({}))?;
+            kandinsky.post(&format!("/api/fs/trash?path={}", kandinsky_plugin::q(f)), &json!({}))?;
         }
     }
     Ok(json!({ "files": paths, "report": out.report, "new": out.new, "errors": out.errors, "written": write, "statements": out.lines, "notes": out.consumed.len() }))
@@ -217,9 +217,9 @@ fn import_run(p: &Value, write: bool) -> Result<Value, atlas_plugin::Error> {
 
 /// Enable Banking (bank.rs) through the core's fetch, every request signed with the application's key (the secret
 /// `enable_banking_key`, its id in Settings).
-fn bank_call(p: &Value, r: &finance::bank::Request) -> Result<Value, atlas_plugin::Error> {
+fn bank_call(p: &Value, r: &finance::bank::Request) -> Result<Value, kandinsky_plugin::Error> {
     let app = p["settings"]["bank_app_id"].as_str().filter(|s| !s.is_empty()).ok_or_else(|| error("Enable Banking: set the application id in Settings → Finance"))?;
-    let key = p["secrets"]["enable_banking_key"].as_str().map(str::to_string).or_else(|| Atlas::new().secret("enable_banking_key").ok().flatten())
+    let key = p["secrets"]["enable_banking_key"].as_str().map(str::to_string).or_else(|| Kandinsky::new().secret("enable_banking_key").ok().flatten())
         .ok_or_else(|| error("Enable Banking: the application's private key is not set (Finance → Sources → key)"))?;
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
     let jwt = finance::bank::jwt(app, &key, now).map_err(error)?;
@@ -227,7 +227,7 @@ fn bank_call(p: &Value, r: &finance::bank::Request) -> Result<Value, atlas_plugi
     if let Some(b) = &r.body {
         req["body"] = json!(b.to_string());
     }
-    let a = Atlas::new().post("/api/plugins/finance/fetch", &req)?;
+    let a = Kandinsky::new().post("/api/plugins/finance/fetch", &req)?;
     let text = a["text"].as_str().unwrap_or_default();
     let v: Value = serde_json::from_str(text).unwrap_or(Value::Null);
     match a["status"].as_u64() {
@@ -246,24 +246,24 @@ fn unlinked(l: &Loaded, accounts: &[finance::bank::Linked]) -> Vec<Value> {
 
 /// The transaction the pane names by its place and its header as drawn (`path`, `line`, `text`): a moved or edited
 /// one is refused rather than guessed.
-fn txn_at<'a>(l: &'a Loaded, p: &Value) -> Result<&'a Txn, atlas_plugin::Error> {
+fn txn_at<'a>(l: &'a Loaded, p: &Value) -> Result<&'a Txn, kandinsky_plugin::Error> {
     let (path, line) = (p["path"].as_str().unwrap_or_default(), p["line"].as_u64().unwrap_or(0) as usize);
     l.ledger.txns.iter().map(|b| &b.txn).find(|t| &*t.span.path == path && t.span.first == line && Some(t.text.as_str()) == p["text"].as_str())
         .ok_or_else(|| error(format!("{path}:{line} changed since the pane read it: reload")))
 }
 
 /// Writes `text` to `path` only when the books read with it have no error they did not have before.
-fn guarded_write(p: &Value, l: &Loaded, path: &str, text: &str) -> Result<(), atlas_plugin::Error> {
-    let base = Vault(Atlas::new());
+fn guarded_write(p: &Value, l: &Loaded, path: &str, text: &str) -> Result<(), kandinsky_plugin::Error> {
+    let base = Vault(Kandinsky::new());
     let after = load(&finance::load::Overlay { base: &base, path: path.to_string(), text: text.to_string() }, &folder(p)).map_err(error)?;
     let new = entry::new_errors(&l.ledger.diags, &after.ledger.diags);
     if !new.is_empty() {
         return Err(error(format!("not written, it would make the books wrong: {}", new.join("; "))));
     }
-    Atlas::new().write(path, text)
+    Kandinsky::new().write(path, text)
 }
 
-fn bank_config(l: &Loaded) -> Result<finance::bank::Config, atlas_plugin::Error> {
+fn bank_config(l: &Loaded) -> Result<finance::bank::Config, kandinsky_plugin::Error> {
     finance::bank::Config::load(l.notes.data.get("enable-banking.toml").map(String::as_str)).map_err(error)
 }
 
@@ -279,7 +279,7 @@ fn bank_sync_one(p: &Value, l: &Loaded, s: &finance::notes::SourceNote) -> Resul
     }
     if !rows.is_empty() {
         let path = format!("{}/statements/inbox/enable-banking {} {}.csv", folder(p), s.bank, today());
-        Atlas::new().write(&path, &finance::bank::csv(&rows)).map_err(|e| e.why)?;
+        Kandinsky::new().write(&path, &finance::bank::csv(&rows)).map_err(|e| e.why)?;
     }
     Ok(rows.len())
 }
@@ -311,7 +311,7 @@ fn bank_rows(p: &Value, cfg: &finance::bank::Config, uid: &str, id: &str, from: 
 }
 
 /// The banks' own sites (data/banks.toml, or the vault's finance/banks.toml instead).
-fn banks_list(l: &Loaded) -> Result<Value, atlas_plugin::Error> {
+fn banks_list(l: &Loaded) -> Result<Value, kandinsky_plugin::Error> {
     let text = l.notes.data.get("banks.toml").map(String::as_str).unwrap_or(include_str!("../../data/banks.toml"));
     let t: toml::Table = text.parse().map_err(|e| error(format!("banks.toml: {e}")))?;
     serde_json::to_value(t.get("bank").cloned().unwrap_or(toml::Value::Array(vec![]))).map_err(|e| error(e.to_string()))
@@ -324,11 +324,11 @@ fn downloads_dir(p: &Value) -> PathBuf {
 
 /// Files in the downloads folder changed since `since` (Unix seconds) that a preset recognises are moved into the
 /// statements inbox: what "Fetch from the bank's site" waits for while the user downloads in their browser.
-fn take_downloads(p: &Value) -> Result<Value, atlas_plugin::Error> {
+fn take_downloads(p: &Value) -> Result<Value, kandinsky_plugin::Error> {
     let folder_name = folder(p);
     let dir = downloads_dir(p);
     let since = std::time::UNIX_EPOCH + std::time::Duration::from_secs(p["since"].as_u64().unwrap_or(0));
-    let vault = Vault(Atlas::new());
+    let vault = Vault(Kandinsky::new());
     let files = vault.files(&folder_name).map_err(error)?;
     let preset_files: Vec<(String, String)> = files.iter().filter(|f| f.starts_with(&format!("{folder_name}/importers/")) && f.ends_with(".toml"))
         .filter_map(|f| Some((f.clone(), vault.read(f).ok()?))).collect();
@@ -346,7 +346,7 @@ fn take_downloads(p: &Value) -> Result<Value, atlas_plugin::Error> {
         match finance::statement::detect(&presets, &bytes, &finance::statement::pdf::text).first() {
             Some(preset) => {
                 let rel = format!("{folder_name}/statements/inbox/{name}");
-                Atlas::new().write_bytes(&rel, &bytes)?;
+                Kandinsky::new().write_bytes(&rel, &bytes)?;
                 std::fs::remove_file(&path).map_err(|e| error(format!("{name}: {e}")))?;
                 taken.push(json!({ "name": name, "preset": preset.name }));
             }
@@ -358,7 +358,7 @@ fn take_downloads(p: &Value) -> Result<Value, atlas_plugin::Error> {
 
 fn serve_plugin() {
     let mut m = Methods::new();
-    let vault_load = |p: &Value| load(&Vault(Atlas::new()), &folder(p)).map_err(error);
+    let vault_load = |p: &Value| load(&Vault(Kandinsky::new()), &folder(p)).map_err(error);
     m.add("check", move |p| {
         let l = vault_load(&p)?;
         Ok(json!({ "diagnostics": l.ledger.diags.iter().map(diag_json).collect::<Vec<_>>() }))
@@ -370,12 +370,12 @@ fn serve_plugin() {
         let l = vault_load(&p)?;
         let c = finance::classify::Classifier::new(&l.ledger, &l.notes);
         let (all, sure) = guesses(&l, &c, p["shared"].as_bool() == Some(true));
-        let atlas = Atlas::new();
-        let (files, problems) = finance::rules::apply(&l.ledger, &sure, &|path| atlas.read(path).map_err(|e| e.to_string()));
+        let kandinsky = Kandinsky::new();
+        let (files, problems) = finance::rules::apply(&l.ledger, &sure, &|path| kandinsky.read(path).map_err(|e| e.to_string()));
         let write = p["write"].as_bool() == Some(true);
         if write {
             for (path, text) in &files {
-                atlas.write(path, text)?;
+                kandinsky.write(path, text)?;
             }
         }
         Ok(json!({ "filed": sure.len(), "asked": all.len() - sure.len(), "written": write, "problems": problems,
@@ -384,21 +384,21 @@ fn serve_plugin() {
     });
     // Capture (capture.rs): `parse` is the live helper's line, `add` writes the `!` transaction, `capture` is the hook
     // after every capture from any door — it answers `skipped` for a thought that is not money.
-    let captured = |p: &Value, l: &Loaded| -> Result<Option<finance::capture::Captured>, atlas_plugin::Error> {
+    let captured = |p: &Value, l: &Loaded| -> Result<Option<finance::capture::Captured>, kandinsky_plugin::Error> {
         let voc = finance::capture::Vocabulary::load(l.notes.data.get("capture.toml").map(String::as_str)).map_err(error)?;
         let account = Account::parse(p["settings"]["capture_account"].as_str().filter(|s| !s.is_empty()).unwrap_or("Assets:Cash")).map_err(error)?;
         Ok(finance::capture::read(p["text"].as_str().unwrap_or_default(), &l.ledger, &l.notes, &voc, &account, today()))
     };
-    let write_capture = move |p: &Value, c: &finance::capture::Captured| -> Result<String, atlas_plugin::Error> {
-        let atlas = Atlas::new();
+    let write_capture = move |p: &Value, c: &finance::capture::Captured| -> Result<String, kandinsky_plugin::Error> {
+        let kandinsky = Kandinsky::new();
         let path = format!("{}/journal/{}.fin", folder(p), chrono::Datelike::year(&c.date));
         let link = p["path"].as_str().filter(|s| !s.is_empty()).map(|s| s.trim_end_matches(".md").to_string());
         let text = c.txn(p["text"].as_str().unwrap_or_default().trim(), link.as_deref());
         let (mut j, mut d) = (Journal::default(), vec![]);
         finance::parse::parse_file(&path, &text, &mut j, &mut d);
         let t = j.txns.first().filter(|_| d.is_empty()).ok_or_else(|| error(format!("the capture would not parse: {d:?}")))?;
-        let old = atlas.read(&path).unwrap_or_default();
-        atlas.write(&path, &write::append(&old, t))?;
+        let old = kandinsky.read(&path).unwrap_or_default();
+        kandinsky.write(&path, &write::append(&old, t))?;
         Ok(path)
     };
     m.add("parse", move |p| {
@@ -442,11 +442,11 @@ fn serve_plugin() {
     m.add("prices", move |p| {
         let l = vault_load(&p)?;
         let folder = folder(&p);
-        let atlas = Atlas::new();
+        let kandinsky = Kandinsky::new();
         let l2 = units(&p, &l).into_iter().filter_map(|u| Commodity::parse(&u).ok()).collect::<Vec<_>>();
         let cfg = price_config(&l).map_err(error)?;
-        let u = pricefeed::update(&cfg, &l.ledger, &l.notes, &pricefeed::Want { folder: &folder, measures: &l2, today: today() }, &|path| atlas.read(path).ok(), &mut |url| {
-            let r = atlas.post("/api/plugins/finance/fetch", &json!({ "url": url, "headers": { "user-agent": "Mozilla/5.0 (Atlas finance)" }, "timeout_secs": 30 })).map_err(|e| e.to_string())?;
+        let u = pricefeed::update(&cfg, &l.ledger, &l.notes, &pricefeed::Want { folder: &folder, measures: &l2, today: today() }, &|path| kandinsky.read(path).ok(), &mut |url| {
+            let r = kandinsky.post("/api/plugins/finance/fetch", &json!({ "url": url, "headers": { "user-agent": "Mozilla/5.0 (Kandinsky finance)" }, "timeout_secs": 30 })).map_err(|e| e.to_string())?;
             match r["status"].as_u64() {
                 Some(200) => Ok(r["text"].as_str().unwrap_or_default().to_string()),
                 s => Err(format!("{} answered {}", url.split('/').nth(2).unwrap_or(url), s.map_or("nothing".into(), |s| s.to_string()))),
@@ -455,7 +455,7 @@ fn serve_plugin() {
         let write = p["dry"].as_bool() != Some(true);
         if write {
             for (path, text) in &u.files {
-                atlas.write(path, text)?;
+                kandinsky.write(path, text)?;
             }
         }
         let summary = format!("{} price files {}, {} problems", u.files.len(), if write { "written" } else { "to write" }, u.errors.len());
@@ -470,15 +470,15 @@ fn serve_plugin() {
             finance::parse::parse_amount(&target).map_err(|e| error(format!("{target}: {e}")))?;
         }
         let l = vault_load(&p)?;
-        let atlas = Atlas::new();
+        let kandinsky = Kandinsky::new();
         let (path, text) = match l.notes.categories.get(&account) {
-            Some(n) => (n.path.to_string(), atlas.read(&n.path)?),
+            Some(n) => (n.path.to_string(), kandinsky.read(&n.path)?),
             None => (format!("{}/categories/{}.md", folder(&p), account.as_str().split(':').skip(1).collect::<Vec<_>>().join(" ")),
                      format!("---\ntype: finance-category\naccount: {}\n---\n\n# {}\n", finance::notes::yaml_str(account.as_str()), account.as_str().rsplit(':').next().unwrap_or_default())),
         };
         let target = finance::notes::yaml_str(&target);
         let out = finance::notes::set_property(&text, "target", (!target.is_empty() && target != "\"\"").then_some(target.as_str()));
-        atlas.write(&path, &out)?;
+        kandinsky.write(&path, &out)?;
         Ok(json!({ "path": path }))
     });
     m.add("register", move |p| {
@@ -509,12 +509,12 @@ fn serve_plugin() {
         })).collect();
         let waiting = l.ledger.txns.iter().filter(|b| b.txn.status == Status::Review).count();
         let edits: Vec<_> = found.into_iter().map(|(i, e, _)| (i, e)).collect();
-        let atlas = Atlas::new();
-        let (files, problems) = finance::rules::apply(&l.ledger, &edits, &|path| atlas.read(path).map_err(|e| e.to_string()));
+        let kandinsky = Kandinsky::new();
+        let (files, problems) = finance::rules::apply(&l.ledger, &edits, &|path| kandinsky.read(path).map_err(|e| e.to_string()));
         let write = p["write"].as_bool() == Some(true);
         if write {
             for (path, text) in &files {
-                atlas.write(path, text)?;
+                kandinsky.write(path, text)?;
             }
         }
         Ok(json!({ "settled": edits.len(), "left": waiting - edits.len(), "guessed": guessed, "written": write, "problems": problems }))
@@ -538,17 +538,17 @@ fn serve_plugin() {
     m.add("txn_save", move |p| {
         let l = vault_load(&p)?;
         let draft = entry::Draft::from_json(&p["draft"]).map_err(error)?;
-        let atlas = Atlas::new();
+        let kandinsky = Kandinsky::new();
         let (path, text) = match p["path"].as_str() {
             Some(path) => {
                 let t = txn_at(&l, &p)?;
-                let file = atlas.read(path)?;
+                let file = kandinsky.read(path)?;
                 let old = entry::lines_of(&file, t).ok_or_else(|| error(format!("{path}:{} is no longer in the file", t.span.first)))?;
                 (path.to_string(), write::replace(&file, &t.span, &old, &entry::render(Some(t), &draft)).map_err(error)?)
             }
             None => {
                 let path = entry::file_for(&folder(&p), draft.date);
-                let file = atlas.read(&path).unwrap_or_default();
+                let file = kandinsky.read(&path).unwrap_or_default();
                 let mut out = file.trim_end_matches('\n').to_string();
                 if !out.is_empty() { out.push_str("\n\n"); }
                 out.push_str(&entry::render(None, &draft));
@@ -562,8 +562,8 @@ fn serve_plugin() {
     m.add("txn_delete", move |p| {
         let l = vault_load(&p)?;
         let t = txn_at(&l, &p)?;
-        let atlas = Atlas::new();
-        let file = atlas.read(&t.span.path)?;
+        let kandinsky = Kandinsky::new();
+        let file = kandinsky.read(&t.span.path)?;
         let old = entry::lines_of(&file, t).ok_or_else(|| error("no longer in the file"))?;
         let out = entry::remove(&file, t, &old).map_err(error)?;
         guarded_write(&p, &l, &t.span.path, &out)?;
@@ -573,7 +573,7 @@ fn serve_plugin() {
         let l = vault_load(&p)?;
         let path = p["path"].as_str().ok_or_else(|| error("which file?"))?;
         let text = p["text"].as_str().filter(|t| !t.trim().is_empty()).ok_or_else(|| error("nothing to restore"))?;
-        let file = Atlas::new().read(path).unwrap_or_default();
+        let file = Kandinsky::new().read(path).unwrap_or_default();
         let out = format!("{}\n\n{}", file.trim_end_matches('\n'), text.trim_end_matches('\n')) + "\n";
         guarded_write(&p, &l, path, &out)?;
         Ok(json!({ "path": path }))
@@ -590,7 +590,7 @@ fn serve_plugin() {
                     let a = Account::parse(x[0].as_str().unwrap_or_default()).map_err(error)?;
                     let q = x[1].as_str().map(finance::parse::parse_amount).transpose().map_err(error)?;
                     Ok(q.map_or(edit::Part::Rest(a.clone()), |q| edit::Part::Amount(a, q)))
-                }).collect::<Result<Vec<_>, atlas_plugin::Error>>()?)),
+                }).collect::<Result<Vec<_>, kandinsky_plugin::Error>>()?)),
                 _ => None,
             },
         };
@@ -598,13 +598,13 @@ fn serve_plugin() {
         // The pane names the transaction by its place and its header as drawn: a moved or edited one is refused.
         let t = l.ledger.txns.iter().map(|b| &b.txn).find(|t| &*t.span.path == path && t.span.first == line && Some(t.text.as_str()) == p["text"].as_str())
             .ok_or_else(|| error(format!("{path}:{line} changed since the pane read it: reload")))?;
-        let atlas = Atlas::new();
-        let out = edit::apply(&atlas.read(path)?, t, &edit).map_err(error)?;
-        atlas.write(path, &out)?;
+        let kandinsky = Kandinsky::new();
+        let out = edit::apply(&kandinsky.read(path)?, t, &edit).map_err(error)?;
+        kandinsky.write(path, &out)?;
         Ok(json!({ "path": path, "line": line }))
     });
     // The statements inbox: a dry run (the report and counts) or, with `write`, the import itself. Binary files (the
-    // originals, the archives) are read and written on this machine's copy of the vault (ATLAS_ROOT): the helper runs
+    // originals, the archives) are read and written on this machine's copy of the vault (KANDINSKY_ROOT): the helper runs
     // beside the vault; text goes through the core so open tabs and the mirror follow.
     m.add("import", move |p| import_run(&p, p["write"].as_bool() == Some(true)));
     // Enable Banking (DESIGN-finance, revised: on the server). `bank_list` the banks of a country; `bank_connect` asks a
@@ -650,7 +650,7 @@ fn serve_plugin() {
             accounts: accounts.iter().map(|a| (a.uid.clone(), a.iban.clone().unwrap_or_default(), a.name.clone().unwrap_or_default())).collect(),
             error: None,
         };
-        Atlas::new().write(&path, &finance::bank::source_note(&note))?;
+        Kandinsky::new().write(&path, &finance::bank::source_note(&note))?;
         Ok(json!({ "path": path, "bank": bank, "accounts": accounts.len(), "until": until, "unlinked": unlinked(&l, &accounts) }))
     });
     // `bank_link`: the ledger account a connected account is (its `uid` added to that note's `bank-uid`), for one the
@@ -660,8 +660,8 @@ fn serve_plugin() {
         let uid = p["uid"].as_str().filter(|u| !u.is_empty()).ok_or_else(|| error("which connected account (uid)?"))?;
         let l = vault_load(&p)?;
         let n = l.notes.accounts.get(&account).ok_or_else(|| error(format!("{account} has no account note")))?;
-        let atlas = Atlas::new();
-        let text = atlas.read(&n.path)?;
+        let kandinsky = Kandinsky::new();
+        let text = kandinsky.read(&n.path)?;
         // the sync names an account by its IBAN when the bank gives one, by its uid otherwise: the note lists both
         let iban = l.notes.sources.iter().flat_map(|s| &s.accounts).find(|a| a.0 == uid).map(|a| a.1.clone()).filter(|i| !i.is_empty());
         let mut out = text;
@@ -673,12 +673,12 @@ fn serve_plugin() {
             }
             out = finance::notes::set_property(&out, key, Some(&format!("[{}]", list.iter().map(|u| format!("{u:?}")).collect::<Vec<_>>().join(", "))));
         }
-        atlas.write(&n.path, &out)?;
+        kandinsky.write(&n.path, &out)?;
         Ok(json!({ "path": n.path.to_string() }))
     });
     m.add("bank_sync", move |p| {
         let l = vault_load(&p)?;
-        let atlas = Atlas::new();
+        let kandinsky = Kandinsky::new();
         let mut said = vec![];
         let mut rows = 0;
         for s in l.notes.sources.iter().filter(|s| !s.accounts.is_empty()) {
@@ -691,7 +691,7 @@ fn serve_plugin() {
                 Err(e) => { said.push(format!("{}: {e}", s.bank)); (s.synced.map(|d| d.to_string()), Some(e)) }
             };
             let synced = synced.and_then(|d| chrono::NaiveDate::parse_from_str(&d, "%Y-%m-%d").ok());
-            atlas.write(&s.path, &finance::bank::source_note(&finance::notes::SourceNote { synced, error: err, ..s.clone() }))?;
+            kandinsky.write(&s.path, &finance::bank::source_note(&finance::notes::SourceNote { synced, error: err, ..s.clone() }))?;
         }
         if l.notes.sources.is_empty() {
             return Ok(json!({ "skipped": "no bank connected (Finance → Sources)" }));
@@ -709,25 +709,25 @@ fn serve_plugin() {
         let l = vault_load(&p)?;
         let e = export::hledger(&l.ledger, &l.notes);
         let path = format!("{}/export/hledger.journal", folder(&p));
-        Atlas::new().write(&path, &e.journal)?;
+        Kandinsky::new().write(&path, &e.journal)?;
         Ok(json!({ "path": path, "losses": e.losses }))
     });
     m.add("migrate_paisa", move |p| {
         let src = p["source"].as_str().ok_or_else(|| error("source: the path of Paisa's main.ledger"))?;
         let text = std::fs::read_to_string(expand(src)).map_err(|e| error(format!("{src}: {e}")))?;
-        let atlas = Atlas::new();
-        let mapping = atlas.read("finance/migration/paisa-mapping.md").ok().filter(|s| !s.is_empty());
+        let kandinsky = Kandinsky::new();
+        let mapping = kandinsky.read("finance/migration/paisa-mapping.md").ok().filter(|s| !s.is_empty());
         let mig = migrate::paisa::migrate(&text, mapping.as_deref(), today());
         let mut written = vec![];
         let mut kept = vec![];
         if p["write"].as_bool() == Some(true) {
             for (path, body) in &mig.files {
                 // Never over a file that exists (the mapping note is the user's to edit; the report is renewed).
-                let exists = atlas.read(path).map(|t| !t.is_empty()).unwrap_or(false);
+                let exists = kandinsky.read(path).map(|t| !t.is_empty()).unwrap_or(false);
                 if exists && !path.ends_with("paisa-report.md") {
                     kept.push(path.clone());
                 } else {
-                    atlas.write(path, body)?;
+                    kandinsky.write(path, body)?;
                     written.push(path.clone());
                 }
             }
@@ -737,12 +737,12 @@ fn serve_plugin() {
     serve(m);
 }
 
-/// Writes an import's files into a vault folder on disk; inputs from its inbox go to `.atlas/trash/`.
+/// Writes an import's files into a vault folder on disk; inputs from its inbox go to `.kandinsky/trash/`.
 fn apply_import(vault: &std::path::Path, out: &finance::statement::batch::Output) -> Result<(), String> {
     let put = |rel: &str, b: &[u8]| -> Result<(), String> {
         let target = vault.join(rel);
         std::fs::create_dir_all(target.parent().unwrap()).map_err(|e| e.to_string())?;
-        atlas_plugin::write_file(&target, b).map_err(|e| format!("{rel}: {e}"))
+        kandinsky_plugin::write_file(&target, b).map_err(|e| format!("{rel}: {e}"))
     };
     for (rel, text) in &out.texts {
         put(rel, text.as_bytes())?;
@@ -755,7 +755,7 @@ fn apply_import(vault: &std::path::Path, out: &finance::statement::batch::Output
     for p in &out.consumed {
         let src = PathBuf::from(p);
         if let Ok(rel) = src.strip_prefix(vault) {
-            let to = vault.join(".atlas/trash").join(rel);
+            let to = kandinsky_plugin::state_dir(vault).join("trash").join(rel);
             std::fs::create_dir_all(to.parent().unwrap()).map_err(|e| e.to_string())?;
             std::fs::rename(&src, &to).map_err(|e| format!("{p}: {e}"))?;
             eprintln!("moved {p} to the trash (it is in the archive)");
@@ -812,7 +812,7 @@ fn cli(args: &[String]) -> Result<(), String> {
         "export-hledger" => {
             let l = load(&Dir(PathBuf::from(arg(1)?)), args.get(3).map(String::as_str).unwrap_or("finance"))?;
             let e = export::hledger(&l.ledger, &l.notes);
-            atlas_plugin::write_file(arg(2)?, e.journal.as_bytes()).map_err(|e| e.to_string())?;
+            kandinsky_plugin::write_file(arg(2)?, e.journal.as_bytes()).map_err(|e| e.to_string())?;
             for x in e.losses {
                 eprintln!("lost: {x}");
             }
@@ -832,7 +832,7 @@ fn cli(args: &[String]) -> Result<(), String> {
                         continue;
                     }
                     std::fs::create_dir_all(target.parent().unwrap()).map_err(|e| e.to_string())?;
-                    atlas_plugin::write_file(&target, body.as_bytes()).map_err(|e| e.to_string())?;
+                    kandinsky_plugin::write_file(&target, body.as_bytes()).map_err(|e| e.to_string())?;
                     eprintln!("wrote {path}");
                 }
             }
@@ -865,7 +865,7 @@ fn cli(args: &[String]) -> Result<(), String> {
                 old = [&lines[..e.span.first - 1], &lines[end..]].concat().concat();
                 eprintln!("replaced the count of {date} (it was {})", e.text);
             }
-            atlas_plugin::write_file(&path, write::append(&old, t).as_bytes()).map_err(|e| e.to_string())?;
+            kandinsky_plugin::write_file(&path, write::append(&old, t).as_bytes()).map_err(|e| e.to_string())?;
             println!("{}", write::txn(t));
             Ok(())
         }
@@ -893,7 +893,7 @@ fn cli(args: &[String]) -> Result<(), String> {
             }
             let path = vault.join(&*t.span.path);
             let out = edit::apply(&std::fs::read_to_string(&path).map_err(|e| e.to_string())?, t, &e)?;
-            atlas_plugin::write_file(&path, out.as_bytes()).map_err(|e| e.to_string())?;
+            kandinsky_plugin::write_file(&path, out.as_bytes()).map_err(|e| e.to_string())?;
             println!("{} {} → {to}", t.date, t.payee);
             Ok(())
         }
@@ -915,7 +915,7 @@ fn cli(args: &[String]) -> Result<(), String> {
             let write = args.iter().any(|a| a == "--write");
             if write {
                 for (p, text) in &files {
-                    atlas_plugin::write_file(vault.join(p), text.as_bytes()).map_err(|e| e.to_string())?;
+                    kandinsky_plugin::write_file(vault.join(p), text.as_bytes()).map_err(|e| e.to_string())?;
                 }
             }
             for p in &problems {
@@ -941,7 +941,7 @@ fn cli(args: &[String]) -> Result<(), String> {
             problems.iter().for_each(|x| eprintln!("problem: {x}"));
             if args.iter().any(|a| a == "--write") {
                 for (p, t) in &files {
-                    atlas_plugin::write_file(vault.join(p), t.as_bytes()).map_err(|e| e.to_string())?;
+                    kandinsky_plugin::write_file(vault.join(p), t.as_bytes()).map_err(|e| e.to_string())?;
                 }
                 let after = load(&Dir(vault), "finance")?;
                 let errors = after.ledger.diags.iter().filter(|d| d.severity == Severity::Error).count();
@@ -960,7 +960,7 @@ fn cli(args: &[String]) -> Result<(), String> {
             let measures: Vec<Commodity> = ["EUR", "CAD", "USD", "XAU", "BTC"].iter().map(|c| Commodity::parse(c).unwrap()).collect();
             let cfg = price_config(&l)?;
             let u = pricefeed::update(&cfg, &l.ledger, &l.notes, &pricefeed::Want { folder: "finance", measures: &measures, today: today() }, &|p| std::fs::read_to_string(vault.join(p)).ok(), &mut |url| {
-                let o = std::process::Command::new("curl").args(["-sfL", "-m", "30", "-A", "Mozilla/5.0 (Atlas finance)", url]).output().map_err(|e| e.to_string())?;
+                let o = std::process::Command::new("curl").args(["-sfL", "-m", "30", "-A", "Mozilla/5.0 (Kandinsky finance)", url]).output().map_err(|e| e.to_string())?;
                 if o.status.success() { Ok(String::from_utf8_lossy(&o.stdout).into_owned()) } else { Err(format!("curl {url}: {}", o.status)) }
             });
             u.log.iter().for_each(|x| eprintln!("{x}"));
@@ -969,7 +969,7 @@ fn cli(args: &[String]) -> Result<(), String> {
                 for (p, t) in &u.files {
                     let target = vault.join(p);
                     std::fs::create_dir_all(target.parent().unwrap()).map_err(|e| e.to_string())?;
-                    atlas_plugin::write_file(&target, t.as_bytes()).map_err(|e| e.to_string())?;
+                    kandinsky_plugin::write_file(&target, t.as_bytes()).map_err(|e| e.to_string())?;
                     eprintln!("wrote {p}");
                 }
             }

@@ -1,5 +1,5 @@
 // Predictor: the likely rest of the word being typed, and the next word when the vault is sure of it, shown faint
-// after the caret (docs/design/DESIGN-spelling-predictor.md). Learned from the vault's notes when Atlas starts, per
+// after the caret (docs/design/DESIGN-spelling-predictor.md). Learned from the vault's notes when Kandinsky starts, per
 // language. Tab or → at the end of a line takes it all, Ctrl+→ one word; anything else typed goes on as if it were not
 // there. Only in a note's prose, right after typing: never in math, code, links or a .tex file (Snippets own math).
 import type { EditorView, ViewUpdate, DecorationSet } from "@codemirror/view";
@@ -12,9 +12,9 @@ import { vaultCounter } from "../../../../../ui/src/lib/editor/vault-count";
 
 const LANGS = ["en", "es", "fr", "de"];
 
-export async function register(atlas: PluginApi) {
-  const { state: S, view: V, language } = atlas.editor.codemirror;
-  const setting = (k: string) => atlas.plugin.settings[k];
+export async function register(kandinsky: PluginApi) {
+  const { state: S, view: V, language } = kandinsky.editor.codemirror;
+  const setting = (k: string) => kandinsky.plugin.settings[k];
   const opts = () => ({ min: Number(setting("min_count") ?? 3), nextWord: setting("next_word") !== false });
   const fallback = () => String(setting("language") || "en");
 
@@ -23,12 +23,12 @@ export async function register(atlas: PluginApi) {
    *  are kept as plain words, so its old counts can leave when it changes. */
   type Counted = { lang: string; text: string };
   const vault = vaultCounter<Counted>(
-    async (paths) => (await atlas.helper.call("count", { paths, langs: LANGS, fallback: fallback() })) as Record<string, Counted>,
+    async (paths) => (await kandinsky.helper.call("count", { paths, langs: LANGS, fallback: fallback() })) as Record<string, Counted>,
     (e, sign) => addSentences(models.get(e.lang) ?? models.set(e.lang, emptyModel()).get(e.lang)!, unpackSentences(e.text), sign),
     "predictor");
-  const learn = async () => vault.countAll((await atlas.helper.call("notes")) as string[]);
-  atlas.onFilesChanged((paths) => {
-    const notes = paths.filter((p) => /\.md$/i.test(p) && !p.startsWith(".atlas/"));
+  const learn = async () => vault.countAll((await kandinsky.helper.call("notes")) as string[]);
+  kandinsky.onFilesChanged((paths) => {
+    const notes = paths.filter((p) => /\.md$/i.test(p) && !p.startsWith(".kandinsky/"));
     if (vault.counted && notes.length) void vault.count(notes);
   });
 
@@ -39,7 +39,7 @@ export async function register(atlas: PluginApi) {
     const have = lexicons.get(lang);
     if (have) return have === "loading" ? undefined : have;
     lexicons.set(lang, "loading");
-    void (atlas.helper.call("lexicon", { lang }, { timeout: 60 }) as Promise<string>)
+    void (kandinsky.helper.call("lexicon", { lang }, { timeout: 60 }) as Promise<string>)
       .then((text) => lexicons.set(lang, text ? text.split("\n").sort() : []))
       .catch((e) => { console.warn(`predictor: the ${lang} dictionary did not load:`, e); lexicons.set(lang, []); });
     return undefined;
@@ -48,11 +48,11 @@ export async function register(atlas: PluginApi) {
   /** The language's general frequencies (the core's lists, plugin API v26): undefined until loaded, or where none. */
   const general = new Map<string, WordFreq | null | "loading">();
   const generalOf = (lang: string): WordFreq | undefined => {
-    if (setting("general") === false || !atlas.editor.words) return undefined;
+    if (setting("general") === false || !kandinsky.editor.words) return undefined;
     const have = general.get(lang);
     if (have !== undefined) return have === "loading" || have === null ? undefined : have;
     general.set(lang, "loading");
-    void atlas.editor.words(lang).then((w) => general.set(lang, w)).catch(() => general.set(lang, null));
+    void kandinsky.editor.words(lang).then((w) => general.set(lang, w)).catch(() => general.set(lang, null));
     return undefined;
   };
 
@@ -95,10 +95,10 @@ export async function register(atlas: PluginApi) {
     return { at: g.at + t.length, guess: { ghost: rest, firstWord: g.guess.firstWord > t.length ? g.guess.firstWord - t.length : (/^\s*\S+/.exec(rest)?.[0].length ?? rest.length) } };
   }
 
-  const isNote = (view: EditorView) => /\.(md|markdown)$/i.test(atlas.editor.path(view));
+  const isNote = (view: EditorView) => /\.(md|markdown)$/i.test(kandinsky.editor.path(view));
   /** Is the caret in prose: a note, text (not math or code), not in a link or the front matter. */
   function inProse(view: EditorView, at: number): boolean {
-    if (!isNote(view) || atlas.editor.place(view, at).kind !== "text") return false;
+    if (!isNote(view) || kandinsky.editor.place(view, at).kind !== "text") return false;
     const line = view.state.doc.lineAt(at);
     const front = frontMatterEnd(view.state.doc.sliceString(0, 4000));
     const tree = language.syntaxTree(view.state);
@@ -142,7 +142,7 @@ export async function register(atlas: PluginApi) {
   };
   const atLineEnd = (view: EditorView) => view.state.selection.main.head === view.state.doc.lineAt(view.state.selection.main.head).to;
 
-  atlas.editor.extension([
+  kandinsky.editor.extension([
     ghost,
     typer,
     // above the editor's own Tab (which types a tab), beside Snippets': each acts only on its own thing (a ghost on

@@ -1,10 +1,10 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 /** The app's native screens: its own (CORE, always there: the notepad, docs/refactor/REFACTOR-notepad-into-core.md)
  *  before the built-in plugins' (NativePlugins, generated from their plugin.toml). */
 final class Natives {
     private Natives() {}
-    static final NativePlugin[] CORE = { new org.atlas.notepad.Notepad() };
+    static final NativePlugin[] CORE = { new org.kandinsky.notepad.Notepad() };
 
     static boolean core(String id) { for (NativePlugin p : CORE) if (p.id().equals(id)) return true; return false; }
 

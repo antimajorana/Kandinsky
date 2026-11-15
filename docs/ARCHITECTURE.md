@@ -1,42 +1,42 @@
-# Atlas — architecture and the v0 API contract
+# Kandinsky — architecture and the v0 API contract
 
-Atlas is a personal desktop workspace app: Obsidian + Notion + Zotero + VS Code + a Claude Code
+Kandinsky is a personal desktop workspace app: Obsidian + Notion + Zotero + VS Code + a Claude Code
 terminal, in one window, over **plain files**. Principles: [PHILOSOPHY.md](PHILOSOPHY.md).
 
 ## Shape
 ```
 Tauri v2 window ─► ui/ (Svelte 5 + Vite + TS, dockview-core panes)
                      │ HTTP + WebSocket on 127.0.0.1 — the ONE transport (also the automation API)
-                  crates/atlas-core (Rust lib: axum server, workspace, commands, pty, events)
-                  crates/atlas      (Rust bin: `atlas serve|capture|cmd|open|today`)
-                  crates/atlas-app/        (Rust bin: starts atlas-core in-process, opens the window)
+                  crates/kandinsky-core (Rust lib: axum server, workspace, commands, pty, events)
+                  crates/kandinsky      (Rust bin: `kandinsky serve|capture|cmd|open|today`)
+                  crates/kandinsky-app/        (Rust bin: starts kandinsky-core in-process, opens the window)
                      │
-                  workspace folder (any folder) + optional .atlas/
+                  workspace folder (any folder) + optional .kandinsky/
 ```
 Invariants:
-1. **Files are the truth.** Nothing lives only in Atlas. `.atlas/cache/` is deletable at any time.
+1. **Files are the truth.** Nothing lives only in Kandinsky. `.kandinsky/cache/` is deletable at any time.
 2. **Zero required fields.** No action asks for metadata before it lets the user type.
 3. **Every action is a command** in one registry, reachable identically from palette, keybinding,
-   CLI and HTTP. Claude/user extensions are scripts in `.atlas/commands/`, no recompile.
+   CLI and HTTP. Claude/user extensions are scripts in `.kandinsky/commands/`, no recompile.
 4. **Invalid states unrepresentable:** commands, pane kinds, event kinds are Rust enums (serde
    tagged); TS types are generated from them with `ts-rs` into `ui/src/lib/gen/`.
 
-## Workspace config — `.atlas/config.toml` (optional; every key has a default)
+## Workspace config — `.kandinsky/config.toml` (optional; every key has a default)
 ```toml
 log_dir   = "log"             # daily capture: <log_dir>/YYYY-MM-DD.md, no frontmatter
-focus     = "FOCUS.md"        # user-owned; Atlas only displays it
+focus     = "FOCUS.md"        # user-owned; Kandinsky only displays it
 lectures  = "notes/lectures"  # <lectures>/<course-slug>/YYYY-MM-DD.md
 ignore    = ["runs", "lib", "archive", "node_modules", "target", ".git"]  # for tree/tasks/search walks
 vim       = true
 ```
 
 ## Discovery for CLI / scripts / Claude
-On start the server writes `<workspace>/.atlas/cache/server.json` = `{"port":N,"pid":P,"root":"/abs"}`.
-The CLI walks up from cwd to find it. If none, `atlas` commands that only touch files
-(`capture`) work directly on disk — **Atlas never has to be running for files to be written**.
+On start the server writes `<workspace>/.kandinsky/cache/server.json` = `{"port":N,"pid":P,"root":"/abs"}`.
+The CLI walks up from cwd to find it. If none, `kandinsky` commands that only touch files
+(`capture`) work directly on disk — **Kandinsky never has to be running for files to be written**.
 
 ## Security (localhost)
-Every `/api` HTTP request must carry header `x-atlas: 1` (forces a CORS preflight that the server
+Every `/api` HTTP request must carry header `x-kandinsky: 1` (forces a CORS preflight that the server
 refuses for foreign origins → blocks drive-by POSTs from web pages). WebSockets check `Origin` is
 absent, `tauri://localhost`, `http://tauri.localhost` or `http://127.0.0.1:<port>`/`http://localhost:<port>`
 (and the Vite dev origin `http://localhost:5173`). Bind 127.0.0.1 only.
@@ -45,7 +45,7 @@ absent, `tauri://localhost`, `http://tauri.localhost` or `http://127.0.0.1:<port
 | method & path | body / query | response |
 |---|---|---|
 | `GET /api/workspace` | – | `{root, name, config}` |
-| `GET /api/tree` | `?path=` (default root) | `[{name, path, kind:"dir"\|"file"}]` sorted dirs-first; config `ignore` honored at any depth, dotfiles hidden except `.atlas` |
+| `GET /api/tree` | `?path=` (default root) | `[{name, path, kind:"dir"\|"file"}]` sorted dirs-first; config `ignore` honored at any depth, dotfiles hidden except `.kandinsky` |
 | `GET /api/files` | `?index=true` (the user's own files), `?under=<path>` (only what is at or under that file or folder) | every file the walk keeps (`walk::files`: dot-entries and `ignore` skipped), vault-relative; the UI's link index (`ui/src/lib/vault.ts`) fetches it whole once, then `?under=` per new path from the file events |
 | `GET /api/file` | `?path=` | `{path, text, mtime}` (text files ≤ 5 MB) |
 | `PUT /api/file` | `{path, text, base_mtime?}` | `{mtime}`; atomic write (tmp + rename); 409 if `base_mtime` given and file changed |
@@ -62,7 +62,7 @@ absent, `tauri://localhost`, `http://tauri.localhost` or `http://127.0.0.1:<port
 
 Built-in commands (ids): `capture {text}`, `lecture.new {course}`, `open {path, line?}` (emits an
 `open` event → UI opens a pane), `notify {title, body?}`, `focus {pane}`, `today` (returns /api/today).
-Script commands: `.atlas/commands/<id>.toml` = `{title, run = "python3 x.py", keys?, description?}`;
+Script commands: `.kandinsky/commands/<id>.toml` = `{title, run = "python3 x.py", keys?, description?}`;
 args sent as JSON on stdin, stdout returned (parsed as JSON if it parses), cwd = workspace root,
 30 s timeout, stderr returned on failure. The server re-reads the folder on each `/api/commands`.
 
@@ -70,7 +70,7 @@ args sent as JSON on stdin, stdout returned (parsed as JSON if it parses), cwd =
 - Layout: left activity rail (Today, Files, Search, Lectures, Commands) + dockview-core panes;
   bottom status bar (workspace, vim mode, server state). Layout JSON persisted in localStorage.
 - Pane kinds: `today`, `editor{path}`, `terminal{preset}`, `files`, `search`, `pdf{path}`
-  (Atlas's PDFium reader with its marking tools), `image{path}`, `web{url}`.
+  (Kandinsky's PDFium reader with its marking tools), `image{path}`, `web{url}`.
 - Editor: CodeMirror 6 + `@replit/codemirror-vim` (**on by default**), markdown live preview from
   vendored obsidian-web `live-preview.js` with KaTeX as `renderMath`, code languages via
   `@codemirror/language-data`; autosave 600 ms after typing stops (PUT with `base_mtime`); reloads on
@@ -79,11 +79,11 @@ args sent as JSON on stdin, stdout returned (parsed as JSON if it parses), cwd =
   Enter sends, Shift+Enter newline; today's log rendered below; open tasks; activity.
 - Global keys: `Ctrl+K` palette (commands + files + headings), `Ctrl+Alt+C` focus capture,
   `Ctrl+Alt+L` new lecture note, `` Ctrl+` `` terminal, `Ctrl+Alt+K` Claude terminal, `Ctrl+P` file
-  quick-open, `Ctrl+W` close pane. Keymap overridable by `.atlas/keys.toml` later.
+  quick-open, `Ctrl+W` close pane. Keymap overridable by `.kandinsky/keys.toml` later.
 - Look: CSS variables, dark (default) + light themes, Inter + JetBrains Mono (bundled via
   `@fontsource`), no CDN anything (offline desktop app).
 - Dev: `npm --prefix ui run dev` (Vite on :5173, proxies `/api` + WS to `127.0.0.1:7717`) against
-  `cargo run -p atlas -- serve <ws> --port 7717`. Prod: atlas-core serves `ui/dist` (embedded with
+  `cargo run -p kandinsky -- serve <ws> --port 7717`. Prod: kandinsky-core serves `ui/dist` (embedded with
   `include_dir` / `rust-embed`) at `/`.
 
 
@@ -93,7 +93,7 @@ args sent as JSON on stdin, stdout returned (parsed as JSON if it parses), cwd =
    400 bad path/body · 403 guard · 404 · 409 stale/missing with `base_mtime` · 413 > 5 MB · 415 not UTF-8.
    PUT creates parent dirs and keeps permissions.
 3. **`POST /api/cmd/:id` always answers 200**; outcome only in `{ok, result}` / `{ok:false, error}`. Empty body = `{args:{}}`.
-4. Built-ins: `open`/`notify`/`focus` return `{delivered:n}` and fail when no UI is listening (so `atlas open`
+4. Built-ins: `open`/`notify`/`focus` return `{delivered:n}` and fail when no UI is listening (so `kandinsky open`
    errors with no window); `open` checks existence; `lecture.new` does **not** emit `open` (the UI opens the
    returned path); `capture` and PUT publish an `fs` event immediately. `focus.pane` is a closed enum:
    today, files, search, lectures, commands, terminal, claude, editor.
@@ -103,37 +103,37 @@ args sent as JSON on stdin, stdout returned (parsed as JSON if it parses), cwd =
 8. Search: filename = all whitespace tokens contained (basename hits first); content = `rg` fixed-string smart-case,
    honoring `.gitignore` + ignore list, hidden skipped; 200 cap each; no `rg` → empty `lines`.
 9. **Scripts:** id = toml stem (dots allowed); run via `sh -c` in its own process group (timeout kills the group);
-   env `ATLAS_ROOT`, `ATLAS_COMMAND`; broken manifests and ids shadowing built-ins skipped with a warning.
+   env `KANDINSKY_ROOT`, `KANDINSKY_COMMAND`; broken manifests and ids shadowing built-ins skipped with a warning.
 10. **Security beyond the contract:** Host header must be loopback (127.0.0.1, localhost, [::1], tauri.localhost) —
-    closes DNS rebinding, which would defeat `x-atlas`; WS Origin also accepts `http://127.0.0.1:5173`; no CORS headers ever.
+    closes DNS rebinding, which would defeat `x-kandinsky`; WS Origin also accepts `http://127.0.0.1:5173`; no CORS headers ever.
 11. PTY: non-resize text frames are input; `cwd` honored; env `TERM=xterm-256color`, `COLORTERM=truecolor`;
     spawn errors are printed into the terminal.
 12. Config re-read per request (malformed config fails `serve` at start). Watcher: one non-recursive watch per
-    non-ignored dir (ignored trees cost no inotify), new dirs picked up, `.atlas/` reported but not `.atlas/cache`.
+    non-ignored dir (ignored trees cost no inotify), new dirs picked up, `.kandinsky/` reported but not `.kandinsky/cache`.
 13. `server.json` removed on graceful shutdown; a stale one is harmless (CLI verifies port answers for the same root).
-14. Tauri (`atlas-app`): sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` on Wayland if unset, serves on port 0 in-process,
-    window → `http://127.0.0.1:<port>/`; `ATLAS_UI_URL` overrides (e.g. Vite). No IPC is used.
+14. Tauri (`kandinsky-app`): sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` on Wayland if unset, serves on port 0 in-process,
+    window → `http://127.0.0.1:<port>/`; `KANDINSKY_UI_URL` overrides (e.g. Vite). No IPC is used.
 
 Gates (2026-10-05): `cargo test --workspace` **67 passed / 0 failed** (29 unit, 34 ts-rs exports, 3 server
 integration incl. pty `echo` round-trip and events WS, 1 CLI); clippy `-D warnings` clean; fmt clean.
 Known gaps: `/api/raw` reads whole files (no Range); watcher ignore list read once; no rename pairing.
 
-### Claude link: UI state + `atlas mcp` (slice 1b, first part)
+### Claude link: UI state + `kandinsky mcp` (slice 1b, first part)
 15. **`GET/PUT /api/ui/state`** (`UiState` = `active` pane, `open` panes, `selection` {path, 1-based
     `from_line`/`to_line`, text ≤ 20 kB}). In memory only: it describes this window session, not the files.
     The UI (`ui/src/lib/uistate.ts`) PUTs it debounced 300 ms on dock active/add/remove and on every editor
     selection change; a selection whose editor closed is dropped.
-16. **`atlas mcp`**: stdio MCP server (hand-rolled newline JSON-RPC, tools only, protocol `2025-06-18`).
-    Tools: `atlas_context`, `atlas_open`, `atlas_notify` (need the window → `isError` with a clear message
-    otherwise), `atlas_capture`, `atlas_today`, `atlas_search`, `atlas_commands`, `atlas_run` (work without the
+16. **`kandinsky mcp`**: stdio MCP server (hand-rolled newline JSON-RPC, tools only, protocol `2025-06-18`).
+    Tools: `kandinsky_context`, `kandinsky_open`, `kandinsky_notify` (need the window → `isError` with a clear message
+    otherwise), `kandinsky_capture`, `kandinsky_today`, `kandinsky_search`, `kandinsky_commands`, `kandinsky_run` (work without the
     window; go through the live server when there is one so the UI sees the change). The server is
     re-discovered per call, so opening/closing the window mid-conversation works. Register it in a workspace's
-    `.mcp.json` as `{"mcpServers": {"atlas": {"command": "atlas", "args": ["mcp"]}}}`.
-    Also `atlas_tasks` (the vault's tasks from the same scan as Home's, open by default, filtered by words or a due
-    day, the Tasks plugin's fields read) and `atlas_task_done` (`today::tick_ref`, the one tick Home's box uses too:
-    a line changed since it was listed is refused), `atlas_templates` and `atlas_new_note` (a note from one of the vault's templates at
+    `.mcp.json` as `{"mcpServers": {"kandinsky": {"command": "kandinsky", "args": ["mcp"]}}}`.
+    Also `kandinsky_tasks` (the vault's tasks from the same scan as Home's, open by default, filtered by words or a due
+    day, the Tasks plugin's fields read) and `kandinsky_task_done` (`today::tick_ref`, the one tick Home's box uses too:
+    a line changed since it was listed is refused), `kandinsky_templates` and `kandinsky_new_note` (a note from one of the vault's templates at
     an exact path, properties set from `fields`, an existing path refused; docs/guides/NOTES-SYSTEM.md), and the
-    instructions the server sends at `initialize` (`INSTRUCTIONS` in `crates/atlas/src/mcp.rs`) tell agents to
+    instructions the server sends at `initialize` (`INSTRUCTIONS` in `crates/kandinsky/src/mcp.rs`) tell agents to
     create notes that way and name the SSH plugin's `ssh_terminal` for a visible terminal tab. Every switched-on
     plugin's `[[tool]]`s follow the built-in ones (`plugin_tools.rs`; docs/guides/PLUGIN-API.md).
 
@@ -141,8 +141,8 @@ Gates (2026-10-05): `cargo test --workspace` **71 passed / 0 failed** (+3 MCP st
 test); clippy `-D warnings` clean. UI: `npm run check` 0 errors / 322 files; `npm run build` ok; Playwright
 **3 passed** (`ui/tests/smoke.spec.ts`: Today renders focus with comments hidden + tasks + focused capture;
 palette → editor; editor selection → `/api/ui/state`). Run: `npm run build && npx playwright test` in `ui/`
-(the config starts `cargo run -p atlas -- serve` on a throwaway workspace, port 7720; set `ATLAS_PW_CHROME` to a
-Chromium binary if Playwright's pinned browser is not downloaded). Verified by hand: `atlas_context` over stdio
+(the config starts `cargo run -p kandinsky -- serve` on a throwaway workspace, port 7720; set `KANDINSKY_PW_CHROME` to a
+Chromium binary if Playwright's pinned browser is not downloaded). Verified by hand: `kandinsky_context` over stdio
 returns the state PUT into a live server on a real vault.
 
 
@@ -153,13 +153,13 @@ returns the state PUT into a live server on a real vault.
     Rule: **every new feature adds its settings as Config fields**.
 18. **Git**: `/api/git/{log,commit,status,diff,stage,blame}`; commits classified you/claude × work/housekeeping. `blame?path=` (`git blame --porcelain`) → `{commits: {hash: {author, time, summary}}, lines: [hash per line]}` (all zeros: not committed yet; empty outside a repository or for an untracked file): the editor's "Git: who changed each line" gutter (`ui/src/lib/editor/blame.ts`, markers mapped through edits, a click opens the commit).
 19. **fs watcher**: raw notify watcher, `Access` events ignored (they fed an endless read→event loop).
-20. **UI diagnostics**: `POST /api/ui/log` → `.atlas/cache/ui.log` (uncaught errors, layout overflow
+20. **UI diagnostics**: `POST /api/ui/log` → `.kandinsky/cache/ui.log` (uncaught errors, layout overflow
     and shell-scroll self-checks) — how WebKitGTK-only bugs are seen.
 21. **CodeMirror chrome is a theme extension** (`ui/src/lib/editor/theme.ts`): the base theme beats plain CSS.
 22. **Colour schemes** (`ui.palette`, `ui/src/styles/palettes.css`): built-in families over tokens.css, each with a
     light and a dark side; no theme file is read (VS Code themes were dropped for one way to colour the app).
 23. **Snippets** (`plugins/beta/snippets/`, a plugin; `ui/src/lib/editor/math-context.ts` tells it where the caret is): JavaScript
-    modules in `.atlas/snippets/`, an old LaTeX Suite file through `/api/snippets` until converted; tab stops on a stack, so a
+    modules in `.kandinsky/snippets/`, an old LaTeX Suite file through `/api/snippets` until converted; tab stops on a stack, so a
     snippet in another's stop hands Tab back; nothing fires in text-like arguments or in an ordinary word being typed.
 24. **Library** (`refs.rs`, `/api/refs`, `/api/refs/add`, `/api/refs/bibtex`): `refs/papers/<key>/info.yaml`;
     add by DOI (Crossref) / arXiv (+PDF); `refs.bib` rewritten after each add — byte-identical to the
@@ -170,9 +170,9 @@ returns the state PUT into a live server on a real vault.
 ### PDF annotation (slice 2)
 - `PUT /api/raw?path=&base_mtime=` — binary body (route-local limit 512 MB vs the 12 MB global JSON limit),
   atomic tmp+rename through the same `write_bytes` as text PUT, 409 on stale `base_mtime`. Before a file's
-  first overwrite its original is kept at `.atlas/originals/<path>` (hard link when possible).
-- `GET`/`HEAD /api/raw` send `x-atlas-mtime` (ms) so binary editors get their base mtime.
-- The PDF pane is Atlas's own reader over one engine per document — PDFium in a worker, or pdf.js as the backup
+  first overwrite its original is kept at `.kandinsky/originals/<path>` (hard link when possible).
+- `GET`/`HEAD /api/raw` send `x-kandinsky-mtime` (ms) so binary editors get their base mtime.
+- The PDF pane is Kandinsky's own reader over one engine per document — PDFium in a worker, or pdf.js as the backup
   (Settings → PDF → engine) — with its text layer, links, find, outline, its own highlight,
   pen and text-note tools); marks are saved into the PDF's note, its `pdf-marks` block (`pdf_marks.rs`), never into
   the PDF — the Boox's reader writes the same block.
@@ -184,11 +184,11 @@ returns the state PUT into a live server on a real vault.
   Rnote pane, its `draw.rnote_open` / `draw.rnote_export` built-ins and `[draw] rnote_*` settings were removed
  .
 - Settings `[pdf]` and `[draw]`.
-- Playwright isolation: `ATLAS_PW_WS`, `ATLAS_PW_PORT` (one per shard of the gate's e2e stage, `scripts/dev/e2e-shards.mjs`).
+- Playwright isolation: `KANDINSKY_PW_WS`, `KANDINSKY_PW_PORT` (one per shard of the gate's e2e stage, `scripts/dev/e2e-shards.mjs`).
 
 
 ### Runs (slice 5)
-- Runs moved out of the core into a workspace plugin (`<vault>/.atlas/plugins/runs/`); the core keeps only the
+- Runs moved out of the core into a workspace plugin (`<vault>/.kandinsky/plugins/runs/`); the core keeps only the
   generic plugin host: `GET /api/plugins`, `POST /api/plugins/{id}/data`, pane kind `plugin`. See [PLUGINS.md](guides/PLUGINS.md).
 
 
@@ -214,8 +214,8 @@ returns the state PUT into a live server on a real vault.
 
 ### Commands, shortcuts, UX audit
 - `GET /api/commands` now carries each script's `file` and `origin` (who added it, from git); `POST /api/commands`
-  writes a new `.atlas/commands/<id>.toml` (no overwrite, no shadowing a built-in); manifests may set
-  `timeout_secs`. `GET/PUT /api/keys` ↔ `.atlas/keys.toml` (`id = "Ctrl+Alt+X"`, `""` unbinds; toml_edit keeps
+  writes a new `.kandinsky/commands/<id>.toml` (no overwrite, no shadowing a built-in); manifests may set
+  `timeout_secs`. `GET/PUT /api/keys` ↔ `.kandinsky/keys.toml` (`id = "Ctrl+Alt+X"`, `""` unbinds; toml_edit keeps
   comments). UI: `lib/keymap.svelte.ts` merges defaults < overrides for every command; `panes/Commands.svelte`.
 - UX audit (`ui/ux/`, `npm run ux`, workspace command `ux.audit`): user journeys on a copy of a real vault.
 

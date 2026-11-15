@@ -1,5 +1,5 @@
 // What went wrong in each plugin, kept per plugin (Settings → Plugins shows it). Every callback a
-// plugin hands to Atlas is run through `guard`, so a failure costs that plugin's contribution only.
+// plugin hands to Kandinsky is run through `guard`, so a failure costs that plugin's contribution only.
 import { errText } from "./text";
 export interface PluginLogLine { at: number; where: string; message: string }
 const MOST = 50;
@@ -14,7 +14,7 @@ export function logPlugin(id: string, where: string, e: unknown): void {
   if (last && last.where === where && last.message === message) { last.at = Date.now(); return; }
   lines.push({ at: Date.now(), where, message });
   if (lines.length > MOST) lines.splice(0, lines.length - MOST);
-  console.error("[atlas] plugin", id, where, e);
+  console.error("[kandinsky] plugin", id, where, e);
 }
 export const clearPluginLog = (id: string): void => { delete pluginLog[id]; };
 

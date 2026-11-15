@@ -77,7 +77,7 @@ impl TrayView for View {
                 Ok(menu) => {
                     let _ = tray.set_menu(Some(menu));
                 }
-                Err(e) => eprintln!("atlas-app: the tray's menu: {e}"),
+                Err(e) => eprintln!("kandinsky-app: the tray's menu: {e}"),
             }
             let _ = tray.set_tooltip(Some(m.tooltip()));
             let _ = tray.set_icon(Some(icons.image(m.attention())));
@@ -91,7 +91,7 @@ pub fn start(app: &AppHandle, shell: Arc<Shell>, icons: Icons, model: Model) -> 
     let menu = menu_of(app, &model, &actions).map_err(|e| e.to_string())?;
     let (by_menu, by_click) = (shell.clone(), shell.clone());
     let chosen = actions.clone();
-    let tray = TrayIconBuilder::with_id("atlas")
+    let tray = TrayIconBuilder::with_id("kandinsky")
         .icon(icons.image(model.attention()))
         .tooltip(model.tooltip())
         .menu(&menu)

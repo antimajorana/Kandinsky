@@ -8,7 +8,7 @@ pub enum TrayAction {
     Show,
     Hide,
     Capture,
-    /// Show Atlas and open the n-th unseen notice's note (newest first).
+    /// Show Kandinsky and open the n-th unseen notice's note (newest first).
     OpenNotice(usize),
     MarkRead,
     ToggleQuiet,
@@ -24,7 +24,7 @@ pub enum TrayItem {
     Separator,
 }
 
-/// A notice that came while nobody looked at Atlas.
+/// A notice that came while nobody looked at Kandinsky.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unseen {
     pub title: String,

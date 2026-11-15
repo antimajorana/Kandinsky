@@ -9,7 +9,7 @@ from Xlib import X, display
 d = display.Display()
 s = d.screen()
 g = s.root.get_geometry()
-if f"{g.width}x{g.height}" not in os.environ.get("ATLAS_LOOK_SCREEN", "1280x800").split():
+if f"{g.width}x{g.height}" not in os.environ.get("KANDINSKY_LOOK_SCREEN", "1280x800").split():
     sys.exit(f"refusing: {d.get_display_name()} is {g.width}x{g.height}, not look.sh's nested screen")
 rgb = int((sys.argv[1] if len(sys.argv) > 1 else "#59606c").lstrip("#"), 16)
 pixel = s.default_colormap.alloc_color(((rgb >> 16) & 0xFF) * 257, ((rgb >> 8) & 0xFF) * 257, (rgb & 0xFF) * 257).pixel

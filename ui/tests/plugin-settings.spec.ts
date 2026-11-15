@@ -4,7 +4,7 @@ import { storedSecret } from "./fixtures/secrets";
 // Plugins v4, settings from a schema (docs/refactor/REFACTOR-plugins-v4.md, 3.7): `[[setting]]` in plugin.toml
 // gives the plugin a form in Settings — "no more TOML by hand" — and the values are written back into
 // the same file, comments kept.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const read = async (r: APIRequestContext, path: string) => ((await (await r.get(`/api/file?path=${encodeURIComponent(path)}`, { headers: H })).json()) as { text: string }).text;
 const TOML = `# a plugin with a form
@@ -46,16 +46,16 @@ kind = "secret"
 [permissions]
 secrets = true
 `;
-const MAIN = `export function register(atlas) {
-  const s = atlas.plugin.settings;
-  atlas.shell.statusItem({ id: "now", text: "d" + s.sides + " " + s.system + (s.loud ? " loud" : "") });
+const MAIN = `export function register(kandinsky) {
+  const s = kandinsky.plugin.settings;
+  kandinsky.shell.statusItem({ id: "now", text: "d" + s.sides + " " + s.system + (s.loud ? " loud" : "") });
 }\n`;
 
 test.beforeAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/dice/plugin.toml", TOML);
-  await put(request, ".atlas/plugins/dice/main.js", MAIN);
+  await put(request, ".kandinsky/plugins/dice/plugin.toml", TOML);
+  await put(request, ".kandinsky/plugins/dice/main.js", MAIN);
 });
-test.afterAll(async ({ request }) => { await put(request, ".atlas/plugins/dice/main.js", "export function register() {}\n"); });
+test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/dice/main.js", "export function register() {}\n"); });
 
 test("a plugin's declared settings are a form; saving writes plugin.toml and the plugin sees the values", async ({ page, request }) => {
   await page.goto("/");
@@ -99,10 +99,10 @@ test("a plugin's declared settings are a form; saving writes plugin.toml and the
   await expect(row).toContainText(/Announce every roll\s*on/);
   await expect(row).not.toContainText("dnd5e");
   // the values are in the vault's settings file (2026-10-18: not in plugin.toml), comments kept; the manifest keeps none
-  const manifest = await read(request, ".atlas/plugins/dice/plugin.toml");
+  const manifest = await read(request, ".kandinsky/plugins/dice/plugin.toml");
   expect(manifest).toContain("# a plugin with a form");
   expect(manifest).not.toContain("[settings]");
-  const text = await read(request, ".atlas/plugin-settings/dice.toml");
+  const text = await read(request, ".kandinsky/plugin-settings/dice.toml");
   expect(text).toContain("sides = 12 # the classic");
   expect(text).toContain("loud = true");
   expect(text, "several lines stay lines in the file").toContain('greeting = """\nHello\nfriend"""');

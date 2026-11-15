@@ -10,7 +10,7 @@ import { said, suwayomi, kept } from "../../plugins/beta/manga/suwayomi.js";
 
 // The manga plugin's web side (plugins/beta/manga/view.js): the library from the vault's manga/ folder, a series, and
 // a .cbz unzipped in the page; where you are written to the series' note (its folder's own), as the Android screens write it.
-const PLUGIN = join(WS, ".atlas/plugins/manga");
+const PLUGIN = join(WS, ".kandinsky/plugins/manga");
 // a 2×3 PNG per page, each a different grey so the pages differ
 function png(grey: number): Buffer {
   const chunk = (type: string, data: Buffer) => {
@@ -129,7 +129,7 @@ test("a .cb7 chapter (as a .cbr): made once into a cached .cbz by the helper, re
 });
 
 test("a chapter's marks: in the series' note, a block per chapter, drawn over its page", async ({ page }) => {
-  const H = { "x-atlas": "1" }, CH = "manga/Blue Period/Chapter 9.cbz";
+  const H = { "x-kandinsky": "1" }, CH = "manga/Blue Period/Chapter 9.cbz";
   // as the phone's pen writes them (InkStore.pictures): a picture page's places are its fractions × 1000, y up
   const r = await page.request.post(`/api/pdf-marks?pdf=${encodeURIComponent(CH)}`, { headers: H, data: [{ op: "put", mark: { id: "m-mangaa01", page: 1, version: 1, kind: "highlight", quads: [[100, 600, 500, 800]] } }] });
   expect(r.ok()).toBe(true);
@@ -167,7 +167,7 @@ test("manga on e-ink: a refresh asked on each page turn (flash_every = 1)", asyn
   await page.addInitScript(() => {
     // every refresh the reader asks for (eink.ts keeps at most one every 5 s, calm: no flash to see in a browser)
     (window as unknown as { flashes: number }).flashes = 0;
-    document.addEventListener("atlas-eink-refresh", () => { (window as unknown as { flashes: number }).flashes++; });
+    document.addEventListener("kandinsky-eink-refresh", () => { (window as unknown as { flashes: number }).flashes++; });
   });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
@@ -209,7 +209,7 @@ test("Suwayomi: its library beside the vault's, a chapter read from it, where yo
     const url = req.url ?? "";
     // the cover as JPEG XL, as some sources serve it: no browser here decodes it, so it shows only through the core's
     // thumbnail (WebKit's decoder could hang the page on one)
-    if (url.includes("thumbnail")) { res.writeHead(200, { "content-type": "image/jxl" }); res.end(readFileSync(new URL("../../crates/atlas-android/tests/fixtures/tiny.jxl", import.meta.url))); return; }
+    if (url.includes("thumbnail")) { res.writeHead(200, { "content-type": "image/jxl" }); res.end(readFileSync(new URL("../../crates/kandinsky-android/tests/fixtures/tiny.jxl", import.meta.url))); return; }
     if (url.startsWith("/api/v1/")) { res.writeHead(200, { "content-type": "image/png" }); res.end(png(60)); return; }
     let body = "";
     req.on("data", (c) => (body += c));
@@ -230,7 +230,7 @@ test("Suwayomi: its library beside the vault's, a chapter read from it, where yo
     });
   });
   await new Promise<void>((r) => server.listen(7743, "127.0.0.1", r));
-  await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: ".atlas/plugin-settings/manga.toml", text: 'suwayomi = "http://127.0.0.1:7743"\n' } });
+  await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: ".kandinsky/plugin-settings/manga.toml", text: 'suwayomi = "http://127.0.0.1:7743"\n' } });
   try {
     await page.goto("/");
     await page.getByText("Finish the GW notes.").waitFor();
@@ -274,23 +274,23 @@ test("Suwayomi: its library beside the vault's, a chapter read from it, where yo
     await expect(page.getByText("3 chapters of BLAME! kept for offline")).toBeVisible();
 
   } finally {
-    await request.put("/api/file", { headers: { "x-atlas": "1" }, data: { path: ".atlas/plugin-settings/manga.toml", text: "" } });
+    await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: ".kandinsky/plugin-settings/manga.toml", text: "" } });
     server.close();
   }
 });
 
-// On the phone only the reader is the app's: the Libraries page shows the plugin's own Comics, and a chapter goes to the app by atlas.openNative.
+// On the phone only the reader is the app's: the Libraries page shows the plugin's own Comics, and a chapter goes to the app by kandinsky.openNative.
 test("on the phone the library is the page's, and a chapter is handed to the app's reader", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 412, height: 760 }, hasTouch: true });
   const page = await ctx.newPage();
   await page.addInitScript(() => {
-    const w = window as unknown as { AtlasNative: unknown; opened: string[] };
+    const w = window as unknown as { KandinskyNative: unknown; opened: string[] };
     w.opened = [];
-    w.AtlasNative = { ready() {}, tabs() {}, nativeOpens: (p: string) => String(p.endsWith(".cbz")), openNative: (p: string) => w.opened.push(p) };
+    w.KandinskyNative = { ready() {}, tabs() {}, nativeOpens: (p: string) => String(p.endsWith(".cbz")), openNative: (p: string) => w.opened.push(p) };
   });
   await page.goto("/");
-  await page.waitForFunction(() => "atlasShell" in window);
-  await page.evaluate(() => (window as unknown as { atlasShell: { view(k: string): void } }).atlasShell.view("libraries"));
+  await page.waitForFunction(() => "kandinskyShell" in window);
+  await page.evaluate(() => (window as unknown as { kandinskyShell: { view(k: string): void } }).kandinskyShell.view("libraries"));
   const tabs = page.locator(".libraries .which");
   await expect(tabs.getByRole("tab")).not.toHaveText([/↗/]); // no tab leaves the page for a native library
   await tabs.getByRole("tab", { name: /Comics/ }).click();
@@ -315,8 +315,8 @@ test("a Suwayomi error is one line, and a source gone says what to do", () => {
 // with the server's next answer (said once).
 test("pure: Suwayomi keeps the page lists of the chapters opened last", async () => {
   const store = kept("http://s.example.org", { getItem: () => null, setItem: () => {} });
-  const atlas = { plugin: { id: "manga" }, async fetch() { return { ok: true, json: async () => ({ data: { fetchChapterPages: { pages: ["/p"] } } }) }; } };
-  const suw = suwayomi(atlas, "http://s.example.org", store);
+  const kandinsky = { plugin: { id: "manga" }, async fetch() { return { ok: true, json: async () => ({ data: { fetchChapterPages: { pages: ["/p"] } } }) }; } };
+  const suw = suwayomi(kandinsky, "http://s.example.org", store);
   for (const id of [5, 900, 5]) await suw.pages(`suwayomi:${id}/x`);
   // an object orders integer keys by value: chapter 5, opened last, must still come last (the first dropped is 900)
   expect(Object.keys(store.data.pages)).toEqual(["c900", "c5"]);
@@ -326,11 +326,11 @@ test("pure: Suwayomi offline — the lists and pictures as kept, where you are s
   const mem = new Map<string, string>(), storage = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) };
   let up = true;
   const asked: string[] = [], marks: unknown[] = [], files = new Set<string>(), toasts: unknown[] = [];
-  const atlas = {
+  const kandinsky = {
     plugin: { id: "manga" },
     async fetch(_url: string, o: { saveTo?: string; body?: { query: string; variables: Record<string, unknown> } } = {}) {
       if (!up) throw new Error("connection refused");
-      if (o.saveTo) { const p = `.atlas/cache/plugins/manga/${o.saveTo}`; files.add(p); asked.push("picture"); return { ok: true, saved: p }; }
+      if (o.saveTo) { const p = `.kandinsky/cache/plugins/manga/${o.saveTo}`; files.add(p); asked.push("picture"); return { ok: true, saved: p }; }
       const { query, variables } = o.body!;
       asked.push(query);
       const data = query.includes("mangas(") ? { mangas: { nodes: [{ id: 6, title: "BLAME!", thumbnailUrl: "/t", user: { unreadCount: 2 } }] } }
@@ -341,12 +341,12 @@ test("pure: Suwayomi offline — the lists and pictures as kept, where you are s
     },
     exists: async (p: string) => files.has(p), thumbUrl: (p: string) => `thumb:${p}`, toast: (...a: unknown[]) => void toasts.push(a),
   };
-  const client = () => suwayomi(atlas, "http://suwayomi.example.org/", kept("http://suwayomi.example.org", storage));
+  const client = () => suwayomi(kandinsky, "http://suwayomi.example.org/", kept("http://suwayomi.example.org", storage));
   let suw = client();
   const [series] = await suw.library();
   await suw.chapters(series);
   const read = await suw.pages(series.chapters[0]);
-  expect(await read.url(0)).toBe("thumb:.atlas/cache/plugins/manga/suwayomi/1/0");
+  expect(await read.url(0)).toBe("thumb:.kandinsky/cache/plugins/manga/suwayomi/1/0");
   await read.url(1); // the chapter's pages looked at while it answered
 
   up = false; suw = client(); // a reload with the server gone
@@ -356,7 +356,7 @@ test("pure: Suwayomi offline — the lists and pictures as kept, where you are s
   await suw.chapters(again);
   expect(again.chapters).toEqual(["suwayomi:1/One", "suwayomi:2/Two"]);
   const before = asked.length;
-  expect(await (await suw.pages(again.chapters[0])).url(1)).toBe("thumb:.atlas/cache/plugins/manga/suwayomi/1/1"); // kept: nothing asked
+  expect(await (await suw.pages(again.chapters[0])).url(1)).toBe("thumb:.kandinsky/cache/plugins/manga/suwayomi/1/1"); // kept: nothing asked
   expect(asked.length).toBe(before);
   await expect(suw.pages(again.chapters[1])).rejects.toThrow("connection refused"); // never opened: nothing to read
   await suw.mark(again.chapters[0], 1, false);

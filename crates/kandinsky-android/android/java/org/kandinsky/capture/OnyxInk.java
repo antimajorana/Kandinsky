@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.util.Log;
 import android.view.View;
@@ -14,9 +14,9 @@ import java.lang.reflect.Method;
  *  screen, so only after layout), single-region mode, width; setRawDrawingEnabled(true) = state 2 (RENDER ON — without it
  *  nothing is drawn), brush on, eraser off. Changing the picture by hand: state 3, redraw + post, state 2. Close: style 0,
  *  enablePost(1), state 3, state 0. All static on android.onyx.ViewUpdateHelper, by reflection; failures are logged
- *  (tag AtlasInk) and turn it off, the canvas still draws. */
+ *  (tag KandinskyInk) and turn it off, the canvas still draws. */
 final class OnyxInk extends Ink {
-    private static final String TAG = "AtlasInk";
+    private static final String TAG = "KandinskyInk";
     private static final int QUIT = 0, START = 1, RENDER = 2, PAUSE = 3; // setScreenHandWritingPenState
     private final View view;
     private final Method penState, enablePost, strokeWidth, strokeStyle, regionLimit;

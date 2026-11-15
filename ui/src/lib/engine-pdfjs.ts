@@ -33,7 +33,7 @@ function open(path: string): Open {
     const task = pdfjs.getDocument({
       worker,
       url: api.rawUrl(path),
-      httpHeaders: { "x-atlas": "1" },
+      httpHeaders: { "x-kandinsky": "1" },
       // by 1 MB pieces (the core answers HTTP ranges): a book's first page reads a few, not the whole file
       disableStream: true,
       disableAutoFetch: true,

@@ -1,8 +1,8 @@
-//! The SSH plugin's helper (`atlas-ssh`), in place of session.py, sftp.py and hosts.py. OpenSSH does the connecting; this keeps one shared connection per host, the long-lived
+//! The SSH plugin's helper (`kandinsky-ssh`), in place of session.py, sftp.py and hosts.py. OpenSSH does the connecting; this keeps one shared connection per host, the long-lived
 //! shells agents use (sessions.rs), the Files pane's sftp calls (sftp.rs), the page's terminal tabs and logins.
 //!
 //!   hosts · connections · status · connect · disconnect · command — the page's side tool and terminal menu
-//!   open · run · read · send · close · sessions — atlas mcp's ssh_* tools
+//!   open · run · read · send · close · sessions — kandinsky mcp's ssh_* tools
 //!   terminal {host, command?, title?} → a tab in the user's window (a `tab` event the page answers with tab_opened)
 //!   files_list / files_edit / files_save / files_get / files_put / files_mkdir / files_rename / files_delete
 //!
@@ -16,7 +16,7 @@ mod shell;
 mod ssh;
 mod wire;
 
-use atlas_plugin::{event, serve_threads, SharedMethods};
+use kandinsky_plugin::{event, serve_threads, SharedMethods};
 use serde_json::{json, Value};
 use ssh::Settings;
 use std::collections::HashMap;
@@ -63,11 +63,11 @@ type Asked = Mutex<HashMap<String, Option<bool>>>;
 static TABS: LazyLock<(Asked, Condvar)> = LazyLock::new(Default::default);
 
 fn tab_wait() -> Duration {
-    Duration::from_secs_f64(std::env::var("ATLAS_SSH_TAB_WAIT").ok().and_then(|w| w.parse().ok()).unwrap_or(15.0))
+    Duration::from_secs_f64(kandinsky_plugin::env_var_os("SSH_TAB_WAIT").and_then(|v| v.into_string().ok()).and_then(|w| w.parse().ok()).unwrap_or(15.0))
 }
 
 /// A visible terminal tab on `host` (the agent's "open me an ssh terminal"): the page opens it, as the "+" menu's
-/// "SSH: <host>" does, and says so. No page answering (Atlas closed, the plugin off) is an error, never a claimed tab.
+/// "SSH: <host>" does, and says so. No page answering (Kandinsky closed, the plugin off) is an error, never a claimed tab.
 fn terminal(p: &Value) -> Answer {
     let s = Settings::of(p);
     let host = host(p, "a name from ssh_hosts, or user@host[:port]")?;
@@ -93,8 +93,8 @@ fn terminal(p: &Value) -> Answer {
     t.remove(&id);
     drop(t);
     match opened {
-        None => Err("no Atlas window opened the tab: is Atlas open on this vault, with the SSH plugin on?".into()),
-        Some(false) => Err("the Atlas window could not open a terminal".into()),
+        None => Err("no Kandinsky window opened the tab: is Kandinsky open on this vault, with the SSH plugin on?".into()),
+        Some(false) => Err("the Kandinsky window could not open a terminal".into()),
         Some(true) => Ok(json!({ "opened": title, "host": host, "connected": up,
             "note": if up { "the shared connection was up: no password asked" } else { "the user answers any passphrase / 2FA in that tab" } })),
     }
@@ -194,7 +194,7 @@ fn files(work: fn(&[String], &Value) -> Answer) -> impl Fn(&Value) -> Answer {
         let s = Settings::of(p);
         let host = host(p, "a name from the ssh config, or user@host[:port]")?;
         if !s.bring_up(&host) {
-            ssh::login(&s, &host, Duration::ZERO, ssh::Asker::User("Atlas's explorer to browse files there"));
+            ssh::login(&s, &host, Duration::ZERO, ssh::Asker::User("Kandinsky's explorer to browse files there"));
             return Ok(json!({ "waiting_for_login": host, "message": format!("Log in to {host} in the terminal tab that opened (passphrase / 2FA).") }));
         }
         work(&s.sftp_argv(&host), p)
@@ -219,7 +219,7 @@ fn list_files(p: &Value) -> Answer {
 fn main() {
     let mut m = SharedMethods::new();
     let mut add = |name: &str, f: Box<dyn Fn(&Value) -> Answer + Send + Sync>| {
-        m.add(name, move |p| f(&p).map_err(atlas_plugin::error));
+        m.add(name, move |p| f(&p).map_err(kandinsky_plugin::error));
     };
     add("hosts", Box::new(hosts));
     add("command", Box::new(command));

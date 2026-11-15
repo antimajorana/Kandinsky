@@ -37,7 +37,7 @@ test("palette opens a note in the editor", async ({ page }) => {
   expect(errs).toEqual([]);
 });
 
-test("editor selection reaches /api/ui/state (what atlas_context returns)", async ({ page, request }) => {
+test("editor selection reaches /api/ui/state (what kandinsky_context returns)", async ({ page, request }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+e");
@@ -49,7 +49,7 @@ test("editor selection reaches /api/ui/state (what atlas_context returns)", asyn
   await page.keyboard.press("Home");
   await page.keyboard.press("Shift+End");
   await expect.poll(async () => {
-    const s = await (await request.get("/api/ui/state", { headers: { "x-atlas": "1" } })).json();
+    const s = await (await request.get("/api/ui/state", { headers: { "x-kandinsky": "1" } })).json();
     return { active: s.active, path: s.selection?.path, line: s.selection?.from_line, text: s.selection?.text };
   }).toMatchObject({ active: { kind: "editor", path: "notes/hubbard.md" }, path: "notes/hubbard.md", line: 5, text: expect.stringContaining("check the sign") });
 });
@@ -68,7 +68,7 @@ test("Today activity separates your commits, Claude's, and housekeeping", async 
 });
 
 test("Settings is generated from the schema and saves to config.toml", async ({ page, request }) => {
-  const cfg = async () => (await (await request.get("/api/config", { headers: { "x-atlas": "1" } })).json()).config;
+  const cfg = async () => (await (await request.get("/api/config", { headers: { "x-kandinsky": "1" } })).json()).config;
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor(); // the keymap is attached once the app is up (was flaky)
   await page.keyboard.press("Meta+,");
@@ -120,7 +120,7 @@ test("terminal panel hides and comes back without restarting", async ({ page }) 
 test("two quick setting toggles both land (writes are queued, not raced)", async ({ page, request }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  const vim = async () => (await (await request.get("/api/config", { headers: { "x-atlas": "1" } })).json()).config.vim;
+  const vim = async () => (await (await request.get("/api/config", { headers: { "x-kandinsky": "1" } })).json()).config.vim;
   const before = await vim();
   await page.getByTestId("vim-mode").click();
   await page.getByTestId("vim-mode").click(); // immediately: the first save is still in flight

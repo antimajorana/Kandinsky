@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 
 const repo = resolve(import.meta.dirname, "../..");
 const PLATFORMS = ["linux", "macos", "windows", "android", "server"];
-const core = Number(/pub const API_VERSION: u32 = (\d+);/.exec(readFileSync(join(repo, "crates/atlas-core/src/plugins.rs"), "utf8"))?.[1]);
+const core = Number(/pub const API_VERSION: u32 = (\d+);/.exec(readFileSync(join(repo, "crates/kandinsky-core/src/plugins.rs"), "utf8"))?.[1]);
 
 /** The manifest's top-level keys, its `[helper]` and `[platforms]` tables: enough TOML for what is checked here. */
 function manifest(text) {

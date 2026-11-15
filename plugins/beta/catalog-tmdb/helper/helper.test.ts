@@ -1,7 +1,7 @@
 // TMDB's answers (cut down) as the catalog sees them: the API with a token, the website without.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import "atlas-helper/testing"; // the global `atlas` (url.quote, html.unescape) the helper uses
+import "kandinsky-helper/testing"; // the global `kandinsky` (url.quote, html.unescape) the helper uses
 import { detailsWith, pageFields, searchPage, searchWith, siteDetailsWith, siteSearchWith } from "./helper";
 
 const SEARCH = { results: [

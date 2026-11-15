@@ -102,7 +102,7 @@ pub fn without_done_date(line: &str) -> String {
 }
 
 /// Ticks the task `t` points at (1-based line), when that line still holds `t.text`: Home's box, the task blocks,
-/// an agent (`atlas_task_done`) — one path. A line that changed meanwhile is a conflict, nothing written.
+/// an agent (`kandinsky_task_done`) — one path. A line that changed meanwhile is a conflict, nothing written.
 pub fn tick_ref(ws: &crate::Workspace, t: &crate::api::TaskRef) -> Result<()> {
     let p = ws.resolve(&t.path)?;
     crate::vault_write::modify(&p, |text| {
@@ -130,7 +130,7 @@ pub fn done_task(line: &str) -> Option<&str> {
 }
 
 /// A file containing this marker is not scanned for tasks.
-pub const NO_TASKS_MARKER: &str = "<!-- atlas:no-tasks -->";
+pub const NO_TASKS_MARKER: &str = "<!-- kandinsky:no-tasks -->";
 
 pub fn scan_tasks(root: &Path, cfg: &Config) -> Vec<LineHit> {
     open_tasks(&found(root, cfg), cfg)
@@ -165,7 +165,7 @@ fn tasks_in(abs: &Path, meta: &std::fs::Metadata) -> std::sync::Arc<Vec<(u32, St
     let mut out = Vec::new();
     // Generated checklists (e.g. a migration review) opt out so they don't flood Today.
     let text = std::fs::read_to_string(abs).unwrap_or_default();
-    if !text.contains(NO_TASKS_MARKER) {
+    if !crate::legacy::current_markers(&text).contains(NO_TASKS_MARKER) {
         out.extend(task_lines(text.lines()).map(|(i, t, done)| (i as u32 + 1, t.to_string(), done)));
     }
     let t = std::sync::Arc::new(out);
@@ -176,7 +176,7 @@ fn tasks_in(abs: &Path, meta: &std::fs::Metadata) -> std::sync::Arc<Vec<(u32, St
 /// The task lines of `lines`: (index, text after the checkbox, done). Checkboxes inside code fences are examples, not
 /// tasks. The one reader of a note's tasks (Today, task and view blocks).
 pub(crate) fn task_lines<'a>(lines: impl Iterator<Item = &'a str>) -> impl Iterator<Item = (usize, &'a str, bool)> {
-    let mut fences = atlas_text::fence::Fences::default();
+    let mut fences = kandinsky_text::fence::Fences::default();
     lines.enumerate().filter_map(move |(i, line)| {
         if fences.code(line) {
             return None;
@@ -383,7 +383,7 @@ fn front_of(note: &Path) -> Option<String> {
     let mut head = vec![0u8; 4096];
     let n = std::fs::File::open(note).ok()?.read(&mut head).ok()?;
     let text = String::from_utf8_lossy(&head[..n]).into_owned();
-    atlas_text::frontmatter::yaml_head(&text).map(String::from)
+    kandinsky_text::frontmatter::yaml_head(&text).map(String::from)
 }
 
 fn property<'a>(front: &'a str, key: &str) -> Option<&'a str> {
@@ -520,7 +520,7 @@ mod tests {
         std::fs::write(r.join(".hidden/h.md"), "- [ ] hidden\n").unwrap();
         std::fs::write(r.join("projects/a/node_modules/m.md"), "- [ ] deep ignored\n").unwrap();
         std::fs::write(r.join("notes/b.txt"), "- [ ] not markdown\n").unwrap();
-        std::fs::write(r.join("notes/review.md"), "<!-- atlas:no-tasks -->\n- [ ] generated checklist\n").unwrap();
+        std::fs::write(r.join("notes/review.md"), "<!-- kandinsky:no-tasks -->\n- [ ] generated checklist\n").unwrap();
         std::fs::create_dir_all(r.join("docs/sessions")).unwrap();
         std::fs::write(r.join("docs/sessions/transcript.md"), "quoted: \n- [ ] check the sign of t\n").unwrap();
         let mut cfg =

@@ -20,8 +20,8 @@ async function load(): Promise<void> {
     propertySpec.spec = s.found ? s : null;
     propertySpec.version++;
     for (const fn of listeners) fn();
-    if (s.problems.length) console.warn("[atlas] property spec", s.path, s.problems);
-  } catch (e) { console.warn("[atlas] property spec", e); }
+    if (s.problems.length) console.warn("[kandinsky] property spec", s.path, s.problems);
+  } catch (e) { console.warn("[kandinsky] property spec", e); }
 }
 
 /** Start following the spec (idempotent: every panel calls it). */

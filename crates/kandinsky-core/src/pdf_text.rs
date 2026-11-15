@@ -1,6 +1,6 @@
 //! PDF text for search (PLAN.md slice 4, "search md + pdf text"): ripgrep already searches notes in
 //! ~20 ms, so the index that was missing is PDF text. Each PDF's text is extracted once into
-//! `.atlas/cache/pdftext/<pdf path>.txt` (rebuilt when the PDF is newer) and searched with the same rg; a hit maps
+//! `.kandinsky/cache/pdftext/<pdf path>.txt` (rebuilt when the PDF is newer) and searched with the same rg; a hit maps
 //! back to the PDF and its page (`\f` separates pages). The text is read in Rust (pdf_oxide), so a new computer needs
 //! no poppler; `pdftotext` is asked only for a PDF that reader cannot open, when it is installed. The same pass draws
 //! each PDF's cover (thumbs.rs `pdf_cover`), at start and whenever a PDF arrives.
@@ -11,26 +11,26 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-pub const CACHE: &str = ".atlas/cache/pdftext";
+pub const CACHE: &str = ".kandinsky/cache/pdftext";
 
 /// Extract text for every PDF whose cache is missing or stale; returns how many were (re)extracted.
 pub fn refresh(root: &Path, cfg: &Config) -> usize {
     let mut n = 0;
     // texts and covers kept from before they carried their PDF's time are adopted once (vault_write::cache::adopt_undated)
-    let dated = root.join(CACHE).join(".dated");
+    let dated = crate::state_dir::join(root, CACHE).join(".dated");
     let adopt = !dated.exists();
     let mut seen = std::collections::HashSet::new();
     for (abs, rel) in walk::files(root, cfg).filter(|(_, rel)| rel.to_lowercase().ends_with(".pdf")) {
-        let out = root.join(CACHE).join(format!("{rel}.txt"));
+        let out = crate::state_dir::join(root, CACHE).join(format!("{rel}.txt"));
         seen.insert(out.clone());
         // the text carries the PDF's time: a PDF synced in with an older time than the text's is still read again
         let Ok(changed) = std::fs::metadata(&abs).and_then(|m| m.modified()) else { continue };
         if adopt {
             vault_write::cache::adopt_undated(&out, changed);
-            vault_write::cache::adopt_undated(&crate::thumbs::pdf_cover_path(&root.join(".atlas/cache"), &rel), changed);
+            vault_write::cache::adopt_undated(&crate::thumbs::pdf_cover_path(&crate::state_dir::dir(root).join("cache"), &rel), changed);
         }
         // its cover too, drawn once here rather than by every page that shows it (thumbs.rs)
-        let _ = crate::thumbs::pdf_cover(&root.join(".atlas/cache"), &rel, &abs);
+        let _ = crate::thumbs::pdf_cover(&crate::state_dir::dir(root).join("cache"), &rel, &abs);
         if vault_write::cache::made_from(&out, changed) {
             continue;
         }
@@ -43,13 +43,13 @@ pub fn refresh(root: &Path, cfg: &Config) -> usize {
         }
     }
     // the texts of PDFs deleted, moved or excluded since
-    for e in walkdir::WalkDir::new(root.join(CACHE)).into_iter().flatten() {
+    for e in walkdir::WalkDir::new(crate::state_dir::join(root, CACHE)).into_iter().flatten() {
         let p = e.path();
         if e.file_type().is_file() && p.extension().is_some_and(|x| x == "txt") && !seen.contains(p) {
             let _ = vault_write::cache::remove_file(p);
         }
     }
-    if adopt && vault_write::cache::mkdir(&root.join(CACHE)).is_ok() {
+    if adopt && vault_write::cache::mkdir(&crate::state_dir::join(root, CACHE)).is_ok() {
         let _ = vault_write::cache::write(&dated, b"");
     }
     n
@@ -110,7 +110,7 @@ pub fn refresh_in_background(root: &Path, cfg: &Config) {
         let t = Instant::now();
         let n = refresh(&root, &cfg);
         if n > 0 {
-            eprintln!("atlas: PDF text for search — {n} extracted in {:.1}s", t.elapsed().as_secs_f32());
+            eprintln!("kandinsky: PDF text for search — {n} extracted in {:.1}s", t.elapsed().as_secs_f32());
         }
         let mut running = RUNNING.lock().unwrap_or_else(|e| e.into_inner());
         let Some(i) = running.iter().position(|(r, _)| *r == root) else { return };
@@ -147,7 +147,7 @@ pub fn hits(cache_hits: Vec<LineHit>, root: &Path) -> Vec<LineHit> {
     cache_hits
         .into_iter()
         .filter_map(|h| {
-            let pdf = h.path.strip_prefix(&prefix)?.strip_suffix(".txt")?.to_string();
+            let pdf = crate::state_dir::current_rel(&h.path).strip_prefix(&prefix)?.strip_suffix(".txt")?.to_string();
             // page of each line: 1 + form feeds before it
             let starts = pages.entry(h.path.clone()).or_insert_with(|| {
                 let text = std::fs::read_to_string(root.join(&h.path)).unwrap_or_default();

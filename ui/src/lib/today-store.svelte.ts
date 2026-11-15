@@ -36,7 +36,7 @@ function watch(): void {
   let t: ReturnType<typeof setTimeout> | undefined, missed = false;
   // a hidden page (a phone in a pocket, a background tab) does not ask: once shown, one refresh catches up
   const later = () => { if (!users) stale = true; else if (document.hidden) missed = true; else void refreshToday(); };
-  // each refresh walks the vault (recent changes, tasks): not for Atlas's own cache writes
+  // each refresh walks the vault (recent changes, tasks): not for Kandinsky's own cache writes
   on("fs", (e) => {
     if (e.paths.length && e.paths.every(isBookkeeping)) return;
     if (!users) { stale = true; return; }

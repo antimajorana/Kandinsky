@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { WS } from "../playwright.config";
 import { runCommand } from "./open";
 
-const H = { "x-atlas": "1" };
-const FILE = ".atlas/bookmarks.yaml";
+const H = { "x-kandinsky": "1" };
+const FILE = ".kandinsky/bookmarks.yaml";
 
 // A bookmark whose file was moved or deleted said nothing and opened a blank "new file";
 // a bookmarked heading that was renamed opened the note at the top without a word.

@@ -7,7 +7,7 @@ import { WS } from "../playwright.config";
 // docs/guides/ZOTERO.md, "The reading note": a paper's note is `<folder>/<citekey>.md` (so `[[citekey]]` is
 // unique and matches `[@citekey]`), made on first use with the paper's properties and the
 // `library.paper` block (details + the PDF); a legacy `notes.md` is renamed on first use.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const DIR = "refs/papers/hubbard1963electron";
 
 /** A one-page PDF that pdf.js reads (offsets computed, so no repair is needed). */
@@ -54,9 +54,9 @@ test("the Library's Notes renames a legacy notes.md to <citekey>.md, which shows
   const block = page.locator(".paper-block");
   await expect(block).toContainText("Hubbard, J.");
   // in its own note the heading above already says it (the embedded PDF pane's bar has a title of its own)
-  await expect.poll(() => block.evaluate((b) => [...b.querySelectorAll(".title")].filter((t) => !t.closest(".atlas-pane")).length)).toBe(0);
+  await expect.poll(() => block.evaluate((b) => [...b.querySelectorAll(".title")].filter((t) => !t.closest(".kandinsky-pane")).length)).toBe(0);
   await expect(block).toContainText("Proc. R. Soc. Lond. A");
-  await expect(block.locator(".atlas-pane-pdf")).toBeVisible();
+  await expect(block.locator(".kandinsky-pane-pdf")).toBeVisible();
   await expect(block.locator(".textLayer").first()).toContainText("Hubbard model", { timeout: 15_000 });
 });
 

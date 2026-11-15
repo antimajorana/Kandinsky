@@ -1,7 +1,7 @@
 // The vault's libraries (docs/design/DESIGN-libraries-everywhere.md): only the list. Plugins and the core's features
-// (Drawings, References) register a source each through `registerLibrary`, the call behind `atlas.registerLibrary`;
+// (Drawings, References) register a source each through `registerLibrary`, the call behind `kandinsky.registerLibrary`;
 // the page that draws them is a plugin's pane — the one whose manifest `provides = ["libraries"]` (the Catalog,
-// plugins/beta/catalog/ui) — which reads the list through `atlas.libraries`. The vault's `[ui] libraries` names those
+// plugins/beta/catalog/ui) — which reads the list through `kandinsky.libraries`. The vault's `[ui] libraries` names those
 // shown, in its order — none named: every one registered. With no such plugin on there is no page, and nothing opens.
 import { untrack } from "svelte";
 import type { LibraryEntry as Shown } from "./plugin-api";
@@ -18,7 +18,7 @@ export interface LibraryEntry extends Shown {
 
 /** The role of the plugin whose pane is the Libraries page. */
 export const LIBRARIES_ROLE = "libraries";
-/** The plugin Atlas ships the page in: named only to read a layout or a note saved before the plugin list loaded. */
+/** The plugin Kandinsky ships the page in: named only to read a layout or a note saved before the plugin list loaded. */
 const SHIPPED = "catalog";
 
 let all = $state.raw<LibraryEntry[]>([]);
@@ -37,12 +37,12 @@ const knownLibraries = (): LibraryEntry[] => all.filter((e) => e.when?.() ?? tru
 export function shownLibraries(): LibraryEntry[] {
   const known = knownLibraries();
   const want = settings.config?.ui.libraries ?? [];
-  // none named: Atlas's own first, then by name — plugins register as they load, in no fixed order
+  // none named: Kandinsky's own first, then by name — plugins register as they load, in no fixed order
   return want.length ? want.flatMap((id) => known.filter((e) => e.id === id)) : [...known].sort((a, b) => Number(a.by !== "core" && a.by !== "library") - Number(b.by !== "core" && b.by !== "library") || a.title.localeCompare(b.title));
 }
 
 /** Calls `fn` with the shown libraries now and whenever they change (not on every settings save that leaves them);
- *  returns the unsubscribe (`atlas.libraries.onChange`). */
+ *  returns the unsubscribe (`kandinsky.libraries.onChange`). */
 export function watchLibraries(fn: (list: LibraryEntry[]) => void): () => void {
   let last: LibraryEntry[] | null = null;
   return $effect.root(() => {
@@ -80,7 +80,7 @@ export function moveLibrary(id: string, by: -1 | 1): void {
 export const librariesPage = () => plugins.list.find((p) => p.provides.includes(LIBRARIES_ROLE) && p.view && pluginOn(p)) ?? null;
 
 /** The Libraries page as a pane, at library `at`: one tab whatever the library (`anchor` is not part of its id; an open
- *  page goes to it, `atlas.pane.onAnchor`). Before the plugin list is loaded, the plugin Atlas ships it in. */
+ *  page goes to it, `kandinsky.pane.onAnchor`). Before the plugin list is loaded, the plugin Kandinsky ships it in. */
 export function librariesSpec(at?: string): PaneSpec {
   return { kind: "plugin", id: librariesPage()?.id ?? SHIPPED, title: "Library", icon: "library", ...(at ? { anchor: at } : {}) };
 }

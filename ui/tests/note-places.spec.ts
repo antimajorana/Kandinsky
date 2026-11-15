@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { openFile } from "./open";
 
 // A file opens at the caret and scroll it was left at, not at its top (lib/editor/places.ts).
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 async function open(page: Page, name: string) {
   await openFile(page, `${name}.md`);

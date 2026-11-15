@@ -2,7 +2,7 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 
 // The notices (components/Toasts.svelte): the same one again
 // is counted on it, × closes it, and the pointer on it keeps it while it is read.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const notify = (r: APIRequestContext, title: string, body = "") => r.post("/api/cmd/notify", { headers: H, data: { args: { title, body } } });
 
 test("the same notice twice shows once with ×2, and × closes it", async ({ page, request }) => {

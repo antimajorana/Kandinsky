@@ -3,7 +3,7 @@
   // shown with its reason), c picks a category and accepts, a accepts every one like it (same payee, same category),
   // o opens the journal at the transaction. Each edit is the engine's (review_edit): only that transaction's lines change.
   import { call, label, type PluginApi, type Txn } from "./api";
-  let { atlas, known, onchange }: { atlas: PluginApi; known: string[]; onchange: () => void } = $props();
+  let { kandinsky, known, onchange }: { kandinsky: PluginApi; known: string[]; onchange: () => void } = $props();
   let txns = $state<Txn[]>([]);
   let sel = $state(0);
   let error = $state("");
@@ -12,7 +12,7 @@
 
   export async function load() {
     try {
-      const r = await call<{ transactions: Txn[] }>(atlas, "review");
+      const r = await call<{ transactions: Txn[] }>(kandinsky, "review");
       txns = r.transactions.slice().reverse();
       sel = Math.min(sel, Math.max(txns.length - 1, 0));
       error = "";
@@ -32,13 +32,13 @@
 
   async function edit(t: Txn, change: { from?: string; to?: string }, quiet = false) {
     try {
-      await call(atlas, "review_edit", { path: t.path, line: t.line, text: t.text, accept: true, ...change });
+      await call(kandinsky, "review_edit", { path: t.path, line: t.line, text: t.text, accept: true, ...change });
       txns = txns.filter((x) => x !== t);
       sel = Math.min(sel, Math.max(txns.length - 1, 0));
       if (!quiet) onchange();
       return true;
     } catch (e) {
-      atlas.toast("Not changed", (e as Error).message, "error");
+      kandinsky.toast("Not changed", (e as Error).message, "error");
       load();
       return false;
     }
@@ -49,7 +49,7 @@
     const from = target(t)?.account;
     if (!from) return;
     const cur = t.postings.map((p) => p.amount?.split(" ")[1]).find(Boolean) ?? "EUR";
-    atlas.pick({
+    kandinsky.pick({
       placeholder: `Split ${t.payee}: Account amount, Account (the last takes the rest)`, tag: "Finance", items: [],
       typed: (s) => `Split into ${s}`,
       onpick: (v) => {
@@ -59,8 +59,8 @@
           if (!m) throw new Error(`“${x}”: write Account amount`);
           const acct = m[1].includes(":") ? m[1] : `Expenses:${m[1]}`;
           return [acct, m[2] ? `${m[2].replace(",", ".")} ${m[3] ?? cur}` : null];
-        }); } catch (e) { atlas.toast("Not split", (e as Error).message, "error"); return; }
-        void call(atlas, "review_edit", { path: t.path, line: t.line, text: t.text, from, split: parts }).then(() => { load(); onchange(); }, (e) => atlas.toast("Not split", (e as Error).message, "error"));
+        }); } catch (e) { kandinsky.toast("Not split", (e as Error).message, "error"); return; }
+        void call(kandinsky, "review_edit", { path: t.path, line: t.line, text: t.text, from, split: parts }).then(() => { load(); onchange(); }, (e) => kandinsky.toast("Not split", (e as Error).message, "error"));
       },
     });
   }
@@ -71,15 +71,15 @@
     const all = same(t);
     for (const x of all) if (!(await edit(x, accepting(x), true))) break;
     onchange();
-    atlas.toast("Accepted", `${all.length} × ${t.payee}`);
+    kandinsky.toast("Accepted", `${all.length} × ${t.payee}`);
   }
 
   function categorize(t: Txn) {
     const from = target(t)?.account;
-    if (!from) return atlas.toast("Nothing to categorize", "every posting of this transaction is an account");
+    if (!from) return kandinsky.toast("Nothing to categorize", "every posting of this transaction is an account");
     const root = from.split(":")[0];
     const items = known.filter((a) => a.startsWith(`${root}:`) && !a.endsWith(":Unknown")).map((a) => ({ value: a, title: label(a), detail: a }));
-    atlas.pick({
+    kandinsky.pick({
       placeholder: `Category for ${t.payee}`, tag: "Finance", items,
       typed: (s) => `New category “${s.includes(":") ? s : `${root}:${s}`}”`,
       onpick: (v) => void edit(t, { from, to: v.includes(":") ? v : `${root}:${v}` }),
@@ -96,7 +96,7 @@
     else if (e.key === "a") acceptLike(t);
     else if (e.key === "s") split(t);
     else if (e.key === "c") categorize(t);
-    else if (e.key === "o") atlas.open(t.path, t.line);
+    else if (e.key === "o") kandinsky.open(t.path, t.line);
     else return;
     e.preventDefault();
   }
@@ -104,11 +104,11 @@
 
 <div class="review" role="listbox" aria-label="Transactions to review" tabindex="0" onkeydown={key} bind:this={list}>
   {#if error}
-    <div class="atlas-notice error">{error}<div class="actions"><button class="atlas-btn" onclick={load}>Try again</button></div></div>
+    <div class="kandinsky-notice error">{error}<div class="actions"><button class="kandinsky-btn" onclick={load}>Try again</button></div></div>
   {:else if loading}
-    <div class="atlas-empty">Reading the journal…</div>
+    <div class="kandinsky-empty">Reading the journal…</div>
   {:else if !txns.length}
-    <div class="atlas-empty">Nothing to review.</div>
+    <div class="kandinsky-empty">Nothing to review.</div>
   {:else}
     <div class="keys"><kbd>j</kbd><kbd>k</kbd> move · <kbd>Enter</kbd> accept · <kbd>a</kbd> accept all like it · <kbd>c</kbd> category · <kbd>s</kbd> split · <kbd>o</kbd> open in the journal · {txns.length} left</div>
     {#each txns as t, i (t.path + t.line)}
@@ -125,8 +125,8 @@
           {:else if tg}<button class="cat" class:unknown={tg.account.endsWith(":Unknown")} onclick={() => categorize(t)} title="c: choose the category">{label(tg.account)}</button>{/if}
           {#if i === sel}
             {@const n = same(t).length}
-            {#if n > 1}<button class="atlas-btn" onclick={() => acceptLike(t)} title="a">All {n}</button>{/if}
-            <button class="atlas-btn primary" onclick={() => edit(t, accepting(t))} title="Enter">Accept</button>
+            {#if n > 1}<button class="kandinsky-btn" onclick={() => acceptLike(t)} title="a">All {n}</button>{/if}
+            <button class="kandinsky-btn primary" onclick={() => edit(t, accepting(t))} title="Enter">Accept</button>
           {/if}
         </div>
         {#if i === sel && t.guess && tg?.account.endsWith(":Unknown")}<div class="why faint">{t.guess.why}</div>{/if}

@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 // The explorer like a file manager (panes/Explorer.svelte): a filter over the folder (Ctrl+F), "Below" for every
 // folder under it, a preview of the selected file drawn as a note embeds it, and Split — a second explorer beside.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 async function explorer(page: Page) {
   await page.goto("/");

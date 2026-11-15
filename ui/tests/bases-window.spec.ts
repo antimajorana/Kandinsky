@@ -3,7 +3,7 @@ import { openFile } from "./open";
 
 // A table over hundreds of notes draws only the rows around the view; the scrollbar is the whole table's, and the
 // last row is there once scrolled to.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("a base's table draws only the rows in view, and scrolling reaches the last", async ({ page, request }) => {
   const N = 400;

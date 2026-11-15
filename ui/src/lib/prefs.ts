@@ -16,7 +16,7 @@ export function save(key: string, value: unknown): void {
   }
 }
 
-/** A plain string kept as is (not JSON): what a page's inline script reads before the app loads (`atlas.theme`). */
+/** A plain string kept as is (not JSON): what a page's inline script reads before the app loads (`kandinsky.theme`). */
 export function loadRaw(key: string): string | null {
   try { return localStorage.getItem(key); } catch { return null; }
 }
@@ -30,12 +30,12 @@ export function drop(key: string): void {
 
 export const KEYS = {
   // layout, recent and pins moved to files of the vault (docs/guides/SHELL.md); the keys remain to read them once
-  layout: "atlas.layout.v1",
-  theme: "atlas.theme",
-  vim: "atlas.vim",
-  recent: "atlas.recent.v1",
-  pins: "atlas.pins.v1",
-  sidebar: "atlas.sidebar.v1",
-  sidePanel: "atlas.sidepanel.v1",
-  tabs: "atlas.tabs",
+  layout: "kandinsky.layout.v1",
+  theme: "kandinsky.theme",
+  vim: "kandinsky.vim",
+  recent: "kandinsky.recent.v1",
+  pins: "kandinsky.pins.v1",
+  sidebar: "kandinsky.sidebar.v1",
+  sidePanel: "kandinsky.sidepanel.v1",
+  tabs: "kandinsky.tabs",
 } as const;

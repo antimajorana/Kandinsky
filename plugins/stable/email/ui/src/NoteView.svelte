@@ -6,7 +6,7 @@
   import MailFrame from "./MailFrame.svelte";
   import { call, hue, initials, type PluginApi } from "./api";
 
-  let { atlas, note, onmail }: { atlas: PluginApi; note: { path: string; text: string; props: Record<string, unknown>; showNote(): void }; onmail: (detail: Record<string, unknown>) => void } = $props();
+  let { kandinsky, note, onmail }: { kandinsky: PluginApi; note: { path: string; text: string; props: Record<string, unknown>; showNote(): void }; onmail: (detail: Record<string, unknown>) => void } = $props();
 
   interface M { from: string; to?: string; cc?: string; date: string; message_id?: string; seen?: boolean; html: string; text: string; files: string[] }
   const MARK = /^<!-- mail (\{.*\}) -->$/gm;
@@ -43,10 +43,10 @@
 
   async function reply(mode: "reply" | "all" | "forward", m: M) {
     try {
-      const r = await call<{ id: number | null }>(atlas, "find", { message_id: m.message_id, account: note.props.account });
+      const r = await call<{ id: number | null }>(kandinsky, "find", { message_id: m.message_id, account: note.props.account });
       if (r.id) onmail({ reply: { id: r.id, mode } });
-      else atlas.toast("Email", "That message is not in the mail index (it may be gone from the server).", "error");
-    } catch (e) { atlas.toast("Email", (e as Error).message, "error"); }
+      else kandinsky.toast("Email", "That message is not in the mail index (it may be gone from the server).", "error");
+    } catch (e) { kandinsky.toast("Email", (e as Error).message, "error"); }
   }
 </script>
 
@@ -65,13 +65,13 @@
       {#if open.includes(i)}
         <div class="body">
           {#if m.to}<div class="meta">to {m.to}{m.cc ? ` · cc ${m.cc}` : ""}</div>{/if}
-          {#if m.html}<MailFrame html={m.html} {atlas} />{:else}<div class="text">{m.text}</div>{/if}
-          {#if m.files.length}<div class="files">{#each m.files as f (f)}<button class="file" onclick={() => atlas.open(f, undefined, { beside: true })}><Icon name="attach" size={13} />{f.split("/").at(-1)}</button>{/each}</div>{/if}
+          {#if m.html}<MailFrame html={m.html} {kandinsky} />{:else}<div class="text">{m.text}</div>{/if}
+          {#if m.files.length}<div class="files">{#each m.files as f (f)}<button class="file" onclick={() => kandinsky.open(f, undefined, { beside: true })}><Icon name="attach" size={13} />{f.split("/").at(-1)}</button>{/each}</div>{/if}
           {#if m.message_id}
             <div class="acts">
-              <button class="atlas-btn" onclick={() => reply("reply", m)}><Icon name="reply" size={14} /> Reply</button>
-              <button class="atlas-btn" onclick={() => reply("all", m)}><Icon name="replyall" size={14} /> Reply all</button>
-              <button class="atlas-btn" onclick={() => reply("forward", m)}><Icon name="forward" size={14} /> Forward</button>
+              <button class="kandinsky-btn" onclick={() => reply("reply", m)}><Icon name="reply" size={14} /> Reply</button>
+              <button class="kandinsky-btn" onclick={() => reply("all", m)}><Icon name="replyall" size={14} /> Reply all</button>
+              <button class="kandinsky-btn" onclick={() => reply("forward", m)}><Icon name="forward" size={14} /> Forward</button>
             </div>
           {/if}
         </div>
@@ -97,5 +97,5 @@
   .files, .acts { display: flex; flex-wrap: wrap; gap: 8px; }
   .file { all: unset; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; padding: 5px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius); }
   .file:hover { color: var(--accent); }
-  .acts .atlas-btn { display: inline-flex; gap: 6px; align-items: center; }
+  .acts .kandinsky-btn { display: inline-flex; gap: 6px; align-items: center; }
 </style>

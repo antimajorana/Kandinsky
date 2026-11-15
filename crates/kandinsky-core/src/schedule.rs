@@ -1,8 +1,8 @@
 //! Scheduled workspace commands: a manifest's `schedule = "daily 03:00"`, `"every 2h"`, `"every 30m"`
-//! or `"hourly"`. They run while an Atlas server is up (the app or `atlas serve`); each run is
-//! recorded in `.atlas/cache/schedule.json` (last run per command) and `schedule.log`, and a failure
+//! or `"hourly"`. They run while an Kandinsky server is up (the app or `kandinsky serve`); each run is
+//! recorded in `.kandinsky/cache/schedule.json` (last run per command) and `schedule.log`, and a failure
 //! notifies the UI. `[automation] run_schedules = false` turns it off; `schedules_on` names the computers that run them.
-//! `ATLAS_NO_SCHEDULE` (any value) keeps a server from running any: a core serving a copy of a vault (a probe, a
+//! `KANDINSKY_NO_SCHEDULE` (any value) keeps a server from running any: a core serving a copy of a vault (a probe, a
 //! profile) would otherwise run the vault's cluster polls and syncs on the same computer, and notify their failures.
 use crate::api::Mtime;
 use crate::api::{Event, Notice, NoticeLevel, ScheduledRun};
@@ -55,7 +55,7 @@ pub fn span(s: &str) -> Option<Duration> {
 
 impl Schedule {
     /// Due now? `Every` runs at once the first time, then each period; `Daily` runs once per day
-    /// at or after its time (a missed slot runs when Atlas next starts that day). A last run after now (recorded
+    /// at or after its time (a missed slot runs when Kandinsky next starts that day). A last run after now (recorded
     /// while the clock was ahead) counts as none: else the job waits until the clock catches up with it.
     pub fn due(&self, last: Option<DateTime<Local>>, now: DateTime<Local>) -> bool {
         let last = last.filter(|l| *l <= now);
@@ -172,7 +172,7 @@ pub async fn tick(ws: &Workspace, bus: &EventBus, helpers: Option<&crate::helper
             bus.publish(Event::Notify(Notice::new(format!("{} failed (scheduled)", job.title())).body(summary.clone()).source("schedule").level(NoticeLevel::Failure).id(format!("schedule:{id}"))));
         }
         recs.insert(id, ScheduledRun { time: Mtime(Local::now().timestamp_millis() as u64), ok, summary });
-        // after each job, not once at the end: Atlas closed during a long one must not run the ones before it again
+        // after each job, not once at the end: Kandinsky closed during a long one must not run the ones before it again
         keep(&cache, &recs);
     }
 }
@@ -202,7 +202,7 @@ fn notices(v: &Value, job: &Job) -> Vec<Notice> {
         .filter_map(|n| match serde_json::from_value::<Notice>(n.clone()) {
             Ok(n) => Some(n.source(source.as_str())),
             Err(e) => {
-                eprintln!("atlas: {source}: a scheduled answer's notice is not one ({e}): {n}");
+                eprintln!("kandinsky: {source}: a scheduled answer's notice is not one ({e}): {n}");
                 None
             }
         })
@@ -211,7 +211,7 @@ fn notices(v: &Value, job: &Job) -> Vec<Notice> {
 
 /// The scheduler loop (every 30 s) for a running server; aborted with the server.
 pub fn spawn(ws: Workspace, bus: EventBus, helpers: crate::helper::Helpers) -> tokio::task::JoinHandle<()> {
-    let off = std::env::var_os("ATLAS_NO_SCHEDULE").is_some();
+    let off = crate::env::var_os("NO_SCHEDULE").is_some();
     tokio::spawn(async move {
         if off {
             return;
@@ -269,14 +269,14 @@ mod tests {
     #[tokio::test]
     async fn tick_runs_due_commands_and_records_them() {
         let d = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(d.path().join(".atlas/commands")).unwrap();
+        std::fs::create_dir_all(d.path().join(".kandinsky/commands")).unwrap();
         std::fs::write(
-            d.path().join(".atlas/commands/stamp.toml"),
+            d.path().join(".kandinsky/commands/stamp.toml"),
             "title = \"Stamp\"\nrun = \"echo stamped\"\nschedule = \"every 2h\"\n",
         )
         .unwrap();
         std::fs::write(
-            d.path().join(".atlas/commands/bad.toml"),
+            d.path().join(".kandinsky/commands/bad.toml"),
             "title = \"Bad\"\nrun = \"true\"\nschedule = \"nightly\"\n",
         )
         .unwrap();
@@ -305,9 +305,9 @@ mod tests {
     #[tokio::test]
     async fn a_computer_not_named_runs_no_schedule() {
         let d = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(d.path().join(".atlas/commands")).unwrap();
-        std::fs::write(d.path().join(".atlas/commands/stamp.toml"), "title = \"Stamp\"\nrun = \"echo stamped\"\nschedule = \"every 2h\"\n").unwrap();
-        std::fs::write(d.path().join(".atlas/config.toml"), "[automation]\nschedules_on = [\"no-such-host.example.org\"]\n").unwrap();
+        std::fs::create_dir_all(d.path().join(".kandinsky/commands")).unwrap();
+        std::fs::write(d.path().join(".kandinsky/commands/stamp.toml"), "title = \"Stamp\"\nrun = \"echo stamped\"\nschedule = \"every 2h\"\n").unwrap();
+        std::fs::write(d.path().join(".kandinsky/config.toml"), "[automation]\nschedules_on = [\"no-such-host.example.org\"]\n").unwrap();
         let ws = Workspace::open(d.path()).unwrap();
         tick(&ws, &EventBus::default(), None, Local::now()).await;
         assert!(records(&ws.cache_dir()).is_empty());
@@ -316,8 +316,8 @@ mod tests {
     #[tokio::test]
     async fn a_skipped_run_is_logged_quietly_and_an_answer_carries_its_notices() {
         let d = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(d.path().join(".atlas/commands")).unwrap();
-        let cmd = d.path().join(".atlas/commands/runs.toml");
+        std::fs::create_dir_all(d.path().join(".kandinsky/commands")).unwrap();
+        let cmd = d.path().join(".kandinsky/commands/runs.toml");
         let answer = |json: &str| std::fs::write(&cmd, format!("title = \"Runs\"\nrun = '''echo '{json}''''\nschedule = \"every 1m\"\n")).unwrap();
         answer(r#"{"skipped": "iq not connected"}"#);
         let ws = Workspace::open(d.path()).unwrap();
@@ -338,8 +338,8 @@ mod tests {
     #[tokio::test]
     async fn a_job_failing_the_same_way_notifies_once() {
         let d = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(d.path().join(".atlas/commands")).unwrap();
-        let cmd = d.path().join(".atlas/commands/poll.toml");
+        std::fs::create_dir_all(d.path().join(".kandinsky/commands")).unwrap();
+        let cmd = d.path().join(".kandinsky/commands/poll.toml");
         let write = |why: &str| std::fs::write(&cmd, format!("title = \"Poll\"\nrun = \"echo {why}; exit 1\"\nschedule = \"every 1m\"\n")).unwrap();
         write("not connected");
         let ws = Workspace::open(d.path()).unwrap();

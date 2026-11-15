@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 // Live notes: two windows on one note — each says who else is there, what one types shows in the other as it is
 // typed, the note's text is never doubled, and the file holds both once they have saved (lib/note-live.ts).
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const PATH = "notes/live-shared-note.md";
 
 async function open(page: Page): Promise<void> {

@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.content.Context;
 import android.util.Log;
@@ -20,7 +20,7 @@ import org.json.JSONObject;
  * ever deleted but by a send that reached the server, or a newer save of the same file that did (an HTTP error keeps it).
  */
 final class PendingWrites {
-    private static final String TAG = "AtlasPendingWrites";
+    private static final String TAG = "KandinskyPendingWrites";
 
     private PendingWrites() {}
 

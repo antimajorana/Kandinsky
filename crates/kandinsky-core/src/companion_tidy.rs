@@ -1,6 +1,6 @@
 //! One companion note per thing (docs/design/DESIGN-shared-notes.md §4). Earlier versions left extra files beside a PDF or a book; this finds them (a dry run) and tidies
 //! them (`apply`): the reading place merged into the note that owns the file, the extras to the Trash after a copy in
-//! `.atlas/trash/<time>-companions/`. `atlas companions [--apply]`. A note holding anything of the user's is left.
+//! `.kandinsky/trash/<time>-companions/`. `kandinsky companions [--apply]`. A note holding anything of the user's is left.
 use crate::{companion, config::Config, files, walk, Result, Workspace};
 use serde_yaml::{Mapping, Value};
 use std::path::Path;
@@ -156,15 +156,15 @@ fn merge_reading(note: &Mapping, owner_text: &str) -> String {
     })
 }
 
-/// The plan carried out: each file copied to `.atlas/trash/<time>-companions/` (owners too, before their edit), the
+/// The plan carried out: each file copied to `.kandinsky/trash/<time>-companions/` (owners too, before their edit), the
 /// reading places merged, the extras to the Trash. → the snapshot folder, when anything was done.
 pub fn apply(ws: &Workspace, plan: &[Tidy]) -> Result<Option<String>> {
     if plan.is_empty() {
         return Ok(None);
     }
-    let snap = format!(".atlas/trash/{}-companions", chrono::Local::now().format("%Y%m%d-%H%M%S"));
+    let snap = format!(".kandinsky/trash/{}-companions", chrono::Local::now().format("%Y%m%d-%H%M%S"));
     let keep = |rel: &str| -> Result<()> {
-        crate::vault_write::copy(&ws.resolve(rel)?, &ws.root().join(&snap).join(rel))
+        crate::vault_write::copy(&ws.resolve(rel)?, &crate::state_dir::join(ws.root(), &snap).join(rel))
     };
     for t in plan {
         if let Tidy::BooksReading { file } = t {

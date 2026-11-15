@@ -14,6 +14,7 @@
   import { LETTER } from "../lib/gitstatus.svelte";
   import { settings } from "../lib/settings.svelte";
   import { shownEntries, treeView } from "../lib/tree-view.svelte";
+  import { folderTint, isAgentPlumbing, oracleExplorer, toggleHidePlumbing } from "../lib/oracle-explorer.svelte";
   import { activeRow, changeOf, openDirs, revealed, setOpen } from "../lib/file-tree.svelte";
   import { joinPath, openExplorer, sources, type FileSource } from "../lib/file-sources.svelte";
   import { busy, listFolder, listed, openRemote, placesOf, remoteKey, remoteOpen, servers, setRemoteOpen, sortEntries, wantPlaces } from "../lib/remote-tree.svelte";
@@ -50,6 +51,13 @@
   type Remote = { kind: "remote"; key: string; src: FileSource; place: string; dir: string; name: string; folder: boolean; depth: number; open: boolean; group?: boolean; title?: string };
   type Row = { kind: "entry"; e: TreeEntry; depth: number; open: boolean } | { kind: "empty"; depth: number; key: string; text?: string } | Remote;
   const keyOf = (r: Row) => (r.kind === "entry" ? r.e.path : r.key);
+  function filterEntries(entries: TreeEntry[], dirNote?: string): TreeEntry[] {
+    const base = shownEntries(entries, dirNote);
+    if (!oracleExplorer.hidePlumbing || treeView.showAll) return base;
+    return base.filter((e) => !isAgentPlumbing(e.path));
+  }
+  const hasPlumbing = $derived(!treeView.showAll && roots.some((e) => isAgentPlumbing(e.path)));
+
   /** Every row of the tree as it unfolds now, top to bottom; and the open folders drawn whose entries are not here yet. */
   const walked = $derived.by(() => {
     const out: Row[] = [];
@@ -61,12 +69,12 @@
         if (!open) continue;
         const c = kids.get(e.path);
         if (!c) { want.push(e.path); continue; }
-        const shown = shownEntries(c, e.note);
+        const shown = filterEntries(c, e.note);
         if (shown.length) walk(shown, depth + 1);
         else out.push({ kind: "empty", depth: depth + 1, key: `${e.path}/` });
       }
     };
-    walk(shownEntries(roots), 0);
+    walk(filterEntries(roots), 0);
     const remote: RemoteWant = [];
     for (const src of servers()) walkServer(src, out, remote);
     return { rows: out, want, remote };
@@ -232,17 +240,21 @@
       {@const entry = r.e}
       {@const change = showGit ? changeOf(entry.path, entry.kind === "dir") : undefined}
       {@const opensNote = entry.kind === "dir" && !!entry.note}
+      {@const isActive = activeRow.has(entry.path) || (opensNote && activeRow.has(entry.note!))}
+      {@const tint = folderTint(entry.path)}
       <li>
-        <button class="row git-{change ?? 'clean'}" class:active={activeRow.has(entry.path) || (opensNote && activeRow.has(entry.note!))} class:is-dir={entry.kind === "dir"} class:ignored={entry.ignored}
+        <button class="row git-{change ?? 'clean'}" class:active={isActive} class:is-dir={entry.kind === "dir"} class:ignored={entry.ignored}
           style:padding-left="{8 + r.depth * 14}px" onclick={(e) => toggle(e, entry, r.open)} title={entry.path} data-path={entry.path} data-key={entry.path} draggable="true">
           {#if entry.kind === "dir"}
             <span class="chev" class:open={r.open}><Icon name="chevron" size={12} /></span>
-            <span class="ico dir" class:note={opensNote}><Icon name={opensNote ? "file-text" : r.open ? "folder-open" : "folder"} size={15} /></span>
+            <span class="ico dir" class:note={opensNote} style:color={tint?.color}><Icon name={opensNote ? "file-text" : r.open ? "folder-open" : "folder"} size={15} /></span>
+            {#if tint?.dot}<span class="bauhaus-dot" style:background={tint.dot}></span>{/if}
           {:else}
             <span class="chev"></span>
-            <span class="ico"><Icon name={fileIcon(entry.path)} size={15} /></span>
+            <span class="ico" style:color={tint?.dot ? tint.color : undefined} class:tinted-file={!!tint?.dot}><Icon name={fileIcon(entry.path)} size={15} /></span>
+            {#if isActive}<span class="bauhaus-dot" style:background={tint?.dot ?? "var(--accent)"}></span>{/if}
           {/if}
-          <span class="name">{entry.name}</span>
+          <span class="name" class:tinted-dir={entry.kind === "dir" && !!tint?.dot} style:color={entry.kind === "dir" && tint?.dot && !change ? tint.color : undefined}>{entry.name}</span>
           {#if change}
             {#if entry.kind === "dir"}<span class="gdot" title="Contains {change} files"></span>
             {:else}<span class="glet" title={change}>{LETTER[change]}</span>{/if}
@@ -253,29 +265,44 @@
     {/if}
   {/each}
 </ul>
+{#if hasPlumbing}
+  <div class="plumbing-bar">
+    <button class="plumbing-toggle" onclick={toggleHidePlumbing} aria-pressed={!oracleExplorer.hidePlumbing}
+      title={oracleExplorer.hidePlumbing ? "Peek at hidden agent plumbing (AGENTS.md, CLAUDE.md, zAI, zMeta, wiki/meta…)" : "Hide agent plumbing in Explorer"}>
+      <Icon name="eye" size={12} />
+      <span>{oracleExplorer.hidePlumbing ? "Agent plumbing hidden" : "Showing agent plumbing"}</span>
+    </button>
+  </div>
+{/if}
 {#if menu}<ContextMenu x={menu.x} y={menu.y} items={menu.items} onclose={() => (menu = null)} />{/if}
 
 <style>
   ul { list-style: none; margin: 0; padding: 0; }
-  .row { display: flex; align-items: center; gap: 4px; width: 100%; height: 26px; padding-right: 8px; border-radius: var(--radius-sm);
-    color: var(--text-muted); font-size: calc(13px * var(--ui-scale, 1)); text-align: left; white-space: nowrap; }
+  .row { display: flex; align-items: center; gap: 5px; width: 100%; height: 27px; padding-right: 8px; border-radius: var(--radius-sm);
+    color: var(--text-muted); font-size: calc(13.2px * var(--ui-scale, 1)); text-align: left; white-space: nowrap; transition: background .1s, color .1s; }
   /* a phone: rows a finger can hit (lib/phone.svelte.ts) */
   :global(html.phone) .row { height: 40px; }
   .row:hover { background: var(--bg-hover); color: var(--text); }
-  .row.active { background: var(--accent-soft); color: var(--text); }
-  .row:focus-visible { outline: none; background: var(--accent-soft); color: var(--text); }
+  .row.active { background: var(--bg-active); color: var(--heading); font-weight: 500; }
+  .row:focus-visible { outline: none; background: var(--bg-active); color: var(--heading); }
   .chev { width: 14px; display: inline-flex; justify-content: center; color: var(--text-faint); transition: transform .12s ease; }
   .chev.open { transform: rotate(90deg); }
   /* fixed widths: a long name must not shrink the chevron slot (rows lost their alignment) */
   .chev, .ico { flex: none; }
-  .ico { display: inline-flex; color: var(--text-faint); margin-right: 3px; }
-  .ico.dir { color: var(--accent); opacity: .85; }
+  .ico { display: inline-flex; color: var(--text-faint); margin-right: 2px; }
+  .ico.tinted-file { opacity: .78; }
+  .ico.dir { color: var(--text-muted); opacity: .9; }
   .ico.dir.note { color: var(--text-faint); opacity: 1; }
+  .bauhaus-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; margin-right: 1px; }
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
   .is-dir .name { color: var(--text); }
+  .name.tinted-dir { font-weight: 500; }
   /* the same height as a row: the window counts rows of one height */
-  .empty { font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint); height: 26px; line-height: 26px; font-style: italic; }
+  .empty { font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint); height: 27px; line-height: 27px; font-style: italic; }
   :global(html.phone) .empty { height: 40px; line-height: 40px; }
+  .plumbing-bar { padding: 6px 8px 2px; border-top: 1px solid var(--border); margin-top: 6px; }
+  .plumbing-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: calc(11.5px * var(--ui-scale, 1)); color: var(--text-faint); padding: 3px 6px; border-radius: var(--radius-sm); transition: color .12s, background .12s; }
+  .plumbing-toggle:hover { color: var(--text-muted); background: var(--bg-hover); }
   .spin { width: 10px; height: 10px; border: 1.5px solid var(--text-faint); border-top-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; margin-left: auto; }
   /* git status: the name takes the colour, a letter (files) or a dot (folders) says what changed */
   .glet { margin-left: auto; font-family: var(--font-mono); font-size: calc(11px * var(--ui-scale, 1)); font-weight: 600; padding-left: 6px; }

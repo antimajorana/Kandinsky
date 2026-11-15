@@ -9,9 +9,9 @@ const href = (path: string, q: Record<string, string> = {}) => `${apiBase()}/api
 export interface Loaded { sheet: Sheet; mtime: number; bytes: number }
 
 export async function loadSheet(path: string, progress?: (done: number) => void): Promise<Loaded> {
-  const res = await fetch(href(path), { headers: { "x-atlas": "1" } });
+  const res = await fetch(href(path), { headers: { "x-kandinsky": "1" } });
   if (!res.ok) throw new ApiError(res.status, res.status === 404 ? `${path} is not there` : `reading ${path}: ${res.status}`);
-  const mtime = Number(res.headers.get("x-atlas-mtime") ?? 0);
+  const mtime = Number(res.headers.get("x-kandinsky-mtime") ?? 0);
   const bytes = await res.arrayBuffer();
   const size = bytes.byteLength;
   const sheet = await new Promise<Sheet>((resolve, reject) => {
@@ -32,9 +32,9 @@ export async function loadSheet(path: string, progress?: (done: number) => void)
 
 /** An Excel workbook's sheets (read in the worker, lib/csv/xlsx.ts), each as a read-only Sheet. */
 export async function loadWorkbook(path: string): Promise<{ sheets: { name: string; sheet: Sheet }[]; mtime: number }> {
-  const res = await fetch(href(path), { headers: { "x-atlas": "1" } });
+  const res = await fetch(href(path), { headers: { "x-kandinsky": "1" } });
   if (!res.ok) throw new ApiError(res.status, res.status === 404 ? `${path} is not there` : `reading ${path}: ${res.status}`);
-  const mtime = Number(res.headers.get("x-atlas-mtime") ?? 0), bytes = await res.arrayBuffer();
+  const mtime = Number(res.headers.get("x-kandinsky-mtime") ?? 0), bytes = await res.arrayBuffer();
   const got = await new Promise<{ name: string; rows: string[][]; formulas: [string, string][] }[]>((resolve, reject) => {
     const w = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     w.onmessage = (e) => { w.terminate(); if (e.data.sheets) resolve(e.data.sheets); else reject(new Error(e.data.error ?? "the workbook could not be read")); };
@@ -47,7 +47,7 @@ export async function loadWorkbook(path: string): Promise<{ sheets: { name: stri
 /** Writes the sheet; the new modification time. A 409 (changed on disk since `baseMtime`) is an ApiError of status 409. */
 export async function saveSheet(path: string, sheet: Sheet, baseMtime: number, force = false): Promise<number> {
   const q: Record<string, string> = force || !baseMtime ? {} : { base_mtime: String(baseMtime) };
-  const res = await fetch(href(path, q), { method: "PUT", headers: { "x-atlas": "1", "content-type": "text/plain; charset=utf-8" }, body: writeSheet(sheet) });
+  const res = await fetch(href(path, q), { method: "PUT", headers: { "x-kandinsky": "1", "content-type": "text/plain; charset=utf-8" }, body: writeSheet(sheet) });
   const body = await res.json().catch(() => undefined);
   if (!res.ok) throw new ApiError(res.status, res.status === 409 ? "changed on disk since it was opened" : `saving ${path}: ${res.status}`, body);
   return Number(body?.mtime ?? 0);
@@ -55,6 +55,6 @@ export async function saveSheet(path: string, sheet: Sheet, baseMtime: number, f
 
 /** The file's modification time on disk now (a HEAD: no body), to tell our own save from someone else's change. */
 export async function diskMtime(path: string): Promise<number> {
-  const res = await fetch(href(path), { method: "HEAD", headers: { "x-atlas": "1" } });
-  return res.ok ? Number(res.headers.get("x-atlas-mtime") ?? 0) : 0;
+  const res = await fetch(href(path), { method: "HEAD", headers: { "x-kandinsky": "1" } });
+  return res.ok ? Number(res.headers.get("x-kandinsky-mtime") ?? 0) : 0;
 }

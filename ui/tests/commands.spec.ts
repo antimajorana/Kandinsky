@@ -10,25 +10,25 @@ test("Commands pane: create a command, run it, give it a shortcut, rebind a buil
   const pane = page.locator(".commands");
   await expect(pane.getByRole("heading", { name: /Commands/ })).toBeVisible();
 
-  // a new command is a file in .atlas/commands/, listed as not yet committed
+  // a new command is a file in .kandinsky/commands/, listed as not yet committed
   await pane.getByRole("button", { name: "New command", exact: true }).click();
   await pane.getByLabel("Title").fill("Say hello");
-  await pane.getByLabel("Command line").fill("echo hello from atlas");
+  await pane.getByLabel("Command line").fill("echo hello from kandinsky");
   await pane.getByRole("button", { name: "Create", exact: true }).click();
   const row = pane.locator(".cmd", { hasText: "Say hello" });
   await expect(row.locator(".origin")).toHaveText("not committed yet");
-  expect(readFileSync(join(WS, ".atlas/commands/say.hello.toml"), "utf8")).toContain('run = "echo hello from atlas"');
+  expect(readFileSync(join(WS, ".kandinsky/commands/say.hello.toml"), "utf8")).toContain('run = "echo hello from kandinsky"');
 
   await row.getByRole("button", { name: "Run" }).click();
-  await expect(row.locator(".out")).toHaveText("hello from atlas");
+  await expect(row.locator(".out")).toHaveText("hello from kandinsky");
 
   // record a shortcut, then use it from anywhere
   await row.locator(".keys").click();
   await page.keyboard.press("Control+Alt+H");
   await expect(row.locator(".keys kbd")).toHaveText(["Ctrl", "Alt", "H"]);
-  expect(readFileSync(join(WS, ".atlas/keys.toml"), "utf8")).toContain('"say.hello" = "Ctrl+Alt+H"');
+  expect(readFileSync(join(WS, ".kandinsky/keys.toml"), "utf8")).toContain('"say.hello" = "Ctrl+Alt+H"');
   await page.keyboard.press("Control+Alt+H");
-  await expect(page.locator(".toast", { hasText: "hello from atlas" })).toBeVisible();
+  await expect(page.locator(".toast", { hasText: "hello from kandinsky" })).toBeVisible();
 
   // rebind a built-in UI action and reset it
   await pane.getByPlaceholder(/Filter commands/).fill("git: changes");

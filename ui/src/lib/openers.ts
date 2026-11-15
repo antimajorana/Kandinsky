@@ -1,8 +1,8 @@
-// Open with… (docs/guides/MALLEABLE.md R2, tools not apps): one file, many views. Atlas's own viewers and
+// Open with… (docs/guides/MALLEABLE.md R2, tools not apps): one file, many views. Kandinsky's own viewers and
 // plugin panes that declare `opens = [...]` are openers. The default of a plain open, first that applies: the vault's
 // `[files] open_with` for the extension, a plugin's `claims = [...]` (the editor contract,
-// docs/guides/PLUGIN-API.md), Atlas's built-in viewer. Kept free of dock/plugin imports (they register here).
-import { specForPath, tableViewIn, TABLE_RE, type IconName, type PaneSpec } from "./panes";
+// docs/guides/PLUGIN-API.md), Kandinsky's built-in viewer. Kept free of dock/plugin imports (they register here).
+import { NOTEBOOK_RE, specForPath, tableViewIn, TABLE_RE, type IconName, type PaneSpec } from "./panes";
 import { settings, updateSettings } from "./settings.svelte";
 import { IMAGE_RE } from "./paths";
 
@@ -18,8 +18,9 @@ export interface Opener {
   spec(path: string, line?: number, anchor?: string): PaneSpec;
 }
 
-const TEXTISH = /\.(md|markdown|txt|tsv|csv|tab|dat|json|ya?ml|toml|base|page|svg|tex|bib|py|rs|js|ts|sh|log|ini|cfg|xml|html|css|lua)$/i;
+const TEXTISH = /\.(md|markdown|txt|tsv|csv|tab|dat|json|ipynb|wln|ya?ml|toml|base|page|svg|tex|bib|py|rs|js|ts|sh|log|ini|cfg|xml|html|css|lua)$/i;
 const builtins: Opener[] = [
+  { id: "notebook", title: "Notebook (Jupyter / WLJS)", icon: "sigma", accepts: (p) => NOTEBOOK_RE.test(p), spec: (path) => ({ kind: "notebook", path }) },
   { id: "editor", title: "Text editor", icon: "file-text", accepts: (p) => TEXTISH.test(p) || !/\.[^/]+$/.test(p), spec: (path, line) => (line === undefined ? { kind: "editor", path } : { kind: "editor", path, line }) },
   { id: "table", title: "Table", icon: "table", accepts: (p) => TABLE_RE.test(p) || /\.(dat|txt)$/i.test(p), spec: (path, _line, anchor) => ({ kind: "table", path, view: tableViewIn(anchor) }) },
   { id: "base", title: "Database (Bases)", icon: "table", accepts: (p) => /\.base$/i.test(p), spec: (path) => ({ kind: "base", path }) },
@@ -42,7 +43,7 @@ export const extOf = (path: string) => /\.((?:excalidraw\.)?[^./]+)$/i.exec(path
 const all = () => [...builtins, ...extra.values()];
 const defaultId = (path: string) => settings.config?.files.open_with?.[extOf(path)];
 
-/** The spec a plain open uses: the user's choice for this extension, else a plugin's claim, else Atlas's usual viewer. */
+/** The spec a plain open uses: the user's choice for this extension, else a plugin's claim, else Kandinsky's usual viewer. */
 export function resolveSpec(path: string, line?: number, anchor?: string): PaneSpec {
   const id = defaultId(path);
   const o = (id ? all().find((x) => x.id === id && x.accepts(path)) : undefined) ?? [...extra.values()].find((x) => x.claims?.(path));
@@ -56,7 +57,7 @@ export function openersFor(path: string): (Opener & { isDefault: boolean })[] {
   return all().filter((o) => o.accepts(path)).map((o) => ({ ...o, isDefault: isDefault(o) })).sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
 }
 
-/** Make `id` the default for this file's extension (`null`: back to Atlas's usual viewer). */
+/** Make `id` the default for this file's extension (`null`: back to Kandinsky's usual viewer). */
 export function setDefaultOpener(path: string, id: string | null): Promise<void> {
   const ext = extOf(path);
   return updateSettings((c) => {

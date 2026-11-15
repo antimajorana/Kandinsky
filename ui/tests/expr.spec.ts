@@ -4,7 +4,7 @@ import { scopeAt, lineOf } from "../src/lib/section-props";
 // Notes that compute (docs/guides/EXPRESSIONS.md): inline code that starts with `=` shows its value, in the
 // editor and in the reading view; `key:: value` lines are properties of their section, inherited by
 // the sections inside it.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const NOTE = `---
 budget: 100
 due: 2030-01-10
@@ -89,7 +89,7 @@ test("inline expressions: values in the editor, the source at the caret, live on
   await page.keyboard.type("Trip.page");
   await expect(page.getByTestId("palette").getByText("Trip", { exact: true }).first()).toBeVisible();
   await page.keyboard.press("Enter");
-  const read = page.locator(".page-pane, .atlas-block").locator("code.expr");
+  const read = page.locator(".page-pane, .kandinsky-block").locator("code.expr");
   await expect(read.first()).toHaveText("-300");
   await expect(read.last()).toHaveText("undefined");
 });

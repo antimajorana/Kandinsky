@@ -4,7 +4,7 @@ import { caretIn, tableOps, alignOf, linesOf } from "../src/lib/editor/table-md"
 
 // Tables edited in place: a cell's own markdown
 // edited, Tab / Enter to move on, + row / + column / −, and the note's text changed only in that table.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const NOTE = "notes/tabled.md";
 const read = (r: APIRequestContext) => r.get(`/api/file?path=${NOTE}`, { headers: H }).then((x) => x.json()).then((j) => j.text as string);
 

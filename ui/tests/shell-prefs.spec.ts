@@ -1,9 +1,9 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 
 // The sidebar's width / collapsed state and the left-bar side panel's choice are a file of the vault
-// (.atlas/cache/shell.json), not the browser's storage: the desktop app and a browser tab agree.
-const H = { "x-atlas": "1" };
-const FILE = ".atlas/cache/shell.json";
+// (.kandinsky/cache/shell.json), not the browser's storage: the desktop app and a browser tab agree.
+const H = { "x-kandinsky": "1" };
+const FILE = ".kandinsky/cache/shell.json";
 async function restore(request: APIRequestContext, on: boolean) {
   const d = await (await request.get("/api/config", { headers: H })).json();
   d.config.ui.restore_layout = on;
@@ -13,7 +13,7 @@ const saved = async (request: APIRequestContext) => JSON.parse((await (await req
 test.afterEach(async ({ request }) => {
   await restore(request, false);
   await request.put("/api/file", { headers: H, data: { path: FILE, text: "{}" } });
-  await request.put("/api/file", { headers: H, data: { path: ".atlas/cache/layout.json", text: "null" } });
+  await request.put("/api/file", { headers: H, data: { path: ".kandinsky/cache/layout.json", text: "null" } });
 });
 
 test("a fresh window takes the sidebar's state from the vault's file and writes changes back", async ({ page, request }) => {

@@ -58,7 +58,7 @@ impl Harness {
         let (pw, ph) = ((w * self.ppp).round() as usize, (self.cap.asked * self.ppp).round() as usize);
         let t = std::time::Instant::now();
         let prims = self.ctx.tessellate(out.shapes, out.pixels_per_point);
-        if std::env::var_os("ATLAS_PAINT_SPLIT").is_some() {
+        if std::env::var_os("KANDINSKY_PAINT_SPLIT").is_some() {
             let n: usize = prims.iter().map(|p| if let egui::epaint::Primitive::Mesh(m) = &p.primitive { m.indices.len() / 3 } else { 0 }).sum();
             println!("[paint] tessellated in {:.1} ms: {n} triangles", t.elapsed().as_secs_f64() * 1000.0);
         }
@@ -96,7 +96,7 @@ impl Harness {
 
 fn two_vaults() -> Vec<Vault> {
     let dir = |n: &str| {
-        let p = std::env::temp_dir().join(format!("atlas-capture-test-{}-{n}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("kandinsky-capture-test-{}-{n}", std::process::id()));
         std::fs::create_dir_all(&p).unwrap();
         p
     };
@@ -179,7 +179,7 @@ fn the_vault_menu_by_keys() {
 
 #[test]
 fn super_is_the_vault_key() {
-    // Super is Atlas's key (docs/guides/KEYS.md); egui does not see it on Linux, the window tells the box it is held
+    // Super is Kandinsky's key (docs/guides/KEYS.md); egui does not see it on Linux, the window tells the box it is held
     let mut h = Harness::new(two_vaults(), "");
     h.cap.super_key = true;
     let super_v = || vec![Event::Key { key: Key::V, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }, Event::Text("v".into())];
@@ -234,7 +234,7 @@ fn the_page_and_a_picture_go_with_the_capture() {
     use crate::extras::{Kind, Offer, What};
     let vaults = two_vaults();
     let root: PathBuf = vaults[0].path.clone();
-    let shot = std::env::temp_dir().join(format!("atlas-shot-{}.png", std::process::id()));
+    let shot = std::env::temp_dir().join(format!("kandinsky-shot-{}.png", std::process::id()));
     {
         let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(&shot).unwrap()), 4, 2);
         enc.set_color(png::ColorType::Rgba);
@@ -297,8 +297,8 @@ fn super_s_takes_the_screen_without_the_box_in_it() {
 
 /// Where today's captures go in `root`, as the core files them (its log folder and the vault's own settings).
 fn today_log(root: &std::path::Path) -> PathBuf {
-    let cfg = atlas_core::Workspace::open(root).unwrap().config().unwrap();
-    root.join(atlas_core::capture::day_log(&cfg, chrono::Local::now().date_naive()))
+    let cfg = kandinsky_core::Workspace::open(root).unwrap().config().unwrap();
+    root.join(kandinsky_core::capture::day_log(&cfg, chrono::Local::now().date_naive()))
 }
 
 fn walk_find(dir: &std::path::Path, name: &str) -> Option<PathBuf> {
@@ -355,7 +355,7 @@ fn floating_a_list_opens_under_the_card_and_the_window_keeps_its_size() {
 }
 
 /// How long one frame takes to paint, floating with the task list open, at the scales a desktop uses.
-/// `cargo test --release -p atlas-capture -- --ignored --nocapture paint_speed` (debug builds are ~20× slower).
+/// `cargo test --release -p kandinsky-capture -- --ignored --nocapture paint_speed` (debug builds are ~20× slower).
 #[test]
 #[ignore]
 fn paint_speed() {
@@ -370,7 +370,7 @@ fn paint_speed() {
             h.frame(vec![]);
             let (buf, _, _, took) = h.paint();
             times.push(took.as_secs_f64() * 1000.0);
-            if let Some(dir) = std::env::var_os("ATLAS_PAINT_DUMP") {
+            if let Some(dir) = std::env::var_os("KANDINSKY_PAINT_DUMP") {
                 let bytes: Vec<u8> = buf.iter().flat_map(|p| p.to_le_bytes()).collect();
                 std::fs::write(std::path::Path::new(&dir).join(format!("{ppp}-{}x{}.bgra", (FLOAT_WIDTH * ppp).round(), (FLOAT_HEIGHT * ppp).round())), bytes).unwrap();
             }
@@ -409,17 +409,17 @@ fn a_guide_clicked_starts_the_text_and_opens_its_suggestions() {
     assert_eq!(h.cap.text, "[] ");
 }
 
-// An Atlas listed as serving the vault that takes no connection (it crashed, or is closing): the capture is written
+// An Kandinsky listed as serving the vault that takes no connection (it crashed, or is closing): the capture is written
 // to the files directly, never lost.
 #[test]
-fn a_capture_goes_to_the_files_when_the_listed_atlas_does_not_answer() {
-    let root = std::env::temp_dir().join(format!("atlas-capture-unreachable-{}", std::process::id()));
-    std::fs::create_dir_all(root.join(".atlas/cache")).unwrap();
+fn a_capture_goes_to_the_files_when_the_listed_kandinsky_does_not_answer() {
+    let root = std::env::temp_dir().join(format!("kandinsky-capture-unreachable-{}", std::process::id()));
+    std::fs::create_dir_all(root.join(".kandinsky/cache")).unwrap();
     // a port nothing listens on: bound, then let go
     let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let file = serde_json::json!({ "port": port, "pid": std::process::id(), "root": root.to_string_lossy(), "path": "" });
-    std::fs::write(root.join(".atlas/cache/server.json"), file.to_string()).unwrap();
-    assert!(atlas_core::vaults::running_server(&root).is_some(), "listed as served by a live process");
+    std::fs::write(root.join(".kandinsky/cache/server.json"), file.to_string()).unwrap();
+    assert!(kandinsky_core::vaults::running_server(&root).is_some(), "listed as served by a live process");
     let (path, _) = crate::send::capture(&root, "kept anyway").expect("written to the files");
     let text = std::fs::read_to_string(root.join(&path)).unwrap();
     assert!(text.contains("kept anyway"), "{text:?}");
@@ -429,7 +429,7 @@ fn a_capture_goes_to_the_files_when_the_listed_atlas_does_not_answer() {
 #[test]
 fn the_text_comes_back_after_the_box_closed_unsent_and_goes_once_saved() {
     let vaults = two_vaults();
-    let dir = std::env::temp_dir().join(format!("atlas-capture-drafts-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("kandinsky-capture-drafts-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let reopen = |vaults: Vec<Vault>| {
         let mut h = Harness::new(vec![], "");
@@ -466,12 +466,12 @@ fn the_text_comes_back_after_the_box_closed_unsent_and_goes_once_saved() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// An open Atlas that took the request and never answered may have written it: the box says so and a plain Enter does
+// An open Kandinsky that took the request and never answered may have written it: the box says so and a plain Enter does
 // not send it a second time (Ctrl+Enter does).
 #[test]
 fn a_capture_sent_but_unanswered_is_unsure_and_enter_does_not_repeat_it() {
-    let root = std::env::temp_dir().join(format!("atlas-capture-unsure-{}", std::process::id()));
-    std::fs::create_dir_all(root.join(".atlas/cache")).unwrap();
+    let root = std::env::temp_dir().join(format!("kandinsky-capture-unsure-{}", std::process::id()));
+    std::fs::create_dir_all(root.join(".kandinsky/cache")).unwrap();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     // takes the request, then hangs up without a word
@@ -480,11 +480,11 @@ fn a_capture_sent_but_unanswered_is_unsure_and_enter_does_not_repeat_it() {
         let _ = std::io::Read::read(&mut s, &mut [0u8; 4096]);
     });
     let file = serde_json::json!({ "port": port, "pid": std::process::id(), "root": root.to_string_lossy(), "path": "" });
-    std::fs::write(root.join(".atlas/cache/server.json"), file.to_string()).unwrap();
+    std::fs::write(root.join(".kandinsky/cache/server.json"), file.to_string()).unwrap();
     let err = crate::send::capture(&root, "maybe twice").expect_err("no answer");
     server.join().unwrap();
     assert!(matches!(err, crate::send::NotSaved::Unsure(_)), "{err}");
-    let written: Vec<_> = std::fs::read_dir(&root).unwrap().flatten().filter(|e| e.file_name() != ".atlas").collect();
+    let written: Vec<_> = std::fs::read_dir(&root).unwrap().flatten().filter(|e| e.file_name() != ".kandinsky").collect();
     assert!(written.is_empty(), "not written to the files as well: {written:?}");
     std::fs::remove_dir_all(&root).unwrap();
 
@@ -498,9 +498,9 @@ fn a_capture_sent_but_unanswered_is_unsure_and_enter_does_not_repeat_it() {
 /// on one side only fails here.
 #[test]
 fn every_capture_box_shows_the_cores_words() {
-    use atlas_core::capture::{GUIDES, PROMPT};
+    use kandinsky_core::capture::{GUIDES, PROMPT};
     let web = include_str!("../../../ui/src/lib/capture-guides.ts");
-    let phone = include_str!("../../atlas-android/android/java/org/atlas/capture/CaptureBox.java");
+    let phone = include_str!("../../kandinsky-android/android/java/org/kandinsky/capture/CaptureBox.java");
     let quoted = |s: &str| format!("\"{s}\"");
     assert!(web.contains(&quoted(PROMPT)), "capture-guides.ts: PROMPT");
     assert!(phone.contains(&format!("setHint({})", quoted(PROMPT))), "CaptureBox: the hint");

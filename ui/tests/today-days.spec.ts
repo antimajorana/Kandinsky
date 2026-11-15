@@ -18,7 +18,7 @@ test("Today's log browses earlier days that have a log, and comes back", async (
 // logs filed by year and month (`log_folders`) are browsed as the others; a template's heading
 // with nothing under it ("## Dreams" on a day without dreams) is not shown
 test("Today's log reaches a day filed in a year/month folder and shows its Log section, one button to open it", async ({ page, request }) => {
-  const h = { "x-atlas": "1" };
+  const h = { "x-kandinsky": "1" };
   const old = "log/2019/12-December/2019-12-31.md";
   await request.put("/api/file", { headers: h, data: { path: old, text: "# Tuesday, 31 December 2019\n\n## Dreams\n\n## Log\n\n- 09:00 Last day of 2019.\n" } });
   await page.goto("/");
@@ -33,7 +33,7 @@ test("Today's log reaches a day filed in a year/month folder and shows its Log s
 });
 
 test("ticking a task on Today writes [x] in its note and drops it from the list", async ({ page, request }) => {
-  const h = { "x-atlas": "1" };
+  const h = { "x-kandinsky": "1" };
   await request.put("/api/file", { headers: h, data: { path: "notes/tick.md", text: "# Tick\n\n- [ ] tick me from Today\n" } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
@@ -49,7 +49,7 @@ test("ticking a task on Today writes [x] in its note and drops it from the list"
 // the user's log, 2026-10-09: a task holding a long `code` path wrapped one word per line, since the
 // flex task item made each text run and the code its own column
 test("a log task with inline code wraps as one paragraph, not as columns", async ({ page, request }) => {
-  const h = { "x-atlas": "1" };
+  const h = { "x-kandinsky": "1" };
   const log = (await (await request.get("/api/today", { headers: h })).json()).log.path;
   await request.put("/api/file", { headers: h, data: { path: log, text: "- [x] Submit the matched all-sector sweep (`runs/Outgoing/CDMFT_2x2_sb_irrep_allsec_4nsb_4nb_1PHS`) on iq\n  - a nested note\n" } });
   await page.goto("/");

@@ -1,4 +1,4 @@
-// Workspace settings (.atlas/config.toml via /api/config): loaded at start, reloaded when the
+// Workspace settings (.kandinsky/config.toml via /api/config): loaded at start, reloaded when the
 // file changes on disk, applied live (CSS variables, theme, editors, terminals).
 import { errText } from "./text";
 import { load, save } from "./prefs";
@@ -13,7 +13,7 @@ export const settings = $state({
   /** Every setting's default (marks what you changed, powers Reset). */
   defaults: null as WorkspaceConfig | null,
   schema: null as Record<string, unknown> | null,
-  path: ".atlas/config.toml",
+  path: ".kandinsky/config.toml",
   /** Detected choices per dotted setting path (fonts, snippet files, themes). */
   suggestions: {} as Record<string, { value: string; label: string }[]>,
 });
@@ -38,6 +38,23 @@ more?.addEventListener("change", () => settings.config && apply(settings.config)
 
 onDeviceLook(() => settings.config && apply(settings.config));
 
+const SHAPE_CHOICE_KEY = "kandinsky.shapeChosen";
+// Apply default Kandinsky palette & Bauhaus Paper shape immediately before /api/config resolves (zero startup flash).
+if (typeof document !== "undefined") {
+  const root = document.documentElement;
+  if (!root.dataset.palette || root.dataset.palette === "atlas") root.dataset.palette = "kandinsky";
+  if (!deviceChose("ui.shape") && !load<string | null>(SHAPE_CHOICE_KEY, null)) root.dataset.shape = "paper";
+}
+
+function resolveShape(uiShape: WorkspaceConfig["ui"]["shape"]): WorkspaceConfig["ui"]["shape"] {
+  if (deviceChose("ui.shape")) return uiShape;
+  const saved = load<string | null>(SHAPE_CHOICE_KEY, null);
+  if (saved === "cards" || saved === "paper") return saved;
+  if (uiShape === "paper") return "paper";
+  if (settings.defaults && uiShape !== settings.defaults.ui.shape) return uiShape;
+  return "paper";
+}
+
 function apply(c: WorkspaceConfig): void {
   const root = document.documentElement;
   const ui = lookOf(c.ui); // the look: the vault's, or this device's own over it (device-look.svelte.ts)
@@ -50,11 +67,13 @@ function apply(c: WorkspaceConfig): void {
   const follows = ui.theme === "system" || (inPhoneApp() && !deviceChose("ui.theme"));
   const theme = eink || (follows ? media?.matches : ui.theme === "light") ? "light" : "dark";
   paintTheme(theme);
-  root.dataset.palette = (theme === "dark" && ui.palette_dark) || ui.palette; // palettes.css: the night's own, if set
+  const pal = ((theme === "dark" && ui.palette_dark) || ui.palette) as string | undefined;
+  root.dataset.palette = !pal || pal === "atlas" ? "kandinsky" : pal; // palettes.css: default Kandinsky (also maps legacy "atlas")
   const high = !eink && (ui.contrast === "high" || (ui.contrast === "system" && !!more?.matches));
   if (high) root.dataset.contrast = "high"; // contrast.css
   else delete root.dataset.contrast;
-  root.dataset.shape = ui.shape; // shape-paper.css
+  const effectiveShape = resolveShape(ui.shape);
+  root.dataset.shape = effectiveShape; // shape-paper.css: flush Bauhaus Paper layout by default
   app.vimEnabled = c.vim;
   const px = (n: number) => `${n}px`;
   const font = (name: string, fallback: string) => (name.trim() ? `"${name.trim()}", ${fallback}` : fallback);
@@ -64,16 +83,20 @@ function apply(c: WorkspaceConfig): void {
   root.style.setProperty("--code-font", font(c.editor.code_font, "var(--font-mono)"));
   root.style.setProperty("--code-size", px(c.editor.code_font_size));
   root.style.setProperty("--prose-font", font(c.editor.prose_font, "var(--font-ui)"));
-  root.style.setProperty("--prose-size", px(c.editor.prose_font_size));
+  const defaultProse = settings.defaults?.editor.prose_font_size;
+  const prosePx = defaultProse && c.editor.prose_font_size === defaultProse && c.editor.prose_font_size < 16 ? 16 : (c.editor.prose_font_size || 16);
+  root.style.setProperty("--prose-size", px(prosePx));
+  root.style.setProperty("--editor-size", px(prosePx));
   root.style.setProperty("--prose-line-height", String(c.editor.prose_line_height || 1.68));
   if (c.ui.ui_font.trim()) root.style.setProperty("--font-ui", font(c.ui.ui_font, "ui-sans-serif, system-ui, sans-serif"));
   else root.style.removeProperty("--font-ui");
   applyAccent(root, high ? phosphorAccent(root, ui.accent.trim(), theme === "light") : ui.accent.trim());
   root.style.setProperty("--prose-width", c.editor.prose_width ? `${c.editor.prose_width}ch` : "none");
-  // the phone app's own bars take the page's background (AtlasActivity Bridge.paper; an older app has no such call):
+  // the phone app's own bars take the page's background (KandinskyActivity Bridge.paper; an older app has no such call):
   // the palette's own token, not the body's computed colour, which is transparent (read as black) until it is styled
-  (globalThis as unknown as { AtlasNative?: { paper?: (css: string) => void } }).AtlasNative?.paper?.(getComputedStyle(root).getPropertyValue("--bg-app").trim());
-  for (const f of listeners) f(c);
+  (globalThis as unknown as { KandinskyNative?: { paper?: (css: string) => void } }).KandinskyNative?.paper?.(getComputedStyle(root).getPropertyValue("--bg-app").trim());
+  const listenerCfg = c.ui.shape === effectiveShape ? c : { ...c, ui: { ...c.ui, shape: effectiveShape } };
+  for (const f of listeners) f(listenerCfg);
 }
 
 // The accent family derives from one colour; the palette's accent stays when none is set. A chosen accent also tints
@@ -146,7 +169,7 @@ function applyAccent(root: HTMLElement, hex: string): void {
 
 // The last settings seen, per vault (a server keeps several under /v/<name>): with no connection the page
 // still opens in its own look (e-ink, theme, fonts) instead of the bare defaults.
-const cacheKey = () => `atlas.config:${location.pathname.match(/^\/v\/[^/]+/)?.[0] ?? ""}`;
+const cacheKey = () => `kandinsky.config:${location.pathname.match(/^\/v\/[^/]+/)?.[0] ?? ""}`;
 
 export async function loadSettings(): Promise<void> {
   let d: Awaited<ReturnType<typeof api.config>>;
@@ -173,8 +196,10 @@ let queue: Promise<void> = Promise.resolve();
 export function updateSettings(mut: (c: WorkspaceConfig) => void): Promise<void> {
   const run = queue.then(async () => {
     if (!settings.config) return;
+    const prevShape = settings.config.ui.shape;
     const next = structuredClone($state.snapshot(settings.config)) as WorkspaceConfig;
     mut(next);
+    if (next.ui.shape !== prevShape) save(SHAPE_CHOICE_KEY, next.ui.shape);
     await api.putConfig(next);
     settings.config = next;
     apply(next);

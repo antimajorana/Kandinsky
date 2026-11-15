@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=Atlas Capture (the box itself)
+Name=Kandinsky Capture (the box itself)
 Comment=Not for the menu: names the capture box's binary so KWin lets it take a picture of the window you were on
-Exec=/usr/bin/atlas-capture
-Icon=atlas
+Exec=/usr/bin/kandinsky-capture
+Icon=kandinsky
 NoDisplay=true
 X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2

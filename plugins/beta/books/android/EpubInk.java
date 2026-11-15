@@ -1,4 +1,4 @@
-package org.atlas.plugins.books;
+package org.kandinsky.plugins.books;
 
 import android.app.AlertDialog;
 import android.content.Context;
@@ -9,10 +9,11 @@ import android.text.InputType;
 import android.view.View;
 import android.widget.EditText;
 
-import org.atlas.capture.Host;
-import org.atlas.capture.InkStore;
-import org.atlas.capture.PageInk;
-import org.atlas.capture.PenBar;
+import org.kandinsky.capture.Host;
+import org.kandinsky.capture.Legacy;
+import org.kandinsky.capture.InkStore;
+import org.kandinsky.capture.PageInk;
+import org.kandinsky.capture.PenBar;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -32,7 +33,7 @@ import java.util.regex.Pattern;
  *  drawn from where that character is now, its size in the text's em: a bigger font or other margins move the note
  *  with its words. Ink: `x.epub.ink.json` beside the book, `{ chapters: { "<spine>": [{k, w, color, opacity, pts}] } }`
  *  (pts and w in em from the character's top left). Typed notes: in the book's note, a list under "## Notes" —
- *  `- text <!-- atlas-note ch=N k=K id=ID -->` then the passage they sit at — so they read and search as notes. */
+ *  `- text <!-- kandinsky-note ch=N k=K id=ID -->` then the passage they sit at — so they read and search as notes. */
 final class EpubInk extends View implements PenBar.Pen {
     static final class Mark { int k; float w; int color = 0xff000000; float opacity = 1; float[] pts; }
     static final class Note { int spine, k; String text, id; }
@@ -149,7 +150,7 @@ final class EpubInk extends View implements PenBar.Pen {
         return out;
     }
 
-    /** The page's answer to atlasInk.where(anchors(s)): `{em, at: [[x, y, h] | null…]}` in CSS px of the viewport. */
+    /** The page's answer to kandinskyInk.where(anchors(s)): `{em, at: [[x, y, h] | null…]}` in CSS px of the viewport. */
     void placedAt(int s, String json) {
         if (s != spine) return;
         placed.clear();
@@ -288,7 +289,7 @@ final class EpubInk extends View implements PenBar.Pen {
 
     // ---- the note's "## Notes" -------------------------------------------------------------------------------------
 
-    private static final Pattern LINE = Pattern.compile("^- (.*?) <!-- atlas-note ch=(\\d+) k=(\\d+) id=([\\w-]+) -->\\s*$");
+    private static final Pattern LINE = Pattern.compile("^- (.*?) <!-- (?:kandinsky|" + Legacy.OLD_NOTE + ")-note ch=(\\d+) k=(\\d+) id=([\\w-]+) -->\\s*$");
 
     static List<Note> notesIn(String md) {
         List<Note> out = new ArrayList<>();
@@ -303,7 +304,7 @@ final class EpubInk extends View implements PenBar.Pen {
     }
 
     private static String line(Note n) {
-        return "- " + n.text.trim().replace("\r", "").replace("\n", "<br>") + " <!-- atlas-note ch=" + (n.spine + 1) + " k=" + n.k + " id=" + n.id + " -->";
+        return "- " + n.text.trim().replace("\r", "").replace("\n", "<br>") + " <!-- kandinsky-note ch=" + (n.spine + 1) + " k=" + n.k + " id=" + n.id + " -->";
     }
 
     interface Edit { String apply(String md); }
@@ -328,11 +329,14 @@ final class EpubInk extends View implements PenBar.Pen {
         return head + block + (end < 0 ? "" : "\n" + md.substring(end + 1));
     }
 
+    /** A note's line, written by this build or one from before the rename (`<!-- atlas-note …`). */
+    private static boolean isNote(String line) { return line.contains("kandinsky-note ") || line.contains(Legacy.OLD_NOTE + "-note "); }
+
     private static String drop(String md, String id) {
         StringBuilder out = new StringBuilder();
         String[] lines = md.split("\n", -1);
         for (int i = 0; i < lines.length; i++) {
-            if (lines[i].contains("atlas-note ") && lines[i].contains("id=" + id + " ")) {
+            if (isNote(lines[i]) && lines[i].contains("id=" + id + " ")) {
                 if (i + 1 < lines.length && lines[i + 1].startsWith("  > ")) i++; // its passage too
                 continue;
             }
@@ -346,7 +350,7 @@ final class EpubInk extends View implements PenBar.Pen {
         StringBuilder out = new StringBuilder();
         String[] lines = md.split("\n", -1);
         for (int i = 0; i < lines.length; i++) {
-            out.append(lines[i].contains("atlas-note ") && lines[i].contains("id=" + n.id + " ") ? line(n) : lines[i]);
+            out.append(isNote(lines[i]) && lines[i].contains("id=" + n.id + " ") ? line(n) : lines[i]);
             if (i < lines.length - 1) out.append('\n');
         }
         return out.toString();

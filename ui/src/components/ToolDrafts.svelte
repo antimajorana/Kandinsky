@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Tools Atlas drafted from how you work (docs/guides/MALLEABLE.md R5): each says what it noticed and which
+  // Tools Kandinsky drafted from how you work (docs/guides/MALLEABLE.md R5): each says what it noticed and which
   // files it would write. Keep writes them (reversible: they are plain files in git); Dismiss hides it.
   // Shown in Settings → Automation and as the `suggestions` block of a .page / ```view.
   import { errText } from "../lib/text";

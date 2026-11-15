@@ -237,7 +237,7 @@ impl Target {
         };
         let mut draw = String::from("Q\n");
         for (i, (form, m)) in forms.iter().enumerate() {
-            let name = (0..).map(|k| format!("AtlasMark{i}_{k}")).find(|n| !xobj.has(n.as_bytes())).expect("a free name");
+            let name = (0..).map(|k| format!("KandinskyMark{i}_{k}")).find(|n| !xobj.has(n.as_bytes())).expect("a free name");
             xobj.set(name.as_bytes(), Object::Reference(*form));
             draw += &format!("q {} {} {} {} {} {} cm /{name} Do Q\n", m[0], m[1], m[2], m[3], m[4], m[5]);
         }
@@ -660,7 +660,7 @@ fn annotation(m: &Mark, rotate: u8, fonts: &Dictionary) -> Option<(Dictionary, O
         d.set("Contents", text(&contents));
     }
     if let Some(dev) = &m.device {
-        d.set("T", text(&format!("Atlas ({dev})")));
+        d.set("T", text(&format!("Kandinsky ({dev})")));
     }
     if let Some(c) = &m.created {
         d.set("M", Object::string_literal(pdf_date(c)));
@@ -800,7 +800,7 @@ mod tests {
             assert!(annots(&doc, n).is_empty(), "no annotations on page {n}");
             let page = doc.get_dictionary(doc.get_pages()[&n]).unwrap();
             let xobj = page.get(b"Resources").unwrap().as_dict().unwrap().get(b"XObject").unwrap().as_dict().unwrap();
-            assert_eq!(xobj.iter().filter(|(k, _)| k.starts_with(b"AtlasMark")).count(), count);
+            assert_eq!(xobj.iter().filter(|(k, _)| k.starts_with(b"KandinskyMark")).count(), count);
             // [q] + (the page had no content) + [the marks]: the first stream saves the state, the last restores it first
             let parts = page.get(b"Contents").unwrap().as_array().unwrap();
             let body = |o: &Object| doc.get_object(o.as_reference().unwrap()).unwrap().as_stream().unwrap().content.clone();
@@ -812,7 +812,7 @@ mod tests {
         let page = doc.get_dictionary(doc.get_pages()[&1]).unwrap();
         let last = page.get(b"Contents").unwrap().as_array().unwrap().last().unwrap().as_reference().unwrap();
         let first_line = String::from_utf8(doc.get_object(last).unwrap().as_stream().unwrap().content.clone()).unwrap().lines().nth(1).unwrap().to_string();
-        assert!(first_line.starts_with("q 1 0 0 1 0 0 cm /AtlasMark0_0 Do Q"), "{first_line}");
+        assert!(first_line.starts_with("q 1 0 0 1 0 0 cm /KandinskyMark0_0 Do Q"), "{first_line}");
     }
 
     #[test]

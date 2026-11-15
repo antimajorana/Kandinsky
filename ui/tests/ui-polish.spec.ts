@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { shownName } from "../src/lib/paths";
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: import("@playwright/test").APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 
 async function openFile(page: import("@playwright/test").Page, name: string) {

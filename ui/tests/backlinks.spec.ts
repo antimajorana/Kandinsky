@@ -16,7 +16,7 @@ test("a note lists the notes that link to it, and a mention jumps to its line", 
 });
 
 test("unlinked mentions: the note's name in another note, linked with one click", async ({ page, request }) => {
-  const h = { "x-atlas": "1" };
+  const h = { "x-kandinsky": "1" };
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "Topic.md");

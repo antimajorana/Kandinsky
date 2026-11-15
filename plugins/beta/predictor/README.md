@@ -5,7 +5,7 @@ caret, learned from the vault.
 
 - **Take it:** Tab, or → at the end of a line, takes all of it; Ctrl+→ one word. Typing the letters it shows keeps the
   rest; anything else typed goes on as if it were not there. Escape (vim's normal mode) drops it.
-- **Learned from the vault:** the words of your notes and which words follow one or two others, counted when Atlas
+- **Learned from the vault:** the words of your notes and which words follow one or two others, counted when Kandinsky
   starts, per language (a note's `lang:` property, else guessed from its words). What the vault wrote only once is
   forgotten. Kept mail (notes with a `message_id`) and agent files are not learned from: they are not your writing.
 - **When it shows:** a word's rest after two letters when the vault wrote it at least 3 times (Settings → Predictor →

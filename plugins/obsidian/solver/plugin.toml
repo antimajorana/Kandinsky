@@ -47,7 +47,7 @@ key = "auto_start"
 label = "Auto-start Solver services when opened"
 kind = "toggle"
 default = true
-hint = "Start Solver's local WSL/Docker services silently in the background when opening the Solver app"
+hint = "Start Solver's local WSL services (MongoDB and the app) silently in the background when opening the Solver app"
 
 [platforms]
 windows = "works"

@@ -4,7 +4,7 @@ import { restoreCatalog, withCatalog } from "./fixtures/catalog";
 // "Add to the catalog…" is a dialog: the collections block's own form (addBox in main.js, mounted by add.js) — what is
 // typed looked up, its card with the other matches as chips, then Add opens the note and closes the dialog. The
 // helper is a stand-in answering `preview` and `add`.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (request: APIRequestContext, path: string, text: string) => request.put("/api/file", { headers: H, data: { path, text } });
 
 const PREVIEW = {

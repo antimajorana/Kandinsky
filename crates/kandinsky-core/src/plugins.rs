@@ -1,4 +1,4 @@
-//! Workspace plugins: `.atlas/plugins/<id>/plugin.toml` + a view module (+ an optional data script).
+//! Workspace plugins: `.kandinsky/plugins/<id>/plugin.toml` + a view module (+ an optional data script).
 //! The core knows nothing about what a plugin shows: it lists manifests and runs a plugin's data
 //! script (stdin = JSON `{settings, args}`, stdout = JSON), exactly like a workspace command.
 //! Special-purpose views (simulation runs, …) live with the project that needs them.
@@ -14,10 +14,10 @@ use std::path::Path;
 use std::time::Duration;
 use ts_rs::TS;
 
-pub const PLUGINS_DIR: &str = ".atlas/plugins";
+pub const PLUGINS_DIR: &str = ".kandinsky/plugins";
 
-/// `$ATLAS_PLUGIN_TARGET` for a plugin's programs: `<arch>-<os>` of the machine running the server (`x86_64-linux`,
-/// `aarch64-android`), so a plugin can carry compiled helpers per platform: `run = "\"$ATLAS_PLUGIN_DIR/bin/$ATLAS_PLUGIN_TARGET/helper\""`.
+/// `$KANDINSKY_PLUGIN_TARGET` for a plugin's programs: `<arch>-<os>` of the machine running the server (`x86_64-linux`,
+/// `aarch64-android`), so a plugin can carry compiled helpers per platform: `run = "\"$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET/helper\""`.
 pub fn target() -> String {
     format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS)
 }
@@ -38,21 +38,21 @@ struct Manifest {
     /// ES module of the plugin's own pane (default `view.js` when that file exists); none = no pane.
     #[serde(default)]
     view: Option<String>,
-    /// ES module run at startup and on every change, exporting `register(atlas)`: blocks, commands,
+    /// ES module run at startup and on every change, exporting `register(kandinsky)`: blocks, commands,
     /// entities (default `main.js` when that file exists).
     #[serde(default)]
     main: Option<String>,
     /// A button in the sidebar rail for the pane. Off unless asked: plugins do not claim the chrome.
     #[serde(default)]
     rail: bool,
-    /// Files the pane can show (`*.tsv`, `runs/**`): offered in "Open with…"; the pane gets `atlas.path`.
+    /// Files the pane can show (`*.tsv`, `runs/**`): offered in "Open with…"; the pane gets `kandinsky.path`.
     #[serde(default)]
     opens: Vec<String>,
     /// Files the pane is the default editor of (`*.epub`): a plain open (a click in the tree, a link) shows them there
     /// unless the vault's `[files] open_with` names another view. Implies `opens`; needs a pane.
     #[serde(default)]
     claims: Vec<String>,
-    /// Shell command (cwd = workspace root, `$ATLAS_PLUGIN_DIR` = the plugin folder) printing JSON.
+    /// Shell command (cwd = workspace root, `$KANDINSKY_PLUGIN_DIR` = the plugin folder) printing JSON.
     #[serde(default)]
     data: Option<String>,
     #[serde(default)]
@@ -73,7 +73,7 @@ struct Manifest {
     /// Its word on each platform (`[platforms]`: `windows = "no"`, `macos = { support = "untested", why = "…" }`).
     #[serde(default)]
     platforms: std::collections::BTreeMap<Platform, PlatformEntry>,
-    /// The plugin API the plugin was written for (`atlas.version` in the page).
+    /// The plugin API the plugin was written for (`kandinsky.version` in the page).
     #[serde(default)]
     api: Option<u32>,
     /// What the plugin asks to be allowed to do outside the page.
@@ -82,15 +82,15 @@ struct Manifest {
     /// A program of the plugin's own that stays running (helper.rs).
     #[serde(default)]
     helper: Option<HelperManifest>,
-    /// The oldest Atlas it works with: `">=0.3"` or `"0.3.1"`. An older Atlas lists the plugin with
+    /// The oldest Kandinsky it works with: `">=0.3"` or `"0.3.1"`. An older Kandinsky lists the plugin with
     /// that as its error instead of loading it.
     #[serde(default)]
     needs: Option<String>,
-    /// `[[tool]]`: helper methods offered to agents (`atlas mcp`) — plugin_tools.rs.
+    /// `[[tool]]`: helper methods offered to agents (`kandinsky mcp`) — plugin_tools.rs.
     #[serde(default, rename = "tool")]
     tools: Vec<crate::plugin_tools::ToolManifest>,
     /// What an agent must know to use the plugin's tools rather than going around them ("for a command on a host, use
-    /// ssh_open and ssh_run, never ssh in your own shell"): added to `atlas mcp`'s instructions while the plugin is on.
+    /// ssh_open and ssh_run, never ssh in your own shell"): added to `kandinsky mcp`'s instructions while the plugin is on.
     #[serde(default)]
     for_agents: Option<String>,
     /// Plugins this one builds on (`["catalog"]`, or with the oldest version each works with:
@@ -118,8 +118,8 @@ struct Manifest {
     /// Linkwarden) keeps working with the meta plugin off, its table simply unused. `requires` is the hard dependency.
     #[serde(default)]
     contributes: std::collections::BTreeMap<String, toml::Table>,
-    /// `[android]`: the plugin's native side, compiled into the Atlas apps (docs/refactor/REFACTOR-native-plugins.md,
-    /// read by crates/atlas-android/native-plugins.sh). The core only checks its shape.
+    /// `[android]`: the plugin's native side, compiled into the Kandinsky apps (docs/refactor/REFACTOR-native-plugins.md,
+    /// read by crates/kandinsky-android/native-plugins.sh). The core only checks its shape.
     #[serde(default)]
     #[allow(dead_code)]
     android: Option<AndroidManifest>,
@@ -217,7 +217,7 @@ pub fn replaces(root: &Path, id: &str) -> Vec<Replaced> {
 #[serde(deny_unknown_fields)]
 #[allow(dead_code)]
 struct AndroidManifest {
-    /// The Java class implementing `org.atlas.capture.NativePlugin`.
+    /// The Java class implementing `org.kandinsky.capture.NativePlugin`.
     main: String,
     /// Vault paths the app opens natively instead of in a web tab (`*.cbz`).
     #[serde(default)]
@@ -233,7 +233,7 @@ struct AndroidManifest {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct HelperManifest {
-    /// Shell command (cwd = the vault; `$ATLAS_PLUGIN_DIR`, `$ATLAS_PLUGIN_CACHE`, `$ATLAS_ROOT` set).
+    /// Shell command (cwd = the vault; `$KANDINSKY_PLUGIN_DIR`, `$KANDINSKY_PLUGIN_CACHE`, `$KANDINSKY_ROOT` set).
     run: Option<String>,
     /// A JavaScript file of the plugin run inside the core instead of a program (js_helper.rs). One of `run` and `js`.
     js: Option<String>,
@@ -242,7 +242,7 @@ struct HelperManifest {
     #[serde(default)]
     start: HelperStart,
     /// Stopped after this long with no call (`"10m"`, the schedule's words), started again by the next one: for a
-    /// helper that only answers and keeps nothing running. Unset: it runs until Atlas stops.
+    /// helper that only answers and keeps nothing running. Unset: it runs until Kandinsky stops.
     idle: Option<String>,
 }
 
@@ -286,7 +286,7 @@ pub fn helper_program(root: &Path, id: &str) -> Result<HelperProgram> {
             if rel.is_empty() || rel.starts_with('/') || rel.split(['/', '\\']).any(|p| p == "..") {
                 return Err(Error::BadRequest(format!("plugin {id}: [helper] js = {js:?}: a file inside the plugin's folder")));
             }
-            Ok(HelperProgram::Js(root.join(PLUGINS_DIR).join(id).join(rel)))
+            Ok(HelperProgram::Js(crate::state_dir::join(root, PLUGINS_DIR).join(id).join(rel)))
         }
         (Some(_), Some(_)) => Err(Error::BadRequest(format!("plugin {id}: [helper] has both run and js: one of them"))),
         (None, None) => Err(Error::BadRequest(format!("plugin {id}: [helper] needs run = \"…\" or js = \"helper.js\""))),
@@ -306,11 +306,11 @@ pub fn helper_idle(root: &Path, id: &str) -> std::result::Result<Option<std::tim
 #[serde(deny_unknown_fields, default)]
 #[ts(export)]
 pub struct Permissions {
-    /// Hosts `atlas.fetch` may reach: `"links.example.org"`, or `"*.example.org"` for any host under it.
+    /// Hosts `kandinsky.fetch` may reach: `"links.example.org"`, or `"*.example.org"` for any host under it.
     pub net: Vec<String>,
-    /// May keep secrets (`atlas.secrets`, a header filled in from one).
+    /// May keep secrets (`kandinsky.secrets`, a header filled in from one).
     pub secrets: bool,
-    /// Programs a JavaScript helper may run with `atlas.exec` (`["pandoc"]`): by name, found on the PATH, no shell
+    /// Programs a JavaScript helper may run with `kandinsky.exec` (`["pandoc"]`): by name, found on the PATH, no shell
     /// (js_exec.rs).
     pub exec: Vec<String>,
 }
@@ -348,28 +348,28 @@ pub fn permissions(root: &Path, id: &str) -> Result<Permissions> {
     Ok(read_manifest(root, id)?.permissions)
 }
 
-/// The plugin API this Atlas offers, the page's `PLUGIN_API_VERSION` (ui/src/lib/plugin-api.ts): v4 `atlas.on`,
-/// `atlas.shell`, settings from a schema; v5 the native pen; v6 `openNative`; v7 the editor contract (`claims`,
-/// `atlas.pane`, `atlas.anchor`) and `registerEmbed`; v8 `atlas.live.join` and `atlas.pane.close`; v9 `atlas.assetUrl`
-/// (a plugin's own files by URL, plugin_files.rs); v10 `atlas.trash`; v11 `atlas.files.thumb`; v12 Settings v2: accounts
-/// (`account = {…}` on a records field), `advanced` / `hidden` fields, `atlas.plugin.registerSettingsSection`; v13
-/// `atlas.templates`, `atlas.newNote`, `atlas.applyTemplate`; v14 `atlas.marks`, `atlas.marksSvg`; v15 `[helper] idle`; v16
+/// The plugin API this Kandinsky offers, the page's `PLUGIN_API_VERSION` (ui/src/lib/plugin-api.ts): v4 `kandinsky.on`,
+/// `kandinsky.shell`, settings from a schema; v5 the native pen; v6 `openNative`; v7 the editor contract (`claims`,
+/// `kandinsky.pane`, `kandinsky.anchor`) and `registerEmbed`; v8 `kandinsky.live.join` and `kandinsky.pane.close`; v9 `kandinsky.assetUrl`
+/// (a plugin's own files by URL, plugin_files.rs); v10 `kandinsky.trash`; v11 `kandinsky.files.thumb`; v12 Settings v2: accounts
+/// (`account = {…}` on a records field), `advanced` / `hidden` fields, `kandinsky.plugin.registerSettingsSection`; v13
+/// `kandinsky.templates`, `kandinsky.newNote`, `kandinsky.applyTemplate`; v14 `kandinsky.marks`, `kandinsky.marksSvg`; v15 `[helper] idle`; v16
 /// `[helper] js` (a JavaScript helper run in the core, js_helper.rs), roles, versioned `requires`; v17
-/// `atlas.terminal.shell()` (the terminal's shell, from /api/version); v18 `exports` (a library plugin's importable files);
-/// v19 `replaces` (a merged plugin takes over the settings and secrets of those it replaces), `atlas.openLibrary(id?)`
+/// `kandinsky.terminal.shell()` (the terminal's shell, from /api/version); v18 `exports` (a library plugin's importable files);
+/// v19 `replaces` (a merged plugin takes over the settings and secrets of those it replaces), `kandinsky.openLibrary(id?)`
 /// (the Libraries page at a library), `{setting:key}` in a contributed table (filled from the contributor's settings);
-/// v20 `atlas.openDialog` (a pane in a popup), `atlas.zip` (the page's zip reader), `atlas.convert.typstPdf` in helpers,
+/// v20 `kandinsky.openDialog` (a pane in a popup), `kandinsky.zip` (the page's zip reader), `kandinsky.convert.typstPdf` in helpers,
 /// `/api/plugins/@<role>/…` (a plugin called by its role), `replaces` with `if_off`; v21 a greeting chip's `icon` may
-/// be one of the app's icon names; v22 `atlas.editor` `claimTab`, `place`, `path`, `drawMath`, `legacySnippets`,
-/// `codemirror.language`, a completion's `applies`, `apply`, `info` and `from`; v23 `atlas.writeBytes`, `atlas.tikz.png`, `atlas.confirm`,
-/// `atlas.input`, `openDialog`'s `view` (another module of the plugin); v24 the Libraries page is a plugin's pane (the
-/// role `libraries`): `atlas.libraries` (the vault's libraries, for it), `atlas.richTitle`, `thumbUrl` of a PDF, a
-/// toast's `timeout`; `atlas.mountLibrary` gone (the page is the Catalog's own); v25 `atlas.editor.prose` (a small
-/// editor for prose outside a note, with the plugins' editor hooks); v26 `atlas.editor.words` (a language's general word
+/// be one of the app's icon names; v22 `kandinsky.editor` `claimTab`, `place`, `path`, `drawMath`, `legacySnippets`,
+/// `codemirror.language`, a completion's `applies`, `apply`, `info` and `from`; v23 `kandinsky.writeBytes`, `kandinsky.tikz.png`, `kandinsky.confirm`,
+/// `kandinsky.input`, `openDialog`'s `view` (another module of the plugin); v24 the Libraries page is a plugin's pane (the
+/// role `libraries`): `kandinsky.libraries` (the vault's libraries, for it), `kandinsky.richTitle`, `thumbUrl` of a PDF, a
+/// toast's `timeout`; `kandinsky.mountLibrary` gone (the page is the Catalog's own); v25 `kandinsky.editor.prose` (a small
+/// editor for prose outside a note, with the plugins' editor hooks); v26 `kandinsky.editor.words` (a language's general word
 /// frequencies, words.rs); v27 a status cell's `panel` (drawn by the plugin in a popover over the lower bar); v28
-/// `atlas.openLink(url, { outside })` (a web link opened as Atlas opens links; Shift+click's system browser).
-/// The page's number must be the same (a test holds it). A manifest with a key this Atlas does not know and an `api`
-/// above it is refused with "update Atlas", not with the parser's error (`read_manifest`).
+/// `kandinsky.openLink(url, { outside })` (a web link opened as Kandinsky opens links; Shift+click's system browser).
+/// The page's number must be the same (a test holds it). A manifest with a key this Kandinsky does not know and an `api`
+/// above it is refused with "update Kandinsky", not with the parser's error (`read_manifest`).
 pub const API_VERSION: u32 = 28;
 
 /// `"1.2.3"` → `[1, 2, 3]` (missing parts are 0; anything after a non-digit part is ignored).
@@ -385,13 +385,13 @@ fn version_parts(v: &str) -> [u64; 3] {
     out
 }
 
-/// Why this Atlas cannot run the plugin, if it cannot.
+/// Why this Kandinsky cannot run the plugin, if it cannot.
 fn too_old_for(m: &Manifest, app: &str) -> Option<String> {
     if let Some(api) = m.api.filter(|a| *a > API_VERSION) {
-        return Some(format!("written for plugin API {api}; this Atlas has {API_VERSION} — update Atlas"));
+        return Some(format!("written for plugin API {api}; this Kandinsky has {API_VERSION} — update Kandinsky"));
     }
     let needs = m.needs.as_deref()?.trim().trim_start_matches(">=").trim().trim_start_matches('v');
-    (version_parts(needs) > version_parts(app)).then(|| format!("needs Atlas {needs} or newer; this is {app}"))
+    (version_parts(needs) > version_parts(app)).then(|| format!("needs Kandinsky {needs} or newer; this is {app}"))
 }
 
 /// `[settings]` with each declared field's default where the key is missing (plugin_settings.rs).
@@ -407,7 +407,7 @@ pub fn form_of(manifest: &str) -> Result<(Vec<SettingField>, Value)> {
     Ok((m.fields, settings))
 }
 
-/// Writes the declared settings the form sent into the plugin's settings file (`.atlas/plugin-settings/<id>.toml`;
+/// Writes the declared settings the form sent into the plugin's settings file (`.kandinsky/plugin-settings/<id>.toml`;
 /// `plugin_settings::apply` says what is written), then keeps and forgets secrets as it says.
 /// Anything refused: nothing is written.
 /// Returns the cards renamed (records key, old name, new name): the plugin is told, to move what it keeps by name.
@@ -477,7 +477,7 @@ pub struct Plugin {
     /// Workspace-relative path of the pane module; none = the plugin has no pane.
     #[ts(optional)]
     pub view: Option<String>,
-    /// Workspace-relative path of the startup module (`register(atlas)`).
+    /// Workspace-relative path of the startup module (`register(kandinsky)`).
     #[ts(optional)]
     pub main: Option<String>,
     /// Shown in the sidebar rail (opt-in).
@@ -635,7 +635,7 @@ fn gives_of(m: &Manifest) -> Vec<Gift> {
 
 /// The `from` of the `.source` file an install leaves in a plugin's folder.
 fn installed_from(root: &Path, id: &str) -> Option<String> {
-    let text = std::fs::read_to_string(root.join(PLUGINS_DIR).join(id).join(".source")).ok()?;
+    let text = std::fs::read_to_string(crate::state_dir::join(root, PLUGINS_DIR).join(id).join(".source")).ok()?;
     toml::from_str::<toml::Table>(&text).ok()?.get("from")?.as_str().map(str::to_string)
 }
 
@@ -647,7 +647,7 @@ pub struct Summary {
     pub has_helper: bool,
 }
 
-/// Reads a `plugin.toml` text as this Atlas would: an error when it does not parse or needs a newer Atlas.
+/// Reads a `plugin.toml` text as this Kandinsky would: an error when it does not parse or needs a newer Kandinsky.
 pub fn summary_of(text: &str) -> std::result::Result<Summary, String> {
     let m: Manifest = toml::from_str(text).map_err(|e| e.to_string())?;
     if let Some(why) = too_old_for(&m, env!("CARGO_PKG_VERSION")) {
@@ -658,7 +658,7 @@ pub fn summary_of(text: &str) -> std::result::Result<Summary, String> {
 
 /// The `[settings]` a vault has in its copy of a manifest (None: none, or the text does not parse).
 pub fn own_settings(text: &str) -> Option<toml::Table> {
-    // only [settings]: the old copy's schema may be one this Atlas no longer reads, its values still count
+    // only [settings]: the old copy's schema may be one this Kandinsky no longer reads, its values still count
     #[derive(Deserialize)]
     struct Own {
         #[serde(default)]
@@ -672,12 +672,12 @@ pub fn valid_id(id: &str) -> bool {
 }
 
 fn read_manifest(root: &Path, id: &str) -> Result<Manifest> {
-    let text = std::fs::read_to_string(root.join(PLUGINS_DIR).join(id).join("plugin.toml"))?;
+    let text = std::fs::read_to_string(crate::state_dir::join(root, PLUGINS_DIR).join(id).join("plugin.toml"))?;
     let mut m: Manifest = toml::from_str(&text).map_err(|e| {
-        // a newer plugin's keys are unknown here: say "update Atlas", not the parser's complaint about them
+        // a newer plugin's keys are unknown here: say "update Kandinsky", not the parser's complaint about them
         let api = toml::from_str::<toml::Table>(&text).ok().and_then(|t| t.get("api")?.as_integer());
         match api.filter(|a| *a > i64::from(API_VERSION)) {
-            Some(a) => Error::BadRequest(format!("written for plugin API {a}; this Atlas has {API_VERSION} — update Atlas")),
+            Some(a) => Error::BadRequest(format!("written for plugin API {a}; this Kandinsky has {API_VERSION} — update Kandinsky")),
             None => Error::BadRequest(format!("{PLUGINS_DIR}/{id}/plugin.toml: {e}")),
         }
     })?;
@@ -692,7 +692,7 @@ fn read_manifest(root: &Path, id: &str) -> Result<Manifest> {
 /// Where a vault keeps a plugin's settings: beside the plugins' folders, not in one, so updating, reinstalling or removing a
 /// plugin never touches what the vault chose. A manifest's own `[settings]` are only the starting values (and an older
 /// vault's, until its first save moves them here).
-pub const SETTINGS_DIR: &str = ".atlas/plugin-settings";
+pub const SETTINGS_DIR: &str = ".kandinsky/plugin-settings";
 fn settings_rel(id: &str) -> String {
     format!("{SETTINGS_DIR}/{id}.toml")
 }
@@ -799,10 +799,10 @@ pub fn settings_path(id: &str) -> String {
 /// Every plugin's manifest `[settings]` moved to its settings file ([`move_settings_out`]), at the vault's start; a
 /// manifest that cannot be moved is said on stderr and left as it is.
 pub fn move_all_settings_out(root: &Path) {
-    let Ok(dirs) = std::fs::read_dir(root.join(PLUGINS_DIR)) else { return };
+    let Ok(dirs) = std::fs::read_dir(crate::state_dir::join(root, PLUGINS_DIR)) else { return };
     for id in dirs.flatten().filter(|e| e.path().is_dir()).filter_map(|e| e.file_name().into_string().ok()).filter(|id| valid_id(id)) {
         if let Err(e) = move_settings_out(root, &id) {
-            eprintln!("atlas: plugin {id}: its [settings] stay in plugin.toml: {e}");
+            eprintln!("kandinsky: plugin {id}: its [settings] stay in plugin.toml: {e}");
         }
     }
 }
@@ -811,11 +811,11 @@ pub fn move_all_settings_out(root: &Path) {
 /// plugin's id in `[ui] apps_hidden`, then the key leaves the file — one list hides every app, built-in or plugin.
 /// The config is written first, so a failure leaves the old switch where it was; runs at every start, a no-op after.
 pub fn hide_legacy_rails(root: &Path) {
-    let Ok(dirs) = std::fs::read_dir(root.join(SETTINGS_DIR)) else { return };
+    let Ok(dirs) = std::fs::read_dir(crate::state_dir::join(root, SETTINGS_DIR)) else { return };
     for name in dirs.flatten().filter_map(|e| e.file_name().into_string().ok()) {
         let Some(id) = name.strip_suffix(".toml").filter(|id| valid_id(id)) else { continue };
         if let Err(e) = hide_legacy_rail(root, id) {
-            eprintln!("atlas: plugin {id}: its `rail` setting stays: {e}");
+            eprintln!("kandinsky: plugin {id}: its `rail` setting stays: {e}");
         }
     }
 }
@@ -840,10 +840,10 @@ fn hide_legacy_rail(root: &Path, id: &str) -> Result<()> {
 /// changes nothing after the first. The config's section is left where it is. Nothing when the
 /// plugin is not in the vault or the config has no such section.
 pub fn adopt_config_section(root: &Path, section: &str, id: &str) -> Result<()> {
-    if !root.join(PLUGINS_DIR).join(id).join("plugin.toml").is_file() {
+    if !crate::state_dir::join(root, PLUGINS_DIR).join(id).join("plugin.toml").is_file() {
         return Ok(());
     }
-    let Ok(text) = std::fs::read_to_string(root.join(crate::config::CONFIG_FILE)) else { return Ok(()) };
+    let Ok(text) = std::fs::read_to_string(crate::state_dir::join(root, crate::config::CONFIG_FILE)) else { return Ok(()) };
     let cfg: toml::Table = toml::from_str(&text).map_err(|e| Error::BadRequest(format!("{}: {e}", crate::config::CONFIG_FILE)))?;
     let Some(old) = cfg.get(section).and_then(toml::Value::as_table) else { return Ok(()) };
     edit_settings_file(root, id, |file| {
@@ -860,7 +860,7 @@ pub fn adopt_config_section(root: &Path, section: &str, id: &str) -> Result<()> 
 /// Every plugin folder holding a `plugin.toml`, sorted by id. Every plugin call asks for it: the list read last is
 /// kept while the stamps of everything it was read from stay the same (`kept`).
 pub fn list(root: &Path) -> Vec<Plugin> {
-    let mut ids: Vec<String> = std::fs::read_dir(root.join(PLUGINS_DIR))
+    let mut ids: Vec<String> = std::fs::read_dir(crate::state_dir::join(root, PLUGINS_DIR))
         .into_iter()
         .flatten()
         .flatten()
@@ -882,9 +882,9 @@ pub fn list(root: &Path) -> Vec<Plugin> {
 
 /// Every file `read_list` reads or looks for, and the folders whose entries it lists.
 fn read_from(root: &Path, ids: &[String]) -> Vec<std::path::PathBuf> {
-    let mut paths = vec![root.join(PLUGINS_DIR)];
+    let mut paths = vec![crate::state_dir::join(root, PLUGINS_DIR)];
     for id in ids {
-        let dir = root.join(PLUGINS_DIR).join(id);
+        let dir = crate::state_dir::join(root, PLUGINS_DIR).join(id);
         paths.extend([dir.join("plugin.toml"), dir.join(".source"), root.join(settings_rel(id)), dir]);
     }
     paths
@@ -1127,7 +1127,7 @@ pub async fn data(root: &Path, id: &str, args: Value) -> Result<Value> {
     let m = read_manifest(root, id)?;
     let settings = settings_with_defaults(&m);
     let Some(run) = m.data else { return Err(Error::BadRequest(format!("plugin {id} has no data script"))) };
-    let dir = root.join(PLUGINS_DIR).join(id);
+    let dir = crate::state_dir::join(root, PLUGINS_DIR).join(id);
     let script = ScriptCommand {
         id: format!("plugin.{id}"),
         manifest: ScriptManifest {
@@ -1140,8 +1140,8 @@ pub async fn data(root: &Path, id: &str, args: Value) -> Result<Value> {
         },
     };
     let timeout = m.timeout_secs.map(Duration::from_secs).unwrap_or(SCRIPT_TIMEOUT);
-    // set for the line's own `$VAR`s too, so it can name its files: `python3 "$ATLAS_PLUGIN_DIR/index.py"`
-    let env = [("ATLAS_PLUGIN_DIR".to_string(), dir.into_os_string()), ("ATLAS_PLUGIN_TARGET".to_string(), target().into())];
+    // set for the line's own `$VAR`s too, so it can name its files: `python3 "$KANDINSKY_PLUGIN_DIR/index.py"`
+    let env = [("KANDINSKY_PLUGIN_DIR".to_string(), dir.into_os_string()), ("KANDINSKY_PLUGIN_TARGET".to_string(), target().into())];
     run_script_with(root, &script, &env, &json!({ "settings": settings, "args": args }), timeout).await
 }
 
@@ -1157,7 +1157,7 @@ mod tests {
     use super::*;
 
     fn plugin(root: &Path, id: &str, toml: &str) {
-        let d = root.join(PLUGINS_DIR).join(id);
+        let d = crate::state_dir::join(root, PLUGINS_DIR).join(id);
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("plugin.toml"), toml).unwrap();
     }
@@ -1169,7 +1169,7 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let settle = |at: u64| {
             let at = std::time::SystemTime::now() - Duration::from_secs(at);
-            let dir = d.path().join(PLUGINS_DIR);
+            let dir = crate::state_dir::join(d.path(), PLUGINS_DIR);
             for p in [dir.clone(), dir.join("a"), dir.join("a/plugin.toml")] {
                 filetime::set_file_mtime(&p, filetime::FileTime::from_system_time(at)).unwrap();
             }
@@ -1198,12 +1198,12 @@ mod tests {
     #[test]
     fn a_config_section_becomes_a_plugins_settings() {
         let d = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(d.path().join(".atlas")).unwrap();
-        std::fs::write(d.path().join(crate::config::CONFIG_FILE), "[refs]\ndir = \"lit\"\nconnector = true\n").unwrap();
+        std::fs::create_dir_all(d.path().join(".kandinsky")).unwrap();
+        std::fs::write(crate::state_dir::join(d.path(), crate::config::CONFIG_FILE), "[refs]\ndir = \"lit\"\nconnector = true\n").unwrap();
         adopt_config_section(d.path(), "refs", "papers").unwrap();
         assert!(!d.path().join(settings_rel("papers")).exists(), "no plugin, nothing written");
         plugin(d.path(), "papers", "title = \"P\"\n");
-        std::fs::create_dir_all(d.path().join(SETTINGS_DIR)).unwrap();
+        std::fs::create_dir_all(crate::state_dir::join(d.path(), SETTINGS_DIR)).unwrap();
         std::fs::write(d.path().join(settings_rel("papers")), "connector = false\n").unwrap();
         adopt_config_section(d.path(), "refs", "papers").unwrap();
         let t: toml::Table = toml::from_str(&std::fs::read_to_string(d.path().join(settings_rel("papers"))).unwrap()).unwrap();
@@ -1320,7 +1320,7 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         plugin(t.path(), "hello", "title = \"Hello\"\nicon = \"table\"\nkeys = \"Ctrl+Alt+H\"\ndata = \"echo 1\"\n[settings]\ndir = \"runs\"\n");
         plugin(t.path(), "broken", "title = 3\n");
-        std::fs::create_dir_all(t.path().join(PLUGINS_DIR).join("not-a-plugin")).unwrap();
+        std::fs::create_dir_all(crate::state_dir::join(t.path(), PLUGINS_DIR).join("not-a-plugin")).unwrap();
         let ps = list(t.path());
         assert_eq!(ps.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), ["broken", "hello"]);
         assert!(ps[0].error.as_deref().unwrap().contains("plugin.toml"));
@@ -1330,10 +1330,10 @@ mod tests {
         // conventional modules are picked up when present; the rail is opt-in
         plugin(t.path(), "runs", "title = \"Runs\"\nrail = true\n");
         for f in ["view.js", "main.js"] {
-            std::fs::write(t.path().join(PLUGINS_DIR).join("runs").join(f), "").unwrap();
+            std::fs::write(crate::state_dir::join(t.path(), PLUGINS_DIR).join("runs").join(f), "").unwrap();
         }
         let r = list(t.path()).into_iter().find(|p| p.id == "runs").unwrap();
-        assert_eq!((r.view.as_deref(), r.main.as_deref(), r.rail), (Some(".atlas/plugins/runs/view.js"), Some(".atlas/plugins/runs/main.js"), true));
+        assert_eq!((r.view.as_deref(), r.main.as_deref(), r.rail), (Some(".kandinsky/plugins/runs/view.js"), Some(".kandinsky/plugins/runs/main.js"), true));
     }
 
     #[test]
@@ -1351,9 +1351,9 @@ mod tests {
         let form = json!({ "sides": 12, "system": "pf2e", "tags": ["npc", "boss"], "loud": true });
         save_settings(t.path(), &store, "dice", form.as_object().unwrap()).unwrap();
         // the values went to the vault's settings file (comments kept); the manifest keeps its own comments, no values
-        let text = std::fs::read_to_string(t.path().join(SETTINGS_DIR).join("dice.toml")).unwrap();
+        let text = std::fs::read_to_string(crate::state_dir::join(t.path(), SETTINGS_DIR).join("dice.toml")).unwrap();
         assert!(text.contains("sides = 12 # the classic") && text.contains("free = \"kept\""), "{text}");
-        let manifest = std::fs::read_to_string(t.path().join(PLUGINS_DIR).join("dice/plugin.toml")).unwrap();
+        let manifest = std::fs::read_to_string(crate::state_dir::join(t.path(), PLUGINS_DIR).join("dice/plugin.toml")).unwrap();
         assert!(manifest.starts_with("# my plugin\n") && !manifest.contains("[settings]"), "{manifest}");
         let p = list(t.path()).remove(0);
         assert_eq!(p.error, None, "the file still parses");
@@ -1369,7 +1369,7 @@ mod tests {
         // a secret goes to the store outside the vault, never into the file; empty leaves it as it is
         plugin(t.path(), "mail", "title = \"Mail\"\n[permissions]\nsecrets = true\n\n[[setting]]\nkey = \"password\"\nkind = \"secret\"\n\n[[setting]]\nkey = \"user\"\nkind = \"text\"\n");
         save_settings(t.path(), &store, "mail", json!({ "password": "hunter2", "user": "me" }).as_object().unwrap()).unwrap();
-        let text = std::fs::read_to_string(t.path().join(SETTINGS_DIR).join("mail.toml")).unwrap();
+        let text = std::fs::read_to_string(crate::state_dir::join(t.path(), SETTINGS_DIR).join("mail.toml")).unwrap();
         assert!(text.contains("user = \"me\"") && !text.contains("hunter2"), "{text}");
         assert_eq!(store.get("mail", "password").unwrap().as_deref(), Some("hunter2"));
         save_settings(t.path(), &store, "mail", json!({ "password": "" }).as_object().unwrap()).unwrap();
@@ -1382,7 +1382,7 @@ mod tests {
         plugin(t.path(), "bare", "title = \"Bare\"\n\n[[setting]]\nkey = \"n\"\nkind = \"number\"\n");
         save_settings(t.path(), &store, "bare", json!({ "n": 3 }).as_object().unwrap()).unwrap();
         let bare = list(t.path()).into_iter().find(|p| p.id == "bare").unwrap();
-        assert_eq!((bare.error.clone(), &bare.settings["n"], bare.fields.len()), (None, &json!(3), 1), "{}", std::fs::read_to_string(t.path().join(PLUGINS_DIR).join("bare/plugin.toml")).unwrap());
+        assert_eq!((bare.error.clone(), &bare.settings["n"], bare.fields.len()), (None, &json!(3), 1), "{}", std::fs::read_to_string(crate::state_dir::join(t.path(), PLUGINS_DIR).join("bare/plugin.toml")).unwrap());
     }
 
     #[test]
@@ -1412,9 +1412,9 @@ mod tests {
         let p = list(t.path()).remove(0);
         assert_eq!(p.settings["accounts"], json!([{ "name": "me@uni.example.org", "user": "me", "port": 993 }, { "name": "home", "port": 143 }]));
         // the cards are in the vault's settings file, not the manifest: an update replaces the manifest, they stay
-        let file = std::fs::read_to_string(t.path().join(SETTINGS_DIR).join("mail.toml")).unwrap();
+        let file = std::fs::read_to_string(crate::state_dir::join(t.path(), SETTINGS_DIR).join("mail.toml")).unwrap();
         assert!(file.contains("[[accounts]]") && !file.contains("pw"), "{file}");
-        assert!(!std::fs::read_to_string(t.path().join(PLUGINS_DIR).join("mail/plugin.toml")).unwrap().contains("[settings"));
+        assert!(!std::fs::read_to_string(crate::state_dir::join(t.path(), PLUGINS_DIR).join("mail/plugin.toml")).unwrap().contains("[settings"));
         plugin(t.path(), "mail", &format!("# v2\n{manifest}"));
         assert_eq!(list(t.path()).remove(0).settings["accounts"].as_array().map(Vec::len), Some(2));
         // renamed: its secret follows it, nothing is forgotten, and the plugin is told
@@ -1422,7 +1422,7 @@ mod tests {
         assert_eq!(renamed, vec![("accounts".to_string(), "me@uni.example.org".to_string(), "uni".to_string())]);
         assert_eq!(store.get("mail", "accounts.uni.password").unwrap().as_deref(), Some("pw"));
         assert_eq!(store.get("mail", "accounts.me@uni.example.org.password").unwrap(), None);
-        assert!(!std::fs::read_to_string(t.path().join(SETTINGS_DIR).join("mail.toml")).unwrap().contains("renamed_from"));
+        assert!(!std::fs::read_to_string(crate::state_dir::join(t.path(), SETTINGS_DIR).join("mail.toml")).unwrap().contains("renamed_from"));
         // renamed back with a new password typed in the same save: the new one stays, not the one moved with the card
         save_settings(t.path(), &store, "mail", json!({ "accounts": [{ "name": "me@uni.example.org", "renamed_from": "uni", "user": "me", "password": "pw2" }, { "name": "home", "port": 143 }] }).as_object().unwrap()).unwrap();
         assert_eq!(store.get("mail", "accounts.me@uni.example.org.password").unwrap().as_deref(), Some("pw2"));
@@ -1444,8 +1444,8 @@ mod tests {
         save_settings(t.path(), &crate::secrets::Store::in_dir(sdir.path(), t.path()), "runs", json!({ "dir": "runs" }).as_object().unwrap()).unwrap();
         let p = list(t.path()).remove(0);
         assert_eq!((&p.settings["dir"], &p.settings["free"]), (&json!("runs"), &json!(7)));
-        assert!(!std::fs::read_to_string(t.path().join(PLUGINS_DIR).join("runs/plugin.toml")).unwrap().contains("[settings]"));
-        let file = std::fs::read_to_string(t.path().join(SETTINGS_DIR).join("runs.toml")).unwrap();
+        assert!(!std::fs::read_to_string(crate::state_dir::join(t.path(), PLUGINS_DIR).join("runs/plugin.toml")).unwrap().contains("[settings]"));
+        let file = std::fs::read_to_string(crate::state_dir::join(t.path(), SETTINGS_DIR).join("runs.toml")).unwrap();
         assert!(file.starts_with("# Settings of the plugin runs") && file.contains("dir = \"runs\"") && file.contains("free = 7"), "{file}");
     }
 
@@ -1455,32 +1455,32 @@ mod tests {
     fn keys_sent_as_null_leave_the_settings_file_even_when_they_came_from_the_manifest() {
         let t = tempfile::tempdir().unwrap();
         plugin(t.path(), "mail", "title = \"Mail\"\n[settings]\nauth = \"outlook\"\nuser = \"me\"\nfolder = \"notes/mail\" # kept\n\n[[setting]]\nkey = \"accounts\"\nkind = \"records\"\nfields = [{ key = \"user\", kind = \"text\" }]\n\n[[setting]]\nkey = \"folder\"\nkind = \"text\"\n");
-        std::fs::create_dir_all(t.path().join(SETTINGS_DIR)).unwrap();
-        std::fs::write(t.path().join(SETTINGS_DIR).join("mail.toml"), "").unwrap();
+        std::fs::create_dir_all(crate::state_dir::join(t.path(), SETTINGS_DIR)).unwrap();
+        std::fs::write(crate::state_dir::join(t.path(), SETTINGS_DIR).join("mail.toml"), "").unwrap();
         let sdir = tempfile::tempdir().unwrap();
         save_settings(t.path(), &crate::secrets::Store::in_dir(sdir.path(), t.path()), "mail", json!({ "accounts": [{ "name": "uni", "user": "me" }], "auth": null, "user": null }).as_object().unwrap()).unwrap();
-        let file = std::fs::read_to_string(t.path().join(SETTINGS_DIR).join("mail.toml")).unwrap();
+        let file = std::fs::read_to_string(crate::state_dir::join(t.path(), SETTINGS_DIR).join("mail.toml")).unwrap();
         assert!(!file.contains("auth =") && !file.contains("\nuser = \"me\"\n\n") && file.contains("folder = \"notes/mail\" # kept") && file.contains("[[accounts]]"), "{file}");
     }
 
     #[test]
-    fn a_plugin_that_needs_a_newer_atlas_is_listed_with_the_reason_and_not_loaded() {
+    fn a_plugin_that_needs_a_newer_kandinsky_is_listed_with_the_reason_and_not_loaded() {
         let m = |extra: &str| toml::from_str::<Manifest>(&format!("title = \"T\"\n{extra}")).unwrap();
         assert_eq!(too_old_for(&m(""), "0.1.0"), None);
         assert_eq!(too_old_for(&m("needs = \">=0.1\""), "0.1.0"), None);
         assert_eq!(too_old_for(&m("needs = \"0.1.0\"\napi = 4"), "0.1.0"), None);
-        assert!(too_old_for(&m("needs = \">= 0.10\""), "0.9.3").unwrap().contains("needs Atlas 0.10"), "10 is more than 9: numbers, not text");
+        assert!(too_old_for(&m("needs = \">= 0.10\""), "0.9.3").unwrap().contains("needs Kandinsky 0.10"), "10 is more than 9: numbers, not text");
         assert!(too_old_for(&m("api = 99"), "0.1.0").unwrap().contains("API 99"));
         let t = tempfile::tempdir().unwrap();
         plugin(t.path(), "future", "title = \"From the future\"\nneeds = \">=99.0\"\n");
-        std::fs::write(t.path().join(PLUGINS_DIR).join("future/main.js"), "").unwrap();
+        std::fs::write(crate::state_dir::join(t.path(), PLUGINS_DIR).join("future/main.js"), "").unwrap();
         let p = list(t.path()).remove(0);
         assert_eq!((p.title.as_str(), p.main), ("From the future", None), "named, not loaded");
-        assert!(p.error.unwrap().contains("needs Atlas 99.0"));
+        assert!(p.error.unwrap().contains("needs Kandinsky 99.0"));
         // a key added by a later API is unknown here: the reason is the API, not the parser's complaint
         plugin(t.path(), "future", "title = \"F\"\napi = 99\n[helper]\nrun = \"true\"\nlater = 1\n");
         let e = list(t.path()).remove(0).error.unwrap();
-        assert!(e.contains("plugin API 99") && e.contains("update Atlas"), "{e}");
+        assert!(e.contains("plugin API 99") && e.contains("update Kandinsky"), "{e}");
     }
 
     #[tokio::test]
@@ -1489,10 +1489,10 @@ mod tests {
         plugin(
             t.path(),
             "echo",
-            "title = \"Echo\"\ndata = \"python3 \\\"$ATLAS_PLUGIN_DIR/echo.py\\\"\"\n[settings]\nk = 2\n",
+            "title = \"Echo\"\ndata = \"python3 \\\"$KANDINSKY_PLUGIN_DIR/echo.py\\\"\"\n[settings]\nk = 2\n",
         );
-        let script = "import json,os,sys\nd = json.load(sys.stdin)\nprint(json.dumps([d, os.path.basename(os.environ['ATLAS_PLUGIN_DIR'])]))\n";
-        std::fs::write(t.path().join(PLUGINS_DIR).join("echo/echo.py"), script).unwrap();
+        let script = "import json,os,sys\nd = json.load(sys.stdin)\nprint(json.dumps([d, os.path.basename(os.environ['KANDINSKY_PLUGIN_DIR'])]))\n";
+        std::fs::write(crate::state_dir::join(t.path(), PLUGINS_DIR).join("echo/echo.py"), script).unwrap();
         let v = data(t.path(), "echo", json!({ "q": "x" })).await.unwrap();
         assert_eq!(v, json!([{ "settings": { "k": 2 }, "args": { "q": "x" } }, "echo"]));
         assert!(data(t.path(), "../etc", json!({})).await.is_err());
@@ -1523,16 +1523,16 @@ mod tests {
     #[test]
     fn an_old_rail_switch_becomes_the_vaults_hidden_apps_and_leaves_the_settings_file() {
         let t = tempfile::tempdir().unwrap();
-        let dir = t.path().join(SETTINGS_DIR);
+        let dir = crate::state_dir::join(t.path(), SETTINGS_DIR);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::create_dir_all(t.path().join(".atlas")).unwrap();
-        std::fs::write(t.path().join(crate::config::CONFIG_FILE), "# mine\n[ui]\ntheme = \"light\"\n").unwrap();
+        std::fs::create_dir_all(t.path().join(".kandinsky")).unwrap();
+        std::fs::write(crate::state_dir::join(t.path(), crate::config::CONFIG_FILE), "# mine\n[ui]\ntheme = \"light\"\n").unwrap();
         std::fs::write(dir.join("catalog.toml"), "# this vault's library is References\nrail = false\non_capture = true\n").unwrap();
         std::fs::write(dir.join("email.toml"), "rail = true\n").unwrap();
         hide_legacy_rails(t.path());
         let cfg = crate::config::Config::load(t.path()).unwrap();
         assert_eq!((cfg.ui.apps_hidden, cfg.ui.theme), (vec!["catalog".to_string()], crate::config::Theme::Light));
-        let config = std::fs::read_to_string(t.path().join(crate::config::CONFIG_FILE)).unwrap();
+        let config = std::fs::read_to_string(crate::state_dir::join(t.path(), crate::config::CONFIG_FILE)).unwrap();
         assert!(config.starts_with("# mine\n"), "comments kept: {config}");
         let catalog = std::fs::read_to_string(dir.join("catalog.toml")).unwrap();
         assert!(!catalog.contains("rail") && catalog.contains("on_capture = true"), "{catalog}");
@@ -1601,8 +1601,8 @@ mod tests {
         let kind = |c: &serde_json::Map<String, Value>| c["refs"]["kinds"][0].clone();
         let c = contributions(t.path(), &[], "catalog").unwrap();
         assert_eq!((kind(&c)["folder"].as_str(), kind(&c)["note_name"].as_str(), kind(&c)["other"].as_str()), (Some("refs/papers"), Some("{citekey}/{citekey}"), Some("{setting:none}")));
-        std::fs::create_dir_all(t.path().join(SETTINGS_DIR)).unwrap();
-        std::fs::write(t.path().join(SETTINGS_DIR).join("refs.toml"), "dir = \"papers\"\n").unwrap();
+        std::fs::create_dir_all(crate::state_dir::join(t.path(), SETTINGS_DIR)).unwrap();
+        std::fs::write(crate::state_dir::join(t.path(), SETTINGS_DIR).join("refs.toml"), "dir = \"papers\"\n").unwrap();
         assert_eq!(kind(&contributions(t.path(), &[], "catalog").unwrap())["folder"], "papers");
     }
 

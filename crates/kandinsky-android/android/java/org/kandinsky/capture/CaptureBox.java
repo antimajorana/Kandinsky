@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Activity;
 import android.content.ClipData;
@@ -57,7 +57,7 @@ final class CaptureBox extends android.content.ContextWrapper {
     private EditText edit;
     private TextView status;
     private LinearLayout list, shots;
-    /** The vault list's "Send to an Atlas server…": vaults found on the phone go in just above it. */
+    /** The vault list's "Send to an Kandinsky server…": vaults found on the phone go in just above it. */
     private View foundBefore;
     private Flow guides;
     private Flow chips;
@@ -570,7 +570,7 @@ final class CaptureBox extends android.content.ContextWrapper {
         // one row of tools a finger hits (48 dp each): the four forms insert their start, then a photo and a drawing.
         // Icons, not the code chips and words they replaced: those took two rows and a tile of their own for Draw.
         guides = new Flow(this, look.dp(2), 0);
-        // {shown, starts, what}: atlas_core::capture::GUIDES (atlas-capture's tests compare)
+        // {shown, starts, what}: kandinsky_core::capture::GUIDES (kandinsky-capture's tests compare)
         String[][] forms = {{"[]", "[] ", "to-do"}, {"@fri", "@", "date"}, {"[[", "[[", "link"}, {"#", "#", "tag"}};
         String[] icons = {"check", "calendar", "link", "tag"};
         for (int k = 0; k < forms.length; k++) {
@@ -682,7 +682,7 @@ final class CaptureBox extends android.content.ContextWrapper {
         } else {
             VaultChoice.find(this::addFound);
         }
-        foundBefore = row("server", "Send to an Atlas server…", "", v -> { Activity a = activity(Then.SERVER); if (a != null) VaultChoice.askServer(a, look, vaults, this::choose); });
+        foundBefore = row("server", "Send to an Kandinsky server…", "", v -> { Activity a = activity(Then.SERVER); if (a != null) VaultChoice.askServer(a, look, vaults, this::choose); });
         list.addView(foundBefore, lp(-1, look.dp(48), 0, 0, 0, 0)); // a row a finger hits: 48 dp
         list.addView(row("plus", "Keep captures in the app", "", v -> choose(VaultChoice.inApp(this))), lp(-1, look.dp(48), 0, 0, 0, 0)); // a row a finger hits: 48 dp
         list.setVisibility(View.VISIBLE);
@@ -868,7 +868,7 @@ final class CaptureBox extends android.content.ContextWrapper {
             saving = false;
             status.setVisibility(View.VISIBLE);
             status.setTextColor(look.red);
-            status.setText("Not saved: Atlas may not write in " + Vaults.name(to) + " — allow \"All files access\", then save again");
+            status.setText("Not saved: Kandinsky may not write in " + Vaults.name(to) + " — allow \"All files access\", then save again");
             askStorage();
             return;
         }
@@ -991,7 +991,7 @@ final class CaptureBox extends android.content.ContextWrapper {
                 status.setTextColor(look.red);
                 String why = o.getString("error");
                 boolean denied = why.toLowerCase(java.util.Locale.ROOT).contains("permission denied") && !VaultChoice.canWriteStorage(this);
-                status.setText("Not saved: " + (denied ? "Atlas may not write in this folder — allow \"All files access\", then save again" : why));
+                status.setText("Not saved: " + (denied ? "Kandinsky may not write in this folder — allow \"All files access\", then save again" : why));
                 if (denied) askStorage();
                 return;
             }
@@ -1064,7 +1064,7 @@ final class CaptureBox extends android.content.ContextWrapper {
         // text selected in another app (its selection menu): a quote, as the desktop box's selection chip
         if (Intent.ACTION_PROCESS_TEXT.equals(i.getAction())) return orNull(Core.shareQuote(text(i.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT))));
         if (!Intent.ACTION_SEND.equals(i.getAction())) return null;
-        // the core takes the share-tracking parameters off every capture (atlas_text::links)
+        // the core takes the share-tracking parameters off every capture (kandinsky_text::links)
         return orNull(Core.shareText(text(i.getStringExtra(Intent.EXTRA_SUBJECT)), text(i.getCharSequenceExtra(Intent.EXTRA_TEXT))));
     }
 

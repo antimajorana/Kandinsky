@@ -13,8 +13,8 @@ test("a PDF is dragged with the mouse: left button on its blank parts, middle bu
   writeFileSync(join(WS, pdf), textPdf([1, 2, 3].map((n) => ({ lines: [`Page ${n}`] }))));
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await page.evaluate((p) => (window as unknown as { __atlas: { open(p: string): void } }).__atlas.open(p), pdf);
-  const viewer = page.locator(".atlas-pane-pdf .viewer-container").first();
+  await page.evaluate((p) => (window as unknown as { __kandinsky: { open(p: string): void } }).__kandinsky.open(p), pdf);
+  const viewer = page.locator(".kandinsky-pane-pdf .viewer-container").first();
   await expect(viewer.locator(".page").first()).toBeVisible({ timeout: 15_000 });
   const room = await viewer.evaluate((el) => el.scrollHeight - el.clientHeight);
   test.skip(room < 300, "the PDF is too short to drag");

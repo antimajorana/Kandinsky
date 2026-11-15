@@ -4,11 +4,11 @@ const { compressToBase64 } = lz;
 
 // The vault's libraries in one page (docs/design/DESIGN-libraries-everywhere.md): the Drawings library lists
 // every drawing — not a file's ink — with its note's properties as the filters, and draws each one's first page.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (page: Page, path: string, text: string) => page.request.put("/api/file", { headers: H, data: { path, text } });
 const rect = (id: string, x: number, frameId: string | null = null) => ({ id, type: "rectangle", x, y: 40, width: 200, height: 120, angle: 0, strokeColor: "#1e1e1e", backgroundColor: "transparent", fillStyle: "solid", strokeWidth: 2, strokeStyle: "solid", roughness: 0, opacity: 100, groupIds: [], frameId, roundness: null, seed: 1, version: 1, versionNonce: 1, isDeleted: false, boundElements: null, updated: 1, link: null, locked: false });
 const frame = (id: string, x: number) => ({ ...rect(id, x), type: "frame", y: 0, width: 794, height: 1123, name: null });
-const scene = (elements: unknown[]) => JSON.stringify({ type: "excalidraw", version: 2, source: "atlas", elements, appState: { viewBackgroundColor: "#ffffff" }, files: {} });
+const scene = (elements: unknown[]) => JSON.stringify({ type: "excalidraw", version: 2, source: "kandinsky", elements, appState: { viewBackgroundColor: "#ffffff" }, files: {} });
 
 test("the Drawings library: every drawing with its note's properties as filters, its first page as the cover", async ({ page }) => {
   await put(page, "libs/sketch.excalidraw", scene([rect("a", 0)]));

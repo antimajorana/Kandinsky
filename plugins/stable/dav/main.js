@@ -1,18 +1,18 @@
 import { C as e, D as t, E as n, F as r, G as i, H as a, J as o, K as s, N as c, P as l, V as u, X as d, Y as f, Z as p, _t as m, a as h, at as g, bt as _, ct as v, d as y, dt as b, et as x, ft as S, g as C, ht as w, i as T, l as E, lt as D, m as O, mt as k, pt as A, q as j, r as M, rt as N, s as P, tt as F, u as I, ut as L, vt as R, x as z, y as B, z as V } from "./ui-lib/layout.js";
 //#region plugins/stable/dav/ui/src/Upcoming.svelte
-var H = p("<div class=\"atlas-notice error\"> <div class=\"actions\"><button class=\"atlas-btn\">Settings…</button></div></div>"), U = p("<div class=\"atlas-empty\">Reading the calendar…</div>"), W = p("<div class=\"atlas-empty\">Nothing.</div>"), G = p("<button class=\"ev svelte-10ncuqf\"><span class=\"bar svelte-10ncuqf\" aria-hidden=\"true\"></span> <span class=\"t svelte-10ncuqf\"> </span> <span class=\"s svelte-10ncuqf\"> </span></button>"), ee = p("<button class=\"more svelte-10ncuqf\"> </button>"), te = p("<section class=\"svelte-10ncuqf\"><button class=\"day svelte-10ncuqf\"> </button> <!> <!> <!></section>"), ne = p("<div class=\"up svelte-10ncuqf\"><!></div>"), re = {
+var H = p("<div class=\"kandinsky-notice error\"> <div class=\"actions\"><button class=\"kandinsky-btn\">Settings…</button></div></div>"), U = p("<div class=\"kandinsky-empty\">Reading the calendar…</div>"), W = p("<div class=\"kandinsky-empty\">Nothing.</div>"), G = p("<button class=\"ev svelte-10ncuqf\"><span class=\"bar svelte-10ncuqf\" aria-hidden=\"true\"></span> <span class=\"t svelte-10ncuqf\"> </span> <span class=\"s svelte-10ncuqf\"> </span></button>"), ee = p("<button class=\"more svelte-10ncuqf\"> </button>"), te = p("<section class=\"svelte-10ncuqf\"><button class=\"day svelte-10ncuqf\"> </button> <!> <!> <!></section>"), ne = p("<div class=\"up svelte-10ncuqf\"><!></div>"), re = {
 	hash: "svelte-10ncuqf",
 	code: ".up.svelte-10ncuqf {display:grid;gap:8px;container-type:inline-size;}section.svelte-10ncuqf {display:grid;gap:1px;}.day.svelte-10ncuqf {all:unset;cursor:pointer;font-size:0.75em;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-faint);font-weight:600;padding:2px 0;}.day.svelte-10ncuqf:hover {color:var(--text);}.ev.svelte-10ncuqf, .more.svelte-10ncuqf {all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:8px;padding:3px 6px;border-radius:var(--radius-sm);min-width:0;}.ev.svelte-10ncuqf:hover, .more.svelte-10ncuqf:hover {background:var(--bg-hover);}.ev.svelte-10ncuqf:focus-visible, .day.svelte-10ncuqf:focus-visible, .more.svelte-10ncuqf:focus-visible {outline:2px solid var(--accent);outline-offset:-1px;}.bar.svelte-10ncuqf {width:3px;align-self:stretch;border-radius:2px;background:var(--c);flex:none;}.t.svelte-10ncuqf {width:4.6em;flex:none;color:var(--text-muted);font-variant-numeric:tabular-nums;font-size:0.9em;}.s.svelte-10ncuqf {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.more.svelte-10ncuqf {color:var(--text-muted);font-size:0.85em;}"
 };
 function K(r, o) {
 	R(o, !0), u(r, re);
-	let s = k(S([])), c = k(""), p = k(!1), y = Math.max(1, Math.min(31, Number(o.options.days ?? 7) || 7)), x = z(/* @__PURE__ */ new Date()), T = w(() => I(o.atlas.plugin.settings.time_format));
+	let s = k(S([])), c = k(""), p = k(!1), y = Math.max(1, Math.min(31, Number(o.options.days ?? 7) || 7)), x = z(/* @__PURE__ */ new Date()), T = w(() => I(o.kandinsky.plugin.settings.time_format));
 	async function O() {
 		try {
-			let e = await P(o.atlas, "range", {
+			let e = await P(o.kandinsky, "range", {
 				from: n(x),
 				to: n(h(x, y - 1)),
-				notes: o.atlas.plugin.settings.show_notes !== !1
+				notes: o.kandinsky.plugin.settings.show_notes !== !1
 			}, 30);
 			A(s, e.events, !0), A(c, "");
 		} catch (e) {
@@ -21,8 +21,8 @@ function K(r, o) {
 		A(p, !0);
 	}
 	t(() => {
-		O(), P(o.atlas, "watch", {}, 30).then(O, () => {});
-		let e, t = o.atlas.helper.on("changed", () => {
+		O(), P(o.kandinsky, "watch", {}, 30).then(O, () => {});
+		let e, t = o.kandinsky.helper.on("changed", () => {
 			clearTimeout(e), e = setTimeout(() => void O(), 250);
 		});
 		return () => {
@@ -39,11 +39,11 @@ function K(r, o) {
 	});
 	function J(e, t) {
 		let r = e ? C(e) : null;
-		r ? o.atlas.open(r) : o.onopen(n(t));
+		r ? o.kandinsky.open(r) : o.onopen(n(t));
 	}
 	var Y = ne(), X = v(Y), Z = (e) => {
 		var t = H(), n = v(t, !0), r = b(n), i = L(r);
-		_(t), g(() => j(n, N(c))), F("click", i, () => o.atlas.plugin.openSettings()), f(e, t);
+		_(t), g(() => j(n, N(c))), F("click", i, () => o.kandinsky.plugin.openSettings()), f(e, t);
 	}, Q = (e) => {
 		var t = U();
 		f(e, t);
@@ -176,11 +176,11 @@ var oe = (e = /* @__PURE__ */ new Date()) => `${e.getFullYear()}-${String(e.getM
 //#region plugins/stable/dav/ui/src/main.ts
 function se(e) {
 	let t = () => e.plugin.settings.accounts ?? [], n = () => t().some((e) => e.name && e.user && (e.url || e.server === "exchange")) || !!(e.plugin.settings.url && e.plugin.settings.user), r = (t = {}) => {
-		window.__atlasCalendarShow = t, e.openView(void 0, {
+		window.__kandinskyCalendarShow = t, e.openView(void 0, {
 			title: "Calendar",
 			icon: "calendar"
 		}), setTimeout(() => {
-			window.dispatchEvent(new CustomEvent("atlas-calendar:show", { detail: t })), window.__atlasCalendarShow = void 0;
+			window.dispatchEvent(new CustomEvent("kandinsky-calendar:show", { detail: t })), window.__kandinskyCalendarShow = void 0;
 		}, 300);
 	};
 	e.registerCommand({
@@ -202,14 +202,16 @@ function se(e) {
 			width: 640,
 			height: 560
 		}) : r({ create: !0 })
-	}), window.addEventListener("atlas-calendar:new", (t) => {
-		let { ack: n, ...i } = t.detail ?? {};
-		n && window.dispatchEvent(new CustomEvent("atlas-calendar:heard")), typeof e.openDialog == "function" ? e.openDialog(O(i), {
-			title: i.guests?.length ? "New meeting" : "New event",
+	});
+	for (let t of ["kandinsky-calendar", "atlas-calendar"]) window.addEventListener(`${t}:new`, (n) => {
+		let { ack: i, ...a } = n.detail ?? {};
+		i && window.dispatchEvent(new CustomEvent(`${t}:heard`)), typeof e.openDialog == "function" ? e.openDialog(O(a), {
+			title: a.guests?.length ? "New meeting" : "New event",
 			width: 640,
 			height: 600
 		}) : r({ create: !0 });
-	}), e.registerCommand({
+	});
+	e.registerCommand({
 		id: "quick",
 		title: "Calendar: quick add (in words)…",
 		run: () => r({ quick: !0 })
@@ -299,7 +301,7 @@ function se(e) {
 		let i = s(K, {
 			target: t,
 			props: {
-				atlas: e,
+				kandinsky: e,
 				options: n.options ?? {},
 				onopen: (e) => r({
 					date: e,

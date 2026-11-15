@@ -9,11 +9,11 @@
 	};
 	/** A CUPS program's output, in English whatever the machine's language (the words are read here). */
 	async function cups(program, args) {
-		const r = await atlas.exec(program, args, {
+		const r = await kandinsky.exec(program, args, {
 			locale: "C",
 			timeout: 60
 		}).catch((e) => {
-			throw new Error(/not installed/.test(e.message) ? `${program} is not installed on the machine running Atlas (CUPS)` : e.message);
+			throw new Error(/not installed/.test(e.message) ? `${program} is not installed on the machine running Kandinsky (CUPS)` : e.message);
 		});
 		if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim() || `${program} failed (${r.status ?? "killed"})`);
 		return r.stdout;
@@ -31,7 +31,7 @@
 	/** A note's PDF, made by the plugin that is the vault's PDF export (role `pdf-export`: Export) with its own saved
 	*  settings (the core puts them in); its vault path. */
 	async function asPdf(path) {
-		const r = await atlas.post("/api/plugins/@pdf-export/helper", {
+		const r = await kandinsky.post("/api/plugins/@pdf-export/helper", {
 			method: "export",
 			params: {
 				path,
@@ -83,7 +83,7 @@
 			printer: printer || "the default printer"
 		};
 	}
-	atlas.methods({
+	kandinsky.methods({
 		printers,
 		prepare,
 		print

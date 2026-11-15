@@ -19,13 +19,13 @@ body:
     attributes:
       label: Where
       multiple: true
-      options: [Desktop app, Browser (atlas serve), Server (Docker), Android app, Quick capture, A plugin]
+      options: [Desktop app, Browser (kandinsky serve), Server (Docker), Android app, Quick capture, A plugin]
     validations: { required: true }
   - type: input
     id: version
     attributes:
       label: Version
-      description: "`atlas --version`, or the commit"
+      description: "`kandinsky --version`, or the commit"
     validations: { required: true }
   - type: input
     id: os
@@ -36,5 +36,5 @@ body:
     id: logs
     attributes:
       label: Logs or screenshots
-      description: The terminal Atlas was started from, or the browser console. Remove anything private first.
+      description: The terminal Kandinsky was started from, or the browser console. Remove anything private first.
       render: text

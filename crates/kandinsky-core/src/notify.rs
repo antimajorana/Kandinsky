@@ -23,7 +23,7 @@ pub fn shown(mode: SystemNotices, n: &Notice, looked_at: bool, muted: bool) -> b
 }
 
 /// The pages of this process and whether each is looked at, as they report it on their event socket (`seen`). Kept
-/// per process, not per vault: a focused window of one vault means the person is looking at Atlas.
+/// per process, not per vault: a focused window of one vault means the person is looking at Kandinsky.
 #[derive(Default)]
 pub struct Presence {
     pages: Mutex<HashMap<u64, bool>>,
@@ -109,12 +109,12 @@ pub struct LogNotifier {
 impl Notifier for LogNotifier {
     fn show(&self, n: &Notice, replaces: Option<u32>, _stay: Stay) -> Result<u32, String> {
         let handle = replaces.unwrap_or_else(|| self.next.fetch_add(1, Ordering::Relaxed) as u32 + 1);
-        eprintln!("atlas: notice{}: {}{}", n.source.as_deref().map(|s| format!(" ({s})")).unwrap_or_default(), n.title, n.body.as_deref().map(|b| format!(" — {b}")).unwrap_or_default());
+        eprintln!("kandinsky: notice{}: {}{}", n.source.as_deref().map(|s| format!(" ({s})")).unwrap_or_default(), n.title, n.body.as_deref().map(|b| format!(" — {b}")).unwrap_or_default());
         Ok(handle)
     }
 }
 
-/// A click on one of Atlas's system notifications: the desktop shell brings its window forward (shell.rs; rebuilt
+/// A click on one of Kandinsky's system notifications: the desktop shell brings its window forward (shell.rs; rebuilt
 /// with `open` if it was asleep), and a live page opens the note from the `Open` event the notifier publishes.
 #[cfg_attr(not(any(windows, all(target_os = "linux", not(target_os = "android")))), allow(dead_code))]
 fn clicked(open: Option<String>) {
@@ -159,16 +159,16 @@ type MakeNotifier = Box<dyn Fn() -> Box<dyn Notifier> + Send + Sync>;
 static SHELL_NOTIFIER: std::sync::OnceLock<MakeNotifier> = std::sync::OnceLock::new();
 
 /// A shell that reaches the system itself gives its notifier here, before the first vault is served: the phone, whose
-/// notifications are Java's (atlas-android, `notices.rs`).
+/// notifications are Java's (kandinsky-android, `notices.rs`).
 pub fn set_platform(make: impl Fn() -> Box<dyn Notifier> + Send + Sync + 'static) {
     let _ = SHELL_NOTIFIER.set(Box::new(make));
 }
 
 /// The platform's notifier: the shell's own if it gave one; the desktop's notification server on Linux, toasts on
 /// Windows (a click publishes `Open` for the notice's note on `bus`); elsewhere, until its step of the design is
-/// built, the log. `ATLAS_NO_NOTIFY` (any value): the log only — a test's or a probe's core never reaches the desktop.
+/// built, the log. `KANDINSKY_NO_NOTIFY` (any value): the log only — a test's or a probe's core never reaches the desktop.
 pub fn platform(bus: &EventBus) -> Box<dyn Notifier> {
-    if std::env::var_os("ATLAS_NO_NOTIFY").is_some() {
+    if crate::env::var_os("NO_NOTIFY").is_some() {
         return Box::new(LogNotifier { next: AtomicU64::new(0) });
     }
     if let Some(make) = SHELL_NOTIFIER.get() {
@@ -177,12 +177,12 @@ pub fn platform(bus: &EventBus) -> Box<dyn Notifier> {
     #[cfg(all(target_os = "linux", not(target_os = "android")))]
     match linux::DBus::connect(bus.clone()) {
         Ok(n) => return Box::new(n),
-        Err(e) => eprintln!("atlas: no system notifications (the session's notification server: {e}); notices go to the log"),
+        Err(e) => eprintln!("kandinsky: no system notifications (the session's notification server: {e}); notices go to the log"),
     }
     #[cfg(windows)]
     match toast::Toasts::open(bus.clone()) {
         Ok(n) => return Box::new(n),
-        Err(e) => eprintln!("atlas: no system notifications (Windows toasts: {e}); notices go to the log"),
+        Err(e) => eprintln!("kandinsky: no system notifications (Windows toasts: {e}); notices go to the log"),
     }
     let _ = bus;
     Box::new(LogNotifier { next: AtomicU64::new(0) })
@@ -229,7 +229,7 @@ mod linux {
             Self::on(zbus::blocking::Connection::session().map_err(|e| e.to_string())?, bus)
         }
 
-        /// Follows `ActionInvoked` on `conn`: a click on one of ours brings Atlas forward and opens its note.
+        /// Follows `ActionInvoked` on `conn`: a click on one of ours brings Kandinsky forward and opens its note.
         pub fn on(conn: zbus::blocking::Connection, bus: EventBus) -> Result<Self, String> {
             let opens: Arc<Mutex<HashMap<u32, Option<String>>>> = Arc::default();
             let rule = zbus::MatchRule::builder()
@@ -241,7 +241,7 @@ mod linux {
             let signals = zbus::blocking::MessageIterator::for_match_rule(rule, &conn, None).map_err(|e| e.to_string())?;
             let clicked = opens.clone();
             std::thread::Builder::new()
-                .name("atlas-notify-clicks".into())
+                .name("kandinsky-notify-clicks".into())
                 .spawn(move || {
                     for msg in signals.flatten() {
                         let Ok((id, _action)) = msg.body().deserialize::<(u32, String)>() else { continue };
@@ -262,7 +262,7 @@ mod linux {
     impl Notifier for DBus {
         fn show(&self, n: &Notice, replaces: Option<u32>, stay: Stay) -> Result<u32, String> {
             let body = if self.markup { as_markup_text(&super::body_of(n)) } else { super::body_of(n) };
-            // a click (`default`: the server's own click on the body) brings Atlas forward and opens a vault path
+            // a click (`default`: the server's own click on the body) brings Kandinsky forward and opens a vault path
             let open = super::opens(n);
             let actions = vec!["default", if open.is_some() { "Open" } else { "Show Kandinsky" }];
             // "critical" is what a server never puts away by itself (and shows over do-not-disturb): only for a failure
@@ -275,14 +275,14 @@ mod linux {
                 Stay::UntilDismissed => 0,
             };
             let mut hints: HashMap<&str, Value> = HashMap::new();
-            hints.insert("desktop-entry", Value::from("atlas"));
+            hints.insert("desktop-entry", Value::from("kandinsky"));
             hints.insert("urgency", Value::from(urgency));
             if let Some(source) = &n.source {
-                hints.insert("category", Value::from(format!("atlas.{source}")));
+                hints.insert("category", Value::from(format!("kandinsky.{source}")));
             }
             let reply = self
                 .conn
-                .call_method(Some(DEST), PATH, Some(DEST), "Notify", &("Kandinsky", replaces.unwrap_or(0), "atlas", n.title.as_str(), body.as_str(), actions, hints, expire))
+                .call_method(Some(DEST), PATH, Some(DEST), "Notify", &("Kandinsky", replaces.unwrap_or(0), "kandinsky", n.title.as_str(), body.as_str(), actions, hints, expire))
                 .map_err(|e| e.to_string())?;
             let id: u32 = reply.body().deserialize().map_err(|e| e.to_string())?;
             let mut opens = self.opens.lock().unwrap();
@@ -388,8 +388,12 @@ mod linux {
 }
 
 /// Windows toasts through WinRT. An app with no MSIX package has an identity only once this user's registry names it
-/// (`AppUserModelId\<id>`): done at start, needing no installer step, so a portable `atlas.exe` shows them too. The
+/// (`AppUserModelId\<id>`): done at start, needing no installer step, so a portable `kandinsky.exe` shows them too. The
 /// click is the toast's `Activated` event, which needs the process alive; the core is, as long as a vault is served.
+/// The same as the Tauri bundle's identifier (crates/kandinsky-app/tauri.conf.json), so Windows groups the toasts under
+/// one app; the WebView's data folder is named by it too (`platform::dirs_migrate` moves the one of the old identifier).
+pub const APP_ID: &str = "dev.kandinsky.app";
+
 #[cfg(windows)]
 mod toast {
     use super::{Notice, Notifier, Stay};
@@ -402,8 +406,7 @@ mod toast {
     use windows::Foundation::TypedEventHandler;
     use windows::UI::Notifications::{ToastNotification, ToastNotificationManager, ToastNotifier, ToastTemplateType};
 
-    /// The same as the Tauri bundle's identifier, so Windows groups the toasts under one app.
-    const APP_ID: &str = "dev.atlas.app";
+    use super::APP_ID;
     /// A tag or a group is at most 16 characters on older Windows (64 since 1703): a longer one is accepted when set
     /// and refused when read back (CI's Windows Server). Sources are short (`sync`, a plugin's id).
     const GROUP_MAX: usize = 16;
@@ -463,7 +466,7 @@ mod toast {
         }
         let toast = ToastNotification::CreateToastNotification(&xml)?;
         toast.SetTag(&HSTRING::from(handle.to_string()))?;
-        let group: String = n.source.as_deref().unwrap_or("atlas").chars().take(GROUP_MAX).collect();
+        let group: String = n.source.as_deref().unwrap_or("kandinsky").chars().take(GROUP_MAX).collect();
         toast.SetGroup(&HSTRING::from(group))?;
         Ok(toast)
     }
@@ -490,7 +493,7 @@ mod toast {
         let mut named = set("DisplayName", "Kandinsky");
         match icon() {
             Ok(file) => named = named.and(set("IconUri", &file.to_string_lossy())),
-            Err(e) => eprintln!("atlas: toasts without the icon: {e}"), // the toast still shows
+            Err(e) => eprintln!("kandinsky: toasts without the icon: {e}"), // the toast still shows
         }
         // SAFETY: opened above, closed once
         unsafe { RegCloseKey(key) };
@@ -499,7 +502,7 @@ mod toast {
 
     /// The icon as a file: Windows reads it from a path, and the program's own is inside the exe.
     fn icon() -> Result<std::path::PathBuf, String> {
-        let dir = crate::platform::dirs::atlas(crate::platform::dirs::Base::Cache);
+        let dir = crate::platform::dirs::app(crate::platform::dirs::Base::Cache);
         let file = dir.join("toast-icon.png");
         std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&file, include_bytes!("../../kandinsky-app/icons/128x128.png"))).map_err(|e| e.to_string())?;
         Ok(file)
@@ -552,7 +555,7 @@ impl Delivery {
                 true
             }
             Err(e) => {
-                eprintln!("atlas: system notification not shown ({}): {e}", n.title);
+                eprintln!("kandinsky: system notification not shown ({}): {e}", n.title);
                 false
             }
         }
@@ -680,8 +683,8 @@ mod tests {
         };
         bus.publish(crate::api::Event::Notify(Notice::new("nobody looks")));
         until(1).await;
-        std::fs::create_dir_all(dir.path().join(".atlas")).unwrap();
-        std::fs::write(dir.path().join(".atlas/config.toml"), "[notifications]\nsystem = \"failures\"\n").unwrap();
+        std::fs::create_dir_all(dir.path().join(".kandinsky")).unwrap();
+        std::fs::write(dir.path().join(".kandinsky/config.toml"), "[notifications]\nsystem = \"failures\"\n").unwrap();
         bus.publish(crate::api::Event::Notify(Notice::new("filed")));
         bus.publish(crate::api::Event::Notify(Notice::new("backup failed").level(NoticeLevel::Failure)));
         until(2).await;

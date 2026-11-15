@@ -29,7 +29,7 @@
 </script>
 
 <div class="side">
-  <button class="create atlas-btn primary" onclick={oncreate}><Icon name="plus" size={15} />Create</button>
+  <button class="create kandinsky-btn primary" onclick={oncreate}><Icon name="plus" size={15} />Create</button>
 
   <div class="mini" aria-label="Pick a day">
     <div class="mhead">
@@ -47,7 +47,7 @@
 
   {#if noAccount}
     <h3>Calendars</h3>
-    <ul><li class="none">{cal.configured ? (cal.error ? "Not read: see the message beside." : "Reading the server…") : "No account yet."}{#if !cal.configured}<button class="link" onclick={() => cal.atlas.plugin.openSettings()}>Set it up…</button>{/if}</li></ul>
+    <ul><li class="none">{cal.configured ? (cal.error ? "Not read: see the message beside." : "Reading the server…") : "No account yet."}{#if !cal.configured}<button class="link" onclick={() => cal.kandinsky.plugin.openSettings()}>Set it up…</button>{/if}</li></ul>
   {/if}
   {#each groups as g (g.title)}
     {#if g.items.length || (g.title !== "Subscriptions")}
@@ -86,7 +86,7 @@
       </li>
     </ul>
   {/if}
-  <button class="link add" onclick={() => cal.atlas.plugin.openSettings()}><Icon name="plus" size={13} />Add an account or a subscription…</button>
+  <button class="link add" onclick={() => cal.kandinsky.plugin.openSettings()}><Icon name="plus" size={13} />Add an account or a subscription…</button>
 </div>
 
 <style>

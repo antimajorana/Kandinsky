@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 // The tree without repetition (docs/design/DESIGN-shared-notes.md): a paper's folder is its note,
 // a mail's attachments folder, a PDF's ink and a `shown: false` note fold away; "Show hidden files" brings them back.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (request: import("@playwright/test").APIRequestContext, path: string, text: string) => request.put("/api/file", { headers: H, data: { path, text } });
 
 test("companions fold away, a folder with its own note opens it, the eye shows everything", async ({ page, request }) => {

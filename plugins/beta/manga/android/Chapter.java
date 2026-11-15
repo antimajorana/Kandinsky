@@ -1,6 +1,6 @@
-package org.atlas.plugins.manga;
+package org.kandinsky.plugins.manga;
 
-import org.atlas.capture.Host;
+import org.kandinsky.capture.Host;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -56,10 +56,10 @@ final class Chapter {
     byte[] page(int i) throws IOException {
         if (remote != null) return Suwayomi.page(host, path, i, remote.get(i));
         if (zip != null) {
-            try (InputStream in = zip.getInputStream(zip.getEntry(pages.get(i)))) { return org.atlas.capture.Bytes.all(in); }
+            try (InputStream in = zip.getInputStream(zip.getEntry(pages.get(i)))) { return org.kandinsky.capture.Bytes.all(in); }
         }
         String dir = path.endsWith("/") ? path : path + "/";
-        try (InputStream in = host.read(dir + pages.get(i))) { return org.atlas.capture.Bytes.all(in); }
+        try (InputStream in = host.read(dir + pages.get(i))) { return org.kandinsky.capture.Bytes.all(in); }
     }
 
     void close() { try { if (zip != null) zip.close(); } catch (IOException e) { /* closed */ } }

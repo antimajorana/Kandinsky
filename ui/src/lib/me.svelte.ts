@@ -1,4 +1,4 @@
-// Who this page is talking to (GET /api/auth/me), asked once and shared: `server` is true only under `atlas serve`
+// Who this page is talking to (GET /api/auth/me), asked once and shared: `server` is true only under `kandinsky serve`
 // (server mode). Settings shows its Server page only then.
 import { api } from "./api";
 import type { Me } from "./types";

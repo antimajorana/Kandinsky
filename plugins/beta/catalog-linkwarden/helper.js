@@ -34,10 +34,10 @@
 			name: props.title || url,
 			description: props.description || "",
 			tags: tags.map((name) => ({ name })),
-			collection: { name: options.collection || params.library || "Atlas" }
+			collection: { name: options.collection || params.library || "Kandinsky" }
 		};
-		const token = Boolean(await atlas.secret("token"));
-		const res = await atlas.fetchResponse({
+		const token = Boolean(await kandinsky.secret("token"));
+		const res = await kandinsky.fetchResponse({
 			url: `${base}/api/v1/links`,
 			method: "POST",
 			headers: {
@@ -55,11 +55,11 @@
 			fields: {},
 			already: true
 		};
-		if (!res.ok) throw new atlas.AtlasError(`Linkwarden answered ${res.status}: ${String(res.text ?? "").slice(0, 200)}`, res.status);
+		if (!res.ok) throw new kandinsky.KandinskyError(`Linkwarden answered ${res.status}: ${String(res.text ?? "").slice(0, 200)}`, res.status);
 		const id = JSON.parse(res.text || "{}").response?.id;
 		return { fields: id !== void 0 && id !== null ? { linkwarden: `${base}/links/${id}` } : {} };
 	}
-	atlas.methods({ save });
+	kandinsky.methods({ save });
 	//#endregion
 	exports.linkOf = linkOf;
 	return exports;

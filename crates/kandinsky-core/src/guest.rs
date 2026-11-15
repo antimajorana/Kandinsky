@@ -1,9 +1,9 @@
 //! A guest folder (docs/design/DESIGN-guest-folder.md): a folder that is not a vault, opened for a while in a window of
 //! its own with the opener vault's plugins, never remembered, and read-only until the window's Edit switch is on.
 //!
-//! The core finds a vault's state at `<root>/.atlas`; a guest's is kept out of the folder in this machine's cache
-//! (`~/.cache/atlas/guests/<hash>/.atlas`) and reached through one symlink, `<folder>/.atlas`, made when it opens and
-//! removed at the next start of the desktop's core ([`sweep`]). In that `.atlas`: `plugins` and `plugin-settings`
+//! The core finds a vault's state at `<root>/.kandinsky`; a guest's is kept out of the folder in this machine's cache
+//! (`~/.cache/kandinsky/guests/<hash>/.kandinsky`) and reached through one symlink, `<folder>/.kandinsky`, made when it opens and
+//! removed at the next start of the desktop's core ([`sweep`]). In that `.kandinsky`: `plugins` and `plugin-settings`
 //! link to the opener's (the same viewers and editors, the same settings), `config.toml` is the opener's with its
 //! schedules off, `guest.toml` says whose guest it is.
 use crate::vault_write::{self, outside, ContentHash, WriteGuard, WriteKind};
@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use ts_rs::TS;
 
 const MARK: &str = "guest.toml";
-/// Linked from the opener's `.atlas`, so a guest has its plugins and their settings.
+/// Linked from the opener's `.kandinsky`, so a guest has its plugins and their settings.
 const SHARED: [&str; 2] = ["plugins", "plugin-settings"];
 
 /// `GET /api/guest`: what this window shows when it is a guest (`null` for a vault).
@@ -41,7 +41,7 @@ pub struct GuestEdit {
 /// Why a folder cannot be opened as a guest.
 #[derive(Debug)]
 pub enum Refused {
-    /// It has an `.atlas/` of its own: a vault, opened as one.
+    /// It has an `.kandinsky/` of its own: a vault, opened as one.
     AVault,
     Other(Error),
 }
@@ -63,9 +63,9 @@ struct Mark {
     from: String,
 }
 
-/// Where guests keep their state: `$ATLAS_GUESTS` (a test's), else `guests/` in Atlas's cache folder.
+/// Where guests keep their state: `$KANDINSKY_GUESTS` (a test's), else `guests/` in Kandinsky's cache folder.
 fn home() -> PathBuf {
-    std::env::var_os("ATLAS_GUESTS").map(PathBuf::from).unwrap_or_else(|| crate::platform::dirs::atlas(crate::platform::dirs::Base::Cache).join("guests"))
+    crate::env::var_os("GUESTS").map(PathBuf::from).unwrap_or_else(|| crate::platform::dirs::app_entry(crate::platform::dirs::Base::Cache, "guests"))
 }
 
 /// The guest state of `folder` (canonical): one per folder, so opening it again finds the same index.
@@ -85,16 +85,20 @@ pub fn prepare(folder: &Path, opener: &Path) -> std::result::Result<PathBuf, Ref
     if folder.starts_with(&opener) || opener.starts_with(&folder) {
         return Err(Error::BadRequest("a guest folder is outside the vault: this one is the vault, or holds it, or is in it".into()).into());
     }
-    let link = folder.join(".atlas");
-    let state = slot(&folder).join(".atlas");
+    let link = folder.join(".kandinsky");
+    let state = slot(&folder).join(".kandinsky");
     match link.symlink_metadata() {
         Ok(m) if m.file_type().is_symlink() && std::fs::read_link(&link).is_ok_and(|t| t == state) => {}
         Ok(_) => return Err(Refused::AVault),
         Err(_) => {}
     }
+    // a vault last opened before the rename has a real `.atlas` folder: a vault, not a guest
+    if folder.join(crate::legacy::STATE_DIR).symlink_metadata().is_ok_and(|m| m.is_dir()) {
+        return Err(Refused::AVault);
+    }
     outside::mkdir(&state.join("cache"))?;
     for name in SHARED {
-        let (mine, theirs) = (state.join(name), opener.join(".atlas").join(name));
+        let (mine, theirs) = (state.join(name), crate::state_dir::dir(&opener).join(name));
         if mine.symlink_metadata().is_err() && theirs.is_dir() {
             outside::symlink_dir(&theirs, &mine)?;
         }
@@ -103,14 +107,14 @@ pub fn prepare(folder: &Path, opener: &Path) -> std::result::Result<PathBuf, Ref
     let mark = Mark { folder: folder.to_string_lossy().into_owned(), from: opener.to_string_lossy().into_owned() };
     outside::write(&state.join(MARK), toml::to_string(&mark).map_err(|e| Error::Other(e.into()))?.as_bytes())?;
     if link.symlink_metadata().is_err() {
-        outside::symlink_dir(&state, &link).map_err(|e| Error::BadRequest(format!("{} cannot be opened as a guest: its .atlas link was refused ({e})", folder.display())))?;
+        outside::symlink_dir(&state, &link).map_err(|e| Error::BadRequest(format!("{} cannot be opened as a guest: its .kandinsky link was refused ({e})", folder.display())))?;
     }
     Ok(folder)
 }
 
 /// The opener's config with what reaches outside the window off: its scheduled commands.
 fn guest_config(opener: &Path) -> Result<String> {
-    let text = std::fs::read_to_string(opener.join(crate::config::CONFIG_FILE)).unwrap_or_default();
+    let text = std::fs::read_to_string(crate::state_dir::join(opener, crate::config::CONFIG_FILE)).unwrap_or_default();
     let mut t: toml::Table = toml::from_str(&text).unwrap_or_default();
     let auto = t.entry("automation").or_insert_with(|| toml::Value::Table(Default::default()));
     if let Some(a) = auto.as_table_mut() {
@@ -123,7 +127,7 @@ fn guest_config(opener: &Path) -> Result<String> {
 
 /// Whose guest the folder at `root` is; `None` for a vault.
 fn mark_of(root: &Path) -> Option<Mark> {
-    let link = root.join(".atlas");
+    let link = crate::state_dir::dir(root); // `.atlas` for a guest made by a build from before the rename
     if !link.symlink_metadata().ok()?.file_type().is_symlink() {
         return None;
     }
@@ -134,14 +138,14 @@ pub fn is_guest(root: &Path) -> bool {
     mark_of(root).is_some()
 }
 
-/// Refuses every change outside its `.atlas` while editing is off.
+/// Refuses every change outside its `.kandinsky` while editing is off.
 struct ReadOnly {
     editing: AtomicBool,
 }
 
 impl WriteGuard for ReadOnly {
     fn before(&self, rel: &str, _: &WriteKind, _: Option<ContentHash>) -> Result<()> {
-        if self.editing.load(Ordering::Relaxed) || rel == ".atlas" || rel.starts_with(".atlas/") {
+        if self.editing.load(Ordering::Relaxed) || crate::state_dir::is_state_rel(rel) {
             return Ok(());
         }
         Err(Error::BadRequest(format!("read-only guest folder: switch Edit on in its window to change {rel}")))
@@ -180,26 +184,35 @@ pub fn set_editing(root: &Path, on: bool) -> Result<GuestInfo> {
     info(root).ok_or_else(|| Error::NotFound("the guest's state is gone".into()))
 }
 
+/// Whether the link target `t` is `<…>/guests/<slot's name>/<name>`: the same guest slot in another cache folder.
+fn links_to_slot(t: &Path, slot: &Path, name: &str) -> bool {
+    let tail: Vec<_> = t.components().rev().take(3).map(|c| c.as_os_str().to_owned()).collect();
+    tail.len() == 3 && tail[0] == name && Some(tail[1].as_os_str()) == slot.file_name() && tail[2] == "guests"
+}
+
 /// At the desktop core's start, before any guest is served: every guest of an earlier run forgotten — its folder's
-/// `.atlas` link removed (only when it still points at that state), its state deleted. Returns how many.
+/// `.kandinsky` link removed (only when it still points at that state), its state deleted. Returns how many.
 pub fn sweep() -> usize {
     let Ok(dir) = std::fs::read_dir(home()) else { return 0 };
     let mut n = 0;
     for slot in dir.flatten().map(|e| e.path()) {
-        let state = slot.join(".atlas");
+        // a guest of a build from before the rename has `.atlas` (state and link), its slot maybe moved here from the
+        // old cache folder (platform::dirs): its link then points at the old place, the same slot name
+        let name = [crate::state_dir::STATE_DIR, crate::legacy::STATE_DIR].into_iter().find(|n| slot.join(n).is_dir()).unwrap_or(crate::state_dir::STATE_DIR);
+        let state = slot.join(name);
         if let Some(m) = std::fs::read_to_string(state.join(MARK)).ok().and_then(|t| toml::from_str::<Mark>(&t).ok()) {
-            let link = Path::new(&m.folder).join(".atlas");
-            if std::fs::read_link(&link).is_ok_and(|t| t == state) {
-                // the folder's own entry: through its guard when one is still installed (it allows `.atlas`)
+            let link = Path::new(&m.folder).join(name);
+            if std::fs::read_link(&link).is_ok_and(|t| t == state || links_to_slot(&t, &slot, name)) {
+                // the folder's own entry: through its guard when one is still installed (it allows `.kandinsky`)
                 if let Err(e) = vault_write::remove_link(&link) {
-                    eprintln!("atlas: the guest link {} stays: {e}", link.display());
+                    eprintln!("kandinsky: the guest link {} stays: {e}", link.display());
                     continue;
                 }
             }
         }
         match outside::remove_dir_all(&slot) {
             Ok(()) => n += 1,
-            Err(e) => eprintln!("atlas: the guest state {} stays: {e}", slot.display()),
+            Err(e) => eprintln!("kandinsky: the guest state {} stays: {e}", slot.display()),
         }
     }
     n
@@ -209,42 +222,65 @@ pub fn sweep() -> usize {
 mod tests {
     use super::*;
 
-    /// One test, as `ATLAS_GUESTS` is process-wide.
+    /// One test, as `KANDINSKY_GUESTS` is process-wide.
     #[test]
     fn a_guest_has_the_openers_plugins_writes_only_its_state_until_edit_and_is_swept() {
         let d = tempfile::tempdir().unwrap();
-        std::env::set_var("ATLAS_GUESTS", d.path().join("guests"));
+        std::env::set_var("KANDINSKY_GUESTS", d.path().join("guests"));
         let (vault, folder) = (d.path().join("vault"), d.path().join("docs"));
-        std::fs::create_dir_all(vault.join(".atlas/plugins/viewer")).unwrap();
-        std::fs::write(vault.join(".atlas/config.toml"), "[automation]\nschedules_on = [\"desk\"]\n\n[editor]\nvim = true\n").unwrap();
+        std::fs::create_dir_all(vault.join(".kandinsky/plugins/viewer")).unwrap();
+        std::fs::write(vault.join(".kandinsky/config.toml"), "[automation]\nschedules_on = [\"desk\"]\n\n[editor]\nvim = true\n").unwrap();
         std::fs::create_dir_all(&folder).unwrap();
         std::fs::write(folder.join("a.md"), "# A\n").unwrap();
 
         // the vault itself, or a folder inside it, is no guest
-        assert!(matches!(prepare(&vault.join(".atlas"), &vault), Err(Refused::Other(_))));
+        assert!(matches!(prepare(&vault.join(".kandinsky"), &vault), Err(Refused::Other(_))));
+        // a vault last opened by a build from before the rename (a real `.atlas`) is no guest
+        let old_vault = d.path().join("old-vault");
+        std::fs::create_dir_all(old_vault.join(".atlas")).unwrap();
+        assert!(matches!(prepare(&old_vault, &vault), Err(Refused::AVault)));
+        assert!(!old_vault.join(".kandinsky").exists());
+
         let root = prepare(&folder, &vault).map_err(|e| format!("{e:?}")).unwrap();
         assert!(is_guest(&root) && !is_guest(&vault));
-        assert!(root.join(".atlas/plugins/viewer").is_dir(), "the opener's plugins");
-        let cfg = std::fs::read_to_string(root.join(".atlas/config.toml")).unwrap();
+        assert!(root.join(".kandinsky/plugins/viewer").is_dir(), "the opener's plugins");
+        let cfg = std::fs::read_to_string(root.join(".kandinsky/config.toml")).unwrap();
         assert!(cfg.contains("run_schedules = false") && !cfg.contains("schedules_on") && cfg.contains("vim = true"), "{cfg}");
         // opened again: the same state
         assert_eq!(prepare(&folder, &vault).map_err(|e| format!("{e:?}")).unwrap(), root);
-        // a folder with its own .atlas is a vault
+        // a folder with its own .kandinsky is a vault
         assert!(matches!(prepare(&vault, &folder), Err(Refused::AVault) | Err(Refused::Other(_))));
 
         let ws = Workspace::open(&root).unwrap();
         install(&ws);
         assert!(!info(&root).unwrap().editing);
         assert!(vault_write::write(&root.join("a.md"), b"changed").is_err(), "read-only until Edit");
-        vault_write::cache::write(&root.join(".atlas/cache/x.json"), b"{}").unwrap();
+        vault_write::cache::write(&root.join(".kandinsky/cache/x.json"), b"{}").unwrap();
         assert_eq!(std::fs::read_to_string(root.join("a.md")).unwrap(), "# A\n");
         assert!(set_editing(&root, true).unwrap().editing);
         vault_write::write(&root.join("a.md"), b"changed").unwrap();
         ws.clear_write_guard();
 
         assert_eq!(sweep(), 1);
-        assert!(root.join(".atlas").symlink_metadata().is_err(), "the link is gone");
+        assert!(root.join(".kandinsky").symlink_metadata().is_err(), "the link is gone");
         assert_eq!(std::fs::read_to_string(root.join("a.md")).unwrap(), "changed", "the folder's files are kept");
-        assert!(vault.join(".atlas/plugins/viewer").is_dir(), "the opener's plugins are kept");
+        assert!(vault.join(".kandinsky/plugins/viewer").is_dir(), "the opener's plugins are kept");
+
+        // a guest of such a build: `.atlas` in its folder, linked to `.atlas` in a slot moved here from the old cache
+        // folder (the link still names the old place); the sweep finds it under the old name
+        let old_guest = d.path().join("old-docs");
+        std::fs::create_dir_all(&old_guest).unwrap();
+        let old_guest = crate::paths::real(&old_guest).unwrap();
+        let slot_dir = slot(&old_guest);
+        let state = slot_dir.join(".atlas");
+        std::fs::create_dir_all(&state).unwrap();
+        let mark = Mark { folder: old_guest.to_string_lossy().into_owned(), from: vault.to_string_lossy().into_owned() };
+        std::fs::write(state.join(MARK), toml::to_string(&mark).unwrap()).unwrap();
+        let old_place = d.path().join("old-cache/guests").join(slot_dir.file_name().unwrap()).join(".atlas");
+        std::fs::create_dir_all(&old_place).unwrap();
+        vault_write::outside::symlink_dir(&old_place, &old_guest.join(".atlas")).unwrap();
+        assert_eq!(sweep(), 1);
+        assert!(old_guest.join(".atlas").symlink_metadata().is_err(), "its old link is gone");
+        assert!(!slot_dir.exists() && old_place.is_dir(), "its state is gone, nothing else");
     }
 }

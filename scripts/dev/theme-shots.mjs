@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Screenshots of the panes of a RUNNING Atlas in one theme, without writing anything to its vault.
+// Screenshots of the panes of a RUNNING Kandinsky in one theme, without writing anything to its vault.
 //
 //   node scripts/dev/theme-shots.mjs light /tmp/shots            # the dev server (dev.sh) on :5173
 //   node scripts/dev/theme-shots.mjs dark  /tmp/shots http://localhost:5173/
@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const { chromium } = createRequire(resolve(here, "../../ui/package.json"))("playwright");
 
-const [theme = "light", out = "/tmp/atlas-theme-shots", url = "http://localhost:5173/"] = process.argv.slice(2);
+const [theme = "light", out = "/tmp/kandinsky-theme-shots", url = "http://localhost:5173/"] = process.argv.slice(2);
 if (theme !== "light" && theme !== "dark") { console.error("theme: light or dark"); process.exit(2); }
 mkdirSync(out, { recursive: true });
 

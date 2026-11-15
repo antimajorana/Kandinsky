@@ -3,7 +3,7 @@ import { test, expect, type Page, type APIRequestContext } from "@playwright/tes
 // A meta plugin and its subplugins (docs/refactor/REFACTOR-catalog.md): a subplugin `requires` the meta plugin and hands it its
 // `[contributes.<meta>]` table through the core (contributing alone is optional: a service's own plugin keeps working), and is not loaded while the
 // meta plugin is off — Settings says why instead of the subplugin failing on its own.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const nav = (page: Page) => page.getByRole("navigation", { name: "Settings pages" });
 
 async function setOff(request: APIRequestContext, off: string[]) {
@@ -16,9 +16,9 @@ const put = (request: APIRequestContext, path: string, text: string) => request.
 test.afterEach(async ({ request }) => { await setOff(request, []); });
 
 test("a subplugin contributes to its meta plugin and is not loaded while the meta plugin is off", async ({ page, request }) => {
-  await put(request, ".atlas/plugins/meta/plugin.toml", 'title = "Meta"\n');
-  await put(request, ".atlas/plugins/meta-sub/plugin.toml", 'title = "Meta Sub"\nicon = "table"\nrail = true\nrequires = ["meta"]\n[contributes.meta]\nkinds = ["thing"]\n');
-  await put(request, ".atlas/plugins/meta-sub/view.js", "export default (host) => { host.textContent = 'sub'; };\n");
+  await put(request, ".kandinsky/plugins/meta/plugin.toml", 'title = "Meta"\n');
+  await put(request, ".kandinsky/plugins/meta-sub/plugin.toml", 'title = "Meta Sub"\nicon = "table"\nrail = true\nrequires = ["meta"]\n[contributes.meta]\nkinds = ["thing"]\n');
+  await put(request, ".kandinsky/plugins/meta-sub/view.js", "export default (host) => { host.textContent = 'sub'; };\n");
 
   const c = await (await request.get("/api/plugins/meta/contributions", { headers: H })).json();
   expect(c).toEqual({ "meta-sub": { kinds: ["thing"] } });
@@ -40,8 +40,8 @@ test("a subplugin contributes to its meta plugin and is not loaded while the met
 });
 
 test("a plugin's page says what it would add to a plugin that is off or not installed", async ({ page, request }) => {
-  await put(request, ".atlas/plugins/meta/plugin.toml", 'title = "Meta"\n');
-  await put(request, ".atlas/plugins/giver/plugin.toml", 'title = "Giver"\n[contributes.meta]\nrecognize = [{ pattern = "x", kind = "thing", id = "x" }]\n[contributes.absent]\npdf_sources = [{ tool = "find" }]\n');
+  await put(request, ".kandinsky/plugins/meta/plugin.toml", 'title = "Meta"\n');
+  await put(request, ".kandinsky/plugins/giver/plugin.toml", 'title = "Giver"\n[contributes.meta]\nrecognize = [{ pattern = "x", kind = "thing", id = "x" }]\n[contributes.absent]\npdf_sources = [{ tool = "find" }]\n');
   await setOff(request, ["meta"]);
 
   await page.goto("/");

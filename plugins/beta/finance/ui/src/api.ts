@@ -37,17 +37,17 @@ export interface RegisterRow { date: string; status: string; payee: string; narr
 export interface Diagnostic { path: string; line: number; message: string; severity: "error" | "warning" }
 
 /** A helper call with the plugin's settings (the folder), its error stripped of the transport's prefix. */
-export async function call<T>(atlas: PluginApi, method: string, params: Record<string, unknown> = {}): Promise<T> {
+export async function call<T>(kandinsky: PluginApi, method: string, params: Record<string, unknown> = {}): Promise<T> {
   try {
-    return (await atlas.helper.call(method, { ...params, settings: atlas.plugin.settings }, { timeout: 60 })) as T;
+    return (await kandinsky.helper.call(method, { ...params, settings: kandinsky.plugin.settings }, { timeout: 60 })) as T;
   } catch (e) {
     // "POST …/helper: 500 command failed: plugin finance: txn_save: <why>" → "<why>"
     throw new Error(String((e as Error)?.message ?? e).replace(/^.*?plugin [\w-]+: \w+: /, "").replace(/^.*?(method|error): /i, ""));
   }
 }
 
-export const currency = (atlas: PluginApi) => String(atlas.plugin.settings.currency ?? "EUR");
-export const folder = (atlas: PluginApi) => String(atlas.plugin.settings.folder ?? "finance").replace(/^\/+|\/+$/g, "");
+export const currency = (kandinsky: PluginApi) => String(kandinsky.plugin.settings.currency ?? "EUR");
+export const folder = (kandinsky: PluginApi) => String(kandinsky.plugin.settings.folder ?? "finance").replace(/^\/+|\/+$/g, "");
 
 
 export function money(n: number, cur: string, opts: { sign?: boolean; whole?: boolean } = {}): string {

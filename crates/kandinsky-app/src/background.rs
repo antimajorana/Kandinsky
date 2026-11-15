@@ -1,8 +1,8 @@
-//! Atlas living on behind its window (docs/design/DESIGN-tray-background.md): closing the window hides it, the tray
+//! Kandinsky living on behind its window (docs/design/DESIGN-tray-background.md): closing the window hides it, the tray
 //! brings it back, a window hidden long enough is closed to give its page's memory back ("asleep") and built again when
 //! shown; the core, its schedules and its notifications run on throughout. One [`Shell`] per process.
 use crate::tray::{Model, TrayAction, Unseen};
-use atlas_core::config::{Config, OnClose};
+use kandinsky_core::config::{Config, OnClose};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -24,7 +24,7 @@ struct State {
     asleep: bool,
     /// The tray icon is on screen (a tray host answered).
     tray_on: bool,
-    /// "Atlas keeps running in the tray" said already in this run.
+    /// "Kandinsky keeps running in the tray" said already in this run.
     told: bool,
 }
 
@@ -42,7 +42,7 @@ const MAIN: &str = "main";
 impl Shell {
     pub fn new(app: AppHandle, vault: PathBuf, core: String, open_main: OpenMain) -> Arc<Self> {
         let name = vault.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        let model = Model { vault: name, shown: true, quiet: atlas_core::notify::quiet(), ..Model::default() };
+        let model = Model { vault: name, shown: true, quiet: kandinsky_core::notify::quiet(), ..Model::default() };
         Arc::new(Self { app, vault, core, open_main, state: Mutex::new(State { model, hidden_since: None, asleep: false, tray_on: false, told: false }), tray: Mutex::new(None) })
     }
 
@@ -61,7 +61,7 @@ impl Shell {
         self.state.lock().unwrap().tray_on = on;
     }
 
-    fn desktop(&self) -> atlas_core::config::DesktopConfig {
+    fn desktop(&self) -> kandinsky_core::config::DesktopConfig {
         Config::load(&self.vault).map(|c| c.desktop).unwrap_or_default()
     }
 
@@ -89,7 +89,7 @@ impl Shell {
                 }
                 None => {
                     if let Err(e) = (me.open_main)(&me.app, open.as_deref()) {
-                        eprintln!("atlas-app: the window could not be opened again: {e}");
+                        eprintln!("kandinsky-app: the window could not be opened again: {e}");
                         return;
                     }
                 }
@@ -105,7 +105,7 @@ impl Shell {
         });
     }
 
-    /// Hides the window; Atlas runs on in the tray.
+    /// Hides the window; Kandinsky runs on in the tray.
     pub fn hide(self: &Arc<Self>) {
         if let Some(w) = self.window() {
             let _ = w.hide();
@@ -131,7 +131,7 @@ impl Shell {
             tauri::async_runtime::spawn(async move {
                 let body = r#"{"args":{"title":"Kandinsky keeps running in the tray","body":"Its schedules and notifications go on. Quit from the tray icon's menu, or choose Quit in Settings → Desktop app."}}"#;
                 if let Err(e) = crate::post(&core, "/api/cmd/notify", body).await {
-                    eprintln!("atlas-app: {e}");
+                    eprintln!("kandinsky-app: {e}");
                 }
             });
         }
@@ -171,8 +171,8 @@ impl Shell {
                 self.redraw();
             }
             TrayAction::ToggleQuiet => {
-                let on = !atlas_core::notify::quiet();
-                atlas_core::notify::set_quiet(on);
+                let on = !kandinsky_core::notify::quiet();
+                kandinsky_core::notify::set_quiet(on);
                 self.state.lock().unwrap().model.quiet = on;
                 self.redraw();
             }
@@ -204,11 +204,11 @@ impl Shell {
     }
 
     /// Every notice of this process (notify.rs `on_notice`): one nobody looked at waits in the tray.
-    pub fn notice(&self, n: &atlas_core::api::Notice, looked_at: bool) {
+    pub fn notice(&self, n: &kandinsky_core::api::Notice, looked_at: bool) {
         if looked_at {
             return;
         }
-        self.state.lock().unwrap().model.add_unseen(Unseen { title: n.title.clone(), source: n.source.clone(), open: atlas_core::notify::opens(n).map(str::to_string) });
+        self.state.lock().unwrap().model.add_unseen(Unseen { title: n.title.clone(), source: n.source.clone(), open: kandinsky_core::notify::opens(n).map(str::to_string) });
         self.redraw();
     }
 
@@ -216,7 +216,7 @@ impl Shell {
     pub fn watch_sleep(self: &Arc<Self>) {
         let me = self.clone();
         std::thread::Builder::new()
-            .name("atlas-sleep".into())
+            .name("kandinsky-sleep".into())
             .spawn(move || loop {
                 std::thread::sleep(Duration::from_secs(30));
                 let minutes = me.desktop().sleep_after_min;
@@ -240,7 +240,7 @@ impl Shell {
         let me = self.clone();
         let _ = self.app.run_on_main_thread(move || {
             if let Some(w) = me.window() {
-                eprintln!("atlas-app: the hidden window is closed to free its memory; Atlas runs on in the tray");
+                eprintln!("kandinsky-app: the hidden window is closed to free its memory; Kandinsky runs on in the tray");
                 let _ = w.destroy();
             }
         });
@@ -248,7 +248,7 @@ impl Shell {
 }
 
 /// The capture box, as its key starts it (it files through this process's core: vaults::running_server).
-/// The native box (atlas-capture, beside this program in every package) when there is one, else this program's web box.
+/// The native box (kandinsky-capture, beside this program in every package) when there is one, else this program's web box.
 fn quick_capture(vault: &std::path::Path) {
     let Ok(me) = std::env::current_exe() else { return };
     let mut cmd = match crate::capture_box() {
@@ -260,6 +260,6 @@ fn quick_capture(vault: &std::path::Path) {
         }
     };
     if let Err(e) = cmd.arg(vault).spawn() {
-        eprintln!("atlas-app: the capture box did not start: {e}");
+        eprintln!("kandinsky-app: the capture box did not start: {e}");
     }
 }

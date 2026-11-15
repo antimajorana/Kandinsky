@@ -1,4 +1,4 @@
-//! The accounts: one card each in the plugin's settings (`accounts` records), their secrets in Atlas's store
+//! The accounts: one card each in the plugin's settings (`accounts` records), their secrets in Kandinsky's store
 //! (`accounts.<name>.password` / `.oauth_refresh`). Every call carries both; the background sync keeps the last ones.
 
 use serde_json::Value;

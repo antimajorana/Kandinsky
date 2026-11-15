@@ -1,4 +1,4 @@
-// The page's own logic over the sources Atlas lists (atlas.libraries; their shapes are the plugin API's, ui/src/lib/
+// The page's own logic over the sources Kandinsky lists (kandinsky.libraries; their shapes are the plugin API's, ui/src/lib/
 // plugin-api.ts): sorting, search, the group tree, the side's counts, and libraries of one subject made one page.
 import type { LibraryEntry, LibraryItem, LibrarySource, LibraryTab } from "../../../../../ui/src/lib/plugin-api";
 

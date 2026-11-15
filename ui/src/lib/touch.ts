@@ -13,14 +13,14 @@ const HOLD_MS = 500;
 const SLOP = 10;
 
 /** `<html data-touch>`, touch.css's finger-sized targets: the main pointer is coarse (a phone, a tablet), or the
- *  desktop app says KDE is in tablet mode (`data-tablet`, atlas-app tablet.rs, with an `atlas-tablet` event). */
+ *  desktop app says KDE is in tablet mode (`data-tablet`, kandinsky-app tablet.rs, with an `kandinsky-tablet` event). */
 function touchMode(): () => void {
   const coarse = matchMedia("(pointer: coarse)");
   const set = () => document.documentElement.toggleAttribute("data-touch", coarse.matches || document.documentElement.hasAttribute("data-tablet"));
   set();
   coarse.addEventListener("change", set);
-  addEventListener("atlas-tablet", set);
-  return () => { coarse.removeEventListener("change", set); removeEventListener("atlas-tablet", set); };
+  addEventListener("kandinsky-tablet", set);
+  return () => { coarse.removeEventListener("change", set); removeEventListener("kandinsky-tablet", set); };
 }
 
 export function attachTouch(): () => void {

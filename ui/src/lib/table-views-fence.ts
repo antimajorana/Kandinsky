@@ -3,7 +3,7 @@
 import { registerFence } from "./fences";
 import { describeView, readViews } from "./csv/views";
 
-registerFence("atlas", "table-views", (host, fence) => {
+registerFence("kandinsky", "table-views", (host, fence) => {
   const views = readViews("```table-views\n" + fence.source + "\n```");
   const box = document.createElement("div");
   box.className = "table-views";

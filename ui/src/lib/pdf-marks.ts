@@ -50,7 +50,7 @@ export const widthAt = (width: number, pressure: number) => width * (0.35 + 0.65
 /** Page `page`'s marks as one SVG in shown points; each mark a `<g data-mark=id data-kind=kind>`. */
 export function pageSvg(marks: readonly Mark[], page: number, space: Space): SVGSVGElement {
   const [W, H] = shownSize(space), { view, rotate } = space;
-  const svg = el("svg", { class: "atlas-marks", viewBox: `0 0 ${W} ${H}` });
+  const svg = el("svg", { class: "kandinsky-marks", viewBox: `0 0 ${W} ${H}` });
   svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;overflow:visible";
   const pt = (x: number, y: number) => toShown(view, rotate, x, y);
   for (const m of marks) {
@@ -167,11 +167,11 @@ export function attachPdfMarks(reader: Reader, pdf: string, changed: (marks: rea
     if (!layer || gone) return;
     const space = await reader.space(n).catch(() => null);
     if (!space || gone) return;
-    layer.querySelector(":scope > svg.atlas-marks")?.remove();
+    layer.querySelector(":scope > svg.kandinsky-marks")?.remove();
     if (!state.marks.some((m) => m.page === n)) return;
     const svg = pageSvg(state.marks, n, space);
     // a redraw (the page drawn after flash scrolled to it) keeps a flash still running
-    if (flashing && Date.now() < flashing.until) svg.querySelector(`[data-mark="${flashing.id}"]`)?.classList.add("atlas-flash-mark");
+    if (flashing && Date.now() < flashing.until) svg.querySelector(`[data-mark="${flashing.id}"]`)?.classList.add("kandinsky-flash-mark");
     layer.append(svg);
   };
   // only pages the reader has drawn (the rest get theirs on "drawn"): a far page's place would load its text
@@ -200,12 +200,12 @@ export function attachPdfMarks(reader: Reader, pdf: string, changed: (marks: rea
     async flash(id) {
       for (let t = 0; t < 50 && !gone; t++) { // the marks load and the page draws first: up to 5 s
         const m = state.marks.find((x) => x.id === id);
-        const g = m && reader.pageLayer(m.page)?.querySelector<SVGGElement>(`svg.atlas-marks [data-mark="${id}"]`);
+        const g = m && reader.pageLayer(m.page)?.querySelector<SVGGElement>(`svg.kandinsky-marks [data-mark="${id}"]`);
         if (g) {
           g.scrollIntoView({ block: "center" });
-          g.classList.remove("atlas-flash-mark");
+          g.classList.remove("kandinsky-flash-mark");
           void g.getBoundingClientRect(); // the animation again when the same link is followed twice
-          g.classList.add("atlas-flash-mark");
+          g.classList.add("kandinsky-flash-mark");
           flashing = { id, until: Date.now() + 3200 };
           return true;
         }
@@ -217,7 +217,7 @@ export function attachPdfMarks(reader: Reader, pdf: string, changed: (marks: rea
       gone = true;
       offDrawn();
       offFs();
-      for (let n = 1; n <= reader.pages; n++) reader.pageLayer(n)?.querySelector(":scope > svg.atlas-marks")?.remove();
+      for (let n = 1; n <= reader.pages; n++) reader.pageLayer(n)?.querySelector(":scope > svg.kandinsky-marks")?.remove();
     },
   };
 }

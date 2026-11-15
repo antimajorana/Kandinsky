@@ -118,11 +118,11 @@
   {/if}
   <div class="row top"><Icon name="text" /><textarea bind:value={f.description} rows="5" placeholder="Add a description" aria-label="Description"></textarea></div>
   <p class="zone">Times in your zone: {Intl.DateTimeFormat().resolvedOptions().timeZone}{e?.tzid && e.tzid !== Intl.DateTimeFormat().resolvedOptions().timeZone ? ` · written in ${e.tzid}` : ""}</p>
-  {#if error}<div class="atlas-notice error">{error}</div>{/if}
+  {#if error}<div class="kandinsky-notice error">{error}</div>{/if}
   <footer>
     <span class="hint">Ctrl+Enter saves</span>
-    <button class="atlas-btn" onclick={onclose}>Cancel</button>
-    <button class="atlas-btn primary" onclick={save} disabled={!cals.length}>Save</button>
+    <button class="kandinsky-btn" onclick={onclose}>Cancel</button>
+    <button class="kandinsky-btn primary" onclick={save} disabled={!cals.length}>Save</button>
   </footer>
 </div>
 

@@ -1,12 +1,12 @@
 <script lang="ts">
-  // Settings → Desktop app: the desktop's global key for Atlas Capture (platform/capture_key.rs). KDE and GNOME keep it
+  // Settings → Desktop app: the desktop's global key for Kandinsky Capture (platform/capture_key.rs). KDE and GNOME keep it
   // in their own shortcut settings, which this reads and writes; Windows' installer and macOS's app set theirs, shown.
   import { api } from "../../lib/api";
   import { errText } from "../../lib/text";
   import type { CaptureKey } from "../../lib/gen/CaptureKey";
 
   const DEFAULT = "Meta+Shift+C";
-  /** KDE spells the logo key Meta; Atlas's keys say Super. */
+  /** KDE spells the logo key Meta; Kandinsky's keys say Super. */
   const shown = (k: string) => k.replace(/\bMeta\b/g, "Super");
   const stored = (k: string) => k.trim().replace(/\s*\+\s*/g, "+").replace(/\bSuper\b/gi, "Meta").replace(/\bControl\b/gi, "Ctrl").replace(/\b(meta|ctrl|alt|shift)\b/g, (m) => m[0].toUpperCase() + m.slice(1)).replace(/\+([a-z0-9])$/i, (_, c: string) => "+" + c.toUpperCase());
 

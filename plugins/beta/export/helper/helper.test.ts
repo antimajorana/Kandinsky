@@ -2,7 +2,7 @@
 // program runs; a real export is the e2e spec's).
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { harness } from "atlas-helper/testing";
+import { harness } from "kandinsky-helper/testing";
 import { translate, relative, mathPortable } from "./translate";
 import { macroDefinitions } from "../../../../ui/src/lib/tex-portable";
 import { latexErrors, yamlEntry } from "./helper";
@@ -123,12 +123,12 @@ test("PDF (LaTeX): the .tex written beside, latexmk's own files in the cache, a 
   const r = await harness.call("export", { path: "notes/Report.md", to: "pdf", settings: { format: "pdf-latex", engine: "xelatex" } });
   assert.deepEqual(r.written, ["exports/notes/Report.tex", "exports/notes/Report.pdf"]);
   const [pandoc, latexmk] = harness.ran;
-  assert.ok(pandoc.args.includes("--biblatex") && pandoc.args.includes(".atlas/plugins/export/tikz.lua"));
-  assert.ok(pandoc.stdin!.includes('biblio-style: "numeric-comp"') && pandoc.stdin!.includes("](<../../.atlas/cache/plugins/export/figures/abababababababab.pdf>)"));
+  assert.ok(pandoc.args.includes("--biblatex") && pandoc.args.includes(".kandinsky/plugins/export/tikz.lua"));
+  assert.ok(pandoc.stdin!.includes('biblio-style: "numeric-comp"') && pandoc.stdin!.includes("](<../../.kandinsky/cache/plugins/export/figures/abababababababab.pdf>)"));
   assert.equal(latexmk.program, "latexmk");
   assert.equal(latexmk.cwd, "exports/notes");
-  assert.ok(latexmk.args.includes("-xelatex") && latexmk.args.includes("-auxdir=../../.atlas/cache/plugins/export/build/notes_Report.md"));
-  assert.deepEqual(typst[0], { path: "notes/.fence.typ", to: ".atlas/cache/plugins/export/figures/abababababababab.pdf", source: "$ x^2 $", fence: true });
+  assert.ok(latexmk.args.includes("-xelatex") && latexmk.args.includes("-auxdir=../../.kandinsky/cache/plugins/export/build/notes_Report.md"));
+  assert.deepEqual(typst[0], { path: "notes/.fence.typ", to: ".kandinsky/cache/plugins/export/figures/abababababababab.pdf", source: "$ x^2 $", fence: true });
 });
 
 test("the LaTeX layouts: chapter makes a KOMA report of numbered chapters with contents, two columns kept", async () => {
@@ -144,7 +144,7 @@ test("the LaTeX layouts: chapter makes a KOMA report of numbered chapters with c
 
 test("a preview goes to the cache; Word cites through citeproc and says the Typst picture stays code", async () => {
   const p = await harness.call("export", { path: "notes/Report.md", format: "pdf-typst", preview: true });
-  assert.equal(p.pdf, ".atlas/cache/plugins/export/preview/notes/Report.pdf");
+  assert.equal(p.pdf, ".kandinsky/cache/plugins/export/preview/notes/Report.pdf");
   harness.reset();
   const w = await harness.call("export", { path: "notes/Report.md", format: "docx" });
   assert.deepEqual(w.written, ["exports/notes/Report.docx"]);
@@ -161,10 +161,10 @@ test("the formats say what they need", async () => {
 
 test("a tikz picture: its source and key for the dialog; the PNG the dialog drew on the Typst and Word roads", async () => {
   const d = await harness.call("describe", { path: "notes/Fig.md" });
-  assert.deepEqual(d.tikz.map((t: any) => [t.key, t.png]), [["abababababababab", ".atlas/cache/plugins/export/figures/abababababababab.png"]]);
+  assert.deepEqual(d.tikz.map((t: any) => [t.key, t.png]), [["abababababababab", ".kandinsky/cache/plugins/export/figures/abababababababab.png"]]);
   assert.ok(d.tikz[0].source.includes("\\draw (0,0)"));
   const drawn = await harness.call("export", { path: "notes/Fig.md", format: "typ", figures: { abababababababab: 72.5 } });
-  assert.ok(harness.ran[0].stdin!.includes("](<../../.atlas/cache/plugins/export/figures/abababababababab.png>){width=72.5pt}"), String(harness.ran[0].stdin));
+  assert.ok(harness.ran[0].stdin!.includes("](<../../.kandinsky/cache/plugins/export/figures/abababababababab.png>){width=72.5pt}"), String(harness.ran[0].stdin));
   assert.ok(!drawn.warnings.length, drawn.warnings.join());
   harness.reset();
   const left = await harness.call("export", { path: "notes/Fig.md", format: "docx" }); // the dialog drew nothing
@@ -178,7 +178,7 @@ test("a header of several lines goes as a block scalar (pandoc reads a quoted on
   assert.equal(yamlEntry("title", "One line"), 'title: "One line"');
 });
 
-test("formulas: Atlas's macros kept and defined per road, a $$align block an aligned, a heading after a line its own", async () => {
+test("formulas: Kandinsky's macros kept and defined per road, a $$align block an aligned, a heading after a line its own", async () => {
   assert.equal(mathPortable("a $\\ket{\\psi}$ b"), "a $\\ket{\\psi}$ b"); // LaTeX keeps it; the road defines it
   assert.equal(mathPortable("x\n$$\n\\braket{a|b} \\cdot \n$$\ny"), "x\n$$\n\\braket{a|b} \\cdot\n$$\ny");
   assert.equal(mathPortable("$$align\na = b\nc \\leq d\n$$"), "$$\n\\begin{aligned}\na &= b \\\\\nc &\\leq d\n\\end{aligned}\n$$");

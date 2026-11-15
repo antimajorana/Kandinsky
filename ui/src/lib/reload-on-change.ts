@@ -1,5 +1,5 @@
-// One way for a view to follow the vault: reload (debounced) when a file it cares about changes — never for Atlas's
-// own bookkeeping (.atlas/cache, .atlas/trash) — and, while its element is off-screen (a hidden tab, scrolled away),
+// One way for a view to follow the vault: reload (debounced) when a file it cares about changes — never for Kandinsky's
+// own bookkeeping (.kandinsky/cache, .kandinsky/trash) — and, while its element is off-screen (a hidden tab, scrolled away),
 // wait until it is seen again instead of asking the core for something nobody looks at.
 import { isBookkeeping, on, touches } from "./bus";
 

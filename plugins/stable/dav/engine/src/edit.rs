@@ -563,10 +563,10 @@ mod tests {
 
     #[test]
     fn a_new_event_carries_the_users_zone_and_reads_back() {
-        let t = create("atlas-x", &Change { summary: Some("Lunch, with Ana".into()), start: Some("2026-11-04T13:00".into()), end: None, ..Default::default() }, &TORONTO, now()).unwrap();
+        let t = create("kandinsky-x", &Change { summary: Some("Lunch, with Ana".into()), start: Some("2026-11-04T13:00".into()), end: None, ..Default::default() }, &TORONTO, now()).unwrap();
         assert!(t.contains("BEGIN:VTIMEZONE\r\nTZID:America/Toronto") && t.contains("DTSTART;TZID=America/Toronto:20261104T130000"), "{t}");
         assert_eq!(starts(&t, "2026-11-04", "2026-11-04"), ["2026-11-04T13:00 Lunch, with Ana"]);
-        let d = create("atlas-y", &Change { summary: Some("Exam".into()), start: Some("2026-11-15".into()), all_day: Some(true), ..Default::default() }, &TORONTO, now()).unwrap();
+        let d = create("kandinsky-y", &Change { summary: Some("Exam".into()), start: Some("2026-11-15".into()), all_day: Some(true), ..Default::default() }, &TORONTO, now()).unwrap();
         assert!(d.contains("DTSTART;VALUE=DATE:20261115\r\nDTEND;VALUE=DATE:20261116") && !d.contains("VTIMEZONE"), "{d}");
         assert!(create("z", &ch("2026-11-04T13:00", "2026-11-04T12:00"), &TORONTO, now()).is_err());
     }
@@ -610,8 +610,8 @@ mod tests {
         assert_eq!(delete(SERIES, "s1", Some("20261102T100000"), Scope::Following, &TORONTO, now()).unwrap(), None, "from the first: all of it");
         assert_eq!(delete(SERIES, "s1", None, Scope::This, &TORONTO, now()).unwrap(), None);
         // a single event changed in place keeps what the editor does not show
-        let single = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e\r\nSUMMARY:A\r\nX-ATLAS-SOURCE:notes/a.md\r\nDTSTART;VALUE=DATE:20261104\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        let single = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e\r\nSUMMARY:A\r\nX-KANDINSKY-SOURCE:notes/a.md\r\nDTSTART;VALUE=DATE:20261104\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
         let t = update(single, "e", None, Scope::This, &ch("2026-11-05", "2026-11-07"), &TORONTO, now()).unwrap().object.unwrap();
-        assert!(t.contains("X-ATLAS-SOURCE:notes/a.md") && t.contains("DTSTART;VALUE=DATE:20261105") && t.contains("DTEND;VALUE=DATE:20261107"), "{t}");
+        assert!(t.contains("X-KANDINSKY-SOURCE:notes/a.md") && t.contains("DTSTART;VALUE=DATE:20261105") && t.contains("DTEND;VALUE=DATE:20261107"), "{t}");
     }
 }

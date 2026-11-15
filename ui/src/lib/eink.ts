@@ -2,7 +2,7 @@
 // partial update leaves a faint ghost of what was there; ghosts pile up until a full refresh (black, then white) clears
 // them. So, besides the look (tokens.css / base.css: no motion, no shadows, no translucency), this module refreshes
 // the whole screen where ghosts come from: another tab to the front, a scroll come to rest (PDF pages, a long note).
-// The phone app on a Boox does it with Onyx's own call (AtlasNative.einkRefresh: applyGCOnce + repaintEverything, as
+// The phone app on a Boox does it with Onyx's own call (KandinskyNative.einkRefresh: applyGCOnce + repaintEverything, as
 // Onyx's framework does after a scroll — boox_5c_re docs/ONYX-EPD-PEN.md); a browser gets a black-then-white
 // flash, which an e-ink panel answers with a clearing refresh.
 import type { DockviewApi } from "dockview-core";
@@ -10,7 +10,7 @@ import type { Eink } from "./gen/Eink";
 import type { EinkRefresh } from "./gen/EinkRefresh";
 
 type Bridge = { eink?(): string; einkRefresh?(): void; einkClear?(): void };
-const bridge = () => (globalThis as unknown as { AtlasNative?: Bridge }).AtlasNative;
+const bridge = () => (globalThis as unknown as { KandinskyNative?: Bridge }).KandinskyNative;
 
 /** Inside the phone app (its bridge is there): the screen is the phone's, so its own dark mode decides the theme. */
 export const inPhoneApp = (): boolean => bridge() !== undefined;
@@ -38,7 +38,7 @@ let last = 0;
 /** The automatic refreshes are calm (the app's REGAL, no flash) and at most one every 5 s; `clear` (the command
  *  "E-ink: clear the screen") is the full flashing one, always: frequent full refreshes are jarring. A browser has no calm refresh: there, only `clear` flashes. */
 export function einkRefresh(clear = false): void {
-  document.dispatchEvent(new CustomEvent("atlas-eink-refresh", { detail: { clear } })); // every ask, kept or not (specs, probes)
+  document.dispatchEvent(new CustomEvent("kandinsky-eink-refresh", { detail: { clear } })); // every ask, kept or not (specs, probes)
   const now = performance.now();
   if (!clear && now - last < 5000) return;
   last = now;

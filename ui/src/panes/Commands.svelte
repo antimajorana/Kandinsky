@@ -2,8 +2,8 @@
   import { errText } from "../lib/text";
   import { keyText } from "../lib/keys";
   import { keysOf } from "../lib/keymap.svelte";
-  // Commands & shortcuts: every command (Atlas's own and the workspace's scripts), where each script
-  // came from (you or Claude, from git), its shortcut (click → press keys → saved to .atlas/keys.toml),
+  // Commands & shortcuts: every command (Kandinsky's own and the workspace's scripts), where each script
+  // came from (you or Claude, from git), its shortcut (click → press keys → saved to .kandinsky/keys.toml),
   // run it and see its output, and create a new one — recurring work becomes a button, no Claude needed.
   import { onMount, tick } from "svelte";
   import { api } from "../lib/api";
@@ -39,7 +39,7 @@
     });
   });
   const scripts = $derived(cmds.filter((c) => c.source === "script"));
-  const atlas = $derived(cmds.filter((c) => c.source !== "script"));
+  const kandinsky = $derived(cmds.filter((c) => c.source !== "script"));
 
   function origin(c: Cmd): string {
     if (!c.file) return "";
@@ -81,7 +81,7 @@
         <code>{c.id}</code>
         {#if c.file}<span class="origin" class:claude={c.origin?.by === "agent"}>{origin(c)}</span>{/if}
         {#if c.schedule}
-          <span class="sched" title="Runs by itself while Kandinsky is open (.atlas/cache/schedule.log)"><Icon name="clock" size={11} /> {c.schedule}{#if c.lastRun} · last {rel(c.lastRun.time)} <b class:bad={!c.lastRun.ok}>{c.lastRun.ok ? "ok" : "failed"}</b>{:else} · not run yet{/if}</span>
+          <span class="sched" title="Runs by itself while Kandinsky is open (.kandinsky/cache/schedule.log)"><Icon name="clock" size={11} /> {c.schedule}{#if c.lastRun} · last {rel(c.lastRun.time)} <b class:bad={!c.lastRun.ok}>{c.lastRun.ok ? "ok" : "failed"}</b>{:else} · not run yet{/if}</span>
         {/if}
       </div>
       {#if c.description}<div class="desc" title={c.description}>{c.description}</div>{/if}
@@ -106,7 +106,7 @@
     {#if creating}
       <!-- svelte-ignore a11y_no_noninteractive_element_interactions (Esc from any of its fields closes it) -->
       <form class="new" onsubmit={(e) => { e.preventDefault(); void create(); }} onkeydown={(e) => { if (e.key === "Escape") { e.preventDefault(); closeForm(); } }}>
-        <p class="hint">A command is a shell command line run in the workspace folder; it lands in <code>.atlas/commands/</code>, shows in the command bar ({keysOf('ui.palette') ?? keyText('Super+E')}) and can get a shortcut. Its output appears here.</p>
+        <p class="hint">A command is a shell command line run in the workspace folder; it lands in <code>.kandinsky/commands/</code>, shows in the command bar ({keysOf('ui.palette') ?? keyText('Super+E')}) and can get a shortcut. Its output appears here.</p>
         <label>Title <input bind:this={titleInput} bind:value={form.title} placeholder="Papers: rebuild refs.bib" required /></label>
         <label>Command line <input class="mono" bind:value={form.run} placeholder={"python3 projects/x/make_figs.py && echo done"} required spellcheck="false" /></label>
         <label>Description <input bind:value={form.description} placeholder="What it does, in one line (optional)" /></label>
@@ -117,8 +117,8 @@
     <h2>Workspace scripts <span class="n">{scripts.length}</span></h2>
     <p class="hint">Recurring jobs as buttons. Who added each one comes from git — the ones an agent wrote are yours to keep, edit or delete.</p>
     <ul>{#each scripts as c (c.id)}{@render row(c)}{:else}<li class="empty">{q.trim() ? `No script matches “${q.trim()}”.` : "No scripts yet — “New command” makes one."}</li>{/each}</ul>
-    <h2>Kandinsky <span class="n">{atlas.length}</span></h2>
-    <ul>{#each atlas as c (c.id)}{@render row(c)}{:else}<li class="empty">No command matches “{q.trim()}”.</li>{/each}</ul>
+    <h2>Kandinsky <span class="n">{kandinsky.length}</span></h2>
+    <ul>{#each kandinsky as c (c.id)}{@render row(c)}{:else}<li class="empty">No command matches “{q.trim()}”.</li>{/each}</ul>
   </div>
 </div>
 

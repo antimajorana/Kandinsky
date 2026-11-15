@@ -1,7 +1,7 @@
-# copyparty: your copyparty servers' files in Atlas's explorer (browse, open and edit from a local copy, upload,
-# download, rename, delete), a link to a server's file opening that file in Atlas, and two tools for agents (list a
+# copyparty: your copyparty servers' files in Kandinsky's explorer (browse, open and edit from a local copy, upload,
+# download, rename, delete), a link to a server's file opening that file in Kandinsky, and two tools for agents (list a
 # folder or find files; file one through the catalog). main.js and a JS helper: copyparty's own HTTP API through the
-# core's fetch. Copy into a vault's .atlas/plugins/.
+# core's fetch. Copy into a vault's .kandinsky/plugins/.
 title = "copyparty"
 description = "your copyparty file servers in the explorer: browse, open, edit, upload, download"
 icon = "server"

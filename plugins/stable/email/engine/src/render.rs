@@ -83,7 +83,7 @@ fn inline_cids(html: &str, images: &[(String, String, Vec<u8>)]) -> String {
 /// paragraph joined into one line, the signature (after "-- ") marked so the page can dim it.
 pub fn text_html(text: &str, flowed: bool) -> String {
     let lines: Vec<String> = if flowed { unflow(text) } else { text.lines().map(String::from).collect() };
-    let mut out = String::from("<div class=\"atlas-plain\">");
+    let mut out = String::from("<div class=\"kandinsky-plain\">");
     let mut depth = 0;
     let mut in_sig = false;
     for line in lines {
@@ -98,7 +98,7 @@ pub fn text_html(text: &str, flowed: bool) -> String {
         }
         if d == 0 && (rest == "-- " || rest == "--") && !in_sig {
             in_sig = true;
-            out.push_str("<div class=\"atlas-signature\">");
+            out.push_str("<div class=\"kandinsky-signature\">");
         }
         out.push_str(&linkify(&escape(rest)));
         out.push_str("<br>");
@@ -235,7 +235,7 @@ mod tests {
         assert!(h.contains("<a href=\"https://www.y.org\""));
         assert!(h.contains("<a href=\"mailto:ana@x.example\">"));
         assert!(h.contains("<blockquote type=\"cite\">quoted<br><blockquote type=\"cite\">deeper<br></blockquote></blockquote>back &amp; &lt;here&gt;"), "{h}");
-        assert!(h.contains("<div class=\"atlas-signature\">-- <br>Ana"), "{h}");
+        assert!(h.contains("<div class=\"kandinsky-signature\">-- <br>Ana"), "{h}");
     }
 
     #[test]

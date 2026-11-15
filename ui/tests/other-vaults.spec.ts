@@ -6,22 +6,22 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WS } from "../playwright.config";
 
-// The other vaults in the explorer (lib/other-vaults.ts). The other vault is a second real core (`atlas
+// The other vaults in the explorer (lib/other-vaults.ts). The other vault is a second real core (`kandinsky
 // serve`), reached at `/v/second/` as the desktop's one core serves it: the page's calls there are passed to it.
 const SECOND = `${WS}-second`;
 const PORT = 7741;
-const ATLAS = fileURLToPath(new URL("../../target/debug/atlas", import.meta.url));
+const KANDINSKY = fileURLToPath(new URL("../../target/debug/kandinsky", import.meta.url));
 let core: ChildProcess;
 
 test.beforeAll(async () => {
   rmSync(SECOND, { recursive: true, force: true });
   mkdirSync(join(SECOND, "notes"), { recursive: true });
   writeFileSync(join(SECOND, "notes", "elsewhere.md"), "# Elsewhere\n\nIn the second vault.\n");
-  core = spawn(ATLAS, ["serve", SECOND, "--port", String(PORT)], {
-    env: { ...process.env, ATLAS_NO_BROWSER: "1", ATLAS_VAULTS: `${SECOND}-vaults.toml`, ATLAS_SECRETS_DIR: `${SECOND}-secrets`, ATLAS_SERVER_CONFIG: `${SECOND}-server.toml`, ATLAS_SERVER_STATE: `${SECOND}-server.json`, ATLAS_AGENTS_FILE: `${SECOND}-agents.json` },
+  core = spawn(KANDINSKY, ["serve", SECOND, "--port", String(PORT)], {
+    env: { ...process.env, KANDINSKY_NO_BROWSER: "1", KANDINSKY_VAULTS: `${SECOND}-vaults.toml`, KANDINSKY_SECRETS_DIR: `${SECOND}-secrets`, KANDINSKY_SERVER_CONFIG: `${SECOND}-server.toml`, KANDINSKY_SERVER_STATE: `${SECOND}-server.json`, KANDINSKY_AGENTS_FILE: `${SECOND}-agents.json` },
     stdio: "ignore",
   });
-  await expect.poll(() => fetch(`http://127.0.0.1:${PORT}/api/workspace`, { headers: { "x-atlas": "1" } }).then((r) => r.ok, () => false), { timeout: 60_000 }).toBe(true);
+  await expect.poll(() => fetch(`http://127.0.0.1:${PORT}/api/workspace`, { headers: { "x-kandinsky": "1" } }).then((r) => r.ok, () => false), { timeout: 60_000 }).toBe(true);
 });
 test.afterAll(() => { core?.kill(); });
 
@@ -76,7 +76,7 @@ test("a vault switch in this window starts the other vault's tabs: this vault's 
   // the second vault's page as the one core serves it: the app with its API at /v/second (server.rs with_base)
   await page.route(/\/v\/second\/$/, async (r) => {
     const html = await (await r.fetch({ url: new URL("/", r.request().url()).href })).text();
-    r.fulfill({ contentType: "text/html", body: html.replace("<head>", '<head><script>window.__ATLAS_API__="/v/second"</script>') });
+    r.fulfill({ contentType: "text/html", body: html.replace("<head>", '<head><script>window.__KANDINSKY_API__="/v/second"</script>') });
   });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();

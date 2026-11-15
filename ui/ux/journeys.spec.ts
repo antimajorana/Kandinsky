@@ -7,7 +7,7 @@ import { journey } from "./harness";
 
 const T = { timeout: 6000 };
 
-journey("Morning check-in", "Open Atlas, see what matters today, jot a thought without losing focus", async (u) => {
+journey("Morning check-in", "Open Kandinsky, see what matters today, jot a thought without losing focus", async (u) => {
   const p = u.page;
   await u.step("App opens on Today", { budget: 2500 }, async () => {
     await p.goto("/");
@@ -48,7 +48,7 @@ journey("Lecture notes", "Start today's lecture note fast and write math the way
   });
   // the user's own inline-math trigger (whatever expands to $…$ in their LaTeX Suite file)
   const trigger = await p.evaluate(async () => {
-    const d = await (await fetch("/api/snippets", { headers: { "x-atlas": "1" } })).json();
+    const d = await (await fetch("/api/snippets", { headers: { "x-kandinsky": "1" } })).json();
     return /trigger:\s*["']([^"']+)["'],\s*replacement:\s*["']\$\$0\$["']/.exec(d.sources.join("\n"))?.[1] ?? "mk";
   });
   await u.step(`Write a heading and inline math via the snippet "${trigger}"`, { budget: 3000 }, async () => {
@@ -150,11 +150,11 @@ journey("Read a paper", "Find a paper in the library, read it, take notes, cite 
   await u.step("Drop a PDF into the Library to add it", { budget: 15_000, why: "Zotero: drag-and-drop import" }, async () => {
     await u.press("Control+Shift+l");
     // a real PDF of the sample (already in the library: it must be recognised, not duplicated)
-    const hits: string[] = await p.request.get("/api/search?q=.pdf", { headers: { "x-atlas": "1" } }).then((r) => r.json()).then((j) => j.files);
+    const hits: string[] = await p.request.get("/api/search?q=.pdf", { headers: { "x-kandinsky": "1" } }).then((r) => r.json()).then((j) => j.files);
     const pdf = hits.find((f) => f.startsWith("refs/papers/"));
     if (!pdf) throw new Error("no PDF in the sample library");
     await p.evaluate(async (path) => {
-      const blob = await (await fetch(`/api/raw?path=${encodeURIComponent(path)}`, { headers: { "x-atlas": "1" } })).blob();
+      const blob = await (await fetch(`/api/raw?path=${encodeURIComponent(path)}`, { headers: { "x-kandinsky": "1" } })).blob();
       const dt = new DataTransfer();
       dt.items.add(new File([blob], path.split("/").pop()!, { type: "application/pdf" }));
       const el = document.querySelector(".library")!;
@@ -241,7 +241,7 @@ journey("Simulation runs", "Find a run, read its parameters and table, compare s
   });
 });
 
-journey("Make it mine without Claude", "Change how Atlas looks and behaves, and turn a recurring task into a button", async (u) => {
+journey("Make it mine without Claude", "Change how Kandinsky looks and behaves, and turn a recurring task into a button", async (u) => {
   const p = u.page;
   await p.goto("/");
   await expect(p.getByTestId("capture")).toBeVisible(T);

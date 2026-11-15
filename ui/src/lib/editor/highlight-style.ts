@@ -2,7 +2,7 @@
 import { HighlightStyle } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 
-export const atlasHighlight = HighlightStyle.define([
+export const kandinskyHighlight = HighlightStyle.define([
   { tag: [t.keyword, t.modifier, t.controlKeyword, t.operatorKeyword, t.definitionKeyword, t.moduleKeyword], color: "var(--syn-keyword)", fontWeight: "var(--syn-keyword-weight, normal)", fontStyle: "var(--syn-keyword-style, normal)" },
   { tag: [t.string, t.special(t.string), t.regexp, t.character], color: "var(--syn-string)", fontWeight: "var(--syn-string-weight, normal)", fontStyle: "var(--syn-string-style, normal)" },
   { tag: [t.number], color: "var(--syn-number)" },

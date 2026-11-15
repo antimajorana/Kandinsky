@@ -2809,28 +2809,29 @@ function pa(e, t) {
 }
 //#endregion
 //#region ui/src/lib/back.ts
-var ma = globalThis.atlasBackStack ??= [];
-function ha(e, t) {
+var ma = globalThis, ha = ma.kandinskyBackStack ??= ma.atlasBackStack ?? [];
+ma.atlasBackStack = ha;
+function ga(e, t) {
 	let n = {
 		close: e,
 		shown: t
 	};
-	return ma.push(n), () => {
-		let e = ma.lastIndexOf(n);
-		e >= 0 && ma.splice(e, 1);
+	return ha.push(n), () => {
+		let e = ha.lastIndexOf(n);
+		e >= 0 && ha.splice(e, 1);
 	};
 }
 //#endregion
 //#region ui/src/components/Select.svelte
-var ga = /* @__PURE__ */ q("<span class=\"n svelte-ifm9j5\"> </span>"), _a = /* @__PURE__ */ q("<li role=\"option\"><span class=\"l svelte-ifm9j5\"> </span><!></li>"), va = /* @__PURE__ */ q("<ul class=\"menu svelte-ifm9j5\" role=\"listbox\" tabindex=\"-1\"></ul>"), ya = /* @__PURE__ */ q("<div class=\"select svelte-ifm9j5\"><button type=\"button\" class=\"trigger svelte-ifm9j5\" aria-haspopup=\"listbox\"><span class=\"cur svelte-ifm9j5\"> </span> <svg viewBox=\"0 0 16 16\" width=\"12\" height=\"12\" aria-hidden=\"true\" class=\"svelte-ifm9j5\"><path d=\"M4 6l4 4 4-4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path></svg></button> <!></div>"), ba = {
+var _a = /* @__PURE__ */ q("<span class=\"n svelte-ifm9j5\"> </span>"), va = /* @__PURE__ */ q("<li role=\"option\"><span class=\"l svelte-ifm9j5\"> </span><!></li>"), ya = /* @__PURE__ */ q("<ul class=\"menu svelte-ifm9j5\" role=\"listbox\" tabindex=\"-1\"></ul>"), ba = /* @__PURE__ */ q("<div class=\"select svelte-ifm9j5\"><button type=\"button\" class=\"trigger svelte-ifm9j5\" aria-haspopup=\"listbox\"><span class=\"cur svelte-ifm9j5\"> </span> <svg viewBox=\"0 0 16 16\" width=\"12\" height=\"12\" aria-hidden=\"true\" class=\"svelte-ifm9j5\"><path d=\"M4 6l4 4 4-4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path></svg></button> <!></div>"), xa = {
 	hash: "svelte-ifm9j5",
 	code: ".select.svelte-ifm9j5 {position:relative;display:inline-block;min-width:180px;max-width:100%;}.trigger.svelte-ifm9j5 {display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;text-align:left;}.trigger.svelte-ifm9j5:hover {border-color:var(--text-faint);}.trigger.svelte-ifm9j5:focus-visible, .trigger[aria-expanded=\"true\"].svelte-ifm9j5 {outline:none;border-color:var(--accent);}.cur.svelte-ifm9j5 {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}svg.svelte-ifm9j5 {flex:none;color:var(--text-muted);}.menu.svelte-ifm9j5 {position:absolute;z-index:50;top:calc(100% + 4px);left:0;min-width:100%;max-width:460px;max-height:300px;overflow:auto;margin:0;padding:4px;list-style:none;background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);box-shadow:var(--shadow-pop);}li.svelte-ifm9j5 {display:flex;flex-direction:column;gap:1px;padding:5px 9px;border-radius:4px;cursor:pointer;color:var(--text);font-size:calc(13px * var(--ui-scale, 1));}li.on.svelte-ifm9j5 {background:var(--bg-hover);}li.cur.svelte-ifm9j5 .l:where(.svelte-ifm9j5) {color:var(--accent);font-weight:600;}.n.svelte-ifm9j5 {color:var(--text-muted);font-size:.86em;}"
 };
-function xa(e, t) {
-	Ue(t, !0), ii(e, ba);
+function Sa(e, t) {
+	Ue(t, !0), ii(e, xa);
 	let n = /* @__PURE__ */ I(!1), r = /* @__PURE__ */ I(0), i, a = /* @__PURE__ */ I(void 0), o = /* @__PURE__ */ P(() => t.options.find((e) => e.value === t.value));
 	vn(() => {
-		if (G(n)) return ha(() => L(n, !1));
+		if (G(n)) return ga(() => L(n, !1));
 	});
 	function s() {
 		L(r, Math.max(0, t.options.findIndex((e) => e.value === t.value)), !0), L(n, !0), requestAnimationFrame(() => G(a)?.querySelector(".on")?.scrollIntoView({ block: "nearest" }));
@@ -2861,15 +2862,15 @@ function xa(e, t) {
 	function u(e) {
 		i.contains(e.relatedTarget) || L(n, !1);
 	}
-	var d = ya(), f = R(d), p = z(R(f), !0);
+	var d = ba(), f = R(d), p = z(R(f), !0);
 	we(2), j(f);
 	var m = B(f, 2), h = (e) => {
-		var n = va();
+		var n = ya();
 		Z(n, 23, () => t.options, (e) => e.value, (e, n, i) => {
-			var a = _a();
+			var a = va();
 			let o;
 			var s = R(a), l = z(s, !0), u = B(s), d = (e) => {
-				var t = ga(), r = z(t, !0);
+				var t = _a(), r = z(t, !0);
 				V(() => Y(r, G(n).note)), J(e, t);
 			};
 			X(u, (e) => {
@@ -2899,7 +2900,7 @@ Dr([
 ]);
 //#endregion
 //#region ui/src/lib/icons.ts
-var Sa = {
+var Ca = {
 	user: "<circle cx=\"12\" cy=\"8\" r=\"4\"/><path d=\"M4.5 20.5a7.5 7.5 0 0 1 15 0\"/>",
 	plugin: "<path d=\"M9 3.5v4M15 3.5v4\"/><path d=\"M6 7.5h12v4a6 6 0 0 1-12 0z\"/><path d=\"M12 17.5v3\"/>",
 	today: "<rect x=\"3\" y=\"4.5\" width=\"18\" height=\"16.5\" rx=\"2.5\"/><path d=\"M8 2.5v4M16 2.5v4M3 10h18\"/><path d=\"M8.5 15l2.3 2.3L15.5 12.8\"/>",
@@ -2977,6 +2978,7 @@ var Sa = {
 	clipboard: "<rect x=\"5\" y=\"5\" width=\"14\" height=\"16\" rx=\"2\"/><rect x=\"9\" y=\"3\" width=\"6\" height=\"4\" rx=\"1\"/>",
 	"select-all": "<path d=\"M5 3a2 2 0 0 0-2 2M19 3a2 2 0 0 1 2 2M21 19a2 2 0 0 1-2 2M5 21a2 2 0 0 1-2-2M9 3h1M9 21h1M14 3h1M14 21h1M3 9v1M21 9v1M3 14v1M21 14v1\"/><rect x=\"8\" y=\"8\" width=\"8\" height=\"8\" rx=\"1\"/>",
 	copy: "<rect x=\"8.5\" y=\"8.5\" width=\"11.5\" height=\"11.5\" rx=\"2.2\"/><path d=\"M15.5 8.5V6A2 2 0 0 0 13.5 4h-7.5A2 2 0 0 0 4 6v7.5a2 2 0 0 0 2 2h2.5\"/>",
+	graph: "<circle cx=\"6\" cy=\"6\" r=\"2.2\"/><circle cx=\"18\" cy=\"7.5\" r=\"2.2\"/><circle cx=\"12\" cy=\"18\" r=\"2.2\"/><path d=\"M8.2 6.4l7.6.9M7.1 8l3.8 7.9M16.9 9.5l-3.8 6.6\"/>",
 	link: "<path d=\"M10 14a4.5 4.5 0 0 0 6.4 0l3-3A4.5 4.5 0 0 0 13 4.6l-1 1\"/><path d=\"M14 10a4.5 4.5 0 0 0-6.4 0l-3 3A4.5 4.5 0 0 0 11 19.4l1-1\"/>",
 	grid: "<rect x=\"4\" y=\"4\" width=\"6.5\" height=\"6.5\" rx=\"1.5\"/><rect x=\"13.5\" y=\"4\" width=\"6.5\" height=\"6.5\" rx=\"1.5\"/><rect x=\"4\" y=\"13.5\" width=\"6.5\" height=\"6.5\" rx=\"1.5\"/><rect x=\"13.5\" y=\"13.5\" width=\"6.5\" height=\"6.5\" rx=\"1.5\"/>",
 	rows: "<path d=\"M8.5 6h11.5M8.5 12h11.5M8.5 18h11.5\"/><circle cx=\"4.5\" cy=\"6\" r=\".9\"/><circle cx=\"4.5\" cy=\"12\" r=\".9\"/><circle cx=\"4.5\" cy=\"18\" r=\".9\"/>",
@@ -3003,34 +3005,34 @@ var Sa = {
 	sticky: "<path d=\"M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5z\"/><path d=\"M15 3v6h6\"/>",
 	crop: "<path d=\"M6 2.5V16a2 2 0 0 0 2 2h13.5\"/><path d=\"M18 21.5V8a2 2 0 0 0-2-2H2.5\"/>",
 	stamp: "<path d=\"m12 2.5 2.9 5.9 6.6 1-4.8 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5-4.8-4.6 6.6-1z\"/>"
-}, Ca = (e) => Object.hasOwn(Sa, e);
-function wa(e, t = 16) {
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="${t}" height="${t}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${Sa[e]}</svg>`;
+}, wa = (e) => Object.hasOwn(Ca, e);
+function Ta(e, t = 16) {
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="${t}" height="${t}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${Ca[e]}</svg>`;
 }
 //#endregion
 //#region ui/src/components/Icon.svelte
-var Ta = /* @__PURE__ */ q("<span class=\"icon svelte-1yrfdk4\"></span>"), Ea = {
+var Ea = /* @__PURE__ */ q("<span class=\"icon svelte-1yrfdk4\"></span>"), Da = {
 	hash: "svelte-1yrfdk4",
-	code: "\n  /* sized by the interface's scale (Settings → font size, a tab's zoom), as the text beside it */.icon.svelte-1yrfdk4 {display:inline-flex;align-items:center;justify-content:center;flex:none;line-height:0;}.icon.svelte-1yrfdk4 svg {width:100%;height:100%;}"
+	code: "\r\n  /* sized by the interface's scale (Settings → font size, a tab's zoom), as the text beside it */.icon.svelte-1yrfdk4 {display:inline-flex;align-items:center;justify-content:center;flex:none;line-height:0;}.icon.svelte-1yrfdk4 svg {width:100%;height:100%;}"
 };
-function Da(e, t) {
-	Ue(t, !0), ii(e, Ea);
+function Oa(e, t) {
+	Ue(t, !0), ii(e, Da);
 	let n = qi(t, "size", 3, 16);
-	var r = Ta();
+	var r = Ea();
 	let i;
-	ri(r, () => wa(t.name, n()), !0), j(r), V(() => i = gi(r, "", i, {
+	ri(r, () => Ta(t.name, n()), !0), j(r), V(() => i = gi(r, "", i, {
 		width: `calc(${n() ?? ""}px * var(--ui-scale, 1))`,
 		height: `calc(${n() ?? ""}px * var(--ui-scale, 1))`
 	})), J(e, r), We();
 }
 //#endregion
 //#region plugins/beta/catalog/ui/src/Icon.svelte
-function Oa(e, t) {
+function ka(e, t) {
 	Ue(t, !0);
 	let n = qi(t, "size", 3, 16);
 	{
-		let r = /* @__PURE__ */ P(() => Ca(t.name) ? t.name : "library");
-		Da(e, {
+		let r = /* @__PURE__ */ P(() => wa(t.name) ? t.name : "library");
+		Oa(e, {
 			get name() {
 				return G(r);
 			},
@@ -3043,16 +3045,16 @@ function Oa(e, t) {
 }
 //#endregion
 //#region plugins/beta/catalog/ui/src/LibraryCover.svelte
-var ka = /* @__PURE__ */ q("<img alt=\"\"/>"), Aa = /* @__PURE__ */ q("<div class=\"cover tile svelte-enia8e\" aria-hidden=\"true\"> </div>"), ja = /* @__PURE__ */ q("<div><!></div>"), Ma = {
+var Aa = /* @__PURE__ */ q("<img alt=\"\"/>"), ja = /* @__PURE__ */ q("<div class=\"cover tile svelte-enia8e\" aria-hidden=\"true\"> </div>"), Ma = /* @__PURE__ */ q("<div><!></div>"), Na = {
 	hash: "svelte-enia8e",
 	code: ".cover.svelte-enia8e {width:100%;aspect-ratio:2 / 3;object-fit:cover;border-radius:var(--radius-sm);background:var(--bg-alt);box-shadow:var(--shadow-sm);}.cover.big.svelte-enia8e {aspect-ratio:auto;max-height:280px;width:auto;max-width:100%;margin-bottom:10px;}.tile.svelte-enia8e {display:grid;place-items:center;font-size:2.2em;font-weight:600;box-shadow:none;background:hsl(var(--hue) 32% 50% / .22);color:hsl(var(--hue) 40% 42%);} /* literal: a hue per title */.wrap.svelte-enia8e {width:100%;min-height:1px;}"
 };
-function Na(e, t) {
-	Ue(t, !0), ii(e, Ma);
+function Pa(e, t) {
+	Ue(t, !0), ii(e, Na);
 	let n = qi(t, "big", 3, !1), r = /* @__PURE__ */ I(null), i = /* @__PURE__ */ I(void 0);
 	async function a(e) {
 		let r = typeof e == "function" ? await e() : e;
-		return r ? /^(https?:|data:|blob:)/i.test(r) ? r : t.atlas.thumbUrl(r.replace(/^!?\[\[|\]\]$/g, "").split("|")[0], n() ? 520 : 260) : null;
+		return r ? /^(https?:|data:|blob:)/i.test(r) ? r : t.kandinsky.thumbUrl(r.replace(/^!?\[\[|\]\]$/g, "").split("|")[0], n() ? 520 : 260) : null;
 	}
 	vn(() => {
 		let e = t.cover, n = G(i);
@@ -3069,16 +3071,16 @@ function Na(e, t) {
 		};
 	});
 	let o = /* @__PURE__ */ P(() => t.title.replace(/[^\p{L}\p{N}]/gu, "").charAt(0).toUpperCase() || "?"), s = /* @__PURE__ */ P(() => [...t.title].reduce((e, t) => (e * 31 + t.charCodeAt(0)) % 360, 7));
-	var c = ja();
+	var c = Ma();
 	let l;
 	var u = R(c), d = (e) => {
-		var t = ka();
+		var t = Aa();
 		let i;
 		V(() => {
 			i = Q(t, 1, "cover svelte-enia8e", null, i, { big: n() }), $(t, "src", G(r));
 		}), J(e, t);
 	}, f = (e) => {
-		var t = Aa();
+		var t = ja();
 		let n;
 		var r = z(t, !0);
 		V(() => {
@@ -3091,17 +3093,17 @@ function Na(e, t) {
 }
 //#endregion
 //#region plugins/beta/catalog/ui/src/Library.svelte
-var Pa = /* @__PURE__ */ q("<button><!> </button>"), Fa = /* @__PURE__ */ q("<div class=\"drop-hint svelte-7gk24t\"> </div>"), Ia = /* @__PURE__ */ q("<button role=\"radio\"> </button>"), La = /* @__PURE__ */ q("<div class=\"seg svelte-7gk24t\" role=\"radiogroup\" aria-label=\"Layout\"></div>"), Ra = /* @__PURE__ */ q("<form class=\"add svelte-7gk24t\"><input spellcheck=\"false\" class=\"svelte-7gk24t\"/> <button class=\"btn primary svelte-7gk24t\"> </button></form>"), za = /* @__PURE__ */ q("<button> <span class=\"c svelte-7gk24t\"> </span></button>"), Ba = /* @__PURE__ */ q("<div class=\"types svelte-7gk24t\" role=\"toolbar\" aria-label=\"Type\"><button>All <span class=\"c svelte-7gk24t\"> </span></button> <!></div>"), Va = /* @__PURE__ */ q("<p class=\"muted pad svelte-7gk24t\"> </p>"), Ha = /* @__PURE__ */ q("<button class=\"twisty svelte-7gk24t\"><!></button>"), Ua = /* @__PURE__ */ q("<span class=\"twisty svelte-7gk24t\"></span>"), Wa = /* @__PURE__ */ q("<div class=\"tree-row svelte-7gk24t\"><!> <button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button></div>"), Ga = /* @__PURE__ */ q("<button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button>"), Ka = /* @__PURE__ */ q("<h4 class=\"svelte-7gk24t\"> </h4> <!>", 1), qa = /* @__PURE__ */ q("<button><span class=\"hash svelte-7gk24t\">#</span><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button>"), Ja = /* @__PURE__ */ q("<button class=\"h4 svelte-7gk24t\"><!>Tags <span class=\"c svelte-7gk24t\"> </span></button> <!>", 1), Ya = /* @__PURE__ */ q("<nav class=\"side svelte-7gk24t\"><button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button> <!> <!></nav>"), Xa = /* @__PURE__ */ q("<span class=\"m svelte-7gk24t\"> </span>"), Za = /* @__PURE__ */ q("<button><!> <span class=\"t svelte-7gk24t\"></span> <!></button>"), Qa = /* @__PURE__ */ q("<span> </span>"), $a = /* @__PURE__ */ q("<span class=\"flags svelte-7gk24t\"></span>"), eo = /* @__PURE__ */ q("<button><span class=\"t svelte-7gk24t\"></span> <!> <!></button>"), to = /* @__PURE__ */ q("<p class=\"muted pad none svelte-7gk24t\"> </p>"), no = /* @__PURE__ */ q("<li class=\"svelte-7gk24t\"></li>"), ro = /* @__PURE__ */ q("<li class=\"muted svelte-7gk24t\"> </li>"), io = /* @__PURE__ */ q("<aside class=\"detail many svelte-7gk24t\" aria-label=\"Picked\"><div class=\"kind svelte-7gk24t\"> </div> <ul class=\"picked svelte-7gk24t\"><!><!></ul> <div class=\"actions svelte-7gk24t\"><!><button class=\"btn svelte-7gk24t\">Clear</button></div></aside>"), ao = /* @__PURE__ */ q("<button class=\"scrim svelte-7gk24t\" aria-label=\"Close\"></button>"), oo = /* @__PURE__ */ q("<button class=\"close icon-btn svelte-7gk24t\" aria-label=\"Close\" title=\"Close\"><!></button>"), so = /* @__PURE__ */ q("<span class=\"hint svelte-7gk24t\"> </span>"), co = /* @__PURE__ */ q("<textarea class=\"svelte-7gk24t\"></textarea>"), lo = /* @__PURE__ */ q("<input class=\"svelte-7gk24t\"/>"), uo = /* @__PURE__ */ q("<label> <!> <!></label>"), fo = /* @__PURE__ */ q("<form class=\"edit svelte-7gk24t\"><!> <div class=\"actions svelte-7gk24t\"><button class=\"btn primary svelte-7gk24t\">Save</button><button type=\"button\" class=\"btn svelte-7gk24t\">Cancel</button></div></form>"), po = /* @__PURE__ */ q("<div class=\"kind svelte-7gk24t\"> </div>"), mo = /* @__PURE__ */ q("<p> </p>"), ho = /* @__PURE__ */ q("<dt class=\"svelte-7gk24t\"> </dt><dd class=\"svelte-7gk24t\"> </dd>", 1), go = /* @__PURE__ */ q("<dl class=\"svelte-7gk24t\"></dl>"), _o = /* @__PURE__ */ q("<div class=\"choice svelte-7gk24t\" role=\"radiogroup\"><span class=\"svelte-7gk24t\"> </span> <!></div>"), vo = /* @__PURE__ */ q("<a target=\"_blank\" rel=\"noreferrer\" class=\"svelte-7gk24t\"><!> </a>"), yo = /* @__PURE__ */ q("<div class=\"links svelte-7gk24t\"></div>"), bo = /* @__PURE__ */ q("<button class=\"tag coll svelte-7gk24t\"><!> </button>"), xo = /* @__PURE__ */ q("<button class=\"tag svelte-7gk24t\"> </button>"), So = /* @__PURE__ */ q("<div class=\"tags svelte-7gk24t\"><!> <!></div>"), Co = /* @__PURE__ */ q("<h3 class=\"svelte-7gk24t\"> </h3><p class=\"abstract svelte-7gk24t\"> </p>", 1), wo = /* @__PURE__ */ q("<div></div>"), To = /* @__PURE__ */ q("<div class=\"links-bar svelte-7gk24t\"><!></div>"), Eo = /* @__PURE__ */ q("<!> <aside class=\"detail svelte-7gk24t\"><!> <!> <!> <!> <h2 class=\"svelte-7gk24t\"></h2> <!> <!> <div class=\"actions svelte-7gk24t\"></div> <!> <!> <!> <!> <!></aside>", 1), Do = /* @__PURE__ */ q("<aside class=\"detail none svelte-7gk24t\" aria-label=\"Details\"><p> <span class=\"keys-only\"><br/>↑ ↓ move, Enter opens.</span></p></aside>"), Oo = /* @__PURE__ */ q("<div tabindex=\"0\" role=\"application\"><!> <header class=\"svelte-7gk24t\"><h1 class=\"svelte-7gk24t\"><!> <span class=\"count svelte-7gk24t\"> </span></h1> <input class=\"search svelte-7gk24t\" spellcheck=\"false\"/> <!> <!> <!> <!></header> <!> <!> <div><!> <div></div> <!></div></div>"), ko = {
+var Fa = /* @__PURE__ */ q("<button><!> </button>"), Ia = /* @__PURE__ */ q("<div class=\"drop-hint svelte-7gk24t\"> </div>"), La = /* @__PURE__ */ q("<button role=\"radio\"> </button>"), Ra = /* @__PURE__ */ q("<div class=\"seg svelte-7gk24t\" role=\"radiogroup\" aria-label=\"Layout\"></div>"), za = /* @__PURE__ */ q("<form class=\"add svelte-7gk24t\"><input spellcheck=\"false\" class=\"svelte-7gk24t\"/> <button class=\"btn primary svelte-7gk24t\"> </button></form>"), Ba = /* @__PURE__ */ q("<button> <span class=\"c svelte-7gk24t\"> </span></button>"), Va = /* @__PURE__ */ q("<div class=\"types svelte-7gk24t\" role=\"toolbar\" aria-label=\"Type\"><button>All <span class=\"c svelte-7gk24t\"> </span></button> <!></div>"), Ha = /* @__PURE__ */ q("<p class=\"muted pad svelte-7gk24t\"> </p>"), Ua = /* @__PURE__ */ q("<button class=\"twisty svelte-7gk24t\"><!></button>"), Wa = /* @__PURE__ */ q("<span class=\"twisty svelte-7gk24t\"></span>"), Ga = /* @__PURE__ */ q("<div class=\"tree-row svelte-7gk24t\"><!> <button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button></div>"), Ka = /* @__PURE__ */ q("<button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button>"), qa = /* @__PURE__ */ q("<h4 class=\"svelte-7gk24t\"> </h4> <!>", 1), Ja = /* @__PURE__ */ q("<button><span class=\"hash svelte-7gk24t\">#</span><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button>"), Ya = /* @__PURE__ */ q("<button class=\"h4 svelte-7gk24t\"><!>Tags <span class=\"c svelte-7gk24t\"> </span></button> <!>", 1), Xa = /* @__PURE__ */ q("<nav class=\"side svelte-7gk24t\"><button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button> <!> <!></nav>"), Za = /* @__PURE__ */ q("<span class=\"m svelte-7gk24t\"> </span>"), Qa = /* @__PURE__ */ q("<button><!> <span class=\"t svelte-7gk24t\"></span> <!></button>"), $a = /* @__PURE__ */ q("<span> </span>"), eo = /* @__PURE__ */ q("<span class=\"flags svelte-7gk24t\"></span>"), to = /* @__PURE__ */ q("<button><span class=\"t svelte-7gk24t\"></span> <!> <!></button>"), no = /* @__PURE__ */ q("<p class=\"muted pad none svelte-7gk24t\"> </p>"), ro = /* @__PURE__ */ q("<li class=\"svelte-7gk24t\"></li>"), io = /* @__PURE__ */ q("<li class=\"muted svelte-7gk24t\"> </li>"), ao = /* @__PURE__ */ q("<aside class=\"detail many svelte-7gk24t\" aria-label=\"Picked\"><div class=\"kind svelte-7gk24t\"> </div> <ul class=\"picked svelte-7gk24t\"><!><!></ul> <div class=\"actions svelte-7gk24t\"><!><button class=\"btn svelte-7gk24t\">Clear</button></div></aside>"), oo = /* @__PURE__ */ q("<button class=\"scrim svelte-7gk24t\" aria-label=\"Close\"></button>"), so = /* @__PURE__ */ q("<button class=\"close icon-btn svelte-7gk24t\" aria-label=\"Close\" title=\"Close\"><!></button>"), co = /* @__PURE__ */ q("<span class=\"hint svelte-7gk24t\"> </span>"), lo = /* @__PURE__ */ q("<textarea class=\"svelte-7gk24t\"></textarea>"), uo = /* @__PURE__ */ q("<input class=\"svelte-7gk24t\"/>"), fo = /* @__PURE__ */ q("<label> <!> <!></label>"), po = /* @__PURE__ */ q("<form class=\"edit svelte-7gk24t\"><!> <div class=\"actions svelte-7gk24t\"><button class=\"btn primary svelte-7gk24t\">Save</button><button type=\"button\" class=\"btn svelte-7gk24t\">Cancel</button></div></form>"), mo = /* @__PURE__ */ q("<div class=\"kind svelte-7gk24t\"> </div>"), ho = /* @__PURE__ */ q("<p> </p>"), go = /* @__PURE__ */ q("<dt class=\"svelte-7gk24t\"> </dt><dd class=\"svelte-7gk24t\"> </dd>", 1), _o = /* @__PURE__ */ q("<dl class=\"svelte-7gk24t\"></dl>"), vo = /* @__PURE__ */ q("<div class=\"choice svelte-7gk24t\" role=\"radiogroup\"><span class=\"svelte-7gk24t\"> </span> <!></div>"), yo = /* @__PURE__ */ q("<a target=\"_blank\" rel=\"noreferrer\" class=\"svelte-7gk24t\"><!> </a>"), bo = /* @__PURE__ */ q("<div class=\"links svelte-7gk24t\"></div>"), xo = /* @__PURE__ */ q("<button class=\"tag coll svelte-7gk24t\"><!> </button>"), So = /* @__PURE__ */ q("<button class=\"tag svelte-7gk24t\"> </button>"), Co = /* @__PURE__ */ q("<div class=\"tags svelte-7gk24t\"><!> <!></div>"), wo = /* @__PURE__ */ q("<h3 class=\"svelte-7gk24t\"> </h3><p class=\"abstract svelte-7gk24t\"> </p>", 1), To = /* @__PURE__ */ q("<div></div>"), Eo = /* @__PURE__ */ q("<div class=\"links-bar svelte-7gk24t\"><!></div>"), Do = /* @__PURE__ */ q("<!> <aside class=\"detail svelte-7gk24t\"><!> <!> <!> <!> <h2 class=\"svelte-7gk24t\"></h2> <!> <!> <div class=\"actions svelte-7gk24t\"></div> <!> <!> <!> <!> <!></aside>", 1), Oo = /* @__PURE__ */ q("<aside class=\"detail none svelte-7gk24t\" aria-label=\"Details\"><p> <span class=\"keys-only\"><br/>↑ ↓ move, Enter opens.</span></p></aside>"), ko = /* @__PURE__ */ q("<div tabindex=\"0\" role=\"application\"><!> <header class=\"svelte-7gk24t\"><h1 class=\"svelte-7gk24t\"><!> <span class=\"count svelte-7gk24t\"> </span></h1> <input class=\"search svelte-7gk24t\" spellcheck=\"false\"/> <!> <!> <!> <!></header> <!> <!> <div><!> <div></div> <!></div></div>"), Ao = {
 	hash: "svelte-7gk24t",
-	code: ".types.svelte-7gk24t {display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 10px;}.chip.svelte-7gk24t {display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--border);color:var(--text-muted);font-size:calc(12.5px * var(--ui-scale, 1));}.chip.svelte-7gk24t:hover {background:var(--bg-hover);color:var(--text);}.chip.on.svelte-7gk24t {background:var(--accent-soft);border-color:color-mix(in srgb, var(--accent) 45%, transparent);color:var(--accent);}.chip.svelte-7gk24t .c:where(.svelte-7gk24t) {color:var(--text-faint);font-variant-numeric:tabular-nums;}.library.svelte-7gk24t {height:100%;display:flex;flex-direction:column;background:var(--bg);outline:none;position:relative;}.library.dragging.svelte-7gk24t {box-shadow:inset 0 0 0 2px var(--accent);}.drop-hint.svelte-7gk24t {position:absolute;inset:0;z-index:5;display:grid;place-items:center;pointer-events:none;background:color-mix(in srgb, var(--bg) 70%, transparent);color:var(--accent);font-size:calc(16px * var(--ui-scale, 1));font-weight:600;}header.svelte-7gk24t {display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--border);}h1.svelte-7gk24t {display:inline-flex;gap:8px;align-items:center;margin:0 8px 0 0;font-size:calc(17px * var(--ui-scale, 1));color:var(--heading);}.count.svelte-7gk24t {font-size:.7em;font-weight:500;color:var(--text-faint);}input.svelte-7gk24t {font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;}input.svelte-7gk24t:focus {outline:none;border-color:var(--accent);}.search.svelte-7gk24t {flex:1;min-width:220px;}.add.svelte-7gk24t {display:flex;gap:6px;}.add.svelte-7gk24t input:where(.svelte-7gk24t) {width:270px;} /* the placeholder whole (clipped text is a bug) */.seg.svelte-7gk24t {display:inline-flex;border:1px solid var(--border-strong);border-radius:var(--radius-sm);overflow:hidden;}.seg.svelte-7gk24t button:where(.svelte-7gk24t) {padding:4px 10px;color:var(--text-muted);}.seg.svelte-7gk24t button.on:where(.svelte-7gk24t) {background:var(--accent-soft);color:var(--accent);}.btn.svelte-7gk24t {display:inline-flex;gap:6px;align-items:center;border:1px solid var(--border-strong);}.btn.svelte-7gk24t:hover:not(:disabled) {background:var(--bg-hover);}.btn.svelte-7gk24t:disabled {opacity:.45;cursor:default;}.btn.danger.svelte-7gk24t {color:var(--red);}.edit.svelte-7gk24t {display:grid;grid-template-columns:1fr 2fr;gap:8px;margin:0 0 14px;padding:12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--bg-alt);}.edit.svelte-7gk24t label:where(.svelte-7gk24t) {grid-column:1 / -1;display:flex;flex-direction:column;gap:3px;color:var(--text-muted);font-size:calc(12px * var(--ui-scale, 1));}.edit.svelte-7gk24t label.half:where(.svelte-7gk24t) {grid-column:auto;}.edit.svelte-7gk24t .actions:where(.svelte-7gk24t) {grid-column:1 / -1;}.edit.svelte-7gk24t textarea:where(.svelte-7gk24t) {font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;resize:vertical;}.hint.svelte-7gk24t {color:var(--text-faint);font-weight:400;}.body.svelte-7gk24t {flex:1;min-height:0;display:grid;grid-template-columns:210px minmax(300px, 1.15fr) minmax(280px, 1fr);}.body.bare.svelte-7gk24t {grid-template-columns:minmax(300px, 1.4fr) minmax(280px, 1fr);}.list.empty-list.svelte-7gk24t {grid-column:span 2;} /* nothing to list: its words get the detail's column too */.detail.none.svelte-7gk24t {display:grid;place-content:center;text-align:center;color:var(--text-faint);}.side.svelte-7gk24t {overflow:auto;border-right:1px solid var(--border);padding:8px 6px;background:var(--bg-alt);display:flex;flex-direction:column;gap:1px;}.side.svelte-7gk24t h4:where(.svelte-7gk24t), .side.svelte-7gk24t .h4:where(.svelte-7gk24t) {display:flex;align-items:center;gap:4px;margin:12px 8px 4px;padding:0;font-size:calc(10.5px * var(--ui-scale, 1));font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);text-align:left;}.side.svelte-7gk24t .h4:where(.svelte-7gk24t):hover {color:var(--text);}.item.svelte-7gk24t {display:flex;align-items:center;gap:7px;width:100%;padding:4px 8px;border-radius:var(--radius-sm);color:var(--text);text-align:left;font-size:calc(12.5px * var(--ui-scale, 1));}.item.svelte-7gk24t:hover {background:var(--bg-hover);}.item.on.svelte-7gk24t {background:var(--accent-soft);color:var(--heading);box-shadow:inset 2px 0 0 var(--accent);}.item.drop.svelte-7gk24t {outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft);}.item.svelte-7gk24t .n:where(.svelte-7gk24t) {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.c.svelte-7gk24t {color:var(--text-faint);font-size:.85em;font-variant-numeric:tabular-nums;}.hash.svelte-7gk24t {color:var(--text-faint);width:14px;text-align:center;}.tagitem.svelte-7gk24t {color:var(--text-muted);}.tag.coll.svelte-7gk24t {display:inline-flex;gap:4px;align-items:center;color:var(--text);}.list.svelte-7gk24t {overflow:hidden auto; /* the grid wraps: a horizontal offset only ever hid the first column */border-right:1px solid var(--border);padding:6px;position:relative;user-select:none;-webkit-user-select:none;}.list.svelte-7gk24t .marquee {position:absolute;z-index:2;pointer-events:none;border:1px solid var(--accent);background:color-mix(in srgb, var(--accent) 12%, transparent);border-radius:2px;}.tree-row.svelte-7gk24t {display:flex;align-items:center;min-width:0;}.tree-row.svelte-7gk24t .item:where(.svelte-7gk24t) {flex:1;min-width:0;}.twisty.svelte-7gk24t {flex:none;width:16px;height:22px;display:grid;place-items:center;color:var(--text-faint);padding:0;}.twisty.svelte-7gk24t:hover {color:var(--text);}.picked.svelte-7gk24t {margin:8px 0 12px;padding-left:18px;font-size:.9em;color:var(--text-muted);}.picked.svelte-7gk24t li:where(.svelte-7gk24t) {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.list.covers.svelte-7gk24t {display:grid;grid-template-columns:repeat(auto-fill, minmax(118px, 1fr));gap:14px 12px;align-content:start;padding:12px;}.row.svelte-7gk24t {display:grid;grid-template-columns:minmax(0, 1fr) auto;gap:2px 10px;width:100%;text-align:left;padding:8px 10px;border-radius:var(--radius-sm);}.row.svelte-7gk24t:hover {background:var(--bg-hover);}.row.sel.svelte-7gk24t {background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent);}.card.svelte-7gk24t {display:flex;flex-direction:column;gap:4px;text-align:left;padding:4px;border-radius:var(--radius-sm);min-width:0;}\n  /* a library of thousands: items out of view are not laid out or painted (still in the page, for the marquee and keys) */.row.svelte-7gk24t {content-visibility:auto;contain-intrinsic-size:auto 52px;}.card.svelte-7gk24t {content-visibility:auto;contain-intrinsic-size:auto 230px;}.card.svelte-7gk24t:hover {background:var(--bg-hover);}.card.sel.svelte-7gk24t {background:var(--accent-soft);box-shadow:0 0 0 2px var(--accent);}.card.svelte-7gk24t .t:where(.svelte-7gk24t) {font-size:.92em;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;}.card.svelte-7gk24t .m:where(.svelte-7gk24t) {font-size:.8em;}.t.svelte-7gk24t {grid-column:1;color:var(--heading);font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.m.svelte-7gk24t {grid-column:1;color:var(--text-muted);font-size:.9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.flags.svelte-7gk24t {grid-column:2;grid-row:1 / span 2;display:flex;gap:4px;align-items:center;}.flag.svelte-7gk24t {font-size:calc(11px * var(--ui-scale, 1));padding:1px 6px;border-radius:999px;background:var(--bg-hover);color:var(--text-muted);}.flag.red.svelte-7gk24t {color:var(--red);background:color-mix(in srgb, var(--red) 14%, transparent);}\n  /* a column, so the linked mentions sit at the bottom however short the item's card is */.detail.svelte-7gk24t {overflow:auto;padding:18px 22px 40px;display:flex;flex-direction:column;}.detail.svelte-7gk24t > * {flex-shrink:0;}.links-bar.svelte-7gk24t {position:sticky;bottom:-40px;margin:auto -22px -40px;padding-top:18px;display:flex;flex-direction:column;max-height:50vh;}.links-bar.svelte-7gk24t .backlinks {max-height:50vh;}.kind.svelte-7gk24t {text-transform:uppercase;letter-spacing:.07em;font-size:calc(11px * var(--ui-scale, 1));color:var(--text-faint);}h2.svelte-7gk24t {margin:4px 0 6px;font-size:calc(19px * var(--ui-scale, 1));color:var(--heading);line-height:1.3;}.authors.svelte-7gk24t {margin:0;color:var(--text);}.venue.svelte-7gk24t {margin:2px 0 0;color:var(--text-muted);font-style:italic;}dl.svelte-7gk24t {display:grid;grid-template-columns:max-content minmax(0, 1fr);gap:3px 12px;font-size:.9em;margin:10px 0;}dt.svelte-7gk24t {color:var(--text-faint);}dd.svelte-7gk24t {margin:0;overflow-wrap:anywhere;}.actions.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 8px;}.choice.svelte-7gk24t {display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 10px;}.choice.svelte-7gk24t span:where(.svelte-7gk24t) {color:var(--text-faint);font-size:.85em;margin-right:2px;}.links.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:14px;margin:6px 0;}.links.svelte-7gk24t a:where(.svelte-7gk24t) {display:inline-flex;gap:5px;align-items:center;color:var(--link, var(--accent));text-decoration:none;font-size:.92em;}.links.svelte-7gk24t a:where(.svelte-7gk24t):hover {text-decoration:underline;}.tags.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}.tag.svelte-7gk24t {font-size:calc(11.5px * var(--ui-scale, 1));padding:2px 9px;border-radius:999px;border:1px solid var(--border-strong);color:var(--text-muted);}.tag.svelte-7gk24t:hover {color:var(--text);border-color:var(--accent);}h3.svelte-7gk24t {margin:18px 0 6px;font-size:calc(11px * var(--ui-scale, 1));text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);}.abstract.svelte-7gk24t {margin:0;line-height:1.6;color:var(--text);}.pad.svelte-7gk24t {padding:12px 16px;}\n  /* the covers are a grid: the \"nothing here\" line spans all its columns (on a phone it sat in one, a word a line) */.none.svelte-7gk24t {grid-column:1 / -1;}\n\n  /* narrow: one column; groups as a row of chips; the card as a sheet over the list */.narrow.svelte-7gk24t header:where(.svelte-7gk24t) {padding:10px 12px;gap:8px;}.narrow.svelte-7gk24t .search:where(.svelte-7gk24t) {flex:1 1 100%;min-width:0;order:1;}.narrow.svelte-7gk24t .add:where(.svelte-7gk24t) {flex:1 1 100%;order:2;}.narrow.svelte-7gk24t .add:where(.svelte-7gk24t) input:where(.svelte-7gk24t) {flex:1;width:auto;min-width:0;}.narrow.svelte-7gk24t .types:where(.svelte-7gk24t) {padding:0 12px 8px;flex-wrap:nowrap;overflow-x:auto;}.narrow.svelte-7gk24t .body:where(.svelte-7gk24t), .narrow.svelte-7gk24t .body.bare:where(.svelte-7gk24t) {display:flex;flex-direction:column;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) {flex:none;flex-direction:row;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid var(--border);padding:6px 12px;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) h4:where(.svelte-7gk24t), .narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .h4:where(.svelte-7gk24t) {margin:0 2px 0 6px;flex:none;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .item:where(.svelte-7gk24t) {width:auto;flex:none;max-width:70vw;padding:5px 10px;border-radius:999px;border:1px solid var(--border);}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .item.on:where(.svelte-7gk24t) {box-shadow:none;border-color:color-mix(in srgb, var(--accent) 45%, transparent);}.narrow.svelte-7gk24t .list:where(.svelte-7gk24t) {flex:1;border-right:0;}.narrow.svelte-7gk24t .list.covers:where(.svelte-7gk24t) {grid-template-columns:repeat(auto-fill, minmax(104px, 1fr));gap:12px 10px;padding:10px 12px;}.scrim.svelte-7gk24t {position:absolute;inset:0;z-index:6;background:var(--scrim);border:0;padding:0;cursor:default;}.narrow.svelte-7gk24t .detail:where(.svelte-7gk24t) {position:absolute;left:0;right:0;bottom:0;z-index:7;max-height:80%;padding:18px 16px calc(24px + env(safe-area-inset-bottom, 0px));background:var(--bg-elev);border-top:1px solid var(--border-strong);border-radius:14px 14px 0 0;box-shadow:var(--shadow-pop);}.narrow.svelte-7gk24t .detail:where(.svelte-7gk24t) .cover.big {max-height:180px;}\n  /* stays at the sheet's top right while its card scrolls */.close.svelte-7gk24t {position:sticky;top:0;float:right;z-index:1;margin:-8px -6px 0 8px;width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:var(--bg-hover);}"
+	code: ".types.svelte-7gk24t {display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 10px;}.chip.svelte-7gk24t {display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--border);color:var(--text-muted);font-size:calc(12.5px * var(--ui-scale, 1));}.chip.svelte-7gk24t:hover {background:var(--bg-hover);color:var(--text);}.chip.on.svelte-7gk24t {background:var(--accent-soft);border-color:color-mix(in srgb, var(--accent) 45%, transparent);color:var(--accent);}.chip.svelte-7gk24t .c:where(.svelte-7gk24t) {color:var(--text-faint);font-variant-numeric:tabular-nums;}.library.svelte-7gk24t {height:100%;display:flex;flex-direction:column;background:var(--bg);outline:none;position:relative;}.library.dragging.svelte-7gk24t {box-shadow:inset 0 0 0 2px var(--accent);}.drop-hint.svelte-7gk24t {position:absolute;inset:0;z-index:5;display:grid;place-items:center;pointer-events:none;background:color-mix(in srgb, var(--bg) 70%, transparent);color:var(--accent);font-size:calc(16px * var(--ui-scale, 1));font-weight:600;}header.svelte-7gk24t {display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--border);}h1.svelte-7gk24t {display:inline-flex;gap:8px;align-items:center;margin:0 8px 0 0;font-size:calc(17px * var(--ui-scale, 1));color:var(--heading);}.count.svelte-7gk24t {font-size:.7em;font-weight:500;color:var(--text-faint);}input.svelte-7gk24t {font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;}input.svelte-7gk24t:focus {outline:none;border-color:var(--accent);}.search.svelte-7gk24t {flex:1;min-width:220px;}.add.svelte-7gk24t {display:flex;gap:6px;}.add.svelte-7gk24t input:where(.svelte-7gk24t) {width:270px;} /* the placeholder whole (clipped text is a bug) */.seg.svelte-7gk24t {display:inline-flex;border:1px solid var(--border-strong);border-radius:var(--radius-sm);overflow:hidden;}.seg.svelte-7gk24t button:where(.svelte-7gk24t) {padding:4px 10px;color:var(--text-muted);}.seg.svelte-7gk24t button.on:where(.svelte-7gk24t) {background:var(--accent-soft);color:var(--accent);}.btn.svelte-7gk24t {display:inline-flex;gap:6px;align-items:center;border:1px solid var(--border-strong);}.btn.svelte-7gk24t:hover:not(:disabled) {background:var(--bg-hover);}.btn.svelte-7gk24t:disabled {opacity:.45;cursor:default;}.btn.danger.svelte-7gk24t {color:var(--red);}.edit.svelte-7gk24t {display:grid;grid-template-columns:1fr 2fr;gap:8px;margin:0 0 14px;padding:12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--bg-alt);}.edit.svelte-7gk24t label:where(.svelte-7gk24t) {grid-column:1 / -1;display:flex;flex-direction:column;gap:3px;color:var(--text-muted);font-size:calc(12px * var(--ui-scale, 1));}.edit.svelte-7gk24t label.half:where(.svelte-7gk24t) {grid-column:auto;}.edit.svelte-7gk24t .actions:where(.svelte-7gk24t) {grid-column:1 / -1;}.edit.svelte-7gk24t textarea:where(.svelte-7gk24t) {font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;resize:vertical;}.hint.svelte-7gk24t {color:var(--text-faint);font-weight:400;}.body.svelte-7gk24t {flex:1;min-height:0;display:grid;grid-template-columns:210px minmax(300px, 1.15fr) minmax(280px, 1fr);}.body.bare.svelte-7gk24t {grid-template-columns:minmax(300px, 1.4fr) minmax(280px, 1fr);}.list.empty-list.svelte-7gk24t {grid-column:span 2;} /* nothing to list: its words get the detail's column too */.detail.none.svelte-7gk24t {display:grid;place-content:center;text-align:center;color:var(--text-faint);}.side.svelte-7gk24t {overflow:auto;border-right:1px solid var(--border);padding:8px 6px;background:var(--bg-alt);display:flex;flex-direction:column;gap:1px;}.side.svelte-7gk24t h4:where(.svelte-7gk24t), .side.svelte-7gk24t .h4:where(.svelte-7gk24t) {display:flex;align-items:center;gap:4px;margin:12px 8px 4px;padding:0;font-size:calc(10.5px * var(--ui-scale, 1));font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);text-align:left;}.side.svelte-7gk24t .h4:where(.svelte-7gk24t):hover {color:var(--text);}.item.svelte-7gk24t {display:flex;align-items:center;gap:7px;width:100%;padding:4px 8px;border-radius:var(--radius-sm);color:var(--text);text-align:left;font-size:calc(12.5px * var(--ui-scale, 1));}.item.svelte-7gk24t:hover {background:var(--bg-hover);}.item.on.svelte-7gk24t {background:var(--accent-soft);color:var(--heading);box-shadow:inset 2px 0 0 var(--accent);}.item.drop.svelte-7gk24t {outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft);}.item.svelte-7gk24t .n:where(.svelte-7gk24t) {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.c.svelte-7gk24t {color:var(--text-faint);font-size:.85em;font-variant-numeric:tabular-nums;}.hash.svelte-7gk24t {color:var(--text-faint);width:14px;text-align:center;}.tagitem.svelte-7gk24t {color:var(--text-muted);}.tag.coll.svelte-7gk24t {display:inline-flex;gap:4px;align-items:center;color:var(--text);}.list.svelte-7gk24t {overflow:hidden auto; /* the grid wraps: a horizontal offset only ever hid the first column */border-right:1px solid var(--border);padding:6px;position:relative;user-select:none;-webkit-user-select:none;}.list.svelte-7gk24t .marquee {position:absolute;z-index:2;pointer-events:none;border:1px solid var(--accent);background:color-mix(in srgb, var(--accent) 12%, transparent);border-radius:2px;}.tree-row.svelte-7gk24t {display:flex;align-items:center;min-width:0;}.tree-row.svelte-7gk24t .item:where(.svelte-7gk24t) {flex:1;min-width:0;}.twisty.svelte-7gk24t {flex:none;width:16px;height:22px;display:grid;place-items:center;color:var(--text-faint);padding:0;}.twisty.svelte-7gk24t:hover {color:var(--text);}.picked.svelte-7gk24t {margin:8px 0 12px;padding-left:18px;font-size:.9em;color:var(--text-muted);}.picked.svelte-7gk24t li:where(.svelte-7gk24t) {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.list.covers.svelte-7gk24t {display:grid;grid-template-columns:repeat(auto-fill, minmax(118px, 1fr));gap:14px 12px;align-content:start;padding:12px;}.row.svelte-7gk24t {display:grid;grid-template-columns:minmax(0, 1fr) auto;gap:2px 10px;width:100%;text-align:left;padding:8px 10px;border-radius:var(--radius-sm);}.row.svelte-7gk24t:hover {background:var(--bg-hover);}.row.sel.svelte-7gk24t {background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent);}.card.svelte-7gk24t {display:flex;flex-direction:column;gap:4px;text-align:left;padding:4px;border-radius:var(--radius-sm);min-width:0;}\r\n  /* a library of thousands: items out of view are not laid out or painted (still in the page, for the marquee and keys) */.row.svelte-7gk24t {content-visibility:auto;contain-intrinsic-size:auto 52px;}.card.svelte-7gk24t {content-visibility:auto;contain-intrinsic-size:auto 230px;}.card.svelte-7gk24t:hover {background:var(--bg-hover);}.card.sel.svelte-7gk24t {background:var(--accent-soft);box-shadow:0 0 0 2px var(--accent);}.card.svelte-7gk24t .t:where(.svelte-7gk24t) {font-size:.92em;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;}.card.svelte-7gk24t .m:where(.svelte-7gk24t) {font-size:.8em;}.t.svelte-7gk24t {grid-column:1;color:var(--heading);font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.m.svelte-7gk24t {grid-column:1;color:var(--text-muted);font-size:.9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.flags.svelte-7gk24t {grid-column:2;grid-row:1 / span 2;display:flex;gap:4px;align-items:center;}.flag.svelte-7gk24t {font-size:calc(11px * var(--ui-scale, 1));padding:1px 6px;border-radius:999px;background:var(--bg-hover);color:var(--text-muted);}.flag.red.svelte-7gk24t {color:var(--red);background:color-mix(in srgb, var(--red) 14%, transparent);}\r\n  /* a column, so the linked mentions sit at the bottom however short the item's card is */.detail.svelte-7gk24t {overflow:auto;padding:18px 22px 40px;display:flex;flex-direction:column;}.detail.svelte-7gk24t > * {flex-shrink:0;}.links-bar.svelte-7gk24t {position:sticky;bottom:-40px;margin:auto -22px -40px;padding-top:18px;display:flex;flex-direction:column;max-height:50vh;}.links-bar.svelte-7gk24t .backlinks {max-height:50vh;}.kind.svelte-7gk24t {text-transform:uppercase;letter-spacing:.07em;font-size:calc(11px * var(--ui-scale, 1));color:var(--text-faint);}h2.svelte-7gk24t {margin:4px 0 6px;font-size:calc(19px * var(--ui-scale, 1));color:var(--heading);line-height:1.3;}.authors.svelte-7gk24t {margin:0;color:var(--text);}.venue.svelte-7gk24t {margin:2px 0 0;color:var(--text-muted);font-style:italic;}dl.svelte-7gk24t {display:grid;grid-template-columns:max-content minmax(0, 1fr);gap:3px 12px;font-size:.9em;margin:10px 0;}dt.svelte-7gk24t {color:var(--text-faint);}dd.svelte-7gk24t {margin:0;overflow-wrap:anywhere;}.actions.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 8px;}.choice.svelte-7gk24t {display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 10px;}.choice.svelte-7gk24t span:where(.svelte-7gk24t) {color:var(--text-faint);font-size:.85em;margin-right:2px;}.links.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:14px;margin:6px 0;}.links.svelte-7gk24t a:where(.svelte-7gk24t) {display:inline-flex;gap:5px;align-items:center;color:var(--link, var(--accent));text-decoration:none;font-size:.92em;}.links.svelte-7gk24t a:where(.svelte-7gk24t):hover {text-decoration:underline;}.tags.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}.tag.svelte-7gk24t {font-size:calc(11.5px * var(--ui-scale, 1));padding:2px 9px;border-radius:999px;border:1px solid var(--border-strong);color:var(--text-muted);}.tag.svelte-7gk24t:hover {color:var(--text);border-color:var(--accent);}h3.svelte-7gk24t {margin:18px 0 6px;font-size:calc(11px * var(--ui-scale, 1));text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);}.abstract.svelte-7gk24t {margin:0;line-height:1.6;color:var(--text);}.pad.svelte-7gk24t {padding:12px 16px;}\r\n  /* the covers are a grid: the \"nothing here\" line spans all its columns (on a phone it sat in one, a word a line) */.none.svelte-7gk24t {grid-column:1 / -1;}\r\n\r\n  /* narrow: one column; groups as a row of chips; the card as a sheet over the list */.narrow.svelte-7gk24t header:where(.svelte-7gk24t) {padding:10px 12px;gap:8px;}.narrow.svelte-7gk24t .search:where(.svelte-7gk24t) {flex:1 1 100%;min-width:0;order:1;}.narrow.svelte-7gk24t .add:where(.svelte-7gk24t) {flex:1 1 100%;order:2;}.narrow.svelte-7gk24t .add:where(.svelte-7gk24t) input:where(.svelte-7gk24t) {flex:1;width:auto;min-width:0;}.narrow.svelte-7gk24t .types:where(.svelte-7gk24t) {padding:0 12px 8px;flex-wrap:nowrap;overflow-x:auto;}.narrow.svelte-7gk24t .body:where(.svelte-7gk24t), .narrow.svelte-7gk24t .body.bare:where(.svelte-7gk24t) {display:flex;flex-direction:column;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) {flex:none;flex-direction:row;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid var(--border);padding:6px 12px;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) h4:where(.svelte-7gk24t), .narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .h4:where(.svelte-7gk24t) {margin:0 2px 0 6px;flex:none;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .item:where(.svelte-7gk24t) {width:auto;flex:none;max-width:70vw;padding:5px 10px;border-radius:999px;border:1px solid var(--border);}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .item.on:where(.svelte-7gk24t) {box-shadow:none;border-color:color-mix(in srgb, var(--accent) 45%, transparent);}.narrow.svelte-7gk24t .list:where(.svelte-7gk24t) {flex:1;border-right:0;}.narrow.svelte-7gk24t .list.covers:where(.svelte-7gk24t) {grid-template-columns:repeat(auto-fill, minmax(104px, 1fr));gap:12px 10px;padding:10px 12px;}.scrim.svelte-7gk24t {position:absolute;inset:0;z-index:6;background:var(--scrim);border:0;padding:0;cursor:default;}.narrow.svelte-7gk24t .detail:where(.svelte-7gk24t) {position:absolute;left:0;right:0;bottom:0;z-index:7;max-height:80%;padding:18px 16px calc(24px + env(safe-area-inset-bottom, 0px));background:var(--bg-elev);border-top:1px solid var(--border-strong);border-radius:14px 14px 0 0;box-shadow:var(--shadow-pop);}.narrow.svelte-7gk24t .detail:where(.svelte-7gk24t) .cover.big {max-height:180px;}\r\n  /* stays at the sheet's top right while its card scrolls */.close.svelte-7gk24t {position:sticky;top:0;float:right;z-index:1;margin:-8px -6px 0 8px;width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:var(--bg-hover);}"
 };
-function Ao(e, t) {
-	Ue(t, !0), ii(e, ko);
+function jo(e, t) {
+	Ue(t, !0), ii(e, Ao);
 	let n = (e, t = d) => {
-		var n = Pa();
+		var n = Fa();
 		let r;
 		var i = R(n), a = (e) => {
-			Oa(e, {
+			ka(e, {
 				get name() {
 					return t().icon;
 				},
@@ -3118,7 +3120,7 @@ function Ao(e, t) {
 				danger: t().danger
 			}), n.disabled = t().disabled, $(n, "title", t().title), Y(o, ` ${t().label ?? ""}`);
 		}), K("click", n, () => void fe(t())), J(e, n);
-	}, r = (e, n, r = "info", i) => t.atlas.toast(e, n, r, { timeout: i }), i = (e) => t.atlas.richTitle(e), a = /* @__PURE__ */ I(Jt([])), o = /* @__PURE__ */ I(""), s = /* @__PURE__ */ I(""), c = /* @__PURE__ */ I(Jt({ kind: "all" })), l = /* @__PURE__ */ I(null), u = /* @__PURE__ */ I(!1), f = /* @__PURE__ */ I(null), p = /* @__PURE__ */ I(Jt(dr(() => t.source.sorts[0]?.id ?? ""))), h = /* @__PURE__ */ I(Jt(dr(() => t.source.layouts[0]))), g = /* @__PURE__ */ I(Jt([])), _;
+	}, r = (e, n, r = "info", i) => t.kandinsky.toast(e, n, r, { timeout: i }), i = (e) => t.kandinsky.richTitle(e), a = /* @__PURE__ */ I(Jt([])), o = /* @__PURE__ */ I(""), s = /* @__PURE__ */ I(""), c = /* @__PURE__ */ I(Jt({ kind: "all" })), l = /* @__PURE__ */ I(null), u = /* @__PURE__ */ I(!1), f = /* @__PURE__ */ I(null), p = /* @__PURE__ */ I(Jt(dr(() => t.source.sorts[0]?.id ?? ""))), h = /* @__PURE__ */ I(Jt(dr(() => t.source.layouts[0]))), g = /* @__PURE__ */ I(Jt([])), _;
 	async function v() {
 		try {
 			let e = new Map(G(a).map((e) => [e.id, e]));
@@ -3170,7 +3172,7 @@ function Ao(e, t) {
 			}, !0);
 			return;
 		}
-		"confirm" in e && !await t.atlas.confirm(e.confirm.title, {
+		"confirm" in e && !await t.kandinsky.confirm(e.confirm.title, {
 			hint: e.confirm.hint,
 			ok: e.confirm.button,
 			danger: !0
@@ -3220,7 +3222,7 @@ function Ao(e, t) {
 		let i = await t.source.drop.run(n);
 		await v(), i && L(f, i, !0);
 	}
-	let be = "text/x-atlas-library", xe = /* @__PURE__ */ I(null);
+	let be = "text/x-kandinsky-library", xe = /* @__PURE__ */ I(null);
 	function Se(e, t) {
 		let n = G(O).length > 1 && G(A).has(t.id) ? G(O) : [t.id];
 		e.dataTransfer?.setData(be, JSON.stringify(n)), e.dataTransfer && (e.dataTransfer.effectAllowed = "move");
@@ -3302,7 +3304,7 @@ function Ao(e, t) {
 		e.preventDefault();
 	}
 	function Me(e, n) {
-		return { destroy: t.atlas.mountBlock(e, {
+		return { destroy: t.kandinsky.mountBlock(e, {
 			type: "backlinks",
 			path: n
 		}) };
@@ -3316,17 +3318,17 @@ function Ao(e, t) {
 			n?.(), clearTimeout(e);
 		};
 	});
-	var Ne = Oo();
+	var Ne = ko();
 	let Pe;
 	var Fe = R(Ne), Ie = (e) => {
-		var n = Fa(), r = z(n, !0);
+		var n = Ia(), r = z(n, !0);
 		V(() => Y(r, t.source.drop.hint)), J(e, n);
 	};
 	X(Fe, (e) => {
 		G(ve) && t.source.drop && e(Ie);
 	});
 	var Le = B(Fe, 2), Re = R(Le), ze = R(Re);
-	Oa(ze, {
+	ka(ze, {
 		get name() {
 			return t.source.icon;
 		},
@@ -3342,7 +3344,7 @@ function Ao(e, t) {
 				value: e.id,
 				label: `Sort: ${e.label}`
 			})));
-			xa(e, {
+			Sa(e, {
 				get value() {
 					return G(p);
 				},
@@ -3358,9 +3360,9 @@ function Ao(e, t) {
 		t.source.sorts.length > 1 && e(Ge);
 	});
 	var Ke = B(He, 2), qe = (e) => {
-		var n = La();
+		var n = Ra();
 		Z(n, 20, () => t.source.layouts, (e) => e, (e, t) => {
-			var n = Ia();
+			var n = La();
 			let r;
 			var i = z(n, !0);
 			V(() => {
@@ -3372,7 +3374,7 @@ function Ao(e, t) {
 		t.source.layouts.length > 1 && e(qe);
 	});
 	var Je = B(Ke, 2), Ye = (e) => {
-		var n = Ra(), r = R(n);
+		var n = za(), r = R(n);
 		Mi(r);
 		var i = B(r, 2), a = z(i, !0);
 		j(n), V((e) => {
@@ -3387,11 +3389,11 @@ function Ao(e, t) {
 		n(e, () => G(t));
 	}), j(Le);
 	var Xe = B(Le, 2), Ze = (e) => {
-		var t = Ba(), n = R(t);
+		var t = Va(), n = R(t);
 		let r;
 		var i = z(B(R(n)), !0);
 		j(n), Z(B(n, 2), 17, () => G(ae), (e) => e.id, (e, t) => {
-			var n = za();
+			var n = Ba();
 			let r;
 			var i = R(n), a = z(B(i), !0);
 			j(n), V(() => {
@@ -3405,7 +3407,7 @@ function Ao(e, t) {
 		G(ae).length > 1 && e(Ze);
 	});
 	var N = B(Xe, 2), Qe = (e) => {
-		var t = Va(), n = z(t, !0);
+		var t = Ha(), n = z(t, !0);
 		V(() => Y(n, G(o))), J(e, t);
 	};
 	X(N, (e) => {
@@ -3414,10 +3416,10 @@ function Ao(e, t) {
 	var $e = B(N, 2);
 	let et;
 	var nt = R($e), rt = (e) => {
-		var n = Ya(), r = R(n);
+		var n = Xa(), r = R(n);
 		let i;
 		var o = R(r);
-		Oa(o, {
+		ka(o, {
 			get name() {
 				return t.source.icon;
 			},
@@ -3426,16 +3428,16 @@ function Ao(e, t) {
 		var s = B(o), l = z(s), d = z(B(s), !0);
 		j(r);
 		var f = B(r, 2), p = (e) => {
-			var n = Ka(), r = on(n), i = z(r, !0), a = B(r, 2), o = (e) => {
+			var n = qa(), r = on(n), i = z(r, !0), a = B(r, 2), o = (e) => {
 				var t = Fr();
 				Z(on(t), 17, () => G(ne), (e) => e.path, (e, t) => {
-					var n = Wa();
+					var n = Ga();
 					let r;
 					var i = R(n), a = (e) => {
-						var n = Ha(), r = R(n);
+						var n = Ua(), r = R(n);
 						{
 							let e = /* @__PURE__ */ P(() => G(te).has(G(t).path) ? "chevron-down" : "chevron");
-							Oa(r, {
+							ka(r, {
 								get name() {
 									return G(e);
 								},
@@ -3446,7 +3448,7 @@ function Ao(e, t) {
 							$(n, "aria-label", e), $(n, "aria-expanded", t);
 						}, [() => G(te).has(G(t).path) ? `Close ${G(t).name}` : `Open ${G(t).name}`, () => G(te).has(G(t).path)]), K("click", n, () => re(G(t).path)), J(e, n);
 					}, o = (e) => {
-						J(e, Ua());
+						J(e, Wa());
 					};
 					X(i, (e) => {
 						G(t).kids ? e(a) : e(o, -1);
@@ -3456,7 +3458,7 @@ function Ao(e, t) {
 					var u = R(s);
 					{
 						let e = /* @__PURE__ */ P(() => G(te).has(G(t).path) && G(t).kids ? "folder-open" : "folder");
-						Oa(u, {
+						ka(u, {
 							get name() {
 								return G(e);
 							},
@@ -3476,7 +3478,7 @@ function Ao(e, t) {
 				Z(on(t), 17, () => G(y), ([e, t]) => e, (e, t) => {
 					var n = /* @__PURE__ */ P(() => m(G(t), 2));
 					let r = () => G(n)[0], i = () => G(n)[1];
-					var a = Ga(), o = () => L(c, {
+					var a = Ka(), o = () => L(c, {
 						kind: "group",
 						name: r()
 					}, !0);
@@ -3491,7 +3493,7 @@ function Ao(e, t) {
 						}
 					}), [() => D(r()), () => oe("group", r())], void 0, void 0, "svelte-7gk24t");
 					var s = R(a);
-					Oa(s, {
+					ka(s, {
 						name: "folder",
 						size: 14
 					});
@@ -3509,10 +3511,10 @@ function Ao(e, t) {
 			G(y).length && e(p);
 		});
 		var h = B(f, 2), g = (e) => {
-			var t = Ja(), n = on(t), r = R(n);
+			var t = Ya(), n = on(t), r = R(n);
 			{
 				let e = /* @__PURE__ */ P(() => G(u) ? "chevron-down" : "chevron");
-				Oa(r, {
+				ka(r, {
 					get name() {
 						return G(e);
 					},
@@ -3527,7 +3529,7 @@ function Ao(e, t) {
 					var n = /* @__PURE__ */ P(() => m(G(t), 2));
 					let r = () => G(n)[0], i = () => G(n)[1];
 					var a = Fr(), o = on(a), s = (e) => {
-						var t = qa();
+						var t = Ja();
 						let n;
 						var a = B(R(t)), o = z(a, !0), s = z(B(a), !0);
 						j(t), V((e) => {
@@ -3561,12 +3563,12 @@ function Ao(e, t) {
 	let at;
 	Z(it, 21, () => G(S), (e) => e.id, (e, n) => {
 		var r = Fr(), a = on(r), o = (e) => {
-			var r = Za();
+			var r = Qa();
 			let a;
 			var o = R(r);
-			Na(o, {
-				get atlas() {
-					return t.atlas;
+			Pa(o, {
+				get kandinsky() {
+					return t.kandinsky;
 				},
 				get cover() {
 					return G(n).cover;
@@ -3578,7 +3580,7 @@ function Ao(e, t) {
 			var s = B(o, 2);
 			ri(s, () => i(G(n).title), !0), j(s);
 			var c = B(s, 2), l = (e) => {
-				var t = Xa(), r = z(t, !0);
+				var t = Za(), r = z(t, !0);
 				V(() => Y(r, G(n).sub)), J(e, t);
 			};
 			X(c, (e) => {
@@ -3587,21 +3589,21 @@ function Ao(e, t) {
 				a = Q(r, 1, "card svelte-7gk24t", null, a, { sel: e }), $(r, "data-pick", G(n).id), $(r, "draggable", t.source.regroup ? "true" : void 0), $(r, "title", G(n).sub);
 			}, [() => Te(G(n))]), Er("dragstart", r, (e) => Se(e, G(n))), K("click", r, (e) => Ee(e, G(n))), K("dblclick", r, () => t.source.open?.(G(n))), J(e, r);
 		}, s = (e) => {
-			var r = eo();
+			var r = to();
 			let a;
 			var o = R(r);
 			ri(o, () => i(G(n).title), !0), j(o);
 			var s = B(o, 2), c = (e) => {
-				var t = Xa(), r = z(t, !0);
+				var t = Za(), r = z(t, !0);
 				V(() => Y(r, G(n).sub)), J(e, t);
 			};
 			X(s, (e) => {
 				G(n).sub && e(c);
 			});
 			var l = B(s, 2), u = (e) => {
-				var t = $a();
+				var t = eo();
 				Z(t, 21, () => G(n).flags, (e) => e.label, (e, t) => {
-					var n = Qa();
+					var n = $a();
 					let r;
 					var i = z(n, !0);
 					V(() => {
@@ -3619,17 +3621,17 @@ function Ao(e, t) {
 			G(h) === "covers" ? e(o) : e(s, -1);
 		}), J(e, r);
 	}, (e) => {
-		var n = to(), r = z(n, !0);
+		var n = no(), r = z(n, !0);
 		V(() => Y(r, G(a).length ? "Nothing matches." : t.source.empty)), J(e, n);
 	}), j(it), Wi(it, (e) => _ = e, () => _), ai(it, (e, t) => pa?.(e, t), () => ({ pick: Oe }));
 	var ot = B(it, 2), st = (e) => {
-		var r = io(), a = R(r), o = z(a), s = B(a, 2), c = R(s);
+		var r = ao(), a = R(r), o = z(a), s = B(a, 2), c = R(s);
 		Z(c, 17, () => G(Ce).slice(0, 12), (e) => e.id, (e, t) => {
-			var n = no();
+			var n = ro();
 			ri(n, () => i(G(t).title), !0), j(n), J(e, n);
 		});
 		var l = B(c), u = (e) => {
-			var t = ro(), n = z(t);
+			var t = io(), n = z(t);
 			V(() => Y(n, `and ${G(Ce).length - 12} more`)), J(e, t);
 		};
 		X(l, (e) => {
@@ -3642,16 +3644,16 @@ function Ao(e, t) {
 		var p = B(f);
 		j(d), j(r), V(() => Y(o, `${G(Ce).length ?? ""} ${t.source.noun ?? ""} picked`)), K("click", p, () => L(O, G(C) ? [G(C).id] : [], !0)), J(e, r);
 	}, ct = (e) => {
-		var r = Eo(), a = on(r), o = (e) => {
-			var t = ao();
+		var r = Do(), a = on(r), o = (e) => {
+			var t = oo();
 			K("click", t, () => L(f, null)), J(e, t);
 		};
 		X(a, (e) => {
 			G(ue) && e(o);
 		});
 		var s = B(a, 2), l = R(s), u = (e) => {
-			var t = oo();
-			Oa(R(t), {
+			var t = so();
+			ka(R(t), {
 				name: "close",
 				size: 16
 			}), j(t), K("click", t, () => L(f, null)), J(e, t);
@@ -3660,22 +3662,22 @@ function Ao(e, t) {
 			G(ue) && e(u);
 		});
 		var d = B(l, 2), p = (e) => {
-			var t = fo(), n = R(t);
+			var t = po(), n = R(t);
 			Z(n, 17, () => G(T).def.fields, (e) => e.key, (e, t) => {
-				var n = uo();
+				var n = fo();
 				let r;
 				var i = R(n, !0), a = B(i), o = (e) => {
-					var n = so(), r = z(n, !0);
+					var n = co(), r = z(n, !0);
 					V(() => Y(r, G(t).hint)), J(e, n);
 				};
 				X(a, (e) => {
 					G(t).hint && e(o);
 				});
 				var s = B(a, 2), c = (e) => {
-					var n = co();
+					var n = lo();
 					tt(n), V(() => $(n, "rows", G(t).rows)), Ri(n, () => G(T).values[G(t).key], (e) => G(T).values[G(t).key] = e), J(e, n);
 				}, l = (e) => {
-					var n = lo();
+					var n = uo();
 					Mi(n), Ri(n, () => G(T).values[G(t).key], (e) => G(T).values[G(t).key] = e), J(e, n);
 				};
 				X(s, (e) => {
@@ -3695,9 +3697,9 @@ function Ao(e, t) {
 			G(T) && e(p);
 		});
 		var g = B(d, 2), _ = (e) => {
-			Na(e, {
-				get atlas() {
-					return t.atlas;
+			Pa(e, {
+				get kandinsky() {
+					return t.kandinsky;
 				},
 				get cover() {
 					return G(C).cover;
@@ -3712,7 +3714,7 @@ function Ao(e, t) {
 			G(h) === "covers" && e(_);
 		});
 		var v = B(g, 2), y = (e) => {
-			var t = po(), n = z(t, !0);
+			var t = mo(), n = z(t, !0);
 			V(() => Y(n, G(w).kind)), J(e, t);
 		};
 		X(v, (e) => {
@@ -3722,17 +3724,17 @@ function Ao(e, t) {
 		ri(ee, () => i(G(w).title), !0), j(ee);
 		var b = B(ee, 2);
 		Z(b, 17, () => G(w).lines ?? [], Jr, (e, t) => {
-			var n = mo(), r = z(n, !0);
+			var n = ho(), r = z(n, !0);
 			V(() => {
 				Q(n, 1, li(G(t).muted ? "venue" : "authors"), "svelte-7gk24t"), Y(r, G(t).text);
 			}), J(e, n);
 		});
 		var x = B(b, 2), te = (e) => {
-			var t = go();
+			var t = _o();
 			Z(t, 21, () => G(w).fields, ([e, t]) => e, (e, t) => {
 				var n = /* @__PURE__ */ P(() => m(G(t), 2));
 				let r = () => G(n)[0], i = () => G(n)[1];
-				var a = ho(), o = on(a), s = z(o, !0), c = z(B(o), !0);
+				var a = go(), o = on(a), s = z(o, !0), c = z(B(o), !0);
 				V(() => {
 					Y(s, r()), Y(c, i());
 				}), J(e, a);
@@ -3746,9 +3748,9 @@ function Ao(e, t) {
 			n(e, () => G(t));
 		}), j(ne);
 		var re = B(ne, 2), ie = (e) => {
-			var t = _o(), n = R(t), r = z(n, !0);
+			var t = vo(), n = R(t), r = z(n, !0);
 			Z(B(n, 2), 17, () => G(w).choice.options, (e) => e.label, (e, t) => {
-				var n = Ia();
+				var n = La();
 				let r;
 				var i = z(n, !0);
 				V(() => {
@@ -3762,10 +3764,10 @@ function Ao(e, t) {
 			G(w).choice && e(ie);
 		});
 		var ae = B(re, 2), oe = (e) => {
-			var t = yo();
+			var t = bo();
 			Z(t, 21, () => G(w).links, (e) => e.url, (e, t) => {
-				var n = vo(), r = R(n);
-				Oa(r, {
+				var n = yo(), r = R(n);
+				ka(r, {
 					name: "link",
 					size: 13
 				});
@@ -3779,10 +3781,10 @@ function Ao(e, t) {
 			G(w).links?.length && e(oe);
 		});
 		var se = B(ae, 2), ce = (e) => {
-			var t = So(), n = R(t);
+			var t = Co(), n = R(t);
 			Z(n, 16, () => G(C).groups ?? [], (e) => e, (e, t) => {
-				var n = bo(), r = R(n);
-				Oa(r, {
+				var n = xo(), r = R(n);
+				ka(r, {
 					name: "folder",
 					size: 12
 				});
@@ -3792,7 +3794,7 @@ function Ao(e, t) {
 					name: t
 				}, !0)), J(e, n);
 			}), Z(B(n, 2), 16, () => G(C).tags ?? [], (e) => e, (e, t) => {
-				var n = xo(), r = z(n);
+				var n = So(), r = z(n);
 				V(() => Y(r, `#${t ?? ""}`)), K("click", n, () => L(c, {
 					kind: "tag",
 					name: t
@@ -3803,7 +3805,7 @@ function Ao(e, t) {
 			(G(C).groups?.length || G(C).tags?.length) && e(ce);
 		});
 		var S = B(se, 2), le = (e) => {
-			var t = Co(), n = on(t), r = z(n, !0), i = z(B(n), !0);
+			var t = wo(), n = on(t), r = z(n, !0), i = z(B(n), !0);
 			V(() => {
 				Y(r, G(w).body.title), Y(i, G(w).body.text);
 			}), J(e, t);
@@ -3812,9 +3814,9 @@ function Ao(e, t) {
 			G(w).body && e(le);
 		});
 		var de = B(S, 2), fe = (e) => {
-			var t = To();
+			var t = Eo();
 			qr(R(t), () => G(C).note, (e) => {
-				var t = wo();
+				var t = To();
 				ai(t, (e, t) => Me?.(e, t), () => G(C).note), J(e, t);
 			}), j(t), J(e, t);
 		};
@@ -3822,7 +3824,7 @@ function Ao(e, t) {
 			G(C).note && e(fe);
 		}), j(s), J(e, r);
 	}, lt = (e) => {
-		var n = Do(), r = R(n), i = R(r);
+		var n = Oo(), r = R(n), i = R(r);
 		we(), j(r), j(n), V(() => Y(i, `Pick one of the ${t.source.noun ?? ""} to see it here.`)), J(e, n);
 	};
 	X(ot, (e) => {
@@ -3848,15 +3850,15 @@ Dr([
 ]);
 //#endregion
 //#region plugins/beta/catalog/ui/src/Libraries.svelte
-var jo = /* @__PURE__ */ q("<button role=\"tab\"><!> </button>"), Mo = /* @__PURE__ */ q("<div class=\"which svelte-1hozhyt\" role=\"tablist\" aria-label=\"Libraries\"></div>"), No = /* @__PURE__ */ q("<p class=\"none svelte-1hozhyt\">No library in this vault: Atlas and its plugins give them (Drawings is Atlas's own; Settings → Appearance → Libraries chooses which show).</p>"), Po = /* @__PURE__ */ q("<p class=\"none svelte-1hozhyt\"> </p>"), Fo = /* @__PURE__ */ q("<div class=\"libraries svelte-1hozhyt\"><!> <!></div>"), Io = {
+var Mo = /* @__PURE__ */ q("<button role=\"tab\"><!> </button>"), No = /* @__PURE__ */ q("<div class=\"which svelte-1hozhyt\" role=\"tablist\" aria-label=\"Libraries\"></div>"), Po = /* @__PURE__ */ q("<p class=\"none svelte-1hozhyt\">No library in this vault: Kandinsky and its plugins give them (Drawings is Kandinsky's own; Settings → Appearance → Libraries chooses which show).</p>"), Fo = /* @__PURE__ */ q("<p class=\"none svelte-1hozhyt\"> </p>"), Io = /* @__PURE__ */ q("<div class=\"libraries svelte-1hozhyt\"><!> <!></div>"), Lo = {
 	hash: "svelte-1hozhyt",
 	code: ".libraries.svelte-1hozhyt {display:flex;flex-direction:column;height:100%;min-height:0;}.which.svelte-1hozhyt {display:flex;gap:4px;padding:6px 10px 0;overflow-x:auto;flex:none;border-bottom:1px solid var(--border);}.which.svelte-1hozhyt button:where(.svelte-1hozhyt) {display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:none;background:none;color:var(--text-muted);border-bottom:2px solid transparent;white-space:nowrap;font:inherit;cursor:pointer;}.which.svelte-1hozhyt button:where(.svelte-1hozhyt):hover {color:var(--text);}.which.svelte-1hozhyt button.on:where(.svelte-1hozhyt) {color:var(--text);border-bottom-color:var(--accent);}.libraries.svelte-1hozhyt > :last-child {flex:1;min-height:0;}.none.svelte-1hozhyt {padding:24px;color:var(--text-muted);}"
 };
-function Lo(e, t) {
-	Ue(t, !0), ii(e, Io);
-	let n = "atlas.libraries.last", r = /* @__PURE__ */ I(dr(() => t.atlas.libraries.list())), i = /* @__PURE__ */ P(() => ca(G(r))), a = /* @__PURE__ */ I(Jt(dr(() => t.atlas.anchor) || Yi(n, "")));
+function Ro(e, t) {
+	Ue(t, !0), ii(e, Lo);
+	let n = "kandinsky.libraries.last", r = /* @__PURE__ */ I(dr(() => t.kandinsky.libraries.list())), i = /* @__PURE__ */ P(() => ca(G(r))), a = /* @__PURE__ */ I(Jt(dr(() => t.kandinsky.anchor) || Yi(n, "")));
 	Ji(() => {
-		let e = t.atlas.libraries.onChange((e) => L(r, e)), n = t.atlas.pane?.onAnchor((e) => L(a, e, !0));
+		let e = t.kandinsky.libraries.onChange((e) => L(r, e)), n = t.kandinsky.pane?.onAnchor((e) => L(a, e, !0));
 		return () => {
 			e(), n?.();
 		};
@@ -3875,13 +3877,13 @@ function Lo(e, t) {
 			t = !1;
 		};
 	});
-	var l = Fo(), u = R(l), d = (e) => {
-		var t = Mo();
+	var l = Io(), u = R(l), d = (e) => {
+		var t = No();
 		Z(t, 21, () => G(i), (e) => e.id, (e, t) => {
-			var n = jo();
+			var n = Mo();
 			let r;
 			var i = R(n);
-			Oa(i, {
+			ka(i, {
 				get name() {
 					return G(t).icon;
 				},
@@ -3897,16 +3899,16 @@ function Lo(e, t) {
 		G(i).length > 1 && e(d);
 	});
 	var f = B(u, 2), p = (e) => {
-		J(e, No());
+		J(e, Po());
 	}, m = (e) => {
-		var t = Po(), n = z(t, !0);
+		var t = Fo(), n = z(t, !0);
 		V(() => Y(n, G(c))), J(e, t);
 	}, h = (e) => {
 		var n = Fr();
 		qr(on(n), () => G(s), (e) => {
-			Ao(e, {
-				get atlas() {
-					return t.atlas;
+			jo(e, {
+				get kandinsky() {
+					return t.kandinsky;
 				},
 				get source() {
 					return G(s);
@@ -3921,24 +3923,24 @@ function Lo(e, t) {
 Dr(["click"]);
 //#endregion
 //#region plugins/beta/catalog/ui/src/view.ts
-function Ro(e, t) {
+function zo(e, t) {
 	e.style.height = "100%";
-	let n = Br(Lo, {
+	let n = Br(Ro, {
 		target: e,
-		props: { atlas: t }
+		props: { kandinsky: t }
 	});
 	return () => void Wr(n);
 }
-function zo(e, t, n) {
+function Bo(e, t, n) {
 	e.style.height = "100%";
-	let r = Br(Ao, {
+	let r = Br(jo, {
 		target: e,
 		props: {
-			atlas: n,
+			kandinsky: n,
 			source: t
 		}
 	});
 	return () => void Wr(r);
 }
 //#endregion
-export { Ro as default, zo as mountLibrary };
+export { zo as default, Bo as mountLibrary };

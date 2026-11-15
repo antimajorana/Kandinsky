@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.content.Context;
 import java.io.File;
@@ -24,7 +24,7 @@ final class Helpers {
                 .put("PATH", bin.getPath() + ":" + System.getenv("PATH"))
                 .put("LD_LIBRARY_PATH", lib)
                 // the plugins' engines shipped in the APK (build-apk.sh `engines`): a plugin's `run` finds its program here
-                .put("ATLAS_PLUGIN_BIN", bin.getPath())
+                .put("KANDINSKY_PLUGIN_BIN", bin.getPath())
                 .toString();
         } catch (Exception e) {
             return "{}"; // the core still runs; the engines say they cannot start

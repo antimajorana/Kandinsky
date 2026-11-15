@@ -7,13 +7,16 @@ import { EditorView, keymap, placeholder as placeholderText, drawSelection } fro
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { obsidianMarkdown } from "./live/obsidian-syntax.js";
+import { closeDisplayMath } from "./display-math";
+import { mathPreview } from "./math-preview";
+import { settings } from "../settings.svelte";
 import { pluginHooks } from "./plugin-hooks";
 import { editorMenu } from "./menu";
-import { atlasTheme } from "./theme";
+import { kandinskyTheme } from "./theme";
 
 export interface ProseEditorOptions {
   text?: string;
-  /** What the plugins are told the text is (`atlas.editor.path`): a `.md` name makes it a note's prose to them. */
+  /** What the plugins are told the text is (`kandinsky.editor.path`): a `.md` name makes it a note's prose to them. */
   path?: string;
   placeholder?: string;
   /** The text changed (typed, pasted, or a plugin's edit). */
@@ -38,11 +41,13 @@ export function createProseEditor(parent: HTMLElement, o: ProseEditorOptions = {
     pluginHooks(path, /\.(md|markdown)$/i.test(path)),
     editorMenu({ path, kind: "prose" }),
     markdown({ base: markdownLanguage, extensions: [...obsidianMarkdown], addKeymap: false }),
+    keymap.of([{ key: "Enter", run: closeDisplayMath }]),
+    mathPreview(() => settings.config?.editor.math_preview ?? true),
     history(),
     drawSelection(),
     keymap.of([...historyKeymap, ...defaultKeymap]),
     EditorView.lineWrapping,
-    atlasTheme,
+    kandinskyTheme,
     EditorView.contentAttributes.of({ "aria-label": o.label ?? "Text", spellcheck: "false" }),
     o.placeholder ? placeholderText(o.placeholder) : [],
     EditorView.updateListener.of((u) => { if (u.docChanged) o.onChange?.(u.state.doc.toString()); }),

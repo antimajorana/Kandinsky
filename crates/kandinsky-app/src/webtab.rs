@@ -2,7 +2,7 @@
 //! drop those headers (its responses are read-only; `disable-web-security` does not lift them — measured,
 //! docs/WEB-WINDOWS.md "Web tabs"). So each web tab is a WebKit view of the app's own, laid over the tab's place in the
 //! page, as Obsidian's <webview>: the main view goes into a `gtk::Overlay`, the Web pane says where it is
-//! (`atlasWeb` messages) and the app places, shows and hides one view per tab, telling the pane its address and title.
+//! (`kandinskyWeb` messages) and the app places, shows and hides one view per tab, telling the pane its address and title.
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -32,11 +32,11 @@ enum Ask {
     FindEnd { id: String },
 }
 
-/// The keys a web tab hands back to Atlas, as names (never keystrokes: a site could post them itself, so a site can at
+/// The keys a web tab hands back to Kandinsky, as names (never keystrokes: a site could post them itself, so a site can at
 /// most close its own tab or open a palette); the browser's own keys stay in the page.
 const KEYS: &str = r#"
 // WebKitGTK reports Super as a key of its own ("Super", OSLeft), never in metaKey or getModifierState (measured in a
-// hidden KWin through Xwayland, 2026-10-21): held from its keydown to its keyup or a blur, as Atlas does (keys.ts)
+// hidden KWin through Xwayland, 2026-10-21): held from its keydown to its keyup or a blur, as Kandinsky does (keys.ts)
 let sup = false;
 const isSup = (e) => /^(Meta|OS|Super|Hyper)(Left|Right)?$/.test(e.key) || /^(Meta|OS|Super|Hyper)(Left|Right)?$/.test(e.code);
 addEventListener("keyup", (e) => { if (isSup(e)) sup = false; }, true);
@@ -46,7 +46,7 @@ addEventListener("keydown", (e) => {
   if (["Shift", "Control", "Alt", "AltGraph"].includes(e.key)) return; // a chord's other modifiers: wait for its key
   const meta = e.metaKey || sup || e.getModifierState("Super") || e.getModifierState("OS");
   const k = e.key.toLowerCase(), plain = !e.altKey && !meta;
-  const send = (what) => { e.preventDefault(); e.stopImmediatePropagation(); webkit.messageHandlers.atlasWebKey.postMessage(what); };
+  const send = (what) => { e.preventDefault(); e.stopImmediatePropagation(); webkit.messageHandlers.kandinskyWebKey.postMessage(what); };
   if (e.altKey && e.key === "ArrowLeft") send("back");
   else if (e.altKey && e.key === "ArrowRight") send("forward");
   else if (e.key === "F5" || (e.ctrlKey && plain && !e.shiftKey && k === "r")) { e.preventDefault(); location.reload(); }
@@ -55,7 +55,7 @@ addEventListener("keydown", (e) => {
   else if (e.key === "F1") send("palette");
   else if (e.ctrlKey && plain && !e.shiftKey && k === "l") send("address");
   else if (e.ctrlKey && plain && !e.shiftKey && k === "f") send("find");
-  // Super is Atlas's (its app keys; a page has no use for it): the chord back, run as Atlas binds it
+  // Super is Kandinsky's (its app keys; a page has no use for it): the chord back, run as Kandinsky binds it
   else if (meta) send("key:" + JSON.stringify({ key: e.key, code: e.code, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey }));
 }, true);
 "#;
@@ -97,7 +97,7 @@ fn latest(view: &WebView, n: u64) -> bool {
 /// Puts the main view in an overlay and listens to its page. GTK main thread, before the page loads.
 pub fn attach(main: &WebView) {
     let Some(parent) = main.parent().and_then(|p| p.downcast::<gtk::Box>().ok()) else {
-        return eprintln!("atlas-app: web tabs off (the window's view is not in a box)");
+        return eprintln!("kandinsky-app: web tabs off (the window's view is not in a box)");
     };
     let overlay = gtk::Overlay::new();
     parent.remove(main);
@@ -112,12 +112,12 @@ pub fn attach(main: &WebView) {
     });
     overlay.show_all();
     if let Some(ucm) = main.user_content_manager() {
-        ucm.register_script_message_handler("atlasWeb");
-        ucm.connect_script_message_received(Some("atlasWeb"), |_, r| {
+        ucm.register_script_message_handler("kandinskyWeb");
+        ucm.connect_script_message_received(Some("kandinskyWeb"), |_, r| {
             let Some(text) = r.js_value().map(|v| javascriptcore::ValueExt::to_str(&v)) else { return };
             match serde_json::from_str::<Ask>(&text) {
                 Ok(ask) => handle(ask),
-                Err(e) => eprintln!("atlas-app: a web tab's ask not understood ({e}): {text}"),
+                Err(e) => eprintln!("kandinsky-app: a web tab's ask not understood ({e}): {text}"),
             }
         });
     }
@@ -163,7 +163,7 @@ fn handle(ask: Ask) {
             view.queue_resize();
             view.show();
         }
-        // something of Atlas lies over the view (a link's preview, a menu): the page shows a picture of it meanwhile,
+        // something of Kandinsky lies over the view (a link's preview, a menu): the page shows a picture of it meanwhile,
         // not an empty pane — taken before the view goes, which it then does whatever the picture's fate
         Ask::Hide { id } => if let Some(v) = p.tabs.get(&id).filter(|v| v.is_visible()) {
             let view = v.clone();
@@ -202,13 +202,13 @@ fn handle(ask: Ask) {
 /// Only the web: a page cannot have the app load a file:// or another scheme in a tab.
 fn web_url(url: &str) -> bool { url.starts_with("https://") || url.starts_with("http://") }
 
-/// A tab's view: the web tabs' own cookies and storage (kept, so a sign-in lasts; apart from the Atlas page, so a site
+/// A tab's view: the web tabs' own cookies and storage (kept, so a sign-in lasts; apart from the Kandinsky page, so a site
 /// never holds the core's key), the ad blocking of the browsing windows, the keys above.
 fn make(p: &mut Place, id: &str) -> WebView {
     let context = p.context.get_or_insert_with(context).clone();
     let ucm = UserContentManager::new();
     ucm.add_script(&UserScript::new(KEYS, UserContentInjectedFrames::TopFrame, UserScriptInjectionTime::Start, &[], &[]));
-    ucm.register_script_message_handler("atlasWebKey");
+    ucm.register_script_message_handler("kandinskyWebKey");
     let view = WebView::builder().web_context(&context).user_content_manager(&ucm).build();
     if let Some(s) = WebViewExt::settings(&view) {
         s.set_enable_developer_extras(true);
@@ -219,7 +219,7 @@ fn make(p: &mut Place, id: &str) -> WebView {
     let tell_id = id.to_string();
     // back / forward go through the view's own history (a page's `history.back()` can be overridden or ignored by it)
     let weak = view.downgrade();
-    ucm.connect_script_message_received(Some("atlasWebKey"), move |_, r| {
+    ucm.connect_script_message_received(Some("kandinskyWebKey"), move |_, r| {
         let Some(what) = r.js_value().map(|v| javascriptcore::ValueExt::to_str(&v).to_string()) else { return };
         if let (Some(v), "back" | "forward") = (weak.upgrade(), what.as_str()) {
             if what == "back" { v.go_back() } else { v.go_forward() }
@@ -227,7 +227,7 @@ fn make(p: &mut Place, id: &str) -> WebView {
             if let Some(m) = main() { m.grab_focus() }
             tell(&tell_id, serde_json::json!({ "action": what }));
         } else if let Some(chord) = what.strip_prefix("key:").and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()) {
-            // a Super chord: Atlas runs the global command bound to it (Web.svelte), never a keystroke into a page
+            // a Super chord: Kandinsky runs the global command bound to it (Web.svelte), never a keystroke into a page
             if let Some(m) = main() { m.grab_focus() }
             tell(&tell_id, serde_json::json!({ "key": chord }));
         }
@@ -273,7 +273,7 @@ fn make(p: &mut Place, id: &str) -> WebView {
         9 => { v.go_forward(); gtk::glib::Propagation::Stop }
         _ => gtk::glib::Propagation::Proceed,
     });
-    // Shift+click on a link: the system's browser, not Atlas. Read from the click WebKit itself reports (modifiers
+    // Shift+click on a link: the system's browser, not Kandinsky. Read from the click WebKit itself reports (modifiers
     // and a user gesture), never from the page's script, so a site cannot send pages out on its own.
     let ext_id = id.to_string();
     view.connect_decide_policy(move |_, decision, kind| {
@@ -291,7 +291,7 @@ fn make(p: &mut Place, id: &str) -> WebView {
         decision.ignore();
         true
     });
-    // a link that wants a new window: a new tab of Atlas
+    // a link that wants a new window: a new tab of Kandinsky
     let tell_id = id.to_string();
     view.connect_create(move |_, action| {
         if let Some(url) = action.request().and_then(|r| r.uri()) {
@@ -305,8 +305,8 @@ fn make(p: &mut Place, id: &str) -> WebView {
 
 /// The web tabs' data and cache folders, beside the app's own.
 fn context() -> WebContext {
-    use atlas_core::platform::dirs::{atlas, Base};
-    let (data, cache) = (atlas(Base::Data).join("web-tabs"), atlas(Base::Cache).join("web-tabs"));
+    use kandinsky_core::platform::dirs::{app, Base};
+    let (data, cache) = (app(Base::Data).join("web-tabs"), app(Base::Cache).join("web-tabs"));
     let manager = WebsiteDataManager::builder()
         .base_data_directory(data.to_string_lossy().as_ref())
         .base_cache_directory(cache.to_string_lossy().as_ref())
@@ -352,10 +352,10 @@ fn picture(shot: &gtk::cairo::Surface, w: i32, h: i32, scale: i32) -> Option<Str
     Some(format!("data:image/bmp;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bmp)))
 }
 
-/// An `atlas-web` event to the Web pane `id`.
+/// An `kandinsky-web` event to the Web pane `id`.
 fn tell(id: &str, mut detail: serde_json::Value) {
     detail["id"] = id.into();
-    let js = format!("window.dispatchEvent(new CustomEvent('atlas-web',{{detail:{detail}}}))");
+    let js = format!("window.dispatchEvent(new CustomEvent('kandinsky-web',{{detail:{detail}}}))");
     #[allow(deprecated)] // evaluate_javascript needs WebKitGTK 2.40, as in main.rs
     if let Some(m) = main() { m.run_javascript(&js, None::<&gtk::gio::Cancellable>, |_| {}) }
 }

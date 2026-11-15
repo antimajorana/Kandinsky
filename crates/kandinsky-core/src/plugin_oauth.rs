@@ -1,10 +1,10 @@
 //! OpenID Connect sign-in for any plugin. Authorization code + PKCE, as a public
 //! client (no client secret lives in a vault):
 //! 1. `start` reads the provider's endpoints (`<issuer>/.well-known/openid-configuration`) and makes the sign-in address;
-//! 2. the page shows it (`atlas.signIn`) and hands back the address the provider sent the browser to;
+//! 2. the page shows it (`kandinsky.signIn`) and hands back the address the provider sent the browser to;
 //! 3. `finish` trades the code for tokens, kept once per provider in `@signin` (outside the vault, never sent to a page)
 //!    and shared by every plugin: a plugin's secret `oauth.<name>` only names the provider it signed in with;
-//! 4. `atlas.fetch` fills a header `{ oauth: name }` with `Bearer <access token>`, refreshed when it is about to expire.
+//! 4. `kandinsky.fetch` fills a header `{ oauth: name }` with `Bearer <access token>`, refreshed when it is about to expire.
 //!
 //! `ready` gets a token with no click when it can: the vault's provider already signed in (another plugin did), or a
 //! kept gate session (the door's cookie) that the provider takes for a silent `prompt=none` sign-in.
@@ -44,7 +44,7 @@ pub struct OauthStart {
     #[serde(default)]
     #[ts(optional)]
     pub scopes: Option<Vec<String>>,
-    /// The redirect address registered with the provider for this client (`https://localhost/atlas`).
+    /// The redirect address registered with the provider for this client (`https://localhost/kandinsky`).
     /// Default: the vault's `[plugins] oidc_redirect`.
     #[serde(default)]
     #[ts(optional)]
@@ -54,7 +54,7 @@ pub struct OauthStart {
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct OauthStarted {
-    /// The provider's sign-in page, to open with `atlas.signIn(url, redirect)`.
+    /// The provider's sign-in page, to open with `kandinsky.signIn(url, redirect)`.
     pub url: String,
     /// Where the provider sends the browser back (the plugin's or the vault's).
     pub redirect: String,
@@ -163,7 +163,7 @@ fn secret_of(name: &str) -> Result<String> {
 fn client() -> Result<reqwest::blocking::Client> {
     reqwest::blocking::Client::builder().use_preconfigured_tls(crate::tls_chain::config())
         .timeout(Duration::from_secs(20))
-        .user_agent(concat!("Atlas/", env!("CARGO_PKG_VERSION"), " (plugin sign-in)"))
+        .user_agent(concat!("Kandinsky/", env!("CARGO_PKG_VERSION"), " (plugin sign-in)"))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| Error::Other(e.into()))
@@ -223,7 +223,7 @@ fn issuer_of(perm: &crate::plugins::Permissions, id: &str, resource: &str) -> Re
     let challenge = r.headers().get(reqwest::header::WWW_AUTHENTICATE).and_then(|v| v.to_str().ok()).and_then(bearer_params).unwrap_or_default();
     if r.status().is_redirection() && challenge.is_empty() {
         let to = r.headers().get(reqwest::header::LOCATION).and_then(|v| v.to_str().ok()).unwrap_or("?");
-        return Err(Error::BadRequest(format!("oauth: {resource} sends the browser to {to}: a sign-in door in front of the service, not a token — sign in to it as a service (atlas.signIn)")));
+        return Err(Error::BadRequest(format!("oauth: {resource} sends the browser to {to}: a sign-in door in front of the service, not a token — sign in to it as a service (kandinsky.signIn)")));
     }
     if let Some(i) = challenge.get("as_uri").or(challenge.get("issuer")) {
         return Ok(i.clone());
@@ -406,7 +406,7 @@ pub fn ready(root: &Path, secrets: &Store, id: &str, name: &str, resource: &str)
         return Ok(false);
     }
     let ok = silent(root, secrets, id, name, resource, &vault).unwrap_or_else(|e| {
-        eprintln!("atlas: a silent sign-in for {id} ({name}): {e}");
+        eprintln!("kandinsky: a silent sign-in for {id} ({name}): {e}");
         false
     });
     let mut tried = TRIED.lock().unwrap_or_else(|e| e.into_inner());
@@ -512,7 +512,7 @@ pub fn keep_alive(secrets: &Store) {
     for key in secrets.names(SECTION).unwrap_or_default().into_iter().filter(|k| k.starts_with("oidc.")) {
         if shared(secrets, &key).ok().flatten().is_some_and(|t| !t.refresh.is_empty() && now().saturating_sub(t.renewed) > QUIET) {
             if let Err(e) = renew(secrets, &key) {
-                eprintln!("atlas: keeping the OpenID sign-in {key}: {e}");
+                eprintln!("kandinsky: keeping the OpenID sign-in {key}: {e}");
             }
         }
     }
@@ -584,7 +584,7 @@ mod tests {
     }
 
     fn plugin(root: &Path, net: &str) {
-        let d = root.join(".atlas/plugins/net");
+        let d = root.join(".kandinsky/plugins/net");
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("plugin.toml"), format!("title = \"Net\"\n[permissions]\nnet = [\"{net}\"]\nsecrets = true\n")).unwrap();
     }
@@ -608,12 +608,12 @@ mod tests {
             let unauthorized = format!("HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Bearer realm=\"api\", resource_metadata=\"http://127.0.0.1:{port}/meta\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
             vec![unauthorized, json(&format!(r#"{{"resource":"x","authorization_servers":["http://127.0.0.1:{port}/idp"]}}"#)), json(&discovery(port))]
         });
-        let vault_cfg = PluginsConfig { oidc_client_id: "atlas-vault".into(), oidc_redirect: "https://localhost/back".into(), ..Default::default() };
+        let vault_cfg = PluginsConfig { oidc_client_id: "kandinsky-vault".into(), oidc_redirect: "https://localhost/back".into(), ..Default::default() };
         let ask = OauthStart { name: "svc".into(), issuer: None, resource: Some(format!("http://127.0.0.1:{port}/api/items")), client_id: None, scopes: None, redirect: None };
         let started = start(vault.path(), "net", &ask, &vault_cfg).unwrap();
         assert_eq!(started.redirect, "https://localhost/back");
         let q: HashMap<String, String> = reqwest::Url::parse(&started.url).unwrap().query_pairs().into_owned().collect();
-        assert_eq!(q["client_id"], "atlas-vault");
+        assert_eq!(q["client_id"], "kandinsky-vault");
         let seen = server.join().unwrap();
         assert!(seen[0].starts_with("GET /api/items "), "{}", seen[0]);
         assert!(seen[1].starts_with("GET /meta "), "{}", seen[1]);
@@ -662,7 +662,7 @@ mod tests {
 
         // a provider on a host the plugin did not declare: refused before anything is sent
         plugin(vault.path(), "example.org");
-        let ask = OauthStart { name: "authelia".into(), issuer: Some(format!("http://127.0.0.1:{port}/")), resource: None, client_id: Some("atlas".into()), scopes: None, redirect: Some("https://localhost/atlas".into()) };
+        let ask = OauthStart { name: "authelia".into(), issuer: Some(format!("http://127.0.0.1:{port}/")), resource: None, client_id: Some("kandinsky".into()), scopes: None, redirect: Some("https://localhost/kandinsky".into()) };
         let none = PluginsConfig::default();
         assert!(start(vault.path(), "net", &ask, &none).unwrap_err().to_string().contains("may not reach 127.0.0.1"));
 
@@ -670,15 +670,15 @@ mod tests {
         let url = reqwest::Url::parse(&start(vault.path(), "net", &ask, &none).unwrap().url).unwrap();
         let q: HashMap<String, String> = url.query_pairs().into_owned().collect();
         assert_eq!(url.path(), "/authorize");
-        assert_eq!((q["client_id"].as_str(), q["scope"].as_str(), q["code_challenge_method"].as_str()), ("atlas", "openid offline_access", "S256"));
-        assert_eq!(q["redirect_uri"], "https://localhost/atlas");
+        assert_eq!((q["client_id"].as_str(), q["scope"].as_str(), q["code_challenge_method"].as_str()), ("kandinsky", "openid offline_access", "S256"));
+        assert_eq!(q["redirect_uri"], "https://localhost/kandinsky");
 
         // the provider said no / a stranger's state: errors in words, nothing kept
-        assert!(finish(&secrets, "net", "https://localhost/atlas?error=access_denied&error_description=Nope").unwrap_err().to_string().contains("Nope"));
-        assert!(finish(&secrets, "net", "https://localhost/atlas?code=c&state=forged").unwrap_err().to_string().contains("start it again"));
+        assert!(finish(&secrets, "net", "https://localhost/kandinsky?error=access_denied&error_description=Nope").unwrap_err().to_string().contains("Nope"));
+        assert!(finish(&secrets, "net", "https://localhost/kandinsky?code=c&state=forged").unwrap_err().to_string().contains("start it again"));
         assert!(!status(&secrets, "net", "authelia").unwrap().signed_in);
 
-        assert_eq!(finish(&secrets, "net", &format!("https://localhost/atlas?code=the-code&state={}", q["state"])).unwrap(), "authelia");
+        assert_eq!(finish(&secrets, "net", &format!("https://localhost/kandinsky?code=the-code&state={}", q["state"])).unwrap(), "authelia");
         let st = status(&secrets, "net", "authelia").unwrap();
         assert!(st.signed_in && st.renews);
         // 30 s left is inside the renewal margin: the next use renews, and keeps the refresh token the answer lacked
@@ -701,7 +701,7 @@ mod tests {
 
     /// The vault's provider, its client and redirect, in the vault's config.
     fn vault_provider(root: &Path, port: u16) {
-        std::fs::write(root.join(".atlas/config.toml"), format!("[plugins]\noidc_issuer = \"http://127.0.0.1:{port}/\"\noidc_client_id = \"atlas\"\noidc_redirect = \"https://localhost/atlas\"\n")).unwrap();
+        std::fs::write(root.join(".kandinsky/config.toml"), format!("[plugins]\noidc_issuer = \"http://127.0.0.1:{port}/\"\noidc_client_id = \"kandinsky\"\noidc_redirect = \"https://localhost/kandinsky\"\n")).unwrap();
     }
 
     /// A query parameter of the request line `GET /path?… HTTP/1.1`.
@@ -725,7 +725,7 @@ mod tests {
                 n += 1;
                 match n {
                     1 => json(&discovery(port)),
-                    2 => format!("HTTP/1.1 302 Found\r\nLocation: https://localhost/atlas?code=silent&state={}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", param(req, "state")),
+                    2 => format!("HTTP/1.1 302 Found\r\nLocation: https://localhost/kandinsky?code=silent&state={}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", param(req, "state")),
                     _ => json(r#"{"access_token":"acc","refresh_token":"ref","expires_in":3600}"#),
                 }
             })
@@ -739,7 +739,7 @@ mod tests {
         assert!(seen[2].contains("code=silent"), "{}", seen[2]);
 
         // another plugin of the vault: the provider's token, no request at all
-        let d = vault.path().join(".atlas/plugins/other");
+        let d = vault.path().join(".kandinsky/plugins/other");
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("plugin.toml"), "title = \"Other\"\n[permissions]\nnet = [\"127.0.0.1\"]\nsecrets = true\n").unwrap();
         assert!(ready(vault.path(), &secrets, "other", "authelia", "http://127.0.0.1/x").unwrap());
@@ -758,7 +758,7 @@ mod tests {
             let mut n = 0;
             (2, move |req: &str| {
                 n += 1;
-                if n == 1 { json(&discovery(port)) } else { format!("HTTP/1.1 302 Found\r\nLocation: https://localhost/atlas?error=login_required&state={}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", param(req, "state")) }
+                if n == 1 { json(&discovery(port)) } else { format!("HTTP/1.1 302 Found\r\nLocation: https://localhost/kandinsky?error=login_required&state={}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", param(req, "state")) }
             })
         });
         vault_provider(vault.path(), port);
@@ -778,7 +778,7 @@ mod tests {
     fn a_plugins_own_tokens_from_before_move_to_the_shared_place() {
         let (vault, sdir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let secrets = Store::in_dir(sdir.path(), vault.path());
-        secrets.set("net", "oauth.old", r#"{"access":"a","refresh":"r","expires":0,"token_endpoint":"https://auth.example.org/api/oidc/token","client_id":"atlas"}"#).unwrap();
+        secrets.set("net", "oauth.old", r#"{"access":"a","refresh":"r","expires":0,"token_endpoint":"https://auth.example.org/api/oidc/token","client_id":"kandinsky"}"#).unwrap();
         assert_eq!(access_token(&secrets, "net", "old").unwrap(), "a");
         assert!(secrets.get("net", "oauth.old").unwrap().unwrap().contains("provider"));
         let p = &providers(&secrets, &["net".into()]).unwrap()[0];

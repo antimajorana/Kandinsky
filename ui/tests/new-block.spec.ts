@@ -3,7 +3,7 @@ import { openFile } from "./open";
 
 // Settings → Plugins → "New block": a plugin folder with one block from a template, live at once —
 // usable in a note without a restart (docs/guides/EXTENDING.md).
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 test("a block made from the template works in a note straight away", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/uses-block.md", text: "---\nstate: open\n---\n# Uses a block\n\n```view\ntype: reading-streak.block\ntext: Hi there\n```\n\nafter\n" } });
@@ -15,8 +15,8 @@ test("a block made from the template works in a note straight away", async ({ pa
   await page.keyboard.type("Reading streak");
   await page.keyboard.press("Enter");
   // its code opens, ready to edit; the folder holds a manifest and the block
-  await expect(page.locator(".cm-content")).toContainText('atlas.registerBlock("reading-streak.block"');
-  const toml = await request.get("/api/file?path=.atlas/plugins/reading-streak/plugin.toml", { headers: H }).then((r) => r.json());
+  await expect(page.locator(".cm-content")).toContainText('kandinsky.registerBlock("reading-streak.block"');
+  const toml = await request.get("/api/file?path=.kandinsky/plugins/reading-streak/plugin.toml", { headers: H }).then((r) => r.json());
   expect(toml.text).toContain('title = "Reading streak"');
 
   await openFile(page, "uses-block.md");

@@ -97,8 +97,8 @@
     <div class="acts">
       {#if pluginOn(p) && p.view}<button class="btn" onclick={() => open(pluginSpec(p))}><Icon name="panel-right" size={13} /> Open</button>{/if}
       {#if p.from}<button class="btn" onclick={() => void updatePlugin(p)}><Icon name="refresh" size={13} /> Update</button>{/if}
-      {#if p.fields.length}<button class="btn" title="The values this page writes: .atlas/plugin-settings/{p.id}.toml" onclick={() => void openPluginSettingsText(p)}><Icon name="file-text" size={13} /> Settings file</button>{/if}
-      <button class="btn danger" title="Its folder moves to .atlas/trash/" onclick={() => removePlugin(p)}><Icon name="close" size={13} /> Remove</button>
+      {#if p.fields.length}<button class="btn" title="The values this page writes: .kandinsky/plugin-settings/{p.id}.toml" onclick={() => void openPluginSettingsText(p)}><Icon name="file-text" size={13} /> Settings file</button>{/if}
+      <button class="btn danger" title="Its folder moves to .kandinsky/trash/" onclick={() => removePlugin(p)}><Icon name="close" size={13} /> Remove</button>
     </div>
     {#if problem}<p class="err">{problem}</p>{/if}
     {#if pluginLog[p.id]?.length}
@@ -115,7 +115,7 @@
 
   {#if fields.length}<form class="form" aria-label="{p.title} — settings" onsubmit={(e) => { e.preventDefault(); void save(); }}>
     <FormFields {fields} bind:values sections onaction={(command, arg) => void runSettingsAction(p, command, arg, collect())} />
-    <p class="where">Kept in <code>.atlas/plugin-settings/{p.id}.toml</code>, secrets outside the vault. An empty field goes back to the plugin's default.</p>
+    <p class="where">Kept in <code>.kandinsky/plugin-settings/{p.id}.toml</code>, secrets outside the vault. An empty field goes back to the plugin's default.</p>
     {#if justSaved && !dirty}
       <div class="savebar saved" role="status"><Icon name="check" size={14} /> Saved</div>
     {:else if dirty}

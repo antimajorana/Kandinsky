@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -16,7 +16,7 @@ final class CaptureWays {
     private CaptureWays() {}
 
     /** The manifest's activity-alias with a launcher entry, off until asked for (a second icon nobody wanted otherwise). */
-    private static ComponentName icon(Context c) { return new ComponentName(c.getPackageName(), "org.atlas.capture.CaptureIcon"); }
+    private static ComponentName icon(Context c) { return new ComponentName(c.getPackageName(), "org.kandinsky.capture.CaptureIcon"); }
 
     /** Whether this app has the icon to offer (the capture-only app is its own icon already). */
     static boolean hasIcon(Context c) {
@@ -43,10 +43,10 @@ final class CaptureWays {
     private static final String KEY = "captureNotification", CHANNEL = "capture.ready";
     private static final int ID = 4100; // below Notices' own ids (5000 on)
 
-    static boolean notificationOn(Context c) { return c.getSharedPreferences("atlas", Context.MODE_PRIVATE).getBoolean(KEY, false); }
+    static boolean notificationOn(Context c) { return c.getSharedPreferences("kandinsky", Context.MODE_PRIVATE).getBoolean(KEY, false); }
 
     static void setNotification(Context c, boolean on) {
-        c.getSharedPreferences("atlas", Context.MODE_PRIVATE).edit().putBoolean(KEY, on).apply();
+        c.getSharedPreferences("kandinsky", Context.MODE_PRIVATE).edit().putBoolean(KEY, on).apply();
         post(c);
     }
 

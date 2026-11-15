@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import android.app.Activity;
 import android.app.StatusBarManager;
@@ -32,8 +32,8 @@ final class Setup {
 
     Setup(Activity a, Look look) { this(a, look, Part.ALL); }
 
-    /** The main screen told at once that the vault in use changed (it opens it there: AtlasActivity.vaultChosen). */
-    private void chosen() { if (a instanceof AtlasActivity) ((AtlasActivity) a).vaultChosen(); }
+    /** The main screen told at once that the vault in use changed (it opens it there: KandinskyActivity.vaultChosen). */
+    private void chosen() { if (a instanceof KandinskyActivity) ((KandinskyActivity) a).vaultChosen(); }
 
     Setup(Activity a, Look look, Part part) {
         this.a = a;
@@ -65,7 +65,7 @@ final class Setup {
         LinearLayout card = look.card(a);
         String current = vaults.current();
         List<String> known = vaults.list();
-        if (current == null) card.addView(note("No vault yet: choose one below. A vault is a folder of notes, the one Atlas opens on the computer (synced to the phone, by Syncthing for example)."));
+        if (current == null) card.addView(note("No vault yet: choose one below. A vault is a folder of notes, the one Kandinsky opens on the computer (synced to the phone, by Syncthing for example)."));
         // a folder and its copy on a server are one vault, as in the desktop's vault switcher (docs/design/DESIGN-mirror.md):
         // the server vault that is a folder's mirror is not listed again, unless it is the one in use
         java.util.Set<String> mirrors = vaults.mirrors();
@@ -111,7 +111,7 @@ final class Setup {
                 } catch (Exception e) { /* none found */ }
             });
         }
-        card.addView(tap(look.row(a, "server", "An Atlas server…", "its address and a sign-in"), () -> VaultChoice.askServer(a, look, vaults, u -> draw())));
+        card.addView(tap(look.row(a, "server", "An Kandinsky server…", "its address and a sign-in"), () -> VaultChoice.askServer(a, look, vaults, u -> draw())));
         card.addView(tap(look.row(a, "plus", "A folder in the app", "until a vault is on the phone"), () -> { vaults.use(VaultChoice.inApp(a)); chosen(); draw(); }));
         view.addView(card);
         if (!mirrors.isEmpty() || part == Part.VAULTS) view.addView(note("⇄ a folder's copy on a server: everything is written in the folder; while the server answers, notes and drawings are live with the computer and the other devices. Set it in the folder's ⋯."));
@@ -128,17 +128,17 @@ final class Setup {
         new Thread(() -> {
             SignIn.Probe p = SignIn.probe(a, mirror, true);
             String said = p.front == SignIn.Front.OPEN ? "answers" : p.front == SignIn.Front.PROXY ? "sign in to use it"
-                : p.front == SignIn.Front.ATLAS ? "its sign-in is refused" : "not answering: the folder is used";
+                : p.front == SignIn.Front.KANDINSKY ? "its sign-in is refused" : "not answering: the folder is used";
             ANSWERED.put(mirror, new Object[] { said, System.currentTimeMillis() });
             a.runOnUiThread(() -> { if (r.isAttachedToWindow()) r.detail.setText(detail + " · " + said); });
         }).start();
     }
 
-    /** The folder's mirror changed: the open page told (AtlasActivity.mirrorChanged), the list drawn again. */
+    /** The folder's mirror changed: the open page told (KandinskyActivity.mirrorChanged), the list drawn again. */
     private void mirrorSet(String folder, String server) {
         vaults.setMirror(folder, server);
         if (server != null) ANSWERED.remove(server);
-        if (a instanceof AtlasActivity) ((AtlasActivity) a).mirrorChanged(folder);
+        if (a instanceof KandinskyActivity) ((KandinskyActivity) a).mirrorChanged(folder);
         draw();
     }
 
@@ -230,7 +230,7 @@ final class Setup {
                 JSONArray arr = new JSONArray(json);
                 for (int i = 0; i < arr.length(); i++) { String p = arr.getJSONObject(i).getString("path"); if (!folders.contains(p)) folders.add(p); }
             } catch (Exception e) { /* none found */ }
-            if (folders.isEmpty()) { Toast.makeText(a, "No vault folder on this device (a folder with .atlas/ in it, synced by Syncthing for example)", Toast.LENGTH_LONG).show(); return; }
+            if (folders.isEmpty()) { Toast.makeText(a, "No vault folder on this device (a folder with .kandinsky/ in it, synced by Syncthing for example)", Toast.LENGTH_LONG).show(); return; }
             String now = copyOf(server);
             String[] labels = new String[folders.size() + 1];
             int at = 0;
@@ -256,7 +256,7 @@ final class Setup {
     /** A server's sign-in rows (the vault's own, or a folder's mirror: `which` names it). */
     private void signInRows(String s, String which, java.util.List<String> labels, java.util.List<Runnable> runs) {
         String inUse = vaults.current(); // a mirror's sign-in leaves the folder in use (Vaults.useServer, VaultChoice's use)
-        Runnable again = () -> { if (inUse != null && !which.isEmpty()) vaults.use(inUse); ANSWERED.remove(s); if (!which.isEmpty() && a instanceof AtlasActivity) ((AtlasActivity) a).mirrorChanged(inUse); draw(); };
+        Runnable again = () -> { if (inUse != null && !which.isEmpty()) vaults.use(inUse); ANSWERED.remove(s); if (!which.isEmpty() && a instanceof KandinskyActivity) ((KandinskyActivity) a).mirrorChanged(inUse); draw(); };
         labels.add("Look it up again" + which); runs.add(() -> { ANSWERED.remove(s); Server.lookUp(a, s); }); // a new network: found anew
         labels.add("Sign in again" + which); runs.add(() -> VaultChoice.signIn(a, look, vaults, s, u -> again.run()));
         labels.add("A token or a header…" + which); runs.add(() -> VaultChoice.manual(a, look, vaults, s, u -> again.run()));
@@ -294,8 +294,8 @@ final class Setup {
         } else {
             card.addView(look.row(a, "plus", "The Capture tile", "edit the quick settings and drag it in"));
         }
-        card.addView(look.row(a, "link", "Share to Atlas", "from any app: text, links, pictures, files"));
-        // Atlas's own switches (CaptureWays): flipped here, unlike the ones below that Android keeps
+        card.addView(look.row(a, "link", "Share to Kandinsky", "from any app: text, links, pictures, files"));
+        // Kandinsky's own switches (CaptureWays): flipped here, unlike the ones below that Android keeps
         boolean icon = CaptureWays.iconOn(a);
         if (CaptureWays.hasIcon(a)) card.addView(switchRow("plus", "A Capture icon", icon
             ? "in the app list: put it on the home screen, or pick it for a Pixel's double tap on the back (Quick Tap → Open app)"

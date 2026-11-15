@@ -45,7 +45,7 @@ test("dropping a PDF on the Library adds an entry with the file", async ({ page,
   await expect(lib.locator(".row")).toHaveCount(before + 1);
   await expect(lib.locator(".detail h2")).toHaveText("Dropped lecture notes");
   await expect(lib.locator(".detail").getByRole("button", { name: /Open PDF/ })).toBeEnabled();
-  const bib = await (await request.get("/api/file?path=refs/refs.bib", { headers: { "x-atlas": "1" } })).json();
+  const bib = await (await request.get("/api/file?path=refs/refs.bib", { headers: { "x-kandinsky": "1" } })).json();
   expect(bib.text).toContain("dropped");
 
   // Read: the PDF alone ("it opens both pdf and the note … in the pdf editor there should be an button to do that",
@@ -62,10 +62,10 @@ test("dropping a PDF on the Library adds an entry with the file", async ({ page,
 });
 
 test("Library: sort by year / title; delete an entry (asks, goes to the Trash, refs.bib updated)", async ({ page, request }) => {
-  const h = { "x-atlas": "1" };
+  const h = { "x-kandinsky": "1" };
   // an entry of our own to delete (other tests use the fixture papers)
   // as the view's import does: the PDF into catalog-papers' cache, then filed by its helper
-  const path = ".atlas/cache/plugins/catalog-papers/import-throwaway.pdf";
+  const path = ".kandinsky/cache/plugins/catalog-papers/import-throwaway.pdf";
   await request.post(`/api/fs/upload?path=${encodeURIComponent(path)}`, { headers: h, data: Buffer.from("%PDF-1.4\n%%EOF\n") });
   await request.post("/api/plugins/catalog-papers/helper", { headers: h, data: { method: "import", params: { path, name: "Throwaway_entry.pdf" } } });
   await page.goto("/");

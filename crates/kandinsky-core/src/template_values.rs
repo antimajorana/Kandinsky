@@ -31,7 +31,7 @@ pub async fn add_provided(ws: &Workspace, helpers: &Helpers, req: &mut NewNote) 
             Ok(v) => {
                 req.values.get_or_insert_with(Default::default).insert(name, v);
             }
-            Err(e) => eprintln!("atlas: template value {{{{{name}}}}} from {plugin}/{tool}: {e}"),
+            Err(e) => eprintln!("kandinsky: template value {{{{{name}}}}} from {plugin}/{tool}: {e}"),
         }
     }
 }

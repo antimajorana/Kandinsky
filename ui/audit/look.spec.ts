@@ -1,10 +1,10 @@
 import { test, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ATLAS_URL, OW_URL, OUT } from "./look.config";
+import { KANDINSKY_URL, OW_URL, OUT } from "./look.config";
 import { propertiesInline } from "./props-inline";
 
-// Every construct of catalogue.md, in obsidian-web's live preview and in Atlas's, compared by computed
+// Every construct of catalogue.md, in obsidian-web's live preview and in Kandinsky's, compared by computed
 // style (the deepest element holding each sentinel token) and shown side by side, screen by screen.
 const CONSTRUCTS: [string, string][] = [
   ["k00", "properties tag"], ["k01", "h1"], ["k02", "h2"], ["k03", "h3"], ["k04", "h4"], ["k05", "h5"], ["k06", "h6"],
@@ -66,7 +66,7 @@ async function shots(page: Page, scroller: string, prefix: string) {
   }
 }
 
-test("look: obsidian-web vs Atlas, construct by construct", async ({ browser }) => {
+test("look: obsidian-web vs Kandinsky, construct by construct", async ({ browser }) => {
   mkdirSync(OUT, { recursive: true });
   // obsidian-web (the reference): dark, vim off, edit mode, caret parked on the last line
   const ow = await browser.newPage();
@@ -81,25 +81,25 @@ test("look: obsidian-web vs Atlas, construct by construct", async ({ browser }) 
   const owSig = await measure(ow, "#editor-cm .cm-content", "#editor-cm .cm-scroller");
   await shots(ow, "#editor-cm .cm-scroller", "ow");
 
-  // Atlas
+  // Kandinsky
   const at = await browser.newPage();
   await propertiesInline(at);
-  await at.goto(`${ATLAS_URL}/`);
+  await at.goto(`${KANDINSKY_URL}/`);
   await at.waitForTimeout(1500);
-  await at.request.post(`${ATLAS_URL}/api/cmd/open`, { headers: { "x-atlas": "1" }, data: { args: { path: "catalogue.md", line: 999 } } });
+  await at.request.post(`${KANDINSKY_URL}/api/cmd/open`, { headers: { "x-kandinsky": "1" }, data: { args: { path: "catalogue.md", line: 999 } } });
   await at.locator(".dv-active-group .cm-content").waitFor({ timeout: 20000 });
   await at.waitForTimeout(1500);
   const atSig = await measure(at, ".dv-active-group .cm-content", ".dv-active-group .cm-scroller");
-  await shots(at, ".dv-active-group .cm-scroller", "atlas");
+  await shots(at, ".dv-active-group .cm-scroller", "kandinsky");
 
-  const rows: string[] = ["| | construct | obsidian-web | Atlas | differs |", "|---|---|---|---|---|"];
+  const rows: string[] = ["| | construct | obsidian-web | Kandinsky | differs |", "|---|---|---|---|---|"];
   for (const [tok, what] of CONSTRUCTS) {
     const a = owSig[tok], b = atSig[tok];
     if (!a || !b) { rows.push(`| ${tok} | ${what} | ${a ? a._tag : "**not rendered**"} | ${b ? b._tag : "**not rendered**"} | |`); continue; }
     const diff = [...PROPS, "_indent"].filter((p) => a[p] !== b[p]).map((p) => `${p}: ${a[p]} → ${b[p]}`);
     rows.push(`| ${tok} | ${what} | ${a._tag} | ${b._tag} | ${diff.join("<br>") || "—"} |`);
   }
-  writeFileSync(join(OUT, "REPORT.md"), `# Look audit: obsidian-web → Atlas\n\nScreens: ow-N.png / atlas-N.png.\n\n${rows.join("\n")}\n`);
-  writeFileSync(join(OUT, "signatures.json"), JSON.stringify({ ow: owSig, atlas: atSig }, null, 1));
+  writeFileSync(join(OUT, "REPORT.md"), `# Look audit: obsidian-web → Kandinsky\n\nScreens: ow-N.png / kandinsky-N.png.\n\n${rows.join("\n")}\n`);
+  writeFileSync(join(OUT, "signatures.json"), JSON.stringify({ ow: owSig, kandinsky: atSig }, null, 1));
   console.log(`look report → ${join(OUT, "REPORT.md")}`);
 });

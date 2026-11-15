@@ -4,16 +4,16 @@ The goal: a global KDE shortcut that opens a well-integrated, unobtrusive floati
 
 ## What there is
 
-**A small native box above everything** — `atlas-capture` (crate `crates/atlas-capture`, drawn with egui; no web view). The first box rendered too slowly, and the capture box must not use WebKit. Starting a WebKit view was what made the old box slow; the native one is on screen at once.
+**A small native box above everything** — `kandinsky-capture` (crate `crates/kandinsky-capture`, drawn with egui; no web view). The first box rendered too slowly, and the capture box must not use WebKit. Starting a WebKit view was what made the old box slow; the native one is on screen at once.
 
-- **Keys.** Type; **Enter** writes it and the box is gone (after showing where it went, `log/2026-10-14.md:7`, for two thirds of a second); **Esc** closes it, nothing written; when the open Atlas took the text but its answer never came, the box says it may be saved already and only **Ctrl+Enter** sends it again (`send::NotSaved::Unsure`), so a plain Enter cannot write it twice; **another window taking the focus** closes it too (only once it had the focus: a new window may start unfocused). **What was typed is never lost**: it is kept as that vault's draft (`src/draft.rs`, `$XDG_STATE_HOME/atlas/capture-drafts/`, written on every change, so a killed box keeps it too) and an empty box opens with it; saving or emptying the text removes it, and switching vault moves it. Pressing the key again while a box is open starts a second box, which takes the focus, closes the first and opens with its text, so a single-instance lock is not needed for this. The chips (screen, clipboard, page) are not kept. `ATLAS_CAPTURE_DRAFTS=<dir>` keeps them elsewhere, `=off` not at all (`scripts/dev/capture/look.sh` uses it). **Super+V** opens the vault list, **Super+↑ / Super+↓** switch vault (Super is Atlas's key, docs/guides/KEYS.md; Alt+V and Alt+↑/↓, the first keys, still work). The footer shows the keys: `Super+V` beside the vault pill when there are several vaults, `↑↓ Tab move · Enter take · Esc back` while a list is open.
-- **What it looks like.** Atlas's colours (`look.rs`: the tokens of `ui/src/styles/tokens.css`, dark or light as the vault's `ui.theme`), the desktop's UI font (Inter when installed, else Noto Sans), Atlas's "A" tile, the text line, a hairline, then the footer: what the text will become once there is text ("a to-do, due tomorrow", "a line in today's log · mentions Friday"), the vault as a pill (a click lists the known vaults), and the two keys as quiet chips. Little guides on an empty box (see "Finished" below), no empty space below, but not bare either.
+- **Keys.** Type; **Enter** writes it and the box is gone (after showing where it went, `log/2026-10-14.md:7`, for two thirds of a second); **Esc** closes it, nothing written; when the open Kandinsky took the text but its answer never came, the box says it may be saved already and only **Ctrl+Enter** sends it again (`send::NotSaved::Unsure`), so a plain Enter cannot write it twice; **another window taking the focus** closes it too (only once it had the focus: a new window may start unfocused). **What was typed is never lost**: it is kept as that vault's draft (`src/draft.rs`, `$XDG_STATE_HOME/kandinsky/capture-drafts/`, written on every change, so a killed box keeps it too) and an empty box opens with it; saving or emptying the text removes it, and switching vault moves it. Pressing the key again while a box is open starts a second box, which takes the focus, closes the first and opens with its text, so a single-instance lock is not needed for this. The chips (screen, clipboard, page) are not kept. `KANDINSKY_CAPTURE_DRAFTS=<dir>` keeps them elsewhere, `=off` not at all (`scripts/dev/capture/look.sh` uses it). **Super+V** opens the vault list, **Super+↑ / Super+↓** switch vault (Super is Kandinsky's key, docs/guides/KEYS.md; Alt+V and Alt+↑/↓, the first keys, still work). The footer shows the keys: `Super+V` beside the vault pill when there are several vaults, `↑↓ Tab move · Enter take · Esc back` while a list is open.
+- **What it looks like.** Kandinsky's colours (`look.rs`: the tokens of `ui/src/styles/tokens.css`, dark or light as the vault's `ui.theme`), the desktop's UI font (Inter when installed, else Noto Sans), Kandinsky's "A" tile, the text line, a hairline, then the footer: what the text will become once there is text ("a to-do, due tomorrow", "a line in today's log · mentions Friday"), the vault as a pill (a click lists the known vaults), and the two keys as quiet chips. Little guides on an empty box (see "Finished" below), no empty space below, but not bare either.
 - **Completions.** `[[` a note's name, `#` a tag, `@` a day (`@today`, `@tomorrow`, `@mon`…`@sun`, `@+3d`), and on a to-do (`[] `, `todo `) the Obsidian Tasks fields — one letter of a field's first word is enough (`d` → due, `h` → high priority…); after a date field the dates by name. ↑ ↓ choose, Tab or Enter take, Esc closes the list. The list grows the window. The lists are the same as the web boxes' (`ui/src/lib/task-complete.ts`, `textarea-complete.ts`), copied in `complete.rs` — **change both** (tests on each side).
-- **Where it writes.** Through the Atlas open on that vault (`vaults::running_server`), so its window updates and one core runs the vault's schedules; with none open, straight to the files (`capture::capture`), as `atlas capture` does. An Atlas that is listed but takes no connection (it crashed or is closing) counts as none: the capture goes to the files, never lost. Once the request has been sent, a failure is shown instead of writing again, since that Atlas may already have written it (`send.rs` `Post`). Days are read by one function for both (`capture::day_of`).
-- **Which vault.** The one named on the command line or by `ATLAS_WORKSPACE`, else the one opened last, then the other known ones.
-- `ATLAS_CAPTURE_TEXT="[] pay due" atlas-capture` starts with text typed — for screenshots and tests of the completions.
+- **Where it writes.** Through the Kandinsky open on that vault (`vaults::running_server`), so its window updates and one core runs the vault's schedules; with none open, straight to the files (`capture::capture`), as `kandinsky capture` does. An Kandinsky that is listed but takes no connection (it crashed or is closing) counts as none: the capture goes to the files, never lost. Once the request has been sent, a failure is shown instead of writing again, since that Kandinsky may already have written it (`send.rs` `Post`). Days are read by one function for both (`capture::day_of`).
+- **Which vault.** The one named on the command line or by `KANDINSKY_WORKSPACE`, else the one opened last, then the other known ones.
+- `KANDINSKY_CAPTURE_TEXT="[] pay due" kandinsky-capture` starts with text typed — for screenshots and tests of the completions.
 
-**The older box** — the desktop app as `atlas-app --capture` showing `capture.html` (its own small bundle) or `/#capture` (`ui/src/CaptureWindow.svelte`) — stays for `ATLAS_CAPTURE=webview`, and the page also works in a browser at `/#capture`.
+**The older box** — the desktop app as `kandinsky-app --capture` showing `capture.html` (its own small bundle) or `/#capture` (`ui/src/CaptureWindow.svelte`) — stays for `KANDINSKY_CAPTURE=webview`, and the page also works in a browser at `/#capture`.
 
 **One web capture box.** The in-app popup and that window are two frames around one component, `ui/src/components/CaptureBox.svelte`: the hint line, completions, the guides, the To-do chip, pasted or dropped files beside today's log, the vault picker (shown when there are two or more vaults; Super+↑/↓ or Alt+↑/↓ as in the native box), and a failure kept in the box with the text. The popup (`QuickCapture.svelte`) adds the scrim, the draft, the triage count and the Captured notice; the window (`CaptureWindow.svelte`, 620×160, a one-line box) adds the vault list, where it went and closing itself. A file pasted while another vault is chosen is refused: files go beside this vault's log only. Today's box on Home is still its own (TodayParts.svelte).
 
@@ -31,9 +31,9 @@ What was still missing: a completion list for tasks; the links list was cut off 
 - **The vault menu** opens on a click on the vault pill or Alt+V; Alt+↑/↓ still switch vault.
 - **Little guides** on an empty box: `[]` to-do · `@fri` date · `[[` link · `#` tag. Read in the transcript, "and no little guides" came right after "are the modals done?": a complaint that there were none (this file used to read it the other way).
 - **Border:** a crisp one-pixel edge inside the window, checked pixel by pixel. The corners stay square: rounded corners need a transparent window, and "the borders look weird" was said about the earlier rounded version.
-- **Every capture box says the same words**: the empty box's prompt and its four guides (`[]` to-do · `@fri` date · `[[` link · `#` tag, each a chip that starts the text with it, its tooltip the form with examples) are `atlas_core::capture::{PROMPT, GUIDES}`; the web boxes (Today, the capture box of the popup and the window, the command bar's capture) show them through `CaptureGuides.svelte` from `ui/src/lib/capture-guides.ts`, the phone from `CaptureBox.java` — both copies, compared with the core by atlas-capture's `every_capture_box_shows_the_cores_words`, so **change all three**. Where a capture went reads the same everywhere too: the shown path (no `.md`) and the line (`landedAt`).
+- **Every capture box says the same words**: the empty box's prompt and its four guides (`[]` to-do · `@fri` date · `[[` link · `#` tag, each a chip that starts the text with it, its tooltip the form with examples) are `kandinsky_core::capture::{PROMPT, GUIDES}`; the web boxes (Today, the capture box of the popup and the window, the command bar's capture) show them through `CaptureGuides.svelte` from `ui/src/lib/capture-guides.ts`, the phone from `CaptureBox.java` — both copies, compared with the core by kandinsky-capture's `every_capture_box_shows_the_cores_words`, so **change all three**. Where a capture went reads the same everywhere too: the shown path (no `.md`) and the line (`landedAt`).
 - **The web capture page and Today's box** have the same layout. Every list row has an icon, and the list fits the window: it flips above the box when there is more room there, then scrolls. A CSS selector that painted every row's icon in the accent colour (instead of only the chosen row's) was fixed.
-- **The shortcut:** `packaging/kde-shortcut.sh`, called from install.sh. It sets Meta+Shift+C (or `ATLAS_CAPTURE_KEY`) only when Atlas Capture has no key yet and the key is free everywhere. A dry run on a copy of a real `kglobalshortcutsrc` kept its existing Meta+T. It has not been run on a real config.
+- **The shortcut:** `packaging/kde-shortcut.sh`, called from install.sh. It sets Meta+Shift+C (or `KANDINSKY_CAPTURE_KEY`) only when Kandinsky Capture has no key yet and the key is free everywhere. A dry run on a copy of a real `kglobalshortcutsrc` kept its existing Meta+T. It has not been run on a real config.
 
 **How the native box was checked: never on a real desktop session.** In a nested `kwin_wayland --virtual` on a private D-Bus (`scripts/dev/capture/look.sh` with `shot.py` and `xtype.py`), with screenshots through KWin's screenshot API and real keys typed through the nested Xwayland. Every state (empty, typing, task fields, `[[` list, vault menu) was looked at in dark and light. A full keyboard run wrote `- [ ] pay the rent 📅 2026-10-15 [[Hamiltonian]] ok` into the second vault, and opening a second box closed the first.
 
@@ -60,7 +60,7 @@ the one written (`CaptureResult.source`); edited or filed meanwhile, nothing is 
 
 **Triage by keyboard.** In the Captures view (`components/views/Captures.svelte`) a clicked row takes the keys: `j`/`k`
 (or ↑/↓) move, `t` makes it a to-do, `f` files it into a note, `d` dismisses, `x` ticks a to-do, `u` reopens, Delete
-deletes it (the line and the lines under it leave the log and are kept in `.atlas/trash/`; an inbox note goes there
+deletes it (the line and the lines under it leave the log and are kept in `.kandinsky/trash/`; an inbox note goes there
 whole), Enter opens its line. A capture's pictures show under it; Ctrl over one shows it large, a click opens it. The focus stays in place as an answered row leaves the list, so a run of keys clears it; the keys are listed
 over the rows while the list has the focus. What opens over the page (the command bar, this popup, a plugin's dialog)
 gives the focus back when it closes (`lib/focus-return.ts`).
@@ -73,57 +73,57 @@ The capture window needed a redesign closer to the app's look, and the completio
 
 **Clicks go through the empty part.** Only the card and the open list take the pointer: `src/region.rs` reaches winit's `wl_surface` through its raw handle and sets an input region (`wl_surface.set_input_region`) from the rectangles the frame drew (`Capture::hit`), on an event queue of its own on winit's connection. A click on the see-through part lands on the window below — which takes the focus, so the box closes as it does on any click outside.
 
-**Transparency needed a patched softbuffer.** softbuffer 0.4 hands Wayland `Xrgb8888` buffers (opaque); `crates/vendor/softbuffer` is 0.4.8 with those two formats changed to `Argb8888` (`crates/vendor/softbuffer/ATLAS.md`, `[patch.crates-io]` in the root Cargo.toml). `raster.rs` now carries alpha: premultiplied ARGB, cleared to transparent when floating.
+**Transparency needed a patched softbuffer.** softbuffer 0.4 hands Wayland `Xrgb8888` buffers (opaque); `crates/vendor/softbuffer` is 0.4.8 with those two formats changed to `Argb8888` (`crates/vendor/softbuffer/KANDINSKY.md`, `[patch.crates-io]` in the root Cargo.toml). `raster.rs` now carries alpha: premultiplied ARGB, cleared to transparent when floating.
 
-**X11 keeps the growing box.** Off Wayland (or with `ATLAS_CAPTURE_FLOAT=0`) the window is the box, opaque, and grows for a list as before: X11 has no alpha without a compositor's ARGB visual, and the keyboard check (`look.sh keys`, XTEST through Xwayland) runs that path.
+**X11 keeps the growing box.** Off Wayland (or with `KANDINSKY_CAPTURE_FLOAT=0`) the window is the box, opaque, and grows for a list as before: X11 has no alpha without a compositor's ARGB visual, and the keyboard check (`look.sh keys`, XTEST through Xwayland) runs that path.
 
 **Checked.** Headless: `floating_a_list_opens_under_the_card_and_the_window_keeps_its_size` (the list under the card, inside the room, no size asked of the window, the pointer regions). In a hidden `kwin_wayland --virtual` (`look.sh shots`): every state in dark and light — the card stays where it is, the task list floats below it. `look.sh keys` (X11 path): a to-do with a date, a link, the vault menu, Enter — written as before. **Not seen on a real desktop**, and the click-through was not exercised in the hidden KWin (no Wayland pointer injection there). One oddity: after `look.sh shots` the nested KWin did not exit by itself once (killed by PID); the script's exit trap is the suspect, not the box.
 
 ## Setting it up (once)
 
-On the development machine: nothing is bound to *Atlas Capture* yet; `Meta+A` already opens Atlas itself; `Meta+Space`, `Meta+Shift+C` and `Meta+C` were free. Suggested: **Meta+Shift+C** for the floating box.
+On the development machine: nothing is bound to *Kandinsky Capture* yet; `Meta+A` already opens Kandinsky itself; `Meta+Space`, `Meta+Shift+C` and `Meta+C` were free. Suggested: **Meta+Shift+C** for the floating box.
 
 
-`packaging/install.sh` installs the launcher `atlas-quick-capture` and the menu entry **Atlas Capture**. Then, in KDE: System Settings → Keyboard → Shortcuts → Add New → Application → *Atlas Capture*, and give it a key.
+`packaging/install.sh` installs the launcher `kandinsky-quick-capture` and the menu entry **Kandinsky Capture**. Then, in KDE: System Settings → Keyboard → Shortcuts → Add New → Application → *Kandinsky Capture*, and give it a key.
 
-The menu entry starts the launcher by its full path (`~/.local/bin/atlas-quick-capture`), and the launcher adds `~/.cargo/bin` to its PATH: a KDE session's PATH has neither, and with `Exec=atlas-quick-capture` the entry did nothing at all (reported in).
+The menu entry starts the launcher by its full path (`~/.local/bin/kandinsky-quick-capture`), and the launcher adds `~/.cargo/bin` to its PATH: a KDE session's PATH has neither, and with `Exec=kandinsky-quick-capture` the entry did nothing at all (reported in).
 
-`atlas-quick-capture` starts `atlas-capture` (the native box). `ATLAS_CAPTURE=webview` starts the older web box of the desktop app; `ATLAS_CAPTURE=dialog` a one-line KDE dialog and `atlas capture` — which is also what happens when neither is installed.
+`kandinsky-quick-capture` starts `kandinsky-capture` (the native box). `KANDINSKY_CAPTURE=webview` starts the older web box of the desktop app; `KANDINSKY_CAPTURE=dialog` a one-line KDE dialog and `kandinsky capture` — which is also what happens when neither is installed.
 
-**From the release packages.** The `.deb` and `.rpm` install `atlas-capture`, the launcher `atlas-quick-capture` and
-both menu entries (*Atlas Capture*, and the hidden one that lets KWin give the box its picture) under `/usr`; bind a
-key to *Atlas Capture* as above. The Windows installer puts `atlas-capture.exe` beside the app and an **Atlas
+**From the release packages.** The `.deb` and `.rpm` install `kandinsky-capture`, the launcher `kandinsky-quick-capture` and
+both menu entries (*Kandinsky Capture*, and the hidden one that lets KWin give the box its picture) under `/usr`; bind a
+key to *Kandinsky Capture* as above. The Windows installer puts `kandinsky-capture.exe` beside the app and an **Kandinsky
 Capture** Start-menu shortcut on **Ctrl+Alt+Shift+C** (a Start-menu shortcut's key works anywhere; the Windows key
-cannot be given to one). On macOS the box is inside the app (`Atlas.app/Contents/MacOS/atlas-capture`) and Atlas, while
-it runs, takes **Ctrl+Cmd+C** as a global key for it (the global-shortcut plugin; `ATLAS_CAPTURE_KEY` another key in
+cannot be given to one). On macOS the box is inside the app (`Kandinsky.app/Contents/MacOS/kandinsky-capture`) and Kandinsky, while
+it runs, takes **Ctrl+Cmd+C** as a global key for it (the global-shortcut plugin; `KANDINSKY_CAPTURE_KEY` another key in
 Tauri's form, `Control+Super+C`, or `none`; Cmd+Shift+C is taken by browsers and Finder). The AppImage carries the box
-too: bind a key to `Atlas.AppImage --capture`. `atlas-app --capture` starts the native box whenever one sits beside
-the program (`ATLAS_CAPTURE=webview` keeps the older web box), so one command works for every package. The Flatpak
-has `atlas-capture` and an **Atlas Capture** entry (`atlas-app --capture`) to give a key to.
+too: bind a key to `Kandinsky.AppImage --capture`. `kandinsky-app --capture` starts the native box whenever one sits beside
+the program (`KANDINSKY_CAPTURE=webview` keeps the older web box), so one command works for every package. The Flatpak
+has `kandinsky-capture` and an **Kandinsky Capture** entry (`kandinsky-app --capture`) to give a key to.
 
 **From Settings.** Settings → Desktop app → *Capture key* shows the key bound now and where the desktop keeps it, and
 on KDE Plasma and GNOME sets one (Super+Shift+C offered when there is none), so a package needs no script
 (`platform/capture_key.rs`, `GET`/`POST /api/desktop/capture-key`, answered only by the desktop's own core asked from
 this machine). KDE: the same rules as `kde-shortcut.sh`: it is written to `kglobalshortcutsrc` with `kwriteconfig6`,
 a key any other shortcut uses or has as its default is refused with that shortcut's name, and `plasma-kglobalaccel`
-is restarted so the key works at once; it needs the `atlas-capture.desktop` entry the packages install. GNOME: a
-custom keybinding (`…/custom-keybindings/atlas-capture/`) running `atlas-capture`. Windows and macOS show their fixed
-key (the installer's, the app's); another Linux desktop and the Flatpak say to bind `atlas-capture` by hand.
+is restarted so the key works at once; it needs the `kandinsky-capture.desktop` entry the packages install. GNOME: a
+custom keybinding (`…/custom-keybindings/kandinsky-capture/`) running `kandinsky-capture`. Windows and macOS show their fixed
+key (the installer's, the app's); another Linux desktop and the Flatpak say to bind `kandinsky-capture` by hand.
 
 ## How it works, and what to watch
 
-- **One core per vault.** When Atlas is already open on the vault, the box talks to *that* Atlas: `vaults::running_server(root)` reads the vault's `.atlas/cache/server.json` and believes it only while the folder is the same and the process is alive. Only when no Atlas is open on it does the box start a core of its own, stopped when the box closes. Two cores on one vault would run its scheduled commands twice — the reason for this care.
-- **Closing.** A web page cannot close a desktop window by itself. The page goes to `/__atlas_close`; the window's navigation handler (`on_navigation` in `crates/atlas-app/src/main.rs`) sees that address, exits the process and refuses the navigation. In a browser the address simply does not exist — the tests answer it themselves and count it.
-- **Another vault.** `POST /api/capture` takes `vault: <path>`: accepted only for a folder in the list of known vaults (`~/.config/atlas/vaults.toml`), and written straight into that vault's files (`capture::capture`), whether or not an Atlas is open there (an open one notices the file change).
+- **One core per vault.** When Kandinsky is already open on the vault, the box talks to *that* Kandinsky: `vaults::running_server(root)` reads the vault's `.kandinsky/cache/server.json` and believes it only while the folder is the same and the process is alive. Only when no Kandinsky is open on it does the box start a core of its own, stopped when the box closes. Two cores on one vault would run its scheduled commands twice — the reason for this care.
+- **Closing.** A web page cannot close a desktop window by itself. The page goes to `/__kandinsky_close`; the window's navigation handler (`on_navigation` in `crates/kandinsky-app/src/main.rs`) sees that address, exits the process and refuses the navigation. In a browser the address simply does not exist — the tests answer it themselves and count it.
+- **Another vault.** `POST /api/capture` takes `vault: <path>`: accepted only for a folder in the list of known vaults (`~/.config/kandinsky/vaults.toml`), and written straight into that vault's files (`capture::capture`), whether or not an Kandinsky is open there (an open one notices the file change).
 - **The app's first keys.** `ui/src/main.ts` imports both the app and the capture page up front and mounts one. A first version imported the chosen one with `await import(…)`; the app then mounted a moment later and a key pressed right after the page loaded was lost (a smoke test caught it).
 
 ## From the phone (the route taken)
 
 The wish: a blazing fast way to capture things on the phone. The route that needs nothing new on the phone and nothing new on the server: **ntfy**, which many self-hosted servers already run.
 
-- On the phone: the ntfy app, a topic of one's own (say `atlas-inbox`). To capture: open the app and type into that topic — or, from any app, **Share → ntfy → atlas-inbox**, which sends a link or a text in two taps. A home-screen shortcut to the topic makes it one tap to the box.
-- In Atlas: the Notifications plugin (`plugins/beta/notifications/`), its **Topic to capture from** set to that topic (and the token, if the topic is protected). Its `sync` polls the topic every 5 minutes (the core's schedule) and when a page starts; every message becomes a capture in today's log — or a to-do with `[] `, a dated one with `@tomorrow`, exactly as typed in the capture box. A captured address alone is filed by the catalog when it runs.
-- **While Atlas is closed** messages wait in ntfy (for as long as the server's cache keeps them). The helper keeps the id of the last message it captured (in the vault's cache) and asks ntfy for everything since (`?poll=1&since=<id>`): what was sent meanwhile is captured then, and nothing twice (one sync at a time).
+- On the phone: the ntfy app, a topic of one's own (say `kandinsky-inbox`). To capture: open the app and type into that topic — or, from any app, **Share → ntfy → kandinsky-inbox**, which sends a link or a text in two taps. A home-screen shortcut to the topic makes it one tap to the box.
+- In Kandinsky: the Notifications plugin (`plugins/beta/notifications/`), its **Topic to capture from** set to that topic (and the token, if the topic is protected). Its `sync` polls the topic every 5 minutes (the core's schedule) and when a page starts; every message becomes a capture in today's log — or a to-do with `[] `, a dated one with `@tomorrow`, exactly as typed in the capture box. A captured address alone is filed by the catalog when it runs.
+- **While Kandinsky is closed** messages wait in ntfy (for as long as the server's cache keeps them). The helper keeps the id of the last message it captured (in the vault's cache) and asks ntfy for everything since (`?poll=1&since=<id>`): what was sent meanwhile is captured then, and nothing twice (one sync at a time).
 - **Not checked on a real phone or server** — only against a stand-in in `example-notifications.spec.ts` and the helper's unit tests.
 
 ## Not done, and not checked
@@ -131,13 +131,13 @@ The wish: a blazing fast way to capture things on the phone. The route that need
 - **Not seen on a real screen**; checked in a nested KWin only (above). Fractional scaling is untested (the nested KWin gives its windows scale 1). Keys on native Wayland were not driven (only through Xwayland; both go through egui-winit).
 - The older webview box does not grow; its list scrolls instead.
 - `scripts/dev/capture/look.sh` was committed from scratch versions that ran; the committed form itself has not been run.
-- Clipping an address typed alone into the box (the clip plugin listens to captures made in Atlas's own boxes, not to this one).
+- Clipping an address typed alone into the box (the clip plugin listens to captures made in Kandinsky's own boxes, not to this one).
 - The phone (roadmap 4.4) and the web clippers (4.5) are separate pieces.
 
 
 ## It crashed on every normal close (fixed)
 
-The capture box closed normally but a crash notification followed. `coredumpctl` had a SIGSEGV of `atlas-capture` for each close. The faulting thread was smithay-clipboard's worker (egui's Wayland clipboard) destroying its `zwp_primary_selection_device_manager` proxy, while the main thread joined it from `drop(Shown)` at the end of `window::run`. winit's `run_app` takes the event loop **by value**: when it returns, the Wayland connection is already closed, and the clipboard tidied up its objects on that dead connection. Fix: `ApplicationHandler::exiting` drops the window, with egui's state and clipboard, while the loop and the connection still exist. Checked in a hidden KWin, with KWin's scripting closing the window (`workspace.windowList()` → `closeWindow()`): the installed build ended with signal 11, the fixed one with status 0 (and no `atlas-capture` core dump since).
+The capture box closed normally but a crash notification followed. `coredumpctl` had a SIGSEGV of `kandinsky-capture` for each close. The faulting thread was smithay-clipboard's worker (egui's Wayland clipboard) destroying its `zwp_primary_selection_device_manager` proxy, while the main thread joined it from `drop(Shown)` at the end of `window::run`. winit's `run_app` takes the event loop **by value**: when it returns, the Wayland connection is already closed, and the clipboard tidied up its objects on that dead connection. Fix: `ApplicationHandler::exiting` drops the window, with egui's state and clipboard, while the loop and the connection still exist. Checked in a hidden KWin, with KWin's scripting closing the window (`workspace.windowList()` → `closeWindow()`): the installed build ended with signal 11, the fixed one with status 0 (and no `kandinsky-capture` core dump since).
 
 ## Besides the text: the page, the clipboard, the screenshots
 
@@ -160,8 +160,8 @@ A row of chips under the text (`src/extras.rs`, drawn at the text's left edge, i
 - **Reading a history** (bundled SQLite, `rusqlite`): read-only in place; when the browser holds it locked (or a write-ahead log needs recovery), from a copy of the file and its `-wal` in the box's runtime folder, removed after. The newest 80 visits.
 - **Matching** (`match_caption`): the longest stored title the caption holds wins — a site's home page ("YouTube") is in every one of its captions — then the newest. Compared **folded** (ASCII letters and digits; an accented letter dropped whole, composed or decomposed): Zen stores "María" decomposed (`Mari` + U+0301) while a caption may be composed; without the fold the real check found the YouTube home page instead of the video. No match: no page (never a guess).
 - **Checked**: on a real Zen browser history (read-only), a pretended caption of a recently watched video ("(2) <video title> - YouTube — Zen Browser", the title with an accented name) → that video's watch URL in 228 ms; in a hidden KWin, the window under the box was found (Konsole, "not a browser") in 138 ms; Spectacle takes the nested screen in 407 ms. Tests: `the_page_and_a_picture_go_with_the_capture`, `super_s_takes_the_screen_without_the_box_in_it` (a stand-in for Spectacle: tests never touch the desktop), `context::tests` (shape search, a Firefox history, the caption match incl. decomposed titles), `extras::tests`.
-- **`atlas-capture --context`** prints what the box would offer and why (the window, whether it is a browser, the page and how long it took, the clipboard, the last screenshot); `ATLAS_CAPTURE_WINDOW="caption|class"` pretends a window. `ATLAS_CAPTURE_NO_CONTEXT=1` gathers nothing; `ATLAS_CAPTURE_EXAMPLE_CHIPS=1` (or `=<a .png>`, offered as the last screenshot) shows example chips for screenshots (`look.sh shots`).
-- The box is 111 pt tall now (was 83): the chips row. Pictures taken by the box live in `$XDG_RUNTIME_DIR/atlas-capture-<pid>/` and are removed when it closes.
+- **`kandinsky-capture --context`** prints what the box would offer and why (the window, whether it is a browser, the page and how long it took, the clipboard, the last screenshot); `KANDINSKY_CAPTURE_WINDOW="caption|class"` pretends a window. `KANDINSKY_CAPTURE_NO_CONTEXT=1` gathers nothing; `KANDINSKY_CAPTURE_EXAMPLE_CHIPS=1` (or `=<a .png>`, offered as the last screenshot) shows example chips for screenshots (`look.sh shots`).
+- The box is 111 pt tall now (was 83): the chips row. Pictures taken by the box live in `$XDG_RUNTIME_DIR/kandinsky-capture-<pid>/` and are removed when it closes.
 - Not done: the browser's address when the history has no entry yet for a page opened seconds ago (Firefox writes visits at once; a page still loading has no title); X11 sessions take the screen with the box in it (no hiding there).
 
 
@@ -170,9 +170,9 @@ A row of chips under the text (`src/extras.rs`, drawn at the text's left edge, i
 The desktop box's UX is as simple as possible: the screenshot is taken before the chip appears, so it is faster, and discarded if not wanted.
 
 - **The picture is taken as the box opens**, of **the window you were on** (`context::window_shot`): the KWin script now also returns the window's `internalId`, and KWin's ScreenShot2 `CaptureWindow` (native resolution, no decoration, cursor or shadow) draws that window on its own — the box, on screen or not, is never in it, so nothing waits for anything. Raw pixels come back over a pipe (QImage format 4–6 BGRA or 16–18 RGBA), are written as a PNG (fast compression) in the box's runtime folder: ~95 ms in a hidden KWin, before the chip shows. The **Screen** chip then has its thumbnail, starts **off**, and a click (or Super+S) only turns it on. Not chosen: deleted with the runtime folder when the box closes.
-- **Permission**: KWin gives window pictures only to a program whose desktop file names it in `Exec=` and lists `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2`. The menu's "Atlas Capture" entry starts the wrapper script, so `install.sh` now also installs a hidden `atlas-capture-box.desktop` with `Exec=~/.cargo/bin/atlas-capture` (packaging/atlas-capture-box.desktop). Checked in a hidden KWin with the permission check on: with that file, the picture (100 ms); without it, "The process is not authorized to take a screenshot" (11 ms) — then the chip takes the screen on a click as before (the box hidden for 160 ms, Spectacle).
+- **Permission**: KWin gives window pictures only to a program whose desktop file names it in `Exec=` and lists `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2`. The menu's "Kandinsky Capture" entry starts the wrapper script, so `install.sh` now also installs a hidden `kandinsky-capture-box.desktop` with `Exec=~/.cargo/bin/kandinsky-capture` (packaging/kandinsky-capture-box.desktop). Checked in a hidden KWin with the permission check on: with that file, the picture (100 ms); without it, "The process is not authorized to take a screenshot" (11 ms) — then the chip takes the screen on a click as before (the box hidden for 160 ms, Spectacle).
 - **Plainer chips**: no keys drawn in them — a few words and a thumbnail; each chip's hover note says its key. Last screenshot is offered only when taken in the last 10 minutes (was 30): one taken just before, to go with the capture.
-- `atlas-capture --context` also takes the window's picture and says how long it took; `ATLAS_CAPTURE_KEEP=1` keeps the pictures to look at.
+- `kandinsky-capture --context` also takes the window's picture and says how long it took; `KANDINSKY_CAPTURE_KEEP=1` keeps the pictures to look at.
 
 
 ## What is playing
@@ -185,12 +185,12 @@ gives a web address: Firefox's YouTube tab answers `xesam:url = https://www.yout
 files the video. A local file's path is never offered. Test: `what_is_playing_is_offered_by_artist_and_title_with_its_web_address`.
 
 Still apart from the phone: files shared into the box (the desktop has drag and drop on the main window instead), the
-pen canvas. The phone's "Catalogue it" chip (for server vaults) is not needed here: a capture through the open Atlas runs
+pen canvas. The phone's "Catalogue it" chip (for server vaults) is not needed here: a capture through the open Kandinsky runs
 the catalog's capture hook, which files every link in it by default (its `on_capture` setting) — a chip would file
-them twice. A local vault's captures go through its open Atlas, whose capture
-hooks (catalog, OCR) act on them; with no Atlas open the capture is written straight to the file and kept in
-`.atlas/pending/<device>.jsonl` — synced with the vault (not in `.atlas/cache`, which Syncthing leaves per machine), so a
-capture the phone made reaches the desktop — and the next Atlas to serve the vault runs the hooks on it first (385aa2f).
+them twice. A local vault's captures go through its open Kandinsky, whose capture
+hooks (catalog, OCR) act on them; with no Kandinsky open the capture is written straight to the file and kept in
+`.kandinsky/pending/<device>.jsonl` — synced with the vault (not in `.kandinsky/cache`, which Syncthing leaves per machine), so a
+capture the phone made reaches the desktop — and the next Kandinsky to serve the vault runs the hooks on it first (385aa2f).
 
 On the phone, only the hooks it cannot run are left there: a capture is kept with `only` naming the plugins whose
 `[platforms]` say no on Android (OCR, Tesseract being desktop-only) and that are on in the vault
@@ -203,7 +203,7 @@ desktop serving the vault runs just those, once the capture's note and the pictu
 
 The status line under the text says, as it is typed, what the catalog will file — "a line in today's log · catalogued
 as a film" (an album, a paper, a web page…): the vault's catalog plugins' own `recognize` patterns, matched in the box
-at once (`atlas_core::catalog_hint`, read again every 30 s; nothing asked of any service). Plain words get no mention.
-Every box takes this line from one place, `atlas_core::capture::describe`: the desktop box and the web (`POST
-/api/capture/describe`) with the vault's settings; the phone through JNI (`crates/atlas-android/src/phone.rs`) still
+at once (`kandinsky_core::catalog_hint`, read again every 30 s; nothing asked of any service). Plain words get no mention.
+Every box takes this line from one place, `kandinsky_core::capture::describe`: the desktop box and the web (`POST
+/api/capture/describe`) with the vault's settings; the phone through JNI (`crates/kandinsky-android/src/phone.rs`) still
 without its vault, so without the catalog's kind (the Android lane).

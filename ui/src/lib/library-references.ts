@@ -145,7 +145,7 @@ export function referencesSource(): LibrarySource {
         run: async () => {
           const before = papers.size;
           const r = await api.cmd(z.id);
-          if (!r.ok) throw new Error(`${r.error ?? "it failed"} — the command is .atlas/commands/${z.id}.toml`);
+          if (!r.ok) throw new Error(`${r.error ?? "it failed"} — the command is .kandinsky/commands/${z.id}.toml`);
           const now = (await api.refs()).length;
           toast("Zotero: done", `${now - before} new · ${now} papers in the library`, "success");
         },

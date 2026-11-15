@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn the_address_alone_says_which_bank_it_was_and_a_spent_code_is_recognised() {
-        let back = "https://atlas.example/finance/enable-banking?state=Unicaja+Banco%7CES&code=abc";
+        let back = "https://kandinsky.example/finance/enable-banking?state=Unicaja+Banco%7CES&code=abc";
         assert_eq!(state_of(back), Some(("Unicaja Banco".into(), "ES".into())));
         assert_eq!(state_of("https://x/?code=a&state=Cr%C3%A9dit%20Agricole|FR#f"), Some(("Crédit Agricole".into(), "FR".into())));
         assert_eq!(state_of("https://x/?code=a&state=%zz|ES"), Some(("%zz".into(), "ES".into())), "a malformed escape stays");
@@ -280,8 +280,8 @@ mod tests {
         assert!(n.add("finance/sources/Unicaja.md", &note, &mut d), "{note}");
         assert!(d.is_empty(), "{d:?}");
         assert_eq!(n.sources[0], made, "the note reads back as it was written");
-        assert_eq!(code_of("https://atlas.example/finance/bank?state=s&code=abc123#x").as_deref(), Some("abc123"));
-        assert_eq!(code_of("https://atlas.example/?error=denied"), None);
+        assert_eq!(code_of("https://kandinsky.example/finance/bank?state=s&code=abc123#x").as_deref(), Some("abc123"));
+        assert_eq!(code_of("https://kandinsky.example/?error=denied"), None);
     }
 
     #[test]

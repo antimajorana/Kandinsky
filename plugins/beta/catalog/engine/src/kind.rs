@@ -1,12 +1,12 @@
 //! Kinds: what a thing is, where its note lives, which IDs identify it and which properties the catalog owns.
 //! Three origins, later ones winning by name: the catalog's own (`article`), a subplugin's `kinds = [...]`, and the
-//! vault's `.atlas/kinds/<name>.yaml` — so a vault can rename a folder or reorder sources without touching a plugin.
+//! vault's `.kandinsky/kinds/<name>.yaml` — so a vault can rename a folder or reorder sources without touching a plugin.
 use crate::model::{Fields, IdName, Ids, KindName, PluginId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-pub const KINDS_DIR: &str = ".atlas/kinds";
+pub const KINDS_DIR: &str = ".kandinsky/kinds";
 /// The catalog's own kind: any web page, what a link is when nothing knows more.
 pub const WEB_PAGE: &str = "article";
 
@@ -282,7 +282,7 @@ impl Kinds {
         self.0.values().map(|(k, o)| (k, o))
     }
 
-    /// A vault's `.atlas/kinds/<name>.yaml`; the file name must match `name:` so a kind has one file.
+    /// A vault's `.kandinsky/kinds/<name>.yaml`; the file name must match `name:` so a kind has one file.
     pub fn parse_vault_file(path: &str, text: &str) -> Result<Kind, String> {
         let kind: Kind = serde_yaml::from_str(text).map_err(|e| format!("{path}: {e}"))?;
         let stem = path.rsplit('/').next().unwrap_or(path).trim_end_matches(".yaml").trim_end_matches(".yml");
@@ -327,10 +327,10 @@ mod tests {
 
     #[test]
     fn a_vault_kind_file_must_be_named_after_its_kind_and_typos_are_errors() {
-        assert!(Kinds::parse_vault_file(".atlas/kinds/movie.yaml", "name: movie\nfolder: Films\nids: [{ id: tmdb }]\n").is_ok());
-        let e = Kinds::parse_vault_file(".atlas/kinds/film.yaml", "name: movie\nfolder: Films\nids: []\n").unwrap_err();
+        assert!(Kinds::parse_vault_file(".kandinsky/kinds/movie.yaml", "name: movie\nfolder: Films\nids: [{ id: tmdb }]\n").is_ok());
+        let e = Kinds::parse_vault_file(".kandinsky/kinds/film.yaml", "name: movie\nfolder: Films\nids: []\n").unwrap_err();
         assert!(e.contains("declares the kind"), "{e}");
-        let e = Kinds::parse_vault_file(".atlas/kinds/movie.yaml", "name: movie\nfolder: Films\nids: []\nfoldr: x\n").unwrap_err();
+        let e = Kinds::parse_vault_file(".kandinsky/kinds/movie.yaml", "name: movie\nfolder: Films\nids: []\nfoldr: x\n").unwrap_err();
         assert!(e.contains("unknown field"), "{e}");
     }
 

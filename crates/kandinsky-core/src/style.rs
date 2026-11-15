@@ -1,13 +1,13 @@
-//! CSS snippets (docs/guides/MALLEABLE.md, rung 2): `.atlas/snippets/*.css` restyle Atlas live, like
+//! CSS snippets (docs/guides/MALLEABLE.md, rung 2): `.kandinsky/snippets/*.css` restyle Kandinsky live, like
 //! Obsidian snippets or Stylish. Every file applies unless `[ui] css_snippets_off` names it.
 use crate::api::CssSnippet;
 use std::path::Path;
 
-pub const SNIPPETS_DIR: &str = ".atlas/snippets";
+pub const SNIPPETS_DIR: &str = ".kandinsky/snippets";
 
 /// The workspace's snippets, by name (file stem), sorted; unreadable files are skipped.
 pub fn css_snippets(root: &Path) -> Vec<CssSnippet> {
-    let Ok(dir) = std::fs::read_dir(root.join(SNIPPETS_DIR)) else { return Vec::new() };
+    let Ok(dir) = std::fs::read_dir(crate::state_dir::join(root, SNIPPETS_DIR)) else { return Vec::new() };
     let mut out: Vec<CssSnippet> = dir
         .flatten()
         .filter_map(|e| {
@@ -35,7 +35,7 @@ mod tests {
         std::fs::write(s.join("notes.txt"), "x").unwrap();
         let got = super::css_snippets(d.path());
         assert_eq!(got.iter().map(|x| (x.name.as_str(), x.css.as_str())).collect::<Vec<_>>(), [("a", "a{}"), ("b", "b{}")]);
-        assert_eq!(got[0].path, ".atlas/snippets/a.css");
+        assert_eq!(got[0].path, ".kandinsky/snippets/a.css");
         assert!(super::css_snippets(&d.path().join("nope")).is_empty());
     }
 }

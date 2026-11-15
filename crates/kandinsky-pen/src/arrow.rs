@@ -1,7 +1,7 @@
 //! An arrow from two strokes by plain geometry: a nearly straight
 //! shaft, then a "V" whose point is at one of the shaft's ends with both barbs pointing back along it. Asked when a
 //! head is drawn apart from its shaft, before the recognisers (openink reads arrows too, but misses short, quick
-//! heads — FROM-ATLAS.md), and for either recogniser. The answer is the wire's open path with a head at its end.
+//! heads — FROM-KANDINSKY.md), and for either recogniser. The answer is the wire's open path with a head at its end.
 
 type P = [f32; 2];
 

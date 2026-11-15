@@ -1,17 +1,17 @@
 # syntax=docker/dockerfile:1
 # ---------------------------------------------------------------------------
-# Atlas in server mode — container image (docs/guides/SERVER.md; compose.yaml at the repo root)
+# Kandinsky in server mode — container image (docs/guides/SERVER.md; compose.yaml at the repo root)
 #
-# Three stages, as obsidian-web's: (1) Node builds the UI into ui/dist; (2) Rust builds the `atlas` CLI, which
-# embeds that dist (rust-embed, crates/atlas-core/src/server.rs); (3) an Ubuntu runtime with the binary and what
+# Three stages, as obsidian-web's: (1) Node builds the UI into ui/dist; (2) Rust builds the `kandinsky` CLI, which
+# embeds that dist (rust-embed, crates/kandinsky-core/src/server.rs); (3) an Ubuntu runtime with the binary and what
 # a vault's plugins and terminals call: git, openssh-client (the ssh plugin), bash (the
 # terminals' shell, with a prompt and the basic tools: packaging/docker/bashrc), the documents' tools and PDFium.
-# The desktop app (crates/atlas-app) is not built: its manifest is only read, as a workspace member.
+# The desktop app (crates/kandinsky-app) is not built: its manifest is only read, as a workspace member.
 #
-# Build:   docker build -f packaging/docker/Dockerfile -t atlas .
-# First:   docker run --rm -it -v atlas-config:/config atlas server password
+# Build:   docker build -f packaging/docker/Dockerfile -t kandinsky .
+# First:   docker run --rm -it -v kandinsky-config:/config kandinsky server password
 # Run:     docker run -p 7700:7700 -v /path/to/Notes:/vaults/notes -v /path/to/Work:/vaults/work \
-#                     -v atlas-config:/config -v atlas-state:/state atlas
+#                     -v kandinsky-config:/config -v kandinsky-state:/state kandinsky
 #          every folder in /vaults is a vault, at /v/<folder>/ — one sign-in for all, the app's vault picker switches
 # ---------------------------------------------------------------------------
 
@@ -23,7 +23,7 @@ RUN npm ci --no-audit --no-fund
 COPY ui/ ./
 RUN npm run build   # → /src/ui/dist
 
-# ---- 2) the `atlas` binary --------------------------------------------------------------------------------------------
+# ---- 2) the `kandinsky` binary --------------------------------------------------------------------------------------------
 FROM rust:1-bookworm AS core
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
@@ -31,16 +31,16 @@ COPY crates ./crates
 # the workspace's plugin engines (catalog, ocr…): cargo reads every member's manifest. The bundle carries only those
 # folders of plugins/ (the plugin engines named in Cargo.toml), so this copies just them.
 COPY plugins ./plugins
-# `atlas guide` prints these (include_str!)
+# `kandinsky guide` prints these (include_str!)
 COPY docs/guides/EXTENDING.md docs/guides/DEVELOPING.md ./docs/guides/
 COPY --from=ui /src/ui/dist ./ui/dist
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
-    cargo build --release --locked -p atlas && \
-    cp target/release/atlas /usr/local/bin/atlas && \
-    strip /usr/local/bin/atlas
+    cargo build --release --locked -p kandinsky && \
+    cp target/release/kandinsky /usr/local/bin/kandinsky && \
+    strip /usr/local/bin/kandinsky
 
-# ---- 2b) PDFium: the core draws PDF covers with it (crates/atlas-core/src/pdfium.rs), pdfium-binaries' pinned build ----
+# ---- 2b) PDFium: the core draws PDF covers with it (crates/kandinsky-core/src/pdfium.rs), pdfium-binaries' pinned build ----
 FROM debian:bookworm-slim AS pdfium
 ARG PDFIUM_RELEASE=8086
 ARG PDFIUM_SHA256=588577cf52dabc1a444988bac841920df54cc2f141801424de97ab04f4fbb935
@@ -55,9 +55,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 # ---- 3) the runtime -------------------------------------------------------------------------------------------------
 # Ubuntu 26.04: a recent glibc (2.43), so a plugin engine built on a current desktop distribution (an engine with C++
 # inside is linked against the builder's glibc: plugin-pack.mjs, `libc = "gnu"`) also starts here, from the vault's
-# synced .atlas/plugins; the packages keep Debian's names.
+# synced .kandinsky/plugins; the packages keep Debian's names.
 FROM ubuntu:26.04 AS runtime
-# ca-certificates: plugins' HTTPS (mail, Zotero, copyparty…); tini: signals reach atlas, children are reaped;
+# ca-certificates: plugins' HTTPS (mail, Zotero, copyparty…); tini: signals reach kandinsky, children are reaped;
 # git, openssh-client: what plugins and helpers run (no Python: every helper is JavaScript in the core or compiled);
 # bash and the basic tools: the terminals
 # (bash as the default shell, with a friendly prompt). The documents' tools, so every plugin works here as on a
@@ -71,13 +71,13 @@ RUN apt-get update && \
       zip unzip xz-utils rsync iputils-ping iproute2 dnsutils man-db locales && \
     ln -s /usr/bin/fdfind /usr/local/bin/fd && \
     rm -rf /var/lib/apt/lists/*
-# A terminal's shell is $SHELL (crates/atlas-core/src/pty.rs); HOME is not the user's own, so the niceties are
+# A terminal's shell is $SHELL (crates/kandinsky-core/src/pty.rs); HOME is not the user's own, so the niceties are
 # system-wide: /etc/bash.bashrc is read by every interactive bash, whatever `user:` the host runs the container as.
-COPY packaging/docker/bashrc /etc/atlas.bashrc
-RUN echo '[ -r /etc/atlas.bashrc ] && . /etc/atlas.bashrc' >> /etc/bash.bashrc
-COPY --from=core /usr/local/bin/atlas /usr/local/bin/atlas
-# found by the core beside the binary: ../lib/atlas/ (an empty folder off amd64)
-COPY --from=pdfium /out/ /usr/local/lib/atlas/
+COPY packaging/docker/bashrc /etc/kandinsky.bashrc
+RUN echo '[ -r /etc/kandinsky.bashrc ] && . /etc/kandinsky.bashrc' >> /etc/bash.bashrc
+COPY --from=core /usr/local/bin/kandinsky /usr/local/bin/kandinsky
+# found by the core beside the binary: ../lib/kandinsky/ (an empty folder off amd64)
+COPY --from=pdfium /out/ /usr/local/lib/kandinsky/
 
 # Nothing of the sign-in lives in the vault: /config holds server.toml (the password's hash, the sign-in mode),
 # /state the sessions and device tokens. HOME and the runtime folder are writable for any `user:` the host picks.
@@ -89,18 +89,18 @@ ENV SHELL=/bin/bash \
     XDG_CONFIG_HOME=/config \
     XDG_STATE_HOME=/state \
     XDG_CACHE_HOME=/state/cache \
-    XDG_RUNTIME_DIR=/tmp/atlas-run \
-    HOME=/tmp/atlas-home \
-    ATLAS_SERVER_CONFIG=/config/atlas/server.toml \
-    ATLAS_SERVER_STATE=/state/atlas/server.json
-RUN mkdir -p /config/atlas /state/atlas /vaults && chmod 0777 /config /config/atlas /state /state/atlas
+    XDG_RUNTIME_DIR=/tmp/kandinsky-run \
+    HOME=/tmp/kandinsky-home \
+    KANDINSKY_SERVER_CONFIG=/config/kandinsky/server.toml \
+    KANDINSKY_SERVER_STATE=/state/kandinsky/server.json
+RUN mkdir -p /config/kandinsky /state/kandinsky /vaults && chmod 0777 /config /config/kandinsky /state /state/kandinsky
 
 EXPOSE 7700
 VOLUME ["/vaults", "/config", "/state"]
 
 # Run as the vault's owner on the host (`user: "1000:1000"` in compose): edits keep the right ownership.
-RUN useradd --system --uid 10001 --create-home --home-dir /home/atlas --shell /bin/bash atlas  # scan:allow (the container's own user)
-USER atlas
+RUN useradd --system --uid 10001 --create-home --home-dir /home/kandinsky --shell /bin/bash kandinsky  # scan:allow (the container's own user)
+USER kandinsky
 
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/atlas"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/kandinsky"]
 CMD ["serve", "--listen", "0.0.0.0:7700", "--vaults-in", "/vaults"]

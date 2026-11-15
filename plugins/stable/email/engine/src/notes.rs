@@ -91,7 +91,7 @@ fn save_files(root: &Path, dir_rel: &str, raw: &[u8], body: &parse::Body) -> (Ve
         let Some((bytes, _, _)) = parse::part_bytes(raw, a.part) else { continue };
         let dir = root.join(dir_rel);
         let name = free_name(&dir, &note_file(&a.name));
-        if atlas_plugin::write_file(dir.join(&name), &bytes).is_err() {
+        if kandinsky_plugin::write_file(dir.join(&name), &bytes).is_err() {
             continue;
         }
         let rel = format!("{dir_rel}/{name}");
@@ -198,10 +198,10 @@ fn props(text: &str) -> Vec<(&'static str, Value)> {
     ]
 }
 
-/// The note's frontmatter with these properties set, the others kept. The fences are atlas-text's (the one reader); a
+/// The note's frontmatter with these properties set, the others kept. The fences are kandinsky-text's (the one reader); a
 /// key's old value goes whole, the lines of a block list under it too (Obsidian rewrites `[a, b]` as one).
 fn with_props(text: &str, set: &[(&str, Value)]) -> String {
-    let Some(yaml_at) = atlas_text::frontmatter::yaml_range(text) else { return text.to_string() };
+    let Some(yaml_at) = kandinsky_text::frontmatter::yaml_range(text) else { return text.to_string() };
     let mut head: Vec<String> = text[yaml_at.clone()].lines().map(String::from).collect();
     for (k, v) in set {
         let line = format!("{k}: {}", yaml(v));
@@ -318,7 +318,7 @@ pub fn write(m: &Mail, also: &[String], items: Vec<(Msg, Vec<u8>, String)>) -> R
         return Ok(rel);
     }
     let text = with_props(&text, &props(&text));
-    atlas_plugin::write_file(&path, text.as_bytes()).map_err(|e| e.to_string())?;
+    kandinsky_plugin::write_file(&path, text.as_bytes()).map_err(|e| e.to_string())?;
     Ok(rel)
 }
 

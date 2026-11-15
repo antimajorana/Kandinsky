@@ -2,7 +2,7 @@
 //! recurrence), written in that plugin's emoji so the notes stay readable by it, but offered with
 //! plain names and the app's own icons. One implementation for every place a task is typed: the
 //! note editor and the web capture boxes (`GET /api/tasks/suggest`) and the native capture box
-//! (atlas-capture, which links this crate). docs/guides/TASKS.md, "Typing a task".
+//! (kandinsky-capture, which links this crate). docs/guides/TASKS.md, "Typing a task".
 use crate::tasks;
 use chrono::{Datelike, Duration, NaiveDate, Weekday};
 use serde::Serialize;
@@ -67,7 +67,7 @@ struct FieldRow {
 }
 
 /// In Obsidian Tasks' order and words (its `CU` suggester: due, start, scheduled, the priorities, recurring,
-/// created), so a list the user knows from Obsidian reads the same; "done today" last, Atlas's own.
+/// created), so a list the user knows from Obsidian reads the same; "done today" last, Kandinsky's own.
 const FIELDS: [FieldRow; 11] = [
     FieldRow { label: "due date", detail: "when it must be done", words: &["due", "date", "deadline"], insert: "📅 ", icon: TaskIcon::Due, marker: "📅", more: true },
     FieldRow { label: "start date", detail: "not before", words: &["start", "date", "begin"], insert: "🛫 ", icon: TaskIcon::Start, marker: "🛫", more: true },
@@ -401,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn after_repeats_the_rules_atlas_can_step() {
+    fn after_repeats_the_rules_kandinsky_can_step() {
         let s = suggest("water 🔁 every w", thu(), QUIET).unwrap();
         assert_eq!(s.items.iter().map(|i| i.label.as_str()).collect::<Vec<_>>(), ["every weekday", "every week", "every week when done"]);
         assert!(RULES.iter().all(|r| tasks::step(r, thu()).is_some()));

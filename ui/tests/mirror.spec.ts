@@ -7,7 +7,7 @@ import { WS } from "../playwright.config";
 // server answers or not; the core asks the server for a lease before each write (mirror_guard.rs, unreachable here:
 // written here only) and splices the live rooms to it. The interface only shows the link, the `⇄ host` chip. The
 // server's answers to the page (through the bridge) are played by the page's own routes.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const LIST = `${WS}-vaults.toml`;
 const MIRROR = "https://mirror.invalid/v/ws/";
 const NOTE = "notes/mirrored.md";

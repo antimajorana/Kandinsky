@@ -138,11 +138,11 @@ fn strings(s: &str) -> Vec<String> {
     serde_json::from_str(s).unwrap_or_default()
 }
 
-/// Keywords that are the system's, not labels people chose (Thunderbird's, Apple's, spam filters', Atlas's own).
+/// Keywords that are the system's, not labels people chose (Thunderbird's, Apple's, spam filters', Kandinsky's own).
 pub fn is_label(k: &str) -> bool {
     let l = k.to_lowercase();
     !(k.starts_with('\\')
-        || l.starts_with("$atlas")
+        || l.starts_with("$kandinsky")
         || l.starts_with("$mailflagbit")
         || matches!(l.as_str(), "$forwarded" | "$mdnsent" | "$junk" | "$notjunk" | "junk" | "nonjunk" | "notjunk" | "$phishing" | "$submitpending" | "$submitted" | "forwarded" | "$hasattachment" | "$hasnoattachment" | "$autojunk" | "$autonotjunk" | "$important" | "$label1" | "$label2" | "$label3" | "$label4" | "$label5" | "\\important" | "\\inbox" | "\\sent" | "\\draft" | "\\starred"))
 }

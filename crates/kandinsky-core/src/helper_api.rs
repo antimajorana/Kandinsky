@@ -1,4 +1,4 @@
-//! A plugin's helper calling back into the core (docs/guides/PLUGIN-API.md, "Calling Atlas back"). A helper in any
+//! A plugin's helper calling back into the core (docs/guides/PLUGIN-API.md, "Calling Kandinsky back"). A helper in any
 //! language (a compiled program, a script) can ask the core for things, over the helper's own pipe rather than
 //! a web interface.
 //!
@@ -7,7 +7,7 @@
 //! it through the vault's own router **in-process** (no socket, no port, no key: the pipe is the identity) and writes
 //! `{"reply": n, "status": 200, "body": …}` to the helper's stdin. So a helper reaches exactly the API the pages use —
 //! one implementation of every file, note and search operation — on the machine running the server. The library: the
-//! `atlas-plugin` crate; a helper run in the core (js_helper.rs) has the same calls as `atlas.*`.
+//! `kandinsky-plugin` crate; a helper run in the core (js_helper.rs) has the same calls as `kandinsky.*`.
 use std::path::Path;
 
 /// Marks a request as a plugin's helper's own (a request extension: a network request can never carry one). The
@@ -32,7 +32,7 @@ pub fn may(id: &str, path: &str) -> bool {
 
 /// Whether a helper's write (any verb but GET) leaves other plugins' files alone: no target — a query parameter, or a
 /// string in the JSON body under a key that names a file (`path`, `from`, `to`, `dest`, `paths`…, found by shape, not
-/// by route) — lies in another plugin's folder or settings file, or is a folder holding them (`.atlas`, `.atlas/plugins`).
+/// by route) — lies in another plugin's folder or settings file, or is a folder holding them (`.kandinsky`, `.kandinsky/plugins`).
 /// [`may`] sees only the URL; a file route carries its file in the body. `Err` says which target and why.
 pub fn may_write(id: &str, uri: &str, body: Option<&serde_json::Value>) -> Result<(), String> {
     let mut targets = Vec::new();
@@ -68,24 +68,31 @@ fn collect_targets(v: &serde_json::Value, keyed: bool, out: &mut Vec<String>) {
 }
 
 /// A vault path a helper `id` may write: anything but another plugin's folder or settings file, and the folders that
-/// hold every plugin. Compared without case (a case-insensitive disk would take `.Atlas/Plugins/x` for the same).
+/// hold every plugin. Compared without case (a case-insensitive disk would take `.Kandinsky/Plugins/x` for the same).
+/// Either spelling of the state folder is the same folder (`paths::safe_join` maps `.atlas/…` to the vault's own,
+/// for plugins written before the rename), so the parts are compared with the current spelling. Each part's trailing
+/// dots and spaces are dropped first, as Windows drops them when it opens a path (`.kandinsky./x` is `.kandinsky/x`).
 fn own_or_free(id: &str, target: &str) -> bool {
     let t = target.replace('\\', "/").to_lowercase();
-    let parts: Vec<&str> = t.split('/').filter(|p| !p.is_empty() && *p != ".").collect();
+    let trim = |p: &'_ str| if p == "." || p == ".." { p.len() } else { p.trim_end_matches(['.', ' ']).len() };
+    let mut parts: Vec<&str> = t.split('/').map(|p| &p[..trim(p)]).filter(|p| !p.is_empty() && *p != ".").collect();
+    if parts.first().is_some_and(|p| crate::state_dir::is_name(p)) {
+        parts[0] = crate::state_dir::STATE_DIR;
+    }
     let id = id.to_lowercase();
     match parts.as_slice() {
         [] => true, // the vault's top: a folder to write into (`dir: ""`), never one the core trashes or moves
-        [".atlas"] | [".atlas", "plugins"] | [".atlas", "plugin-settings"] => false,
-        [".atlas", "plugins", other, ..] => *other == id,
-        [".atlas", "plugin-settings", file, ..] => file.strip_suffix(".toml").unwrap_or(file) == id,
+        [".kandinsky"] | [".kandinsky", "plugins"] | [".kandinsky", "plugin-settings"] => false,
+        [".kandinsky", "plugins", other, ..] => *other == id,
+        [".kandinsky", "plugin-settings", file, ..] => file.strip_suffix(".toml").unwrap_or(file) == id,
         _ => true,
     }
 }
 
-/// The environment a plugin's program starts with, beside `ATLAS_ROOT` / `ATLAS_PLUGIN_DIR` / `…_TARGET`:
-/// `ATLAS_PLUGIN_ID`. (`root` stays for what a later variable may need of the vault.)
+/// The environment a plugin's program starts with, beside `KANDINSKY_ROOT` / `KANDINSKY_PLUGIN_DIR` / `…_TARGET`:
+/// `KANDINSKY_PLUGIN_ID`. (`root` stays for what a later variable may need of the vault.)
 pub fn env(_root: &Path, id: &str) -> Vec<(&'static str, String)> {
-    vec![("ATLAS_PLUGIN_ID", id.to_string())]
+    vec![("KANDINSKY_PLUGIN_ID", id.to_string())]
 }
 
 /// A call line from a helper, parsed: the verb is checked here so the router only sees the four the API uses.
@@ -157,19 +164,41 @@ mod tests {
     fn a_helper_writes_its_own_plugin_files_and_never_anothers() {
         use serde_json::json;
         let w = |uri: &str, body: serde_json::Value| may_write("demo-a", uri, Some(&body)).is_ok();
-        assert!(w("/api/file", json!({ "path": "notes/x.md", "text": ".atlas/plugins/demo-b/view.js" })), "a text is not a target");
-        assert!(w("/api/file", json!({ "path": ".atlas/plugins/demo-a/cache.json" })), "its own folder");
-        assert!(!w("/api/file", json!({ "path": ".atlas/plugins/demo-b/view.js" })), "another's code");
-        assert!(!w("/api/file", json!({ "path": "./.Atlas//Plugins/Demo-B/plugin.toml" })), "however spelled");
-        assert!(!w("/api/file", json!({ "path": ".atlas\\plugins\\demo-b\\plugin.toml" })), "Windows separators");
-        assert!(!w("/api/fs/move", json!({ "from": "notes/a.md", "to": ".atlas/plugins/demo-b/view.js" })), "moved over it");
-        assert!(!w("/api/fs/trash", json!({ "paths": ["notes/a.md", ".atlas/plugins"] })), "every plugin at once");
-        assert!(!w("/api/fs/trash", json!({ "path": ".atlas" })));
-        assert!(!w("/api/file", json!({ "path": ".atlas/plugin-settings/demo-b.toml" })), "another's settings");
-        assert!(w("/api/file", json!({ "path": ".atlas/plugin-settings/demo-a.toml" })));
-        assert!(!w("/api/raw?path=.atlas%2Fplugins%2Fdemo-b%2Fbin%2Fx", json!(null)), "a query's path, decoded");
+        assert!(w("/api/file", json!({ "path": "notes/x.md", "text": ".kandinsky/plugins/demo-b/view.js" })), "a text is not a target");
+        assert!(w("/api/file", json!({ "path": ".kandinsky/plugins/demo-a/cache.json" })), "its own folder");
+        assert!(!w("/api/file", json!({ "path": ".kandinsky/plugins/demo-b/view.js" })), "another's code");
+        assert!(!w("/api/file", json!({ "path": "./.Kandinsky//Plugins/Demo-B/plugin.toml" })), "however spelled");
+        assert!(!w("/api/file", json!({ "path": ".kandinsky\\plugins\\demo-b\\plugin.toml" })), "Windows separators");
+        assert!(!w("/api/fs/move", json!({ "from": "notes/a.md", "to": ".kandinsky/plugins/demo-b/view.js" })), "moved over it");
+        assert!(!w("/api/fs/trash", json!({ "paths": ["notes/a.md", ".kandinsky/plugins"] })), "every plugin at once");
+        assert!(!w("/api/fs/trash", json!({ "path": ".kandinsky" })));
+        assert!(!w("/api/file", json!({ "path": ".kandinsky/plugin-settings/demo-b.toml" })), "another's settings");
+        assert!(w("/api/file", json!({ "path": ".kandinsky/plugin-settings/demo-a.toml" })));
+        assert!(!w("/api/raw?path=.kandinsky%2Fplugins%2Fdemo-b%2Fbin%2Fx", json!(null)), "a query's path, decoded");
         assert!(w("/api/raw?path=refs%2Fa.pdf", json!(null)));
-        assert!(!w("/api/fs/move", json!({ "items": [{ "new_path": ".atlas/plugins/demo-b/x" }] })), "nested, prefixed keys");
+        assert!(!w("/api/fs/move", json!({ "items": [{ "new_path": ".kandinsky/plugins/demo-b/x" }] })), "nested, prefixed keys");
+    }
+
+    #[test]
+    fn the_write_guard_covers_the_state_folders_old_spelling_too() {
+        use serde_json::json;
+        // `paths::safe_join` maps `.atlas/…` to the vault's state folder: the guard must refuse it just the same
+        let w = |uri: &str, body: serde_json::Value| may_write("demo-a", uri, Some(&body)).is_ok();
+        assert!(w("/api/file", json!({ "path": ".atlas/plugins/demo-a/cache.json" })), "its own folder, old spelling");
+        assert!(!w("/api/file", json!({ "path": ".atlas/plugins/demo-b/view.js" })), "another's code, old spelling");
+        assert!(!w("/api/file", json!({ "path": "./.ATLAS//Plugins/Demo-B/plugin.toml" })), "old spelling, any case");
+        assert!(!w("/api/file", json!({ "path": ".atlas\\plugin-settings\\demo-b.toml" })), "old spelling, Windows separators");
+        assert!(w("/api/file", json!({ "path": ".atlas/plugin-settings/demo-a.toml" })));
+        assert!(!w("/api/fs/trash", json!({ "path": ".atlas" })));
+        assert!(!w("/api/fs/trash", json!({ "paths": [".atlas/plugins"] })));
+        assert!(!w("/api/raw?path=.atlas%2Fplugins%2Fdemo-b%2Fbin%2Fx", json!(null)), "a query's path, old spelling");
+        assert!(w("/api/file", json!({ "path": "notes/.atlas/plugins/demo-b/x" })), "only the vault's own state folder");
+        // Windows opens `.kandinsky./plugins` as `.kandinsky/plugins`: a trailing dot or space hides nothing
+        assert!(!w("/api/file", json!({ "path": ".kandinsky./plugins/demo-b/view.js" })));
+        assert!(!w("/api/file", json!({ "path": ".atlas. /plugins/demo-b/view.js" })));
+        assert!(!w("/api/file", json!({ "path": ".kandinsky/plugins./demo-b./view.js" })));
+        assert!(!w("/api/file", json!({ "path": ".kandinsky/plugin-settings/demo-b.toml." })));
+        assert!(w("/api/file", json!({ "path": ".kandinsky./plugins/demo-a/x" })), "its own folder still");
     }
 
     #[test]
@@ -190,7 +219,7 @@ mod tests {
     fn the_environment_names_the_plugin() {
         let root = tempfile::tempdir().unwrap();
         let env: std::collections::HashMap<_, _> = env(root.path(), "demo-c").into_iter().collect();
-        assert_eq!(env["ATLAS_PLUGIN_ID"], "demo-c");
-        assert!(!env.contains_key("PYTHONPATH") && !root.path().join(".atlas/cache/sdk").exists(), "no library written into the vault");
+        assert_eq!(env["KANDINSKY_PLUGIN_ID"], "demo-c");
+        assert!(!env.contains_key("PYTHONPATH") && !root.path().join(".kandinsky/cache/sdk").exists(), "no library written into the vault");
     }
 }

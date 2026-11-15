@@ -1,4 +1,4 @@
-// The UX audit's workspace: a COPY of a sample of a real vault (ATLAS_UX_SOURCE / ATLAS_VAULT), so
+// The UX audit's workspace: a COPY of a sample of a real vault (KANDINSKY_UX_SOURCE / KANDINSKY_VAULT), so
 // journeys run on real notes, papers, runs and code while writes never touch the original.
 // Sampling is by shape (folders that exist, small tables, a few PDFs), not by hardcoded names.
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -53,7 +53,7 @@ export function buildWorkspace(src: string, dst: string): string[] {
   // runs: up to 3 run folders with small tables (+ their figures)
   const runDirs = [...new Set(walk(join(src, "runs"), (p, s) => p.endsWith(".tsv") && s <= 2 * MB).map(dirname))].slice(0, 3);
   take("runs/ (3 small run folders)", runDirs.flatMap((d) => readdirSync(d).map((n) => join(d, n)).filter((p) => statSync(p).isFile() && statSync(p).size <= 5 * MB)));
-  // one real file of each type Atlas opens that the folders above may lack (from anywhere in the
+  // one real file of each type Kandinsky opens that the folders above may lack (from anywhere in the
   // source, ignored folders included), under ux-samples/ so search and the palette can see them
   const wanted = ["tex", "bib", "svg", "tsv", "csv", "toml", "json", "png", "jpg"];
   // types already visible to search (runs/ is usually on the ignore list, so its tables do not count)
@@ -62,22 +62,22 @@ export function buildWorkspace(src: string, dst: string): string[] {
   const extra = wanted.filter((e) => !have.has(e)).flatMap((e) => pool.filter((p) => p.toLowerCase().endsWith("." + e)).slice(0, 1));
   for (const f of extra) { mkdirSync(join(dst, "ux-samples"), { recursive: true }); cpSync(f, join(dst, "ux-samples", f.split("/").pop()!)); }
   notes.push(`ux-samples/ (one real file per missing type): ${extra.map((f) => f.split(".").pop()).join(", ") || "none needed"}`);
-  // Atlas config + commands; relative tool paths are made absolute (they point into the original)
-  if (existsSync(join(src, ".atlas/config.toml"))) {
-    mkdirSync(join(dst, ".atlas"), { recursive: true });
-    let cfg = readFileSync(join(src, ".atlas/config.toml"), "utf8").replace(/^(\w+\s*=\s*")((?:lib|tools|bin)\/[^"]*")/gm, `$1${src}/$2`);
-    // the audit never starts the real Claude: its "Claude" is `cat`, which echoes what Atlas types into it
+  // Kandinsky config + commands; relative tool paths are made absolute (they point into the original)
+  if (existsSync(join(src, ".kandinsky/config.toml"))) {
+    mkdirSync(join(dst, ".kandinsky"), { recursive: true });
+    let cfg = readFileSync(join(src, ".kandinsky/config.toml"), "utf8").replace(/^(\w+\s*=\s*")((?:lib|tools|bin)\/[^"]*")/gm, `$1${src}/$2`);
+    // the audit never starts the real Claude: its "Claude" is `cat`, which echoes what Kandinsky types into it
     if (/^claude\s*=/m.test(cfg)) cfg = cfg.replace(/^claude\s*=.*$/m, 'claude = "cat"');
     else if (/^\[terminal\]/m.test(cfg)) cfg = cfg.replace(/^\[terminal\]\s*$/m, '[terminal]\nclaude = "cat"');
     else cfg += '\n[terminal]\nclaude = "cat"\n';
-    writeFileSync(join(dst, ".atlas/config.toml"), cfg);
-    notes.push(".atlas/config.toml (relative tool paths → absolute; Claude replaced by `cat`)");
+    writeFileSync(join(dst, ".kandinsky/config.toml"), cfg);
+    notes.push(".kandinsky/config.toml (relative tool paths → absolute; Claude replaced by `cat`)");
   }
-  // everything else under .atlas/ (commands, plugins, keys…) except the rebuildable cache
-  if (existsSync(join(src, ".atlas"))) {
-    for (const e of readdirSync(join(src, ".atlas"))) {
+  // everything else under .kandinsky/ (commands, plugins, keys…) except the rebuildable cache
+  if (existsSync(join(src, ".kandinsky"))) {
+    for (const e of readdirSync(join(src, ".kandinsky"))) {
       if (e === "cache" || e === "config.toml") continue;
-      cpSync(join(src, ".atlas", e), join(dst, ".atlas", e), { recursive: true });
+      cpSync(join(src, ".kandinsky", e), join(dst, ".kandinsky", e), { recursive: true });
     }
   }
 

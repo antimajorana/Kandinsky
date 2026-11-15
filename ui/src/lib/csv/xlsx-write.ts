@@ -1,5 +1,5 @@
 // A table written as a new Excel workbook (.xlsx): one sheet, the header as its first row, numbers as numbers, text as
-// inline strings, and each `=` formula as Excel's formula with the value Atlas computed beside it (so a reader that
+// inline strings, and each `=` formula as Excel's formula with the value Kandinsky computed beside it (so a reader that
 // does not recompute still shows it). References move down a row, the header taking row 1. Never written over an
 // existing workbook: its styles, charts and other sheets would be lost. Pure apart from CompressionStream.
 import { formulas, isFormula, shiftRows, colName } from "./formula";

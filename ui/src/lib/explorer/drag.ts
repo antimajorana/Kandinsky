@@ -4,9 +4,9 @@ import { api } from "../api";
 import { basename } from "../paths";
 
 /** A vault path. */
-export const VAULT_DRAG = "application/x-atlas-path";
+export const VAULT_DRAG = "application/x-kandinsky-path";
 /** A remote row (SSH, copyparty): where it is. */
-export const REMOTE_DRAG = "application/x-atlas-remote";
+export const REMOTE_DRAG = "application/x-kandinsky-remote";
 export type RemoteRow = { source: string; place: string; path: string; dir: boolean };
 
 /** A row of the tree or an explorer starts a drag: a vault path (also as text, for a terminal or a note), or a remote

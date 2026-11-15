@@ -5,7 +5,7 @@
 # that stops loading (a moved file: every test an import error) fails loudly instead of quietly running nothing.
 set -uo pipefail
 root="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
-export PYTHONDONTWRITEBYTECODE=1 ATLAS_NO_BROWSER=1
+export PYTHONDONTWRITEBYTECODE=1 KANDINSKY_NO_BROWSER=1
 failed=0
 
 suite() { # name, folder, unittest arguments…
@@ -18,7 +18,7 @@ suite() { # name, folder, unittest arguments…
 }
 
 # the SSH plugin's tests drive its helper binary: build it first (a fresh clone has none yet)
-(cd "$root" && cargo build --quiet -p atlas-ssh) || echo "[py] could not build atlas-ssh: the SSH tests will fail"
+(cd "$root" && cargo build --quiet -p kandinsky-ssh) || echo "[py] could not build kandinsky-ssh: the SSH tests will fail"
 suite scripts/vault "$root/scripts/vault" discover -s tests
 shopt -s nullglob # no plugin keeps a Python test now and then: none is not a failure
 for f in "$root"/plugins/*/*/test_*.py; do

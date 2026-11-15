@@ -2,7 +2,7 @@
 import type { PromptAsk } from "./PromptAsk";
 
 /**
- * A template as an agent sees it (`atlas_templates`): the name to pass as `template`, the folder its
+ * A template as an agent sees it (`kandinsky_templates`): the name to pass as `template`, the folder its
  * notes are filed in (for a note made now), and the properties its frontmatter defines.
  */
 export type TemplateInfo = { name: string, 

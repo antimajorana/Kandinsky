@@ -1,13 +1,13 @@
 // Kiwix — the search pane: a book of the server (its catalog, OPDS), titles suggested while typing (`/suggest`), the
-// full text searched on Enter (`/search`, its hits with their snippets). An article is a link: Atlas opens it as a web
+// full text searched on Enter (`/search`, its hits with their snippets). An article is a link: Kandinsky opens it as a web
 // page (a tab, as `[web] open_links` says). Save captures its address; the catalog files it as a note.
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
-const BOOK_KEY = "atlas.kiwix.book";
+const BOOK_KEY = "kandinsky.kiwix.book";
 
-export default function mount(host, atlas) {
+export default function mount(host, kandinsky) {
   const root = el("div", "kx");
   host.append(style(), root);
-  const server = String(atlas.plugin.settings?.server ?? "").trim().replace(/\/+$/, "");
+  const server = String(kandinsky.plugin.settings?.server ?? "").trim().replace(/\/+$/, "");
   if (!server) {
     root.append(el("p", "kx-note", "Set your Kiwix server's address in Settings → Plugins → Kiwix."));
     return () => {};
@@ -22,8 +22,8 @@ export default function mount(host, atlas) {
   let gone = false, asked = 0;
 
   const get = async (path) => {
-    const r = await atlas.fetch(`${server}${path}`, { timeout: 30 });
-    if (!r.ok) throw new Error(r.signin ? `sign in to ${r.signin.host} first (Atlas offers it)` : `${server} answered ${r.status}`);
+    const r = await kandinsky.fetch(`${server}${path}`, { timeout: 30 });
+    if (!r.ok) throw new Error(r.signin ? `sign in to ${r.signin.host} first (Kandinsky offers it)` : `${server} answered ${r.status}`);
     return r.text();
   };
   const xml = (text) => new DOMParser().parseFromString(text, "application/xml");
@@ -41,7 +41,7 @@ export default function mount(host, atlas) {
       const href = [...e.querySelectorAll("link")].map((l) => l.getAttribute("href") ?? "").find((h) => h.startsWith(content)) ?? "";
       return { id: decoded(href.slice(content.length)), title: e.querySelector("title")?.textContent ?? "", name: e.querySelector("name")?.textContent ?? "", lang: e.querySelector("language")?.textContent ?? "", count: Number(e.querySelector("articleCount")?.textContent ?? 0) };
     }).filter((b) => b.id);
-    const words = String(atlas.plugin.settings?.books ?? "").toLowerCase().split(",").map((w) => w.trim()).filter(Boolean);
+    const words = String(kandinsky.plugin.settings?.books ?? "").toLowerCase().split(",").map((w) => w.trim()).filter(Boolean);
     const named = words.length ? all.filter((b) => words.some((w) => `${b.name} ${b.title}`.toLowerCase().includes(w))) : all;
     return (named.length ? named : all).sort((a, b) => a.title.localeCompare(b.title) || a.lang.localeCompare(b.lang) || b.id.localeCompare(a.id));
   }
@@ -52,8 +52,8 @@ export default function mount(host, atlas) {
       a.href = articleUrl(h.path);
       save.title = "Capture the article's address: the catalog files it as a note";
       save.onclick = async () => {
-        try { await atlas.capture(a.href); atlas.toast("Saved", `${h.title} — captured; the catalog files it`, "success"); }
-        catch (e) { atlas.toast("Not saved", String(e?.message ?? e), "error"); }
+        try { await kandinsky.capture(a.href); kandinsky.toast("Saved", `${h.title} — captured; the catalog files it`, "success"); }
+        catch (e) { kandinsky.toast("Not saved", String(e?.message ?? e), "error"); }
       };
       const head = el("div", "kx-head"); head.append(a, save);
       li.append(head);

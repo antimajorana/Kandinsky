@@ -7,7 +7,7 @@
   // By keyboard, from the moment it opens (the first row takes the keys unless a text has them): j/k (or ↑/↓) move,
   // g/G (Home/End) first and last, h/l (←/→) or 1 2 3 the tabs, t task, f file, c catalogue (when a plugin provides the
   // catalog: it files the capture as its note — a link, an ISBN, a DOI — and the capture links to it), d dismiss, x done, u reopen, Delete
-  // deletes (the line and its lines under it to `.atlas/trash/`), Enter opens; its pictures show under it (Ctrl: large);
+  // deletes (the line and its lines under it to `.kandinsky/trash/`), Enter opens; its pictures show under it (Ctrl: large);
   // the focus stays in place as triaged rows leave the list, so a run of keys clears it.
   import { onMount, tick } from "svelte";
   import { listVault, resolveLink } from "../../lib/vault";
@@ -130,7 +130,7 @@
     busy = new Set(busy).add(key(c));
     try {
       await api.triageCapture({ path: c.path, line: c.line, source: c.source, action });
-      if (action.kind === "delete") toast("Capture deleted", "Kept in the vault's .atlas/trash/.");
+      if (action.kind === "delete") toast("Capture deleted", "Kept in the vault's .kandinsky/trash/.");
     }
     catch (e) { toast("Could not triage the capture", /409/.test(String(e)) ? "The line changed since it was listed — shown again as it is now." : errText(e), "error"); }
     busy.delete(key(c));
@@ -179,7 +179,7 @@
 <section class="captures" aria-label="Captures" data-testid="captures" tabindex="-1" {onkeydown} bind:this={section}>
   <header>
     <span class="label">Captures</span>
-    <div class="tabs atlas-seg" role="tablist" aria-label="Which captures">
+    <div class="tabs kandinsky-seg" role="tablist" aria-label="Which captures">
       {#each [["open", `To triage`, open], ["tasks", "Tasks", tasks], ["all", "All", items.length]] as const as [s, label, n] (s)}
         <button role="tab" class:on={show === s} aria-selected={show === s} onclick={() => void showTab(s)}>{label}<span class="n">{n}</span></button>
       {/each}
@@ -232,7 +232,7 @@
               {:else}
                 <button class="act" onclick={() => triage(c, { kind: "reopen" })} title="Back to the captures to triage"><Icon name="undo" size={13} />Reopen</button>
               {/if}
-              <button class="act del" onclick={() => triage(c, { kind: "delete" })} title="Delete it: out of the log, kept in .atlas/trash/ (Delete)" aria-label="Delete: {c.text}"><Icon name="trash" size={13} /></button>
+              <button class="act del" onclick={() => triage(c, { kind: "delete" })} title="Delete it: out of the log, kept in .kandinsky/trash/ (Delete)" aria-label="Delete: {c.text}"><Icon name="trash" size={13} /></button>
             </span>
           </li>
         {/each}

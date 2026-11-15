@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // The example Jellyfin plugin installed as it is, against a stand-in: the last things watched.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
 const example = (f: string) => readFileSync(fileURLToPath(new URL(`../../plugins/examples/jellyfin/${f}`, import.meta.url)), "utf8");
 let server: Server, port = 0;
@@ -20,12 +20,12 @@ test.beforeAll(async ({ request }) => {
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   port = (server.address() as AddressInfo).port;
-  await put(request, ".atlas/plugins/jellyfin/main.js", example("main.js"));
-  await put(request, ".atlas/plugins/jellyfin/plugin.toml", example("plugin.toml"));
+  await put(request, ".kandinsky/plugins/jellyfin/main.js", example("main.js"));
+  await put(request, ".kandinsky/plugins/jellyfin/plugin.toml", example("plugin.toml"));
   await put(request, "notes/watched.md", "# Watched\n\n```view\ntype: jellyfin.watched\n```\n\nend\n");
 });
 test.afterAll(async ({ request }) => {
-  await put(request, ".atlas/plugins/jellyfin/main.js", "export function register() {}\n");
+  await put(request, ".kandinsky/plugins/jellyfin/main.js", "export function register() {}\n");
   await new Promise((done) => server.close(done));
 });
 

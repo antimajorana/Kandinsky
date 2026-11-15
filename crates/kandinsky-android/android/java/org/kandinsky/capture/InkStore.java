@@ -1,4 +1,4 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
 import org.json.JSONArray;
 import org.json.JSONException;

@@ -3,7 +3,7 @@ import { shownName } from "../src/lib/paths";
 
 // docs/guides/SHELL.md: the shell is files. Layouts are JSON in the vault (the current one, and named
 // workspaces that are also commands); vaults are a list the chooser reads and writes.
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 const openFile = async (page: Page, name: string) => {
   await page.keyboard.press("Control+p");
   const palette = page.getByTestId("palette");
@@ -34,7 +34,7 @@ test("a workspace saves the open tabs to a file, and switching to it brings them
   await page.keyboard.type("Pair");
   await expect(page.getByTestId("palette").getByText("Save as “Pair”")).toBeVisible();
   await page.keyboard.press("Enter");
-  await expect.poll(() => request.get("/api/file?path=.atlas/workspaces/Pair.json", { headers: H }).then((r) => r.status())).toBe(200);
+  await expect.poll(() => request.get("/api/file?path=.kandinsky/workspaces/Pair.json", { headers: H }).then((r) => r.status())).toBe(200);
 
   // close both, then come back to them in one step — as a command of its own
   await tabs(page).filter({ hasText: "related" }).click();
@@ -47,7 +47,7 @@ test("a workspace saves the open tabs to a file, and switching to it brings them
   await expect(tabs(page).filter({ hasText: "related" })).toBeVisible();
 
   // the current layout is a file too: a reload of the window keeps the tabs
-  await expect.poll(() => request.get("/api/file?path=.atlas/cache/layout.json", { headers: H }).then((r) => r.json()).then((j) => String(j.text ?? ""))).toContain("related.md");
+  await expect.poll(() => request.get("/api/file?path=.kandinsky/cache/layout.json", { headers: H }).then((r) => r.json()).then((j) => String(j.text ?? ""))).toContain("related.md");
   await page.reload();
   await expect(tabs(page).filter({ hasText: "related" })).toBeVisible();
 });
@@ -55,7 +55,7 @@ test("a workspace saves the open tabs to a file, and switching to it brings them
 test("the vault chooser lists vaults, opens a typed folder and creates it only when asked", async ({ page, request }) => {
   const root: string = (await (await request.get("/api/workspace", { headers: H })).json()).root;
   const personal = `${root}-personal`;
-  const name = personal.split("/").pop()!; // the run's own folder name (ATLAS_PW_WS may move it)
+  const name = personal.split("/").pop()!; // the run's own folder name (KANDINSKY_PW_WS may move it)
   const vaults = () => request.get("/api/vaults", { headers: H }).then((r) => r.json()).then((l) => (l.vaults as { path: string; missing: boolean }[]));
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();

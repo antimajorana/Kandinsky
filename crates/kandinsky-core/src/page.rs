@@ -75,7 +75,7 @@ pub fn parse(src: &str) -> Result<PageDoc> {
     Ok(PageDoc { title: raw.title, rows })
 }
 
-/// The home page Atlas writes once: the Today dashboard, as a file.
+/// The home page Kandinsky writes once: the Today dashboard, as a file.
 pub const HOME_TEMPLATE: &str = r#"# Your home screen, as a file: reorder, remove or add blocks and save — it updates at once.
 # A block is a name (welcome, greeting, capture, focus, log, tasks, activity, suggestions, calendar, list,
 # table), or { view: calendar, from: tasks, dated: true, title: … }, { view: settings, page: appearance },

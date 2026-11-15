@@ -1,4 +1,4 @@
-// Claude usage in the status bar (README.md): "Claude 42 %" — the session limit of the account Atlas's Claude runs
+// Claude usage in the status bar (README.md): "Claude 42 %" — the session limit of the account Kandinsky's Claude runs
 // as (the helper's `in_use`, engine/src/lib.rs) — and its limits on hover; a click looks again and shows the report
 // (usage.js, a dialog: each account's limits as bars).
 
@@ -12,11 +12,11 @@ export function resetText(iso) {
   return `resets ${d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}`;
 }
 
-export function register(atlas) {
-  const cell = atlas.shell.statusItem({ id: "usage", text: "Claude …", title: "Claude usage", run: () => void look(true) });
+export function register(kandinsky) {
+  const cell = kandinsky.shell.statusItem({ id: "usage", text: "Claude …", title: "Claude usage", run: () => void look(true) });
   // A limit is announced once per window, also across restarts. The key leaves out resets_at: the endpoint moves it
   // by a fraction of a second on every look, so a key holding it was new each time (a notice every 2 min).
-  const STORE = "atlas.claude.warned";
+  const STORE = "kandinsky.claude.warned";
   const warned = (() => { try { return JSON.parse(localStorage.getItem(STORE) ?? "{}") ?? {}; } catch { return {}; } })(); // "folder:kind" → the window's end (ms), 0 unknown
   const save = () => { try { localStorage.setItem(STORE, JSON.stringify(warned)); } catch { /* storage off: once per run */ } };
   function announce(a, l, warn) {
@@ -25,7 +25,7 @@ export function register(atlas) {
     if (a.stale || (key in warned && (!warned[key] || Date.now() < warned[key]))) return; // old numbers, or this window was announced
     warned[key] = Date.parse(l.resets_at ?? "") || 0;
     save();
-    atlas.toast(`Claude: ${Math.round(l.percent)} % of the ${l.label} used`, `${a.name}${when(l.resets_at) ? ` — ${when(l.resets_at)}` : ""}`, "info");
+    kandinsky.toast(`Claude: ${Math.round(l.percent)} % of the ${l.label} used`, `${a.name}${when(l.resets_at) ? ` — ${when(l.resets_at)}` : ""}`, "info");
   }
   const when = resetText;
   let looking = false;
@@ -33,8 +33,8 @@ export function register(atlas) {
     if (looking) return;
     looking = true;
     try {
-      const { accounts } = await atlas.helper.call("usage", {}, { timeout: 30 });
-      const warn = Number(atlas.plugin.settings.warn ?? 80);
+      const { accounts } = await kandinsky.helper.call("usage", {}, { timeout: 30 });
+      const warn = Number(kandinsky.plugin.settings.warn ?? 80);
       const sessions = accounts.flatMap((a) => a.limits.filter((l) => !l.weekly).map((l) => ({ a, l })));
       sessions.sort((x, y) => y.l.percent - x.l.percent);
       const top = sessions.find((s) => s.a.current) ?? sessions[0];
@@ -44,14 +44,14 @@ export function register(atlas) {
       else cell.set(`${top.l.percent >= warn ? "⚠ " : ""}Claude ${Math.round(top.l.percent)} %${many ? ` · ${top.a.name}` : ""}`, lines.join("\n"));
       for (const { a, l } of sessions) if (a.current) announce(a, l, warn);
       // tall enough for every account's limits without a scrollbar: a header, then one row per limit
-      if (asked && (atlas.version ?? 0) >= 23) void atlas.openDialog(undefined, { title: "Claude usage", width: 520, height: Math.min(640, 170 + accounts.reduce((h, a) => h + 64 + 46 * Math.max(1, a.limits.length), 0)), view: "usage.js" });
-      else if (asked) atlas.toast("Claude usage", lines.join("\n"));
+      if (asked && (kandinsky.version ?? 0) >= 23) void kandinsky.openDialog(undefined, { title: "Claude usage", width: 520, height: Math.min(640, 170 + accounts.reduce((h, a) => h + 64 + 46 * Math.max(1, a.limits.length), 0)), view: "usage.js" });
+      else if (asked) kandinsky.toast("Claude usage", lines.join("\n"));
     } catch (e) {
       cell.set("Claude ?", `Usage not read: ${e.message ?? e}`);
     } finally { looking = false; }
   }
-  atlas.registerCommand({ id: "show", title: "Claude: show usage", run: () => void look(true) });
-  const every = Math.max(0, Number(atlas.plugin.settings.every ?? 2));
+  kandinsky.registerCommand({ id: "show", title: "Claude: show usage", run: () => void look(true) });
+  const every = Math.max(0, Number(kandinsky.plugin.settings.every ?? 2));
   const first = setTimeout(() => void look(false), 3000);
   const timer = every > 0 ? setInterval(() => void look(false), every * 60_000) : null;
   return () => { clearTimeout(first); if (timer) clearInterval(timer); };

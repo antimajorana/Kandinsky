@@ -23,7 +23,7 @@ test("markdown: [[ link completion, / slash menu, foldable headings", async ({ p
   await page.keyboard.press("Enter");
   await page.keyboard.type("buy chalk");
   // what matters is the saved markdown (the live preview hides "- [ ]" while the caret is on the line)
-  await expect.poll(async () => (await (await request.get("/api/file?path=notes/aids.md", { headers: { "x-atlas": "1" } })).json()).text)
+  await expect.poll(async () => (await (await request.get("/api/file?path=notes/aids.md", { headers: { "x-kandinsky": "1" } })).json()).text)
     .toContain("See [[FOCUS]]\n- [ ] buy chalk");
   // fold the "# Aids" section from its heading line (vim: Escape, gg), then check it collapsed
   await page.keyboard.press("Escape");
@@ -36,7 +36,7 @@ test("markdown: [[ link completion, / slash menu, foldable headings", async ({ p
 // links as [[name|alias]], the selected note is previewed, a name nothing has is offered as a new note, and
 // after #^ come the target's block ids.
 test("[[ finds aliases, previews the note, offers a new note, and lists block ids", async ({ page, request }) => {
-  const H = { "x-atlas": "1" };
+  const H = { "x-kandinsky": "1" };
   await request.put("/api/file", { headers: H, data: { path: "notes/lt-impurity.md", text: "---\naliases: [Anderson problem]\n---\nThe zqx impurity text.\n\nA key claim ^claim1\n" } });
   await request.put("/api/file", { headers: H, data: { path: "notes/lt-write.md", text: "# Write\n\n" } });
   await page.goto("/");
@@ -46,7 +46,7 @@ test("[[ finds aliases, previews the note, offers a new note, and lists block id
   await page.keyboard.press("Control+End");
   if (await page.locator(".cm-fat-cursor").count()) await page.keyboard.press("i");
   const list = page.locator(".cm-tooltip-autocomplete");
-  const text = () => page.evaluate(() => (window as any).__atlas.editor().text as string);
+  const text = () => page.evaluate(() => (window as any).__kandinsky.editor().text as string);
 
   await page.keyboard.type("[[anderson pro");
   await expect(list.locator("li").first()).toContainText("Anderson problem");
@@ -74,7 +74,7 @@ test("[[ finds aliases, previews the note, offers a new note, and lists block id
 // the core ranks by match quality, then use (opened, linked, linked to, changed lately); daily notes wait below
 // the rest unless a date is typed (link_targets.rs).
 test("[[ ranks by use and keeps daily notes below the rest unless a date is typed", async ({ page, request }) => {
-  const H = { "x-atlas": "1" };
+  const H = { "x-kandinsky": "1" };
   const put = (path: string, text: string) => request.put("/api/file", { headers: H, data: { path, text } });
   await put("notes/rkq gamma.md", "c\n"); // the oldest of the three: newest-first would not put it first
   await put("notes/rkq alpha.md", "a\n");

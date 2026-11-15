@@ -116,15 +116,15 @@ export function extractNoteImages(markdown) {
   return results;
 }
 
-export function register(atlas) {
+export function register(kandinsky) {
   let obsidianCache = null;
 
   async function loadObsidianDefaults() {
     if (obsidianCache) return obsidianCache;
     const found = {};
     try {
-      if (await atlas.exists(".obsidian/app.json")) {
-        const appJson = JSON.parse(await atlas.readText(".obsidian/app.json"));
+      if (await kandinsky.exists(".obsidian/app.json")) {
+        const appJson = JSON.parse(await kandinsky.readText(".obsidian/app.json"));
         if (typeof appJson?.attachmentFolderPath === "string" && appJson.attachmentFolderPath.trim()) {
           found.attachment_folder = appJson.attachmentFolderPath.trim();
         }
@@ -136,8 +136,8 @@ export function register(atlas) {
 
     try {
       const pluginDataPath = ".obsidian/plugins/obsidian-paste-image-rename/data.json";
-      if (await atlas.exists(pluginDataPath)) {
-        const data = JSON.parse(await atlas.readText(pluginDataPath));
+      if (await kandinsky.exists(pluginDataPath)) {
+        const data = JSON.parse(await kandinsky.readText(pluginDataPath));
         const pat = convertObsidianPattern(data?.imageNamePattern, data?.dupNumberDelimiter);
         if (pat) found.pattern = pat;
         if (typeof data?.autoRename === "boolean") {
@@ -150,12 +150,12 @@ export function register(atlas) {
     return found;
   }
 
-  atlas.onFilesChanged((paths) => {
+  kandinsky.onFilesChanged((paths) => {
     if (!paths?.length || paths.some((p) => p.startsWith(".obsidian/"))) obsidianCache = null;
   });
 
   async function effectiveConfig() {
-    const s = atlas.plugin?.settings ?? {};
+    const s = kandinsky.plugin?.settings ?? {};
     const obs = await loadObsidianDefaults();
     const attachmentFolder =
       typeof s.attachment_folder === "string" && s.attachment_folder !== DEFAULTS.attachment_folder
@@ -186,7 +186,7 @@ export function register(atlas) {
           .replace(/\{n\}/gi, String(n));
         const stem = sanitizeStem(rendered, `${noteStem}-${n}`);
         const candidate = joinVaultPath(folder, `${stem}.${ext}`);
-        if (!reserved.has(candidate) && !(await atlas.exists(candidate))) return stem;
+        if (!reserved.has(candidate) && !(await kandinsky.exists(candidate))) return stem;
       }
     } else {
       const base = sanitizeStem(
@@ -194,11 +194,11 @@ export function register(atlas) {
         noteStem,
       );
       const first = joinVaultPath(folder, `${base}.${ext}`);
-      if (!reserved.has(first) && !(await atlas.exists(first))) return base;
+      if (!reserved.has(first) && !(await kandinsky.exists(first))) return base;
       for (let n = 1; n < 10000; n++) {
         const stem = `${base}-${n}`;
         const candidate = joinVaultPath(folder, `${stem}.${ext}`);
-        if (!reserved.has(candidate) && !(await atlas.exists(candidate))) return stem;
+        if (!reserved.has(candidate) && !(await kandinsky.exists(candidate))) return stem;
       }
     }
     return `${noteStem}-${Date.now()}`;
@@ -206,11 +206,11 @@ export function register(atlas) {
 
   async function ensureCollisionFreePath(folder, stem, ext, reserved) {
     const initial = joinVaultPath(folder, `${stem}.${ext}`);
-    if (!reserved.has(initial) && !(await atlas.exists(initial))) return initial;
+    if (!reserved.has(initial) && !(await kandinsky.exists(initial))) return initial;
     const stripped = stem.replace(/-\d+$/, "") || stem;
     for (let n = 1; n < 10000; n++) {
       const candidate = joinVaultPath(folder, `${stripped}-${n}.${ext}`);
-      if (!reserved.has(candidate) && !(await atlas.exists(candidate))) return candidate;
+      if (!reserved.has(candidate) && !(await kandinsky.exists(candidate))) return candidate;
     }
     return joinVaultPath(folder, `${stripped}-${Date.now()}.${ext}`);
   }
@@ -228,7 +228,7 @@ export function register(atlas) {
       let stem = await nextAvailableStem(folder, cfg.pattern, noteStem, date, ext, reserved);
 
       if (cfg.promptRename) {
-        const typed = await atlas.input("Image filename", {
+        const typed = await kandinsky.input("Image filename", {
           value: stem,
           hint: `Saved in ${folder || "/"} as .${ext}`,
           ok: "Save",
@@ -240,7 +240,7 @@ export function register(atlas) {
 
       const destPath = await ensureCollisionFreePath(folder, stem, ext, reserved);
       reserved.add(destPath);
-      await atlas.writeBytes(destPath, file);
+      await kandinsky.writeBytes(destPath, file);
       links.push(formatImageLink(destPath, cfg.useWikilink));
     }
 
@@ -257,28 +257,28 @@ export function register(atlas) {
     return saveIncomingImages(data.path, files);
   }
 
-  atlas.editor.onPaste(onIncoming);
-  atlas.editor.onDrop(onIncoming);
+  kandinsky.editor.onPaste(onIncoming);
+  kandinsky.editor.onDrop(onIncoming);
 
-  atlas.registerCommand({
+  kandinsky.registerCommand({
     id: "rename-note-images",
     title: "Paste Image Rename: Check image attachments in this note",
     run: async () => {
-      const ctx = atlas.context();
+      const ctx = kandinsky.context();
       const notePath = ctx?.active?.path || ctx?.selection?.path || "";
       if (!notePath || !/\.md$/i.test(notePath)) {
-        atlas.toast("Paste Image Rename", "Open a Markdown note first to check its image attachments.", "info");
+        kandinsky.toast("Paste Image Rename", "Open a Markdown note first to check its image attachments.", "info");
         return;
       }
 
       const cfg = await effectiveConfig();
       const expectedFolder = resolveAttachmentFolder(cfg.attachmentFolder, notePath);
       const noteStem = noteStemOf(notePath);
-      const text = await atlas.readText(notePath);
+      const text = await kandinsky.readText(notePath);
       const embeds = extractNoteImages(text);
 
       if (embeds.length === 0) {
-        atlas.toast("Paste Image Rename", `No local image attachments found in ${noteStem}.md.`, "info");
+        kandinsky.toast("Paste Image Rename", `No local image attachments found in ${noteStem}.md.`, "info");
         return;
       }
 
@@ -297,7 +297,7 @@ export function register(atlas) {
 
         let resolved = null;
         for (const c of candidates) {
-          if (await atlas.exists(c)) {
+          if (await kandinsky.exists(c)) {
             resolved = c;
             break;
           }
@@ -329,14 +329,14 @@ export function register(atlas) {
       }
 
       const summary = `${embeds.length} image${embeds.length === 1 ? "" : "s"}: ${okCount} clean, ${genericCount} generic, ${missingCount} missing`;
-      atlas.toast("Paste Image Rename", summary, missingCount ? "error" : "info");
-      atlas.pick({
+      kandinsky.toast("Paste Image Rename", summary, missingCount ? "error" : "info");
+      kandinsky.pick({
         placeholder: `${summary} — pick an attachment to open`,
         tag: "Images",
         items,
         onpick: (chosen) => {
           if (chosen && !items.find((x) => x.value === chosen && x.title.startsWith("[Missing]"))) {
-            atlas.open(chosen, undefined, { beside: true });
+            kandinsky.open(chosen, undefined, { beside: true });
           }
         },
       });

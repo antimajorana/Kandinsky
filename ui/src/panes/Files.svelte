@@ -157,12 +157,12 @@
     document.addEventListener("visibilitychange", onShown);
     // the tree follows the active file (FileTree scrolls to it while shown)
     const onActive = (e: Event) => revealPath((e as CustomEvent<string>).detail);
-    window.addEventListener("atlas-active-file", onActive);
+    window.addEventListener("kandinsky-active-file", onActive);
     // opened after the file: the event is gone — reveal the file you were last in
     const last = lastEditorId();
     const p = openIntent.path || (last ? editors.get(last)?.path : undefined); // the file asked for last
-    if (p) onActive(new CustomEvent("atlas-active-file", { detail: p }));
-    return () => { off(); offGit(); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onShown); window.removeEventListener("atlas-active-file", onActive); };
+    if (p) onActive(new CustomEvent("kandinsky-active-file", { detail: p }));
+    return () => { off(); offGit(); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onShown); window.removeEventListener("kandinsky-active-file", onActive); };
   });
 </script>
 

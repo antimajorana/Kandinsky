@@ -1,4 +1,4 @@
-package org.atlas.plugins.books;
+package org.kandinsky.plugins.books;
 
 import org.json.JSONObject;
 
@@ -55,8 +55,8 @@ final class Typeset {
         }
         b.append("a { color: inherit; }\n");
         b.append("img, svg, video { max-width: 100% !important; max-height: 92vh !important; height: auto; object-fit: contain; break-inside: avoid; }\n");
-        b.append("mark.atlas-hl { background: ").append(eink ? "transparent" : "rgba(245,197,66,.45)").append("; color: inherit;").append(eink ? " text-decoration: underline 2px; text-underline-offset: 3px;" : "").append(" }\n");
-        b.append("mark.atlas-found { background: ").append(eink ? "transparent" : "rgba(74,158,255,.4)").append("; color: inherit;").append(eink ? " outline: 2px solid currentColor;" : "").append(" }\n");
+        b.append("mark.kandinsky-hl { background: ").append(eink ? "transparent" : "rgba(245,197,66,.45)").append("; color: inherit;").append(eink ? " text-decoration: underline 2px; text-underline-offset: 3px;" : "").append(" }\n");
+        b.append("mark.kandinsky-found { background: ").append(eink ? "transparent" : "rgba(74,158,255,.4)").append("; color: inherit;").append(eink ? " outline: 2px solid currentColor;" : "").append(" }\n");
         if (paged(o, eink)) {
             // a page is exactly the view's width: the side margins are the html's padding and the columns' gap, so page
             // n starts at n × width and never drifts (the web reader's rule)

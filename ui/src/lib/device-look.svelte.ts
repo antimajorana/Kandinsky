@@ -9,7 +9,7 @@ type Ui = WorkspaceConfig["ui"];
 /** The settings that are a screen's look. Settings → Appearance draws them from here when the device keeps its own. */
 export const LOOK_PATHS = ["ui.theme", "ui.palette", "ui.palette_dark", "ui.contrast", "ui.shape", "ui.accent", "ui.font_size"] as const;
 const LOOK_KEYS = LOOK_PATHS.map((p) => p.slice(3)) as (keyof Ui)[];
-const KEY = "atlas.device-look.v1";
+const KEY = "kandinsky.device-look.v1";
 
 interface Kept { own: boolean; ui: Partial<Ui> }
 const kept = load<Kept>(KEY, { own: false, ui: {} });

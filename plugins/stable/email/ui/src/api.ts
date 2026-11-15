@@ -49,15 +49,15 @@ export interface Draft {
 }
 
 /** A helper call with the plugin's settings; the error stripped of the transport's prefix. */
-export async function call<T>(atlas: PluginApi, method: string, params: Record<string, unknown> = {}, timeout = 120): Promise<T> {
+export async function call<T>(kandinsky: PluginApi, method: string, params: Record<string, unknown> = {}, timeout = 120): Promise<T> {
   try {
-    return (await atlas.helper.call(method, { ...params, settings: atlas.plugin.settings }, { timeout })) as T;
+    return (await kandinsky.helper.call(method, { ...params, settings: kandinsky.plugin.settings }, { timeout })) as T;
   } catch (e) {
     throw new Error(String((e as Error)?.message ?? e).replace(/^.*?plugin [\w-]+: \w+: /, "").replace(/^.*?(method|error): /i, ""));
   }
 }
 
-export const setting = <T>(atlas: PluginApi, key: string, fallback: T): T => (atlas.plugin.settings[key] as T) ?? fallback;
+export const setting = <T>(kandinsky: PluginApi, key: string, fallback: T): T => (kandinsky.plugin.settings[key] as T) ?? fallback;
 
 /** A person as a list shows them: the name, else the address's local part; "me" for the user's own addresses. */
 export function who(p: Person | undefined, own: string[] = []): string {
@@ -152,10 +152,10 @@ export function parseWhen(text: string, now = new Date()): number | null {
   return Math.floor(d.getTime() / 1000);
 }
 
-/** The app's own yes/no (`atlas.confirm`, API 23); the browser's on an older Atlas. */
-export const askYes = (atlas: PluginApi, question: string, opts?: { ok?: string; danger?: boolean }): Promise<boolean> =>
-  typeof atlas.confirm === "function" ? atlas.confirm(question, opts) : Promise.resolve(window.confirm(question));
+/** The app's own yes/no (`kandinsky.confirm`, API 23); the browser's on an older Kandinsky. */
+export const askYes = (kandinsky: PluginApi, question: string, opts?: { ok?: string; danger?: boolean }): Promise<boolean> =>
+  typeof kandinsky.confirm === "function" ? kandinsky.confirm(question, opts) : Promise.resolve(window.confirm(question));
 
-/** The app's own one-line question (`atlas.input`, API 23): the text, or null; the browser's on an older Atlas. */
-export const askLine = (atlas: PluginApi, title: string, value = ""): Promise<string | null> =>
-  typeof atlas.input === "function" ? atlas.input(title, { value }) : Promise.resolve(window.prompt(title, value)?.trim() || null);
+/** The app's own one-line question (`kandinsky.input`, API 23): the text, or null; the browser's on an older Kandinsky. */
+export const askLine = (kandinsky: PluginApi, title: string, value = ""): Promise<string | null> =>
+  typeof kandinsky.input === "function" ? kandinsky.input(title, { value }) : Promise.resolve(window.prompt(title, value)?.trim() || null);

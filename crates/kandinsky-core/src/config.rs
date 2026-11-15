@@ -1,10 +1,10 @@
-//! `.atlas/config.toml`: optional, and every key has a default (invariant: zero required fields).
+//! `.kandinsky/config.toml`: optional, and every key has a default (invariant: zero required fields).
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use ts_rs::TS;
 
-pub const CONFIG_FILE: &str = ".atlas/config.toml";
+pub const CONFIG_FILE: &str = ".kandinsky/config.toml";
 
 /// Every field's doc comment is its description in the Settings pane (generated from the JSON
 /// schema), so a new setting needs only a field here: no hand-written form to forget.
@@ -82,7 +82,7 @@ pub enum CaptureMode {
 #[serde(default)]
 #[ts(export)]
 pub struct NotesConfig {
-    /// What capture (Super+C, the capture box, `atlas capture`) writes: a bullet in today's log, or a note of its own.
+    /// What capture (Super+C, the capture box, `kandinsky capture`) writes: a bullet in today's log, or a note of its own.
     pub capture: CaptureMode,
     /// Folder for captured notes (when capture makes notes).
     pub inbox: String,
@@ -163,7 +163,7 @@ impl PluginsConfig {
     }
 }
 
-/// Plugins: the vault's own (`.atlas/plugins/<id>/`) and the built-in ones (`library`).
+/// Plugins: the vault's own (`.kandinsky/plugins/<id>/`) and the built-in ones (`library`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(default)]
 #[ts(export)]
@@ -176,9 +176,9 @@ pub struct PluginsConfig {
     pub oidc_issuer: String,
     /// Kandinsky's client id at that provider, registered once for every plugin (a public client: no secret).
     pub oidc_client_id: String,
-    /// The redirect address registered for that client (`https://localhost/atlas`).
+    /// The redirect address registered for that client (`https://localhost/kandinsky`).
     pub oidc_redirect: String,
-    /// Where "Install a plugin" finds the released plugins: a `plugins.json` with the `atlas-plugin-<id>.tar.gz`
+    /// Where "Install a plugin" finds the released plugins: a `plugins.json` with the `kandinsky-plugin-<id>.tar.gz`
     /// archives beside it (a release's files need no sign-in). Empty: none offered.
     pub release_index: String,
 }
@@ -228,7 +228,7 @@ pub struct LatexConfig {
     /// LaTeX Suite snippets while typing math in markdown (and in .tex files).
     pub snippets: bool,
     /// Snippet file or folder in Obsidian LaTeX Suite format (a JS array of {trigger, replacement, options}).
-    /// A relative path is inside the vault (`.atlas/snippets/snippets.coffee`); `~/…` is under home.
+    /// A relative path is inside the vault (`.kandinsky/snippets/snippets.coffee`); `~/…` is under home.
     pub snippets_file: String,
     /// Snippet variables file (e.g. `${GREEK}` → `alpha|beta|…`).
     pub variables_file: String,
@@ -281,7 +281,7 @@ impl Default for LspConfig {
 #[ts(export)]
 pub struct AutomationConfig {
     /// Run workspace commands that have a `schedule` (e.g. `daily 03:00`) while Kandinsky is open.
-    /// Results: the Commands pane and `.atlas/cache/schedule.log`; failures notify.
+    /// Results: the Commands pane and `.kandinsky/cache/schedule.log`; failures notify.
     pub run_schedules: bool,
     /// The computers that run them, by host name; empty: every computer that opens the vault. A vault synced to
     /// several computers runs a schedule on one, so two never write its output at once (Syncthing conflict copies).
@@ -330,7 +330,7 @@ pub struct UiConfig {
     /// Desktop window rendering (applies on the next app start). Auto = compatible: nothing runs
     /// while idle. Accelerated scrolls more smoothly but keeps the window busy.
     pub gpu_rendering: GpuRendering,
-    /// CSS snippets switched off. Every `.css` file in `.atlas/snippets/` restyles Kandinsky live (like
+    /// CSS snippets switched off. Every `.css` file in `.kandinsky/snippets/` restyles Kandinsky live (like
     /// Obsidian snippets) unless its name is here.
     pub css_snippets_off: Vec<String>,
     /// Where open tabs are listed: a vertical sidebar (Zen-style, with pinned tabs) or the
@@ -450,9 +450,10 @@ pub enum EinkRefresh {
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Palette {
-    /// Kandinsky's own: cool greys, indigo links and buttons.
+    /// Kandinsky's own: cool greys, indigo links and buttons. (`atlas`: its name before the rename.)
     #[default]
-    Atlas,
+    #[serde(alias = "atlas")]
+    Kandinsky,
     /// Warm paper, deep ink-blue links and buttons.
     Ink,
     /// Warm paper, terracotta links and buttons.
@@ -940,7 +941,7 @@ pub struct DrawConfig {
     pub notepad: bool,
     /// The pages a new drawing gets. Ask: chosen each time from the list.
     pub page_format: PageFormat,
-    // ── the notepad: the Boox's (org.atlas.notepad) and the desktop's pen mode (draw-excalidraw.ts) start from the
+    // ── the notepad: the Boox's (org.kandinsky.notepad) and the desktop's pen mode (draw-excalidraw.ts) start from the
     // same pen, paper, width, colour, snapping and recogniser; scribble, eraser, shape and text size are the Boox's ──
     /// Pen at the start (knote2's pens, Boox Notes'); the pen menu changes it while drawing.
     pub pen: NotepadPen,
@@ -950,7 +951,7 @@ pub struct DrawConfig {
     /// cleanly, as Boox Notes does.
     pub snap: bool,
     /// Shape recogniser. openink: boox_5c_re's trained one (lines, boxes, ellipses, triangles, polygons, arcs,
-    /// arrows); atlas: the earlier one (lines, boxes, ellipses, triangles).
+    /// arrows); kandinsky: the earlier one (lines, boxes, ellipses, triangles).
     pub shapes: ShapeRecogniser,
     /// Scribble back and forth over strokes (as Boox Notes does) and they are erased instead of the scribble kept
     /// (the Boox's notepad).
@@ -992,7 +993,8 @@ choices!(/// knote2's pens.
     NotepadPen { Ballpoint = "ballpoint", #[default] Fountain = "fountain", Brush = "brush", Marker = "marker", Square = "square", Pencil = "pencil", Charcoal = "charcoal" });
 choices!(/// A new page's paper.
     NotepadPaper { #[default] Blank = "blank", Lines = "lines", Grid = "grid", Dots = "dots", Fine = "fine", Graph = "graph", Staff = "staff" });
-choices!(ShapeRecogniser { #[default] Openink = "openink", Atlas = "atlas" });
+// `atlas`: the same recogniser, as a config from before the rename names it (legacy.rs SHAPES)
+choices!(ShapeRecogniser { #[default] Openink = "openink", #[serde(alias = "atlas")] Kandinsky = "kandinsky" });
 choices!(PenWidth { Thin = "thin", #[default] Normal = "normal", Thick = "thick", VeryThick = "very thick" });
 choices!(PenColor { #[default] Black = "black", DarkGrey = "dark grey", LightGrey = "light grey", Red = "red", Blue = "blue", Green = "green", Orange = "orange", Purple = "purple" });
 choices!(EraserMode { #[default] WholeStrokes = "whole strokes", PartOfStrokes = "part of strokes" });
@@ -1198,7 +1200,7 @@ impl Config {
     /// request asks for it: the parsed file is kept while its size, time and inode stay the same (any write changes
     /// them; `save` forgets it outright).
     pub fn load(root: &Path) -> anyhow::Result<Self> {
-        let path = root.join(CONFIG_FILE);
+        let path = crate::state_dir::join(root, CONFIG_FILE);
         let stamp = match crate::file_stamp::seen(&path) {
             crate::file_stamp::Seen::Stamped(s) => Some(s),
             _ => None,
@@ -1238,7 +1240,7 @@ impl Config {
     /// layout. The result is re-parsed before it replaces the file, so a bad write never lands.
     /// Under the file's lock: two saves at once (two windows' Settings) each change the file as the other left it.
     pub fn save(root: &Path, new: &Config) -> anyhow::Result<()> {
-        let path = root.join(CONFIG_FILE);
+        let path = crate::state_dir::join(root, CONFIG_FILE);
         crate::vault_write::locked(&path, || Ok(Self::save_now(root, &path, new)))?
     }
 
@@ -1356,9 +1358,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_palettes_old_name_reads_as_kandinsky() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".kandinsky")).unwrap();
+        std::fs::write(crate::state_dir::join(dir.path(), CONFIG_FILE), "[ui]\npalette = \"atlas\"\npalette_dark = \"atlas\"\n").unwrap();
+        let ui = Config::load(dir.path()).unwrap().ui;
+        assert_eq!((ui.palette, ui.palette_dark), (Palette::Kandinsky, Some(Palette::Kandinsky)));
+    }
+
+    #[test]
+    fn the_recognisers_old_name_reads_as_the_same_one() {
+        #[derive(serde::Deserialize)]
+        struct S {
+            shapes: ShapeRecogniser,
+        }
+        assert_eq!(toml::from_str::<S>("shapes = \"atlas\"").unwrap().shapes, ShapeRecogniser::Kandinsky);
+        assert_eq!(toml::from_str::<S>("shapes = \"kandinsky\"").unwrap().shapes, ShapeRecogniser::Kandinsky);
+        assert_eq!(ShapeRecogniser::Kandinsky.as_str(), "kandinsky", "written with the current name");
+    }
+
+    #[test]
     fn a_kept_config_is_read_again_when_the_file_changes() {
         let d = tempfile::tempdir().unwrap();
-        let file = d.path().join(CONFIG_FILE);
+        let file = crate::state_dir::join(d.path(), CONFIG_FILE);
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         let ago = |s: u64| std::time::SystemTime::now() - std::time::Duration::from_secs(s);
         let write = |text: &str, at| {
@@ -1378,8 +1400,8 @@ mod tests {
     fn the_contrast_scheme_taken_out_reads_as_phosphor() {
         // Phosphor took its place: a vault's day or night scheme naming it must still load
         let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join(".atlas")).unwrap();
-        std::fs::write(dir.path().join(CONFIG_FILE), "[ui]\npalette = \"contrast\"\npalette_dark = \"contrast\"\n").unwrap();
+        std::fs::create_dir_all(dir.path().join(".kandinsky")).unwrap();
+        std::fs::write(crate::state_dir::join(dir.path(), CONFIG_FILE), "[ui]\npalette = \"contrast\"\npalette_dark = \"contrast\"\n").unwrap();
         let ui = Config::load(dir.path()).unwrap().ui;
         assert_eq!((ui.palette, ui.palette_dark), (Palette::Phosphor, Some(Palette::Phosphor)));
     }
@@ -1388,12 +1410,12 @@ mod tests {
     fn a_page_format_taken_out_reads_as_a4() {
         // A5 and Letter were removed: a vault's setting naming them must still load
         let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join(".atlas")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".kandinsky")).unwrap();
         for old in ["a5", "letter"] {
-            std::fs::write(dir.path().join(CONFIG_FILE), format!("[draw]\npage_format = \"{old}\"\n")).unwrap();
+            std::fs::write(crate::state_dir::join(dir.path(), CONFIG_FILE), format!("[draw]\npage_format = \"{old}\"\n")).unwrap();
             assert_eq!(Config::load(dir.path()).unwrap().draw.page_format, PageFormat::A4, "{old}");
         }
-        std::fs::write(dir.path().join(CONFIG_FILE), "[draw]\npage_format = \"boox-landscape\"\n").unwrap();
+        std::fs::write(crate::state_dir::join(dir.path(), CONFIG_FILE), "[draw]\npage_format = \"boox-landscape\"\n").unwrap();
         assert_eq!(Config::load(dir.path()).unwrap().draw.page_format, PageFormat::BooxLandscape);
     }
 
@@ -1406,8 +1428,8 @@ mod tests {
         // a vault whose logs are in log/ already keeps them there, unless it says otherwise
         std::fs::create_dir_all(dir.path().join("log")).unwrap();
         assert_eq!(Config::load(dir.path()).unwrap().log_dir, "log");
-        std::fs::create_dir_all(dir.path().join(".atlas")).unwrap();
-        std::fs::write(dir.path().join(CONFIG_FILE), "log_dir = \"notes/log\"\n").unwrap();
+        std::fs::create_dir_all(dir.path().join(".kandinsky")).unwrap();
+        std::fs::write(crate::state_dir::join(dir.path(), CONFIG_FILE), "log_dir = \"notes/log\"\n").unwrap();
         assert_eq!(Config::load(dir.path()).unwrap().log_dir, "notes/log");
         assert_eq!(c.focus, "FOCUS.md");
         assert!(!c.vim, "vim is asked for, never assumed");
@@ -1417,8 +1439,8 @@ mod tests {
     #[test]
     fn partial_file_keeps_other_defaults() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join(".atlas")).unwrap();
-        std::fs::write(dir.path().join(CONFIG_FILE), "log_dir = \"journal\"\nvim = true\n").unwrap();
+        std::fs::create_dir_all(dir.path().join(".kandinsky")).unwrap();
+        std::fs::write(crate::state_dir::join(dir.path(), CONFIG_FILE), "log_dir = \"journal\"\nvim = true\n").unwrap();
         let c = Config::load(dir.path()).unwrap();
         assert_eq!(c.log_dir, "journal");
         assert!(c.vim);
@@ -1429,8 +1451,8 @@ mod tests {
     #[test]
     fn malformed_file_is_an_error() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join(".atlas")).unwrap();
-        std::fs::write(dir.path().join(CONFIG_FILE), "log_dir = [").unwrap();
+        std::fs::create_dir_all(dir.path().join(".kandinsky")).unwrap();
+        std::fs::write(crate::state_dir::join(dir.path(), CONFIG_FILE), "log_dir = [").unwrap();
         assert!(Config::load(dir.path()).is_err());
     }
 
@@ -1443,7 +1465,7 @@ mod tests {
         Config::save(dir.path(), &c).unwrap();
         c.files.open_with.remove("tsv");
         Config::save(dir.path(), &c).unwrap();
-        let text = std::fs::read_to_string(dir.path().join(CONFIG_FILE)).unwrap();
+        let text = std::fs::read_to_string(crate::state_dir::join(dir.path(), CONFIG_FILE)).unwrap();
         assert!(!text.contains("tsv") && text.contains("dat = \"table\""), "{text}");
         assert_eq!(Config::load(dir.path()).unwrap(), c);
     }
@@ -1451,16 +1473,16 @@ mod tests {
     #[test]
     fn latex_keys_of_the_editor_section_move_to_latex() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join(".atlas")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".kandinsky")).unwrap();
         let old = "[editor]\nlatex_snippets = false\nlatex_snippets_file = \"s.js\" # mine\nlatex_snippet_variables_file = \"v.js\"\nbacklinks = false\n";
-        std::fs::write(dir.path().join(CONFIG_FILE), old).unwrap();
+        std::fs::write(crate::state_dir::join(dir.path(), CONFIG_FILE), old).unwrap();
         let mut c = Config::load(dir.path()).unwrap();
         assert_eq!(c.latex, LatexConfig { snippets: false, snippets_file: "s.js".into(), variables_file: "v.js".into() });
         assert!(!c.editor.backlinks);
         // the next save writes the new shape; the value and its comment survive
         c.ui.font_size = 15;
         Config::save(dir.path(), &c).unwrap();
-        let text = std::fs::read_to_string(dir.path().join(CONFIG_FILE)).unwrap();
+        let text = std::fs::read_to_string(crate::state_dir::join(dir.path(), CONFIG_FILE)).unwrap();
         assert!(!text.contains("latex_snippet") && text.contains("[latex]") && text.contains("# mine"), "{text}");
         assert_eq!(Config::load(dir.path()).unwrap(), c);
     }
@@ -1468,13 +1490,13 @@ mod tests {
     #[test]
     fn save_keeps_comments_and_writes_only_changes() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join(".atlas")).unwrap();
-        std::fs::write(dir.path().join(CONFIG_FILE), "# mine\nlog_dir = \"journal\" # keep\n").unwrap();
+        std::fs::create_dir_all(dir.path().join(".kandinsky")).unwrap();
+        std::fs::write(crate::state_dir::join(dir.path(), CONFIG_FILE), "# mine\nlog_dir = \"journal\" # keep\n").unwrap();
         let mut c = Config::load(dir.path()).unwrap();
         c.terminal.position = PanelPosition::Right;
         c.ui.font_size = 15;
         Config::save(dir.path(), &c).unwrap();
-        let text = std::fs::read_to_string(dir.path().join(CONFIG_FILE)).unwrap();
+        let text = std::fs::read_to_string(crate::state_dir::join(dir.path(), CONFIG_FILE)).unwrap();
         assert!(text.contains("# mine") && text.contains("# keep"), "{text}");
         assert!(text.contains("position = \"right\"") && !text.contains("focus"), "{text}");
         assert_eq!(Config::load(dir.path()).unwrap(), c);

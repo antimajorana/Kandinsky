@@ -67,7 +67,7 @@ CORPUS = [
 
 def ask(tool, text):
     req = urllib.request.Request(f"http://127.0.0.1:7799/api/plugins/catalog/tools/{tool}", data=json.dumps({"text": text}).encode(),
-                                 headers={"x-atlas": "1", "content-type": "application/json"})
+                                 headers={"x-kandinsky": "1", "content-type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=150) as r:
             return json.load(r)

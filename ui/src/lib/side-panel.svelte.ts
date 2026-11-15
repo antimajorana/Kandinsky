@@ -44,7 +44,7 @@ export function showSide(kind: SideId): void {
   sidePanel.visible = true;
   sidePanel.focus++;
   keep();
-  window.dispatchEvent(new Event("atlas-side-needed")); // a bar shrunk to icons (fullscreen) opens to show it
+  window.dispatchEvent(new Event("kandinsky-side-needed")); // a bar shrunk to icons (fullscreen) opens to show it
 }
 /** Set the height (the drag on the panel's top edge); `room` is the most the bar can give. */
 export function sizeSide(px: number, room: number): void {

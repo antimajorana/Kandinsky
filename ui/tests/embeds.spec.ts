@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { WS } from "../playwright.config";
 
 // Embeds render as in Obsidian, on the phone too: `![[x.pdf]]` and `![[Note#Heading]]` were link chips; Obsidian embeds both (lib/embeds.ts).
-const H = { "x-atlas": "1" };
+const H = { "x-kandinsky": "1" };
 
 /** A one-page PDF with the word "Embedded" on it, small enough to write here. */
 function tinyPdf(): Buffer {
@@ -39,7 +39,7 @@ test("a PDF and a note's section are embedded, not shown as links", async ({ pag
   await expect(note).not.toContainText("not this");
   // the PDF drawn in place, without the viewer's toolbar (an embed is for reading; its note or tab has the tools)
   await expect(page.locator(".pdf-embed canvas").first()).toBeVisible({ timeout: 15000 });
-  await expect(page.locator(".pdf-embed.atlas-block").getByRole("toolbar", { name: "Annotation tools" })).toHaveCount(0);
+  await expect(page.locator(".pdf-embed.kandinsky-block").getByRole("toolbar", { name: "Annotation tools" })).toHaveCount(0);
 });
 
 // "all files should be able to render when embedded": a table as the table, a sound as a player,
@@ -53,7 +53,7 @@ test("any file embeds: a table drawn, a sound played, the rest a card", async ({
   await expect.poll(async () => ((await (await request.get("/api/files", { headers: H })).json()) as string[]).includes("embeds/data.zip")).toBe(true);
   await page.goto("/");
   await openFile(page, "Shelf of files");
-  await expect(page.locator(".file-embed.atlas-block").first()).toContainText("-1.2", { timeout: 15000 });
+  await expect(page.locator(".file-embed.kandinsky-block").first()).toContainText("-1.2", { timeout: 15000 });
   await expect(page.locator(".file-embed audio.embed-audio")).toHaveCount(1);
   const zip = page.locator(".file-embed .file-card");
   await expect(zip).toHaveText("data.zip");

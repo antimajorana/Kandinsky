@@ -12,7 +12,7 @@ import { api } from "../api";
 import { toast } from "../state.svelte";
 import { errText } from "../text";
 import { lspRoot } from "./lsp";
-import { atlasTheme } from "./theme";
+import { kandinskyTheme } from "./theme";
 
 type Loc = { uri?: string; targetUri?: string; range?: { start: { line: number } }; targetSelectionRange?: { start: { line: number } } };
 
@@ -59,7 +59,7 @@ async function showPeek(view: EditorView, uri: string, line: number): Promise<vo
     parent: box,
     state: EditorState.create({
       doc,
-      extensions: [EditorState.readOnly.of(true), EditorView.editable.of(false), atlasTheme, lang ?? [],
+      extensions: [EditorState.readOnly.of(true), EditorView.editable.of(false), kandinskyTheme, lang ?? [],
         lineNumbers({ formatNumber: (n) => String(n + peek.start - 1) }),
         EditorView.decorations.of(Decoration.set([Decoration.line({ class: "def-peek-line" }).range(mark.from)]))],
     }),

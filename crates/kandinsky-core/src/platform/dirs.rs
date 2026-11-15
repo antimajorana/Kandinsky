@@ -3,7 +3,7 @@
 //! folders from the environment (`%APPDATA%`, `%LOCALAPPDATA%`).
 use std::path::{Path, PathBuf};
 
-/// The kinds of per-user folder Atlas keeps things in.
+/// The kinds of per-user folder Kandinsky keeps things in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Base {
     /// Settings the user may edit (`vaults.toml`, `server.toml`).
@@ -23,7 +23,7 @@ pub fn home() -> Option<PathBuf> {
     [std::env::var_os("HOME"), std::env::var_os("USERPROFILE")].into_iter().flatten().find(|h| !h.is_empty()).map(PathBuf::from)
 }
 
-/// The OS folder for `base`, without Atlas's own sub-folder.
+/// The OS folder for `base`, without Kandinsky's own sub-folder.
 pub fn base(base: Base) -> PathBuf {
     let var = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from);
     let xdg = match base {
@@ -63,10 +63,47 @@ pub fn base(base: Base) -> PathBuf {
     }
 }
 
-/// Atlas's folder of `kind`: [`base`]`/atlas`.
-pub fn atlas(kind: Base) -> PathBuf {
-    base(kind).join("atlas")
+/// Kandinsky's folder of `kind`: [`base`]`/kandinsky`. Until the desktop app has migrated the folder of a build from
+/// before the rename ([`super::dirs_migrate`]), the old one (`<base>/atlas`) when only that one is there, so its
+/// settings, sessions and vault list stay in use and nothing new is made beside them. Only a lookup: nothing is moved.
+pub fn app(kind: Base) -> PathBuf {
+    resolve(&base(kind))
 }
+
+/// `<base>/kandinsky` when it exists or `<base>/atlas` does not, else `<base>/atlas`.
+pub fn resolve(base: &Path) -> PathBuf {
+    let (new, old) = (base.join(APP_DIR), base.join(crate::legacy::APP_DIR));
+    if new.symlink_metadata().is_err() && old.is_dir() {
+        old
+    } else {
+        new
+    }
+}
+
+/// The file or folder `name` in Kandinsky's folder of `kind`. On Windows the local folder of a build from before the
+/// rename is never moved whole (it is also where the program is installed, so `%LOCALAPPDATA%\kandinsky` exists from the
+/// install on): its state entries move one by one (`dirs_migrate::LOCAL_ENTRIES`), and each is looked up on its own
+/// ([`resolve_entry`]), so one that has not moved yet, or could not, stays in use where it is.
+pub fn app_entry(kind: Base, name: &str) -> PathBuf {
+    if cfg!(windows) && matches!(kind, Base::State | Base::Cache) {
+        resolve_entry(&base(kind), name)
+    } else {
+        app(kind).join(name)
+    }
+}
+
+/// `<base>/kandinsky/<name>` when it exists, else `<base>/atlas/<name>` when that exists, else the new one.
+pub fn resolve_entry(base: &Path, name: &str) -> PathBuf {
+    let (new, old) = (base.join(APP_DIR).join(name), base.join(crate::legacy::APP_DIR).join(name));
+    if new.symlink_metadata().is_err() && old.symlink_metadata().is_ok() {
+        old
+    } else {
+        new
+    }
+}
+
+/// Kandinsky's sub-folder in each per-user folder.
+pub const APP_DIR: &str = "kandinsky";
 
 /// `~/x` → the home folder joined with `x`; anything else unchanged. (`~\x` too on Windows.)
 pub fn expand_tilde(p: &str) -> PathBuf {
@@ -88,6 +125,16 @@ pub fn tilde(p: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn app_folder_is_the_new_one_unless_only_the_old_one_is_there() {
+        let d = tempfile::tempdir().unwrap();
+        assert_eq!(resolve(d.path()), d.path().join("kandinsky"), "neither: the new one");
+        std::fs::create_dir(d.path().join("atlas")).unwrap();
+        assert_eq!(resolve(d.path()), d.path().join("atlas"), "only the old one: still used");
+        std::fs::create_dir(d.path().join("kandinsky")).unwrap();
+        assert_eq!(resolve(d.path()), d.path().join("kandinsky"), "both: the new one");
+    }
 
     #[test]
     fn tilde_round_trips_under_home() {

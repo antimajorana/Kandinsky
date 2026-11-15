@@ -1,8 +1,8 @@
-package org.atlas.capture;
+package org.kandinsky.capture;
 
-/** The Rust half (crates/atlas-android/src/glue.rs): what a capture means, the desktop box's own code. Strings in and out; JSON for structures. */
+/** The Rust half (crates/kandinsky-android/src/glue.rs): what a capture means, the desktop box's own code. Strings in and out; JSON for structures. */
 final class Core {
-    static { System.loadLibrary("atlas_android"); }
+    static { System.loadLibrary("kandinsky_android"); }
     private Core() {}
     /** Starts reading the vault's note names and tags (completions use them once there). */
     static native void prepare(String vault);
@@ -16,11 +16,11 @@ final class Core {
     static native String attach(String vault, String name, String source);
     /** Vault folders under root: [{name, path, kind}]. */
     static native String findVaults(String root);
-    /** A JPEG XL picture (no Android decoder reads one): [width, height, ARGB…], or null (crates/atlas-android/src/image.rs). */
+    /** A JPEG XL picture (no Android decoder reads one): [width, height, ARGB…], or null (crates/kandinsky-android/src/image.rs). */
     static native int[] decodeJxl(byte[] bytes);
     /** A built-in plugin's form from the manifest the app carries: {fields, settings} or {error}. */
     static native String pluginForm(String manifest);
-    /** PDFium (crates/atlas-core/src/pdfium.rs), through Pdfium.java: "" once libpdfium.so at `lib` is loaded, else why. */
+    /** PDFium (crates/kandinsky-core/src/pdfium.rs), through Pdfium.java: "" once libpdfium.so at `lib` is loaded, else why. */
     static native String pdfiumInit(String lib);
     /** Each page's width, height in points, pair after pair. Throws IllegalArgumentException with why. */
     static native float[] pdfiumPages(String pdf);
@@ -32,7 +32,7 @@ final class Core {
     static native float[] pdfiumFind(String pdf, int n, String query);
     /** Page n's links: [{box, page} | {box, url}] or {error}. */
     static native String pdfiumLinks(String pdf, int n);
-    /** The full app's core: Atlas's server for the vault, inside the app (crates/atlas-android/src/serve.rs) → {port, open, key} or {error}; `open` a one-time address (the core is locked to this app), `key` for the native screens' own calls (Local);
+    /** The full app's core: Kandinsky's server for the vault, inside the app (crates/kandinsky-android/src/serve.rs) → {port, open, key} or {error}; `open` a one-time address (the core is locked to this app), `key` for the native screens' own calls (Local);
      *  `env`: what the plugin helpers it starts need (Helpers.environment). */
     static native String serve(String vault, String home, String env);
     /** The app's own interface file at `path` as `[mime, 0, bytes…]` (full app only), or null. */
@@ -46,10 +46,10 @@ final class Core {
     static native String keepSignin(String vault, String url, String cookies);
     /** `{version, api, ui}` of the interface the app carries (full app only). */
     static native String version();
-    /** The Boox pens (crates/atlas-android/src/ink.rs, openink's engine): a stroke's ink — left, top, right, bottom (NaN:
+    /** The Boox pens (crates/kandinsky-android/src/ink.rs, openink's engine): a stroke's ink — left, top, right, bottom (NaN:
      *  empty), then polygons `n, x0, y0, …` or dabs `x, y, size, angle, alpha` — from its samples `x, y, pressure, tiltX,
      *  tiltY, tMs` and the pen's config `float[6]`. Throws IllegalArgumentException with why on bad input. */
-    /** The shape a stroke (`x0, y0, x1, y1, …`) was meant as (crates/atlas-android/src/shape.rs): `[0]` none; `[1, x1, y1,
+    /** The shape a stroke (`x0, y0, x1, y1, …`) was meant as (crates/kandinsky-android/src/shape.rs): `[0]` none; `[1, x1, y1,
      *  x2, y2]` a line; `[2 | 3, cx, cy, w, h, angle]` a rectangle / an ellipse; `[4, x1, y1, x2, y2, x3, y3]` a triangle. */
     static native float[] penShape(float[] xyt, boolean openink);
     static native float[] penInk(int pen, float[] config, float[] samples);
@@ -62,16 +62,16 @@ final class Core {
     /** 0 filled polygons, 1 the same at the marker's translucency, 2 dabs. */
     static native int penOutput(int pen);
 
-    // The core's text rules (crates/atlas-android/src/text.rs) instead of Java copies; "" stands for null both ways.
-    /** Addresses in `text` with their share-tracking parameters taken off (atlas-text links.rs). */
+    // The core's text rules (crates/kandinsky-android/src/text.rs) instead of Java copies; "" stands for null both ways.
+    /** Addresses in `text` with their share-tracking parameters taken off (kandinsky-text links.rs). */
     static native String untracked(String text);
-    /** A share's text, its subject first when the text does not hold it (atlas-capture share.rs). */
+    /** A share's text, its subject first when the text does not hold it (kandinsky-capture share.rs). */
     static native String shareText(String subject, String text);
     /** Selected text as a Markdown quote; "" when there is none. */
     static native String shareQuote(String text);
     /** A share under an unsent draft, never over it. */
     static native String underDraft(String draft, String shared);
-    /** A note's top-level properties as a JSON object of texts (atlas-text frontmatter.rs). */
+    /** A note's top-level properties as a JSON object of texts (kandinsky-text frontmatter.rs). */
     static native String propsRead(String text);
     /** `text` with the JSON object's keys set (a JSON null removes one); every other line as written. */
     static native String propsSet(String text, String json);

@@ -15,8 +15,8 @@ test("a PDF's scrollbar drags where it is dropped, and a deep page stays put", a
   writeFileSync(join(WS, pdf), textPdf(Array.from({ length: 20 }, (_, i) => ({ lines: [`Page ${i + 1}`] }))));
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await page.evaluate((p) => (window as unknown as { __atlas: { open(p: string): void } }).__atlas.open(p), pdf);
-  const viewer = page.locator(".atlas-pane-pdf .viewer-container").first();
+  await page.evaluate((p) => (window as unknown as { __kandinsky: { open(p: string): void } }).__kandinsky.open(p), pdf);
+  const viewer = page.locator(".kandinsky-pane-pdf .viewer-container").first();
   await expect(viewer.locator(".page").first()).toBeVisible({ timeout: 15_000 });
   const bar = await viewer.evaluate((el: HTMLElement) => el.offsetWidth - el.clientWidth - el.clientLeft * 2);
   test.skip(bar <= 0, "overlay scrollbars: nothing to press on");

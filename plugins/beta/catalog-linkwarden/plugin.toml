@@ -29,7 +29,7 @@ hint = "Linkwarden → Settings → Access Tokens"
 key = "tags"
 label = "Tags on every link"
 kind = "list"
-default = ["atlas"]
+default = ["kandinsky"]
 
 [helper]
 js = "helper.js"                   # run in the core (QuickJS), built from helper/helper.ts

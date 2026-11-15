@@ -10,7 +10,7 @@ icon = "grid" # not References' library icon (a vault may show both)
 version = "0.9.0"
 api = 24
 provides = ["catalog", "libraries"]    # the roles the core and the page ask for (not this id): "libraries" = its pane
-                                       # is the Libraries page (atlas.openLibrary, the Library tile, the phone's Library)
+                                       # is the Libraries page (kandinsky.openLibrary, the Library tile, the phone's Library)
 
 # Catalog · Web pages is now the "read_pages" setting: a vault that had it switched off gets the setting off
 [replaces]
@@ -21,8 +21,8 @@ net = ["*"] # the pages a link points to, read for the "read_pages" source (clip
 
 [helper]
 # built by engine/build.sh: one static binary per platform
-# (on the phone the app's own copy, from the APK: $ATLAS_PLUGIN_BIN — Android runs nothing from the vault)
-run = "\"${ATLAS_PLUGIN_BIN:-$ATLAS_PLUGIN_DIR/bin/$ATLAS_PLUGIN_TARGET}/catalog\""
+# (on the phone the app's own copy, from the APK: $KANDINSKY_PLUGIN_BIN — Android runs nothing from the vault)
+run = "\"${KANDINSKY_PLUGIN_BIN:-$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET}/catalog\""
 idle = "10m"                       # it only answers: stopped when unused, started again by the next call
 
 [[tool]]

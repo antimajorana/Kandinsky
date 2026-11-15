@@ -1,6 +1,6 @@
 # Manga and comics, shaped like Tachiyomi / Mihon (docs/design/DESIGN-pen-eink-reader.md). Two sides
 # (docs/refactor/REFACTOR-native-plugins.md): native in the
-# Atlas apps (android/), the web side (main.js) for the desktop and the server. A series is a folder of the library;
+# Kandinsky apps (android/), the web side (main.js) for the desktop and the server. A series is a folder of the library;
 # its chapters are .cbz files or folders of pictures; where you are is a file in the series (reading.json).
 title = "Manga"
 description = "a manga and comics library and reader like Mihon: series, chapters, read from where you left, right-to-left, webtoon, e-ink paging"
@@ -20,7 +20,7 @@ idle = "10m"                       # it only answers: stopped when unused, start
 net = ["*"]
 
 [android]
-main = "org.atlas.plugins.manga.Manga"
+main = "org.kandinsky.plugins.manga.Manga"
 opens = ["*.cbz"]                      # and a folder of pictures, a `suwayomi:<chapter id>/<name>` chapter (Manga.opens): the reader only, the library is the web side's
 
 [[setting]]

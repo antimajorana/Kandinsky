@@ -1,9 +1,9 @@
 import { test, type Page } from "@playwright/test";
 
 // The start: from navigation to a usable Home (the Today pane's focus text drawn), with the CPU slowed 4× so the
-// script cost shows. A measurement, not a gate: ATLAS_PERF=1 runs it; it prints `[perf]` lines — the median of a few
+// script cost shows. A measurement, not a gate: KANDINSKY_PERF=1 runs it; it prints `[perf]` lines — the median of a few
 // loads, the script bytes the page fetched before Home and the main thread's script time.
-test.skip(!process.env.ATLAS_PERF, "a measurement: ATLAS_PERF=1 runs it");
+test.skip(!process.env.KANDINSKY_PERF, "a measurement: KANDINSKY_PERF=1 runs it");
 
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? NaN;
 
@@ -18,9 +18,9 @@ async function load(page: Page): Promise<{ home: number; js: number; scripts: nu
     const rs = (performance.getEntriesByType("resource") as PerformanceResourceTiming[]).filter((e) => e.initiatorType !== "fetch" && /\.js(\?|$)/.test(e.name) && e.startTime < t);
     return { js: rs.reduce((a, e) => a + (e.decodedBodySize || 0), 0), scripts: rs.length, list: rs.map((e) => [e.name.replace(/^.*\//, ""), Math.round(e.decodedBodySize / 1024)]) };
   }, home);
-  if (process.env.ATLAS_PERF_LIST) console.log(await page.evaluate((t) => (performance.getEntriesByType("resource") as PerformanceResourceTiming[])
+  if (process.env.KANDINSKY_PERF_LIST) console.log(await page.evaluate((t) => (performance.getEntriesByType("resource") as PerformanceResourceTiming[])
     .filter((e) => e.startTime < t && !/\.(js|css|woff2?)$/.test(e.name)).map((e) => `${e.startTime.toFixed(0)}→${e.responseEnd.toFixed(0)} ${e.name.replace(/^https?:\/\/[^/]+/, "")}`).join("\n"), home));
-  if (process.env.ATLAS_PERF_LIST) console.log(list.sort((a, b) => +b[1] - +a[1]).map((x) => x.join(" ")).join("\n"));
+  if (process.env.KANDINSKY_PERF_LIST) console.log(list.sort((a, b) => +b[1] - +a[1]).map((x) => x.join(" ")).join("\n"));
   const m = await cdp.send("Performance.getMetrics");
   const metric = (n: string) => (m.metrics.find((x) => x.name === n)?.value ?? 0) * 1000;
   const task = metric("ScriptDuration"), style = metric("RecalcStyleDuration"), layout = metric("LayoutDuration");

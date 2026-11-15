@@ -1,4 +1,4 @@
-// Reading the vault's optional files (`.atlas/workspaces/`, `.atlas/bookmarks.yaml`, `.atlas/sidebar.page`)
+// Reading the vault's optional files (`.kandinsky/workspaces/`, `.kandinsky/bookmarks.yaml`, `.kandinsky/sidebar.page`)
 // without a 404 in the log when one is not there yet.
 import { api, ApiError } from "./api";
 

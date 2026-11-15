@@ -78,7 +78,7 @@ export interface Reader {
   toPagePoint(n: number, X: number, Y: number): Promise<[number, number]>;
   /** Shown-space boxes (points) of page n's characters `from`…`to`, one a line, in page space. */
   quads(n: number, from: number, to: number): Promise<Box[]>;
-  /** Page n's box (PDF points) and its text as pieces, for a mark's words (lib/atlas-mark.ts). */
+  /** Page n's box (PDF points) and its text as pieces, for a mark's words (lib/kandinsky-mark.ts). */
   view(n: number): Promise<Box>;
   /** Page n's box and /Rotate: what `toShown` needs to place a page-space mark (lib/pdf-geom.ts). */
   space(n: number): Promise<{ view: Box; rotate: number }>;
@@ -90,7 +90,7 @@ export interface Reader {
   destroy(): void;
 }
 
-const STYLE_ID = "atlas-pdf-reader";
+const STYLE_ID = "kandinsky-pdf-reader";
 function addStyle(): void {
   if (document.getElementById(STYLE_ID)) return;
   document.head.append(Object.assign(document.createElement("style"), { id: STYLE_ID, textContent: `
@@ -582,9 +582,9 @@ export async function openReader(container: HTMLElement, path: string, eng: PdfE
       const el = views[n - 1]?.linkEl.querySelector<HTMLElement>(`[data-annotation-id="${id}"]`);
       if (!el) return false;
       el.scrollIntoView({ block: "center" });
-      el.classList.remove("atlas-flash");
+      el.classList.remove("kandinsky-flash");
       void el.offsetWidth; // the animation again when the same link is followed twice
-      el.classList.add("atlas-flash");
+      el.classList.add("kandinsky-flash");
       return true;
     },
     pageAt(x, y) {

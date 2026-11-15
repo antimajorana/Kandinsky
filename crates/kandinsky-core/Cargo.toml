@@ -1,20 +1,20 @@
 [package]
-name = "atlas-core"
+name = "kandinsky-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Atlas workspace server: files, Today, capture, commands, search, events, pty over HTTP/WS"
+description = "Kandinsky workspace server: files, Today, capture, commands, search, events, pty over HTTP/WS"
 
 [dependencies]
 # what a pen stroke was meant as (/api/pen/shape): the phone's recognisers, shared
-atlas-pen = { path = "../kandinsky-pen" }
+kandinsky-pen = { path = "../kandinsky-pen" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-atlas-text.workspace = true
-atlas-template.workspace = true
+kandinsky-text.workspace = true
+kandinsky-template.workspace = true
 tokio.workspace = true
 axum = { version = "0.8", features = ["ws"] }
 tokio-util = { version = "0.7", features = ["io"] }
@@ -88,8 +88,8 @@ libc = "0.2"
 [target.'cfg(all(target_os = "linux", not(target_os = "android")))'.dependencies]
 zbus = "5"
 [target.'cfg(target_os = "android")'.dependencies]
-# RAR on the phone, which has no RAR program: libarchive compiled in (crates/atlas-rar)
-atlas-rar = { path = "../kandinsky-rar" }
+# RAR on the phone, which has no RAR program: libarchive compiled in (crates/kandinsky-rar)
+kandinsky-rar = { path = "../kandinsky-rar" }
 rquickjs = { version = "0.14", default-features = false, features = ["std", "bindgen"] }
 # the system Trash on macOS (Finder) and Windows (the Recycle Bin), platform/trash.rs; Linux has `gio trash`
 # and the clipboard's picture there (clipboard.rs; Linux reads it with wl-paste / xclip)

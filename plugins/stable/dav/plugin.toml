@@ -14,12 +14,12 @@ api = 12             # Settings v2: account cards (status, Test, presets), hidde
 
 [helper]
 # built by engine/build.sh: one static binary per platform (it also runs in the server's container)
-run = "\"${ATLAS_PLUGIN_BIN:-$ATLAS_PLUGIN_DIR/bin/$ATLAS_PLUGIN_TARGET}/dav\""
+run = "\"${KANDINSKY_PLUGIN_BIN:-$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET}/dav\""
 
 [permissions]
-secrets = true   # each account's app password (accounts.<name>.password), in Atlas's secret store, never in the vault
+secrets = true   # each account's app password (accounts.<name>.password), in Kandinsky's secret store, never in the vault
 
-# ----- Accounts first: one card per CalDAV server / user, or per Exchange mailbox (ews.rs), written as [[accounts]] in .atlas/plugin-settings/dav.toml
+# ----- Accounts first: one card per CalDAV server / user, or per Exchange mailbox (ews.rs), written as [[accounts]] in .kandinsky/plugin-settings/dav.toml
 [[setting]]
 key = "accounts"
 label = "Accounts"
@@ -232,7 +232,7 @@ secrets = ["*"]
 [[tool]]
 name = "sync"
 description = "Puts the vault's important notes on the calendar new events go to: notes marked important: true with a due: or event: date (never mail, never calendar files). Runs by itself after notes change when Settings switches it on; called with no paths it reads every note in the folders. Answers what was added, updated, unchanged, skipped."
-input = { paths = { type = "array", description = "only these vault paths (Atlas passes the changed ones)", optional = true } }
+input = { paths = { type = "array", description = "only these vault paths (Kandinsky passes the changed ones)", optional = true } }
 secrets = ["*"]
 timeout_secs = 300
 on = "fs"
