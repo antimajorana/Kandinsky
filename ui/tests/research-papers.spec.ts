@@ -330,7 +330,7 @@ test("Library references filters Books (book and science_book) separately from P
 
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await page.keyboard.press("Meta+Shift+L");
+  await runCommandPalette(page, "Library: references");
 
   const lib = page.locator(".library");
   await expect(lib.locator(".row")).toHaveCount(3);
