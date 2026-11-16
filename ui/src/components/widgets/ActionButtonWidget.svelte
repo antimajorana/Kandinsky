@@ -440,9 +440,9 @@
   .ab-btn.tone-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg, #fff); }
   .ab-btn.tone-default { background: var(--bg-elev); border-color: var(--border-strong); color: var(--heading, var(--text)); }
   .ab-btn.tone-default:hover:not(:disabled) { border-color: var(--accent); background: var(--bg-hover); }
-  .ab-btn.tone-green { background: var(--green); border-color: var(--green); color: #fff; }
-  .ab-btn.tone-yellow { background: var(--yellow); border-color: var(--yellow); color: #141518; }
-  .ab-btn.tone-red { background: var(--red); border-color: var(--red); color: #fff; }
+  .ab-btn.tone-green { background: var(--green); border-color: var(--green); color: #fff; } /* literal: white ink on saturated viridian button */
+  .ab-btn.tone-yellow { background: var(--yellow); border-color: var(--yellow); color: #141518; } /* literal: dark ink on ochre button */
+  .ab-btn.tone-red { background: var(--red); border-color: var(--red); color: #fff; } /* literal: white ink on vermilion button */
   .ab-glyph { font-size: 1.05em; line-height: 1; }
   .ab-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
   .ab-sub, .ab-modal-sub { margin: 0; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-muted); line-height: 1.4; }

@@ -33,7 +33,10 @@ if (plugins.length === 0) {
 // The sources import "svelte" like the app's do: a link to the app's node_modules makes node resolution find it.
 function linkModules(ui) {
   const nm = join(ui, "node_modules");
-  if (!existsSync(nm) && !lstatSync(nm, { throwIfNoEntry: false })) symlinkSync(relative(ui, join(appUi, "node_modules")), nm, "dir");
+  if (!existsSync(nm) && !lstatSync(nm, { throwIfNoEntry: false })) {
+    const target = process.platform === "win32" ? join(appUi, "node_modules") : relative(ui, join(appUi, "node_modules"));
+    symlinkSync(target, nm, process.platform === "win32" ? "junction" : "dir");
+  }
 }
 
 async function bundle(plugin, outDir) {
@@ -113,7 +116,7 @@ async function helperStep(plugin, name) {
     }
     log(`${name}: helper types (tsc)`);
     try {
-      execFileSync(join(appUi, "node_modules/.bin/tsc"), ["-p", join(plugin, "helper/tsconfig.json")], { stdio: "inherit" });
+      execFileSync(process.execPath, [need.resolve("typescript/bin/tsc"), "-p", join(plugin, "helper/tsconfig.json")], { stdio: "inherit" });
     } catch {
       log(`${name}: FAIL helper types`);
       return false;
@@ -153,7 +156,7 @@ for (const plugin of plugins) {
   log(`${name}: types (svelte-check)`);
   try {
     const ui = join(plugin, "ui");
-    execFileSync(join(appUi, "node_modules/.bin/svelte-check"), ["--workspace", ui, "--tsconfig", join(ui, "tsconfig.json"), "--fail-on-warnings"], { stdio: "inherit" });
+    execFileSync(process.execPath, [join(appUi, "node_modules/svelte-check/bin/svelte-check"), "--workspace", ui, "--tsconfig", join(ui, "tsconfig.json"), "--fail-on-warnings"], { stdio: "inherit" });
   } catch {
     failed++;
     log(`${name}: FAIL types`);

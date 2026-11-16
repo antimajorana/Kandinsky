@@ -7,7 +7,7 @@ use crate::ssh::{self, Settings};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, LazyLock, Mutex};
 use std::time::{Duration, Instant};
@@ -54,7 +54,7 @@ fn log_dir() -> std::path::PathBuf {
 impl Session {
     fn spawn(name: &str, host: &str, settings: &Settings) -> Result<Arc<Session>, String> {
         let argv = settings.argv(host, &["-T", "-o", "BatchMode=yes"]);
-        let mut child = Command::new(&argv[0]).args(&argv[1..]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("{}: {e}", argv[0]))?;
+        let mut child = crate::proc::command(&argv).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("{}: {e}", argv[0]))?;
         std::fs::create_dir_all(log_dir()).map_err(|e| e.to_string())?;
         let log_path = log_dir().join(format!("{name}.log"));
         let mut log = std::fs::OpenOptions::new().create(true).append(true).open(&log_path).map_err(|e| e.to_string())?;

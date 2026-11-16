@@ -74,6 +74,21 @@
   let docText = $state(""); // what the properties panel reads; set on every change of the text
   let live: LiveNote | null = null; // the note shared with the other devices that have it open (lib/note-live.ts)
   let livePeers = $state<string[]>([]);
+  let upstream = $state<import("../lib/gen/UpstreamHealth").UpstreamHealth | null>(null);
+  const refreshUpstream = () => {
+    if (!isMarkdown(path)) return;
+    void api.noteUpstream(path).then((u) => { if (!disposed) upstream = u.state === "ok" ? null : u; }, () => {});
+  };
+  function openUpstreamMenu(e: MouseEvent) {
+    if (!upstream || !upstream.reasons.length) return;
+    if (upstream.reasons.length === 1) { openPath(upstream.reasons[0].target); return; }
+    popMenu(below(e, upstream.reasons.map((r) => ({
+      label: shownName(r.target),
+      detail: `${r.relation} · ${r.detail}`,
+      icon: "file-text" as const,
+      run: () => openPath(r.target),
+    }))));
+  }
   /** This vault's mirror (lib/mirror.ts): the note is saved here, and its live room is the server's (core server.rs
    *  live_ws); null when none is linked. Shown as the `⇄ host` chip. */
   let mirror = $state<{ host: string; address: string; state: MirrorState } | null>(null);
@@ -582,6 +597,7 @@
         return noteHeadings(doc.iterLines()).map((h) => ({ level: h.level, text: h.text, line: h.i + 1 }));
       }
       if (panel.isActive) {
+        refreshUpstream();
         // loaded late (the home note at startup): take the focus only if nobody else has it — the
         // palette or a search box opened meanwhile keeps its keys (vim would read them as commands)
         const a = document.activeElement;
@@ -597,6 +613,7 @@
     })();
 
     const offFs = on("fs", (e) => {
+      if (isMarkdown(path) && touches(e.paths, (p) => p.endsWith(".md"))) refreshUpstream();
       if (!touches(e.paths, (p) => p === path || p.endsWith(`/${path}`))) return;
       if (inflight || !ed) return;
       // shared live: the others' edits arrive as edits, not as a reload of the file under the shared text
@@ -698,6 +715,13 @@
         {/if}
       </div>
       <div class="top-actions">
+        {#if upstream}
+          <button type="button" class="upstream-chip" class:stale={upstream.state === "stale"} data-testid="upstream-health-pill"
+            onclick={openUpstreamMenu}
+            title={upstream.reasons.map((r) => `${r.target} (${r.relation}): ${r.detail}`).join("\n")}>
+            {upstream.state === "stale" ? "Upstream stale" : "Upstream changed"}
+          </button>
+        {/if}
         {#if editedLabel}<span class="edited-lbl">{editedLabel}</span>{/if}
         {#if isMarkdown(path) && status === "ready"}
           <span class="oracle-slot" class:notion-quiet={isNotionShell()} bind:this={oracleSlotEl}>
@@ -720,6 +744,13 @@
   {:else if isMarkdown(path) && status === "ready"}
     <header class="topbar compact">
       <div class="top-actions" style="margin-left: auto;">
+        {#if upstream}
+          <button type="button" class="upstream-chip" class:stale={upstream.state === "stale"} data-testid="upstream-health-pill"
+            onclick={openUpstreamMenu}
+            title={upstream.reasons.map((r) => `${r.target} (${r.relation}): ${r.detail}`).join("\n")}>
+            {upstream.state === "stale" ? "Upstream stale" : "Upstream changed"}
+          </button>
+        {/if}
         <OracleBar {path} flush={() => save(false)} gotoLine={(line) => ed?.gotoLine(line)} />
       </div>
     </header>
@@ -871,6 +902,10 @@
     border-color: var(--border-strong);
   }
   .edited-lbl { color: var(--text-faint); margin-right: 2px; }
+  .upstream-chip { padding: 2px 8px; border-radius: 999px; font-size: calc(11.5px * var(--ui-scale, 1)); font-weight: 500; background: var(--yellow-soft); color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 36%, transparent); cursor: pointer; white-space: nowrap; }
+  .upstream-chip:hover { background: color-mix(in srgb, var(--yellow) 18%, transparent); }
+  .upstream-chip.stale { background: var(--red-soft); color: var(--red); border-color: color-mix(in srgb, var(--red) 38%, transparent); }
+  .upstream-chip.stale:hover { background: color-mix(in srgb, var(--red) 18%, transparent); }
   .top-pill { padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font: inherit; cursor: pointer; transition: background 120ms, color 120ms, border-color 120ms; }
   .top-pill:hover { background: var(--bg-hover); color: var(--text); border-color: var(--border-strong); }
   .star-pill.starred { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 11%, transparent); border-color: color-mix(in srgb, var(--yellow) 36%, var(--border)); font-weight: 500; }

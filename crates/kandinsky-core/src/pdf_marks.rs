@@ -537,9 +537,18 @@ pub fn marks_of(root: &std::path::Path, cfg: &crate::config::Config, pdf: &str) 
     let (at, file) = holder(pdf);
     let note = note_of(root, cfg, &at, false, chrono::Local::now().naive_local())?;
     let text = std::fs::read_to_string(crate::paths::safe_join(root, &note.path)?).ok();
-    Ok(match text {
-        Some(t) => Marks { note: Some(note.path), marks: read_for(&t, file.as_deref()).live().into_iter().cloned().collect() },
-        None => Marks { note: None, marks: vec![] },
+    let shared = file.is_none()
+        && crate::external_roots::is_external_path(root, cfg, pdf)
+        && crate::external_roots::settings(root, cfg).annotations_mode == "shared_sidecar";
+    let sidecar = shared.then(|| crate::external_roots::read_sidecar_block(root, cfg, pdf)).flatten();
+    Ok(match (text, sidecar) {
+        (Some(t), Some(sc)) => {
+            let merged = merge(&read_for(&t, file.as_deref()), &sc);
+            Marks { note: Some(note.path), marks: merged.live().into_iter().cloned().collect() }
+        }
+        (Some(t), None) => Marks { note: Some(note.path), marks: read_for(&t, file.as_deref()).live().into_iter().cloned().collect() },
+        (None, Some(sc)) => Marks { note: None, marks: sc.live().into_iter().cloned().collect() },
+        (None, None) => Marks { note: None, marks: vec![] },
     })
 }
 
@@ -549,16 +558,64 @@ pub fn change(root: &std::path::Path, cfg: &crate::config::Config, pdf: &str, op
     let (at, file) = holder(pdf);
     let note = note_of(root, cfg, &at, true, now)?;
     let abs = crate::paths::safe_join(root, &note.path)?;
+    let shared = file.is_none()
+        && crate::external_roots::is_external_path(root, cfg, pdf)
+        && crate::external_roots::settings(root, cfg).annotations_mode == "shared_sidecar";
+    let sidecar = shared.then(|| crate::external_roots::read_sidecar_block(root, cfg, pdf)).flatten();
     // under the note's lock: two quick marks (or two chapters of one series note) each wrote back the note without
     // the other's
     let mut marks = Vec::new();
+    let mut final_block = Block::default();
     crate::vault_write::modify(&abs, |text| {
         let mut block = read_for(text, file.as_deref());
+        if let Some(sc) = &sidecar {
+            block = merge(&block, sc);
+        }
         apply(&mut block, ops);
         marks = block.live().into_iter().cloned().collect();
+        final_block = block.clone();
         Ok(write_for(text, file.as_deref(), &block))
     })?;
+    if shared {
+        let _ = crate::external_roots::write_sidecar_block(root, cfg, pdf, &final_block);
+    }
     Ok((Marks { note: Some(note.path), marks }, note.created))
+}
+
+/// Exports (CRDT-merges) a vault note's `pdf-marks` into the shared `.kandinsky-marks` sidecar inside `external_pdf_roots`.
+pub fn export_sidecar(root: &std::path::Path, cfg: &crate::config::Config, pdf: &str) -> crate::Result<crate::external_roots::SidecarSyncResult> {
+    let (at, file) = holder(pdf);
+    let note = note_of(root, cfg, &at, false, chrono::Local::now().naive_local())?;
+    let text = std::fs::read_to_string(crate::paths::safe_join(root, &note.path)?).unwrap_or_default();
+    let block = read_for(&text, file.as_deref());
+    let path = crate::external_roots::write_sidecar_block(root, cfg, pdf, &block)?;
+    let saved = crate::external_roots::read_sidecar_block(root, cfg, pdf).unwrap_or(block);
+    Ok(crate::external_roots::SidecarSyncResult {
+        sidecar_path: path.to_string_lossy().into_owned(),
+        marks: saved.live().len(),
+        note: (!text.is_empty()).then_some(note.path),
+    })
+}
+
+/// Imports (CRDT-merges) a shared `.kandinsky-marks` sidecar from `external_pdf_roots` into this vault's note.
+pub fn import_sidecar(root: &std::path::Path, cfg: &crate::config::Config, pdf: &str, now: chrono::NaiveDateTime) -> crate::Result<crate::external_roots::SidecarSyncResult> {
+    let sc_path = crate::external_roots::sidecar_path_for(root, cfg, pdf)?;
+    let sc = crate::external_roots::read_sidecar_block(root, cfg, pdf)
+        .ok_or_else(|| crate::Error::NotFound(format!("no sidecar at {}", sc_path.display())))?;
+    let (at, file) = holder(pdf);
+    let note = note_of(root, cfg, &at, true, now)?;
+    let abs = crate::paths::safe_join(root, &note.path)?;
+    let mut count = 0;
+    crate::vault_write::modify(&abs, |text| {
+        let merged = merge(&read_for(text, file.as_deref()), &sc);
+        count = merged.live().len();
+        Ok(write_for(text, file.as_deref(), &merged))
+    })?;
+    Ok(crate::external_roots::SidecarSyncResult {
+        sidecar_path: sc_path.to_string_lossy().into_owned(),
+        marks: count,
+        note: Some(note.path),
+    })
 }
 
 #[cfg(test)]

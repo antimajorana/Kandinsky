@@ -108,6 +108,63 @@ enum Action {
         #[arg(long)]
         apply: bool,
     },
+    /// Audit indexed Markdown notes' frontmatter against `properties.yaml` and the vault link index.
+    PropertiesAudit {
+        /// Also flag properties not declared in `properties.yaml`.
+        #[arg(long)]
+        strict: bool,
+        /// Print machine-readable JSON instead of human lines.
+        #[arg(long)]
+        json: bool,
+        /// Exit 0 even when issues are found.
+        #[arg(long)]
+        no_fail: bool,
+    },
+    /// Migrate a local Zotero database (`zotero.sqlite` + `storage/` + linked attachments, collections, notes &
+    /// highlights) into this vault's `catalog-papers` library without copying PDFs already in `external_pdf_roots`.
+    /// Dry-run by default; pass `--apply` to write notes.
+    ImportZotero {
+        /// Explicit Zotero data folder (default: auto-discover from Windows/macOS/Linux Zotero profile `prefs.js`).
+        #[arg(long)]
+        zotero: Option<PathBuf>,
+        /// Explicit Zotero linked-attachment base folder (`extensions.zotero.baseAttachmentPath`).
+        #[arg(long)]
+        base_attachments: Option<PathBuf>,
+        /// Write `<citekey>.md` notes, `pdf-marks` annotations and `refs/refs.bib` (without `--apply`, prints dry-run report).
+        #[arg(long)]
+        apply: bool,
+        /// Print full JSON report.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Capture a paper from a `kandinsky://capture-paper?...` URI, DOI, arXiv ID, or web URL into `catalog-papers`.
+    CapturePaper {
+        /// URI, DOI, arXiv ID, or URL to add.
+        target: String,
+    },
+    /// Scan configured `external_pdf_roots` recursively for PDFs, indexing papers and `@book` entries in place
+    /// without copying files and deriving collections from subfolders. Dry-run by default; pass `--apply` or
+    /// `--dry-run=false` to write notes and update `refs.bib`.
+    ScanExternalRoots {
+        /// Write `<citekey>.md` notes and update `refs/refs.bib` (without `--apply`, defaults to dry-run preview).
+        #[arg(long, conflicts_with = "dry_run")]
+        apply: bool,
+        /// Preview without writing (`true` by default; pass `--dry-run=false` to apply changes).
+        #[arg(long, num_args = 0..=1, default_missing_value = "true", conflicts_with = "apply")]
+        dry_run: Option<bool>,
+        /// Scan only this configured external PDF root (for example `../Library/Papers`).
+        #[arg(long)]
+        root: Option<String>,
+        /// Delay in milliseconds between remote metadata lookups.
+        #[arg(long)]
+        rate_limit_ms: Option<u64>,
+        /// Cap on remote metadata lookups during this scan.
+        #[arg(long)]
+        max_lookups: Option<usize>,
+        /// Print full JSON report.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -308,6 +365,16 @@ impl Server {
             return Err(anyhow::anyhow!("{status}: {}", resp.text().await.unwrap_or_default()));
         }
         // a route that answers 204 (a tick) has no body: null, not a parse error
+        let text = resp.text().await?;
+        Ok(if text.trim().is_empty() { Value::Null } else { serde_json::from_str(&text)? })
+    }
+
+    pub(crate) async fn put(&self, path: &str, body: &Value) -> Result<Value> {
+        let resp = self.http.put(format!("{}{path}", self.base)).header("x-kandinsky", "1").header(kandinsky_core::legacy::HEADER, "1").json(body).send().await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            return Err(anyhow::anyhow!("{status}: {}", resp.text().await.unwrap_or_default()));
+        }
         let text = resp.text().await?;
         Ok(if text.trim().is_empty() { Value::Null } else { serde_json::from_str(&text)? })
     }
@@ -567,9 +634,128 @@ async fn main() -> Result<()> {
         }
         return Ok(());
     }
+    if let Action::PropertiesAudit { strict, json: as_json, no_fail } = cli.action {
+        let report = kandinsky_core::properties_audit::audit(ws.root(), &ws.config()?, strict);
+        if as_json {
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        } else {
+            for p in &report.spec_problems {
+                eprintln!("[spec] {p}");
+            }
+            for i in &report.issues {
+                println!("{}:{} [{:?}] {} — {}", i.path, i.line, i.kind, i.key, i.message);
+            }
+            println!(
+                "{} notes scanned, {} issue(s){}",
+                report.notes_scanned,
+                report.issues.len(),
+                if report.spec_found { format!(" ({})", report.spec_path) } else { " (no properties.yaml found)".into() }
+            );
+        }
+        if !report.issues.is_empty() && !no_fail {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+    if let Action::ImportZotero { zotero, base_attachments, apply, json: as_json } = cli.action {
+        let params = json!({
+            "dry_run": !apply,
+            "data_dir": zotero.map(|p| p.to_string_lossy().into_owned()),
+            "base_attachment_path": base_attachments.map(|p| p.to_string_lossy().into_owned()),
+        });
+        let v = call_plugin_method(&ws, "catalog-papers", "import_zotero", params).await?;
+        if as_json {
+            print_value(&v);
+        } else {
+            println!(
+                "{} Zotero migration: {} item(s), {} linked PDF(s) in place, {} storage PDF(s) {}, {} collection(s), {} reading note(s), {} pdf-marks annotation(s)",
+                if apply { "Applied" } else { "Dry-run" },
+                v["total_items"].as_u64().unwrap_or(0),
+                v["linked_pdfs_in_place"].as_u64().unwrap_or(0),
+                v["storage_pdfs_copied"].as_u64().unwrap_or(0),
+                if apply { "copied" } else { "to copy" },
+                v["collections_mapped"].as_u64().unwrap_or(0),
+                v["notes_imported"].as_u64().unwrap_or(0),
+                v["annotations_imported"].as_u64().unwrap_or(0),
+            );
+            if let Some(warns) = v["warnings"].as_array() {
+                for w in warns.iter().filter_map(Value::as_str).take(20) {
+                    println!("  warning: {w}");
+                }
+            }
+            if !apply {
+                println!("Run again with --apply to write notes into {}", ws.root().display());
+            }
+        }
+        return Ok(());
+    }
+    if let Action::ScanExternalRoots { apply, dry_run, root, rate_limit_ms, max_lookups, json: as_json } = cli.action {
+        let is_dry_run = if apply { false } else { dry_run.unwrap_or(true) };
+        let mut map = serde_json::Map::new();
+        map.insert("dry_run".into(), Value::Bool(is_dry_run));
+        if let Some(r) = root.filter(|s| !s.trim().is_empty()) {
+            map.insert("root".into(), Value::String(r));
+        }
+        if let Some(ms) = rate_limit_ms {
+            map.insert("rate_limit_ms".into(), json!(ms));
+        }
+        if let Some(max) = max_lookups {
+            map.insert("max_lookups".into(), json!(max));
+        }
+        let v = call_plugin_method(&ws, "catalog-papers", "scan_external_roots", Value::Object(map)).await?;
+        if as_json {
+            print_value(&v);
+        } else {
+            let count_of = |k: &str| -> u64 {
+                v[k].as_u64().or_else(|| v[k].as_array().map(|a| a.len() as u64)).unwrap_or(0)
+            };
+            let applied = !v["dry_run"].as_bool().unwrap_or(is_dry_run);
+            println!(
+                "{} external roots scan: {} root(s), {} PDF(s) — {} created, {} updated, {} moved, {} unchanged, {} enriched, {} skipped, {} error(s)",
+                if applied { "Applied" } else { "Dry-run" },
+                count_of("roots_scanned"),
+                count_of("total_pdfs"),
+                count_of("created"),
+                count_of("updated"),
+                count_of("moved"),
+                count_of("unchanged"),
+                count_of("enriched"),
+                count_of("skipped"),
+                count_of("errors"),
+            );
+            if let Some(items) = v["items"].as_array() {
+                for item in items.iter().take(50) {
+                    let action = item["action"].as_str().unwrap_or("?");
+                    let key = item["citekey"].as_str().unwrap_or("");
+                    let title = item["title"].as_str().unwrap_or("");
+                    let kind = item["kind"].as_str().unwrap_or("");
+                    let bibtex_type = item["bibtex_type"].as_str().unwrap_or("");
+                    let pdf_ref = item["pdf_ref"].as_str().or_else(|| item["pdf_path"].as_str()).unwrap_or("");
+                    if let Some(err) = item["error"].as_str().filter(|s| !s.is_empty()) {
+                        println!("  [{action}] {pdf_ref} — error: {err}");
+                    } else if action != "unchanged" {
+                        println!("  [{action}] {key} ({kind} / @{bibtex_type}): {title} — {pdf_ref}");
+                    }
+                }
+                if items.len() > 50 {
+                    println!("  … {} more item(s) (pass --json for full list)", items.len() - 50);
+                }
+            }
+            if !applied {
+                println!("Run again with --apply to write notes into {}", ws.root().display());
+            }
+        }
+        return Ok(());
+    }
+    if let Action::CapturePaper { target } = cli.action {
+        let parsed = parse_capture_paper_target(&target);
+        let v = call_plugin_method(&ws, "catalog-papers", "add", parsed).await?;
+        print_value(&v);
+        return Ok(());
+    }
     let server = Server::find(&ws).await;
     match cli.action {
-        Action::Serve { .. } | Action::Server { .. } | Action::Mcp | Action::Guide { .. } | Action::Plugin { .. } | Action::PaperNotes | Action::Drawings { .. } | Action::Companions { .. } => unreachable!("handled above"),
+        Action::Serve { .. } | Action::Server { .. } | Action::Mcp | Action::Guide { .. } | Action::Plugin { .. } | Action::PaperNotes | Action::Drawings { .. } | Action::Companions { .. } | Action::PropertiesAudit { .. } | Action::ImportZotero { .. } | Action::ScanExternalRoots { .. } | Action::CapturePaper { .. } => unreachable!("handled above"),
         Action::Capture { text } => {
             let text = if text.is_empty() { std::io::read_to_string(std::io::stdin())? } else { text.join(" ") };
             let r: CaptureResult = match &server {
@@ -601,4 +787,39 @@ async fn main() -> Result<()> {
         Action::Today => print_today(&today::today(ws.root(), &ws.config()?)?),
     }
     Ok(())
+}
+
+/// Calls a plugin helper method through the running Kandinsky server when open, else in a local helper process.
+async fn call_plugin_method(ws: &Workspace, id: &str, method: &str, params: Value) -> Result<Value> {
+    if let Some(s) = Server::find(ws).await {
+        return s.post(&format!("/api/plugins/{id}/helper"), &json!({ "method": method, "params": params, "timeout_secs": 3600 }), Duration::from_secs(3605)).await;
+    }
+    let cfg = ws.config()?;
+    let store = kandinsky_core::secrets::Store::for_vault(ws.root());
+    let full = kandinsky_core::plugin_tools::page_call_params(ws.root(), &cfg, &store, id, params)?;
+    let local = kandinsky_core::helper::Helpers::new(ws.root(), kandinsky_core::events::EventBus::default());
+    let out = local.call(id, method, full, Duration::from_secs(3600)).await?;
+    local.stop_all();
+    Ok(out)
+}
+
+/// Parses either a `kandinsky://capture-paper?url=...&doi=...&title=...` bookmarklet URI or a plain DOI/arXiv/URL string.
+fn parse_capture_paper_target(raw: &str) -> Value {
+    let t = raw.trim();
+    if t.starts_with("kandinsky://capture-paper") || t.starts_with("kandinsky://paper") {
+        if let Ok(u) = reqwest::Url::parse(t) {
+            let mut map = serde_json::Map::new();
+            for (k, v) in u.query_pairs() {
+                if !v.trim().is_empty() {
+                    map.insert(k.into_owned(), Value::String(v.into_owned()));
+                }
+            }
+            let best = map.get("doi").or_else(|| map.get("arxiv")).or_else(|| map.get("url")).or_else(|| map.get("id")).or_else(|| map.get("title")).cloned();
+            if let Some(id_val) = best {
+                map.entry("id".to_string()).or_insert(id_val);
+            }
+            return Value::Object(map);
+        }
+    }
+    json!({ "id": t })
 }

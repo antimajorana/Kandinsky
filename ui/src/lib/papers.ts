@@ -30,8 +30,10 @@ export function readPaper(p: { key: string; pdf: string | null }): void {
 
 /** The Library entry whose folder holds `path` (its PDF, its note), if any. */
 async function paperOf(path: string): Promise<Paper | undefined> {
-  const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
-  return dir ? (await api.refs().catch(() => [] as Paper[])).find((p) => p.dir === dir) : undefined;
+  const norm = path.replaceAll("\\", "/");
+  const dir = norm.includes("/") ? norm.slice(0, norm.lastIndexOf("/")) : "";
+  const list = await api.refs().catch(() => [] as Paper[]);
+  return list.find((p) => (dir !== "" && p.dir === dir) || p.pdf === norm);
 }
 
 /** Before something writes into the note of the paper holding `path` (the annotation export): the

@@ -5497,14 +5497,17 @@ name = "kandinsky-papers"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "flate2",
  "httparse",
  "kandinsky-plugin",
  "kandinsky-text",
  "pdf_oxide",
+ "rusqlite",
  "serde",
  "serde_json",
  "serde_yaml",
  "sha2 0.10.9",
+ "tar",
  "tempfile",
 ]
 

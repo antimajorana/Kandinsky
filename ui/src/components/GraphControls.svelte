@@ -78,7 +78,7 @@
 </div>
 
 <style>
-  .graph-controls { position: absolute; top: 10px; right: 10px; width: 260px; max-height: calc(100% - 20px); overflow: auto; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 6px 24px rgb(0 0 0 / 0.25); font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text); padding: 6px 0; z-index: 2; }
+  .graph-controls { position: absolute; top: 10px; right: 10px; width: 260px; max-height: calc(100% - 20px); overflow: auto; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-pop); font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text); padding: 6px 0; z-index: 2; }
   .head { display: flex; align-items: center; gap: 4px; padding: 2px 8px 6px 12px; }
   .title { flex: 1; font-weight: 600; color: var(--heading); }
   .from { margin: 0 12px 6px; color: var(--text-muted); font-size: 0.92em; line-height: 1.35; }

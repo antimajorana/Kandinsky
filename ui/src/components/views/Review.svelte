@@ -31,8 +31,14 @@
   const name = shownName;
 
   const inDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
-  /** Waiting now: never answered (in a filtered inbox), or its date has come. "done" never returns. */
+  const upstreamLabel = (r: Row | undefined): string => {
+    const u = r?.["file.upstreamStatus"] ?? r?.upstreamStatus;
+    return typeof u === "string" ? u.trim() : "";
+  };
+  /** Waiting now: never answered (in a filtered inbox), its date has come, or an upstream dependency/conventions note became stale/changed. */
   function due(r: Row): boolean {
+    const up = upstreamLabel(r);
+    if (options.include_upstream !== false && (up === "Upstream stale" || up === "Upstream changed")) return true;
     const v = r.review === null || r.review === undefined ? "" : String(r.review).slice(0, 10);
     if (!v) return options.filters !== undefined;
     return /^\d{4}-\d{2}-\d{2}$/.test(v) && v <= iso(new Date());
@@ -40,7 +46,7 @@
 
   async function load() {
     try {
-      const yaml = stringify({ ...(options.filters === undefined ? {} : { filters: options.filters }), views: [{ type: "table", order: ["file.name", "review", "review_interval"] }] });
+      const yaml = stringify({ ...(options.filters === undefined ? {} : { filters: options.filters }), views: [{ type: "table", order: ["file.name", "review", "review_interval", "file.upstreamStatus"] }] });
       const keep = cur?.path;
       queue = (await queryRows(yaml, doc)).filter(due).sort((a, b) => String(a.review ?? "").localeCompare(String(b.review ?? "")) || a.path.localeCompare(b.path));
       at = Math.max(0, keep ? queue.findIndex((r) => r.path === keep) : 0);
@@ -104,7 +110,14 @@
   {#if error}<p class="view-error">{error}</p>
   {:else if cur}
     <button class="title" data-path={cur.path} onclick={() => openPath(cur.path)} title="Open {cur.path}">{name(cur.path)}</button>
-    <div class="where">{shownPath(cur.path)}</div>
+    <div class="where">
+      <span>{shownPath(cur.path)}</span>
+      {#if upstreamLabel(cur)}
+        <button type="button" class="up-pill" class:stale={upstreamLabel(cur) === "Upstream stale"} data-testid="review-upstream-pill"
+          onclick={async () => { const h = await api.noteUpstream(cur.path).catch(() => null); if (h?.reasons?.[0]) openPath(h.reasons[0].target); }}
+          title="Click to inspect upstream dependency">{upstreamLabel(cur)}</button>
+      {/if}
+    </div>
     <div class="body">{#if text}<Markdown {text} path={cur.path} />{/if}</div>
     <footer>
       <button class="act primary" onclick={() => openPath(cur.path)}>Open <kbd>O</kbd></button>
@@ -127,7 +140,9 @@
   .count { margin-left: auto; color: var(--text-faint); font-size: calc(12px * var(--ui-scale, 1)); font-variant-numeric: tabular-nums; }
   .title { align-self: flex-start; text-align: left; font-size: calc(19px * var(--ui-scale, 1)); font-weight: 650; letter-spacing: -.01em; color: var(--heading); text-wrap: balance; }
   .title:hover { color: var(--accent); }
-  .where { color: var(--text-faint); font-size: calc(12px * var(--ui-scale, 1)); font-family: var(--font-mono); }
+  .where { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--text-faint); font-size: calc(12px * var(--ui-scale, 1)); font-family: var(--font-mono); }
+  .up-pill { font-family: var(--font-ui); font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 999px; background: var(--yellow-soft); color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 35%, transparent); }
+  .up-pill.stale { background: var(--red-soft); color: var(--red); border-color: color-mix(in srgb, var(--red) 35%, transparent); }
   .body { max-height: 240px; overflow: auto; padding: 4px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); min-height: 48px; }
   footer { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 2px; }
   .act { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); color: var(--text); font-size: calc(12.5px * var(--ui-scale, 1)); background: var(--bg); }

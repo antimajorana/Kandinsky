@@ -1,10 +1,10 @@
 title = "Oracle Physics Runner"
-description = "Local runner for Jupyter (.ipynb), WLJS/Wolfram (.wln/.wls), c_lint, and oracle_wiki filing."
+description = "Local runner for Jupyter (.ipynb), c_lint, and oracle_wiki filing."
 icon = "sigma"
 version = "1.1.0"
 api = 28
 main = "main.js"
-for_agents = "Use oracle-runner tools to lint Cnn pages (c_lint), run Wolfram scripts behind the 1-slot lock (run_wolfram), or open .wln notebooks in WLJS."
+for_agents = "Use oracle-runner tools to lint Cnn pages (c_lint)."
 
 [permissions]
 exec = ["node", "py", "python", "powershell", "cmd"]
@@ -18,19 +18,6 @@ name = "c_lint"
 method = "runCLint"
 description = "Run deterministic c_lint checks (10-section schema, citation locators, script .out logs, receipt-backed multi-digit numbers) on a computation note."
 input = { path = "string", anyLayout = "boolean?", strict = "boolean?" }
-
-[[tool]]
-name = "run_wolfram"
-method = "runWolfram"
-description = "Run a Wolfram .wls script or snippet through wl.py under the 1-slot Wolfram Engine lock (keeping 1 seat free for WLJS)."
-input = { path = "string?", wlsPath = "string?", code = "string?" }
-timeout_secs = 320
-
-[[tool]]
-name = "open_wljs"
-method = "openInWljs"
-description = "Open an interactive WLJS .wln formal notebook in WLJS Notebook on the user's desktop."
-input = { path = "string" }
 
 [platforms]
 windows = "works"

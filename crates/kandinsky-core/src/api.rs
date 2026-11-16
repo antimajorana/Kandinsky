@@ -2214,3 +2214,72 @@ pub struct ImportReport {
     pub warnings: Vec<String>,
 }
 
+/// Kind of schema violation reported by `properties-audit`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+#[ts(export)]
+pub enum PropertyIssueKind {
+    MissingRequired,
+    InvalidValue,
+    BrokenLink,
+    UnknownProperty,
+}
+
+/// One frontmatter property violation in an indexed note (`properties_audit.rs`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PropertyIssue {
+    pub path: String,
+    /// 1-based line in `path` where the property (or closing frontmatter fence) sits.
+    pub line: u32,
+    pub key: String,
+    pub kind: PropertyIssueKind,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub note_type: Option<String>,
+}
+
+/// Result of `GET /api/properties/audit` and `kandinsky properties-audit`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PropertiesAuditReport {
+    pub spec_path: String,
+    pub spec_found: bool,
+    pub strict: bool,
+    pub notes_scanned: u32,
+    pub spec_problems: Vec<String>,
+    pub issues: Vec<PropertyIssue>,
+}
+
+/// Upstream dependency health state for a note (`upstream.rs`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum UpstreamState {
+    #[default]
+    Ok,
+    Changed,
+    Stale,
+}
+
+/// One upstream target causing a note to be marked stale or changed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct UpstreamReason {
+    pub target: String,
+    pub relation: String,
+    pub state: UpstreamState,
+    pub detail: String,
+}
+
+/// Computed upstream health for a note (`GET /api/note/upstream` and Bases `file.upstreamStatus`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct UpstreamHealth {
+    pub state: UpstreamState,
+    /// `""`, `"Upstream stale"`, or `"Upstream changed"`.
+    pub label: String,
+    pub reasons: Vec<UpstreamReason>,
+}
+

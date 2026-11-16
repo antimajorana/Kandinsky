@@ -442,7 +442,7 @@ async fn answer_call(routes: Option<axum::Router>, id: &str, c: crate::helper_ap
     let Ok(req) = req.body(body) else { return (400, json!({ "error": format!("not a request: {}", c.path) })) };
     let res = match routes.oneshot(req).await {
         Ok(r) => r,
-        Err(e) => return (500, json!({ "error": e.to_string() })),
+        Err(e) => match e {},
     };
     let status = res.status().as_u16();
     let bytes = axum::body::to_bytes(res.into_body(), 256 * 1024 * 1024).await.unwrap_or_default();
@@ -673,7 +673,7 @@ fn main() {
         let out = d.join("bin").join(plugins::target());
         std::fs::create_dir_all(&out).unwrap();
         let built = std::process::Command::new(std::env::var("RUSTC").unwrap_or("rustc".into()))
-            .arg("-O").arg("-o").arg(out.join("helper")).arg(&src).status().unwrap();
+            .arg("-O").arg("-o").arg(out.join(format!("helper{}", std::env::consts::EXE_SUFFIX))).arg(&src).status().unwrap();
         assert!(built.success(), "rustc");
         std::fs::write(d.join("plugin.toml"), "title = \"H\"\n[helper]\nrun = \"\\\"$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET/helper\\\"\"\n").unwrap();
         let h = Helpers::new(t.path(), EventBus::default());

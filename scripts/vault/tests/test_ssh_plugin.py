@@ -96,9 +96,12 @@ class SessionTest(unittest.TestCase):
     def test_a_shell_keeps_its_folder_and_variables_and_a_long_command_is_read_later(self):
         self.assertEqual(self.ok("open"), {"session": "iq", "host": "iq"})
         self.assertEqual(self.ok("open")["reused"], True)
-        self.assertEqual(self.ok("run", session="iq", command=f"cd {self.h.dir} && X=42"), {"output": "", "exit": 0})
-        r = self.ok("run", session="iq", command='pwd; echo "x=$X"; ls nowhere')
-        self.assertTrue(r["output"].startswith(f"{self.h.dir}\nx=42\n"), r)
+        sh_dir = self.h.dir.replace("\\", "/")
+        pwd_cmd = "pwd -W" if os.name == "nt" else "pwd"
+        self.assertEqual(self.ok("run", session="iq", command=f'cd "{sh_dir}" && X=42'), {"output": "", "exit": 0})
+        r = self.ok("run", session="iq", command=f'{pwd_cmd}; echo "x=$X"; ls nowhere')
+        first_two = r["output"].splitlines()[:2]
+        self.assertEqual((os.path.normcase(first_two[0]), first_two[1]), (os.path.normcase(sh_dir), "x=42"), r)
         self.assertIn("nowhere", r["output"], "the shell's errors come in the same output")
         self.assertNotEqual(r["exit"], 0)
         slow = self.ok("run", session="iq", command="echo first; sleep 2; echo second", timeout=0.5)

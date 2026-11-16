@@ -16,10 +16,23 @@ impl Ran {
     }
 }
 
+/// Builds a `Command` for `argv`, routing `#!` shebang stand-in scripts through `sh` on Windows.
+pub fn command(argv: &[String]) -> Command {
+    #[cfg(windows)]
+    if std::fs::read(&argv[0]).is_ok_and(|b| b.starts_with(b"#!")) {
+        let mut c = Command::new("sh");
+        c.arg(&argv[0]).args(&argv[1..]);
+        return c;
+    }
+    let mut c = Command::new(&argv[0]);
+    c.args(&argv[1..]);
+    c
+}
+
 /// `argv` with `input` on its stdin (none: nothing to read), its output kept, killed after `limit`.
 pub fn run(argv: &[String], input: Option<&str>, limit: Duration) -> Ran {
-    let mut cmd = Command::new(&argv[0]);
-    cmd.args(&argv[1..]).stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut cmd = command(argv);
+    cmd.stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::piped());
     let Ok(mut child) = cmd.spawn() else {
         return Ran { code: None, out: String::new(), err: format!("{} could not be started", argv[0]) };
     };
@@ -54,7 +67,7 @@ pub fn run(argv: &[String], input: Option<&str>, limit: Duration) -> Ran {
 /// `argv` with nothing in or out, to its end or `limit` — for an ssh that leaves a master running, which keeps any pipe
 /// it was given open (a captured output would never end).
 pub fn quiet(argv: &[String], limit: Duration) -> bool {
-    let Ok(mut child) = Command::new(&argv[0]).args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() else {
+    let Ok(mut child) = command(argv).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() else {
         return false;
     };
     let end = Instant::now() + limit;

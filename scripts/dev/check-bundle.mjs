@@ -4,8 +4,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const dist = process.argv[2] ?? new URL("../../ui/dist", import.meta.url).pathname;
+const dist = process.argv[2] ?? fileURLToPath(new URL("../../ui/dist", import.meta.url));
 const { parse } = createRequire(join(dist, "../package.json"))("acorn");
 const dir = join(dist, "assets");
 const files = readdirSync(dir).filter((f) => f.endsWith(".js"));

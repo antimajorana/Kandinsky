@@ -8,9 +8,12 @@
 set -uo pipefail
 [ $# -gt 0 ] || { echo "usage: heavy.sh <command> [args…]" >&2; exit 2; }
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-6}"
-# already inside a heavy scope (a gate calling an install), or no user systemd (a container): just nice it
-if [ -n "${KANDINSKY_HEAVY:-}" ] || ! systemd-run --user --scope --quiet true 2>/dev/null; then
-  exec nice -n 19 ionice -c3 "$@"
+# already inside a heavy scope (a gate calling an install), or no user systemd (a container / Windows / macOS): just nice it
+if [ -n "${KANDINSKY_HEAVY:-}" ] || ! command -v systemd-run >/dev/null 2>&1 || ! systemd-run --user --scope --quiet true 2>/dev/null; then
+  export KANDINSKY_HEAVY=1
+  if command -v ionice >/dev/null 2>&1; then exec nice -n 19 ionice -c3 "$@"; fi
+  if command -v nice >/dev/null 2>&1; then exec nice -n 19 "$@"; fi
+  exec "$@"
 fi
 export KANDINSKY_HEAVY=1
 echo "[heavy] own scope: MemoryMax ${HEAVY_MAX:-6G} + swap ${HEAVY_SWAP:-3G}, ${CARGO_BUILD_JOBS} jobs — $1" >&2

@@ -250,47 +250,47 @@
 
   /* Pure CSS Kandinsky & Bauhaus cover presets — zero network calls */
   .preset-several-circles {
-    background-color: #13151c;
+    background-color: #13151c; /* literal: Kandinsky Several Circles 1926 canvas ground */
     background-image:
-      radial-gradient(circle 62px at 22% 54%, rgba(50, 89, 194, 0.58) 0%, rgba(50, 89, 194, 0.16) 68%, transparent 72%),
-      radial-gradient(circle 34px at 31% 36%, rgba(223, 171, 46, 0.72) 0%, rgba(223, 171, 46, 0.14) 72%, transparent 76%),
-      radial-gradient(circle 22px at 66% 42%, rgba(217, 78, 65, 0.74) 0%, transparent 74%),
-      radial-gradient(circle 46px at 74% 62%, rgba(60, 163, 149, 0.48) 0%, rgba(60, 163, 149, 0.1) 70%, transparent 74%),
-      radial-gradient(circle 14px at 49% 68%, rgba(245, 243, 238, 0.52) 0%, transparent 75%),
-      linear-gradient(135deg, #101218 0%, #191d28 100%);
+      radial-gradient(circle 62px at 22% 54%, rgba(50, 89, 194, 0.58) 0%, rgba(50, 89, 194, 0.16) 68%, transparent 72%), /* literal: cover art pigment */
+      radial-gradient(circle 34px at 31% 36%, rgba(223, 171, 46, 0.72) 0%, rgba(223, 171, 46, 0.14) 72%, transparent 76%), /* literal: cover art pigment */
+      radial-gradient(circle 22px at 66% 42%, rgba(217, 78, 65, 0.74) 0%, transparent 74%), /* literal: cover art pigment */
+      radial-gradient(circle 46px at 74% 62%, rgba(60, 163, 149, 0.48) 0%, rgba(60, 163, 149, 0.1) 70%, transparent 74%), /* literal: cover art pigment */
+      radial-gradient(circle 14px at 49% 68%, rgba(245, 243, 238, 0.52) 0%, transparent 75%), /* literal: cover art pigment */
+      linear-gradient(135deg, #101218 0%, #191d28 100%); /* literal: cover art ground */
   }
   .preset-velvet-cosmos {
     background:
-      radial-gradient(ellipse 65% 90% at 18% 20%, rgba(125, 151, 244, 0.24), transparent 70%),
-      radial-gradient(ellipse 55% 80% at 82% 80%, rgba(60, 163, 149, 0.18), transparent 70%),
-      linear-gradient(125deg, #121521 0%, #1c2236 52%, #151722 100%);
+      radial-gradient(ellipse 65% 90% at 18% 20%, rgba(125, 151, 244, 0.24), transparent 70%), /* literal: cover art pigment */
+      radial-gradient(ellipse 55% 80% at 82% 80%, rgba(60, 163, 149, 0.18), transparent 70%), /* literal: cover art pigment */
+      linear-gradient(125deg, #121521 0%, #1c2236 52%, #151722 100%); /* literal: cover art ground */
   }
   .preset-bauhaus-paper {
-    background-color: #f3efe6;
+    background-color: #f3efe6; /* literal: Weimar watercolor paper preset */
     background-image:
-      radial-gradient(circle 48px at 80% 48%, rgba(38, 76, 164, 0.14) 0%, transparent 72%),
-      radial-gradient(circle 32px at 24% 60%, rgba(196, 139, 22, 0.18) 0%, transparent 72%),
-      linear-gradient(to right, rgba(30, 32, 36, 0.055) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(30, 32, 36, 0.055) 1px, transparent 1px);
+      radial-gradient(circle 48px at 80% 48%, rgba(38, 76, 164, 0.14) 0%, transparent 72%), /* literal: cover art pigment */
+      radial-gradient(circle 32px at 24% 60%, rgba(196, 139, 22, 0.18) 0%, transparent 72%), /* literal: cover art pigment */
+      linear-gradient(to right, rgba(30, 32, 36, 0.055) 1px, transparent 1px), /* literal: cover art grid */
+      linear-gradient(to bottom, rgba(30, 32, 36, 0.055) 1px, transparent 1px); /* literal: cover art grid */
     background-size: auto, auto, 24px 24px, 24px 24px;
   }
   .preset-viridian-mist {
     background:
-      radial-gradient(circle 90px at 26% 50%, rgba(60, 163, 149, 0.3), transparent 75%),
-      radial-gradient(circle 75px at 76% 38%, rgba(86, 182, 194, 0.22), transparent 75%),
+      radial-gradient(circle 90px at 26% 50%, rgba(60, 163, 149, 0.3), transparent 75%), /* literal: cover art pigment */
+      radial-gradient(circle 75px at 76% 38%, rgba(86, 182, 194, 0.22), transparent 75%), /* literal: cover art pigment */
       linear-gradient(120deg, color-mix(in srgb, var(--green) 18%, var(--bg-alt)) 0%, var(--bg-alt) 100%);
   }
   .preset-ochre-wash {
     background:
-      radial-gradient(circle 88px at 25% 48%, rgba(223, 171, 46, 0.28), transparent 75%),
-      radial-gradient(circle 68px at 74% 58%, rgba(226, 131, 39, 0.22), transparent 75%),
+      radial-gradient(circle 88px at 25% 48%, rgba(223, 171, 46, 0.28), transparent 75%), /* literal: cover art pigment */
+      radial-gradient(circle 68px at 74% 58%, rgba(226, 131, 39, 0.22), transparent 75%), /* literal: cover art pigment */
       linear-gradient(120deg, color-mix(in srgb, var(--yellow) 16%, var(--bg-alt)) 0%, var(--bg-alt) 100%);
   }
 
   .cover-controls { position: absolute; right: 16px; bottom: 10px; display: flex; gap: 6px; opacity: 0; transition: opacity 120ms ease; }
   .note-cover:hover .cover-controls, .cover-controls:focus-within { opacity: 1; }
-  .cover-btn { padding: 3px 9px; border-radius: 5px; font-size: 11.5px; color: #f5f3ee; background: rgba(21, 22, 26, 0.72); border: 1px solid rgba(255, 255, 255, 0.16); backdrop-filter: blur(6px); cursor: pointer; }
-  .cover-btn:hover { background: rgba(21, 22, 26, 0.9); }
+  .cover-btn { padding: 3px 9px; border-radius: 5px; font-size: 11.5px; color: #f5f3ee; background: rgba(21, 22, 26, 0.72); border: 1px solid rgba(255, 255, 255, 0.16); backdrop-filter: blur(6px); cursor: pointer; } /* literal: translucent badge over arbitrary cover image */
+  .cover-btn:hover { background: rgba(21, 22, 26, 0.9); } /* literal: translucent badge over arbitrary cover image */
 
   .hero-row { width: 100%; box-sizing: border-box; }
   /* Evaluated at `--prose-size` so `ch`-based `--prose-width` matches `.live-cm .cm-content` to the exact pixel */

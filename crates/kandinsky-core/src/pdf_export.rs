@@ -62,10 +62,21 @@ pub fn marked_name(pdf: &str, mode: Mode) -> String {
 /// the trash first (it may have been changed in another app).
 pub fn export(ws: &Workspace, pdf: &str, mode: Mode) -> Result<Exported> {
     let cfg = ws.config()?;
-    let marks = pdf_marks::marks_of(ws.root(), &cfg, pdf)?.marks;
-    let bytes = std::fs::read(ws.resolve(pdf)?)?;
-    let (out, mut report) = write_marks(bytes, &marks, mode)?;
-    let path = marked_name(pdf, mode);
+    let marks_res = pdf_marks::marks_of(ws.root(), &cfg, pdf)?;
+    let bytes = std::fs::read(ws.resolve_readable(pdf)?)?;
+    let (out, mut report) = write_marks(bytes, &marks_res.marks, mode)?;
+    let path = if ws.resolve(pdf).is_ok() {
+        marked_name(pdf, mode)
+    } else {
+        let file = pdf.replace('\\', "/");
+        let base = file.rsplit('/').next().unwrap_or("paper.pdf");
+        let dir = marks_res
+            .note
+            .as_deref()
+            .and_then(|n| n.rsplit_once('/').map(|(d, _)| d.to_string()))
+            .unwrap_or_else(|| crate::external_roots::settings(ws.root(), &cfg).refs_dir);
+        marked_name(&format!("{dir}/{base}"), mode)
+    };
     let abs = ws.resolve(&path)?;
     if abs.exists() {
         crate::files::trash(ws, &path)?;

@@ -158,11 +158,11 @@ function engines(o) {
 
 /** The files a plugin ships: tracked by git, without its sources. */
 function shippedFiles(p) {
-  const rel = relative(root, p.dir);
+  const rel = relative(root, p.dir).replaceAll("\\", "/");
   return execFileSync("git", ["-C", root, "ls-files", "-z", "--", rel], { encoding: "utf8" })
     .split("\0")
     .filter(Boolean)
-    .map((f) => relative(rel, f))
+    .map((f) => relative(rel, f).replaceAll("\\", "/"))
     .filter((f) => !/^(engine|ui|helper)\//.test(f));
 }
 
@@ -197,7 +197,7 @@ function pack(o) {
     }
     const engine = existsSync(join(p.dir, "engine", "Cargo.toml"));
     const file = `kandinsky-plugin-${p.id}.tar.gz`;
-    execFileSync("tar", ["-czf", join(out, file), "-C", stage, p.id]);
+    execFileSync("tar", ["-czf", relative(root, join(out, file)).replaceAll("\\", "/"), "-C", relative(root, stage).replaceAll("\\", "/"), p.id], { cwd: root });
     const text = readFileSync(join(p.dir, "plugin.toml"), "utf8");
     index.push({
       id: p.id,

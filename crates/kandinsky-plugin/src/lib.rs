@@ -258,13 +258,35 @@ impl Kandinsky {
 
 // ---- writing the vault's files (PLUGIN-MATURITY.md, criterion 11) ----------------------------------------------
 
+fn strip_verbatim(p: &std::path::Path) -> std::path::PathBuf {
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        std::path::PathBuf::from(format!(r"\\{rest}"))
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        std::path::PathBuf::from(rest)
+    } else {
+        p.to_path_buf()
+    }
+}
+
 /// `path` from the vault's top when a helper Kandinsky started writes it: inside KANDINSKY_ROOT and not a cache. Through Kandinsky
 /// the search index, the mirror and the open tabs follow; anything else (a test, a run by hand, a cache) is written
 /// straight to the disk.
 fn through_kandinsky(path: &std::path::Path) -> Option<String> {
     env_var("PLUGIN_ID").filter(|id| !id.is_empty())?;
-    let root = std::path::PathBuf::from(env_var_os("ROOT")?);
-    let rel = path.strip_prefix(&root).ok()?;
+    let root = strip_verbatim(&std::path::PathBuf::from(env_var_os("ROOT")?));
+    let clean = strip_verbatim(path);
+    let rel = clean
+        .strip_prefix(&root)
+        .ok()
+        .map(std::path::Path::to_path_buf)
+        .or_else(|| {
+            let root_real = root.canonicalize().ok().map(|p| strip_verbatim(&p))?;
+            let anc = clean.ancestors().find(|a| a.exists())?;
+            let anc_real = anc.canonicalize().ok().map(|p| strip_verbatim(&p))?;
+            let full = anc_real.join(clean.strip_prefix(anc).ok()?);
+            full.strip_prefix(&root_real).ok().map(std::path::Path::to_path_buf)
+        })?;
     let rel = rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/");
     (!rel.is_empty() && !STATE_DIRS.iter().any(|d| rel.starts_with(&format!("{d}/cache/")))).then_some(rel)
 }
@@ -324,7 +346,11 @@ pub fn env_var(name: &str) -> Option<String> {
 pub fn write_file(path: impl AsRef<std::path::Path>, bytes: &[u8]) -> Result<()> {
     let path = path.as_ref();
     if let Some(rel) = through_kandinsky(path) {
-        match Kandinsky::new().write_bytes(&rel, bytes) {
+        let call = match std::str::from_utf8(bytes) {
+            Ok(text) if [".md", ".base", ".page", ".bib"].iter().any(|ext| rel.ends_with(ext)) => Kandinsky::new().write(&rel, text),
+            _ => Kandinsky::new().write_bytes(&rel, bytes),
+        };
+        match call {
             Err(e) if e.status == Some(503) => {}
             done => return done,
         }

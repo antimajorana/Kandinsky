@@ -37,6 +37,18 @@ impl Workspace {
         paths::safe_join(&self.root, rel)
     }
 
+    /// Resolves a vault path, or a file inside one of the vault's configured `external_pdf_roots` (for read-only/zero-copy
+    /// PDF serving, covers and reveal). Arbitrary `..` outside configured roots is always rejected.
+    pub fn resolve_readable(&self, rel: &str) -> Result<PathBuf> {
+        match self.resolve(rel) {
+            Ok(p) => Ok(p),
+            Err(e) => {
+                let cfg = self.config()?;
+                crate::external_roots::resolve_external_file(&self.root, &cfg, rel).map_err(|_| e)
+            }
+        }
+    }
+
     pub fn rel(&self, abs: &Path) -> String {
         paths::rel_path(&self.root, abs).unwrap_or_else(|| abs.to_string_lossy().into_owned())
     }

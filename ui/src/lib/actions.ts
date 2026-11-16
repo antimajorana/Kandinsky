@@ -338,6 +338,12 @@ export const actions: Action[] = [
     void import("./page-history.svelte").then((m) => m.openPageHistory(p));
   } },
   { id: "ui.import", title: "Import Notes… (Notion export, NoteCraft notebook, OneNote)", icon: "move-in", label: "Import", run: () => void import("./import-modal.svelte").then((m) => m.openImportModal()) },
+  { id: "ui.properties.audit", title: "Properties: audit frontmatter schema & broken links…", icon: "check", label: "Audit properties", run: () => { open({ kind: "block", src: "type: properties-audit\n", doc: "", title: "Properties audit" }); } },
+  { id: "ui.papers.zotero", title: "References: import from Zotero…", icon: "library", run: () => void import("./paper-modals.svelte").then((m) => m.openZoteroImportModal()) },
+  { id: "ui.papers.add", title: "References: add, search INSPIRE / Crossref / arXiv, or paste BibTeX…", icon: "plus", run: () => void import("./paper-modals.svelte").then((m) => m.openPaperWorkflowModal("add")) },
+  { id: "ui.papers.inbox", title: "References: triage PDF drop inbox…", icon: "folder-open", run: () => void import("./paper-modals.svelte").then((m) => m.openPaperWorkflowModal("inbox")) },
+  { id: "ui.papers.duplicates", title: "References: find & merge duplicate papers…", icon: "library", run: () => void import("./paper-modals.svelte").then((m) => m.openPaperWorkflowModal("duplicates")) },
+  { id: "ui.papers.scan", title: "References: scan external folders…", icon: "folder-open", run: () => void import("./paper-modals.svelte").then((m) => m.openPaperWorkflowModal("scan")) },
   { id: "ui.sidePanel", title: "Show / hide the side panel (files, search, outline, git)", icon: "folder-tree", label: "Side panel (show / hide)", keys: "Super+B", run: () => toggleSidePanel() },
   { id: "ui.sidePanel.move", title: "Move side panel (beside the editors ↔ in the left bar)", run: () => placeSidePanel(sideInBar() ? "dock" : "sidebar") },
   { id: "ui.shell.toggle", title: "Workspace shell: switch between Nootion Unified Sidebar and Classic Rail", icon: "panel-left", run: () => toggleShellMode() },
@@ -372,4 +378,5 @@ export const serverBuiltinToUi: Record<string, string | null> = {
   capture: "ui.capture",
   open: "ui.quickOpen",
   today: "ui.today",
+  "properties-audit": "ui.properties.audit",
 };

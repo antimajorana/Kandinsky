@@ -423,7 +423,7 @@
   .vault-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 2px 4px 10px 6px; flex: none; }
   .vault-btn { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 9px; padding: 3px 4px; margin-left: -4px; border-radius: 6px; font-weight: 600; font-size: calc(14px * var(--ui-scale, 1)); letter-spacing: -0.01em; color: var(--heading); text-align: left; }
   .vault-btn:hover { background: var(--bg-hover); }
-  .brand-emblem { flex: none; border-radius: 50%; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22); }
+  .brand-emblem { flex: none; border-radius: 50%; box-shadow: var(--shadow-sm); }
   .vault-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vault-chev { display: inline-flex; color: var(--text-faint); opacity: 0; transition: opacity .12s; }
   .vault-btn:hover .vault-chev, .vault-btn:focus-visible .vault-chev { opacity: 1; }

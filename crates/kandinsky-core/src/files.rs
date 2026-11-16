@@ -217,7 +217,7 @@ pub const MAX_RANGE_BYTES: u64 = 8 * 1024 * 1024;
 /// a 70 MB book by pieces instead of waiting for all of it. `end` is clamped to the file and to `MAX_RANGE_BYTES`.
 pub fn read_raw_range(ws: &Workspace, rel: &str, start: u64, end: u64) -> Result<(Vec<u8>, u64, String)> {
     use std::io::{Read, Seek, SeekFrom};
-    let path = ws.resolve(rel)?;
+    let path = ws.resolve_readable(rel)?;
     if !path.is_file() {
         return Err(Error::NotFound(rel.into()));
     }

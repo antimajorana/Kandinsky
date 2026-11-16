@@ -7,22 +7,184 @@ use serde_yaml::{Mapping, Value};
 
 // --- identifiers -----------------------------------------------------------------------------------------------
 
+const ARXIV_ARCHIVES: &[&str] = &[
+    "astro-ph", "cond-mat", "gr-qc", "hep-ex", "hep-lat", "hep-ph", "hep-th",
+    "math-ph", "nlin", "nucl-ex", "nucl-th", "physics", "quant-ph",
+    "math", "cs", "q-bio", "q-fin", "stat",
+    "acc-phys", "adap-org", "alg-geom", "ao-sci", "atom-ph", "bayes-an",
+    "chao-dyn", "chem-ph", "cmp-lg", "comp-gas", "dg-ga", "funct-an",
+    "mtrl-th", "patt-sol", "plasm-ph", "q-alg", "solv-int", "supr-con",
+];
+
+fn valid_archive_name(arch: &str) -> bool {
+    if arch.is_empty() || arch.starts_with('.') || arch.ends_with('.') || arch.starts_with('-') || arch.ends_with('-') {
+        return false;
+    }
+    let mut parts = arch.split('.');
+    let Some(base) = parts.next() else { return false };
+    if !ARXIV_ARCHIVES.contains(&base.to_ascii_lowercase().as_str()) {
+        return false;
+    }
+    match parts.next() {
+        Some(sub) => !sub.is_empty() && sub.chars().all(|c| c.is_ascii_alphabetic() || c == '-') && parts.next().is_none(),
+        None => true,
+    }
+}
+
+fn valid_arxiv_end(rest: &str) -> bool {
+    if rest.is_empty() {
+        return true;
+    }
+    let low = rest.to_ascii_lowercase();
+    for ext in [".pdf", ".tex", ".tar", ".gz", ".ps", ".html"] {
+        if let Some(after) = low.strip_prefix(ext) {
+            return after.is_empty() || !after.as_bytes()[0].is_ascii_alphanumeric();
+        }
+    }
+    let b = rest.as_bytes();
+    if b[0].is_ascii_alphanumeric() {
+        return false;
+    }
+    if b[0] == b'.' && b.get(1).is_some_and(u8::is_ascii_digit) {
+        return false;
+    }
+    true
+}
+
+fn parse_version_suffix(rest: &str) -> (Option<String>, usize) {
+    let b = rest.as_bytes();
+    if matches!(b.first(), Some(b'v' | b'V')) {
+        let digits = b[1..].iter().take_while(|c| c.is_ascii_digit()).count();
+        if digits > 0 {
+            return (Some(format!("v{}", &rest[1..1 + digits])), 1 + digits);
+        }
+    }
+    (None, 0)
+}
+
+fn parse_arxiv_at(slice: &str, strict: bool) -> Option<(String, Option<String>)> {
+    let b = slice.as_bytes();
+    // Modern format: YYMM.NNNN or YYMM.NNNNN + optional vK
+    if b.len() >= 9 && b[..4].iter().all(u8::is_ascii_digit) && b[4] == b'.' {
+        let post = b[5..].iter().take_while(|c| c.is_ascii_digit()).count();
+        let yy: u8 = slice[..2].parse().ok()?;
+        let mm: u8 = slice[2..4].parse().ok()?;
+        let len_ok = if !strict {
+            matches!(post, 4 | 5)
+        } else {
+            let ym_ok = (7..=99).contains(&yy) && (1..=12).contains(&mm) && !(yy == 7 && mm < 4);
+            let digits_ok = if yy >= 15 { post == 5 } else { matches!(post, 4 | 5) };
+            ym_ok && digits_ok
+        };
+        if len_ok {
+            let id_end = 5 + post;
+            let (ver, vlen) = parse_version_suffix(&slice[id_end..]);
+            if valid_arxiv_end(&slice[id_end + vlen..]) {
+                return Some((slice[..id_end].to_string(), ver));
+            }
+        }
+    }
+    // Legacy format: archive/YYMMNNN + optional vK
+    let slash = b.iter().take(24).position(|&c| c == b'/')?;
+    let arch = &slice[..slash];
+    let after = &slice[slash + 1..];
+    let ab = after.as_bytes();
+    if valid_archive_name(arch) && ab.len() >= 7 && ab[..7].iter().all(u8::is_ascii_digit) && !ab.get(7).is_some_and(u8::is_ascii_digit) {
+        let yy: u8 = after[..2].parse().ok()?;
+        let mm: u8 = after[2..4].parse().ok()?;
+        let ym_ok = !strict || ((yy >= 91 || yy <= 7) && (1..=12).contains(&mm) && !(yy == 91 && mm < 8) && !(yy == 7 && mm > 3));
+        if ym_ok {
+            let id_end = slash + 1 + 7;
+            let (ver, vlen) = parse_version_suffix(&slice[id_end..]);
+            if valid_arxiv_end(&slice[id_end + vlen..]) {
+                return Some((slice[..id_end].to_string(), ver));
+            }
+        }
+    }
+    None
+}
+
+fn non_arxiv_doi_spans(text: &str) -> Vec<(usize, usize)> {
+    let mut spans = Vec::new();
+    let b = text.as_bytes();
+    let mut i = 0;
+    while i + 8 < b.len() {
+        if &b[i..i + 3] == b"10." && (i == 0 || !b[i - 1].is_ascii_alphanumeric()) {
+            let reg = b[i + 3..].iter().take_while(|c| c.is_ascii_digit()).count();
+            if (4..=9).contains(&reg) && b.get(i + 3 + reg) == Some(&b'/') {
+                let mut end = i + 3 + reg + 1;
+                while end < b.len() && !b[end].is_ascii_whitespace() && !matches!(b[end], b'"' | b'\'' | b'<' | b'>' | b')' | b']' | b'}') {
+                    end += 1;
+                }
+                if !text[i..end].to_ascii_lowercase().starts_with("10.48550/arxiv.") {
+                    spans.push((i, end));
+                }
+                i = end;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    spans
+}
+
+/// Extracts an arXiv ID and optional `vN` version suffix from arbitrary text, filenames (e.g. `2604.06107v1.pdf`),
+/// URLs, or first-page headers (modern `YYMM.NNNNN(vK)` and legacy `archive/YYMMNNN(vK)`), avoiding false positives
+/// on ISBNs, DOIs, and dates.
+pub fn parse_arxiv_anywhere(text: &str) -> Option<(String, Option<String>)> {
+    let low = text.to_ascii_lowercase(); // byte offsets preserved 1:1 for ASCII
+    let b = text.as_bytes();
+    for pat in ["arxiv.org/abs/", "arxiv.org/pdf/", "arxiv.org/e-print/", "arxiv.org/html/", "arxiv.org/src/", "10.48550/arxiv.", "arxiv:"] {
+        for (idx, _) in low.match_indices(pat) {
+            if pat == "arxiv:" && idx > 0 && b[idx - 1].is_ascii_alphanumeric() {
+                continue;
+            }
+            let mut pos = idx + pat.len();
+            if pat == "arxiv:" {
+                while pos < b.len() && matches!(b[pos], b' ' | b'\t') {
+                    pos += 1;
+                }
+            }
+            if pos < text.len() {
+                if let Some(found) = parse_arxiv_at(&text[pos..], false) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    let doi_spans = non_arxiv_doi_spans(text);
+    for i in 0..b.len() {
+        if !b[i].is_ascii_alphanumeric() {
+            continue;
+        }
+        if doi_spans.iter().any(|&(s, e)| i >= s && i < e) {
+            continue;
+        }
+        let prev_ok = if b[i].is_ascii_digit() {
+            i == 0
+                || (!b[i - 1].is_ascii_alphanumeric() && !(b[i - 1] == b'.' && i >= 2 && b[i - 2].is_ascii_digit()))
+                || (i >= 5 && low[..i].ends_with("arxiv"))
+        } else {
+            i == 0 || (!b[i - 1].is_ascii_alphanumeric() && b[i - 1] != b'.' && b[i - 1] != b'-')
+        };
+        if !prev_ok {
+            continue;
+        }
+        if let Some(found) = parse_arxiv_at(&text[i..], true) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// An arXiv id in text alongside an explicit `vN` revision when given (`"2401.12345v3"` → `("2401.12345", Some("v3"))`).
+pub fn parse_arxiv_versioned(text: &str) -> Option<(String, Option<String>)> {
+    parse_arxiv_anywhere(text)
+}
+
 /// An arXiv id in text (new `2301.12345`, old `cond-mat/0101001`; a URL, `arXiv:`), without its version.
 pub fn parse_arxiv(text: &str) -> Option<String> {
-    let low = text.to_ascii_lowercase(); // its offsets are the text's: a full lower case can be longer (`İ`)
-    let start = ["arxiv.org/abs/", "arxiv.org/pdf/", "arxiv:"].iter().find_map(|p| low.find(p).map(|i| i + p.len())).unwrap_or(0);
-    let id: String = text[start..].trim().chars().take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '/' | '-')).collect();
-    let id = id.trim_end_matches(".pdf");
-    // drop a trailing version (v2) — the library tracks the paper, not one revision
-    let id = match id.rfind('v') {
-        Some(i) if i > 0 && !id[i + 1..].is_empty() && id[i + 1..].chars().all(|c| c.is_ascii_digit()) => &id[..i],
-        _ => id,
-    };
-    let new_style = id.len() >= 9 && id[..4].chars().all(|c| c.is_ascii_digit()) && id.as_bytes()[4] == b'.' && id[5..].chars().all(|c| c.is_ascii_digit());
-    let old_style = id.split_once('/').is_some_and(|(a, n)| {
-        a.chars().all(|c| c.is_ascii_lowercase() || c == '-' || c == '.') && n.len() == 7 && n.chars().all(|c| c.is_ascii_digit())
-    });
-    (new_style || old_style).then(|| id.to_string())
+    parse_arxiv_versioned(text).map(|(id, _)| id)
 }
 
 /// `10.xxxx/...` from a bare DOI, `doi:` prefix or a doi.org URL.
@@ -42,6 +204,36 @@ pub fn enc(s: &str, keep: &str) -> String {
 
 // --- Crossref ------------------------------------------------------------------------------------------------------
 
+fn json_first_str(x: &Json) -> Option<String> {
+    x.as_str()
+        .or_else(|| x.as_array()?.first()?.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+}
+
+fn json_str_or_num(x: &Json) -> Option<String> {
+    x.as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .or_else(|| x.as_u64().map(|n| n.to_string()))
+}
+
+fn crossref_people(arr: &Json) -> Vec<Value> {
+    arr.as_array()
+        .into_iter()
+        .flatten()
+        .map(|a| match (a["family"].as_str(), a["given"].as_str()) {
+            (Some(f), Some(g)) => format!("{}, {}", f.trim(), g.trim()),
+            (Some(f), None) => f.trim().to_string(),
+            _ => norm_person(a["name"].as_str().unwrap_or("")),
+        })
+        .filter(|a| !a.is_empty())
+        .map(Value::from)
+        .collect()
+}
+
 /// A DOI's record at Crossref, as an entry's fields.
 pub fn crossref(net: &dyn Net, doi: &str) -> Result<Mapping, String> {
     let v = net.json(&format!("https://api.crossref.org/works/{}", enc(doi, "/")))
@@ -49,51 +241,86 @@ pub fn crossref(net: &dyn Net, doi: &str) -> Result<Mapping, String> {
     Ok(crossref_fields(&v["message"], doi))
 }
 
-fn crossref_fields(w: &Json, doi: &str) -> Mapping {
+pub(crate) fn crossref_fields(w: &Json, doi: &str) -> Mapping {
     let mut m = Mapping::new();
     let put = |m: &mut Mapping, k: &str, v: Option<String>| {
         if let Some(v) = v.filter(|x| !x.is_empty()) {
             m.insert(k.into(), v.into());
         }
     };
-    let first = |x: &Json| x.as_array().and_then(|a| a.first()).and_then(|t| t.as_str()).map(String::from);
-    put(&mut m, "title", first(&w["title"]));
+    let title = match (json_first_str(&w["title"]), json_first_str(&w["subtitle"])) {
+        (Some(t), Some(sub)) if !t.to_ascii_lowercase().contains(&sub.to_ascii_lowercase()) => Some(format!("{t}: {sub}")),
+        (t, _) => t,
+    };
+    put(&mut m, "title", title);
     let kind = match w["type"].as_str().unwrap_or("") {
         "journal-article" => "journalArticle",
-        "book" | "monograph" => "book",
-        "book-chapter" => "bookSection",
+        "book" | "monograph" | "edited-book" | "reference-book" | "book-series" => "book",
+        "book-chapter" | "book-section" | "book-part" | "reference-entry" => "bookSection",
         "proceedings-article" => "conferencePaper",
         "posted-content" => "preprint",
         "dissertation" => "thesis",
         _ => "document",
     };
     m.insert("type".into(), kind.into());
-    let authors: Vec<Value> = w["author"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|a| match (a["family"].as_str(), a["given"].as_str()) {
-            (Some(f), Some(g)) => format!("{f}, {g}"),
-            (Some(f), None) => f.to_string(),
-            _ => a["name"].as_str().unwrap_or("").to_string(),
-        })
-        .filter(|a| !a.is_empty())
-        .map(Value::from)
-        .collect();
+    let authors = crossref_people(&w["author"]);
     m.insert("author".into(), Value::Sequence(authors));
-    let parts = w["issued"]["date-parts"][0].as_array().cloned().unwrap_or_default();
+    let editors = crossref_people(&w["editor"]);
+    if !editors.is_empty() {
+        m.insert("editor".into(), Value::Sequence(editors));
+    }
+    let parts = w["issued"]["date-parts"][0]
+        .as_array()
+        .or_else(|| w["published-print"]["date-parts"][0].as_array())
+        .or_else(|| w["published-online"]["date-parts"][0].as_array())
+        .cloned()
+        .unwrap_or_default();
     let date: Vec<String> = parts.iter().filter_map(|p| p.as_u64()).map(|p| format!("{p:02}")).collect();
     put(&mut m, "date", Some(date.join("-")));
-    put(&mut m, "publicationTitle", first(&w["container-title"]));
-    put(&mut m, "volume", w["volume"].as_str().map(String::from));
-    put(&mut m, "issue", w["issue"].as_str().map(String::from));
+    if kind == "bookSection" {
+        put(&mut m, "bookTitle", json_first_str(&w["container-title"]));
+    } else if kind == "book" {
+        put(&mut m, "series", json_first_str(&w["container-title"]));
+    } else {
+        put(&mut m, "publicationTitle", json_first_str(&w["container-title"]));
+    }
+    put(&mut m, "volume", json_str_or_num(&w["volume"]));
+    put(&mut m, "issue", json_str_or_num(&w["issue"]));
+    put(&mut m, "edition", json_str_or_num(&w["edition-number"]));
     put(&mut m, "pages", w["page"].as_str().map(String::from));
     put(&mut m, "publisher", w["publisher"].as_str().map(String::from));
+    if let Some(isbn) = w["ISBN"].as_array().into_iter().flatten().filter_map(|v| v.as_str()).find_map(normalize_isbn) {
+        put(&mut m, "ISBN", Some(isbn));
+    }
     put(&mut m, "DOI", Some(doi.to_string()));
     put(&mut m, "url", w["URL"].as_str().map(String::from));
     // JATS abstracts carry <jats:p> tags
     put(&mut m, "abstractNote", w["abstract"].as_str().map(|a| strip_tags(a).trim().to_string()));
     m
+}
+
+/// Normalizes an ISBN-10 or ISBN-13 by stripping optional `ISBN` labels, hyphens, and spaces, uppercasing `X`.
+pub fn normalize_isbn(raw: &str) -> Option<String> {
+    let mut s = raw.trim().trim_matches(|c: char| matches!(c, '(' | ')' | '[' | ']' | '.' | ',' | ';'));
+    let low = s.to_ascii_lowercase();
+    if let Some(after_urn) = low.strip_prefix("urn:isbn:") {
+        s = s[s.len() - after_urn.len()..].trim();
+    } else if low.starts_with("isbn") {
+        let rest = &s[4..];
+        let rlow = rest.to_ascii_lowercase();
+        let skip = ["-13:", "-10:", "-13", "-10", "13:", "10:", "13", "10", ":"]
+            .into_iter()
+            .find(|p| rlow.trim_start().starts_with(p))
+            .map_or(0, |p| rest.len() - rest.trim_start().len() + p.len());
+        s = rest[skip..].trim_start_matches([':', ' ', '\t', '-']).trim();
+    }
+    let clean: String = s.chars().filter(|c| !matches!(c, '-' | ' ' | '\t')).map(|c| c.to_ascii_uppercase()).collect();
+    let ok = match clean.len() {
+        10 => clean[..9].bytes().all(|b| b.is_ascii_digit()) && clean[9..].bytes().all(|b| b.is_ascii_digit() || b == b'X'),
+        13 => clean.bytes().all(|b| b.is_ascii_digit()),
+        _ => false,
+    };
+    ok.then_some(clean)
 }
 
 /// An ISBN in text (a book's copyright page: `ISBN 978-3-540-32897-1`, `ISBN-10: 0-19-…`), as its digits, checked:
@@ -120,47 +347,616 @@ fn isbn_valid(d: &str) -> bool {
     }
 }
 
-/// A book by its ISBN, as an entry's fields (`type: book`): Open Library, else Google Books.
-pub fn isbn_book(net: &dyn Net, isbn: &str) -> Result<Mapping, String> {
-    let ol = net.json(&format!("https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data")).ok();
-    let b = ol.as_ref().map(|j| &j[format!("ISBN:{isbn}").as_str()]).filter(|b| b["title"].is_string());
+fn norm_person(raw: &str) -> String {
+    let t = raw.trim();
+    if t.is_empty() {
+        return String::new();
+    }
+    if t.contains(',') {
+        t.to_string()
+    } else {
+        last_first(t)
+    }
+}
+
+fn is_science_book(title: &str, series: Option<&str>, subjects: &[String]) -> bool {
+    const TERMS: &[&str] = &[
+        "physics", "mathematics", "mathematical", "quantum", "condensed matter", "statistical mechanics",
+        "field theory", "chemistry", "biology", "computer science", "algorithm", "algorithms", "statistics",
+        "probability", "geometry", "topology", "algebra", "analysis", "differential equation", "astrophysics",
+        "astronomy", "neuroscience", "genetics", "optics", "thermodynamics", "electromagnetism", "relativity",
+        "mechanics", "engineering", "computational", "machine learning", "textbook", "graduate texts",
+        "lecture notes in", "electrodynamics", "spectroscopy", "semiconductor", "superconduct",
+    ];
+    let hay = std::iter::once(title)
+        .chain(series)
+        .chain(subjects.iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase();
+    TERMS.iter().any(|t| hay.contains(t))
+}
+
+struct BookFields {
+    title: String,
+    authors: Vec<String>,
+    editors: Vec<String>,
+    date: Option<String>,
+    year: Option<String>,
+    publisher: Option<String>,
+    isbn: Option<String>,
+    edition: Option<String>,
+    series: Option<String>,
+    volume: Option<String>,
+    doi: Option<String>,
+    url: Option<String>,
+    abstract_text: Option<String>,
+    book_title: Option<String>,
+    num_pages: Option<String>,
+    is_section: bool,
+    subjects: Vec<String>,
+}
+
+fn build_book_mapping(b: BookFields) -> Option<Mapping> {
+    let title = b.title.trim().to_string();
+    if title.is_empty() {
+        return None;
+    }
     let mut m = Mapping::new();
-    m.insert("type".into(), "book".into());
     let put = |m: &mut Mapping, k: &str, v: Option<String>| {
-        if let Some(v) = v.map(|x| x.trim().to_string()).filter(|x| !x.is_empty()) {
-            m.insert(k.into(), v.into());
+        if let Some(s) = v.map(|x| x.trim().to_string()).filter(|x| !x.is_empty()) {
+            m.insert(k.into(), s.into());
         }
     };
-    let names = |a: &Json, key: &str| -> Vec<Value> { a.as_array().into_iter().flatten().filter_map(|x| if key.is_empty() { x.as_str() } else { x[key].as_str() }).map(|n| Value::from(last_first(n))).collect() };
-    if let Some(b) = b {
-        let title = match b["subtitle"].as_str() {
-            Some(sub) => format!("{}: {sub}", b["title"].as_str().unwrap_or_default()),
-            None => b["title"].as_str().unwrap_or_default().to_string(),
-        };
-        put(&mut m, "title", Some(title));
-        m.insert("author".into(), Value::Sequence(names(&b["authors"], "name")));
-        put(&mut m, "date", b["publish_date"].as_str().and_then(year_in).map(String::from));
-        put(&mut m, "publisher", b["publishers"][0]["name"].as_str().map(String::from));
-        put(&mut m, "numPages", b["number_of_pages"].as_u64().map(|n| n.to_string()));
-        put(&mut m, "url", b["url"].as_str().map(String::from));
-    } else {
-        let g = net.json(&format!("https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}"))?;
-        let v = &g["items"][0]["volumeInfo"];
-        if !v["title"].is_string() {
-            return Err(format!("ISBN {isbn}: neither Open Library nor Google Books knows it"));
-        }
-        let title = match v["subtitle"].as_str() {
-            Some(sub) => format!("{}: {sub}", v["title"].as_str().unwrap_or_default()),
-            None => v["title"].as_str().unwrap_or_default().to_string(),
-        };
-        put(&mut m, "title", Some(title));
-        m.insert("author".into(), Value::Sequence(names(&v["authors"], "")));
-        put(&mut m, "date", v["publishedDate"].as_str().and_then(year_in).map(String::from));
-        put(&mut m, "publisher", v["publisher"].as_str().map(String::from));
-        put(&mut m, "numPages", v["pageCount"].as_u64().map(|n| n.to_string()));
+    let year = b
+        .year
+        .as_deref()
+        .and_then(year_in)
+        .map(String::from)
+        .or_else(|| b.date.as_deref().and_then(year_in).map(String::from));
+    let date = b.date.filter(|d| !d.trim().is_empty()).or_else(|| year.clone());
+    let kind = if is_science_book(&title, b.series.as_deref(), &b.subjects) { "science_book" } else { "book" };
+    let ztype = if b.is_section { "bookSection" } else { "book" };
+    let bibtex_type = if b.is_section { "incollection" } else { "book" };
+
+    put(&mut m, "title", Some(title));
+    m.insert("type".into(), ztype.into());
+    m.insert("kind".into(), kind.into());
+    m.insert("bibtexType".into(), bibtex_type.into());
+    if !b.authors.is_empty() {
+        let seq: Vec<Value> = b.authors.into_iter().map(Value::from).collect();
+        m.insert("author".into(), Value::Sequence(seq.clone()));
+        m.insert("authors".into(), Value::Sequence(seq));
     }
-    put(&mut m, "ISBN", Some(isbn.to_string()));
-    Ok(m)
+    if !b.editors.is_empty() {
+        let seq: Vec<Value> = b.editors.into_iter().map(Value::from).collect();
+        m.insert("editor".into(), Value::Sequence(seq.clone()));
+        m.insert("editors".into(), Value::Sequence(seq));
+    }
+    put(&mut m, "date", date);
+    put(&mut m, "year", year);
+    put(&mut m, "publisher", b.publisher);
+    if let Some(isbn) = b.isbn.and_then(|i| normalize_isbn(&i).or(Some(i))) {
+        put(&mut m, "ISBN", Some(isbn.clone()));
+        put(&mut m, "isbn", Some(isbn));
+    }
+    put(&mut m, "edition", b.edition);
+    put(&mut m, "series", b.series);
+    put(&mut m, "volume", b.volume);
+    if let Some(doi) = b.doi.filter(|d| !d.trim().is_empty()) {
+        put(&mut m, "DOI", Some(doi.clone()));
+        put(&mut m, "doi", Some(doi));
+    }
+    put(&mut m, "url", b.url);
+    if let Some(abs) = b.abstract_text.filter(|a| !a.trim().is_empty()) {
+        put(&mut m, "abstractNote", Some(abs.clone()));
+        put(&mut m, "abstract", Some(abs));
+    }
+    if b.is_section {
+        put(&mut m, "bookTitle", b.book_title);
+    }
+    put(&mut m, "numPages", b.num_pages);
+    Some(m)
+}
+
+fn is_crossref_book_type(t: &str) -> bool {
+    matches!(t, "book" | "monograph" | "edited-book" | "reference-book" | "book-series" | "book-chapter" | "book-section" | "book-part" | "reference-entry")
+}
+
+fn crossref_book_mapping(w: &Json, fallback_isbn: Option<&str>, fallback_doi: Option<&str>) -> Option<Mapping> {
+    let raw_type = w["type"].as_str().unwrap_or("");
+    if !raw_type.is_empty() && !is_crossref_book_type(raw_type) {
+        return None;
+    }
+    let title = match (json_first_str(&w["title"]), json_first_str(&w["subtitle"])) {
+        (Some(t), Some(sub)) if !t.to_ascii_lowercase().contains(&sub.to_ascii_lowercase()) => format!("{t}: {sub}"),
+        (Some(t), _) => t,
+        (None, _) => return None,
+    };
+    let is_section = matches!(raw_type, "book-chapter" | "book-section" | "book-part" | "reference-entry");
+    let people = |arr: &Json| -> Vec<String> {
+        crossref_people(arr).into_iter().filter_map(|v| v.as_str().map(String::from)).collect()
+    };
+    let parts = w["issued"]["date-parts"][0]
+        .as_array()
+        .or_else(|| w["published-print"]["date-parts"][0].as_array())
+        .or_else(|| w["published-online"]["date-parts"][0].as_array())
+        .cloned()
+        .unwrap_or_default();
+    let date_parts: Vec<String> = parts.iter().filter_map(|p| p.as_u64()).map(|p| format!("{p:02}")).collect();
+    let date = (!date_parts.is_empty()).then(|| date_parts.join("-"));
+    let mut isbns: Vec<String> = w["ISBN"].as_array().into_iter().flatten().filter_map(|v| v.as_str()).filter_map(normalize_isbn).collect();
+    if isbns.is_empty() {
+        if let Some(arr) = w["isbn-type"].as_array() {
+            isbns.extend(arr.iter().filter_map(|x| x["value"].as_str()).filter_map(normalize_isbn));
+        }
+    }
+    let isbn = fallback_isbn
+        .and_then(normalize_isbn)
+        .filter(|fb| isbns.is_empty() || isbns.iter().any(|x| x == fb))
+        .or_else(|| isbns.iter().find(|i| i.len() == 13).cloned().or_else(|| isbns.into_iter().next()))
+        .or_else(|| fallback_isbn.and_then(normalize_isbn));
+    let doi = w["DOI"].as_str().map(String::from).or_else(|| fallback_doi.map(String::from));
+    let container = json_first_str(&w["container-title"]);
+    let subjects: Vec<String> = w["subject"].as_array().into_iter().flatten().filter_map(|s| s.as_str().map(String::from)).collect();
+    let url = w["URL"].as_str().map(String::from).or_else(|| doi.as_deref().map(|d| format!("https://doi.org/{d}")));
+    build_book_mapping(BookFields {
+        title,
+        authors: people(&w["author"]),
+        editors: people(&w["editor"]),
+        date,
+        year: None,
+        publisher: w["publisher"].as_str().map(String::from),
+        isbn,
+        edition: json_str_or_num(&w["edition-number"]),
+        series: if is_section { None } else { container.clone() },
+        volume: json_str_or_num(&w["volume"]),
+        doi,
+        url,
+        abstract_text: w["abstract"].as_str().map(|a| strip_tags(a).trim().to_string()),
+        book_title: if is_section { container } else { None },
+        num_pages: None,
+        is_section,
+        subjects,
+    })
+}
+
+fn openalex_book_mapping(w: &Json, fallback_isbn: Option<&str>) -> Option<Mapping> {
+    let raw_type = w["type"].as_str().unwrap_or("");
+    if !raw_type.is_empty() && !matches!(raw_type, "book" | "monograph" | "edited-book" | "reference-book" | "book-chapter" | "reference-entry") {
+        return None;
+    }
+    let title = w["display_name"].as_str().or_else(|| w["title"].as_str())?.trim().to_string();
+    if title.is_empty() {
+        return None;
+    }
+    let is_section = matches!(raw_type, "book-chapter" | "reference-entry");
+    let authors: Vec<String> = w["authorships"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| a["author"]["display_name"].as_str())
+        .map(norm_person)
+        .filter(|n| !n.is_empty())
+        .collect();
+    let date = w["publication_date"]
+        .as_str()
+        .map(String::from)
+        .or_else(|| json_str_or_num(&w["publication_year"]));
+    let year = json_str_or_num(&w["publication_year"]);
+    let publisher = w["primary_location"]["source"]["host_organization_name"]
+        .as_str()
+        .or_else(|| w["primary_location"]["source"]["display_name"].as_str())
+        .or_else(|| w["host_venue"]["publisher"].as_str())
+        .or_else(|| w["best_oa_location"]["source"]["host_organization_name"].as_str())
+        .map(String::from);
+    let raw_isbn = w["ids"]["isbn"]
+        .as_str()
+        .and_then(normalize_isbn)
+        .or_else(|| w["ids"]["isbn"].as_array().into_iter().flatten().filter_map(|v| v.as_str()).find_map(normalize_isbn));
+    let isbn = fallback_isbn.and_then(normalize_isbn).or(raw_isbn);
+    let raw_doi = openalex_doi(w);
+    let doi = (!raw_doi.is_empty() && !raw_doi.starts_with("10.48550/arxiv.")).then_some(raw_doi);
+    let url = w["primary_location"]["landing_page_url"]
+        .as_str()
+        .or_else(|| w["id"].as_str())
+        .map(String::from)
+        .or_else(|| doi.as_deref().map(|d| format!("https://doi.org/{d}")));
+    let mut subjects: Vec<String> = w["concepts"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|c| c["display_name"].as_str().map(String::from))
+        .collect();
+    subjects.extend(
+        w["topics"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|t| t["display_name"].as_str().map(String::from)),
+    );
+    if let Some(pt) = w["primary_topic"]["display_name"].as_str() {
+        subjects.push(pt.to_string());
+    }
+    build_book_mapping(BookFields {
+        title,
+        authors,
+        editors: Vec::new(),
+        date,
+        year,
+        publisher,
+        isbn,
+        edition: None,
+        series: None,
+        volume: json_str_or_num(&w["biblio"]["volume"]),
+        doi,
+        url,
+        abstract_text: openalex_abstract(&w["abstract_inverted_index"]),
+        book_title: if is_section { w["primary_location"]["source"]["display_name"].as_str().map(String::from) } else { None },
+        num_pages: None,
+        is_section,
+        subjects,
+    })
+}
+
+fn openlibrary_text(v: &Json) -> Option<String> {
+    v.as_str()
+        .or_else(|| v["value"].as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+}
+
+fn openlibrary_data_mapping(b: &Json, isbn: &str) -> Option<Mapping> {
+    let raw_title = b["title"].as_str()?.trim();
+    if raw_title.is_empty() {
+        return None;
+    }
+    let title = match b["subtitle"].as_str().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(sub) => format!("{raw_title}: {sub}"),
+        None => raw_title.to_string(),
+    };
+    let people = |arr: &Json| -> Vec<String> {
+        arr.as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|x| x.as_str().or_else(|| x["name"].as_str()))
+            .map(norm_person)
+            .filter(|n| !n.is_empty())
+            .collect()
+    };
+    let publisher = b["publishers"][0]["name"]
+        .as_str()
+        .or_else(|| b["publishers"][0].as_str())
+        .map(String::from);
+    let series = b["series"][0]["name"]
+        .as_str()
+        .or_else(|| b["series"][0].as_str())
+        .map(String::from);
+    let subjects: Vec<String> = b["subjects"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|s| s.as_str().or_else(|| s["name"].as_str()).map(String::from))
+        .collect();
+    let abstract_text = openlibrary_text(&b["notes"])
+        .or_else(|| b["excerpts"].as_array().and_then(|a| a.first()).and_then(|e| openlibrary_text(&e["text"])));
+    let resolved_isbn = normalize_isbn(isbn)
+        .or_else(|| b["identifiers"]["isbn_13"].as_array().and_then(|a| a.first()).and_then(|v| v.as_str()).and_then(normalize_isbn))
+        .or_else(|| b["identifiers"]["isbn_10"].as_array().and_then(|a| a.first()).and_then(|v| v.as_str()).and_then(normalize_isbn));
+    build_book_mapping(BookFields {
+        title,
+        authors: people(&b["authors"]),
+        editors: people(&b["editors"]),
+        date: b["publish_date"].as_str().and_then(year_in).map(String::from),
+        year: None,
+        publisher,
+        isbn: resolved_isbn,
+        edition: b["edition_name"].as_str().map(String::from),
+        series,
+        volume: None,
+        doi: None,
+        url: b["url"].as_str().map(String::from),
+        abstract_text,
+        book_title: None,
+        num_pages: b["number_of_pages"].as_u64().map(|n| n.to_string()),
+        is_section: false,
+        subjects,
+    })
+}
+
+fn openlibrary_doc_mapping(doc: &Json, fallback_isbn: Option<&str>) -> Option<Mapping> {
+    let raw_title = doc["title"].as_str()?.trim();
+    if raw_title.is_empty() {
+        return None;
+    }
+    let title = match doc["subtitle"].as_str().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(sub) => format!("{raw_title}: {sub}"),
+        None => raw_title.to_string(),
+    };
+    let authors: Vec<String> = doc["author_name"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| a.as_str())
+        .map(norm_person)
+        .filter(|n| !n.is_empty())
+        .collect();
+    let year = doc["first_publish_year"]
+        .as_u64()
+        .map(|y| y.to_string())
+        .or_else(|| doc["publish_year"].as_array().and_then(|a| a.first()).and_then(Json::as_u64).map(|y| y.to_string()))
+        .or_else(|| doc["publish_date"].as_array().and_then(|a| a.first()).and_then(Json::as_str).and_then(year_in).map(String::from));
+    let publisher = doc["publisher"].as_array().and_then(|a| a.first()).and_then(Json::as_str).map(String::from);
+    let doc_isbns: Vec<String> = doc["isbn"].as_array().into_iter().flatten().filter_map(Json::as_str).filter_map(normalize_isbn).collect();
+    let isbn = fallback_isbn
+        .and_then(normalize_isbn)
+        .filter(|fb| doc_isbns.is_empty() || doc_isbns.iter().any(|x| x == fb))
+        .or_else(|| doc_isbns.iter().find(|i| i.len() == 13).cloned().or_else(|| doc_isbns.into_iter().next()))
+        .or_else(|| fallback_isbn.and_then(normalize_isbn));
+    let url = doc["key"].as_str().map(|k| {
+        if k.starts_with("http") {
+            k.to_string()
+        } else if k.starts_with('/') {
+            format!("https://openlibrary.org{k}")
+        } else {
+            format!("https://openlibrary.org/works/{k}")
+        }
+    });
+    let subjects: Vec<String> = doc["subject"].as_array().into_iter().flatten().filter_map(Json::as_str).map(String::from).collect();
+    let num_pages = doc["number_of_pages_median"].as_u64().map(|n| n.to_string());
+    build_book_mapping(BookFields {
+        title,
+        authors,
+        editors: Vec::new(),
+        date: year.clone(),
+        year,
+        publisher,
+        isbn,
+        edition: doc["edition_name"].as_str().map(String::from),
+        series: None,
+        volume: None,
+        doi: None,
+        url,
+        abstract_text: openlibrary_text(&doc["description"]),
+        book_title: None,
+        num_pages,
+        is_section: false,
+        subjects,
+    })
+}
+
+fn norm_words(s: &str) -> Vec<String> {
+    s.split(|c: char| !c.is_alphanumeric())
+        .map(|w| w.to_ascii_lowercase())
+        .filter(|w| !w.is_empty())
+        .collect()
+}
+
+fn matches_book_query(m: &Mapping, wanted_title: &str, wanted_author: Option<&str>) -> bool {
+    let Some(cand_title) = m.get("title").and_then(Value::as_str) else { return false };
+    let w_norm = norm_words(wanted_title).join(" ");
+    let c_norm = norm_words(cand_title).join(" ");
+    let c_base = norm_words(cand_title.split(':').next().unwrap_or(cand_title)).join(" ");
+    let title_ok = !w_norm.is_empty()
+        && (c_norm == w_norm
+            || c_base == w_norm
+            || (w_norm.len() >= 8 && (c_norm.starts_with(&w_norm) || w_norm.starts_with(&c_norm))));
+    if !title_ok {
+        let w_set: Vec<String> = norm_words(wanted_title).into_iter().filter(|w| w.len() > 2).collect();
+        let c_set: Vec<String> = norm_words(cand_title).into_iter().filter(|w| w.len() > 2).collect();
+        let hits = w_set.iter().filter(|w| c_set.contains(w)).count();
+        if w_set.is_empty() || hits * 4 < w_set.len() * 3 {
+            return false;
+        }
+    }
+    let Some(author) = wanted_author.map(str::trim).filter(|a| !a.is_empty()) else {
+        return true;
+    };
+    let surname = author
+        .split_once(',')
+        .map_or_else(|| author.split_whitespace().last().unwrap_or(author), |(l, _)| l.trim())
+        .to_ascii_lowercase();
+    if surname.is_empty() {
+        return true;
+    }
+    let cand_people: Vec<&str> = ["author", "editor"]
+        .into_iter()
+        .flat_map(|k| m.get(k).and_then(Value::as_sequence).into_iter().flatten())
+        .filter_map(Value::as_str)
+        .collect();
+    if cand_people.is_empty() {
+        return c_norm == w_norm || c_base == w_norm;
+    }
+    cand_people.iter().any(|p| norm_words(p).iter().any(|w| w.as_str() == surname))
+}
+
+/// Searches Open Library for books matching `query` (`search.json`).
+pub fn openlibrary_search(net: &dyn Net, query: &str, limit: usize) -> Result<Vec<Mapping>, String> {
+    let qstr = query.trim();
+    if qstr.is_empty() {
+        return Ok(Vec::new());
+    }
+    let v = net
+        .json(&format!("https://openlibrary.org/search.json?q={}&limit={limit}", enc(qstr, "")))
+        .map_err(|e| format!("OpenLibrary: {e}"))?;
+    Ok(v["docs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|doc| openlibrary_doc_mapping(doc, None))
+        .collect())
+}
+
+/// Looks up book metadata across Crossref, OpenAlex, and OpenLibrary (ISBN `bibkeys` + `search.json` fallback).
+/// Returns `(mapping, source)` where `source` is `"crossref"`, `"openalex"`, or `"openlibrary"`.
+pub fn lookup_book_metadata(
+    net: &dyn Net,
+    isbn: Option<&str>,
+    doi: Option<&str>,
+    title: Option<&str>,
+    author: Option<&str>,
+    email: &str,
+) -> Option<(Mapping, &'static str)> {
+    let norm_isbn = isbn.and_then(|s| normalize_isbn(s).or_else(|| parse_isbn(s)));
+    let norm_doi = doi
+        .and_then(|d| {
+            parse_doi(d).or_else(|| {
+                let t = d
+                    .trim()
+                    .trim_start_matches("https://doi.org/")
+                    .trim_start_matches("http://doi.org/")
+                    .trim_start_matches("doi:")
+                    .trim();
+                (!t.is_empty()).then(|| t.to_string())
+            })
+        });
+    let clean_title = title.map(str::trim).filter(|s| !s.is_empty());
+    let clean_author = author.map(str::trim).filter(|s| !s.is_empty());
+    let mailto_q = if email.is_empty() { String::new() } else { format!("?mailto={}", enc(email, "")) };
+    let mailto_amp = if email.is_empty() { String::new() } else { format!("&mailto={}", enc(email, "")) };
+
+    if let Some(d) = norm_doi.as_deref() {
+        if let Ok(v) = net.json(&format!("https://api.crossref.org/works/{}", enc(d, "/"))) {
+            if let Some(m) = crossref_book_mapping(&v["message"], norm_isbn.as_deref(), Some(d)) {
+                return Some((m, "crossref"));
+            }
+        }
+        if let Ok(w) = net.json(&format!("https://api.openalex.org/works/doi:{}{mailto_q}", enc(&d.to_lowercase(), "/"))) {
+            let answered = openalex_doi(&w);
+            if answered.is_empty() || answered == d.to_lowercase() {
+                if let Some(m) = openalex_book_mapping(&w, norm_isbn.as_deref()) {
+                    return Some((m, "openalex"));
+                }
+            }
+        }
+    }
+
+    if let Some(i) = norm_isbn.as_deref() {
+        if let Ok(v) = net.json(&format!("https://api.crossref.org/works?filter=isbn:{}&rows=5", enc(i, ""))) {
+            for w in v["message"]["items"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|w| matches!(w["type"].as_str().unwrap_or(""), "book" | "monograph" | "edited-book" | "reference-book" | "book-series" | ""))
+            {
+                if let Some(m) = crossref_book_mapping(w, Some(i), norm_doi.as_deref()) {
+                    return Some((m, "crossref"));
+                }
+            }
+        }
+        if let Ok(v) = net.json(&format!("https://api.openalex.org/works?filter=ids.isbn:{}&per-page=5{mailto_amp}", enc(i, ""))) {
+            let results = v["results"].as_array().into_iter().flatten();
+            for w in results {
+                if let Some(m) = openalex_book_mapping(w, Some(i)) {
+                    return Some((m, "openalex"));
+                }
+            }
+            if v["id"].is_string() {
+                if let Some(m) = openalex_book_mapping(&v, Some(i)) {
+                    return Some((m, "openalex"));
+                }
+            }
+        }
+        if let Ok(ol) = net.json(&format!("https://openlibrary.org/api/books?bibkeys=ISBN:{i}&format=json&jscmd=data")) {
+            let key = format!("ISBN:{i}");
+            if let Some(m) = openlibrary_data_mapping(&ol[key.as_str()], i) {
+                return Some((m, "openlibrary"));
+            }
+        }
+        if let Ok(v) = net.json(&format!("https://openlibrary.org/search.json?isbn={}&limit=5", enc(i, ""))) {
+            for doc in v["docs"].as_array().into_iter().flatten() {
+                if let Some(m) = openlibrary_doc_mapping(doc, Some(i)) {
+                    return Some((m, "openlibrary"));
+                }
+            }
+        }
+    }
+
+    if let Some(t) = clean_title {
+        let query = match clean_author {
+            Some(a) => format!("{t} {a}"),
+            None => t.to_string(),
+        };
+        if let Ok(v) = net.json(&format!("https://api.crossref.org/works?filter=type:book,type:monograph&rows=5&query.bibliographic={}", enc(&query, ""))) {
+            for w in v["message"]["items"].as_array().into_iter().flatten() {
+                if let Some(m) = crossref_book_mapping(w, norm_isbn.as_deref(), norm_doi.as_deref()).filter(|m| matches_book_query(m, t, clean_author)) {
+                    return Some((m, "crossref"));
+                }
+            }
+        }
+        if let Ok(v) = net.json(&format!("https://api.openalex.org/works?filter=type:book&per-page=5&search={}{mailto_amp}", enc(&query, ""))) {
+            for w in v["results"].as_array().into_iter().flatten() {
+                if let Some(m) = openalex_book_mapping(w, norm_isbn.as_deref()).filter(|m| matches_book_query(m, t, clean_author)) {
+                    return Some((m, "openalex"));
+                }
+            }
+        }
+        let author_q = clean_author.map(|a| format!("&author={}", enc(a, ""))).unwrap_or_default();
+        if let Ok(v) = net.json(&format!("https://openlibrary.org/search.json?title={}{author_q}&limit=5", enc(t, ""))) {
+            for doc in v["docs"].as_array().into_iter().flatten() {
+                if let Some(m) = openlibrary_doc_mapping(doc, norm_isbn.as_deref()).filter(|m| matches_book_query(m, t, clean_author)) {
+                    return Some((m, "openlibrary"));
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// A book by its ISBN, as an entry's fields (`type: book`): Open Library, else Google Books, else Crossref/OpenAlex.
+pub fn isbn_book(net: &dyn Net, isbn: &str) -> Result<Mapping, String> {
+    let norm = normalize_isbn(isbn).unwrap_or_else(|| isbn.to_string());
+    let ol = net.json(&format!("https://openlibrary.org/api/books?bibkeys=ISBN:{norm}&format=json&jscmd=data")).ok();
+    let b = ol.as_ref().map(|j| &j[format!("ISBN:{norm}").as_str()]).filter(|b| b["title"].is_string());
+    if let Some(m) = b.and_then(|obj| openlibrary_data_mapping(obj, &norm)) {
+        return Ok(m);
+    }
+    let g_res = net.json(&format!("https://www.googleapis.com/books/v1/volumes?q=isbn:{norm}"));
+    if let Ok(g) = g_res {
+        let v = &g["items"][0]["volumeInfo"];
+        if let Some(raw_title) = v["title"].as_str() {
+            let title = match v["subtitle"].as_str() {
+                Some(sub) => format!("{raw_title}: {sub}"),
+                None => raw_title.to_string(),
+            };
+            let authors: Vec<String> = v["authors"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|x| x.as_str())
+                .map(norm_person)
+                .filter(|n| !n.is_empty())
+                .collect();
+            let subjects: Vec<String> = v["categories"].as_array().into_iter().flatten().filter_map(Json::as_str).map(String::from).collect();
+            if let Some(m) = build_book_mapping(BookFields {
+                title,
+                authors,
+                editors: Vec::new(),
+                date: v["publishedDate"].as_str().and_then(year_in).map(String::from),
+                year: None,
+                publisher: v["publisher"].as_str().map(String::from),
+                isbn: Some(norm.clone()),
+                edition: None,
+                series: None,
+                volume: None,
+                doi: None,
+                url: v["infoLink"].as_str().map(String::from),
+                abstract_text: v["description"].as_str().map(String::from),
+                book_title: None,
+                num_pages: v["pageCount"].as_u64().map(|n| n.to_string()),
+                is_section: false,
+                subjects,
+            }) {
+                return Ok(m);
+            }
+        }
+    }
+    if let Some((m, _)) = lookup_book_metadata(net, Some(&norm), None, None, None, "") {
+        return Ok(m);
+    }
+    Err(format!("ISBN {norm}: neither Open Library nor Google Books knows it"))
 }
 
 /// The first four-digit year in a free-form date ("June 2010", "2010-06-01").
@@ -230,18 +1026,31 @@ pub fn last_first(name: &str) -> String {
     }
 }
 
+/// Every `<entry>` of an arXiv Atom feed, paired with its parsed arXiv base id when `<id>` carries one.
+pub fn parse_atom_entries(xml: &str) -> Vec<(Option<String>, ArxivRecord)> {
+    xml_all(xml, "entry")
+        .into_iter()
+        .filter_map(|entry| {
+            let one = |t: &str| xml_all(entry, t).first().map(|v| xml_text(v)).filter(|v| !v.is_empty());
+            let id = one("id").and_then(|u| parse_arxiv(&u));
+            Some((
+                id,
+                ArxivRecord {
+                    title: one("title")?,
+                    authors: xml_all(entry, "author").iter().filter_map(|a| xml_all(a, "name").first().map(|n| last_first(&xml_text(n)))).collect(),
+                    published: one("published").map(|d| d.chars().take(10).collect()),
+                    summary: one("summary"),
+                    doi: one("arxiv:doi"),
+                    journal_ref: one("arxiv:journal_ref"),
+                },
+            ))
+        })
+        .collect()
+}
+
 /// The feed's first entry; None when arXiv has none (an unknown id answers an empty feed).
 pub fn parse_atom(xml: &str) -> Option<ArxivRecord> {
-    let entry = *xml_all(xml, "entry").first()?;
-    let one = |t: &str| xml_all(entry, t).first().map(|v| xml_text(v)).filter(|v| !v.is_empty());
-    Some(ArxivRecord {
-        title: one("title")?,
-        authors: xml_all(entry, "author").iter().filter_map(|a| xml_all(a, "name").first().map(|n| last_first(&xml_text(n)))).collect(),
-        published: one("published").map(|d| d.chars().take(10).collect()),
-        summary: one("summary"),
-        doi: one("arxiv:doi"),
-        journal_ref: one("arxiv:journal_ref"),
-    })
+    parse_atom_entries(xml).into_iter().next().map(|(_, r)| r)
 }
 
 /// The Atom record of an arXiv id.
@@ -378,6 +1187,16 @@ pub fn open_access_pdfs<'a>(net: &'a dyn Net, doi: &'a str, email: &'a str, more
     });
     let more = more.iter().flat_map(move |i| i.pdf_urls(net, doi).into_iter().map(move |u| (u, i.label())));
     openalex.chain(unpaywall).chain(more)
+}
+
+/// OpenAlex's abstract, kept as word → places.
+pub(crate) fn openalex_abstract(inverted: &Json) -> Option<String> {
+    let mut at: Vec<(u64, &str)> = Vec::new();
+    for (word, places) in inverted.as_object()? {
+        at.extend(places.as_array().into_iter().flatten().filter_map(Json::as_u64).map(|i| (i, word.as_str())));
+    }
+    at.sort_by_key(|(i, _)| *i);
+    (!at.is_empty()).then(|| at.iter().map(|(_, w)| *w).collect::<Vec<_>>().join(" "))
 }
 
 /// The DOI OpenAlex answered about (it merges records now and then: an arXiv preprint was once answered
@@ -586,6 +1405,8 @@ mod tests {
         assert_eq!(parse_doi("doi:10.1017/9781108781244.").as_deref(), Some("10.1017/9781108781244"));
         assert_eq!(parse_doi("hello"), None);
         assert_eq!(parse_arxiv("https://arxiv.org/abs/2301.12345v2").as_deref(), Some("2301.12345"));
+        assert_eq!(parse_arxiv_versioned("https://arxiv.org/abs/2301.12345v2"), Some(("2301.12345".into(), Some("v2".into()))));
+        assert_eq!(parse_arxiv_versioned("arXiv:cond-mat/0101001"), Some(("cond-mat/0101001".into(), None)));
         assert_eq!(parse_arxiv("arXiv:cond-mat/0101001").as_deref(), Some("cond-mat/0101001"));
         assert_eq!(parse_arxiv("2409.01234").as_deref(), Some("2409.01234"));
         // a letter whose full lower case is longer, before the id, does not move where it is read
@@ -609,5 +1430,165 @@ mod tests {
         assert_eq!((m["title"].as_str(), m["date"].as_str(), m["DOI"].as_str()), (Some("Attention & You"), Some("2017-06-12"), Some("10.1/a")));
         assert_eq!(m["archiveID"].as_str(), Some("arXiv:1706.03762"));
         assert_eq!(parse_atom("<feed><title>none</title></feed>"), None, "no entry: arXiv does not know it");
+    }
+
+    #[test]
+    fn parse_arxiv_anywhere_handles_filenames_headers_legacy_and_rejects_false_positives() {
+        // Modern filenames, paths, headers, URLs, and arXiv DOIs
+        assert_eq!(parse_arxiv_anywhere("2604.06107v1.pdf"), Some(("2604.06107".into(), Some("v1".into()))));
+        assert_eq!(parse_arxiv_anywhere("papers/Author_2604.06107v1.pdf"), Some(("2604.06107".into(), Some("v1".into()))));
+        assert_eq!(parse_arxiv_anywhere("Author.2604.06107v2.pdf"), Some(("2604.06107".into(), Some("v2".into()))));
+        assert_eq!(parse_arxiv_anywhere("Header line\narXiv: 2604.06107v1 [hep-th] 7 Apr 2026"), Some(("2604.06107".into(), Some("v1".into()))));
+        assert_eq!(parse_arxiv_anywhere("https://arxiv.org/pdf/2604.06107v1.pdf#page=2"), Some(("2604.06107".into(), Some("v1".into()))));
+        assert_eq!(parse_arxiv_anywhere("10.48550/arXiv.2401.12345v2"), Some(("2401.12345".into(), Some("v2".into()))));
+        assert_eq!(parse_arxiv_anywhere("1205.1234"), Some(("1205.1234".into(), None)));
+
+        // Legacy archive/YYMMNNN(vK)
+        assert_eq!(parse_arxiv_anywhere("notes/cond-mat/0101001v2.pdf"), Some(("cond-mat/0101001".into(), Some("v2".into()))));
+        assert_eq!(parse_arxiv_anywhere("See hep-th/9905111v1 for proof."), Some(("hep-th/9905111".into(), Some("v1".into()))));
+        assert_eq!(parse_arxiv_anywhere("arXiv:math.GT/0309136"), Some(("math.GT/0309136".into(), None)));
+
+        // Avoid false positives on ISBNs, non-arXiv DOIs, URLs, and dates
+        assert_eq!(parse_arxiv_anywhere("ISBN 978-0-306-40615-7"), None);
+        assert_eq!(parse_arxiv_anywhere("ISBN-10: 0-306-40615-2"), None);
+        assert_eq!(parse_arxiv_anywhere("doi:10.1016/j.nuclphysb.2012.01234"), None);
+        assert_eq!(parse_arxiv_anywhere("https://doi.org/10.1007/978-0-306-40615-7"), None);
+        assert_eq!(parse_arxiv_anywhere("https://inspirehep.net/literature/1234567"), None);
+        assert_eq!(parse_arxiv_anywhere("Dated 2026-04-06, 2026.04.06, 06.04.2026, 2012.0406, 0703.1234"), None);
+        assert_eq!(parse_arxiv_anywhere("2604.061071"), None);
+        assert_eq!(parse_arxiv_anywhere("2024.12345"), None);
+    }
+
+    #[test]
+    fn normalize_isbn_strips_prefixes_hyphens_and_spaces() {
+        assert_eq!(normalize_isbn("ISBN-13: 978-0-306-40615-7").as_deref(), Some("9780306406157"));
+        assert_eq!(normalize_isbn("isbn: 0-8044-2957-x").as_deref(), Some("080442957X"));
+        assert_eq!(normalize_isbn("978 3 16 148410 0").as_deref(), Some("9783161484100"));
+        assert_eq!(normalize_isbn("not-an-isbn"), None);
+    }
+
+    #[test]
+    fn lookup_book_metadata_supports_crossref_openalex_and_openlibrary() {
+        // 1. Crossref monograph by ISBN + edited-book / incollection shapes
+        let cr_book = json!({
+            "message": {
+                "items": [{
+                    "type": "monograph",
+                    "title": ["Synthetic Quantum Mechanics"],
+                    "subtitle": ["Foundations"],
+                    "author": [{ "family": "Researcher", "given": "A." }],
+                    "editor": [{ "family": "Editor", "given": "B." }],
+                    "issued": { "date-parts": [[2021, 5]] },
+                    "publisher": "Example University Press",
+                    "container-title": ["Graduate Texts in Physics"],
+                    "volume": "12",
+                    "edition-number": "2",
+                    "ISBN": ["978-0-306-40615-7"],
+                    "DOI": "10.1000/book.example.1",
+                    "URL": "https://example.org/book/1",
+                    "abstract": "<jats:p>Synthetic textbook summary.</jats:p>"
+                }]
+            }
+        });
+        let net = Table::default().on("https://api.crossref.org/works?filter=isbn:9780306406157", Answer::Json(cr_book));
+        let (m, src) = lookup_book_metadata(&net, Some("978-0-306-40615-7"), None, None, None, "me@example.org").unwrap();
+        assert_eq!(src, "crossref");
+        assert_eq!(m["title"].as_str(), Some("Synthetic Quantum Mechanics: Foundations"));
+        assert_eq!(m["kind"].as_str(), Some("science_book"));
+        assert_eq!(m["bibtexType"].as_str(), Some("book"));
+        assert_eq!(m["type"].as_str(), Some("book"));
+        assert_eq!(m["publisher"].as_str(), Some("Example University Press"));
+        assert_eq!(m["series"].as_str(), Some("Graduate Texts in Physics"));
+        assert_eq!(m["edition"].as_str(), Some("2"));
+        assert_eq!(m["volume"].as_str(), Some("12"));
+        assert_eq!(m["isbn"].as_str(), Some("9780306406157"));
+        assert_eq!(m["ISBN"].as_str(), Some("9780306406157"));
+        assert_eq!(m["year"].as_str(), Some("2021"));
+        assert_eq!(m["authors"][0].as_str(), Some("Researcher, A."));
+        assert_eq!(m["editors"][0].as_str(), Some("Editor, B."));
+        assert_eq!(m["abstract"].as_str(), Some("Synthetic textbook summary."));
+
+        // Crossref book-chapter by DOI -> incollection / bookSection
+        let cr_chapter = json!({
+            "message": {
+                "type": "book-chapter",
+                "title": ["Chapter One: Operators"],
+                "author": [{ "family": "Writer", "given": "C." }],
+                "container-title": ["Handbook of Synthetic Methods"],
+                "issued": { "date-parts": [[2020]] },
+                "publisher": "Example Press",
+                "DOI": "10.1000/chapter.example.1"
+            }
+        });
+        let net = Table::default().on("https://api.crossref.org/works/10.1000/chapter.example.1", Answer::Json(cr_chapter));
+        let (m, src) = lookup_book_metadata(&net, None, Some("10.1000/chapter.example.1"), None, None, "").unwrap();
+        assert_eq!((src, m["bibtexType"].as_str(), m["type"].as_str(), m["bookTitle"].as_str()), ("crossref", Some("incollection"), Some("bookSection"), Some("Handbook of Synthetic Methods")));
+
+        // 2. OpenAlex book by ISBN when Crossref misses
+        let oa_book = json!({
+            "results": [{
+                "id": "https://openalex.org/W999",
+                "type": "book",
+                "display_name": "Civic Architecture History",
+                "publication_year": 2018,
+                "publication_date": "2018-03-10",
+                "ids": { "doi": "https://doi.org/10.1000/oa.book.1", "isbn": "9783161484100" },
+                "authorships": [{ "author": { "display_name": "Dana Example" } }],
+                "primary_location": { "landing_page_url": "https://example.org/oa-book", "source": { "host_organization_name": "Synthetic Academic Press" } },
+                "abstract_inverted_index": { "Urban": [0], "design": [1], "monograph.": [2] }
+            }]
+        });
+        let net = Table::default().on("https://api.openalex.org/works?filter=ids.isbn:9783161484100", Answer::Json(oa_book));
+        let (m, src) = lookup_book_metadata(&net, Some("978-3-16-148410-0"), None, None, None, "me@example.org").unwrap();
+        assert_eq!(src, "openalex");
+        assert_eq!(m["kind"].as_str(), Some("book"));
+        assert_eq!(m["bibtexType"].as_str(), Some("book"));
+        assert_eq!(m["publisher"].as_str(), Some("Synthetic Academic Press"));
+        assert_eq!(m["year"].as_str(), Some("2018"));
+        assert_eq!(m["doi"].as_str(), Some("10.1000/oa.book.1"));
+        assert_eq!(m["abstract"].as_str(), Some("Urban design monograph."));
+
+        // 3. OpenLibrary ISBN lookup
+        let ol_isbn = json!({
+            "ISBN:080442957X": {
+                "title": "Mathematical Logic",
+                "authors": [{ "name": "Elena Example" }],
+                "publish_date": "May 2015",
+                "publishers": [{ "name": "Example House" }],
+                "edition_name": "3rd ed.",
+                "series": ["Logic Monograph Series"],
+                "subjects": [{ "name": "Mathematics" }],
+                "url": "https://openlibrary.org/books/OL1M"
+            }
+        });
+        let net = Table::default().on("https://openlibrary.org/api/books?bibkeys=ISBN:080442957X", Answer::Json(ol_isbn));
+        let (m, src) = lookup_book_metadata(&net, Some("0-8044-2957-x"), None, None, None, "").unwrap();
+        assert_eq!(src, "openlibrary");
+        assert_eq!(m["kind"].as_str(), Some("science_book"));
+        assert_eq!(m["edition"].as_str(), Some("3rd ed."));
+        assert_eq!(m["series"].as_str(), Some("Logic Monograph Series"));
+        assert_eq!(m["isbn"].as_str(), Some("080442957X"));
+
+        // 4. OpenLibrary search.json title+author fallback (rejecting non-matching entry)
+        let ol_search = json!({
+            "docs": [
+                { "title": "Completely Unrelated Book", "author_name": ["Someone Else"], "first_publish_year": 2001 },
+                { "title": "Synthetic Lattice Models", "author_name": ["Ada Example"], "first_publish_year": 2019, "publisher": ["Synthetic Press"], "isbn": ["9780306406157"], "key": "/works/OL42W" }
+            ]
+        });
+        let net = Table::default().on("https://openlibrary.org/search.json?title=Synthetic%20Lattice%20Models&author=Ada%20Example", Answer::Json(ol_search));
+        let (m, src) = lookup_book_metadata(&net, None, None, Some("Synthetic Lattice Models"), Some("Ada Example"), "").unwrap();
+        assert_eq!(src, "openlibrary");
+        assert_eq!(m["title"].as_str(), Some("Synthetic Lattice Models"));
+        assert_eq!(m["isbn"].as_str(), Some("9780306406157"));
+        assert_eq!(m["year"].as_str(), Some("2019"));
+        assert_eq!(m["url"].as_str(), Some("https://openlibrary.org/works/OL42W"));
+
+        // OpenLibrary search helper
+        let ol_q = json!({ "docs": [{ "title": "Synthetic Lattice Models", "author_name": ["Ada Example"], "first_publish_year": 2019, "publisher": ["Synthetic Press"], "isbn": ["9780306406157"], "key": "/works/OL42W" }] });
+        let net = Table::default().on("https://openlibrary.org/search.json?q=lattice", Answer::Json(ol_q));
+        let hits = openlibrary_search(&net, "lattice", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0]["isbn"].as_str(), Some("9780306406157"));
     }
 }

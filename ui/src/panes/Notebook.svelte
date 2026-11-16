@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Native Jupyter (.ipynb) & WLJS/Wolfram (.wln) computational physics notebook pane.
+  // Native Jupyter (.ipynb) computational physics notebook pane (read-only view for legacy .wln files).
   import { onMount } from "svelte";
   import Icon from "../components/Icon.svelte";
   import Markdown from "../components/Markdown.svelte";
@@ -10,7 +10,6 @@
   import { superOf } from "../lib/keys";
   import {
     applyJupyterResultToCell,
-    buildWolframNotebookRunner,
     makeCellId,
     parseNotebook,
     serializeIpynb,
@@ -19,11 +18,8 @@
     type NotebookDoc,
   } from "../lib/notebook-format";
   import {
-    openInWljs,
     runJupyterNotebook,
-    runWolfram,
     type JupyterKernelChoice,
-    type WolframRunResponse,
   } from "../lib/oracle-runner";
   import { shownName } from "../lib/paths";
   import { app, toast } from "../lib/state.svelte";
@@ -42,7 +38,6 @@
   let activeKernelLabel = $state("");
   let runningAll = $state(false);
   let runningCellId = $state<string | null>(null);
-  let wolframReport = $state<WolframRunResponse | null>(null);
 
   let activeCellId = $state<string | null>(null);
   let editingMd = $state<Record<string, boolean>>({});
@@ -73,7 +68,6 @@
       nb = parsed;
       activeCellId = parsed.cells[0]?.id ?? null;
       editingMd = {};
-      wolframReport = null;
       markDirty(false);
     } catch (e) {
       loadErr = errText(e);
@@ -200,82 +194,6 @@
     }
   }
 
-  function applyWolframStdout(stdout: string, upToId?: string, totalMs?: number) {
-    if (!nb) return;
-    const byId = new Map<string, string[]>();
-    const otherLines: string[] = [];
-    for (const line of stdout.split(/\r?\n/)) {
-      if (line.startsWith("__WLN_CELL__\t")) {
-        const parts = line.split("\t");
-        const cid = parts[1] ?? "";
-        const val = parts.slice(2).join("\t");
-        byId.set(cid, [...(byId.get(cid) ?? []), val]);
-      } else if (line.trim()) {
-        otherLines.push(line);
-      }
-    }
-    nb.cells = nb.cells.map((c) => {
-      if (c.kind !== "code") return c;
-      if (upToId && c.id !== upToId && !byId.has(c.id)) return c;
-      const vals = byId.get(c.id);
-      if (!vals?.length) return c;
-      return {
-        ...c,
-        runtimeMs: upToId === c.id ? totalMs : c.runtimeMs,
-        outputs: vals.map((v) => ({ type: "display", executionCount: c.executionCount, plain: v })),
-      };
-    });
-    if (otherLines.length && upToId) {
-      const idx = nb.cells.findIndex((c) => c.id === upToId);
-      if (idx >= 0) {
-        nb.cells[idx].outputs = [
-          { type: "stream", stream: "stdout", text: `${otherLines.join("\n")}\n` },
-          ...nb.cells[idx].outputs,
-        ];
-      }
-    }
-  }
-
-  async function runWlnCheck(upToCellId?: string) {
-    if (!nb || nb.format !== "wln" || runningAll || runningCellId) return;
-    if (upToCellId) runningCellId = upToCellId;
-    else runningAll = true;
-    try {
-      const companionWls = spec.path.replace(/\.wln$/i, ".wls");
-      const hasCompanion = !upToCellId && companionWls !== spec.path && (await api.exists(companionWls).catch(() => false));
-      const code = hasCompanion ? undefined : buildWolframNotebookRunner(nb.cells, upToCellId);
-      const res = await runWolfram({
-        path: spec.path,
-        wlsPath: hasCompanion ? companionWls : undefined,
-        code,
-      });
-      wolframReport = res;
-      if (!hasCompanion && res.stdout) {
-        applyWolframStdout(res.stdout, upToCellId, res.ms);
-      }
-      toast(
-        res.ok ? `Wolfram check passed (${res.ms} ms)` : `Wolfram check exited ${res.exitCode}`,
-        hasCompanion ? `Ran ${shownName(companionWls)} via wl.py` : `Evaluated ${shownName(spec.path)} via wl.py`,
-        res.ok ? "success" : "error",
-      );
-    } catch (e) {
-      toast("Wolfram check failed", errText(e), "error");
-    } finally {
-      runningAll = false;
-      runningCellId = null;
-    }
-  }
-
-  async function launchWljs() {
-    try {
-      const res = await openInWljs(spec.path);
-      if (!res.ok) throw new Error(res.error || "Could not launch WLJS");
-      toast("Opened in WLJS", shownName(spec.path), "success", 2800);
-    } catch (e) {
-      toast("Could not open WLJS", errText(e), "error");
-    }
-  }
-
   async function sendCellToAgent(target: AgentTarget, cell?: NotebookCell) {
     openSendMenuId = null;
     const chosen =
@@ -286,7 +204,7 @@
       toast("Nothing to send", "Pick a non-empty notebook cell first.", "info");
       return;
     }
-    const lang = chosen.language === "wolfram" ? "wolfram" : chosen.kind === "code" ? "python" : "markdown";
+    const lang = chosen.kind === "code" ? (chosen.language === "python" ? "python" : "text") : "markdown";
     const prompt = [
       `Notebook cell from \`${spec.path}\`${chosen.executionCount ? ` [In ${chosen.executionCount}]` : ""}:`,
       "",
@@ -300,7 +218,7 @@
   }
 
   function copyCellToNote(cell: NotebookCell) {
-    const lang = cell.language === "wolfram" ? "wolfram" : cell.kind === "code" ? "python" : "markdown";
+    const lang = cell.kind === "code" ? (cell.language === "python" ? "python" : "text") : "markdown";
     const block = cell.kind === "markdown" ? cell.source.trim() : `\`\`\`${lang}\n${cell.source.trim()}\n\`\`\``;
     const r = insertIntoActiveNote(block);
     if (r.ok) toast("Inserted cell into note", r.path ? shownName(r.path) : undefined, "success", 2600);
@@ -322,8 +240,7 @@
     if ((e.shiftKey || e.ctrlKey || superOf(e)) && e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
-      if (isWln) void runWlnCheck(cell.id);
-      else void runIpynbCells(cell.id);
+      if (!isWln) void runIpynbCells(cell.id);
     }
   }
 
@@ -340,7 +257,7 @@
   <header class="nb-toolbar">
     <span class="nb-badge" class:wln={isWln}>
       <Icon name="sigma" size={12} />
-      {isWln ? "WLJS .wln" : "Jupyter .ipynb"}
+      {isWln ? "Read-only .wln" : "Jupyter .ipynb"}
     </span>
     <span class="nb-title" title={spec.path}>{shownName(spec.path)}</span>
 
@@ -362,8 +279,6 @@
       <button class="nb-btn" onclick={() => addCell("markdown")} title="Insert Markdown + KaTeX cell below"><Icon name="plus" size={12} /> Markdown</button>
       <button class="nb-btn" class:dirty disabled={saving} onclick={() => void saveNotebook()} title="Save .ipynb to disk (Ctrl+S)"><Icon name="check" size={13} /> {saving ? "Saving…" : dirty ? "Save*" : "Save"}</button>
     {:else}
-      <button class="nb-btn" onclick={() => void launchWljs()} title="Launch this .wln file in WLJS Notebook"><Icon name="external-link" size={13} /> Open in WLJS</button>
-      <button class="nb-btn primary" disabled={runningAll || Boolean(runningCellId)} onclick={() => void runWlnCheck()} title="Run Wolfram verification via wl.py">{runningAll ? "◌ Running wl.py…" : "▶ Run Wolfram Check (wl.py)"}</button>
       <div class="menu-anchor">
         <button class="nb-btn" onclick={(e) => { e.stopPropagation(); openSendMenuId = openSendMenuId === "header" ? null : "header"; }}>Send Cell to Solver / Agent ▾</button>
         {#if openSendMenuId === "header"}
@@ -390,22 +305,6 @@
       </div>
     {:else if nb}
       <div class="nb-column">
-        {#if wolframReport}
-          <div class="wl-banner" class:ok={wolframReport.ok} class:fail={!wolframReport.ok}>
-            <div class="wl-banner-head">
-              <strong>{wolframReport.ok ? "● Wolfram Check Clean" : `▲ Wolfram Exit ${wolframReport.exitCode}`}</strong>
-              <span class="ms-pill">{wolframReport.ms} ms</span>
-              <button class="icon-xs" onclick={() => (wolframReport = null)} title="Dismiss"><Icon name="close" size={12} /></button>
-            </div>
-            {#if wolframReport.stdout.trim()}
-              <pre class="nb-stream">{wolframReport.stdout.replace(/^__WLN_CELL__\t.*$/gm, "").trim()}</pre>
-            {/if}
-            {#if wolframReport.stderr.trim()}
-              <pre class="nb-stream stderr">{wolframReport.stderr.trim()}</pre>
-            {/if}
-          </div>
-        {/if}
-
         {#each nb.cells as cell (cell.id)}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <section
@@ -446,8 +345,10 @@
                 <div class="exec-gutter" title="Execution counter">[{runningCellId === cell.id || runningAll ? "*" : (cell.executionCount ?? " ")}]</div>
                 <div class="code-main">
                   <div class="cell-head">
-                    <button class="run-cell-btn" disabled={runningAll || Boolean(runningCellId)} onclick={() => (isWln ? void runWlnCheck(cell.id) : void runIpynbCells(cell.id))} title="Run cell (Shift+Enter)">{runningCellId === cell.id ? "◌ Running…" : "▶ Run Cell"}</button>
-                    <span class="cell-tag">{cell.language === "wolfram" ? "Wolfram" : cell.kind === "raw" ? "Raw" : "Python"}</span>
+                    {#if !isWln}
+                      <button class="run-cell-btn" disabled={runningAll || Boolean(runningCellId)} onclick={() => void runIpynbCells(cell.id)} title="Run cell (Shift+Enter)">{runningCellId === cell.id ? "◌ Running…" : "▶ Run Cell"}</button>
+                    {/if}
+                    <span class="cell-tag">{isWln ? "Read-only" : cell.kind === "raw" ? "Raw" : "Python"}</span>
                     {#if cell.runtimeMs !== undefined}<span class="ms-pill">{cell.runtimeMs} ms</span>{/if}
                     <span class="spacer"></span>
                     <button class="cell-act" onclick={() => copyCellToNote(cell)} title="Insert cell into active Markdown note">+ Note</button>
@@ -468,7 +369,7 @@
                       <button class="icon-xs" onclick={() => deleteCell(cell.id)} title="Delete cell"><Icon name="trash" size={12} /></button>
                     {/if}
                   </div>
-                  <textarea class="code-editor" spellcheck="false" rows={Math.max(2, Math.min(28, cell.source.split("\n").length))} bind:value={cell.source} oninput={() => { if (!isWln) markDirty(true); }} onkeydown={(e) => onCodeKeydown(e, cell)} placeholder={cell.language === "wolfram" ? "Wolfram Language input…" : "Python code… (Shift+Enter to run)"}></textarea>
+                  <textarea class="code-editor" spellcheck="false" readonly={isWln} rows={Math.max(2, Math.min(28, cell.source.split("\n").length))} bind:value={cell.source} oninput={() => { if (!isWln) markDirty(true); }} onkeydown={(e) => onCodeKeydown(e, cell)} placeholder={isWln ? "Read-only notebook cell" : "Python code… (Shift+Enter to run)"}></textarea>
 
                   {#if cell.outputs.length > 0}
                     <div class="outputs">
@@ -536,12 +437,6 @@
   .nb-state { max-width: 640px; margin: 40px auto; padding: 18px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-muted); text-align: center; }
   .nb-state.error { border-color: color-mix(in srgb, var(--red, #d94e41) 40%, var(--border)); color: var(--red, #d94e41); }
 
-  .wl-banner { padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elev); }
-  .wl-banner.ok { border-color: color-mix(in srgb, var(--green, #3ca395) 38%, transparent); background: color-mix(in srgb, var(--green, #3ca395) 9%, var(--bg-elev)); }
-  .wl-banner.fail { border-color: color-mix(in srgb, var(--red, #d94e41) 40%, transparent); background: color-mix(in srgb, var(--red, #d94e41) 9%, var(--bg-elev)); }
-  .wl-banner-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
-  .wl-banner-head strong { flex: 1; }
-
   .nb-cell { border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elev); transition: border-color 120ms ease; }
   .nb-cell.md-cell { background: transparent; border-color: transparent; padding: 4px 10px; }
   .nb-cell.md-cell:hover, .nb-cell.md-cell.active { border-color: var(--border); background: color-mix(in srgb, var(--bg-elev) 55%, transparent); }
@@ -573,7 +468,7 @@
   .nb-plain { display: flex; align-items: flex-start; gap: 8px; }
   .out-tag { font-family: var(--font-mono); font-size: 11px; color: var(--accent); padding-top: 6px; flex: none; }
   .nb-plain pre { flex: 1; }
-  .nb-plot { padding: 8px; background: #fff; border-radius: 5px; border: 1px solid var(--border); overflow-x: auto; max-width: 100%; width: fit-content; }
+  .nb-plot { padding: 8px; background: #fff; border-radius: 5px; border: 1px solid var(--border); overflow-x: auto; max-width: 100%; width: fit-content; } /* literal: plot paper for transparent PNG/SVG axes */
   .nb-plot img, .nb-svg :global(svg) { display: block; max-width: 100%; height: auto; }
   .nb-rich { padding: 4px 6px; background: var(--bg); border-radius: 4px; }
 

@@ -56,16 +56,16 @@
   button.on { border-color: var(--accent); color: var(--text); }
   .sample { position: relative; display: flex; align-items: center; justify-content: center; height: calc(38px * var(--ui-scale, 1)); border-radius: var(--radius-sm);
     background: var(--bg); border: 1px solid var(--border); color: var(--heading, var(--text)); }
-  .sample.kandinsky[data-theme="dark"] { background: #15161a; color: #eceae4; }
-  .sample.kandinsky[data-theme="light"] { background: #faf8f4; color: #1c1d22; }
+  .sample.kandinsky[data-theme="dark"] { background: #15161a; color: #eceae4; } /* literal: fixed preview swatch of dark Kandinsky palette */
+  .sample.kandinsky[data-theme="light"] { background: #faf8f4; color: #1c1d22; } /* literal: fixed preview swatch of light Bauhaus palette */
   .sample b { font-size: calc(13px * var(--ui-scale, 1)); font-weight: 600; }
   .sample > i { position: absolute; right: 5px; bottom: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
   .sc-dots { position: absolute; right: 4px; bottom: 4px; display: inline-flex; align-items: center; gap: 2px; }
   .sc-dots i { width: 6px; height: 6px; border-radius: 50%; display: block; }
-  .sc-cobalt { background: #7d97f4; }
-  .sample[data-theme="light"] .sc-cobalt { background: #264ca4; }
-  .sc-ochre { background: #dfab2e; }
-  .sc-vermilion { background: #d94e41; }
-  .sc-viridian { background: #3ca395; }
+  .sc-cobalt { background: #7d97f4; } /* literal: Kandinsky cobalt swatch dot */
+  .sample[data-theme="light"] .sc-cobalt { background: #264ca4; } /* literal: Bauhaus cobalt swatch dot */
+  .sc-ochre { background: #dfab2e; } /* literal: Kandinsky ochre swatch dot */
+  .sc-vermilion { background: #d94e41; } /* literal: Kandinsky vermilion swatch dot */
+  .sc-viridian { background: #3ca395; } /* literal: Kandinsky viridian swatch dot */
   .name { font-size: calc(11px * var(--ui-scale, 1)); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: capitalize; }
 </style>

@@ -314,7 +314,7 @@
     display: inline-grid; place-items: center; cursor: pointer; padding: 0; transition: transform 100ms, background 120ms, border-color 120ms;
   }
   .check-btn:hover { border-color: var(--green); background: var(--bg-hover); }
-  .check-btn.checked { background: var(--green); border-color: var(--green); color: #fff; }
+  .check-btn.checked { background: var(--green); border-color: var(--green); color: #fff; } /* literal: white checkmark on viridian fill */
   .streak-td { text-align: right; padding-right: 2px; white-space: nowrap; }
   .streak-pill { font-family: var(--font-mono); font-size: calc(11px * var(--ui-scale, 1)); font-variant-numeric: tabular-nums; padding: 1px 6px; border-radius: 999px; color: var(--text-faint); background: var(--bg-alt); }
   .streak-pill.hot { color: var(--orange); background: color-mix(in srgb, var(--orange) 13%, transparent); font-weight: 600; }

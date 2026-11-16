@@ -5,15 +5,59 @@ integrates with the Obsidian side. Of Zotero's jobs the ones needed are: **save 
 see the annotations in notes**, **cite while writing**. This page covers sync + browser saving; the Library screen and
 its right panel (PDF preview, notes) are documented with the Library.
 
-## 1. Sync (`scripts/vault/zotero_sync.py`, workspace command `refs.sync-zotero`, every 10 min)
-One way, Zotero → `refs/papers`; Zotero is only read. The live library is found from Zotero's own
-`extensions.zotero.dataDir` (here `~/QUARMEN/Zotero`; the old importer read a stale September copy). Three-way
-per field against the last sync's state: changed only in Zotero → updated; only in Kandinsky → kept; both → Kandinsky's
-kept and listed in `refs/ZOTERO-SYNC.md`. Zotero notes are marked blocks in the paper's reading note `<citekey>.md` (section 4); Zotero's trash is reported,
-never deleted. First real run: 54 entries, 0 changes, `refs.bib` byte-identical. Details: TOOLS.md.
-The real library this was built on has **no Zotero annotations** (0 in `itemAnnotations`), so annotations come from Kandinsky's own
-PDF annotator, which exports them into the paper's reading note `<citekey>.md` ("To notes", or on every save with
-`[pdf] export_on_save`).
+## 1. Lossless one-time Zotero migration (`kandinsky import-zotero` & Library wizard)
+
+To retire Zotero + Better BibTeX + ZotMoov + Zoplicate completely on Windows, macOS, and Linux, `catalog-papers` includes a cross-platform SQLite importer accessible from **Library → References → Import from Zotero…** (`ui/src/components/ZoteroImportModal.svelte`), the Command Palette, or the CLI:
+
+```sh
+kandinsky --workspace . import-zotero
+kandinsky --workspace . import-zotero --apply
+```
+
+- **Auto-discovery across OSes:** Finds Zotero profiles on Windows (`%APPDATA%\Zotero\Zotero\Profiles\*\prefs.js`), macOS (`~/Library/Application Support/Zotero/Profiles/*/prefs.js`), and Linux (`~/.zotero/zotero/*/prefs.js`), or accepts explicit CLI `--zotero` / `--base-attachments` overrides (helper parameters `data_dir` / `base_attachment_path`). Reads `extensions.zotero.dataDir`, `extensions.zotero.baseAttachmentPath`, `better-bibtex.sqlite` (when present), and ZotMoov preferences (`extensions.zotmoov.dst_dir` and subfolder rules).
+- **Safe read-only SQLite access:** Opens `zotero.sqlite` read-only (`?mode=ro&immutable=1`) and falls back to a temporary snapshot copy if Zotero currently holds a write lock.
+- **Zero-copy linked PDFs & Better BibTeX citekeys:** Preserves pinned Better BibTeX citation keys (from `better-bibtex.sqlite` or `Extra:` `Citation Key:`) before falling back to `author+year+word`. Resolves both `storage:<KEY>:file.pdf` and `attachments:` relative paths against `baseAttachmentPath`; when a linked PDF already lives inside a configured `external_pdf_roots` folder (such as `../Papers`), it is linked **in place with zero copying and zero OS hard-links or symlinks**.
+- **Nested collections, notes, relations, and `itemAnnotations`:** Preserves `parentCollectionID` hierarchies (`Parent/Child`), converts HTML `itemNotes` into clean Markdown sections on `<citekey>.md`, maps `itemRelations` into `related:` wikilinks, and imports Zotero `itemAnnotations` (highlight, underline, strike, note, and image/area boxes with `annotationPageLabel`, `annotationColor`, `annotationText`, and `annotationComment`) directly into native `pdf-marks` blocks (`PdfMarksNote.svelte`).
+- **Dry-run report first:** Reports total items, citekeys, linked vs copied PDFs, annotations, notes, collections, and warnings before writing any files.
+
+Legacy incremental sync (`scripts/vault/zotero_sync.py`, workspace command `refs.sync-zotero`) remains available for Linux vaults that still run Zotero alongside Kandinsky.
+
+## 1b. Shared zero-copy external PDF roots (`external_pdf_roots`) & annotation modes
+
+When multiple vaults live on the same synced cloud drive (for example `../VaultA`, `../VaultB`, and shared `../Library/Papers` and `../Library/Books` pools), OS hard-links and symlinks break across machines or create cloud-sync conflict copies. Configure **Settings → Plugins → Catalog · Science** (`catalog-papers`):
+
+| setting | default | meaning |
+|---|---|---|
+| `dir` | `refs/papers` | Vault folder holding `<citekey>/<citekey>.md` |
+| `bib` | `refs/refs.bib` | Derived BibTeX file rewritten after every change (`@article`, `@book`, `@phdthesis`…) |
+| `external_pdf_roots` | `[]` | Shared PDF folders outside the vault (e.g. `["../Library/Papers", "../Library/Books"]`), resolved safely via `external_roots.rs` without allowing arbitrary `..` traversal outside listed roots |
+| `store_in_external` | `true` | When `external_pdf_roots` is non-empty, newly downloaded, dropped, and browser-captured PDFs are filed into `external_pdf_roots[0]` using `rename_format` instead of copied into the vault |
+| `annotations_mode` | `"vault"` | `"vault"` keeps `pdf-marks` strictly per-vault inside `<citekey>.md`; `"shared_sidecar"` also syncs CRDT marks to `<pdf>.kandinsky-marks` (or `sidecar_dir`) |
+| `sidecar_dir` | `""` | Optional folder for `.kandinsky-marks` sidecars when sharing annotations without writing beside shared PDFs |
+| `watch_inbox` | `""` | ZotMoov-style drop folder (e.g. `../Papers/Sort`) scanned for unfiled PDFs |
+| `rename_format` | `"{Author}{Year} - {Title}.pdf"` | Target filename pattern when filing PDFs into `external_pdf_roots[0]` |
+| `subfolder_presets` | `[]` | Optional target subfolders inside `external_pdf_roots[0]` (e.g. `["Condensed Matter", "Quantum Info"]`) |
+| `arxiv_source_dir` | `""` | Optional folder for unpacked arXiv LaTeX `.tar.gz` bundles (blank uses `.kandinsky/cache/arxiv-src/<id>/`) |
+
+With `external_pdf_roots = ["../Library/Papers", "../Library/Books"]`, `<citekey>.md`, the Library PDF reader, `library.paper` embeds, thumbnails, full-text PDF search (`_ext/` cache), and `refs/refs.bib` (`file = {../Library/Papers/...}`) read the shared PDF directly in place. You can also export or import `.kandinsky-marks` sidecars on demand from any paper or book row in **Library → References**.
+
+## 1c. External folder scanning (`scan-external-roots`), first-class Books, and daily workflows
+
+From **Library → References** (`ui/src/components/PaperWorkflowsModal.svelte`), the Command Palette, CLI, or `catalog-papers` MCP tools:
+
+- **Scan External Folders (`Scan folders` tab, `kandinsky scan-external-roots`, `catalog_papers_scan_external_roots`):** Recursively scans configured `external_pdf_roots` (such as `../Library/Papers` and `../Library/Books`) for `.pdf` files while ignoring non-PDF files (`.ipynb`, `.md`, data files). Extracts DOI / arXiv / ISBN / first-page metadata, classifies papers and `@book` entries, derives `collections` from nested subfolder paths, and detects moved PDFs by SHA-256 to update their `pdf` path and collection without creating duplicate notes. Keeps PDFs strictly in place (zero copies into the vault) and defaults to a safe dry-run preview (`dry_run: true`) with optional `--root`, `--rate-limit-ms`, and `--max-lookups` controls:
+
+  ```sh
+  kandinsky --workspace . scan-external-roots --max-lookups 25 --rate-limit-ms 250
+  kandinsky --workspace . scan-external-roots --root ../Library/Books --apply
+  ```
+
+- **First-Class Books (`book` / `science_book` / `@book`) & Filtered Search:** Books added by ISBN (Open Library + Google Books), book DOI (Crossref / OpenAlex), long-PDF heuristics (>100 pages), or book external roots emit `@book{...}` entries in `refs/refs.bib` and appear under the **Books** filter tab (`book`, `science_book`, `bookSection`) alongside **Papers**, **Theses**, and **Notes** in **Library → References**. In `catalog-papers`, `[contributes.catalog]` `instead` routes catalog-captured books to `science_book`, and `catalog_papers_search_papers` accepts `item_type` (`"paper"`, `"book"`, `"thesis"`, or `"notes"`).
+- **Universal Add / Search (`Add or search`):** Add or query papers and books by arXiv ID/URL (preserving exact `arXiv:XXXX.YYYYYvN` version provenance), DOI, ISBN, pasted BibTeX/RIS, Crossref, OpenAlex, Open Library, Google Books, or **INSPIRE-HEP** (`inspirehep.net/api/literature`, e.g. `author: Witten` or TeX keys).
+- **Drop Inbox (`Drop inbox`, ZotMoov replacement):** Scans `watch_inbox` (such as `../Papers/Sort`), extracts first-page DOI / arXiv / ISBN / title+authors, fetches metadata, renames via `rename_format`, moves into `external_pdf_roots[0]` (or an optional `subfolder_presets` subfolder) without overwriting existing files, creates `<citekey>/<citekey>.md`, and updates `refs/refs.bib`.
+- **Duplicate Review & Safe Merge (`Duplicates`, Zoplicate replacement):** Finds duplicates across normalized DOI, base arXiv ID (matching `arXiv:2401.12345v1` with `v2` or its published journal record), PDF SHA-256, ISBN-10/13, and fuzzy title + first author + year. Merging keeps the primary citekey, records secondary citekeys under `aliases:`, unions `tags`, `collections`, `sources`, reading notes, and `pdf-marks`, optionally rewrites `[[old_citekey]]` and `\cite{old_citekey}` across the vault (`POST /api/refs/relink`), and regenerates `refs/refs.bib`.
+- **Preprint upgrade & arXiv LaTeX source:** On any arXiv paper, **Check published** (`upgrade_preprint`) checks Crossref / INSPIRE-HEP / arXiv for a published journal DOI and upgrades metadata while keeping exact `eprint` / `archivePrefix` provenance; **arXiv LaTeX** (`fetch_arxiv_source`) downloads and safely unpacks the `.tar.gz` bundle from `export.arxiv.org/e-print/<id>` into `arxiv_source_dir/<id>/` so formulas and macros can be inspected locally.
+- **Bookmarklet / URI capture fallback:** When a browser cannot run the Zotero Connector extension, `kandinsky://capture-paper?url=https://example.org/paper&doi=10.1000/xyz123` (or `kandinsky capture-paper <id-or-url>`) files the paper directly into the active vault.
 
 ## 2. Saving from the browser (`crates/kandinsky-core/src/connector.rs`)
 Kandinsky speaks the **Zotero Connector protocol** (API v3), read from Zotero 10's own `server_connector.js` and

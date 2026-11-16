@@ -34,8 +34,8 @@ const runs = Array.from({ length: n }, (_, k) => {
   const out = createWriteStream(file);
   const env = { ...process.env, KANDINSKY_PW_WS: join(tmp, `kandinsky-ui-test-ws-${i}`), KANDINSKY_PW_PORT: String(7720 + k) };
   delete env.KANDINSKY_PW_KEY; // each run makes its own
-  const args = ["playwright", "test", `--shard=${i}/${n}`, `--output=test-results/shard-${i}`, "--reporter=line", ...argv];
-  const child = spawn("npx", n > 1 ? args : args.filter((a) => !a.startsWith("--shard")), { cwd: ui, env, stdio: ["ignore", "pipe", "pipe"] });
+  const args = [join(ui, "node_modules/@playwright/test/cli.js"), "test", `--shard=${i}/${n}`, `--output=test-results/shard-${i}`, "--reporter=line", ...argv];
+  const child = spawn(process.execPath, n > 1 ? args : args.filter((a) => !a.startsWith("--shard")), { cwd: ui, env, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout.pipe(out, { end: false });
   child.stderr.pipe(out, { end: false });
   return new Promise((done) => child.on("close", (code) => {

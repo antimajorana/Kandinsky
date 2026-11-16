@@ -328,23 +328,35 @@ impl<H: Host> Connector<H> {
         let Some(dir) = dir else { return Response::json(400, json!({ "error": "SESSION_NOT_FOUND" })) };
         let ext = if ctype.contains("pdf") || body.starts_with(b"%PDF") { "pdf" } else if ctype.contains("html") { "html" } else { "bin" };
         let key = entry::key_of(&dir);
-        let mut name = format!("{key}.{ext}");
-        let mut n = 1;
-        while dir.join(&name).exists() {
-            n += 1;
-            name = format!("{key}-{n}.{ext}");
-        }
-        if let Err(e) = kandinsky_plugin::write_file(dir.join(&name), body) {
-            return Response::text(500, e.to_string());
-        }
+        let cfg = self.host.settings();
         let mut m = entry::read(&dir).unwrap_or_default();
+        let stored = if ext == "pdf" && !cfg.external_pdf_roots.is_empty() && cfg.store_in_external {
+            let fname = crate::external::format_pdf_filename(&cfg.rename_format, &m, &key);
+            match crate::external::write_external_pdf(&self.root, &cfg, None, &fname, body) {
+                Ok((portable, _)) => portable,
+                Err(e) => return Response::text(500, e),
+            }
+        } else {
+            let mut name = format!("{key}.{ext}");
+            let mut n = 1;
+            while dir.join(&name).exists() {
+                n += 1;
+                name = format!("{key}-{n}.{ext}");
+            }
+            if let Err(e) = kandinsky_plugin::write_file(dir.join(&name), body) {
+                return Response::text(500, e.to_string());
+            }
+            name
+        };
         if let serde_yaml::Value::Sequence(v) = m.entry("files".into()).or_insert_with(|| serde_yaml::Value::Sequence(vec![])) {
-            v.push(name.into());
+            if !v.iter().any(|x| x.as_str() == Some(stored.as_str())) {
+                v.push(stored.into());
+            }
         }
         if let Err(e) = entry::write(self.host.companion(), &dir, &m) {
             return Response::text(500, e);
         }
-        self.finish(&self.host.settings(), &[dir]);
+        self.finish(&cfg, &[dir]);
         Response::empty(201)
     }
 
@@ -589,7 +601,7 @@ mod tests {
 
     fn app() -> (tempfile::TempDir, Connector<TestHost>) {
         let t = tempfile::tempdir().unwrap();
-        let root = t.path().canonicalize().unwrap();
+        let root = kandinsky_text::paths::real(t.path()).unwrap();
         std::fs::create_dir_all(root.join("refs/papers")).unwrap();
         let host = TestHost { root: root.clone(), net: Table::default(), captured: Mutex::default(), trash: TempTrash(root.clone()) };
         (t, Connector::new(host, root))

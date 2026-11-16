@@ -65,8 +65,8 @@
 <style>
   .rail { width: var(--rail-w); flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 11px 0 10px; background: var(--bg-side, var(--bg-alt)); border-right: 1px solid var(--border); }
   .brand { margin-bottom: 8px; display: grid; place-items: center; flex: none; }
-  .kandinsky-emblem { display: block; border-radius: 50%; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.24); }
-  :global([data-theme="light"]) .kandinsky-emblem { box-shadow: 0 0 0 1px rgba(28, 29, 34, 0.14), 0 2px 6px rgba(28, 29, 34, 0.12); }
+  .kandinsky-emblem { display: block; border-radius: 50%; box-shadow: var(--shadow-sm); }
+  :global([data-theme="light"]) .kandinsky-emblem { box-shadow: var(--shadow-card); }
   .rail-btn { position: relative; width: 32px; height: 32px; border-radius: var(--radius); display: grid; place-items: center; color: var(--text-muted); transition: color .12s, background .12s; }
   .rail-btn:hover { color: var(--text); background: var(--bg-hover); }
   .rail-btn.active { color: var(--accent); background: var(--accent-soft); }

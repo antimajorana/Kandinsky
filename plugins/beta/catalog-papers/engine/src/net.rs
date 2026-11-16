@@ -15,6 +15,10 @@ pub trait Net {
     /// JSON from an index that wants a key: the plugin's secret `secret`, sent as `Authorization: <prefix><secret>`
     /// (the core fills it in; the engine never sees it). No such secret: an error.
     fn json_with_secret(&self, url: &str, secret: &str, prefix: &str) -> Result<Value, String>;
+    /// Arbitrary binary payload (such as an arXiv `.tar.gz` / `.gz` e-print source archive).
+    fn raw_bytes(&self, _url: &str) -> Result<Vec<u8>, String> {
+        Err("not supported".into())
+    }
 }
 
 /// Why a PDF did not come.
@@ -108,6 +112,13 @@ pub mod fake {
                 last.push_str(&format!("#secret={secret}"));
             }
             r
+        }
+        fn raw_bytes(&self, url: &str) -> Result<Vec<u8>, String> {
+            match self.find(url)? {
+                Answer::Bytes(b) => Ok(b.clone()),
+                Answer::Text(t) => Ok(t.as_bytes().to_vec()),
+                Answer::Json(v) => Ok(v.to_string().into_bytes()),
+            }
         }
     }
 }

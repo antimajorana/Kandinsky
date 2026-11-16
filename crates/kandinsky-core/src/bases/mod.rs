@@ -129,6 +129,7 @@ struct Note<'a> {
     data: &'a Parsed,
     out: &'a [String],
     incoming: &'a [String],
+    upstream: std::cell::OnceCell<crate::api::UpstreamHealth>,
 }
 
 fn stem(p: &str) -> String {
@@ -219,6 +220,24 @@ fn parse_summary_kind(raw: &str) -> Option<SummaryKind> {
 }
 
 impl Ctx<'_> {
+    fn upstream_of<'b>(&self, n: &'b Note<'_>) -> &'b crate::api::UpstreamHealth {
+        n.upstream.get_or_init(|| {
+            crate::upstream::check_with(
+                n.path,
+                &[],
+                |p| self.notes_by_path.get(p).map(|tn| &tn.data.props),
+                |target, from| self.vault.resolve(target, from),
+            )
+        })
+    }
+
+    fn note_field(&self, n: &Note<'_>, name: &str) -> Val {
+        match name {
+            "upstreamStatus" | "upstream_status" => Val::Str(self.upstream_of(n).label.clone()),
+            _ => n.field(name),
+        }
+    }
+
     fn eval_rollup(&self, relation: &str, target: &str, summary_raw: Option<&str>) -> Val {
         let mut linked_paths: Vec<String> = Vec::new();
         let mut push_unique = |p: String| {
@@ -272,7 +291,7 @@ impl Ctx<'_> {
         let mut vals = Vec::new();
         for tn in &linked_notes {
             let v = if let Some(rest) = target_trim.strip_prefix("file.") {
-                tn.field(rest)
+                self.note_field(tn, rest)
             } else {
                 let key = target_trim.strip_prefix("note.").unwrap_or(target_trim);
                 tn.data.props.get(key).map(from_yaml).unwrap_or(Val::Null)
@@ -317,7 +336,7 @@ impl Context for Ctx<'_> {
         if name == "properties" {
             return Val::Map(self.props.clone());
         }
-        self.note.field(name)
+        self.note_field(self.note, name)
     }
     fn property(&self, name: &str) -> Val {
         if let Some(meta) = prop_meta(name, self.base_props) {
@@ -335,10 +354,16 @@ impl Context for Ctx<'_> {
     }
     fn this_field(&self, name: &str) -> Val {
         // no host note: `this.file.name` is null, so `x != this.file.name` keeps rows
-        self.this.map_or(Val::Null, |n| n.field(name))
+        self.this.map_or(Val::Null, |n| self.note_field(n, name))
     }
     fn rollup(&self, relation: &str, target: &str, summary: Option<&str>) -> Val {
         self.eval_rollup(relation, target, summary)
+    }
+    fn upstream_status(&self) -> Val {
+        Val::Str(self.upstream_of(self.note).label.clone())
+    }
+    fn is_upstream_stale(&self) -> Val {
+        Val::Bool(self.upstream_of(self.note).state != crate::api::UpstreamState::Ok)
     }
 }
 
@@ -550,6 +575,7 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
             data,
             out,
             incoming: vault.incoming.get(path).unwrap_or(&none),
+            upstream: std::cell::OnceCell::new(),
         })
         .collect();
     let host = this.and_then(|t| notes.iter().find(|n| n.path == t));
@@ -946,5 +972,55 @@ views:
         assert!(matches!(&cells[3], BaseCell::Num { value } if *value == 1.0), "{:?}", cells[3]);
         assert!(matches!(&cells[4], BaseCell::Num { value } if *value == 5.0), "{:?}", cells[4]);
         assert!(matches!(&cells[5], BaseCell::Num { value } if *value == 2.0), "{:?}", cells[5]);
+    }
+
+    #[test]
+    fn upstream_status_file_field_and_formulas_surface_stale_and_changed() {
+        let d = tempfile::tempdir().unwrap();
+        let w = |n: &str, s: &str| std::fs::write(d.path().join(n), s).unwrap();
+        w("Lemma.md", "---\nstatus: stale\nupdated: 2026-10-01\n---\n");
+        w("Bridge.md", "---\nstatus: accepted\nupdated: 2026-10-02\ndepends_on: \"[[Lemma]]\"\n---\n");
+        w("Theorem.md", "---\ntype: claim\nstatus: accepted\naccepted_date: 2026-10-05\ndepends_on: \"[[Bridge]]\"\n---\n");
+        w("Units.md", "---\ntype: conventions\nupdated: 2026-10-20\n---\n");
+        w("Corollary.md", "---\ntype: claim\nstatus: accepted\nupdated: 2026-10-10\nconventions: \"[[Units]]\"\n---\n");
+        w("Fresh.md", "---\ntype: claim\nstatus: accepted\nupdated: 2026-10-25\nconventions: \"[[Units]]\"\n---\n");
+
+        let src = r#"filters: 'type == "claim"'
+formulas:
+  Status: upstreamStatus()
+  NeedsReview: isUpstreamStale()
+views:
+  - type: table
+    name: All
+    order: [file.name, file.upstreamStatus, file.upstream_status, formula.Status, formula.NeedsReview]
+    sort:
+      - property: file.name
+        direction: ASC
+  - type: table
+    name: Flagged
+    filters: 'isUpstreamStale()'
+    order: [file.name, file.upstreamStatus]
+"#;
+        let r = evaluate(d.path(), &Config::default(), src, None);
+        assert_eq!(r.error, None);
+        let all = &r.views[0];
+        let by_path = |p: &str| all.rows.iter().find(|row| row.path == p).unwrap();
+        let cor = &by_path("Corollary.md").cells;
+        assert!(matches!(&cor[1], BaseCell::Text { value } if value == "Upstream changed"), "{cor:?}");
+        assert!(matches!(&cor[2], BaseCell::Text { value } if value == "Upstream changed"), "{cor:?}");
+        assert!(matches!(&cor[3], BaseCell::Text { value } if value == "Upstream changed"), "{cor:?}");
+        assert!(matches!(&cor[4], BaseCell::Bool { value: true }), "{cor:?}");
+
+        let fresh = &by_path("Fresh.md").cells;
+        assert!(matches!(&fresh[1], BaseCell::Text { value } if value.is_empty()), "{fresh:?}");
+        assert!(matches!(&fresh[4], BaseCell::Bool { value: false }), "{fresh:?}");
+
+        let thm = &by_path("Theorem.md").cells;
+        assert!(matches!(&thm[1], BaseCell::Text { value } if value == "Upstream stale"), "{thm:?}");
+        assert!(matches!(&thm[4], BaseCell::Bool { value: true }), "{thm:?}");
+
+        let flagged: Vec<&str> = r.views[1].rows.iter().map(|row| row.path.as_str()).collect();
+        assert_eq!(flagged.len(), 2);
+        assert!(flagged.contains(&"Corollary.md") && flagged.contains(&"Theorem.md"));
     }
 }

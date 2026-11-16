@@ -70,14 +70,146 @@ pub fn companion_properties(key: &str, m: &Mapping) -> Mapping {
     out
 }
 
-/// Adds `text` at the end of the entry's note unless it is there already (a note sent from the browser).
+/// Adds `text` above any trailing `pdf-marks` fence unless it is already in the note.
 pub fn append_note(dir: &Path, text: &str) -> Result<(), String> {
     let path = dir.join(note_file(&key_of(dir)));
     let old = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    if old.contains(text.trim()) {
+    let trimmed = text.trim();
+    if trimmed.is_empty() || old.contains(trimmed) {
         return Ok(());
     }
-    kandinsky_plugin::write_file(&path, format!("{}\n\n{}\n", old.trim_end(), text.trim()).as_bytes()).map_err(|e| e.to_string())
+    let (outside, marks) = split_pdf_marks(&old);
+    let updated = attach_pdf_marks(&format!("{}\n\n{trimmed}\n", outside.trim_end()), &marks);
+    kandinsky_plugin::write_file(&path, updated.as_bytes()).map_err(|e| e.to_string())
+}
+
+/// Inserts or updates an idempotent `<!-- zotero:note KEY -->` block above any trailing `pdf-marks` fence.
+pub fn upsert_zotero_note(dir: &Path, zot_key: &str, md: &str) -> Result<(), String> {
+    let md = md.trim();
+    if md.is_empty() {
+        return Ok(());
+    }
+    let path = dir.join(note_file(&key_of(dir)));
+    let old = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let (mut outside, marks) = split_pdf_marks(&old);
+    let open = format!("<!-- zotero:note {zot_key} -->");
+    let close = "<!-- /zotero:note -->";
+    let block = format!("{open}\n{md}\n{close}");
+    if let Some(s) = outside.find(&open) {
+        if let Some(rel_end) = outside[s..].find(close) {
+            let end = s + rel_end + close.len();
+            outside = format!("{}{block}{}", &outside[..s], &outside[end..]);
+        } else {
+            outside = format!("{}\n\n{block}\n", outside.trim_end());
+        }
+    } else {
+        outside = format!("{}\n\n{block}\n", outside.trim_end());
+    }
+    let updated = attach_pdf_marks(&outside, &marks);
+    if updated != old {
+        kandinsky_plugin::write_file(&path, updated.as_bytes()).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Splits a note into `(note_without_pdf_marks_fences, mark_lines)`.
+pub fn split_pdf_marks(note: &str) -> (String, Vec<String>) {
+    let mut outside = String::new();
+    let mut marks = Vec::new();
+    let mut in_marks = false;
+    for line in note.split_inclusive('\n') {
+        let trimmed = line.trim_end_matches(['\r', '\n']);
+        if !in_marks {
+            if trimmed == "```pdf-marks" || trimmed.starts_with("```pdf-marks ") {
+                in_marks = true;
+            } else {
+                outside.push_str(line);
+            }
+        } else if trimmed == "```" {
+            in_marks = false;
+        } else if !trimmed.trim().is_empty() {
+            marks.push(trimmed.trim().to_string());
+        }
+    }
+    (outside, marks)
+}
+
+fn mark_meta(line: &str) -> (String, u32, u64) {
+    let mut p = line.splitn(4, ' ');
+    let id = p.next().unwrap_or("").to_string();
+    let _kind = p.next();
+    let page = p.next().and_then(|s| s.strip_prefix('p')).and_then(|n| n.parse::<u32>().ok()).unwrap_or(1);
+    let ver = p
+        .next()
+        .and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok())
+        .and_then(|v| v["version"].as_u64())
+        .unwrap_or(0);
+    (id, page, ver)
+}
+
+pub fn attach_pdf_marks(outside: &str, lines: &[String]) -> String {
+    if lines.is_empty() {
+        return outside.to_string();
+    }
+    format!("{}\n\n```pdf-marks\n{}\n```\n", outside.trim_end(), lines.join("\n"))
+}
+
+/// Merges `new_lines` into `note`'s trailing `pdf-marks` fence by mark ID (higher `version` wins, idempotent).
+pub fn merge_pdf_marks(note: &str, new_lines: &[String]) -> String {
+    if new_lines.is_empty() {
+        return note.to_string();
+    }
+    let (outside, existing) = split_pdf_marks(note);
+    let mut by_id: std::collections::BTreeMap<String, (u32, u64, String)> = std::collections::BTreeMap::new();
+    for line in existing.iter().chain(new_lines.iter()) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let (id, page, ver) = mark_meta(trimmed);
+        if id.is_empty() {
+            continue;
+        }
+        match by_id.get(&id) {
+            Some((_, old_ver, _)) if *old_ver > ver => {}
+            _ => {
+                by_id.insert(id, (page, ver, trimmed.to_string()));
+            }
+        }
+    }
+    let mut merged: Vec<(u32, String, String)> = by_id.into_iter().map(|(id, (p, _, l))| (p, id, l)).collect();
+    merged.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
+    let out_lines: Vec<String> = merged.into_iter().map(|(_, _, l)| l).collect();
+    attach_pdf_marks(&outside, &out_lines)
+}
+
+/// Parses one `<id> <kind> p<page> <json>` line into structured JSON for `paper_annotations`.
+pub fn parse_mark_line(line: &str) -> Option<serde_json::Value> {
+    let mut parts = line.trim().splitn(4, ' ');
+    let (id, kind, page) = (parts.next()?, parts.next()?, parts.next()?.strip_prefix('p')?.parse::<u32>().ok()?);
+    let mut obj = match parts.next() {
+        Some(rest) => serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(rest).ok()?,
+        None => serde_json::Map::new(),
+    };
+    obj.insert("id".into(), id.into());
+    obj.insert("kind".into(), kind.into());
+    obj.insert("page".into(), page.into());
+    Some(serde_json::Value::Object(obj))
+}
+
+/// Extracts user reading prose from a note (excluding frontmatter, `library.paper` view fence, default headings, and `pdf-marks`).
+pub fn extract_user_prose(note: &str) -> String {
+    let (_, body) = kandinsky_text::frontmatter::split(note);
+    let (without_marks, _) = split_pdf_marks(body);
+    let without_view = without_marks.replace(BLOCK, "").replace("```view\r\ntype: library.paper\r\n```", "");
+    let mut lines: Vec<&str> = without_view.lines().collect();
+    while lines.first().is_some_and(|l| l.trim().is_empty() || l.starts_with("# ")) {
+        lines.remove(0);
+    }
+    while lines.first().is_some_and(|l| l.trim().is_empty() || l.trim() == "## Notes") {
+        lines.remove(0);
+    }
+    lines.join("\n").trim().to_string()
 }
 
 /// (Zotero's name, the note's): the note's `type` is its kind of note (literature), `date` when it was made, `tags`

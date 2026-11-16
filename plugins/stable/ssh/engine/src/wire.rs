@@ -4,7 +4,7 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
@@ -117,8 +117,7 @@ impl Drop for Channel {
 
 impl Channel {
     fn open(argv: &[String]) -> Result<Channel, String> {
-        let mut child = Command::new(&argv[0])
-            .args(&argv[1..])
+        let mut child = crate::proc::command(argv)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

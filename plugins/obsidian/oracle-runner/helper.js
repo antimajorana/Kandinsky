@@ -1,6 +1,6 @@
 // Oracle Physics Runner helper (QuickJS):
-// Executes Jupyter (.ipynb) cells in a stateful Python kernel, WLJS/Wolfram (.wln/.wls) via wl.py,
-// opens .wln notebooks in WLJS, runs deterministic c_lint checks, and files accepted results via oracle_wiki.py.
+// Executes Jupyter (.ipynb) cells in a stateful Python kernel,
+// runs deterministic c_lint checks, and files accepted results via oracle_wiki.py.
 
 const NODE_ORACLE_ENV = `
 const fs = require("node:fs");
@@ -12,7 +12,6 @@ const PY_BIN = process.platform === "win32" ? path.join("Scripts", "python.exe")
 const ORACLE_PY = process.env.ORACLE_PYTHON || path.join(ORACLE_RESEARCH_DIR, "env", PY_BIN);
 const C_LINT_PY = path.join(ORACLE_RESEARCH_DIR, "framework", "tools", "c_lint.py");
 const ORACLE_WIKI_PY = path.join(ORACLE_RESEARCH_DIR, "framework", "tools", "oracle_wiki.py");
-const WL_PY = path.join(ORACLE_RESEARCH_DIR, "framework", "tools", "wl.py");
 const VENV_JUPYTER = path.join(ORACLE_HOME, ".venvs", "jupyter", PY_BIN);
 const VENV_JUPYTER314 = path.join(ORACLE_HOME, ".venvs", "jupyter314", PY_BIN);
 `.trim();
@@ -220,135 +219,6 @@ async function runJupyterCell(params = {}) {
     ? params.cells
     : [{ index: Number(params.index || 0), source: String(params.source || "") }];
   return runJupyterNotebook({ ...params, cells });
-}
-
-const WOLFRAM_NODE_SCRIPT = `
-${NODE_ORACLE_ENV}
-const { spawnSync } = require("node:child_process");
-
-const req = JSON.parse(fs.readFileSync(0, "utf8") || "{}");
-const vaultRoot = process.cwd();
-const wlPy = WL_PY;
-const oraclePy = ORACLE_PY;
-
-let targetWls = "";
-let cleanupTmp = "";
-
-try {
-  if (req.wlsPath) {
-    targetWls = path.resolve(vaultRoot, String(req.wlsPath));
-  } else {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "oracle-wln-"));
-    cleanupTmp = tmpDir;
-    targetWls = path.join(tmpDir, "notebook_check.wls");
-    const headerLines = [];
-    if (req.path) {
-      const nbDir = path.dirname(path.resolve(vaultRoot, String(req.path))).replace(/\\\\/g, "/");
-      if (fs.existsSync(nbDir)) {
-        headerLines.push('wlnSourceDir$ = "' + nbDir.replace(/"/g, '\\\\"') + '";');
-        headerLines.push('Quiet[Check[SetDirectory[wlnSourceDir$], Null]];');
-      }
-    }
-    headerLines.push(String(req.code || ""));
-    fs.writeFileSync(targetWls, headerLines.join("\\n") + "\\n", "utf8");
-  }
-
-  const t0 = Date.now();
-  const usePyLauncher = process.platform === "win32";
-  const exe = usePyLauncher ? "py" : (fs.existsSync(oraclePy) ? oraclePy : "python3");
-  const args = usePyLauncher
-    ? ["-3", "-X", "utf8", wlPy, ...(cleanupTmp ? ["--no-out"] : []), targetWls]
-    : ["-X", "utf8", wlPy, ...(cleanupTmp ? ["--no-out"] : []), targetWls];
-
-  const run = spawnSync(exe, args, {
-    cwd: vaultRoot,
-    encoding: "utf8",
-    maxBuffer: 16 * 1024 * 1024,
-    windowsHide: true,
-  });
-  const ms = Date.now() - t0;
-  const exitCode = typeof run.status === "number" ? run.status : 1;
-  process.stdout.write(JSON.stringify({
-    ok: exitCode === 0,
-    stdout: String(run.stdout || ""),
-    stderr: String(run.stderr || (run.error ? String(run.error) : "")),
-    exitCode,
-    ms,
-  }));
-} finally {
-  if (cleanupTmp) {
-    try { fs.rmSync(cleanupTmp, { recursive: true, force: true }); } catch {}
-  }
-}
-`;
-
-async function runWolfram(params = {}) {
-  const timeout = Math.min(600, Math.max(30, Number(params.timeout || 320)));
-  const r = await kandinsky.exec(
-    "node",
-    ["-e", WOLFRAM_NODE_SCRIPT],
-    {
-      stdin: JSON.stringify({
-        path: params.path || "",
-        code: params.code || "",
-        wlsPath: params.wlsPath || "",
-      }),
-      timeout,
-    },
-  );
-  if (r.stdout) {
-    try {
-      return JSON.parse(r.stdout.trim());
-    } catch {}
-  }
-  return {
-    ok: false,
-    stdout: String(r.stdout || ""),
-    stderr: String(r.stderr || (r.timedOut ? "Wolfram run timed out." : "Wolfram run failed.")),
-    exitCode: typeof r.status === "number" ? r.status : 1,
-    ms: 0,
-  };
-}
-
-const OPEN_WLJS_NODE_SCRIPT = `
-const fs = require("node:fs");
-const path = require("node:path");
-const { spawn } = require("node:child_process");
-
-const req = JSON.parse(fs.readFileSync(0, "utf8") || "{}");
-const absPath = path.resolve(process.cwd(), String(req.path || ""));
-if (!req.path || !fs.existsSync(absPath)) {
-  process.stdout.write(JSON.stringify({ ok: false, error: "Notebook file not found: " + absPath }));
-  process.exit(0);
-}
-
-if (process.platform === "win32") {
-  const child = spawn("cmd", ["/c", "start", "", absPath], {
-    detached: true,
-    stdio: "ignore",
-    windowsHide: true,
-  });
-  child.unref();
-} else {
-  const opener = process.platform === "darwin" ? "open" : "xdg-open";
-  const child = spawn(opener, [absPath], { detached: true, stdio: "ignore" });
-  child.unref();
-}
-process.stdout.write(JSON.stringify({ ok: true, path: absPath }));
-`;
-
-async function openInWljs(params = {}) {
-  const r = await kandinsky.exec(
-    "node",
-    ["-e", OPEN_WLJS_NODE_SCRIPT],
-    { stdin: JSON.stringify({ path: params.path || "" }), timeout: 10 },
-  );
-  if (r.stdout) {
-    try {
-      return JSON.parse(r.stdout.trim());
-    } catch {}
-  }
-  return { ok: false, error: String(r.stderr || "Could not launch WLJS Notebook.").trim() };
 }
 
 const CLINT_NODE_SCRIPT = `
@@ -582,4 +452,4 @@ async function fileToWiki(params = {}) {
   };
 }
 
-kandinsky.methods({ runJupyterCell, runJupyterNotebook, runWolfram, openInWljs, runCLint, fileToWiki });
+kandinsky.methods({ runJupyterCell, runJupyterNotebook, runCLint, fileToWiki });

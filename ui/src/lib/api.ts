@@ -293,6 +293,16 @@ export const api = {
   propertySpec: () => request<import("./types").PropertySpecs>("GET", "/api/properties/spec"),
   /** The properties the vault's notes use, with their commonest values (the panel's completion). */
   knownProperties: () => request<import("./gen/KnownProperty").KnownProperty[]>("GET", "/api/properties/known"),
+  /** Vault-wide frontmatter schema & typed-link validation report (`properties_audit.rs`). */
+  propertiesAudit: (strict = false) =>
+    request<import("./gen/PropertiesAuditReport").PropertiesAuditReport>("GET", "/api/properties/audit", { query: strict ? { strict: "true" } : {} }),
+  /** Upstream staleness & convention/dependency health for one note (`upstream.rs`). */
+  noteUpstream: (path: RelPath) => request<import("./gen/UpstreamHealth").UpstreamHealth>("GET", "/api/note/upstream", { query: { path } }),
+  /** Export or import a shared `.kandinsky-marks` sidecar for a PDF inside `external_pdf_roots`. */
+  pdfSidecar: (pdf: string, action: "export" | "import") =>
+    request<{ sidecar_path: string; marks: number; note: string | null }>("POST", "/api/pdf-marks/sidecar", { query: { pdf, action } }),
+  /** Rewrite `[[from_key]]` and `\cite{from_key}` references across the vault after merging duplicate papers. */
+  refsRelink: (from_key: string, to_key: string) => request<import("./gen/Moved").Moved>("POST", "/api/refs/relink", { body: { from_key, to_key } }),
   home: () => request<import("./gen/HomeDoc").HomeDoc>("GET", "/api/home"),
   /** The usage journal (core usage.rs): fire-and-forget, never in the way of what the user did. */
   usage: (e: import("./gen/UsageEvent").UsageEvent) => { void request<void>("POST", "/api/usage", { body: e }).catch(() => {}); },

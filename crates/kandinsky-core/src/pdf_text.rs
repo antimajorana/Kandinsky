@@ -13,6 +13,24 @@ use std::time::{Duration, Instant};
 
 pub const CACHE: &str = ".kandinsky/cache/pdftext";
 
+fn cache_rel_for_pdf(rel: &str) -> String {
+    if !rel.starts_with("../") && !rel.contains("/../") && !Path::new(rel).is_absolute() {
+        format!("{rel}.txt")
+    } else {
+        use base64::Engine as _;
+        format!("_ext/{}.txt", base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(rel.as_bytes()))
+    }
+}
+
+fn pdf_rel_from_cache(sub: &str) -> Option<String> {
+    if let Some(b64) = sub.strip_prefix("_ext/").and_then(|s| s.strip_suffix(".txt")) {
+        use base64::Engine as _;
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(b64).ok().and_then(|b| String::from_utf8(b).ok())
+    } else {
+        sub.strip_suffix(".txt").map(str::to_string)
+    }
+}
+
 /// Extract text for every PDF whose cache is missing or stale; returns how many were (re)extracted.
 pub fn refresh(root: &Path, cfg: &Config) -> usize {
     let mut n = 0;
@@ -20,8 +38,9 @@ pub fn refresh(root: &Path, cfg: &Config) -> usize {
     let dated = crate::state_dir::join(root, CACHE).join(".dated");
     let adopt = !dated.exists();
     let mut seen = std::collections::HashSet::new();
-    for (abs, rel) in walk::files(root, cfg).filter(|(_, rel)| rel.to_lowercase().ends_with(".pdf")) {
-        let out = crate::state_dir::join(root, CACHE).join(format!("{rel}.txt"));
+    let ext = crate::external_roots::linked_external_pdfs(root, cfg);
+    for (abs, rel) in walk::files(root, cfg).filter(|(_, rel)| rel.to_lowercase().ends_with(".pdf")).chain(ext) {
+        let out = crate::state_dir::join(root, CACHE).join(cache_rel_for_pdf(&rel));
         seen.insert(out.clone());
         // the text carries the PDF's time: a PDF synced in with an older time than the text's is still read again
         let Ok(changed) = std::fs::metadata(&abs).and_then(|m| m.modified()) else { continue };
@@ -147,7 +166,8 @@ pub fn hits(cache_hits: Vec<LineHit>, root: &Path) -> Vec<LineHit> {
     cache_hits
         .into_iter()
         .filter_map(|h| {
-            let pdf = crate::state_dir::current_rel(&h.path).strip_prefix(&prefix)?.strip_suffix(".txt")?.to_string();
+            let sub = crate::state_dir::current_rel(&h.path);
+            let pdf = pdf_rel_from_cache(sub.strip_prefix(&prefix)?)?;
             // page of each line: 1 + form feeds before it
             let starts = pages.entry(h.path.clone()).or_insert_with(|| {
                 let text = std::fs::read_to_string(root.join(&h.path)).unwrap_or_default();

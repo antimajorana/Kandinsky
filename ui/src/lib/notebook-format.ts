@@ -1,6 +1,6 @@
 // Parsers and serializers for computational physics notebooks:
 // 1. Jupyter (.ipynb, nbformat v4) with stream, display_data / execute_result (PNG, SVG, LaTeX, Markdown, plain), and error outputs
-// 2. Wolfram WLJS (.wln) supporting both `%---...---%Notebook%---...---%` banner format and JSON `.wln` format
+// 2. Legacy .wln read-only parsing supporting both `%---...---%Notebook%---...---%` banner format and JSON `.wln` format
 import type { JupyterCellRunResult } from "./oracle-runner";
 
 export type NotebookFormat = "ipynb" | "wln";
@@ -378,28 +378,4 @@ export function applyJupyterResultToCell(cell: NotebookCell, res: JupyterCellRun
     outputs,
     runtimeMs: res.ms,
   };
-}
-
-/** Build a Wolfram verification runner script from `.wln` code cells so per-cell evaluations come back structured. */
-export function buildWolframNotebookRunner(cells: NotebookCell[], upToCellId?: string): string {
-  const lines: string[] = ["wlnAllOk$ = True;"];
-  for (const cell of cells) {
-    if (cell.kind !== "code") continue;
-    const src = cell.source.trim();
-    if (src) {
-      if (src.endsWith(";")) {
-        lines.push(src);
-      } else {
-        const safeId = cell.id.replace(/[^A-Za-z0-9]/g, "");
-        lines.push(`wlnCell$${safeId} = (${src});`);
-        lines.push(
-          `Print["__WLN_CELL__\\t${cell.id}\\t", ToString[wlnCell$${safeId}, InputForm]];`,
-        );
-        lines.push(`If[wlnCell$${safeId} === False, wlnAllOk$ = False];`);
-      }
-    }
-    if (upToCellId && cell.id === upToCellId) break;
-  }
-  lines.push('If[!wlnAllOk$, Exit[1]];');
-  return `${lines.join("\n")}\n`;
 }

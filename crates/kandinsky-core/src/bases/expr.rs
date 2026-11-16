@@ -37,6 +37,14 @@ pub trait Context {
         let _ = (relation, target, summary);
         Val::Null
     }
+    /// Current note's upstream health label (`"Upstream stale"`, `"Upstream changed"`, or `""`).
+    fn upstream_status(&self) -> Val {
+        Val::Str(String::new())
+    }
+    /// Whether the current note's upstream health is non-OK (`Stale` or `Changed`).
+    fn is_upstream_stale(&self) -> Val {
+        Val::Bool(false)
+    }
 }
 
 /// The abstract syntax tree. An expression is a *tree* of these nodes — e.g.
@@ -543,6 +551,8 @@ fn eval_call(callee: &Expr, args: &[Expr], ctx: &dyn Context, scope: Option<&Val
                 let sum_key = args.get(2).map(|e| expr_key_arg(e, ctx, scope)).filter(|s| !s.is_empty());
                 return ctx.rollup(&rel_key, &target_key, sum_key.as_deref());
             }
+            "upstreamStatus" | "upstream_status" => return ctx.upstream_status(),
+            "isUpstreamStale" | "is_upstream_stale" => return ctx.is_upstream_stale(),
             _ => {}
         }
     }
@@ -576,6 +586,8 @@ fn eval_call(callee: &Expr, args: &[Expr], ctx: &dyn Context, scope: Option<&Val
                     let want = want.rsplit('/').next().unwrap_or(&want).trim_end_matches(".md").to_string();
                     return Val::Bool(names("links").contains(&want));
                 }
+                "upstreamStatus" | "upstream_status" => return ctx.upstream_status(),
+                "isUpstreamStale" | "is_upstream_stale" => return ctx.is_upstream_stale(),
                 _ => {}
             }
         }

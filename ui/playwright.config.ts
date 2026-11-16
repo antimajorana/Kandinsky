@@ -40,7 +40,7 @@ const files: Record<string, string> = {
   ".kandinsky/plugins/claude/plugin.toml": `title = "Claude"\nicon = "claude"\n\n[[agent]]\nid = "claude"\ntitle = "Claude"\nicon = "claude"\ncommand = "cat"\nsend_selection = "@{path}#L{from}-{to} "\n`,
   // the references library is the catalog-papers plugin's: its manifest, its helper the debug build (webServer builds it)
   ".kandinsky/plugins/catalog-papers/plugin.toml": readFileSync(fileURLToPath(new URL("../plugins/beta/catalog-papers/plugin.toml", import.meta.url)), "utf8")
-    .replace(/^run = .*$/m, `run = "${fileURLToPath(new URL("../target/debug/papers", import.meta.url))}"`),
+    .replace(/^run = .*$/m, `run = "${fileURLToPath(new URL("../target/debug/papers", import.meta.url)).replaceAll("\\", "/")}"`),
   // the Libraries page is the Catalog plugin's pane: its page, without its helper (tests/fixtures/catalog.ts)
   ...catalogFixture(),
   // the snippets are a plugin's: its build, as a vault holds it
@@ -48,7 +48,7 @@ const files: Record<string, string> = {
   ".kandinsky/plugins/snippets/main.js": readFileSync(fileURLToPath(new URL("../plugins/beta/snippets/main.js", import.meta.url)), "utf8"),
   ".kandinsky/plugins/snippets/words.txt": readFileSync(fileURLToPath(new URL("../plugins/beta/snippets/words.txt", import.meta.url)), "utf8"),
   ".kandinsky/plugins/snippets/starter.js": readFileSync(fileURLToPath(new URL("../plugins/beta/snippets/starter.js", import.meta.url)), "utf8"),
-  ".kandinsky/config.toml": `log_dir = "log"\nfocus = "FOCUS.md"\nvim = true\n\n[ui]\nrestore_layout = false\n\n[latex]\nsnippets_file = "snippets/snips.js"\nvariables_file = "snippets/vars.js"\n\n[terminal]\nrenderer = "text"\n\n[lsp]\npython = "python3 ${FAKE_LS}"\nrust = "off"\nlatex = "off"\nc = "off"\n`,
+  ".kandinsky/config.toml": `log_dir = "log"\nfocus = "FOCUS.md"\nvim = true\n\n[ui]\nrestore_layout = false\n\n[latex]\nsnippets_file = "snippets/snips.js"\nvariables_file = "snippets/vars.js"\n\n[terminal]\nrenderer = "text"\n\n[lsp]\npython = "python3 ${FAKE_LS.replaceAll("\\", "/")}"\nrust = "off"\nlatex = "off"\nc = "off"\n`,
   "data/sweep.tsv": "U\tE_kin\tZ\n3.0\t-1.25\t0.81\n5.5\t-0.90\t0.42\n4.0\t-1.10\t0.66\n",
   "themes/test-color-theme.json": '{\n  // VS Code themes are JSONC\n  "name": "Test Zed", "type": "dark",\n  "colors": { "editor.background": "#050505", "focusBorder": "#7de486", },\n  "tokenColors": [ { "scope": "keyword", "settings": { "foreground": "#c678dd" } }, { "scope": ["variable"], "settings": { "foreground": "#4cc2fb", "fontStyle": "bold" } } ]\n}\n',
   "snippets/snips.js": '[\n  { trigger: "mk", replacement: "$$0$", options: "tA" },\n  { trigger: "//", replacement: "\\\\frac{$0}{$1}$2", options: "mA" },\n  { trigger: "([A-Za-z])(\\\\d)", replacement: "[[0]]_{[[1]]}", options: "rmA" },\n  { trigger: "@${GREEK}", replacement: "\\\\[[0]]", options: "rmA" },\n  { trigger: "U", replacement: "\\\\underbrace{${VISUAL}}_{$0}", options: "mA" },\n  { trigger: "beg", replacement: "\\\\begin{$0}", options: "mA" },\n  { trigger: "sumk", replacement: "\\\\sum_{k=$0}^{$1}$2", options: "mA" },\n  { trigger: "sumq", replacement: "\\\\sum_{q}$0", options: "mA" },\n  { trigger: "kV", replacement: "\\\\text{kV}", options: "mA" },\n  { trigger: "VA", replacement: "\\\\text{VA}", options: "mA" },\n  { trigger: "kVA", replacement: "\\\\text{kVA}", options: "mA" },\n'
@@ -129,6 +129,7 @@ export default defineConfig({
   timeout: 30_000,
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
+    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
     extraHTTPHeaders: { authorization: `Bearer ${KEY}` },
     storageState: { cookies: [{ name: "kandinsky_local", value: KEY, domain: "127.0.0.1", path: "/", expires: -1, httpOnly: true, secure: false, sameSite: "Strict" }], origins: [] },
     viewport: { width: 1500, height: 900 },

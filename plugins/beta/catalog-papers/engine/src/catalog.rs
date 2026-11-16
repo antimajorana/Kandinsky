@@ -2,40 +2,53 @@
 //! OpenAlex (any DOI) or arXiv itself (an arXiv id), in the catalog's terms — and `add` — the paper into the library
 //! (refs.rs `add`: metadata, citekey, note, open-access PDF, refs.bib), the PDF sources other plugins contribute asked
 //! when the built-in ones found none (docs/guides/PAPERS-PDF-SOURCES.md), answering the entry's note.
+use crate::entry;
 use crate::net::Net;
-use crate::refs::{Lib, Res};
-use crate::remote::{self, enc, last_first, openalex_doi, ArxivRecord};
+use crate::refs::{Lib, PaperAdded, Res};
+use crate::remote::{self, enc, last_first, openalex_abstract, openalex_doi, ArxivRecord};
+use kandinsky_text::paths::safe_join;
 use serde_json::{json, Map, Value};
+use serde_yaml::{Mapping, Value as Yaml};
 
 /// The identifiers the catalog recognised (`params.ids`).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Ids {
     pub doi: Option<String>,
     pub arxiv: Option<String>,
+    pub isbn: Option<String>,
     /// A link straight to a PDF (a captured `….pdf`): downloaded and read for its identifiers.
     pub pdf: Option<String>,
+}
+
+fn isbn_from_param(raw: &str) -> Option<String> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return None;
+    }
+    if t.to_ascii_lowercase().starts_with("isbn") {
+        remote::normalize_isbn(t).or_else(|| remote::parse_isbn(t))
+    } else if !t.contains("://") {
+        remote::normalize_isbn(t)
+    } else {
+        None
+    }
 }
 
 impl Ids {
     pub fn of(params: &Value) -> Ids {
         let one = |k: &str| params["ids"][k].as_str().map(str::trim).filter(|v| !v.is_empty()).map(String::from);
-        Ids { doi: one("doi"), arxiv: one("arxiv"), pdf: one("pdf") }
+        let isbn = one("isbn")
+            .or_else(|| params["isbn"].as_str().map(str::trim).filter(|v| !v.is_empty()).map(String::from))
+            .and_then(|s| remote::normalize_isbn(&s).or_else(|| remote::parse_isbn(&s)))
+            .or_else(|| params["url"].as_str().and_then(isbn_from_param))
+            .or_else(|| params["id"].as_str().and_then(isbn_from_param));
+        Ids { doi: one("doi"), arxiv: one("arxiv"), isbn, pdf: one("pdf") }
     }
 
     /// The DOI to ask OpenAlex about: the paper's own, else its arXiv DOI.
     pub fn doi_for_openalex(&self) -> Option<String> {
         self.doi.as_deref().map(str::to_lowercase).or_else(|| self.arxiv.as_ref().map(|a| format!("10.48550/arxiv.{}", a.to_lowercase())))
     }
-}
-
-/// OpenAlex's abstract, kept as word → places.
-fn abstract_of(inverted: &Value) -> Option<String> {
-    let mut at: Vec<(u64, &str)> = Vec::new();
-    for (word, places) in inverted.as_object()? {
-        at.extend(places.as_array().into_iter().flatten().filter_map(Value::as_u64).map(|i| (i, word.as_str())));
-    }
-    at.sort();
-    (!at.is_empty()).then(|| at.iter().map(|(_, w)| *w).collect::<Vec<_>>().join(" "))
 }
 
 /// `{ids, fields}` without the empty fields.
@@ -57,6 +70,13 @@ pub fn from_openalex(w: &Value) -> Value {
         None if !doi.is_empty() => drop(ids.insert("doi".into(), doi.clone().into())),
         None => {}
     }
+    if let Some(isbn) = w["ids"]["isbn"]
+        .as_str()
+        .and_then(remote::normalize_isbn)
+        .or_else(|| w["ids"]["isbn"].as_array().into_iter().flatten().filter_map(Value::as_str).find_map(remote::normalize_isbn))
+    {
+        ids.insert("isbn".into(), isbn.into());
+    }
     for loc in w["locations"].as_array().into_iter().flatten() {
         let page = loc["landing_page_url"].as_str().unwrap_or_default();
         if let Some(a) = page.split_once("arxiv.org/").and_then(|(_, r)| remote::parse_arxiv(&format!("arxiv:{}", r.trim_start_matches("abs/").trim_start_matches("pdf/")))) {
@@ -72,9 +92,80 @@ pub fn from_openalex(w: &Value) -> Value {
             ("authors", authors.into()),
             ("year", w["publication_year"].clone()),
             ("journal", w["primary_location"]["source"]["display_name"].clone()),
-            ("abstract", abstract_of(&w["abstract_inverted_index"]).into()),
+            ("abstract", openalex_abstract(&w["abstract_inverted_index"]).into()),
             ("openalex", w["id"].clone()),
             ("pdf", pdf.into()),
+        ],
+    )
+}
+
+fn yaml_str(m: &Mapping, k: &str) -> Option<String> {
+    match m.get(k)? {
+        Yaml::String(s) => Some(s.trim().to_string()).filter(|x| !x.is_empty()),
+        Yaml::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+/// Converts a book metadata YAML mapping (from [`remote::lookup_book_metadata`]) into the catalog's `{ ids, fields }`.
+pub fn from_book_mapping(m: &Mapping, fallback_isbn: Option<&str>) -> Value {
+    let get_s = |k: &str| yaml_str(m, k);
+    let get_seq = |k: &str| -> Vec<Value> {
+        m.get(k)
+            .and_then(Yaml::as_sequence)
+            .into_iter()
+            .flatten()
+            .filter_map(Yaml::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(Value::from)
+            .collect()
+    };
+    let mut ids = Map::new();
+    let isbn = get_s("ISBN").or_else(|| get_s("isbn")).or_else(|| fallback_isbn.map(String::from)).and_then(|s| remote::normalize_isbn(&s).or(Some(s)));
+    if let Some(ref i) = isbn {
+        ids.insert("isbn".into(), i.clone().into());
+    }
+    let doi = get_s("DOI").or_else(|| get_s("doi")).map(|d| d.to_lowercase());
+    if let Some(ref d) = doi {
+        ids.insert("doi".into(), d.clone().into());
+    }
+    let authors = {
+        let a = get_seq("author");
+        if a.is_empty() { get_seq("authors") } else { a }
+    };
+    let editors = {
+        let e = get_seq("editor");
+        if e.is_empty() { get_seq("editors") } else { e }
+    };
+    let year_str = get_s("year").or_else(|| get_s("date").and_then(|d| crate::refs::year_of(&d)));
+    let year_val = year_str
+        .as_deref()
+        .and_then(|y| y.parse::<u64>().ok())
+        .map(Value::from)
+        .or_else(|| year_str.map(Value::from))
+        .unwrap_or(Value::Null);
+    let pages_val = get_s("numPages")
+        .and_then(|p| p.parse::<u64>().ok())
+        .map(Value::from)
+        .unwrap_or(Value::Null);
+    found(
+        ids,
+        vec![
+            ("title", get_s("title").into()),
+            ("authors", authors.into()),
+            ("editors", editors.into()),
+            ("year", year_val),
+            ("publisher", get_s("publisher").into()),
+            ("isbn", isbn.into()),
+            ("edition", get_s("edition").into()),
+            ("series", get_s("series").into()),
+            ("volume", get_s("volume").into()),
+            ("pages", pages_val),
+            ("abstract", get_s("abstractNote").or_else(|| get_s("abstract")).into()),
+            ("url", get_s("url").into()),
+            ("kind", get_s("kind").into()),
+            ("bibtexType", get_s("bibtexType").into()),
         ],
     )
 }
@@ -110,26 +201,66 @@ fn skipped(why: String) -> Value {
 
 /// The `lookup` tool. arXiv ids are asked of arXiv itself (OpenAlex sometimes merges a preprint with another work:
 /// 1706.03762 was once answered with a 2025 record); DOIs of OpenAlex, whose answer about another work is
-/// refused. `key_of(title, year, authors)`: the citekey the library would give it, so a preview names the real file.
+/// refused; ISBNs (and book hints) via Crossref, OpenAlex, and OpenLibrary. `key_of(title, year, authors)`:
+/// the citekey the library would give it, so a preview names the real file.
 pub fn lookup(net: &dyn Net, params: &Value, email: &str, key_of: KeyOf) -> Value {
     let ids = Ids::of(params);
-    let mut got = match (&ids.arxiv, &ids.doi) {
-        (Some(a), None) => match remote::arxiv_record(net, a) {
-            Ok(r) => from_arxiv(&r, a),
-            Err(_) => return skipped(format!("arXiv does not know {a}")),
-        },
-        _ => {
-            let Some(doi) = ids.doi_for_openalex() else { return skipped("no DOI or arXiv id".into()) };
-            let mailto = if email.is_empty() { String::new() } else { format!("?mailto={}", enc(email, "")) };
-            let w = match net.json(&format!("https://api.openalex.org/works/doi:{}{mailto}", enc(&doi, "/"))) {
-                Ok(w) if w["id"].is_string() => w,
-                _ => return skipped(format!("OpenAlex does not know {doi}")),
-            };
-            let answered = openalex_doi(&w);
-            if !answered.is_empty() && answered != doi {
-                return skipped(format!("OpenAlex answered {answered} for {doi}; not used"));
+    let hint_title = params["hints"]["title"]
+        .as_str()
+        .or_else(|| params["title"].as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let hint_author = params["hints"]["author"]
+        .as_str()
+        .or_else(|| params["hints"]["authors"].as_array().and_then(|a| a.first()).and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let is_book_kind = matches!(params["kind"].as_str(), Some("book" | "science_book"));
+
+    let openalex_by_doi = |doi: &str| -> Value {
+        let mailto = if email.is_empty() { String::new() } else { format!("?mailto={}", enc(email, "")) };
+        let w = match net.json(&format!("https://api.openalex.org/works/doi:{}{mailto}", enc(doi, "/"))) {
+            Ok(w) if w["id"].is_string() => w,
+            _ => return skipped(format!("OpenAlex does not know {doi}")),
+        };
+        let answered = openalex_doi(&w);
+        if !answered.is_empty() && answered != doi {
+            return skipped(format!("OpenAlex answered {answered} for {doi}; not used"));
+        }
+        from_openalex(&w)
+    };
+
+    let mut got = if let Some(ref isbn) = ids.isbn {
+        if let Some((m, _)) = remote::lookup_book_metadata(net, Some(isbn), ids.doi.as_deref(), hint_title, hint_author, email) {
+            from_book_mapping(&m, Some(isbn))
+        } else if let Some(doi) = ids.doi_for_openalex() {
+            openalex_by_doi(&doi)
+        } else {
+            return skipped(format!("no book found for ISBN {isbn}"));
+        }
+    } else {
+        match (&ids.arxiv, &ids.doi) {
+            (Some(a), None) => match remote::arxiv_record(net, a) {
+                Ok(r) => from_arxiv(&r, a),
+                Err(_) => return skipped(format!("arXiv does not know {a}")),
+            },
+            _ if is_book_kind && ids.doi.is_some() => {
+                if let Some((m, _)) = remote::lookup_book_metadata(net, None, ids.doi.as_deref(), hint_title, hint_author, email) {
+                    from_book_mapping(&m, None)
+                } else {
+                    openalex_by_doi(&ids.doi_for_openalex().unwrap_or_default())
+                }
             }
-            from_openalex(&w)
+            _ => match ids.doi_for_openalex() {
+                Some(doi) => openalex_by_doi(&doi),
+                None if is_book_kind && hint_title.is_some() => {
+                    match remote::lookup_book_metadata(net, None, None, hint_title, hint_author, email) {
+                        Some((m, _)) => from_book_mapping(&m, None),
+                        None => return skipped("no book found".into()),
+                    }
+                }
+                None => return skipped("no DOI or arXiv id".into()),
+            },
         }
     };
     let f = &got["fields"];
@@ -220,6 +351,132 @@ pub fn find_pdf(ask: &dyn Fn(&Source, &Value) -> Res<Value>, attach: &dyn Fn(&st
     FoundPdf { pdf: false, from: None, tried }
 }
 
+fn find_existing_by_isbn(lib: &Lib, norm_isbn: &str) -> Option<crate::refs::Paper> {
+    lib.list().ok()?.into_iter().find(|p| {
+        safe_join(lib.root, &p.dir)
+            .ok()
+            .and_then(|d| entry::read(&d))
+            .and_then(|em| yaml_str(&em, "ISBN").or_else(|| yaml_str(&em, "isbn")))
+            .and_then(|raw| remote::normalize_isbn(&raw))
+            .as_deref()
+            == Some(norm_isbn)
+    })
+}
+
+fn mapping_from_catalog_fields(fields: &Map<String, Value>, isbn: &str) -> Option<Mapping> {
+    let title = fields.get("title").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty())?;
+    let mut m = Mapping::new();
+    m.insert("title".into(), title.into());
+    for (fk, mk) in [("authors", "author"), ("editors", "editor")] {
+        if let Some(arr) = fields.get(fk).and_then(Value::as_array) {
+            let seq: Vec<Yaml> = arr.iter().filter_map(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(Yaml::from).collect();
+            if !seq.is_empty() {
+                m.insert(mk.into(), Yaml::Sequence(seq));
+            }
+        }
+    }
+    if let Some(y) = fields.get("year").and_then(|v| v.as_u64().map(|n| n.to_string()).or_else(|| v.as_str().map(String::from))) {
+        m.insert("date".into(), y.into());
+    }
+    for (fk, mk) in [
+        ("publisher", "publisher"),
+        ("edition", "edition"),
+        ("series", "series"),
+        ("volume", "volume"),
+        ("url", "url"),
+        ("abstract", "abstractNote"),
+        ("bibtexType", "bibtexType"),
+    ] {
+        if let Some(s) = fields.get(fk).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()) {
+            m.insert(mk.into(), s.into());
+        }
+    }
+    m.insert("ISBN".into(), isbn.into());
+    Some(m)
+}
+
+fn bibtex_from_book_mapping(m: &Mapping, fallback_isbn: &str) -> Option<String> {
+    let title = yaml_str(m, "title")?;
+    let clean = |v: &str| v.replace(['{', '}'], "").split_whitespace().collect::<Vec<_>>().join(" ");
+    let bib_kind = match yaml_str(m, "bibtexType").as_deref() {
+        Some("incollection" | "inbook") => "incollection",
+        _ if yaml_str(m, "type").as_deref() == Some("bookSection") => "incollection",
+        _ => "book",
+    };
+    let mut lines = vec![format!("@{bib_kind}{{,")];
+    lines.push(format!("  title = {{{}}},", clean(&title)));
+    for (mk, bk) in [("author", "author"), ("authors", "author"), ("editor", "editor"), ("editors", "editor")] {
+        if bk == "author" && mk == "authors" && m.contains_key("author") {
+            continue;
+        }
+        if bk == "editor" && mk == "editors" && m.contains_key("editor") {
+            continue;
+        }
+        let people: Vec<String> = m
+            .get(mk)
+            .and_then(Yaml::as_sequence)
+            .into_iter()
+            .flatten()
+            .filter_map(Yaml::as_str)
+            .map(clean)
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !people.is_empty() {
+            lines.push(format!("  {bk} = {{{}}},", people.join(" and ")));
+        }
+    }
+    if let Some(y) = yaml_str(m, "year").or_else(|| yaml_str(m, "date").and_then(|d| crate::refs::year_of(&d))) {
+        lines.push(format!("  year = {{{}}},", clean(&y)));
+    }
+    let isbn = yaml_str(m, "ISBN").or_else(|| yaml_str(m, "isbn")).unwrap_or_else(|| fallback_isbn.to_string());
+    lines.push(format!("  isbn = {{{}}},", clean(&isbn)));
+    for (mk, bk) in [
+        ("publisher", "publisher"),
+        ("edition", "edition"),
+        ("series", "series"),
+        ("volume", "volume"),
+        ("bookTitle", "booktitle"),
+        ("DOI", "doi"),
+        ("doi", "doi"),
+        ("url", "url"),
+        ("abstractNote", "abstract"),
+        ("abstract", "abstract"),
+    ] {
+        if (mk == "doi" && m.contains_key("DOI")) || (mk == "abstract" && m.contains_key("abstractNote")) {
+            continue;
+        }
+        if let Some(val) = yaml_str(m, mk).map(|v| clean(&v)).filter(|v| !v.is_empty()) {
+            lines.push(format!("  {bk} = {{{val}}},"));
+        }
+    }
+    lines.push("}".into());
+    Some(lines.join("\n"))
+}
+
+fn add_book_by_isbn(lib: &Lib, isbn: &str, params: &Value) -> Res<PaperAdded> {
+    let norm = remote::normalize_isbn(isbn).unwrap_or_else(|| isbn.to_string());
+    if let Some(existing) = find_existing_by_isbn(lib, &norm) {
+        let pdf = existing.pdf.is_some();
+        return Ok(PaperAdded { paper: existing, created: false, pdf, gate: None });
+    }
+    let tagged = format!("ISBN {norm}");
+    if remote::parse_isbn(&tagged).is_some() {
+        if let Ok(added) = lib.add(&tagged) {
+            return Ok(added);
+        }
+    }
+    let hint_title = params["hints"]["title"].as_str().or_else(|| params["fields"]["title"].as_str());
+    let hint_author = params["hints"]["author"].as_str().or_else(|| params["fields"]["authors"].as_array().and_then(|a| a.first()).and_then(Value::as_str));
+    let mapped = remote::lookup_book_metadata(lib.net, Some(&norm), None, hint_title, hint_author, &lib.cfg.email)
+        .map(|(m, _)| m)
+        .or_else(|| params["fields"].as_object().and_then(|f| mapping_from_catalog_fields(f, &norm)));
+    let Some(m) = mapped else {
+        return Err(format!("ISBN {norm}: no book metadata found"));
+    };
+    let bib = bibtex_from_book_mapping(&m, &norm).ok_or_else(|| format!("ISBN {norm}: book metadata has no title"))?;
+    lib.add(&bib)
+}
+
 /// The `add` tool: through the library (the entry, its note, the PDF, refs.bib), then the PDF sources when the
 /// built-in ones found none; answers `{ path, created, pdf, notice? }` (`exists`: the note the catalog found already).
 pub fn add(lib: &Lib, params: &Value, sources_of: &dyn Fn() -> Res<Map<String, Value>>, ask: &dyn Fn(&Source, &Value) -> Res<Value>) -> Res<Value> {
@@ -227,18 +484,30 @@ pub fn add(lib: &Lib, params: &Value, sources_of: &dyn Fn() -> Res<Map<String, V
         return Ok(json!({ "path": path }));
     }
     let ids = Ids::of(params);
-    let ident = match (&ids.arxiv, &ids.doi, &ids.pdf) {
-        (Some(a), None, _) => format!("arXiv:{a}"),
-        (_, Some(d), _) => d.clone(),
-        (None, None, Some(url)) => return add_pdf_link(lib, url),
-        (None, None, None) => return Err("a paper needs a DOI, an arXiv id or a link to its PDF".into()),
+    let url_param = params["url"].as_str().map(str::trim).filter(|u| !u.is_empty());
+    let added = match (&ids.arxiv, &ids.doi, &ids.isbn, &ids.pdf) {
+        (Some(a), None, _, _) => {
+            let ver = url_param.and_then(remote::parse_arxiv_versioned).filter(|(base, _)| base == a).and_then(|(_, v)| v).unwrap_or_default();
+            lib.add(&format!("arXiv:{a}{ver}"))?
+        }
+        (_, Some(d), Some(isbn), _) => match lib.add(d) {
+            Ok(a) => a,
+            Err(_) => add_book_by_isbn(lib, isbn, params)?,
+        },
+        (_, Some(d), None, _) => lib.add(d)?,
+        (None, None, Some(isbn), _) => add_book_by_isbn(lib, isbn, params)?,
+        (None, None, None, Some(url)) => return add_pdf_link(lib, url),
+        (None, None, None, None) => match url_param {
+            Some(u) if u.split(['?', '#']).next().unwrap_or(u).to_ascii_lowercase().ends_with(".pdf") => return add_pdf_link(lib, u),
+            Some(u) => lib.add(u)?,
+            None => return Err("a paper needs a DOI, an arXiv id, an ISBN or a link to its PDF".into()),
+        },
     };
-    let added = lib.add(&ident)?;
     let key = added.paper.key.clone();
     let mut found = FoundPdf { pdf: added.pdf, ..Default::default() };
     if !added.pdf && added.created && lib.cfg.pdf_sources_on {
         let p = &added.paper;
-        let paper = json!({ "key": key, "doi": ids.doi.clone().or(p.doi.clone()), "arxiv": ids.arxiv, "title": p.title, "year": p.year, "authors": p.authors });
+        let paper = json!({ "key": key, "doi": ids.doi.clone().or(p.doi.clone()), "arxiv": ids.arxiv, "isbn": ids.isbn, "title": p.title, "year": p.year, "authors": p.authors });
         let sources = pdf_sources(&sources_of().unwrap_or_default(), &lib.cfg.pdf_order);
         found = find_pdf(ask, &|file, from| lib.attach_pdf(&key, file, from).map(drop), &sources, &paper);
     }
@@ -261,7 +530,7 @@ pub fn add(lib: &Lib, params: &Value, sources_of: &dyn Fn() -> Res<Map<String, V
 /// ISBN; else named after the file), keeping its own name and the link as `url`.
 fn add_pdf_link(lib: &Lib, url: &str) -> Res<Value> {
     let bytes = lib.net.pdf(url).map_err(|e| e.to_string())?;
-    let name = url.split(['?', '#']).next().unwrap_or(url).rsplit('/').next().filter(|n| !n.is_empty()).unwrap_or("document.pdf");
+    let name = url.split(['?', '#']).next().unwrap_or(url).rsplit(['/', '\\']).next().filter(|n| !n.is_empty()).unwrap_or("document.pdf");
     let name = kandinsky_text::links::percent_decoded(name);
     let opts = crate::refs::ImportOpts { keep_name: true, url: Some(url.to_string()), ..Default::default() };
     let added = lib.import_pdf_with(&name, &bytes, &opts)?;
@@ -423,5 +692,79 @@ mod tests {
             assert_eq!(r["pdf"].as_bool(), Some(pdf));
             assert_eq!(*v.net.offered.borrow(), offered);
         }
+    }
+
+    #[test]
+    fn isbn_identifiers_normalize_lookup_and_add_books_cleanly() {
+        let cr_book = json!({
+            "message": {
+                "items": [{
+                    "type": "monograph",
+                    "title": ["Synthetic Quantum Mechanics"],
+                    "author": [{ "family": "Example", "given": "Ada" }],
+                    "issued": { "date-parts": [[2021]] },
+                    "publisher": "Example University Press",
+                    "container-title": ["Graduate Texts in Physics"],
+                    "edition-number": "2",
+                    "ISBN": ["978-0-306-40615-7"],
+                    "DOI": "10.1000/book.example.1"
+                }]
+            }
+        });
+        let net = Table::default().on("https://api.crossref.org/works?filter=isbn:9780306406157", Answer::Json(cr_book.clone()));
+        let looked = lookup(&net, &json!({ "kind": "science_book", "ids": { "isbn": "isbn:978-0-306-40615-7" } }), "", NO_KEY);
+        assert_eq!(looked["ids"], json!({ "isbn": "9780306406157", "doi": "10.1000/book.example.1" }));
+        assert_eq!(looked["fields"]["title"], "Synthetic Quantum Mechanics");
+        assert_eq!(looked["fields"]["authors"], json!(["Example, Ada"]));
+        assert_eq!(looked["fields"]["year"], json!(2021));
+        assert_eq!(looked["fields"]["publisher"], "Example University Press");
+        assert_eq!(looked["fields"]["edition"], "2");
+        assert_eq!(looked["fields"]["kind"], "science_book");
+        assert_eq!(looked["fields"]["bibtexType"], "book");
+
+        let ol_isbn = json!({
+            "ISBN:080442957X": {
+                "title": "Introduction to Synthetic Logic",
+                "authors": [{ "name": "B. Researcher" }],
+                "publish_date": "2015",
+                "publishers": [{ "name": "Synthetic Press" }],
+                "number_of_pages": 320
+            }
+        });
+        let net_ol = Table::default().on("https://openlibrary.org/api/books?bibkeys=ISBN:080442957X", Answer::Json(ol_isbn));
+        let looked_ol = lookup(&net_ol, &json!({ "ids": { "isbn": "0-8044-2957-x" } }), "", NO_KEY);
+        assert_eq!(looked_ol["ids"], json!({ "isbn": "080442957X" }));
+        assert_eq!(looked_ol["fields"]["pages"], json!(320));
+        assert!(lookup(&Table::default(), &json!({ "ids": { "isbn": "9780306406157" } }), "", NO_KEY)["skipped"].as_str().unwrap().contains("9780306406157"));
+
+        // catalog::add with valid-check-digit ISBN via Crossref fallback + deduplication
+        let mut v = Vault::new();
+        v.net = Table::default().on("https://api.crossref.org/works?filter=isbn:9780306406157", Answer::Json(cr_book));
+        v.cfg.pdf_sources_on = false;
+        let added = add(&v.lib(), &json!({ "ids": { "isbn": "isbn:978-0-306-40615-7" } }), &|| Ok(Map::new()), &|_, _| panic!("no pdf sources")).unwrap();
+        assert_eq!(added["created"], json!(true));
+        let note_path = added["path"].as_str().unwrap();
+        let note = std::fs::read_to_string(v.root.join(note_path)).unwrap();
+        assert!(note.contains("itemType: book") && (note.contains("ISBN: '9780306406157'") || note.contains("ISBN: \"9780306406157\"") || note.contains("ISBN: 9780306406157")), "{note}");
+        assert!(std::fs::read_to_string(v.root.join("refs/refs.bib")).unwrap().contains("@book{"));
+        let again = add(&v.lib(), &json!({ "url": "isbn:9780306406157" }), &|| Ok(Map::new()), &|_, _| panic!("no pdf sources")).unwrap();
+        assert_eq!(again["created"], json!(false));
+
+        // catalog::add with synthetic ISBN-13 (not passing mod-10 check digit) still resolves via lookup_book_metadata
+        let mut v2 = Vault::new();
+        let ol_syn = json!({
+            "ISBN:9780123456789": {
+                "title": "Synthetic Workbook",
+                "authors": [{ "name": "C. Author" }],
+                "publish_date": "2022",
+                "publishers": [{ "name": "Example House" }]
+            }
+        });
+        v2.net = Table::default().on("https://openlibrary.org/api/books?bibkeys=ISBN:9780123456789", Answer::Json(ol_syn));
+        v2.cfg.pdf_sources_on = false;
+        let syn = add(&v2.lib(), &json!({ "ids": { "isbn": "978-0-12-345678-9" } }), &|| Ok(Map::new()), &|_, _| panic!("no pdf sources")).unwrap();
+        assert_eq!(syn["created"], json!(true));
+        let syn_again = add(&v2.lib(), &json!({ "ids": { "isbn": "9780123456789" } }), &|| Ok(Map::new()), &|_, _| panic!("no pdf sources")).unwrap();
+        assert_eq!(syn_again["created"], json!(false));
     }
 }

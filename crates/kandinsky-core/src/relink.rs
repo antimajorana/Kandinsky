@@ -136,6 +136,89 @@ fn relative(from_dir: &str, to: &str) -> String {
     out.join("/")
 }
 
+/// Rewrites `[[from_key]]` (and `[[.../from_key]]`) wikilinks plus `\cite*{...from_key...}` citations across `.md` and
+/// `.tex` files when two duplicate references are merged into `to_key`.
+pub fn relink_citekey(ws: &Workspace, from_key: &str, to_key: &str) -> Result<Relinked> {
+    let (from_key, to_key) = (from_key.trim(), to_key.trim());
+    if from_key.is_empty() || to_key.is_empty() || from_key == to_key {
+        return Ok(Relinked::default());
+    }
+    let cfg = ws.config()?;
+    let cite_re = regex::Regex::new(r"\\(cite[a-zA-Z]*\*?|parencite\*?|textcite\*?|autocite\*?|footcite\*?)\{([^}]*)\}")
+        .expect("valid cite regex");
+    let mut out = Relinked::default();
+    for (abs, rel) in crate::walk::files(ws.root(), &cfg) {
+        if !(rel.ends_with(".md") || rel.ends_with(".tex")) || cfg.is_agent_file(&rel) {
+            continue;
+        }
+        let mut count = 0usize;
+        let done = vault_write::modify(&abs, |text| {
+            let (t1, c1) = if rel.ends_with(".md") { rewrite_wiki_citekey(text, from_key, to_key) } else { (text.to_string(), 0) };
+            let (t2, c2) = rewrite_tex_cite(&t1, &cite_re, from_key, to_key);
+            count = c1 + c2;
+            Ok(t2)
+        });
+        if done.is_ok() && count > 0 {
+            out.links += count;
+            out.notes.push(rel);
+        }
+    }
+    out.notes.sort();
+    Ok(out)
+}
+
+fn rewrite_wiki_citekey(text: &str, from_key: &str, to_key: &str) -> (String, usize) {
+    let mut edits: Vec<(usize, usize, String)> = Vec::new();
+    links::link_lines(text, |_, offset, line, _| {
+        for sp in links::link_spans(line).into_iter().filter(|s| s.wiki) {
+            let written = &line[sp.start..sp.end];
+            let (base, anchor) = split_anchor(written);
+            let bare = base.strip_suffix(".md").unwrap_or(base);
+            let next_base = if bare == from_key {
+                if base.ends_with(".md") { format!("{to_key}.md") } else { to_key.to_string() }
+            } else if let Some(prefix) = bare.strip_suffix(&format!("/{from_key}/{from_key}")) {
+                if base.ends_with(".md") { format!("{prefix}/{to_key}/{to_key}.md") } else { format!("{prefix}/{to_key}/{to_key}") }
+            } else {
+                continue;
+            };
+            let next = format!("{next_base}{anchor}");
+            if next != written {
+                edits.push((offset + sp.start, offset + sp.end, next));
+            }
+        }
+    });
+    let n = edits.len();
+    let mut out = text.to_string();
+    for (a, b, rep) in edits.into_iter().rev() {
+        out.replace_range(a..b, &rep);
+    }
+    (out, n)
+}
+
+fn rewrite_tex_cite(text: &str, cite_re: &regex::Regex, from_key: &str, to_key: &str) -> (String, usize) {
+    let mut count = 0usize;
+    let out = cite_re.replace_all(text, |caps: &regex::Captures| {
+        let cmd = &caps[1];
+        let inner = &caps[2];
+        let mut changed = false;
+        let parts: Vec<String> = inner
+            .split(',')
+            .map(|part| {
+                let trimmed = part.trim();
+                if trimmed == from_key {
+                    changed = true;
+                    count += 1;
+                    part.replacen(from_key, to_key, 1)
+                } else {
+                    part.to_string()
+                }
+            })
+            .collect();
+        if changed { format!("\\{cmd}{{{}}}", parts.join(",")) } else { caps[0].to_string() }
+    });
+    (out.into_owned(), count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

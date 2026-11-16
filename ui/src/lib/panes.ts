@@ -27,7 +27,7 @@ export type PaneSpec =
   | { kind: "base"; path: RelPath; view?: string }
   // a .page layout file (rows/columns of blocks) — the home screen is one; title from the file
   | { kind: "page"; path: RelPath; title?: string }
-  // Jupyter (.ipynb) and Wolfram WLJS (.wln) computational notebooks
+  // Jupyter (.ipynb) computational notebooks
   | { kind: "notebook"; path: RelPath }
   | { kind: "excalidraw"; path: RelPath; page?: string } // `page`: shown at open (an embed's `#Page 2`, draw-pages.ts frameRef)
   | { kind: "canvas"; path: RelPath }
@@ -190,7 +190,7 @@ export function paneIcon(s: PaneSpec): IconName {
 export const TABLE_RE = /\.(tsv|csv|tab|xlsx)$/i;
 const CODE_RE = /\.(rs|py|ts|js|mjs|cjs|tsx|jsx|svelte|c|h|cc|cpp|hpp|go|java|kt|jl|f90|f|sh|zsh|bash|toml|ya?ml|json|lua|rb|css|scss|html|tex|bib|nix|cmake|sql)$/i;
 
-export const NOTEBOOK_RE = /\.(ipynb|wln)$/i;
+export const NOTEBOOK_RE = /\.ipynb$/i;
 
 export function fileIcon(path: string): IconName {
   if (/\.canvas$/i.test(path)) return "grid";

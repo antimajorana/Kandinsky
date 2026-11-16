@@ -8,7 +8,9 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 const PROTOCOL: &str = "2025-06-18";
 const INSTRUCTIONS: &str = "Kandinsky is the user's workspace app. Use these tools BEFORE touching the vault's files directly: \
-search with kandinsky_search, create notes with kandinsky_new_note, read mail with email_*, run the vault's commands with kandinsky_run — \
+search with kandinsky_search, query structured .base views with kandinsky_query, inspect incoming body and typed frontmatter links with kandinsky_backlinks, \
+edit frontmatter safely against the vault schema with kandinsky_set_property, validate vault properties and links with kandinsky_properties_audit, \
+create notes with kandinsky_new_note, read mail with email_*, run the vault's commands with kandinsky_run — \
 a tool keeps the vault's templates, properties, indexes and the open editors right; edit a file directly only for what no tool does. \
 Use kandinsky_context to see the file/selection they are looking at, kandinsky_open to show them a file, kandinsky_notify when a long task finishes. \
 To create a note, use kandinsky_new_note with a template from kandinsky_templates rather than writing the file yourself: the note then has the properties the vault's templates define. \
@@ -66,6 +68,26 @@ fn builtin_tools() -> Value {
             "fields": {"type": "object", "description": "properties to set: {name: text | number | boolean | list | null}", "additionalProperties": true},
             "text": {"type": "string", "description": "the body, appended after the template's text"}
         }), &["path"])},
+        {"name": "kandinsky_query", "description": "Evaluate an Obsidian .base database view (from a vault .base `path` or inline `yaml`), including formulas, rollups and file.upstreamStatus.", "inputSchema": s(json!({
+            "path": {"type": "string", "description": "workspace-relative .base file path (provide `path` or `yaml`)"},
+            "yaml": {"type": "string", "description": "inline .base YAML query source (provide `yaml` or `path`)"},
+            "this": {"type": "string", "description": "optional note path bound to `this.*`"},
+            "view": {"type": "string", "description": "optional view name to narrow the returned views"}
+        }), &[])},
+        {"name": "kandinsky_backlinks", "description": "List incoming links to a vault file (`path`): both Markdown body links/embeds and typed frontmatter property links (with `relation`), plus unlinked mentions.", "inputSchema": s(json!({
+            "path": {"type": "string", "description": "workspace-relative target file path, e.g. notes/Concept.md"}
+        }), &["path"])},
+        {"name": "kandinsky_set_property", "description": "Atomically set or remove (`remove: true`) one frontmatter property on a Markdown note, validated against the vault's properties.yaml schema and triggering bidirectional .base back-relations.", "inputSchema": s(json!({
+            "path": {"type": "string", "description": "workspace-relative .md note path"},
+            "key": {"type": "string", "description": "frontmatter property key"},
+            "value": {"description": "new scalar/list value (string, number, boolean, array, or null)"},
+            "remove": {"type": "boolean", "description": "true to delete the property key from frontmatter"},
+            "force": {"type": "boolean", "description": "skip schema validation when setting an out-of-spec value"}
+        }), &["path", "key"])},
+        {"name": "kandinsky_properties_audit", "description": "Validate every indexed Markdown note's frontmatter against the vault's properties.yaml schema and link index (missing required properties, invalid enum/date/datetime/number/bool values, broken wikilinks, and optional `strict` unknown keys).", "inputSchema": s(json!({
+            "strict": {"type": "boolean", "description": "also flag properties not declared in properties.yaml"},
+            "path_prefix": {"type": "string", "description": "optional folder/file prefix filter on reported issues"}
+        }), &[])},
     ])
 }
 
@@ -107,8 +129,88 @@ async fn call(ws: &Workspace, local: &kandinsky_core::helper::Helpers, server: O
             let req = notes::NoteFile { path: &path, template: a["template"].as_str(), title: a["title"].as_str(), fields, text: a["text"].as_str() };
             serde_json::to_value(notes::new_note_file(ws.root(), &ws.config()?, &req)?)?
         }
+        "kandinsky_query" => query_base(ws, a)?,
+        "kandinsky_backlinks" => {
+            let path = str_arg("path")?;
+            serde_json::to_value(kandinsky_core::links::backlinks(ws.root(), &ws.config()?, &path))?
+        }
+        "kandinsky_set_property" => set_note_property(ws, server, a).await?,
+        "kandinsky_properties_audit" => {
+            let strict = a["strict"].as_bool().unwrap_or(false);
+            let mut report = kandinsky_core::properties_audit::audit(ws.root(), &ws.config()?, strict);
+            if let Some(pfx) = a["path_prefix"].as_str().map(str::trim).filter(|s| !s.is_empty()) {
+                let norm = pfx.trim_matches('/').replace('\\', "/");
+                report.issues.retain(|i| i.path == norm || i.path.starts_with(&format!("{norm}/")) || i.path.starts_with(&norm));
+            }
+            serde_json::to_value(report)?
+        }
         other => return plugin_tool(ws, local, server, other, a).await,
     })
+}
+
+fn query_base(ws: &Workspace, a: &Value) -> Result<Value> {
+    let cfg = ws.config()?;
+    let src = match (a["yaml"].as_str().or_else(|| a["query"].as_str()), a["path"].as_str()) {
+        (Some(y), _) => y.to_string(),
+        (None, Some(p)) => std::fs::read_to_string(ws.resolve(p)?)?,
+        (None, None) => return Err(anyhow!("provide `path` (a .base file) or `yaml` (inline .base query)")),
+    };
+    let mut res = kandinsky_core::bases::evaluate(ws.root(), &cfg, &src, a["this"].as_str());
+    if let Some(view_name) = a["view"].as_str().filter(|s| !s.trim().is_empty()) {
+        res.views.retain(|v| v.name.eq_ignore_ascii_case(view_name.trim()));
+    }
+    Ok(serde_json::to_value(res)?)
+}
+
+async fn set_note_property(ws: &Workspace, server: Option<&Server>, a: &Value) -> Result<Value> {
+    let path = a["path"].as_str().ok_or_else(|| anyhow!("missing argument `path`"))?;
+    let key = a["key"].as_str().map(str::trim).filter(|k| !k.is_empty()).ok_or_else(|| anyhow!("missing argument `key`"))?;
+    if !path.to_ascii_lowercase().ends_with(".md") {
+        return Err(anyhow!("`path` must be a Markdown (.md) note"));
+    }
+    if key.contains([':', '\n', '\r']) || key.contains(" #") || key.starts_with(['-', '#', '"', '\'', '[', ']', '{', '}', ',', '&', '*', '!', '|', '>', '%', '@', '`', '?']) {
+        return Err(anyhow!("`{key}` is not a valid frontmatter property name"));
+    }
+    let abs = ws.resolve(path)?;
+    if !abs.is_file() {
+        return Err(anyhow!("note not found: {path}"));
+    }
+    let cfg = ws.config()?;
+    let specs = kandinsky_core::property_spec::load(ws.root(), &cfg.editor.properties_spec);
+    let remove = a["remove"].as_bool().unwrap_or(false);
+    let force = a["force"].as_bool().unwrap_or(false);
+    let val = a.get("value").cloned().unwrap_or(Value::Null);
+    if !remove && !val.is_null() && !force {
+        if let Some(spec) = specs.properties.get(key) {
+            if let Err(why) = kandinsky_core::properties_audit::validate_property_json_value(spec, &val) {
+                return Err(anyhow!("invalid value for `{key}`: {why}"));
+            }
+        }
+    }
+    let mut before_buf = String::new();
+    let mut after_buf = String::new();
+    let edit = if remove {
+        kandinsky_core::api::FrontmatterEdit::Remove { key: key.to_string() }
+    } else {
+        kandinsky_core::api::FrontmatterEdit::Set { key: key.to_string(), value: val }
+    };
+    kandinsky_core::vault_write::modify(&abs, |text| {
+        before_buf = text.to_string();
+        let next = kandinsky_core::frontmatter::apply(text, &edit)?;
+        after_buf = next.clone();
+        Ok(next)
+    })?;
+    let mut synced = Vec::new();
+    if before_buf != after_buf {
+        let _ = kandinsky_core::history::record_edit(ws, path, Some(&before_buf), &after_buf);
+        if let Ok(extra) = kandinsky_core::bases::sync_back_relations(ws.root(), &cfg, path, &before_buf, &after_buf) {
+            synced = extra;
+        }
+        if let Some(s) = server {
+            let _ = s.put("/api/file", &json!({ "path": path, "text": after_buf })).await;
+        }
+    }
+    Ok(json!({ "path": path, "key": key, "changed": before_buf != after_buf, "synced_back_relations": synced }))
 }
 
 /// `kandinsky_tasks`: the vault's tasks, read from the files (the same scan as Home's), filtered as asked.
@@ -223,4 +325,64 @@ pub async fn serve(ws: Workspace) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn mcp_tools_query_backlinks_set_property_and_audit() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        std::fs::create_dir_all(root.join(".kandinsky")).unwrap();
+        std::fs::create_dir_all(root.join("templates")).unwrap();
+        std::fs::create_dir_all(root.join("notes")).unwrap();
+        std::fs::write(
+            root.join("templates/properties.yaml"),
+            "properties:\n  status:\n    kind: enum\n    values: [draft, active, accepted, stale]\n  updated:\n    kind: date\n  up:\n    kind: link\ntypes:\n  concept:\n    required: [status]\n",
+        )
+        .unwrap();
+        std::fs::write(root.join("notes/Conventions.md"), "---\ntype: concept\nstatus: accepted\nupdated: 2026-10-10\n---\n# Conventions\n").unwrap();
+        std::fs::write(root.join("notes/Derivation.md"), "---\ntype: concept\nup: \"[[Conventions]]\"\n---\n# Derivation\nSee [[Conventions]].\n").unwrap();
+        std::fs::write(
+            root.join("Research.base"),
+            "filters:\n  and:\n    - file.inFolder(\"notes\")\nviews:\n  - type: table\n    name: All\n    order: [file.name, status, file.upstreamStatus]\n",
+        )
+        .unwrap();
+
+        let ws = Workspace::open(root).unwrap();
+        let local = kandinsky_core::helper::Helpers::new(ws.root(), kandinsky_core::events::EventBus::default());
+
+        // 1. tools/list exposes all 4 new tools
+        let listed = handle(&ws, &local, &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})).await.unwrap();
+        let names: Vec<String> = listed["result"]["tools"].as_array().unwrap().iter().filter_map(|t| t["name"].as_str().map(String::from)).collect();
+        for expected in ["kandinsky_query", "kandinsky_backlinks", "kandinsky_set_property", "kandinsky_properties_audit"] {
+            assert!(names.iter().any(|n| n == expected), "missing {expected} in {names:?}");
+        }
+
+        // 2. kandinsky_properties_audit catches missing required `status` on Derivation.md
+        let audit = handle(&ws, &local, &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "kandinsky_properties_audit", "arguments": {}}})).await.unwrap();
+        let report: Value = serde_json::from_str(audit["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(report["issues"].as_array().unwrap().len(), 1);
+        assert_eq!(report["issues"][0]["path"], "notes/Derivation.md");
+
+        // 3. kandinsky_set_property rejects invalid enum values and accepts valid ones
+        let bad = handle(&ws, &local, &json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "kandinsky_set_property", "arguments": {"path": "notes/Derivation.md", "key": "status", "value": "bogus"}}})).await.unwrap();
+        assert_eq!(bad["result"]["isError"], true);
+        let ok = handle(&ws, &local, &json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "kandinsky_set_property", "arguments": {"path": "notes/Derivation.md", "key": "status", "value": "active"}}})).await.unwrap();
+        assert!(ok["result"].get("isError").is_none(), "{ok}");
+
+        // 4. kandinsky_backlinks reports both typed frontmatter (`up`) and body links
+        let bl = handle(&ws, &local, &json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "kandinsky_backlinks", "arguments": {"path": "notes/Conventions.md"}}})).await.unwrap();
+        let bl_val: Value = serde_json::from_str(bl["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        let links = bl_val["links"].as_array().unwrap();
+        assert!(links.len() >= 2, "{bl_val}");
+        assert!(links.iter().any(|l| l["relation"] == "up"), "{bl_val}");
+
+        // 5. kandinsky_query evaluates Research.base
+        let q = handle(&ws, &local, &json!({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "kandinsky_query", "arguments": {"path": "Research.base"}}})).await.unwrap();
+        let q_val: Value = serde_json::from_str(q["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(q_val["views"][0]["count"], 2);
+    }
 }

@@ -13,6 +13,8 @@ export async function resolveWikilink(target: string, fromPath: string): Promise
   const dir = fromPath.includes("/") ? fromPath.slice(0, fromPath.lastIndexOf("/")) : "";
   const hit = resolveLink(clean, dir);
   if (hit) return hit;
+  const norm = clean.replaceAll("\\", "/");
+  if ((norm.startsWith("../") || norm.startsWith("@ext/")) && /\.[a-z0-9]+$/i.test(norm)) return norm;
   const withExt = /\.[a-z0-9]+$/i.test(clean) ? clean : `${clean}.md`;
   return clean.includes("/") ? resolveRel(withExt) : resolveRel(withExt, dir);
 }

@@ -148,7 +148,7 @@ async fn files_get(State(st): S, Query(q): Query<FilesQuery>) -> Result<Json<Vec
 /// way, not read and answered 404 (a line in the browser's log) nor found by listing every parent folder.
 async fn exists_get(State(st): S, Query(q): Query<PathQuery>) -> Result<Json<bool>> {
     let rel = required_path(q)?;
-    Ok(Json(with_ws(&st, move |ws| Ok(ws.resolve(&rel)?.exists())).await?))
+    Ok(Json(with_ws(&st, move |ws| Ok(ws.resolve_readable(&rel).is_ok_and(|p| p.exists()))).await?))
 }
 
 fn required_path(q: PathQuery) -> Result<String> {
@@ -242,7 +242,7 @@ async fn raw(State(st): S, headers: HeaderMap, Query(q): Query<PathQuery>) -> Re
     }
     // the whole file streamed, not read into memory first: a viewer's first GET (and a HEAD) only wants the headers
     let (path, mime, mtime, len) = with_ws(&st, move |ws| {
-        let path = ws.resolve(&rel)?;
+        let path = ws.resolve_readable(&rel)?;
         let meta = std::fs::metadata(&path).map_err(|_| Error::NotFound(rel.clone()))?;
         if !meta.is_file() {
             return Err(Error::NotFound(rel));
@@ -824,8 +824,60 @@ struct NoteQuery {
 
 /// The PDF a note holds the marks of (companion::pdf_of_note): `{pdf}`, null when it is no PDF's note.
 async fn pdf_of_note_get(State(st): S, Query(q): Query<NoteQuery>) -> Result<Json<serde_json::Value>> {
-    let pdf = with_ws(&st, move |ws| Ok(crate::companion::pdf_of_note(ws.root(), &q.note))).await?;
+    let pdf = with_ws(&st, move |ws| Ok(crate::companion::pdf_of_note_with_cfg(ws.root(), &ws.config()?, &q.note))).await?;
     Ok(Json(serde_json::json!({ "pdf": pdf })))
+}
+
+#[derive(serde::Deserialize)]
+struct PdfSidecarQuery {
+    pdf: String,
+    action: String,
+}
+
+async fn pdf_marks_sidecar_post(State(st): S, Query(q): Query<PdfSidecarQuery>) -> Result<Json<crate::external_roots::SidecarSyncResult>> {
+    let now = chrono::Local::now().naive_local();
+    let res = with_ws(&st, move |ws| {
+        let cfg = ws.config()?;
+        match q.action.as_str() {
+            "export" => crate::pdf_marks::export_sidecar(ws.root(), &cfg, &q.pdf),
+            "import" => crate::pdf_marks::import_sidecar(ws.root(), &cfg, &q.pdf, now),
+            other => Err(Error::BadRequest(format!("unknown sidecar action {other:?} (expected export or import)"))),
+        }
+    })
+    .await?;
+    if let Some(n) = &res.note {
+        st.bus.publish(Event::Fs { paths: vec![n.clone()] });
+    }
+    Ok(Json(res))
+}
+
+#[derive(serde::Deserialize)]
+struct CitekeyRelinkRequest {
+    from_key: String,
+    to_key: String,
+}
+
+async fn refs_relink_post(State(st): S, Json(req): Json<CitekeyRelinkRequest>) -> Result<Json<Moved>> {
+    let r = with_ws(&st, move |ws| crate::relink::relink_citekey(&ws, &req.from_key, &req.to_key)).await?;
+    if !r.notes.is_empty() {
+        st.bus.publish(Event::Fs { paths: r.notes.clone() });
+    }
+    Ok(Json(Moved { links: r.links as u32, notes: r.notes }))
+}
+
+#[derive(serde::Deserialize)]
+struct AuditQuery {
+    #[serde(default)]
+    strict: bool,
+}
+
+async fn properties_audit_get(State(st): S, Query(q): Query<AuditQuery>) -> Result<Json<PropertiesAuditReport>> {
+    Ok(Json(with_ws(&st, move |ws| Ok(crate::properties_audit::audit(ws.root(), &ws.config()?, q.strict))).await?))
+}
+
+async fn note_upstream_get(State(st): S, Query(q): Query<PathQuery>) -> Result<Json<UpstreamHealth>> {
+    let path = required_path(q)?;
+    Ok(Json(with_ws(&st, move |ws| Ok(crate::upstream::check_note(ws.root(), &ws.config()?, &path))).await?))
 }
 
 async fn pdf_marks_post(State(st): S, Query(q): Query<PdfQuery>, Json(ops): Json<Vec<crate::pdf_marks::Op>>) -> Result<Json<crate::pdf_marks::Marks>> {
@@ -987,7 +1039,7 @@ async fn fs_reveal_outside(State(st): S, axum::extract::ConnectInfo(peer): axum:
         return forbidden("the system's file manager opens only on the desktop's own core");
     }
     let path = match required_path(q) { Ok(p) => p, Err(e) => return e.into_response() };
-    let abs = match with_ws(&st, move |ws| ws.resolve(&path)).await { Ok(a) => a, Err(e) => return e.into_response() };
+    let abs = match with_ws(&st, move |ws| ws.resolve_readable(&path)).await { Ok(a) => a, Err(e) => return e.into_response() };
     // the file manager may be waited for (dbus-send, open -R): off the async threads
     match tokio::task::spawn_blocking(move || crate::platform::open::reveal(&abs)).await {
         Ok(Err(why)) => Error::CommandFailed(why).into_response(),
@@ -2428,8 +2480,10 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/attach", post(attach_post).layer(DefaultBodyLimit::max(100 * 1024 * 1024)))
         .route("/api/companion", post(companion_post))
         .route("/api/pdf-marks", get(pdf_marks_get).post(pdf_marks_post))
+        .route("/api/pdf-marks/sidecar", post(pdf_marks_sidecar_post))
         .route("/api/pdf-of-note", get(pdf_of_note_get))
         .route("/api/pdf-export", post(pdf_export_post))
+        .route("/api/refs/relink", post(refs_relink_post))
         .route("/api/typst/svg", post(typst_svg_post))
         .route("/api/backlinks", get(backlinks_get))
         .route("/api/link-targets", get(link_targets_get))
@@ -2470,8 +2524,10 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/property", put(property_put))
         .route("/api/frontmatter/edit", post(frontmatter_edit_post))
         .route("/api/note/merge-template", post(merge_template_post))
+        .route("/api/note/upstream", get(note_upstream_get))
         .route("/api/properties/spec", get(properties_spec_get))
         .route("/api/properties/known", get(properties_known_get))
+        .route("/api/properties/audit", get(properties_audit_get))
         .route("/api/git/log", get(git_log_get))
         .route("/api/git/commit", get(git_commit_get).post(git_commit_post))
         .route("/api/git/status", get(git_status_get))

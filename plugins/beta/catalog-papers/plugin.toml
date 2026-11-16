@@ -6,17 +6,18 @@
 # the Zotero browser extension on 127.0.0.1:23119. docs/design/DESIGN-collections.md, "Papers";
 # docs/refactor/REFACTOR-references-plugin.md (moved out of the core).
 title = "Catalog · Science"
-description = "everything science: papers by DOI or arXiv id into References, with metadata, the open-access PDF (arXiv, OpenAlex, Unpaywall, Semantic Scholar, Europe PMC, CORE), refs.bib and the Zotero connector"
+description = "everything science: papers and books (DOI, arXiv, ISBN, BibTeX/RIS) into References, in-place scanning of shared external PDF folders, open-access PDFs (arXiv, OpenAlex, Unpaywall, Semantic Scholar, Europe PMC, CORE), refs.bib and the Zotero connector"
 icon = "book"
-version = "0.6.0"
+version = "0.7.0"
 api = 19
 provides = ["references"]                 # the role the core and the page ask for (not this id)
+for_agents = "Use catalog_papers_search_papers (with optional item_type: paper, book, thesis, notes) to find references in the local library, catalog_papers_scan_external_roots to preview (dry_run=true by default) or sync existing PDFs in external_pdf_roots into the library in place with zero copying, catalog_papers_paper_annotations to read a paper's or book's pdf-marks highlights and reading notes, catalog_papers_bibtex for BibTeX entries, catalog_papers_find_duplicates before merging duplicates, catalog_papers_upgrade_preprint to check whether an arXiv preprint has a published journal version, catalog_papers_fetch_arxiv_source to inspect arXiv LaTeX equation labels and macros, and catalog_papers_add to file papers (DOI/arXiv/BibTeX/RIS) or books (ISBN) cleanly."
 # no `requires`: References stands alone; its [contributes.catalog] patterns count only where the catalog runs
 
 [permissions]
-# the indexes (Crossref, arXiv, OpenAlex, Unpaywall, Semantic Scholar, Europe PMC, CORE), and wherever they say a
-# paper's open-access PDF is (a repository, an author's page, a publisher)
-net = ["api.crossref.org", "export.arxiv.org", "arxiv.org", "api.openalex.org", "api.unpaywall.org", "api.semanticscholar.org", "www.ebi.ac.uk", "api.core.ac.uk", "*"]
+# the indexes (Crossref, arXiv, OpenAlex, Unpaywall, INSPIRE-HEP, Semantic Scholar, Europe PMC, CORE, Open Library, Google Books),
+# and wherever they say a paper's open-access PDF is (a repository, an author's page, a publisher)
+net = ["api.crossref.org", "export.arxiv.org", "arxiv.org", "api.openalex.org", "api.unpaywall.org", "inspirehep.net", "api.semanticscholar.org", "www.ebi.ac.uk", "api.core.ac.uk", "openlibrary.org", "www.googleapis.com", "*"]
 # CORE's API key, sent by the core as a header (the helper never holds it)
 secrets = true
 
@@ -87,6 +88,72 @@ label = "CORE API key (optional)"
 kind = "secret"
 hint = "free at core.ac.uk/services/api: CORE gathers the papers of thousands of university repositories"
 
+[[setting]]
+key = "external_pdf_roots"
+label = "Shared external PDF folders"
+kind = "list"
+default = []
+group = "Shared PDF pool & inbox"
+hint = "one folder per line (for example ../Library/Papers or ../Library/Books): PDFs inside these folders are linked, scanned into subfolder collections, and read in place with zero copying and zero symlinks"
+
+[[setting]]
+key = "store_in_external"
+label = "File new PDFs into primary external folder"
+kind = "toggle"
+default = true
+group = "Shared PDF pool & inbox"
+hint = "when a shared external PDF folder is set, downloaded, dropped and browser-captured PDFs are named by the format below inside the first folder instead of copied into the vault"
+
+[[setting]]
+key = "watch_inbox"
+label = "Watched PDF drop inbox"
+kind = "text"
+default = ""
+group = "Shared PDF pool & inbox"
+hint = "optional folder watched for newly dropped PDFs (for example ../Papers/Sort), organized into the primary shared PDF folder"
+
+[[setting]]
+key = "rename_format"
+label = "PDF file name format"
+kind = "text"
+default = "{Author}{Year} - {Title}.pdf"
+group = "Shared PDF pool & inbox"
+hint = "placeholders: {Author}, {Authors}, {Year}, {Title}, {Citekey}, {Journal}"
+
+[[setting]]
+key = "subfolder_presets"
+label = "Destination subfolder presets"
+kind = "list"
+default = []
+group = "Shared PDF pool & inbox"
+hint = "optional subfolders inside the primary shared PDF folder offered when organizing inbox PDFs (one per line)"
+
+[[setting]]
+key = "annotations_mode"
+label = "PDF highlights storage mode"
+kind = "choice"
+choices = ["vault", "shared_sidecar"]
+default = "vault"
+group = "Shared PDF pool & inbox"
+hint = "vault keeps pdf-marks private inside each vault's <citekey>.md; shared_sidecar syncs marks with a sidecar file so multiple vaults share highlights on the same PDF"
+
+[[setting]]
+key = "sidecar_dir"
+label = "Shared annotations sidecar folder (optional)"
+kind = "text"
+default = ""
+group = "Shared PDF pool & inbox"
+when = { annotations_mode = "shared_sidecar" }
+hint = "blank places <pdf>.kandinsky-marks beside the PDF; or name a folder inside a shared external root"
+
+[[setting]]
+key = "arxiv_source_dir"
+label = "arXiv LaTeX source folder (optional)"
+kind = "text"
+default = ""
+group = "Shared PDF pool & inbox"
+hint = "blank unpacks fetched arXiv .tex sources into .kandinsky/cache/arxiv-src/<id>/; or name a folder inside the vault or a shared external root"
+
 [[tool]]
 name = "lookup"
 description = "A paper's metadata from its DOI or arXiv id: title, authors, year, venue, abstract, and its other identifier."
@@ -98,6 +165,44 @@ method = "catalog_add"     # the helper's own `add` is the References view's (by
 description = "Add a paper to the papers library by DOI or arXiv id (metadata, citekey, reading note, open-access PDF, refs.bib) and answer its reading note."
 input = { kind = "string", ids = "object?", fields = "object?", url = "string?", exists = "string?" }
 timeout_secs = 300
+
+[[tool]]
+name = "search_papers"
+description = "Search the local references library across title, authors, citekey, year, venue, DOI, arXiv id, abstract, collections, tags and item_type (\"paper\", \"book\", \"thesis\", \"notes\")."
+input = { query = "string?", collection = "string?", tag = "string?", item_type = "string?", limit = "integer?" }
+
+[[tool]]
+name = "paper_annotations"
+description = "Read a paper's reading note and structured pdf-marks highlights, quotes, comments and clips by citekey."
+input = { key = "string" }
+
+[[tool]]
+name = "bibtex"
+description = "Return the BibTeX entry of one citekey (or all entries when key is omitted)."
+input = { key = "string?" }
+
+[[tool]]
+name = "find_duplicates"
+description = "Scan the references library for duplicate entries across DOI, arXiv id (including preprint-to-published pairs), PDF SHA-256, ISBN and fuzzy title+author+year."
+input = {}
+
+[[tool]]
+name = "upgrade_preprint"
+description = "Check Crossref, OpenAlex and INSPIRE-HEP for a published journal version of an arXiv preprint and upgrade its metadata while keeping its arXiv id, version and citekey."
+input = { key = "string", dry_run = "boolean?" }
+timeout_secs = 120
+
+[[tool]]
+name = "fetch_arxiv_source"
+description = "Download and unpack an entry's (or arXiv id's) LaTeX e-print source archive and list its .tex files, equation labels and macros."
+input = { id = "string?", key = "string?" }
+timeout_secs = 180
+
+[[tool]]
+name = "scan_external_roots"
+description = "Scan configured external_pdf_roots recursively for PDFs and index them in place with zero copying, deriving collections from subfolders and classifying books (@book) alongside papers. Defaults to dry_run = true (preview); pass dry_run = false to write notes and update refs.bib."
+input = { dry_run = "boolean?", root = "string?", rate_limit_ms = "integer?", max_lookups = "integer?" }
+timeout_secs = 600
 
 [contributes.catalog]
 recognize = [
@@ -115,14 +220,16 @@ instead = [{ of = "book", file_as = "science_book" }]
 [[contributes.catalog.kinds]]
 name = "paper"
 label = "Paper"
-type = "Literature"
+type = "literature"
 folder = "{setting:dir}"                # where References keeps them (the `dir` setting), filled in by the core (API 19)
 note_name = "{citekey}/{citekey}"
 ids = [{ id = "doi", property = "source", prefix = "https://doi.org/" }, { id = "arxiv", property = "source", prefix = "https://arxiv.org/abs/" }, { id = "pdf", property = "url" }]
 writer = { by = "plugin", plugin = "catalog-papers", tool = "add" }
 links = { catalog-linkwarden = false }
-library = { title = "Papers", layout = "table", group = "status", shelves = ["to-read", "reading", "read"], key = ["authors", "year", "journal"], icon = "book" }
+library = { title = "Papers", in = "References", layout = "table", group = "status", shelves = ["to-read", "reading", "read"], key = ["authors", "year", "journal"], icon = "book" }
 
 # where it runs (PLUGIN-API.md, "Platforms"); a platform not named is untested (Android: only with `phone = true`)
 [platforms]
 linux = "works"
+macos = "works"
+windows = "works"

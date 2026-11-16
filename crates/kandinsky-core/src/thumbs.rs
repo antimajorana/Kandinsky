@@ -13,7 +13,7 @@ const MAX_W: u32 = 2048; // a reader's page (manga), not only a gallery's figure
 
 /// PNG bytes no wider than `w` (aspect kept); an image already that small comes back as it is.
 pub fn thumbnail(ws: &Workspace, rel: &str, w: u32) -> Result<(Vec<u8>, &'static str)> {
-    let src = ws.resolve(rel)?;
+    let src = ws.resolve_readable(rel)?;
     let w = w.clamp(STEP, MAX_W).div_ceil(STEP) * STEP;
     let mtime = std::fs::metadata(&src)?.modified()?;
     if is_pdf(rel) {

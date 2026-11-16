@@ -434,6 +434,6 @@
   .tray-hint { font-weight: 400; color: var(--text-faint); }
   .tray-chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .tray-chip { max-width: 220px; }
-  .drag-badge { position: fixed; z-index: 900; pointer-events: none; padding: 3px 9px; border-radius: 999px; background: var(--bg-elev); border: 1.5px solid var(--accent); color: var(--heading, var(--text)); font-size: .82em; font-weight: 600; font-variant-numeric: tabular-nums; box-shadow: 0 4px 14px rgba(0, 0, 0, .2); white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+  .drag-badge { position: fixed; z-index: 900; pointer-events: none; padding: 3px 9px; border-radius: 999px; background: var(--bg-elev); border: 1.5px solid var(--accent); color: var(--heading, var(--text)); font-size: .82em; font-weight: 600; font-variant-numeric: tabular-nums; box-shadow: var(--shadow-sm); white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
   .empty { color: var(--text-faint); padding: 14px; margin: 0; }
 </style>

@@ -44,7 +44,12 @@ fn main() {
     let lib = dst.join("build/libarchive");
     println!("cargo:rustc-link-search=native={}", lib.display());
     println!("cargo:rustc-link-search=native={}", lib.join("Release").display()); // multi-config generators
-    println!("cargo:rustc-link-lib=static=archive"); // archive_static's OUTPUT_NAME when no shared library is built
+    let lib_name = if lib.join("Release/archive_static.lib").is_file() || lib.join("archive_static.lib").is_file() {
+        "archive_static"
+    } else {
+        "archive"
+    };
+    println!("cargo:rustc-link-lib=static={lib_name}"); // archive_static's OUTPUT_NAME on Unix vs Windows MSVC
 }
 
 /// The unpacked source folder, fetched and checked first when not there yet.

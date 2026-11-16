@@ -37,6 +37,11 @@ pub enum Builtin {
     Focus { pane: FocusPane },
     #[serde(rename = "today")]
     Today {},
+    #[serde(rename = "properties-audit")]
+    PropertiesAudit {
+        #[serde(default)]
+        strict: bool,
+    },
 }
 
 /// The argument-free identity of a built-in, for listing; `Builtin::kind` keeps the two in step.
@@ -47,15 +52,17 @@ pub enum BuiltinId {
     Notify,
     Focus,
     Today,
+    PropertiesAudit,
 }
 
 impl BuiltinId {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Capture,
         Self::Open,
         Self::Notify,
         Self::Focus,
         Self::Today,
+        Self::PropertiesAudit,
     ];
 
     /// (id, title, default keys, description)
@@ -68,6 +75,9 @@ impl BuiltinId {
             Self::Notify => ("notify", "Notify", None, "Show a notification in the UI"),
             Self::Focus => ("focus", "Focus pane", None, "Bring a pane to the front"),
             Self::Today => ("today", "Today", None, "Focus, today's log, open tasks and recent activity"),
+            Self::PropertiesAudit => {
+                ("properties-audit", "Audit note properties", None, "Validate frontmatter properties and typed links against the vault schema")
+            }
         }
     }
 
@@ -106,6 +116,7 @@ impl Builtin {
             Self::Notify { .. } => BuiltinId::Notify,
             Self::Focus { .. } => BuiltinId::Focus,
             Self::Today {} => BuiltinId::Today,
+            Self::PropertiesAudit { .. } => BuiltinId::PropertiesAudit,
         }
     }
 }
@@ -283,6 +294,10 @@ pub async fn run(ws: &Workspace, bus: &EventBus, cmd: Command) -> Result<Value> 
                 let ws = ws.clone();
                 Ok(to_json(&blocking(move || today::today(ws.root(), &ws.config()?)).await?))
             }
+            Builtin::PropertiesAudit { strict } => {
+                let ws = ws.clone();
+                Ok(to_json(&blocking(move || Ok(crate::properties_audit::audit(ws.root(), &ws.config()?, strict))).await?))
+            }
         },
         Command::Script { script, args } => {
             let t = script.manifest.timeout_secs.map_or(SCRIPT_TIMEOUT, Duration::from_secs);
@@ -366,6 +381,7 @@ mod tests {
             json!({"path": "a.md", "line": 3}),
             json!({"title": "done"}),
             json!({"pane": "terminal"}),
+            json!({}),
             json!({}),
         ];
         for (id, args) in BuiltinId::ALL.into_iter().zip(samples) {

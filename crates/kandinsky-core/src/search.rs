@@ -108,7 +108,13 @@ fn pdf_lines(root: &Path, cfg: &Config, q: &str, o: Opts, walked: &[(std::path::
     if !crate::state_dir::join(root, crate::pdf_text::CACHE).is_dir() {
         return Vec::new();
     }
-    let pdfs: std::collections::HashSet<&str> = walked.iter().map(|(_, rel)| rel.as_str()).filter(|r| r.to_lowercase().ends_with(".pdf")).collect();
+    let ext = crate::external_roots::linked_external_pdfs(root, cfg);
+    let pdfs: std::collections::HashSet<&str> = walked
+        .iter()
+        .map(|(_, rel)| rel.as_str())
+        .filter(|r| r.to_lowercase().ends_with(".pdf"))
+        .chain(ext.iter().map(|(_, rel)| rel.as_str()))
+        .collect();
     let mut found: Vec<FileLines> = file_lines(q, o, text_files(root, cfg, o, crate::pdf_text::CACHE), false)
         .into_iter()
         .filter_map(|f| {

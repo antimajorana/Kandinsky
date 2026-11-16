@@ -74,7 +74,7 @@ export const BUILTIN_FIELDS: Record<string, OptionField[]> = {
   "file-table": [path("The CSV / TSV file")],
   excalidraw: [path("The drawing")],
   page: [path("The page (.page)")],
-  notebook: [path("The Jupyter (.ipynb) or WLJS (.wln) notebook")],
+  notebook: [path("The Jupyter (.ipynb) notebook")],
   web: [{ key: "url", label: "Address", kind: "text", hint: "https://…" }],
   search: [{ key: "q", label: "Search for", kind: "text", hint: "the same words as in the Search pane, e.g. tag:run" }],
   terminal: [{ key: "preset", label: "Runs", kind: "choice", choices: ["shell", "claude"] }],

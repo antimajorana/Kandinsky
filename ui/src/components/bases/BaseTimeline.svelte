@@ -462,7 +462,7 @@
   .tl-item.movable { cursor: grab; }
   .tl-item.span { border-radius: 5px; max-width: none; background: color-mix(in srgb, var(--bar-color, var(--accent)) 16%, var(--bg-elev)); border-color: color-mix(in srgb, var(--bar-color, var(--accent)) 48%, var(--border)); }
   .tl-item:hover { border-color: var(--accent); background: var(--bg-hover); z-index: 3; }
-  .tl-item.dragging { border-color: var(--accent); box-shadow: 0 2px 10px rgba(0, 0, 0, .18), 0 0 0 1px var(--accent); cursor: grabbing; z-index: 5; transition: left 45ms linear, width 45ms linear; }
+  .tl-item.dragging { border-color: var(--accent); box-shadow: var(--shadow-sm), 0 0 0 1px var(--accent); cursor: grabbing; z-index: 5; transition: left 45ms linear, width 45ms linear; }
   .tl-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 3; }
   .tl-item.lit { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .item-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bar-color, var(--accent)); flex: none; }
@@ -473,7 +473,7 @@
   .bar-grip::after { content: ""; width: 2px; height: 10px; border-radius: 1px; background: var(--accent); opacity: 0; transition: opacity 110ms; }
   .tl-item.span .bar-grip::after { opacity: .35; }
   .tl-item:hover .bar-grip::after, .tl-item.dragging .bar-grip::after { opacity: .9; }
-  .bar-date-pill { position: fixed; transform: translate(-50%, -100%); z-index: 900; pointer-events: none; padding: 2px 8px; border-radius: 999px; background: var(--bg-elev); border: 1.5px solid var(--accent); color: var(--heading, var(--text)); font-size: .78em; font-weight: 600; font-variant-numeric: tabular-nums; box-shadow: 0 3px 12px rgba(0, 0, 0, .2); white-space: nowrap; }
+  .bar-date-pill { position: fixed; transform: translate(-50%, -100%); z-index: 900; pointer-events: none; padding: 2px 8px; border-radius: 999px; background: var(--bg-elev); border: 1.5px solid var(--accent); color: var(--heading, var(--text)); font-size: .78em; font-weight: 600; font-variant-numeric: tabular-nums; box-shadow: var(--shadow-sm); white-space: nowrap; }
 
   .tl-undated { border-top: 1px solid var(--border); background: var(--bg-alt); padding: 5px 10px; }
   .undated-toggle { font: inherit; font-size: .86em; font-weight: 600; color: var(--text-muted); background: none; border: 0; cursor: pointer; padding: 2px 0; }

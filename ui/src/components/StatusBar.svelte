@@ -689,7 +689,7 @@
   .agy-act-btn:hover:not(:disabled) { background: var(--bg-hover); }
   .agy-act-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg, #fff); font-weight: 600; }
   .agy-act-btn.primary:hover { background: var(--accent-hover, var(--accent)); }
-  .agy-act-btn.primary code { font-family: var(--font-mono); font-size: 11px; background: rgba(0, 0, 0, 0.16); padding: 0 4px; border-radius: 3px; color: inherit; }
+  .agy-act-btn.primary code { font-family: var(--font-mono); font-size: 11px; background: color-mix(in srgb, var(--accent-fg) 16%, transparent); padding: 0 4px; border-radius: 3px; color: inherit; }
   .agy-act-meta { font-family: var(--font-mono); font-size: 10.5px; opacity: 0.9; }
   .agy-act-btn.handoff:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong)); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
   .agy-act-btn:disabled { opacity: 0.55; cursor: not-allowed; }

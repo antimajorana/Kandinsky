@@ -443,6 +443,28 @@ fn main() -> anyhow::Result<()> {
         return Ok(web_filters::convert_main(&out)?);
     }
     let folder = args.iter().find(|a| !a.to_string_lossy().starts_with("--")).map(PathBuf::from);
+    if let Some(uri) = folder.as_ref().map(|f| f.to_string_lossy().into_owned()).filter(|s| s.starts_with("kandinsky://capture-paper") || s.starts_with("kandinsky://paper")) {
+        let root = vault_to_open(None)?;
+        if let Ok(u) = uri.parse::<tauri::Url>() {
+            let mut params = serde_json::Map::new();
+            for (k, v) in u.query_pairs() {
+                if !v.trim().is_empty() {
+                    params.insert(k.into_owned(), serde_json::Value::String(v.into_owned()));
+                }
+            }
+            if let Some(best) = params.get("doi").or_else(|| params.get("arxiv")).or_else(|| params.get("url")).or_else(|| params.get("id")).cloned() {
+                params.entry("id").or_insert(best);
+            }
+            if let Some(base) = kandinsky_core::vaults::running_server(&root) {
+                let body = serde_json::json!({ "method": "add", "params": params, "timeout_secs": 120 }).to_string();
+                let added = tauri::async_runtime::block_on(post(&base, "/api/plugins/@references/helper", &body));
+                let note = added.ok().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).and_then(|v| v["note"].as_str().or_else(|| v["key"].as_str()).map(String::from));
+                let show_body = serde_json::json!({ "open": note }).to_string();
+                let _ = tauri::async_runtime::block_on(post(&base, "/api/shell/show", &show_body));
+                return Ok(());
+            }
+        }
+    }
     if args.iter().any(|a| a == "--capture") {
         if let Some(code) = native_capture(folder.as_deref()) {
             std::process::exit(code);

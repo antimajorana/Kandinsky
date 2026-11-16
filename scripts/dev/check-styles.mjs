@@ -22,7 +22,8 @@ const outside = (name) => name.startsWith("--dv-") || name.startsWith("--cm-"); 
 
 const found = [];
 for (const f of all) {
-  if (!/\.(svelte|css)$/.test(f) || TOKENS.some((t) => f.endsWith(`/styles/${t}`)) || f.includes("/themes/")) continue;
+  const norm = f.replaceAll("\\", "/");
+  if (!/\.(svelte|css)$/.test(norm) || TOKENS.some((t) => norm.endsWith(`/styles/${t}`)) || norm.includes("/themes/")) continue;
   const text = readFileSync(f, "utf8");
   // a .svelte file: only its <style>; a stylesheet: all of it
   const start = f.endsWith(".svelte") ? text.indexOf("<style") : 0;

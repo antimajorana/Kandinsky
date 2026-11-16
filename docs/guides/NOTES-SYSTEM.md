@@ -118,7 +118,17 @@ Kinds: `text`, `number`, `bool` (also `checkbox`), `date`, `datetime`, `list` (a
 
 **Kandinsky's own writers follow the spec.** A companion note (a PDF's, a book's, a paper's) says when it was made with the spec's stamp: `created` when the spec names it, else `date` (a vault whose rule is "date is the one creation stamp"), in the spec's `format` or its kind's usual form; with no spec, `created: YYYY-MM-DD` (`property_spec::creation_stamp`). A template's own frontmatter wins over both: its keys, order and values are kept, and the stamp only fills a key it leaves empty. A template's `{{date}}` writes what the template asks (`{{date:YYYY-MM-DD HH:mm}}`), never reformatted.
 
-**Not built yet**: a check that lists the notes that break the spec. (Renaming a key from the panel and completing note names in a link field are built: double-click a key's name; `/api/link-targets`.)
+**Auditing the vault against the spec (`properties-audit`):** `crates/kandinsky-core/src/properties_audit.rs` checks every indexed note (strictly honouring `editor.index_exclude`, `.kandinsky/config.toml` `ignore`, and excluding templates) against `[editor] properties_spec`:
+- Missing `required` properties for the note's `type:`
+- Invalid `enum`, `date`, `datetime`, `number`, `bool`, `list`, `tags`, `link`, or `links` values
+- Broken wikilinks in `link` / `links` properties as well as research relation keys (`up`, `conventions`, `depends_on`, `sources`), including links to files inside configured `external_pdf_roots`
+- Unknown properties when `strict: true` (or `?strict=true` / `--strict`)
+
+Reachable everywhere from the same engine:
+- **CLI:** `kandinsky [--workspace <dir>] properties-audit [--strict] [--json] [--no-fail]` (exits non-zero when issues exist unless `--no-fail` is passed)
+- **HTTP & Command:** `GET /api/properties/audit?strict=false`, core command `properties-audit`, and Command Palette *Properties: audit vault schema* (`notes.propertiesAudit`)
+- **Dashboard / view block:** `type: properties-audit` (`ui/src/components/widgets/PropertiesAuditWidget.svelte`, `/properties-audit` in the slash menu), grouping findings by issue kind or note with 1-click jump to the exact file and YAML line
+- **MCP:** `kandinsky_properties_audit` (plus `kandinsky_set_property`, which validates edits against the spec before writing unless `force: true`)
 
 Tests: `ui/tests/properties.spec.ts` (hidden by default with the file untouched; inline with the spec's kinds; the panel: a date, a tag, a link list, a choice, a number, a checkbox, removing and adding — each time the whole file compared, the body untouched, and vim's `u` undoing a panel edit), `crates/kandinsky-core/src/property_spec.rs` and `frontmatter.rs` (unit), `properties_spec_and_frontmatter_edits` in `crates/kandinsky-core/tests/server.rs`.
 
@@ -187,3 +197,29 @@ A figure is a picture (or any embed) with a block id at the end of its line: `![
 
 ## Sources not in the library
 In a note's `sources` (also `source`, `references`, `refs`, `cites`, `citations`), an entry the papers library could hold — a DOI, an arXiv id, a link to a PDF — shows red while no paper in the library has it (by its DOI, arXiv id, or the address it was filed from). A click on a red entry asks, then files it through the catalog and opens its note: a PDF is downloaded and read for its identifiers, else its first page (title, authors, year). Nothing is filed without that yes, and the catalog files only what it recognises, never an empty note. A filed entry opens its note, and Shift+click opens the address in the browser. Other addresses (a video, a site) stay ordinary links. Code: `ui/src/lib/doi-links.ts` (`isSource`, `filedSource`, `openSource`), drawn by `components/PropertyField.svelte`.
+
+## Upstream dependency & staleness propagation (`depends_on`, `up`, `conventions`)
+
+Research and derivation notes often depend on upstream conventions, definitions, or accepted results (`depends_on`, `up`, `conventions`, `sources`). `crates/kandinsky-core/src/upstream.rs` walks that directed graph (cycle-safe BFS) and computes each note's upstream health:
+
+- **`"Upstream stale"` (`stale`):** Any direct or transitive upstream target has `status: stale`.
+- **`"Upstream changed"` (`changed`):** Any direct or transitive upstream note (such as a `conventions` or `accepted` note) has an `updated` timestamp newer than the downstream note's `updated` / `accepted_date` timestamp.
+- **`""` (`clean`):** All upstream dependencies are current.
+
+Where it surfaces:
+- **Bases & formulas:** Built-in property `file.upstreamStatus` plus formula functions `upstreamStatus()` (`"Upstream stale"`, `"Upstream changed"`, or `""`) and `isUpstreamStale()` (`true` when stale or changed) in `crates/kandinsky-core/src/bases/expr.rs`.
+- **Editor & Review:** A clickable warning pill in the note header (`ui/src/panes/Editor.svelte`, via `GET /api/note/upstream?path=…`) and in `Review.svelte` cards, jumping directly to the upstream note that triggered the warning.
+
+## Read-only notebook & tabular result previews (`notebook-preview`, `table-preview`)
+
+To keep numerical checks and plots inspectable inside `.md` notes and `.page` dashboards without ever executing code on render:
+
+- **Notebook preview (`notebook-preview` block & ```` ```notebook-preview ```` fence):** Renders cells from Jupyter `.ipynb` JSON files (`path`, `cells` index/range such as `"0-2,4"`, `heading`, or `tag`). Displays syntax-highlighted input code alongside saved Markdown/LaTeX, plain text, and `image/png` or `image/svg+xml` outputs, with **Open notebook** and **Reveal file** actions (`ui/src/components/blocks/NotebookPreviewBlock.svelte`, `ui/src/lib/notebook-preview-fence.ts`). Never executes notebook code.
+- **Table result preview (`table-preview` block & ```` ```table-preview ```` fence):** Renders read-only slices of `.csv` / `.tsv` data files (`path`, `columns`, `offset`, `limit`, `sort`, `sci: true`), formatting scientific-notation floats cleanly (`1.23 × 10⁻⁵`) with tabular numerals (`ui/src/components/blocks/TablePreviewBlock.svelte`, `ui/src/lib/table-preview-fence.ts`).
+
+## External PDF pools, first-class Books, and folder scanning (`scan-external-roots`)
+
+Notes, reading notes (`<citekey>.md`), and `properties-audit` work seamlessly with shared `external_pdf_roots` (such as `../Library/Papers` and `../Library/Books`):
+
+- **Zero-copy linking & auditing:** PDFs inside configured `external_pdf_roots` are linked in place by relative path without copying files into the vault or creating OS symlinks, and `kandinsky properties-audit` / `kandinsky_properties_audit` resolves links into those roots without false broken-link warnings.
+- **Folder scanning & Books:** `kandinsky scan-external-roots` (or the **Scan folders** modal tab and `catalog_papers_scan_external_roots` MCP tool) indexes PDFs across `external_pdf_roots` into papers and first-class `@book` entries (`book` / `science_book`), derives collections from nested subfolders, updates paths and collections when PDFs move, and ignores non-PDF companion files (such as `.ipynb` notebooks). Agents can filter local lookups via `catalog_papers_search_papers` using `item_type` (`"paper"`, `"book"`, `"thesis"`, or `"notes"`). See [ZOTERO.md](ZOTERO.md) and [PAPERS-PDF-SOURCES.md](PAPERS-PDF-SOURCES.md).

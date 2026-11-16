@@ -11,7 +11,7 @@
 set -uo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 dry=0; [ "${1:-}" = "--dry" ] && dry=1
-if pgrep -u "$(id -u)" -x cargo >/dev/null || pgrep -u "$(id -u)" -x rustc >/dev/null; then
+if command -v pgrep >/dev/null 2>&1 && { pgrep -u "$(id -u)" -x cargo >/dev/null || pgrep -u "$(id -u)" -x rustc >/dev/null; }; then
   echo "[trim] a cargo / rustc is running: target/ left as it is"; exit 0
 fi
 before=$(du -sb "$root/target" 2>/dev/null | cut -f1)

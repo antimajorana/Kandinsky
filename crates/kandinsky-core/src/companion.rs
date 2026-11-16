@@ -41,7 +41,37 @@ pub fn ensure(root: &Path, cfg: &Config, req: &CompanionRequest, now: NaiveDateT
     if rel.is_empty() {
         return Err(Error::BadRequest("companion: a path is needed".into()));
     }
-    let abs = paths::safe_join(root, rel)?;
+    let abs = match paths::safe_join(root, rel) {
+        Ok(p) => p,
+        Err(e) => {
+            if !crate::external_roots::is_external_path(root, cfg, rel) {
+                return Err(e);
+            }
+            if let Some(owner) = crate::external_roots::owner_note_for_external_pdf(root, cfg, rel) {
+                return Ok(CompanionNote { path: owner, created: false, migrated_from: None });
+            }
+            let note = crate::external_roots::fallback_vault_note_for_external(root, cfg, rel);
+            let path = paths::safe_join(root, &note)?;
+            if path.is_file() || req.find {
+                return Ok(CompanionNote { path: note, created: false, migrated_from: None });
+            }
+            let name = rel.replace('\\', "/");
+            let base = name.rsplit('/').next().unwrap_or(&name);
+            let stem = base.rsplit_once('.').map_or(base, |(s, _)| s);
+            let mut props = req.properties.clone();
+            if !props.contains_key("pdf") {
+                props.insert("pdf".into(), rel.to_string().into());
+            }
+            let shape = Shape {
+                title: req.title.clone().filter(|t| !t.trim().is_empty()).unwrap_or_else(|| stem.to_string()),
+                props,
+                block: req.block.as_deref().map(view_block).unwrap_or_else(|| file_block(rel)),
+            };
+            let text = new_text(&shape, template(root, cfg, rel, &note, &shape.title, now)?.as_deref(), &stamp(root, cfg, now));
+            let created = write_new(&path, &text)?;
+            return Ok(CompanionNote { path: note, created, migrated_from: None });
+        }
+    };
     let folder = abs.is_dir() || req.path.ends_with('/');
     let (dir, name) = rel.rsplit_once('/').unwrap_or(("", rel));
     let stem = if folder { name } else { name.rsplit_once('.').map_or(name, |(s, _)| s) };
@@ -171,8 +201,14 @@ pub(crate) fn stands_for_in<'p>(root: &Path, rel: &str, props: impl Fn(&str) -> 
 }
 
 /// The PDF whose note `note` is (the inverse of `ensure` for a PDF): `x.pdf` beside `x.md`; else, for a folder entry's
-/// note, the PDF in its folder (the first by name); else the PDF its `view` block of type `pdf` shows.
+/// note, the PDF in its folder (the first by name), or an external/vault PDF named in its frontmatter (`pdf:` / `files:`);
+/// else the PDF its `view` block of type `pdf` shows.
 pub fn pdf_of_note(root: &Path, note: &str) -> Option<String> {
+    let cfg = Config::load(root).unwrap_or_default();
+    pdf_of_note_with_cfg(root, &cfg, note)
+}
+
+pub fn pdf_of_note_with_cfg(root: &Path, cfg: &Config, note: &str) -> Option<String> {
     let note = note.trim_matches('/');
     let (dir, name) = note.rsplit_once('/').map_or(("", note), |(d, n)| (d, n));
     let stem = name.strip_suffix(".md")?;
@@ -192,11 +228,17 @@ pub fn pdf_of_note(root: &Path, note: &str) -> Option<String> {
             return Some(at(first));
         }
     }
+    if let Some(ext_or_vault) = crate::external_roots::pdf_from_note_frontmatter(root, cfg, note) {
+        return Some(ext_or_vault);
+    }
     let text = std::fs::read_to_string(&abs).ok()?;
     let block = text.split("```view").skip(1).find(|b| b.lines().any(|l| l.trim() == "type: pdf"))?;
     let path = block.lines().take_while(|l| !l.starts_with("```")).find_map(|l| l.trim().strip_prefix("path:"))?.trim();
     let path = serde_json::from_str::<String>(path).unwrap_or_else(|_| path.trim_matches(['"', '\'']).to_string());
-    root.join(&path).is_file().then_some(path)
+    if root.join(&path).is_file() || crate::external_roots::resolve_external_file(root, cfg, &path).is_ok_and(|p| p.is_file()) {
+        return Some(path);
+    }
+    None
 }
 
 /// Whether `note` is a folder entry's own note (its properties carry ENTRY_MARK).

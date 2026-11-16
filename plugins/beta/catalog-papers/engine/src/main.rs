@@ -1,13 +1,14 @@
 //! The catalog-papers helper (`papers`): the references library served over the helper pipe
 //! (docs/guides/PLUGIN-API.md, "Calling Kandinsky back"), the core reached back through the same pipe (core_api.rs).
-//! Methods: list add import attach edit merge type delete bibtex bib citekey fold (the References view), lookup and
-//! catalog_add (the catalog's tools `lookup` / `add`), connector (the Zotero Connector's listener, on or off as the
-//! settings say; started with the helper).
 use kandinsky_papers::catalog;
 use kandinsky_papers::connector::{self, Connector, Listener};
 use kandinsky_papers::core_api::{ConnectorHost, CoreApi};
+use kandinsky_papers::enrich;
+use kandinsky_papers::inbox_dedupe::{self, MergeOpts, OrganizeInboxReq};
 use kandinsky_papers::refs::{ImportOpts, Lib, PaperEdit, Res};
+use kandinsky_papers::scan_roots::{self, ScanRootsOpts};
 use kandinsky_papers::settings::Settings;
+use kandinsky_papers::zotero_import::{self, ZoteroImportOpts};
 use kandinsky_plugin::{serve, Methods};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
@@ -33,10 +34,10 @@ fn parse<T: DeserializeOwned>(p: &Value) -> kandinsky_plugin::Result<T> {
     serde_json::from_value(p.clone()).map_err(|e| fail(format!("params: {e}")))
 }
 
-/// The vault: `KANDINSKY_ROOT` (set by the core), canonical so every path check holds.
+/// The vault: `KANDINSKY_ROOT` (set by the core), canonical without Windows `\\?\` prefix so every path check holds.
 fn vault() -> PathBuf {
     let root = std::env::var_os("KANDINSKY_ROOT").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-    root.canonicalize().unwrap_or(root)
+    kandinsky_text::paths::real(&root).unwrap_or(root)
 }
 
 /// One method: the library with this call's settings.
@@ -59,26 +60,36 @@ fn sync_connector(slot: &RefCell<Option<Listener>>, cfg: &Settings, plugin: &str
     json!({ "on": cfg.connector, "port": l.as_ref().map(|l| l.port), "listening": l.as_ref().is_some_and(|l| l.listening()) })
 }
 
+fn ensure_inbox_watcher(started: &RefCell<bool>, cfg: &Settings, plugin: &str, root: &Path) {
+    if !*started.borrow() && !cfg.watch_inbox.trim().is_empty() {
+        *started.borrow_mut() = true;
+        inbox_dedupe::start_inbox_watcher(plugin.to_string(), root.to_path_buf());
+    }
+}
+
 fn main() {
     let plugin = std::env::var("KANDINSKY_PLUGIN_ID").ok().filter(|p| !p.is_empty()).unwrap_or_else(|| "catalog-papers".into());
     let root = vault();
     let core = Rc::new(CoreApi::new(plugin.clone(), root.clone()));
     let listener = Rc::new(RefCell::new(None));
-    sync_connector(&listener, &core.settings(&Value::Null), &plugin, &root);
+    let inbox_watching = Rc::new(RefCell::new(false));
+    let initial_cfg = core.settings(&Value::Null);
+    sync_connector(&listener, &initial_cfg, &plugin, &root);
+    ensure_inbox_watcher(&inbox_watching, &initial_cfg, &plugin, &root);
 
     let mut m = Methods::new();
     let c = core.clone();
     m.add("list", move |p| with_lib(&c, &p, |lib| lib.list()));
     let c = core.clone();
     m.add("add", move |p| {
-        let id = text(&p, "id")?;
+        let id = p["id"].as_str().or_else(|| p["input"].as_str()).map(str::to_string).ok_or_else(|| fail("\"id\" is needed"))?;
         with_lib(&c, &p, |lib| lib.add(&id))
     });
     // a PDF the page uploaded into the vault (best: this plugin's cache, which is emptied after) filed as an entry
     let c = core.clone();
     m.add("import", move |p| {
         let path = text(&p, "path")?;
-        let name = p["name"].as_str().map(String::from).unwrap_or_else(|| path.rsplit('/').next().unwrap_or(&path).to_string());
+        let name = p["name"].as_str().map(String::from).unwrap_or_else(|| path.rsplit(['/', '\\']).next().unwrap_or(&path).to_string());
         let opts: ImportOpts = parse(&p)?;
         let file = kandinsky_text::paths::safe_join(&c.root, &kandinsky_plugin::live_rel(&c.root, &path)).map_err(fail)?;
         let bytes = std::fs::read(&file).map_err(|e| fail(format!("{path}: {e}")))?;
@@ -100,8 +111,10 @@ fn main() {
     });
     let c = core.clone();
     m.add("merge", move |p| {
-        let (dup, into) = (text(&p, "dup")?, text(&p, "into")?);
-        with_lib(&c, &p, |lib| lib.merge(&dup, &into))
+        let opts: MergeOpts = parse(&p)?;
+        with_lib(&c, &p, |lib| {
+            inbox_dedupe::merge_entries(lib, &opts, &|from, to| inbox_dedupe::relink_vault_citations(&c.root, from, to))
+        })
     });
     let c = core.clone();
     m.add("type", move |p| {
@@ -115,13 +128,11 @@ fn main() {
     });
     let c = core.clone();
     m.add("bibtex", move |p| {
-        let key = text(&p, "key")?;
-        with_lib(&c, &p, |lib| lib.bibtex(&key))
+        let key = p["key"].as_str().map(str::trim).unwrap_or("").to_string();
+        with_lib(&c, &p, |lib| if key.is_empty() { lib.bibtex_all() } else { lib.bibtex(&key) })
     });
     let c = core.clone();
     m.add("bib", move |p| with_lib(&c, &p, |lib| lib.write_bib().map(|n| json!({ "entries": n }))));
-    // the key a paper with these fields would get here (what `add` names its folder); authors "Last, First" joined
-    // by "; ", or a list
     let c = core.clone();
     m.add("citekey", move |p| {
         let title = text(&p, "title")?;
@@ -133,7 +144,6 @@ fn main() {
         let year = p["year"].as_str().map(String::from).or_else(|| p["year"].as_u64().map(|y| y.to_string()));
         with_lib(&c, &p, |lib| lib.next_citekey(&authors, year.as_deref(), &title).map(|key| json!({ "key": key })))
     });
-    // the entry's note, made when missing (the UI opens it: a citation chip, the Library's "Notes")
     let c = core.clone();
     m.add("note", move |p| {
         let key = text(&p, "key")?;
@@ -146,7 +156,79 @@ fn main() {
         let apply = p["apply"].as_bool().unwrap_or(false);
         with_lib(&c, &p, |lib| lib.fold_all(apply))
     });
-    // the catalog's tools (plugin.toml [[tool]] lookup, and add → method catalog_add)
+
+    // Zotero read-only importer, watched inbox, Zoplicate deduplication, remote search, preprint upgrade & arXiv source
+    m.add("discover_zotero", move |p| {
+        answer(Ok(zotero_import::discover_zotero(
+            p["data_dir"].as_str(),
+            p["prefs_path"].as_str(),
+            p["base_attachment_path"].as_str(),
+        )))
+    });
+    let c = core.clone();
+    m.add("import_zotero", move |p| {
+        let opts: ZoteroImportOpts = parse(&p)?;
+        with_lib(&c, &p, |lib| zotero_import::import_zotero(lib, &opts))
+    });
+    let (c, iw) = (core.clone(), inbox_watching.clone());
+    m.add("scan_inbox", move |p| {
+        ensure_inbox_watcher(&iw, &c.settings(&p), &c.plugin, &c.root);
+        with_lib(&c, &p, inbox_dedupe::scan_inbox)
+    });
+    let (c, iw) = (core.clone(), inbox_watching.clone());
+    m.add("organize_inbox", move |p| {
+        ensure_inbox_watcher(&iw, &c.settings(&p), &c.plugin, &c.root);
+        let req: OrganizeInboxReq = parse(&p)?;
+        with_lib(&c, &p, |lib| inbox_dedupe::organize_inbox(lib, &req))
+    });
+    let c = core.clone();
+    m.add("find_duplicates", move |p| with_lib(&c, &p, inbox_dedupe::find_duplicates));
+    let c = core.clone();
+    m.add("scan_external_roots", move |p| {
+        let opts: ScanRootsOpts = if p.is_null() { ScanRootsOpts::default() } else { parse(&p)? };
+        with_lib(&c, &p, |lib| scan_roots::scan_external_roots(lib, &opts))
+    });
+    let c = core.clone();
+    m.add("search_remote", move |p| {
+        let query = text(&p, "query")?;
+        let source = p["source"].as_str().unwrap_or("inspire");
+        let cfg = c.settings(&p);
+        answer(enrich::search_remote(&*c, &query, source, &cfg.email))
+    });
+    let c = core.clone();
+    m.add("upgrade_preprint", move |p| {
+        let key = text(&p, "key")?;
+        let dry_run = p["dry_run"].as_bool().unwrap_or(false);
+        with_lib(&c, &p, |lib| enrich::upgrade_preprint(lib, &key, dry_run))
+    });
+    let c = core.clone();
+    m.add("fetch_arxiv_source", move |p| {
+        let target = p["id"]
+            .as_str()
+            .or_else(|| p["key"].as_str())
+            .or_else(|| p["id_or_key"].as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| fail("\"id\" or \"key\" is needed"))?
+            .to_string();
+        with_lib(&c, &p, |lib| enrich::fetch_arxiv_source(lib, &c.plugin, &target))
+    });
+
+    // Agent MCP tools (plugin.toml [[tool]] search_papers, paper_annotations, lookup, add -> catalog_add)
+    let c = core.clone();
+    m.add("search_papers", move |p| {
+        let query = p["query"].as_str();
+        let collection = p["collection"].as_str();
+        let tag = p["tag"].as_str();
+        let item_type = p["item_type"].as_str().or_else(|| p["itemType"].as_str());
+        let limit = p["limit"].as_u64().map(|n| n as usize);
+        with_lib(&c, &p, |lib| lib.search(query, collection, tag, item_type, limit))
+    });
+    let c = core.clone();
+    m.add("paper_annotations", move |p| {
+        let key = p["key"].as_str().or_else(|| p["citekey"].as_str()).ok_or_else(|| fail("\"key\" is needed"))?.to_string();
+        with_lib(&c, &p, |lib| lib.annotations(&key))
+    });
     let c = core.clone();
     m.add("lookup", move |p| {
         let cfg = c.settings(&p);
@@ -160,7 +242,11 @@ fn main() {
         let ask = |s: &catalog::Source, paper: &Value| c.tool(&s.plugin, &s.tool, paper);
         with_lib(&c, &p, |lib| catalog::add(lib, &p, &sources, &ask))
     });
-    let (c, l) = (core.clone(), listener.clone());
-    m.add("connector", move |p| Ok(sync_connector(&l, &c.settings(&p), &c.plugin, &c.root)));
+    let (c, l, iw) = (core.clone(), listener.clone(), inbox_watching.clone());
+    m.add("connector", move |p| {
+        let cfg = c.settings(&p);
+        ensure_inbox_watcher(&iw, &cfg, &c.plugin, &c.root);
+        Ok(sync_connector(&l, &cfg, &c.plugin, &c.root))
+    });
     serve(m);
 }

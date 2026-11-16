@@ -460,7 +460,7 @@
   .code-badge.warn { color: var(--yellow, #dfab2e); background: color-mix(in srgb, var(--yellow, #dfab2e) 14%, transparent); }
   .issue-msg { flex: 1; white-space: normal; word-break: break-word; }
 
-  .modal-backdrop { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, 0.48); display: grid; place-items: center; padding: 16px; }
+  .modal-backdrop { position: fixed; inset: 0; z-index: 200; background: var(--scrim); display: grid; place-items: center; padding: 16px; }
   .wiki-modal { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: var(--shadow-pop); color: var(--text); }
   .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px 10px; border-bottom: 1px solid var(--border); }
   .modal-head h3 { margin: 0; font-size: 14.5px; font-weight: 600; }
@@ -486,11 +486,11 @@
   .feedback.error { color: var(--red, #d94e41); background: color-mix(in srgb, var(--red, #d94e41) 11%, transparent); border: 1px solid color-mix(in srgb, var(--red, #d94e41) 34%, transparent); white-space: pre-wrap; }
   .feedback.success { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--green, #3ca395); background: color-mix(in srgb, var(--green, #3ca395) 12%, transparent); border: 1px solid color-mix(in srgb, var(--green, #3ca395) 32%, transparent); }
   .stdout-line { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-  .open-dest-btn { padding: 4px 10px; border-radius: 6px; background: var(--green, #3ca395); color: #fff; font-weight: 500; white-space: nowrap; cursor: pointer; }
+  .open-dest-btn { padding: 4px 10px; border-radius: 6px; background: var(--green); color: #fff; font-weight: 500; white-space: nowrap; cursor: pointer; } /* literal: white ink on saturated viridian button */
 
   .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
   .btn-cancel { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; }
   .btn-cancel:hover { background: var(--bg-hover); color: var(--text); }
-  .btn-submit { padding: 5px 14px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); background: var(--accent); color: #fff; font-weight: 500; cursor: pointer; }
+  .btn-submit { padding: 5px 14px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); background: var(--accent); color: var(--accent-fg); font-weight: 500; cursor: pointer; }
   .btn-submit:disabled { opacity: 0.45; cursor: not-allowed; }
 </style>

@@ -559,9 +559,11 @@ function librarySource(kandinsky, title = null) {
           ...links.slice(0, 1).map((l) => ({ label: `Open on ${l.label}`, icon: "link", run: () => (kandinsky.openLink ? kandinsky.openLink(l.url) : window.open(l.url, "_blank", "noopener")) })), // as Kandinsky opens any link
           { label: "Copy link", icon: "copy", title: `[[${name}]]: to link it from a note`, run: () => navigator.clipboard.writeText(`[[${name}]]`).then(() => kandinsky.toast("Copied", `[[${name}]]`)) },
           { label: "Update", icon: "refresh", title: "Fetch its details again from the services it is in (your own text is kept)", run: () => kandinsky.helper.call("refresh", { path: item.id }, { timeout: 120 }) },
-          // as References' Edit: its fields in place, each written to the note's property
-          { label: "Edit", edit: { fields: editable.map((p) => ({ key: p, label: human(p), value: fieldText(props[p]), half: editable.length > 3 })), save: async (v) => { for (const p of editable) if (v[p] !== fieldText(props[p])) await kandinsky.writeProperty(item.id, p, v[p]); } } },
-          ...(kandinsky.trash ? [{ label: "Delete…", danger: true, confirm: { title: `Move ${item.title} to the Trash?`, hint: "Its note goes to .kandinsky/trash/, where it can be taken back.", button: "Delete" }, run: () => kandinsky.trash(item.id) }] : []),
+          // as References' Edit: its fields in place, each written to the note's property (only when the catalog itself writes the kind)
+          ...(k.writer?.by !== "plugin" ? [
+            { label: "Edit", edit: { fields: editable.map((p) => ({ key: p, label: human(p), value: fieldText(props[p]), half: editable.length > 3 })), save: async (v) => { for (const p of editable) if (v[p] !== fieldText(props[p])) await kandinsky.writeProperty(item.id, p, v[p]); } } },
+            ...(kandinsky.trash ? [{ label: "Delete…", danger: true, confirm: { title: `Move ${item.title} to the Trash?`, hint: "Its note goes to .kandinsky/trash/, where it can be taken back.", button: "Delete" }, run: () => kandinsky.trash(item.id) }] : []),
+          ] : []),
         ],
         links: links,
         // its shelf, changed in place (the kind's `group` property, as a link like the catalog writes it)

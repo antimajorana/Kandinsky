@@ -77,3 +77,5 @@ input = {}
 # where it runs (PLUGIN-API.md, "Platforms"); a platform not named is untested (Android: only with `phone = true`)
 [platforms]
 linux = "works"
+windows = "works"
+macos = "works"

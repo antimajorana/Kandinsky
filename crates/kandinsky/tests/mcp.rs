@@ -18,7 +18,7 @@ fn session(ws: &std::path::Path, msgs: &[Value]) -> Vec<Value> {
     }
     drop(stdin); // EOF ends the server
     let out = child.wait_with_output().unwrap();
-    assert!(out.status.success());
+    assert!(out.status.success(), "kandinsky mcp failed: {}", String::from_utf8_lossy(&out.stderr));
     String::from_utf8_lossy(&out.stdout).lines().map(|l| serde_json::from_str(l).unwrap()).collect()
 }
 
@@ -47,7 +47,17 @@ fn handshake_tools_and_offline_calls() {
     assert_eq!(replies.len(), 7, "the notification gets no reply: {replies:?}");
     assert_eq!(replies[0]["result"]["serverInfo"]["name"], "kandinsky");
     let names: Vec<&str> = replies[1]["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert!(names.contains(&"kandinsky_context") && names.contains(&"kandinsky_open") && names.contains(&"kandinsky_tasks") && names.len() == 12, "{names:?}");
+    assert!(
+        names.contains(&"kandinsky_context")
+            && names.contains(&"kandinsky_open")
+            && names.contains(&"kandinsky_tasks")
+            && names.contains(&"kandinsky_query")
+            && names.contains(&"kandinsky_backlinks")
+            && names.contains(&"kandinsky_set_property")
+            && names.contains(&"kandinsky_properties_audit")
+            && names.len() == 16,
+        "{names:?}"
+    );
     assert!(replies[2]["result"]["isError"].is_null(), "{}", replies[2]);
     let today = replies[3]["result"]["content"][0]["text"].as_str().unwrap();
     assert!(today.contains("cumulant periodization") && today.contains("Mott transition"), "{today}");
@@ -128,4 +138,306 @@ fn a_plugins_word_to_agents_is_in_the_instructions_while_it_is_on() {
     let text = session(d.path(), &[init])[0]["result"]["instructions"].as_str().unwrap().to_string();
     assert!(text.contains("- [plugin remote] For a command on a host, use remote_run, never ssh in your own shell."), "{text}");
     assert!(!text.contains("Never shown"), "{text}");
+}
+
+#[test]
+fn part_b_tools_query_backlinks_set_property_and_audit_over_stdio() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path();
+    std::fs::create_dir_all(root.join(".kandinsky")).unwrap();
+    std::fs::create_dir_all(root.join("templates")).unwrap();
+    std::fs::create_dir_all(root.join("notes")).unwrap();
+    std::fs::write(
+        root.join("templates/properties.yaml"),
+        "properties:\n  status:\n    kind: enum\n    values: [draft, active, accepted, stale]\n  up:\n    kind: link\ntypes:\n  concept:\n    required: [status]\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("notes/Conventions.md"), "---\ntype: concept\nstatus: accepted\n---\n# Conventions\n").unwrap();
+    std::fs::write(root.join("notes/Derivation.md"), "---\ntype: concept\nup: \"[[Conventions]]\"\n---\n# Derivation\nSee [[Conventions]].\n").unwrap();
+    std::fs::write(
+        root.join("Research.base"),
+        "filters:\n  and:\n    - file.inFolder(\"notes\")\nviews:\n  - type: table\n    name: All\n    order: [file.name, status]\n",
+    )
+    .unwrap();
+
+    let replies = session(
+        root,
+        &[
+            call(1, "kandinsky_properties_audit", json!({})),
+            call(2, "kandinsky_set_property", json!({"path": "notes/Derivation.md", "key": "status", "value": "bogus"})),
+            call(3, "kandinsky_set_property", json!({"path": "notes/Derivation.md", "key": "status", "value": "active"})),
+            call(4, "kandinsky_backlinks", json!({"path": "notes/Conventions.md"})),
+            call(5, "kandinsky_query", json!({"path": "Research.base"})),
+        ],
+    );
+    let parse_text = |r: &Value| -> Value { serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap() };
+
+    let audit = parse_text(&replies[0]);
+    assert_eq!(audit["issues"].as_array().unwrap().len(), 1, "{audit}");
+    assert_eq!(audit["issues"][0]["path"], "notes/Derivation.md");
+    assert_eq!(replies[1]["result"]["isError"], true, "invalid enum must fail: {}", replies[1]);
+    assert!(replies[2]["result"]["isError"].is_null(), "{}", replies[2]);
+    let bl = parse_text(&replies[3]);
+    assert!(bl["links"].as_array().unwrap().iter().any(|l| l["relation"] == "up"), "{bl}");
+    let q = parse_text(&replies[4]);
+    assert_eq!(q["views"][0]["count"], 2, "{q}");
+}
+
+fn find_papers_bin() -> std::path::PathBuf {
+    let exe_name = if cfg!(windows) { "papers.exe" } else { "papers" };
+    let kandinsky_bin = std::path::Path::new(env!("CARGO_BIN_EXE_kandinsky"));
+    let target_dir = format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS);
+    let mut candidates = Vec::new();
+    if let Some(dir) = kandinsky_bin.parent() {
+        candidates.push(dir.join(exe_name));
+        if let Some(parent) = dir.parent() {
+            candidates.push(parent.join(exe_name));
+        }
+    }
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    if let Some(repo_root) = manifest_dir.parent().and_then(|p| p.parent()) {
+        candidates.push(repo_root.join("target/debug").join(exe_name));
+        candidates.push(repo_root.join("target/release").join(exe_name));
+        candidates.push(repo_root.join("plugins/beta/catalog-papers/bin").join(&target_dir).join(exe_name));
+    }
+    candidates.into_iter().find(|p| p.is_file()).unwrap_or_else(|| {
+        panic!(
+            "catalog-papers helper binary ({exe_name}) not found beside {} or in target/ / plugins/beta/catalog-papers/bin/{target_dir}/; build it first with `cargo build -p kandinsky-papers`",
+            kandinsky_bin.display()
+        )
+    })
+}
+
+fn install_catalog_papers(vault: &std::path::Path, settings_toml: &str) {
+    let papers_bin = find_papers_bin();
+    let bin_str = papers_bin.to_string_lossy().replace('\\', "/").replace('"', "\\\"");
+    let manifest_src = include_str!("../../../plugins/beta/catalog-papers/plugin.toml");
+    let mut replaced = false;
+    let mut manifest = String::new();
+    for line in manifest_src.lines() {
+        if line.trim_start().starts_with("run =") && !replaced {
+            manifest.push_str(&format!("run = \"\\\"{bin_str}\\\"\"\n"));
+            replaced = true;
+        } else {
+            manifest.push_str(line);
+            manifest.push('\n');
+        }
+    }
+    assert!(replaced, "expected `[helper] run =` line in catalog-papers plugin.toml");
+    let pdir = vault.join(".kandinsky/plugins/catalog-papers");
+    std::fs::create_dir_all(&pdir).unwrap();
+    std::fs::write(pdir.join("plugin.toml"), manifest).unwrap();
+    let sdir = vault.join(".kandinsky/plugin-settings");
+    std::fs::create_dir_all(&sdir).unwrap();
+    std::fs::write(sdir.join("catalog-papers.toml"), settings_toml).unwrap();
+}
+
+fn tiny_pdf(lines: &[&str], page_count: usize) -> Vec<u8> {
+    assert!(page_count >= 1);
+    let esc = |s: &str| s.replace('\\', "\\\\").replace('(', "\\(").replace(')', "\\)");
+    let mut stream = String::from("BT /F1 14 Tf 40 700 Td ");
+    for (i, line) in lines.iter().enumerate() {
+        if i > 0 {
+            stream.push_str("0 -24 Td ");
+        }
+        stream.push_str(&format!("({}) Tj ", esc(line)));
+    }
+    stream.push_str("ET");
+    let kids: Vec<String> = (0..page_count).map(|i| format!("{} 0 R", 6 + i)).collect();
+    let mut objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        format!("<< /Type /Pages /Kids [{}] /Count {page_count} >>", kids.join(" ")),
+        format!("<< /Length {} >>\nstream\n{stream}\nendstream", stream.len()),
+        "<< /Length 0 >>\nstream\n\nendstream".into(),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".into(),
+    ];
+    for i in 0..page_count {
+        let content_id = if i == 0 { 3 } else { 4 };
+        objs.push(format!(
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 800] /Contents {content_id} 0 R /Resources << /Font << /F1 5 0 R >> >> >>"
+        ));
+    }
+    let mut out = String::from("%PDF-1.4\n");
+    let mut offsets = Vec::with_capacity(objs.len());
+    for (idx, obj) in objs.iter().enumerate() {
+        offsets.push(out.len());
+        out.push_str(&format!("{} 0 obj\n{obj}\nendobj\n", idx + 1));
+    }
+    let xref = out.len();
+    out.push_str(&format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1));
+    for off in offsets {
+        out.push_str(&format!("{off:010} 00000 n \n"));
+    }
+    out.push_str(&format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1));
+    out.into_bytes()
+}
+
+fn has_any_pdf(dir: &std::path::Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else { return false };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.is_dir() && has_any_pdf(&p) {
+            return true;
+        }
+        if p.is_file() && p.extension().is_some_and(|x| x.eq_ignore_ascii_case("pdf")) {
+            return true;
+        }
+    }
+    false
+}
+
+#[test]
+fn catalog_papers_scan_external_roots_and_search_item_type() {
+    let d = tempfile::tempdir().unwrap();
+    let vault = d.path().join("vault");
+    let papers_root = d.path().join("Library/Papers");
+    let books_root = d.path().join("Library/Books");
+    std::fs::create_dir_all(papers_root.join("CondensedMatter/DMFT")).unwrap();
+    std::fs::create_dir_all(books_root.join("Textbooks")).unwrap();
+
+    let paper_pdf = papers_root.join("CondensedMatter/DMFT/Hubbard_1963.pdf");
+    let book_pdf = books_root.join("Textbooks/Altland_2023_Condensed_Matter_Field_Theory.pdf");
+    let notebook = papers_root.join("CondensedMatter/DMFT/analysis.ipynb");
+    std::fs::write(&paper_pdf, tiny_pdf(&["Electron Correlations in Narrow Energy Bands", "John Hubbard", "(Dated: 1963)"], 2)).unwrap();
+    std::fs::write(&book_pdf, tiny_pdf(&["Condensed Matter Field Theory", "Alexander Altland", "(Dated: 2023)"], 120)).unwrap();
+    std::fs::write(&notebook, r#"{"nbformat":4,"cells":[]}"#).unwrap();
+
+    install_catalog_papers(&vault, "external_pdf_roots = [\"../Library/Papers\", \"../Library/Books\"]\n");
+
+    let parse_text = |r: &Value| -> Value {
+        assert!(r["result"]["isError"].is_null(), "tool call failed: {r}");
+        serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap()
+    };
+    let count_of = |v: &Value, k: &str| -> u64 { v[k].as_u64().or_else(|| v[k].as_array().map(|a| a.len() as u64)).unwrap_or(0) };
+
+    let dry_replies = session(
+        &vault,
+        &[
+            json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
+            call(2, "catalog_papers_scan_external_roots", json!({"max_lookups": 0})),
+            call(3, "catalog_papers_scan_external_roots", json!({"dry_run": true, "root": "../Library/Books", "max_lookups": 0})),
+        ],
+    );
+
+    // 1. Audit MCP tool listing for catalog_papers_* tools and schemas
+    let listed = dry_replies[0]["result"]["tools"].as_array().unwrap();
+    let names: Vec<&str> = listed.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    for expected in [
+        "catalog_papers_search_papers",
+        "catalog_papers_paper_annotations",
+        "catalog_papers_bibtex",
+        "catalog_papers_find_duplicates",
+        "catalog_papers_upgrade_preprint",
+        "catalog_papers_fetch_arxiv_source",
+        "catalog_papers_scan_external_roots",
+    ] {
+        assert!(names.contains(&expected), "missing {expected} in {names:?}");
+    }
+    let scan_tool = listed.iter().find(|t| t["name"] == "catalog_papers_scan_external_roots").unwrap();
+    for param in ["dry_run", "root", "rate_limit_ms", "max_lookups"] {
+        assert!(scan_tool["inputSchema"]["properties"][param].is_object(), "missing {param} schema: {scan_tool}");
+    }
+    let search_tool = listed.iter().find(|t| t["name"] == "catalog_papers_search_papers").unwrap();
+    assert!(search_tool["inputSchema"]["properties"]["item_type"].is_object(), "{search_tool}");
+
+    // 2. Dry-run preview (default when dry_run omitted): finds 2 PDFs, ignores .ipynb, writes nothing
+    let preview = parse_text(&dry_replies[1]);
+    assert_eq!(preview["dry_run"], true, "{preview}");
+    assert_eq!(count_of(&preview, "roots_scanned"), 2, "{preview}");
+    assert_eq!(preview["total_pdfs"], 2, "{preview}");
+    assert_eq!(preview["created"], 2, "{preview}");
+    assert_eq!(count_of(&preview, "errors"), 0, "{preview}");
+    assert!(!vault.join("refs/papers").exists(), "dry-run must not create notes");
+    assert!(!vault.join("refs/refs.bib").exists(), "dry-run must not write refs.bib");
+
+    // 3. Single root filter dry-run
+    let books_only = parse_text(&dry_replies[2]);
+    assert_eq!(books_only["dry_run"], true, "{books_only}");
+    assert_eq!(books_only["total_pdfs"], 1, "{books_only}");
+    assert_eq!(books_only["items"][0]["bibtex_type"], "book", "{books_only}");
+
+    // 4. Apply sync: creates paper & @book entries in place, ignores .ipynb
+    let apply_replies = session(
+        &vault,
+        &[
+            call(1, "catalog_papers_scan_external_roots", json!({"dry_run": false, "max_lookups": 0})),
+            call(2, "catalog_papers_search_papers", json!({"item_type": "book"})),
+            call(3, "catalog_papers_search_papers", json!({"item_type": "paper"})),
+        ],
+    );
+
+    let applied = parse_text(&apply_replies[0]);
+    assert_eq!(applied["dry_run"], false, "{applied}");
+    assert_eq!(applied["total_pdfs"], 2, "{applied}");
+    assert_eq!(applied["created"], 2, "{applied}");
+    assert_eq!(count_of(&applied, "errors"), 0, "{applied}");
+    let items = applied["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2, "{applied}");
+    assert!(!items.iter().any(|it| it["pdf_ref"].as_str().unwrap_or("").contains("analysis.ipynb")), "{applied}");
+    let book_item = items.iter().find(|it| it["bibtex_type"] == "book").expect("expected @book item");
+    let paper_item = items.iter().find(|it| it["bibtex_type"] != "book").expect("expected paper item");
+    assert!(
+        paper_item["collections"].as_array().unwrap().iter().any(|c| {
+            let s = c.as_str().unwrap_or("");
+            s.contains("DMFT") || s.contains("CondensedMatter")
+        }),
+        "expected nested topic collection on paper: {paper_item}"
+    );
+    assert!(
+        book_item["collections"].as_array().unwrap().iter().any(|c| c.as_str().unwrap_or("").contains("Textbooks")),
+        "expected folder collection on book: {book_item}"
+    );
+
+    // PDFs stay strictly in place outside the vault
+    assert!(paper_pdf.is_file() && book_pdf.is_file() && notebook.is_file());
+    assert!(!has_any_pdf(&vault.join("refs/papers")), "zero PDFs may be copied into the vault");
+    let bib = std::fs::read_to_string(vault.join("refs/refs.bib")).unwrap();
+    let book_key = book_item["citekey"].as_str().unwrap().to_string();
+    assert!(bib.contains(&format!("@book{{{book_key},")), "expected @book in refs.bib:\n{bib}");
+    assert!(!bib.contains("analysis"), "non-PDF .ipynb must be ignored:\n{bib}");
+
+    // 5. search_papers filters cleanly by item_type ("book" vs "paper")
+    let books_search = parse_text(&apply_replies[1]);
+    let books_arr = books_search.as_array().unwrap();
+    assert_eq!(books_arr.len(), 1, "{books_search}");
+    assert_eq!(books_arr[0]["key"], book_key);
+    assert_eq!(books_arr[0]["pdf"], "../Library/Books/Textbooks/Altland_2023_Condensed_Matter_Field_Theory.pdf");
+
+    let papers_search = parse_text(&apply_replies[2]);
+    let papers_arr = papers_search.as_array().unwrap();
+    assert_eq!(papers_arr.len(), 1, "{papers_search}");
+    assert_eq!(papers_arr[0]["pdf"], "../Library/Papers/CondensedMatter/DMFT/Hubbard_1963.pdf");
+
+    // 6. Move the paper PDF to a new subfolder inside external_pdf_roots and rescan
+    let moved_pdf = papers_root.join("QuantumInfo/Mott/Hubbard_1963.pdf");
+    std::fs::create_dir_all(moved_pdf.parent().unwrap()).unwrap();
+    std::fs::rename(&paper_pdf, &moved_pdf).unwrap();
+
+    let rescan_replies = session(
+        &vault,
+        &[
+            call(1, "catalog_papers_scan_external_roots", json!({"dry_run": false, "max_lookups": 0})),
+            call(2, "catalog_papers_search_papers", json!({"item_type": "paper"})),
+            call(3, "catalog_papers_bibtex", json!({"key": book_key})),
+        ],
+    );
+
+    let rescan = parse_text(&rescan_replies[0]);
+    assert_eq!(rescan["moved"], 1, "{rescan}");
+    assert_eq!(rescan["unchanged"], 1, "{rescan}");
+    assert_eq!(rescan["created"], 0, "{rescan}");
+
+    let moved_search = parse_text(&rescan_replies[1]);
+    let moved_papers = moved_search.as_array().unwrap();
+    assert_eq!(moved_papers.len(), 1, "{moved_search}");
+    assert_eq!(moved_papers[0]["pdf"], "../Library/Papers/QuantumInfo/Mott/Hubbard_1963.pdf");
+    assert!(
+        moved_papers[0]["collections"].as_array().unwrap().iter().any(|c| {
+            let s = c.as_str().unwrap_or("");
+            s.contains("Mott") || s.contains("QuantumInfo")
+        }),
+        "expected updated collection after move: {moved_search}"
+    );
+    let bib_single = rescan_replies[2]["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(bib_single.contains(&format!("@book{{{book_key},")), "{bib_single}");
 }

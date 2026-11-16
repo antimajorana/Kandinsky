@@ -68,6 +68,9 @@
   import PageHistoryModal from "./components/PageHistoryModal.svelte";
   import { importNotesModal } from "./lib/import-modal.svelte";
   import ImportNotesModal from "./components/ImportNotesModal.svelte";
+  import { paperWorkflowModal, zoteroModal } from "./lib/paper-modals.svelte";
+  import ZoteroImportModal from "./components/ZoteroImportModal.svelte";
+  import PaperWorkflowsModal from "./components/PaperWorkflowsModal.svelte";
 
   let dockEl: HTMLDivElement;
 
@@ -267,6 +270,8 @@
 {#if dropFilePrompt.current}<DropFileChoiceModal />{/if}
 {#if pageHistoryModal.open}<PageHistoryModal />{/if}
 {#if importNotesModal.open}<ImportNotesModal />{/if}
+{#if zoteroModal.open}<ZoteroImportModal />{/if}
+{#if paperWorkflowModal.open}<PaperWorkflowsModal />{/if}
 <Toasts />
 
 <style>

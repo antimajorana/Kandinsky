@@ -6,15 +6,22 @@ import { on, touches } from "./bus";
 import { openPath } from "./dock";
 import { errText } from "./text";
 import { openReadingNote, readPaper } from "./papers";
+import { openPaperWorkflowModal, openZoteroImportModal } from "./paper-modals.svelte";
 import { toast } from "./state.svelte";
 import type { Paper } from "./types";
 import type { LibraryItem, LibrarySource } from "./plugin-api";
 
 // Zotero's item types grouped as a reader thinks of them (2026-10-18: books, theses and lecture notes are references too)
 const typeOf = (p: Paper) =>
-  p.kind === "book" || p.kind === "bookSection" ? "book" : p.kind === "thesis" ? "thesis" : p.kind === "manuscript" || p.kind === "report" ? "notes" : "paper";
-/** Zotero's item type in words: `journalArticle` → `journal article`. */
-const typeWords = (kind: string) => kind.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+  p.kind === "science_book" || p.kind === "book" || p.kind === "bookSection"
+    ? "book"
+    : p.kind === "thesis"
+      ? "thesis"
+      : p.kind === "manuscript" || p.kind === "report"
+        ? "notes"
+        : "paper";
+/** Zotero's item type in words: `journalArticle` → `journal article`, `science_book` → `science book`. */
+const typeWords = (kind: string) => kind.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
 const lastNames = (p: Paper) => {
   const n = p.authors.map((a) => a.split(",")[0].trim());
   return n.length > 3 ? `${n[0]} et al.` : n.join(", ");
@@ -79,6 +86,38 @@ export function referencesSource(): LibrarySource {
           { label: "\\cite", run: () => copy(`\\cite{${p.key}}`, "\\cite") },
           { label: "BibTeX", run: async () => copy(await api.refsBibtex(p.key), "BibTeX") },
           {
+            label: "Check published", title: "Check Crossref / INSPIRE-HEP / OpenAlex for a published journal version while keeping arXiv version provenance",
+            run: async () => {
+              const r = (await api.pluginHelper("catalog-papers", "upgrade_preprint", { key: p.key }, 90)) as { upgraded?: boolean; doi?: string; venue?: string; message?: string };
+              toast(r?.upgraded ? `Upgraded ${p.key}` : `${p.key}: no newer publication`, r?.message ?? (r?.venue ? `${r.venue}${r.doi ? ` · doi:${r.doi}` : ""}` : "Metadata checked"), r?.upgraded ? "success" : "info");
+            },
+          },
+          ...(p.arxiv ? [{
+            label: "arXiv LaTeX", title: "Download and unpack the arXiv e-print LaTeX (.tex / .bib) source",
+            run: async () => {
+              const r = (await api.pluginHelper("catalog-papers", "fetch_arxiv_source", { key: p.key }, 120)) as { dir?: string; main_tex?: string; files?: string[] };
+              toast(`Fetched arXiv source for ${p.key}`, r?.main_tex ?? r?.dir ?? `${r?.files?.length ?? 0} files`, "success", 7000,
+                r?.main_tex && !r.main_tex.startsWith(".kandinsky/cache/") ? [{ label: "Open .tex", run: () => openPath(r.main_tex!) }] : undefined);
+            },
+          }] : []),
+          ...(p.pdf && (p.pdf.startsWith("../") || p.pdf.startsWith("@ext/")) ? [
+            {
+              label: "Export marks sidecar", title: "Merge this vault's PDF highlights into a shared .kandinsky-marks sidecar beside the external PDF",
+              run: async () => {
+                const r = await api.pdfSidecar(p.pdf!, "export");
+                toast("Shared sidecar written", `${r.marks} mark(s) → ${r.sidecar_path}`, "success");
+              },
+            },
+            {
+              label: "Import marks sidecar", title: "Merge highlights from the external PDF's shared .kandinsky-marks sidecar into this vault's reading note",
+              run: async () => {
+                const r = await api.pdfSidecar(p.pdf!, "import");
+                toast("Shared sidecar imported", `${r.marks} mark(s) in ${r.note ?? p.key}`, "success");
+              },
+            },
+          ] : []),
+          { label: "Duplicates / merge…", title: "Compare and merge duplicate entries", run: () => openPaperWorkflowModal("duplicates", p.key) },
+          {
             label: "Edit", title: "Edit title, authors, year, venue, collections, tags",
             edit: {
               fields: [
@@ -137,10 +176,23 @@ export function referencesSource(): LibrarySource {
     },
     // Zotero → plain files through a command of the vault (Zotero is only read): any `refs.<verb>-zotero`, a sync first
     async tools() {
+      let inboxLabel = "Drop inbox…";
+      try {
+        const inbox = (await api.pluginHelper("catalog-papers", "scan_inbox", {}, 15)) as { items?: unknown[]; files?: unknown[] } | null;
+        const n = inbox?.items?.length ?? inbox?.files?.length ?? 0;
+        if (n > 0) inboxLabel = `Drop inbox (${n})…`;
+      } catch { /* helper optional until configured */ }
+      const baseTools = [
+        { label: "Add / search…", title: "Add by DOI, arXiv (with vN), ISBN, BibTeX/RIS paste, or search INSPIRE-HEP / Crossref / OpenAlex", run: () => openPaperWorkflowModal("add") },
+        { label: inboxLabel, title: "Triage, rename and file dropped PDFs from watch_inbox into external_pdf_roots", run: () => openPaperWorkflowModal("inbox") },
+        { label: "Scan external folders…", title: "Scan configured external PDF folders for papers and books, derive collections, and sync references", run: () => openPaperWorkflowModal("scan") },
+        { label: "Duplicates…", title: "Detect and safely merge duplicate papers across DOI, arXiv, SHA-256, ISBN and title", run: () => openPaperWorkflowModal("duplicates") },
+        { label: "Import from Zotero…", title: "Lossless one-time Zotero migration (SQLite, linked PDFs in place, collections, notes and highlights)", run: () => openZoteroImportModal() },
+      ];
       const mine = (await api.commands()).filter((c) => /^refs\.[\w-]*zotero$/.test(c.id));
       const z = mine.find((c) => c.id.includes("sync")) ?? mine[0];
-      if (!z) return [];
-      return [{
+      if (!z) return baseTools;
+      return [...baseTools, {
         label: "Sync from Zotero", title: `${z.title} — Zotero is only read; running it again brings only what changed`,
         run: async () => {
           const before = papers.size;
@@ -151,7 +203,19 @@ export function referencesSource(): LibrarySource {
         },
       }];
     },
-    watch: (reload) => on("fs", (e) => { if (touches(e.paths, (p) => p.startsWith(dir))) reload(); }),
+    watch: (reload) => {
+      const offFs = on("fs", (e) => { if (touches(e.paths, (p) => p.startsWith(dir))) reload(); });
+      const offPlug = on("plugin", (e) => {
+        if (e.plugin === "catalog-papers" && e.event === "papers:inbox") {
+          const count = (e.data as { count?: number } | null)?.count ?? 1;
+          toast("New PDF(s) in drop inbox", `${count} file(s) ready to file`, "info", 7000, [{ label: "Triage", run: () => openPaperWorkflowModal("inbox") }]);
+          reload();
+        }
+      });
+      const onChanged = () => reload();
+      window.addEventListener("kandinsky:papers-changed", onChanged);
+      return () => { offFs(); offPlug(); window.removeEventListener("kandinsky:papers-changed", onChanged); };
+    },
     keys: { r: (i) => readPaper(paper(i)), n: (i) => void openReadingNote(i.id), c: (i) => void copy(i.id, "citekey") },
     open: (i) => openPdf(paper(i)),
   };

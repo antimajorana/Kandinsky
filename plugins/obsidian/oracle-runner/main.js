@@ -25,23 +25,6 @@ async function runLintToast(kandinsky, path) {
   }
 }
 
-async function openWljsToast(kandinsky, path) {
-  if (!path || !/\.wln$/i.test(path)) {
-    kandinsky.toast("Open in WLJS", "Select a .wln notebook first.", "info");
-    return;
-  }
-  try {
-    const res = await kandinsky.helper.call("openInWljs", { path }, { timeout: 15 });
-    if (res && res.ok) {
-      kandinsky.toast("Opened in WLJS", path, "success");
-    } else {
-      kandinsky.toast("WLJS launch failed", (res && res.error) || "Could not open WLJS", "error");
-    }
-  } catch (err) {
-    kandinsky.toast("WLJS error", String(err && err.message ? err.message : err), "error");
-  }
-}
-
 function extractSection(text, headingRe) {
   const m = headingRe.exec(text);
   if (!m) return "";
@@ -80,16 +63,6 @@ export function register(kandinsky) {
   });
 
   kandinsky.registerCommand({
-    id: "open-wljs",
-    title: "Oracle: Open .wln notebook in WLJS",
-    run: () => {
-      const ctx = kandinsky.context();
-      const p = (ctx && ctx.active && ctx.active.path) || "";
-      void openWljsToast(kandinsky, p);
-    },
-  });
-
-  kandinsky.registerCommand({
     id: "copy-conventions",
     title: "Oracle: Copy statement & conventions for external model",
     run: () => void copyProblemContext(kandinsky, activeMdPath(kandinsky)),
@@ -98,9 +71,6 @@ export function register(kandinsky) {
   kandinsky.shell.menu("file", (target) => {
     const p = (target && target.path) || "";
     if (!p || (target && target.dir)) return [];
-    if (/\.wln$/i.test(p)) {
-      return [{ label: "Open in WLJS Notebook", icon: "sigma", run: () => void openWljsToast(kandinsky, p) }];
-    }
     if (/\.md$/i.test(p) && /(?:^|\/)Problems\//i.test(p)) {
       return [
         { label: "Lint computation (c_lint)", icon: "check", run: () => void runLintToast(kandinsky, p) },

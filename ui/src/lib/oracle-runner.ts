@@ -37,14 +37,6 @@ export interface JupyterNotebookRunResponse {
   results: JupyterCellRunResult[];
 }
 
-export interface WolframRunResponse {
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  ms: number;
-}
-
 export interface CLintIssue {
   line?: number;
   code?: string;
@@ -150,20 +142,6 @@ export function runJupyterCell(opts: {
     { path: opts.path, cells: [{ index: opts.index, source: opts.source }], kernel: opts.kernel ?? "auto" },
     timeout,
   );
-}
-
-export function runWolfram(opts: {
-  path?: string;
-  code?: string;
-  wlsPath?: string;
-  timeout?: number;
-}): Promise<WolframRunResponse> {
-  const timeout = opts.timeout ?? 320;
-  return callRunner<WolframRunResponse>("runWolfram", opts, timeout);
-}
-
-export function openInWljs(path: string): Promise<{ ok: boolean; path?: string; error?: string }> {
-  return callRunner<{ ok: boolean; path?: string; error?: string }>("openInWljs", { path }, 15);
 }
 
 export function runCLint(

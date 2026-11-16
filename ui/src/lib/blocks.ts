@@ -13,6 +13,8 @@ import "./tikz-fence"; // the core's own fence: a ```tikz picture drawn by TeX i
 import "./ink-fence"; // the core's own fence: an Obsidian Ink block shown as a card for its file
 import "./typst-fence"; // and a ```typst block drawn by the core's Typst
 import "./encrypted-fence"; // opt-in AES-GCM-256 encrypted block card (PBKDF2-SHA256 + WebCrypto)
+import "./notebook-preview-fence"; // read-only .ipynb cell & output transclusion fence
+import "./table-preview-fence"; // read-only .tsv / .csv / .dat tabular preview fence
 import { mount, unmount, type Component } from "svelte";
 import { parse as parseYaml } from "yaml";
 import type { DockviewPanelApi } from "dockview-core";
@@ -141,7 +143,7 @@ export const paneBlockType = (kind: PaneKind) => PANE_BLOCK_TYPE[kind] ?? kind;
 // pane kinds that show a file, and which files (asked for when the block is added by hand)
 const PANE_FILES: Partial<Record<PaneKind, RegExp | true>> = {
   editor: true, pdf: /\.pdf$/i, image: IMAGE_RE, table: /\.(tsv|csv|tab|dat|txt)$/i,
-  page: /\.page$/i, notebook: /\.(ipynb|wln)$/i, excalidraw: /\.excalidraw(\.md)?$/i, canvas: /\.canvas$/i,
+  page: /\.page$/i, notebook: /\.ipynb$/i, excalidraw: /\.excalidraw(\.md)?$/i, canvas: /\.canvas$/i,
 };
 const EMBED_HEIGHT = 420;
 let embeds = 0;
@@ -311,6 +313,40 @@ registerBlock({
     { key: "prompt", label: "Ask with quick input form before running", kind: "toggle", default: false },
     { key: "prompt_fields", label: "Prompt form fields", kind: "text", hint: "comma-separated input keys (e.g. title, priority)" },
     { key: "open", label: "Open created note", kind: "toggle", when: { action: ["create_note"] }, default: true },
+  ],
+});
+registerBlock({
+  ...lazyBlock("notebook-preview", "Notebook preview (read-only)", () => import("../components/blocks/NotebookPreviewBlock.svelte"), (c) => ({ options: c.options, doc: c.doc })),
+  icon: "sigma", card: true, file: /\.ipynb$/i,
+  options: [
+    { key: "path", label: "Notebook file", kind: "text", hint: "vault-relative .ipynb path (never executed on render)" },
+    { key: "cells", label: "Cell range / indices", kind: "text", hint: "1-based index or range, e.g. 1-3 or 2, 5" },
+    { key: "heading", label: "Markdown heading section", kind: "text", hint: "transclude cells under a matching notebook heading" },
+    { key: "tag", label: "Cell tag", kind: "text", hint: "Jupyter metadata tag or # tag: name" },
+    { key: "limit", label: "Max cells", kind: "number", default: 6 },
+    { key: "show_input", label: "Show code input", kind: "toggle", default: true },
+    { key: "show_output", label: "Show saved outputs", kind: "toggle", default: true },
+  ],
+});
+registerBlock({
+  ...lazyBlock("table-preview", "Table / TSV preview (read-only)", () => import("../components/blocks/TablePreviewBlock.svelte"), (c) => ({ options: c.options, doc: c.doc })),
+  icon: "table", card: true, file: /\.(tsv|csv|dat)$/i,
+  options: [
+    { key: "path", label: "Table file", kind: "text", hint: "vault-relative .tsv, .csv or .dat file" },
+    { key: "columns", label: "Columns", kind: "list", hint: "column names or 1-based indices (blank: all)" },
+    { key: "slice", label: "Row slice", kind: "text", hint: "1-based range like 1-20" },
+    { key: "limit", label: "Row limit", kind: "number", default: 25 },
+    { key: "sort", label: "Sort column", kind: "text", hint: "e.g. energy asc or -gap" },
+    { key: "format", label: "Number format", kind: "choice", choices: ["auto", "scientific", "fixed", "raw"], default: "auto" },
+    { key: "precision", label: "Significant / decimal digits", kind: "number", default: 4 },
+  ],
+});
+registerBlock({
+  ...lazyBlock("properties-audit", "Properties schema audit", () => import("../components/widgets/PropertiesAuditWidget.svelte"), (c) => ({ options: c.options, doc: c.doc })),
+  icon: "check", card: true,
+  options: [
+    { key: "strict", label: "Flag undeclared properties (strict)", kind: "toggle", default: false },
+    { key: "path_prefix", label: "Folder prefix filter", kind: "text", hint: "optional folder prefix, e.g. notes/" },
   ],
 });
 

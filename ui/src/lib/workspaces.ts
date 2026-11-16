@@ -4,7 +4,7 @@
 //   .kandinsky/workspaces.json          per-vault index of saved workspaces & active layout metadata
 // Plus 3 built-in 1-click Bauhaus Research Workspace Presets:
 //   1. Research Quad     (● Cobalt)   — PDF + Markdown Note + Solver + Antigravity (2×2)
-//   2. Derivation Studio (● Ochre)    — Markdown Note + Jupyter/WLJS Notebook + Terminal below
+//   2. Derivation Studio (● Ochre)    — Markdown Note + Jupyter Notebook + Terminal below
 //   3. Focus Sheet       (◎ Viridian) — Distraction-free centered sheet (folds sidebars & terminal)
 import { errText } from "./text";
 import type { Action } from "./actions";
@@ -345,9 +345,9 @@ async function pickBestNotebookSpec(): Promise<PaneSpec> {
     const s = p.params as PaneSpec | undefined;
     if (s?.kind === "notebook") return s;
   }
-  const rec = await firstRecentMatching(/\.(ipynb|wln)$/i);
+  const rec = await firstRecentMatching(/\.ipynb$/i);
   if (rec) return { kind: "notebook", path: rec };
-  const nbs = (await api.files().catch(() => [])).filter((f) => /\.(ipynb|wln)$/i.test(f));
+  const nbs = (await api.files().catch(() => [])).filter((f) => /\.ipynb$/i.test(f));
   if (nbs.length) return { kind: "notebook", path: nbs[0] };
   try {
     if (!(await exists(STATE_FOLDER))) await api.mkdir(STATE_FOLDER).catch(() => {});
@@ -406,7 +406,7 @@ export async function applyWorkspacePreset(preset: WorkspacePresetId): Promise<v
     });
     const shellSpec: PaneSpec = existingShell
       ? (existingShell.params as PaneSpec)
-      : { kind: "terminal", preset: "shell", n: nextTerminalN(), title: "Shell · Wolfram" };
+      : { kind: "terminal", preset: "shell", n: nextTerminalN(), title: "Shell" };
 
     await clearMainExcept(new Set([paneId(noteSpec), paneId(nbSpec), paneId(shellSpec)]));
     open(noteSpec);

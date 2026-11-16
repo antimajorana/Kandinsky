@@ -256,7 +256,7 @@
   .kw-pills { display: inline-flex; padding: 2px; border-radius: 7px; background: var(--bg-alt); border: 1px solid var(--border); gap: 1px; }
   .kw-pill { padding: 2px 8px; border-radius: 5px; font-size: calc(11.5px * var(--ui-scale, 1)); color: var(--text-muted); cursor: pointer; border: 0; background: transparent; transition: background 120ms, color 120ms; }
   .kw-pill:hover { color: var(--text); }
-  .kw-pill.active { background: var(--bg-elev); color: var(--heading); font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+  .kw-pill.active { background: var(--bg-elev); color: var(--heading); font-weight: 500; box-shadow: var(--shadow-sm); }
   .kw-msg { margin: 4px 0; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text-muted); }
   .kw-msg.err { color: var(--red); }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
