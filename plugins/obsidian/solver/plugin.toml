@@ -37,10 +37,10 @@ hint = "Vault folder where imported Solver derivations are saved as Markdown not
 
 [[setting]]
 key = "launcher_dir"
-label = "Solver Agent folder"
+label = "re:Solve folder"
 kind = "text"
-default = "~/Documents/GitHub/re-Solver-Agent"
-hint = "Path to your local re-Solver-Agent folder containing local-launcher/Start-SolverAgent.ps1"
+default = "~/Documents/GitHub/re-Solve"
+hint = "Path to your local re-Solve folder containing local-launcher/Start-re-Solve.ps1"
 
 [[setting]]
 key = "auto_start"

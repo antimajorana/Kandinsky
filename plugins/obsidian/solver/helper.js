@@ -2,18 +2,32 @@
 
 const DEFAULT_UI = "http://localhost:4200";
 const DEFAULT_API = "http://127.0.0.1:3000";
-const DEFAULT_DIR = "~/Documents/GitHub/re-Solver-Agent";
+const DEFAULT_DIR = "~/Documents/GitHub/re-Solve";
 
-async function resolveTildeDir(dirPath) {
+async function resolveLauncherPaths(dirPath) {
   const raw = String(dirPath || DEFAULT_DIR).trim().replace(/\\/g, "/").replace(/\/+$/, "");
-  if (raw !== "~" && !raw.startsWith("~/")) return raw;
+  const nodeCode = [
+    "const fs = require('node:fs'), os = require('node:os'), path = require('node:path');",
+    "let d = process.argv[1] || '';",
+    "const home = os.homedir().replace(/\\\\/g, '/').replace(/\\/+$/, '');",
+    "if (d === '~') d = home;",
+    "else if (d.startsWith('~/')) d = home + '/' + d.slice(2);",
+    "if (!fs.existsSync(d) && /\\/re-Solver-Agent$/i.test(d)) {",
+    "  const alt = d.replace(/\\/re-Solver-Agent$/i, '/re-Solve');",
+    "  if (fs.existsSync(alt)) d = alt;",
+    "}",
+    "const s1 = d + '/local-launcher/Start-re-Solve.ps1';",
+    "const s2 = d + '/local-launcher/Start-SolverAgent.ps1';",
+    "const scriptPath = fs.existsSync(s1) ? s1 : (fs.existsSync(s2) ? s2 : s1);",
+    "process.stdout.write(JSON.stringify({ baseDir: d, scriptPath }));",
+  ].join(" ");
   try {
-    const r = await kandinsky.exec("node", ["-e", "process.stdout.write(require('node:os').homedir())"], { timeout: 5 });
-    const home = String(r.stdout || "").trim().replace(/\\/g, "/").replace(/\/+$/, "");
-    if (home) return raw === "~" ? home : `${home}/${raw.slice(2)}`;
+    const r = await kandinsky.exec("node", ["-e", nodeCode, raw], { timeout: 5 });
+    if (r.status === 0 && r.stdout) return JSON.parse(String(r.stdout).trim());
   } catch {}
-  return raw;
+  return { baseDir: raw, scriptPath: `${raw}/local-launcher/Start-re-Solve.ps1` };
 }
+
 // Solver's MongoDB runs natively in WSL Ubuntu as the systemd service mongod (no Docker).
 // serverSelectionTimeoutMS makes a stopped mongod fail in about 3 s instead of hanging.
 const MONGO_URI = "mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=3000";
@@ -21,6 +35,10 @@ const MONGO_URI = "mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=3000";
 function cleanUrl(u, fallback) {
   const s = String(u || fallback).trim().replace(/\/+$/, "");
   return /^https?:\/\//i.test(s) ? s : fallback;
+}
+
+function toLoopbackProbeUrl(u) {
+  return String(u || "").replace(/^http:\/\/localhost(?=:|\/|$)/i, "http://127.0.0.1");
 }
 
 async function probeWithNode(uiUrl, apiUrl) {
@@ -55,17 +73,19 @@ async function probeWithNode(uiUrl, apiUrl) {
       }));
     })();
   `;
-  const r = await kandinsky.exec("node", ["-e", script, uiUrl, apiUrl], { timeout: 6 });
+  const r = await kandinsky.exec("node", ["-e", script, toLoopbackProbeUrl(uiUrl), toLoopbackProbeUrl(apiUrl)], { timeout: 6 });
   if (r.status === 0 && r.stdout) return JSON.parse(r.stdout.trim());
   throw new Error(r.stderr || "node probe failed");
 }
 
 async function probeWithPowerShell(uiUrl, apiUrl) {
+  const probeUi = toLoopbackProbeUrl(uiUrl);
+  const probeApi = toLoopbackProbeUrl(apiUrl);
   const ps = `
     $ErrorActionPreference = 'SilentlyContinue'
     $fe = $false; $be = $false; $bid = $null
     try {
-      $r1 = Invoke-WebRequest -Uri '${uiUrl.replace(/'/g, "''")}/.solver-launcher/identity' -UseBasicParsing -TimeoutSec 2
+      $r1 = Invoke-WebRequest -Uri '${probeUi.replace(/'/g, "''")}/.solver-launcher/identity' -UseBasicParsing -TimeoutSec 2
       if ($r1.StatusCode -ge 200 -and $r1.StatusCode -lt 400) {
         $fe = $true
         $j1 = $r1.Content | ConvertFrom-Json
@@ -74,12 +94,12 @@ async function probeWithPowerShell(uiUrl, apiUrl) {
     } catch {}
     if (-not $fe) {
       try {
-        $r1b = Invoke-WebRequest -Uri '${uiUrl.replace(/'/g, "''")}/' -UseBasicParsing -TimeoutSec 2
+        $r1b = Invoke-WebRequest -Uri '${probeUi.replace(/'/g, "''")}/' -UseBasicParsing -TimeoutSec 2
         if ($r1b.StatusCode -ge 200 -and $r1b.StatusCode -lt 400) { $fe = $true }
       } catch {}
     }
     try {
-      $r2 = Invoke-WebRequest -Uri '${apiUrl.replace(/'/g, "''")}/api/health' -UseBasicParsing -TimeoutSec 2
+      $r2 = Invoke-WebRequest -Uri '${probeApi.replace(/'/g, "''")}/api/health' -UseBasicParsing -TimeoutSec 2
       if ($r2.StatusCode -ge 200 -and $r2.StatusCode -lt 400) { $be = $true }
     } catch {}
     @{ running = ($fe -and $be); frontend = $fe; backend = $be; buildId = $bid } | ConvertTo-Json -Compress
@@ -109,8 +129,7 @@ async function startServices(params = {}) {
     return { ok: true, alreadyRunning: true, url: uiUrl, status: current };
   }
 
-  const baseDir = await resolveTildeDir(params.launcherDir || DEFAULT_DIR);
-  const scriptPath = `${baseDir}/local-launcher/Start-SolverAgent.ps1`;
+  const { scriptPath } = await resolveLauncherPaths(params.launcherDir || DEFAULT_DIR);
 
   const run = await kandinsky.exec(
     "powershell",
