@@ -54,6 +54,7 @@
   import { mapHeadings } from "../lib/editor/heading-map";
   import { attachDroppedFiles, extractDropUriHint, takeFiles } from "../lib/attach";
   import { bodyStart } from "../lib/editor/live/live-preview.js";
+  import { openPageHistory } from "../lib/page-history.svelte";
   /** Vim, as the setting says — never in the mobile apps or on a phone's screen: a touch keyboard has no Escape, and normal mode ate the taps. */
   const vimHere = () => app.vimEnabled && !nativeShell.on && !phone.on;
 
@@ -298,6 +299,18 @@
     }
   }
 
+  async function showPageHistory(): Promise<void> {
+    if (autosave() && current() !== saved) await save(false);
+    openPageHistory(path, (res) => {
+      mtime = res.mtime;
+      saved = fromDisk(res.text);
+      docText = saved;
+      ed?.setDoc(saved, { keepUndo: true });
+      conflict = false;
+      markDirty();
+    });
+  }
+
   async function trashThisNote(): Promise<void> {
     if (trashed) return;
     clearTimeout(timer);
@@ -406,7 +419,9 @@
               "sep" as const,
             ]
           : []),
+        { label: "Version history & restore…", icon: "clock" as const, run: () => void showPageHistory() },
         { label: blameOn ? "Hide Git blame" : "Git blame (line history)", icon: "clock" as const, run: () => void editors.get(panel.id)?.toggleBlame() },
+        { label: "Open Git repository pane", icon: "git" as const, run: () => open({ kind: "git" }) },
         "sep",
         { label: isMarkdown(path) ? "Move note to Trash" : "Move file to Trash", icon: "trash" as const, danger: true, run: () => void trashThisNote() },
       ], 4),
@@ -694,7 +709,7 @@
           title={starred ? "Remove from Favorites" : "Add to Favorites"}>
           {starred ? "★ Starred" : "★ Star"}
         </button>
-        <button type="button" class="top-link" onclick={() => open({ kind: "git" })} title="Version history & Git diff">History</button>
+        <button type="button" class="top-link" data-testid="editor-history-btn" onclick={() => void showPageHistory()} title="Per-page version history, diff & restore">History</button>
         <button type="button" class="top-more" aria-label="Page actions" title="Page actions" onclick={openPageMenu}>···</button>
         <button type="button" class="top-pill" onclick={openShareMenu} title="Copy or export note">Share</button>
         <button type="button" class="icon-btn trash-btn" title="Move to Trash" aria-label="Move to Trash" onclick={() => void trashThisNote()}>

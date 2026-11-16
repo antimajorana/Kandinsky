@@ -64,6 +64,10 @@
   import VoiceRecorderModal from "./components/VoiceRecorderModal.svelte";
   import { dropFilePrompt } from "./lib/attach";
   import DropFileChoiceModal from "./components/DropFileChoiceModal.svelte";
+  import { pageHistoryModal } from "./lib/page-history.svelte";
+  import PageHistoryModal from "./components/PageHistoryModal.svelte";
+  import { importNotesModal } from "./lib/import-modal.svelte";
+  import ImportNotesModal from "./components/ImportNotesModal.svelte";
 
   let dockEl: HTMLDivElement;
 
@@ -261,6 +265,8 @@
 <QuickCapture />
 {#if voiceRecorder.open}<VoiceRecorderModal />{/if}
 {#if dropFilePrompt.current}<DropFileChoiceModal />{/if}
+{#if pageHistoryModal.open}<PageHistoryModal />{/if}
+{#if importNotesModal.open}<ImportNotesModal />{/if}
 <Toasts />
 
 <style>

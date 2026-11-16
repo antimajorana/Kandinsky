@@ -32,6 +32,11 @@ pub trait Context {
     fn formula(&self, name: &str) -> Val; // a computed `formula.x`
     /// Resolve `this.file.<name>` — the file the base is embedded in / opened from.
     fn this_field(&self, name: &str) -> Val;
+    /// Aggregate `target` across notes linked from `relation` via an optional `SummaryKind` name.
+    fn rollup(&self, relation: &str, target: &str, summary: Option<&str>) -> Val {
+        let _ = (relation, target, summary);
+        Val::Null
+    }
 }
 
 /// The abstract syntax tree. An expression is a *tree* of these nodes — e.g.
@@ -527,6 +532,17 @@ fn eval_call(callee: &Expr, args: &[Expr], ctx: &dyn Context, scope: Option<&Val
                 return Val::Date(d);
             }
             "now" => return Val::Date(chrono::Local::now().naive_local()),
+            "rollup" => {
+                let Some(rel_arg) = args.first() else { return Val::Null };
+                let Some(target_arg) = args.get(1) else { return Val::Null };
+                let rel_key = expr_key_arg(rel_arg, ctx, scope);
+                let target_key = expr_key_arg(target_arg, ctx, scope);
+                if rel_key.is_empty() || target_key.is_empty() {
+                    return Val::Null;
+                }
+                let sum_key = args.get(2).map(|e| expr_key_arg(e, ctx, scope)).filter(|s| !s.is_empty());
+                return ctx.rollup(&rel_key, &target_key, sum_key.as_deref());
+            }
             _ => {}
         }
     }
@@ -617,6 +633,23 @@ fn eval_call(callee: &Expr, args: &[Expr], ctx: &dyn Context, scope: Option<&Val
         };
     }
     Val::Null
+}
+
+/// Extracts a property/summary key passed either as `"hours"`, `hours`, `note.hours`, `note["hours"]`, or `file.size`.
+fn expr_key_arg(e: &Expr, ctx: &dyn Context, scope: Option<&Val>) -> String {
+    match e {
+        Expr::Str(s) => s.trim().to_string(),
+        Expr::Ident(s) => s.trim().to_string(),
+        Expr::Member(obj, field) => match obj.as_ref() {
+            Expr::Ident(root) if root == "note" => field.trim().to_string(),
+            Expr::Ident(root) if root == "file" => format!("file.{}", field.trim()),
+            _ => to_plain(&eval_scoped(e, ctx, scope)).trim().to_string(),
+        },
+        Expr::Index(obj, idx) if matches!(obj.as_ref(), Expr::Ident(r) if r == "note") => {
+            to_plain(&eval_scoped(idx, ctx, scope)).trim().to_string()
+        }
+        _ => to_plain(&eval_scoped(e, ctx, scope)).trim().to_string(),
+    }
 }
 
 /// Two dates' difference as Obsidian gives it: a duration whose fields are its whole length in each unit

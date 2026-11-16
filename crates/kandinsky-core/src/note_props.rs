@@ -28,6 +28,54 @@ impl Props {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// Parse frontmatter properties from a full Markdown document (`--- ... ---`).
+    pub fn from_markdown(text: &str) -> Self {
+        let Some(yaml) = kandinsky_text::frontmatter::yaml_head(text) else {
+            return Self::default();
+        };
+        serde_yaml::from_str::<Mapping>(yaml).map(Self::from).unwrap_or_default()
+    }
+
+    /// Extract normalized wikilink targets (`[[Target]]` -> `"Target"`, stripping `#heading` and `|alias`) from `key`.
+    pub fn wikilink_targets(&self, key: &str) -> Vec<String> {
+        self.get(key).map(extract_wikilinks_from_yaml).unwrap_or_default()
+    }
+}
+
+/// Extract every `[[target]]` written inside a YAML scalar or sequence (`![[...]]`, `#heading`, and `|alias` stripped).
+pub(crate) fn extract_wikilinks_from_yaml(v: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    collect_wikilinks(v, &mut out);
+    out
+}
+
+fn collect_wikilinks(v: &Value, out: &mut Vec<String>) {
+    match v {
+        Value::String(s) => {
+            let mut rest = s.as_str();
+            while let Some(open) = rest.find("[[") {
+                let after = &rest[open + 2..];
+                let Some(close) = after.find("]]") else { break };
+                let inner = &after[..close];
+                if !inner.contains("[[") {
+                    let before_alias = inner.split('|').next().unwrap_or(inner);
+                    let target = before_alias.split('#').next().unwrap_or(before_alias).trim();
+                    if !target.is_empty() && !out.iter().any(|x| x == target) {
+                        out.push(target.to_string());
+                    }
+                }
+                rest = &after[close + 2..];
+            }
+        }
+        Value::Sequence(seq) => {
+            for item in seq {
+                collect_wikilinks(item, out);
+            }
+        }
+        Value::Tagged(t) => collect_wikilinks(&t.value, out),
+        _ => {}
+    }
 }
 
 impl From<Mapping> for Props {
@@ -82,5 +130,14 @@ mod tests {
         assert!(is_mail(Some("email-thread"), |_| false));
         assert!(is_mail(None, |k| k == "message_id") && is_mail(None, |k| k == "message-id"));
         assert!(!is_mail(Some("lecture"), |k| k == "title"));
+    }
+
+    #[test]
+    fn parses_markdown_frontmatter_and_wikilinks() {
+        let md = "---\nproject: '[[Folder/Alpha#Goals|Alpha]]'\ntasks:\n  - '[[Task 1]]'\n  - '[[Task 2|Two]], [[Task 3]]'\n---\n# Body\n";
+        let p = Props::from_markdown(md);
+        assert_eq!(p.wikilink_targets("project"), vec!["Folder/Alpha"]);
+        assert_eq!(p.wikilink_targets("tasks"), vec!["Task 1", "Task 2", "Task 3"]);
+        assert!(Props::from_markdown("# No frontmatter\n").is_empty());
     }
 }

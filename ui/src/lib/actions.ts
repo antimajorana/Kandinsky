@@ -332,6 +332,12 @@ export const actions: Action[] = [
   { id: "ui.library", title: "Library: references, then the vault's other libraries", icon: "library", label: "Library", keys: "Super+Shift+L", plugin: "library", run: () => openLibraries("references") },
   { id: "ui.git", title: "Git: changes and history", icon: "git", label: "Git", keys: "Super+G", run: () => { open({ kind: "git" }); } },
   { id: "ui.git.blame", title: "Git: who changed each line (blame)", icon: "git", run: () => void toggleBlame() },
+  { id: "note.history", title: "Page: Version history, diff & restore…", icon: "clock", run: () => {
+    const p = context.active?.path;
+    if (!p) { toast("Version history", "Open a note or page first to view its history."); return; }
+    void import("./page-history.svelte").then((m) => m.openPageHistory(p));
+  } },
+  { id: "ui.import", title: "Import Notes… (Notion export, NoteCraft notebook, OneNote)", icon: "move-in", label: "Import", run: () => void import("./import-modal.svelte").then((m) => m.openImportModal()) },
   { id: "ui.sidePanel", title: "Show / hide the side panel (files, search, outline, git)", icon: "folder-tree", label: "Side panel (show / hide)", keys: "Super+B", run: () => toggleSidePanel() },
   { id: "ui.sidePanel.move", title: "Move side panel (beside the editors ↔ in the left bar)", run: () => placeSidePanel(sideInBar() ? "dock" : "sidebar") },
   { id: "ui.shell.toggle", title: "Workspace shell: switch between Nootion Unified Sidebar and Classic Rail", icon: "panel-left", run: () => toggleShellMode() },

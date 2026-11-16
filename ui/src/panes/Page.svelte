@@ -29,6 +29,7 @@
   import NoteHero from "../components/NoteHero.svelte";
   import { pluginMenu } from "../lib/plugin-menus";
   import Icon from "../components/Icon.svelte";
+  import { openPageHistory } from "../lib/page-history.svelte";
 
   let { spec, panel }: PaneProps<"page"> = $props();
   // svelte-ignore state_referenced_locally -- a pane's spec is fixed for its lifetime
@@ -109,7 +110,7 @@
   // --- arranging: add ---------------------------------------------------------------------------------
   const SECTIONS: [string, (type: string) => boolean][] = [
     ["Today", (t) => ["greeting", "capture", "focus", "log", "tasks", "activity"].includes(t)],
-    ["Widgets", (t) => ["chart", "progress", "countdown", "pomodoro", "habits", "clock", "weather"].includes(t)],
+    ["Widgets", (t) => ["chart", "progress", "countdown", "pomodoro", "habits", "clock", "weather", "button"].includes(t)],
     ["Content", (t) => ["note", "text", "base", "editor", "pdf", "image", "file-table", "excalidraw", "canvas", "web"].includes(t)],
     ["From plugins", (t) => t.includes(".")],
   ];
@@ -343,6 +344,13 @@
     }
   }
 
+  function showPageHistory(): void {
+    openPageHistory(path, (res) => {
+      mtime = res.mtime;
+      show(res.text);
+    });
+  }
+
   function openPageActions(e: MouseEvent): void {
     popMenu(
       below(e, [
@@ -350,6 +358,8 @@
         { label: isFullWidth ? "Standard width" : "Full width page", icon: "maximize", run: togglePageFullWidth },
         { label: showPageProps ? "Hide properties" : "Properties", icon: "table", run: () => { showPageProps = !showPageProps; } },
         { label: arranging ? "Finish arranging" : "Arrange blocks", icon: arranging ? "check" : "edit", run: () => { arranging = !arranging; } },
+        { label: "Version history & restore…", icon: "clock", run: showPageHistory },
+        { label: "Open Git repository pane", icon: "git", run: () => open({ kind: "git" }) },
         { label: "Edit YAML as text", icon: "file-code", run: () => open({ kind: "editor", path }) },
         { label: "Copy file path", icon: "file-text", run: () => void copyPath(path) },
         "sep",
@@ -447,7 +457,7 @@
         title={starred ? "Remove from Favorites" : "Add to Favorites"}>
         {starred ? "★ Starred" : "★ Star"}
       </button>
-      <button type="button" class="top-link" onclick={() => open({ kind: "git" })} title="Version history & Git diff">History</button>
+      <button type="button" class="top-link" data-testid="page-history-btn" onclick={showPageHistory} title="Per-page version history, diff & restore">History</button>
       <button type="button" class="top-more" aria-label="Page actions" title="Page actions" onclick={openPageActions}>···</button>
       <button type="button" class="top-pill" onclick={openShareMenu} title="Copy or export page">Share</button>
       <button type="button" class="icon-btn trash-btn" title="Move to Trash" aria-label="Move to Trash" onclick={() => void trashThisPage()}>

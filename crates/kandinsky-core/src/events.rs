@@ -101,7 +101,9 @@ fn watchable(cfg: &Config, rel: &str) -> bool {
     }
     if crate::state_dir::is_state_rel(rel) {
         let rel = &*crate::state_dir::current_rel(rel); // `.atlas/` in a vault not yet migrated
-        return ![".kandinsky/cache", ".kandinsky/trash"].iter().any(|x| rel == *x || rel.starts_with(&format!("{x}/")));
+        return ![".kandinsky/cache", ".kandinsky/trash", ".kandinsky/history"]
+            .iter()
+            .any(|x| rel == *x || rel.starts_with(&format!("{x}/")));
     }
     walk::keep(cfg, rel)
 }

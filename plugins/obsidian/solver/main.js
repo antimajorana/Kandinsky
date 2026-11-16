@@ -1,18 +1,40 @@
-// Solver app commands & context-menu integration (main.js): note-to-Solver handoff and direct Solver-to-note cursor export.
+// Solver app commands & context-menu integration (main.js): note-to-Solver handoff with attachment bundling and direct Solver-to-note cursor export.
 
-import { insertLatestSolverDerivation } from "./view.js";
+import {
+  collectContextAttachments,
+  dispatchInsertToNote,
+  formatDerivationCallout,
+  insertLatestSolverDerivation,
+} from "./view.js";
 
-async function sendToSolver(kandinsky, opts = {}) {
+let prefillRequestSeq = 0;
+
+/** Format a derivation payload ({ markdown, latex, title, kind } or text) and insert into the active note, or copy/notify if none is open. */
+export function insertDerivationIntoNote(kandinsky, payload, opts = {}) {
+  const block = formatDerivationCallout(payload, opts);
+  if (!block) {
+    kandinsky.toast("Nothing to insert", "Select an equation or complete a Solver step first.", "info");
+    return false;
+  }
+  return dispatchInsertToNote(block, kandinsky, opts);
+}
+
+export async function sendToSolver(kandinsky, opts = {}) {
   const snap = kandinsky.context();
   const path = opts.path || (snap && snap.selection && snap.selection.path) || (snap && snap.active && snap.active.path) || "";
   let prompt = (opts.selection || (snap && snap.selection && snap.selection.text) || "").trim();
 
-  if (!prompt && path && /\.(md|tex|txt)$/i.test(path)) {
+  if (!prompt && path && /\.(md|tex|txt|bib)$/i.test(path)) {
     try {
       prompt = (await kandinsky.readText(path)).trim();
     } catch {
       prompt = "";
     }
+  }
+
+  const attachments = await collectContextAttachments(kandinsky, { path, prompt });
+  if (!prompt && attachments.length > 0) {
+    prompt = `Analyze the attached file${attachments.length === 1 ? "" : "s"}: ${attachments.map((a) => a.name).join(", ")}.`;
   }
 
   if (!prompt) {
@@ -24,16 +46,17 @@ async function sendToSolver(kandinsky, opts = {}) {
   try {
     await navigator.clipboard?.writeText(prompt);
   } catch {}
-  const payload = { target: "solver", path, title, prompt };
+  const requestId = `sol-${Date.now()}-${++prefillRequestSeq}`;
+  const payload = { target: "solver", requestId, path, title, prompt, attachments };
   if (typeof window !== "undefined") {
     window.__kandinskyPendingSolverPrompt = payload;
-  }
-  kandinsky.openView(JSON.stringify({ path, title, prompt }), { beside: true, title: "Solver" });
-  if (typeof window !== "undefined") {
+    kandinsky.openView(undefined, { beside: true, title: "Solver" });
     window.dispatchEvent(new CustomEvent("kandinsky:solver-prefill", { detail: payload }));
     setTimeout(() => {
       window.dispatchEvent(new CustomEvent("kandinsky:solver-prefill", { detail: payload }));
     }, 220);
+  } else {
+    kandinsky.openView(JSON.stringify({ path, title, prompt }), { beside: true, title: "Solver" });
   }
 }
 
@@ -143,10 +166,20 @@ export function register(kandinsky) {
     run: () => sendToSolver(kandinsky, { beside: true }),
   });
 
+  const onSolverInsertEvent = (ev) => {
+    if (disposed || !ev || !ev.detail) return;
+    insertDerivationIntoNote(kandinsky, ev.detail);
+  };
+  if (typeof window !== "undefined") {
+    window.addEventListener("kandinsky:solver-insert-derivation", onSolverInsertEvent);
+  }
+
   kandinsky.registerCommand({
     id: "insert-active-note",
     title: "Solver: Insert latest derivation into active note at cursor",
-    run: () => insertLatestSolverDerivation(kandinsky),
+    run: (arg) => (arg && typeof arg === "object" && (arg.markdown || arg.latex))
+      ? insertDerivationIntoNote(kandinsky, arg)
+      : insertLatestSolverDerivation(kandinsky),
   });
 
   kandinsky.registerCommand({
@@ -198,7 +231,7 @@ export function register(kandinsky) {
   });
 
   kandinsky.shell.menu("file", (target) => {
-    if (!target || target.dir || !/\.(md|tex)$/i.test(target.path || "")) return null;
+    if (!target || target.dir || !/\.(md|tex|pdf|bib)$/i.test(target.path || "")) return null;
     return [
       {
         label: "Open beside Solver",
@@ -214,6 +247,9 @@ export function register(kandinsky) {
     clearInterval(pollTimer);
     if (ctxTimer) clearTimeout(ctxTimer);
     if (typeof offContext === "function") offContext();
+    if (typeof window !== "undefined") {
+      window.removeEventListener("kandinsky:solver-insert-derivation", onSolverInsertEvent);
+    }
     statusItem.remove();
   };
 }

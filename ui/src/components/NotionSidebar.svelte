@@ -37,6 +37,7 @@
   import InputDialog from "./InputDialog.svelte";
   import TrashModal from "./TrashModal.svelte";
   import NotificationsModal from "./NotificationsModal.svelte";
+  import { openImportModal } from "../lib/import-modal.svelte";
 
   const collapsed = $derived(tabs.sidebar.collapsed || fullscreen.on);
   let peek = $state(false);
@@ -149,6 +150,7 @@
     const items: MenuItem[] = [
       { label: "New note…", icon: "file-text", run: () => newFile(dir) },
       { label: "New folder…", icon: "folder", run: () => newFolder(dir) },
+      { label: "Import notes…", icon: "move-in", run: () => openImportModal(dir) },
     ];
     if (path && !isDir) {
       const starred = isFileStarred(path);
@@ -374,6 +376,7 @@
       <span class="sec-actions">
         <button class="sec-btn" title="New note" aria-label="New note" onclick={() => newFile("")}><Icon name="plus" size={13} /></button>
         <button class="sec-btn" title="New folder" aria-label="New folder" onclick={() => newFolder("")}><Icon name="folder" size={13} /></button>
+        <button class="sec-btn" title="Import notes (Notion, NoteCraft, OneNote)…" aria-label="Import notes" data-testid="sidebar-import-icon" onclick={() => openImportModal()}><Icon name="move-in" size={13} /></button>
         <button class="sec-btn" class:on={treeView.showAll} title={treeView.showAll ? "Hide dotfiles & companions" : "Show hidden files"} aria-label="Show hidden files" aria-pressed={treeView.showAll} onclick={toggleShowAll}><Icon name="eye" size={13} /></button>
       </span>
     </div>
@@ -386,6 +389,7 @@
     </div>
 
     <footer class="side-foot">
+      <button class="nav-row" data-testid="sidebar-import" onclick={() => openImportModal()}><span class="nav-left"><Icon name="move-in" size={14} /><span>Import</span></span></button>
       <button class="nav-row" onclick={() => (trashOpen = true)}><span class="nav-left"><Icon name="trash" size={14} /><span>Trash</span></span></button>
       <button class="nav-row" onclick={() => openSettingsAt("plugins")}><span class="nav-left"><Icon name="plugin" size={14} /><span>Plugins</span></span></button>
       <button class="nav-row" class:active={tabs.active === "settings"} onclick={() => open({ kind: "settings" })}><span class="nav-left"><Icon name="settings" size={14} /><span>Settings</span></span></button>

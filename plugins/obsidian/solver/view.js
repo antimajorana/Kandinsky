@@ -1,4 +1,33 @@
-// Solver app pane (view.js): docks Solver Agent inside Kandinsky with direct KaTeX derivation cursor export & PDF/note prefill.
+// Solver app pane (view.js): docks Solver Agent inside Kandinsky with two-way postMessage handoff, KaTeX callout insertion, and context attachment support.
+
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENTS = 5;
+const PREFILL_ACK_TIMEOUT_MS = 400;
+const MAX_PREFILL_LOAD_RETRIES = 3;
+const ATTACHMENT_MIME_BY_EXT = {
+  ".pdf": "application/pdf",
+  ".tex": "application/x-tex",
+  ".md": "text/markdown",
+  ".bib": "text/x-bibtex",
+};
+const CALLOUT_KIND_MAP = {
+  "final-answer": "important",
+  result: "important",
+  verified: "important",
+  important: "important",
+  proof: "proof",
+  theorem: "theorem",
+  lemma: "lemma",
+  proposition: "proposition",
+  corollary: "corollary",
+  definition: "definition",
+  remark: "remark",
+  summary: "summary",
+  tip: "tip",
+  warning: "warning",
+  example: "example",
+  note: "note",
+};
 
 function parseArg(raw) {
   if (!raw || typeof raw !== "string") return null;
@@ -17,6 +46,42 @@ export function getSolverSettings(kandinsky) {
     launcherDir: String(s.launcher_dir || "~/Documents/GitHub/re-Solve").trim(),
     autoStart: s.auto_start !== false,
   };
+}
+
+/** Validate strictly against loopback origins (localhost / 127.0.0.1 on port 4200 or the configured Solver port). */
+export function isAllowedSolverOrigin(origin, configuredUrl = "http://localhost:4200") {
+  if (typeof origin !== "string" || !origin || origin === "null") return false;
+  let parsed;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (parsed.origin !== origin) return false;
+  const isLoopback = (h) => h === "localhost" || h === "127.0.0.1";
+  if (!isLoopback(parsed.hostname)) return false;
+
+  const allowed = new Set(["http://localhost:4200", "http://127.0.0.1:4200"]);
+  try {
+    const cfg = new URL(String(configuredUrl || "http://localhost:4200").trim());
+    if ((cfg.protocol === "http:" || cfg.protocol === "https:") && isLoopback(cfg.hostname)) {
+      const portPart = cfg.port ? `:${cfg.port}` : "";
+      allowed.add(cfg.origin);
+      allowed.add(`${cfg.protocol}//localhost${portPart}`);
+      allowed.add(`${cfg.protocol}//127.0.0.1${portPart}`);
+    }
+  } catch {}
+  return allowed.has(parsed.origin);
+}
+
+function getSolverTargetOrigin(configuredUrl = "http://localhost:4200") {
+  try {
+    const u = new URL(String(configuredUrl || "http://localhost:4200").trim());
+    if ((u.protocol === "http:" || u.protocol === "https:") && (u.hostname === "localhost" || u.hostname === "127.0.0.1")) {
+      return u.origin;
+    }
+  } catch {}
+  return "http://localhost:4200";
 }
 
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -55,15 +120,61 @@ export function normalizeKatexMath(raw) {
     .trim();
 }
 
-/** Wrap normalized KaTeX derivation prose & equations inside a Bauhaus [!NOTE] callout with source metadata for c_lint. */
-export function formatDerivationCallout(rawContent, opts = {}) {
-  const normalized = normalizeKatexMath(rawContent);
-  if (!normalized) return "";
-  const stamp = opts.timestamp || nowStamp();
-  const label = opts.stepTitle ? `Solver Derivation · ${opts.stepTitle} · ${stamp}` : `Solver Derivation · ${stamp}`;
-  const meta = ["source: solver-agent", ...(opts.solverId ? [`solver_id: ${opts.solverId}`] : []), "verified-pending: run c_lint"];
-  const quoted = normalized.split("\n").map((l) => (l.trim() ? `> ${l}` : ">")).join("\n");
-  return `> [!NOTE] ${label}\n> <!-- ${meta.join(", ")} -->\n${quoted}\n`;
+function wrapRawLatexIfNeeded(rawTex) {
+  const tex = String(rawTex || "").trim();
+  if (!tex) return "";
+  if (/(\$\$?|\\\[|\\\(|\\begin\{)/.test(tex)) return normalizeKatexMath(tex);
+  return `$$\n${tex}\n$$`;
+}
+
+/** Wrap normalized KaTeX derivation prose, LaTeX, or { markdown, latex, title, kind } payloads inside an Obsidian callout with c_lint metadata. */
+export function formatDerivationCallout(rawOrPayload, opts = {}) {
+  const isObj = rawOrPayload !== null && typeof rawOrPayload === "object";
+  const payload = isObj ? rawOrPayload : {};
+  const merged = isObj ? { ...opts, ...payload } : opts;
+
+  let bodySrc = "";
+  if (isObj) {
+    const md = typeof payload.markdown === "string" ? payload.markdown.trim() : "";
+    const tex = typeof payload.latex === "string" ? payload.latex.trim() : "";
+    if (md && tex) {
+      const normMd = normalizeKatexMath(md);
+      const compactMd = normMd.replace(/\s+/g, "");
+      const compactTex = tex.replace(/\s+/g, "");
+      const hasMathBlock = /\$\$[\s\S]*?\$\$/.test(normMd);
+      const looksFullTexDoc = /\\(documentclass|begin\{document\}|section|chapter)/.test(tex);
+      bodySrc = !compactMd.includes(compactTex) && !hasMathBlock && !looksFullTexDoc
+        ? `${normMd}\n\n${wrapRawLatexIfNeeded(tex)}`
+        : normMd;
+    } else if (md) {
+      bodySrc = normalizeKatexMath(md);
+    } else if (tex) {
+      bodySrc = wrapRawLatexIfNeeded(tex);
+    }
+  } else {
+    bodySrc = normalizeKatexMath(rawOrPayload);
+  }
+
+  if (!bodySrc) return "";
+  const stamp = merged.timestamp || nowStamp();
+  const stepTitle = String(merged.title || merged.stepTitle || "").trim();
+  const rawKind = String(merged.kind || "").trim();
+  const kindKey = rawKind.toLowerCase().replace(/[\s_]+/g, "-");
+  const calloutTag = isObj ? (CALLOUT_KIND_MAP[kindKey] || "note") : (merged.calloutType || "NOTE");
+  const lineCount = bodySrc.split("\n").length;
+  const fold = merged.collapsed === true ? "-" : merged.collapsed === false ? "+" : isObj && (kindKey === "derivation" || kindKey === "proof" || lineCount > 10) ? "-" : "";
+
+  const titlePrefix = stepTitle && /^solver\b/i.test(stepTitle) ? stepTitle : stepTitle ? `Solver Derivation · ${stepTitle}` : "Solver Derivation";
+  const label = `${titlePrefix} · ${stamp}`;
+  const solverId = merged.solverId || merged.conversationId || "";
+  const meta = [
+    "source: solver-agent",
+    ...(solverId ? [`solver_id: ${solverId}`] : []),
+    ...(rawKind ? [`kind: ${rawKind}`] : []),
+    "verified-pending: run c_lint",
+  ];
+  const quoted = bodySrc.split("\n").map((l) => (l.trim() ? `> ${l}` : ">")).join("\n");
+  return `> [!${calloutTag}]${fold} ${label}\n> <!-- ${meta.join(", ")} -->\n${quoted}\n`;
 }
 
 export function openImportFallback(kandinsky, targetPath = "") {
@@ -73,47 +184,277 @@ export function openImportFallback(kandinsky, targetPath = "") {
   });
 }
 
-/** Dispatch "kandinsky:insert-at-cursor" to insert formatted Markdown/KaTeX at the open note's cursor, with graceful fallback. */
-export function dispatchInsertToNote(formattedBlock, kandinsky) {
+function fallbackCopyAndNotice(formattedBlock, kandinsky, reason, opts = {}) {
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      void navigator.clipboard.writeText(formattedBlock).catch(() => {});
+    }
+  } catch {}
+  const msg = reason || "No active Markdown note is open.";
+  kandinsky.toast("Copied derivation to clipboard", `${msg} Paste with Ctrl+V into any note, or save as a new note.`, "info", {
+    label: "Save as Note…",
+    run: () => openImportFallback(kandinsky),
+  });
+  if (opts.openImportOnMissing) openImportFallback(kandinsky);
+}
+
+/** Dispatch "kandinsky:insert-at-cursor" to insert formatted Markdown/KaTeX at the open note's cursor, copying/notifying if no note is open. */
+export function dispatchInsertToNote(formattedBlock, kandinsky, opts = {}) {
   if (!formattedBlock || !formattedBlock.trim()) {
     kandinsky.toast("Nothing to insert", "Select an equation or complete a Solver step first.", "info");
     return false;
   }
   let handled = false;
   let succeeded = false;
-  window.dispatchEvent(
-    new CustomEvent("kandinsky:insert-at-cursor", {
-      detail: {
-        text: formattedBlock,
-        focus: true,
-        onResult: (res) => {
-          handled = true;
-          if (res && res.ok) {
-            succeeded = true;
-            const leaf = res.path ? res.path.split("/").pop() : "active note";
-            kandinsky.toast("Inserted into Active Note", `Added KaTeX derivation block at cursor in ${leaf}`, "success");
-          } else {
-            const reason = (res && res.reason) || "No open Markdown note.";
-            kandinsky.toast("No active Markdown note", `${reason} Opening Save / Import dialog instead…`, "info");
-            openImportFallback(kandinsky);
-          }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("kandinsky:insert-at-cursor", {
+        detail: {
+          text: formattedBlock,
+          focus: true,
+          onResult: (res) => {
+            handled = true;
+            if (res && res.ok) {
+              succeeded = true;
+              const leaf = res.path ? res.path.split("/").pop() : "active note";
+              kandinsky.toast("Inserted into Active Note", `Added KaTeX derivation block at cursor in ${leaf}`, "success");
+            } else {
+              fallbackCopyAndNotice(formattedBlock, kandinsky, res && res.reason, opts);
+            }
+          },
         },
-      },
-    }),
-  );
-  if (!handled) {
-    const directFn = window.__kandinskyInsertIntoActiveNote;
-    if (typeof directFn === "function") {
-      const res = directFn(formattedBlock, { focus: true });
-      if (res && res.ok) {
-        kandinsky.toast("Inserted into Active Note", `Added KaTeX derivation block at cursor in ${(res.path || "note").split("/").pop()}`, "success");
-        return true;
+      }),
+    );
+    if (!handled) {
+      const directFn = window.__kandinskyInsertIntoActiveNote;
+      if (typeof directFn === "function") {
+        const res = directFn(formattedBlock, { focus: true });
+        if (res && res.ok) {
+          kandinsky.toast("Inserted into Active Note", `Added KaTeX derivation block at cursor in ${(res.path || "note").split("/").pop()}`, "success");
+          return true;
+        }
       }
+      fallbackCopyAndNotice(formattedBlock, kandinsky, "Open a Markdown note tab first.", opts);
     }
-    kandinsky.toast("No active Markdown note", "Open a Markdown note tab first, or save via Import dialog.", "info");
-    openImportFallback(kandinsky);
+  } else {
+    fallbackCopyAndNotice(formattedBlock, kandinsky, "No active note editor available.", opts);
   }
   return succeeded;
+}
+
+function getAttachmentMime(path) {
+  const clean = String(path || "").trim();
+  const dot = clean.lastIndexOf(".");
+  if (dot < 0) return "";
+  return ATTACHMENT_MIME_BY_EXT[clean.slice(dot).toLowerCase()] || "";
+}
+
+function normalizeRelPath(raw) {
+  const parts = [];
+  for (const seg of String(raw || "").replace(/\\/g, "/").split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") {
+      if (!parts.length) return null;
+      parts.pop();
+    } else {
+      parts.push(seg);
+    }
+  }
+  return parts.join("/");
+}
+
+function dirOfPath(path) {
+  const norm = normalizeRelPath(path) || "";
+  const idx = norm.lastIndexOf("/");
+  return idx >= 0 ? norm.slice(0, idx) : "";
+}
+
+function extractContextLinkTargets(text) {
+  const targets = [];
+  const src = String(text || "");
+  for (const m of src.matchAll(/!?\[\[([^\]|#\n]+)(?:#[^\]|\n]*)?(?:\|[^\]\n]*)?\]\]/g)) {
+    targets.push(m[1].trim());
+  }
+  for (const m of src.matchAll(/\[[^\]]*\]\(([^)\n]+)\)/g)) {
+    const raw = m[1].trim().replace(/^<|>$/g, "").split(/\s+"/)[0].split("#")[0].trim();
+    if (raw && !/^(?:[a-z][a-z0-9+.-]*:|#)/i.test(raw)) {
+      try { targets.push(decodeURI(raw)); } catch { targets.push(raw); }
+    }
+  }
+  for (const m of src.matchAll(/\\(?:bibliography|addbibresource)\{([^}]+)\}/g)) {
+    for (const item of m[1].split(",")) {
+      const t = item.trim();
+      if (t) targets.push(/\.[a-z0-9]+$/i.test(t) ? t : `${t}.bib`);
+    }
+  }
+  for (const m of src.matchAll(/\\(?:input|include)\{([^}]+)\}/g)) {
+    const t = m[1].trim();
+    if (t) targets.push(/\.[a-z0-9]+$/i.test(t) ? t : `${t}.tex`);
+  }
+  return targets;
+}
+
+function collectFrontmatterTargets(props) {
+  const out = [];
+  const pushVal = (v) => {
+    if (typeof v === "string") {
+      const s = v.trim();
+      const wiki = s.match(/^\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]$/);
+      if (wiki) out.push(wiki[1].trim());
+      else if (getAttachmentMime(s)) out.push(s);
+    } else if (Array.isArray(v)) {
+      for (const item of v) pushVal(item);
+    }
+  };
+  if (props && typeof props === "object") {
+    for (const v of Object.values(props)) pushVal(v);
+  }
+  return out;
+}
+
+async function resolveVaultAttachmentPath(kandinsky, rawTarget, baseDir, openPaths) {
+  const clean = String(rawTarget || "").replace(/\\/g, "/").replace(/^\/+/, "").trim();
+  if (!clean || !getAttachmentMime(clean)) return null;
+  const cands = [];
+  if (baseDir) {
+    const rel = normalizeRelPath(`${baseDir}/${clean}`);
+    if (rel) cands.push(rel);
+  }
+  const root = normalizeRelPath(clean);
+  if (root && !cands.includes(root)) cands.push(root);
+  const leaf = clean.split("/").pop()?.toLowerCase() || "";
+  for (const op of openPaths) {
+    if (op.toLowerCase().endsWith(`/${leaf}`) || op.toLowerCase() === leaf) {
+      if (!cands.includes(op)) cands.push(op);
+    }
+  }
+  if (typeof kandinsky.exists !== "function") return cands[0] || null;
+  for (const cand of cands) {
+    try {
+      if (await kandinsky.exists(cand)) return cand;
+    } catch {}
+  }
+  return null;
+}
+
+async function getVaultFileSize(kandinsky, path) {
+  if (typeof kandinsky.list !== "function") return null;
+  const dir = dirOfPath(path);
+  const name = path.split("/").pop();
+  try {
+    const entries = await kandinsky.list(dir);
+    if (!Array.isArray(entries)) return null;
+    const hit = entries.find((e) => e && !e.dir && (e.path === path || e.name === name));
+    return hit && typeof hit.size === "number" ? hit.size : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readVaultFileBytes(kandinsky, path) {
+  if (typeof kandinsky.readBytes === "function") {
+    const raw = await kandinsky.readBytes(path);
+    if (raw instanceof Uint8Array) return raw;
+    if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
+  }
+  if (typeof kandinsky.fileUrl === "function") {
+    const url = await kandinsky.fileUrl(path);
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return new Uint8Array(await resp.arrayBuffer());
+  }
+  if (/\.(tex|md|bib)$/i.test(path) && typeof kandinsky.readText === "function") {
+    const text = await kandinsky.readText(path);
+    return new TextEncoder().encode(String(text || ""));
+  }
+  return null;
+}
+
+function uint8ToBase64(bytes) {
+  if (!(bytes instanceof Uint8Array) || bytes.length === 0) return "";
+  const parts = [];
+  const chunk = 0x4000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    parts.push(String.fromCharCode(...bytes.subarray(i, i + chunk)));
+  }
+  return btoa(parts.join(""));
+}
+
+/** Collect active and linked .pdf/.tex/.md/.bib context files <= 10 MiB via permitted Kandinsky plugin APIs. */
+export async function collectContextAttachments(kandinsky, opts = {}) {
+  if (!kandinsky) return [];
+  const snap = typeof kandinsky.context === "function" ? kandinsky.context() : null;
+  const openPaths = Array.isArray(snap && snap.open)
+    ? snap.open.map((p) => p && p.path).filter((p) => typeof p === "string" && p.trim())
+    : [];
+  const primaryPath = String(opts.path || (snap && snap.selection && snap.selection.path) || (snap && snap.active && snap.active.path) || "").trim();
+  const baseDir = primaryPath ? dirOfPath(primaryPath) : "";
+
+  const resolvedSet = new Set();
+  const addResolved = (p) => {
+    if (p && getAttachmentMime(p) && resolvedSet.size < MAX_ATTACHMENTS) resolvedSet.add(p);
+  };
+
+  if (primaryPath && getAttachmentMime(primaryPath)) {
+    const direct = await resolveVaultAttachmentPath(kandinsky, primaryPath, "", openPaths);
+    addResolved(direct || normalizeRelPath(primaryPath));
+  }
+
+  const rawTargets = [...extractContextLinkTargets(opts.prompt || "")];
+  if (primaryPath && /\.(md|tex)$/i.test(primaryPath) && typeof kandinsky.readText === "function") {
+    try {
+      const noteText = await kandinsky.readText(primaryPath);
+      rawTargets.push(...extractContextLinkTargets(noteText));
+    } catch {}
+  }
+  if (primaryPath && /\.md$/i.test(primaryPath) && typeof kandinsky.noteProps === "function") {
+    try {
+      const props = await kandinsky.noteProps(primaryPath);
+      rawTargets.push(...collectFrontmatterTargets(props));
+    } catch {}
+  }
+  if (primaryPath && /\.pdf$/i.test(primaryPath) && typeof kandinsky.companion === "function") {
+    try {
+      const comp = await kandinsky.companion(primaryPath, { find: true });
+      if (comp) rawTargets.push(comp);
+    } catch {}
+  }
+
+  for (const target of rawTargets) {
+    if (resolvedSet.size >= MAX_ATTACHMENTS) break;
+    const hit = await resolveVaultAttachmentPath(kandinsky, target, baseDir, openPaths);
+    addResolved(hit);
+  }
+
+  const attachments = [];
+  for (const path of resolvedSet) {
+    const mimeType = getAttachmentMime(path);
+    const name = path.split("/").pop() || path;
+    if (!mimeType) continue;
+    try {
+      const knownSize = await getVaultFileSize(kandinsky, path);
+      if (typeof knownSize === "number" && knownSize > MAX_ATTACHMENT_BYTES) {
+        const mib = (knownSize / (1024 * 1024)).toFixed(1);
+        console.warn(`[solver] Skipping attachment > 10 MiB: ${path} (${mib} MiB)`);
+        kandinsky.toast?.("Skipped oversized attachment", `${name} (${mib} MiB) exceeds the 10 MiB handoff limit.`, "info");
+        continue;
+      }
+      if (knownSize === 0) continue;
+
+      const bytes = await readVaultFileBytes(kandinsky, path);
+      if (!bytes || bytes.byteLength === 0) continue;
+      if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+        const mib = (bytes.byteLength / (1024 * 1024)).toFixed(1);
+        console.warn(`[solver] Skipping attachment > 10 MiB: ${path} (${mib} MiB)`);
+        kandinsky.toast?.("Skipped oversized attachment", `${name} (${mib} MiB) exceeds the 10 MiB handoff limit.`, "info");
+        continue;
+      }
+      attachments.push({ name, mimeType, base64: uint8ToBase64(bytes) });
+    } catch (e) {
+      console.warn(`[solver] Could not attach ${path}:`, e);
+    }
+  }
+  return attachments;
 }
 
 function parseExportedSteps(exported) {
@@ -252,33 +593,132 @@ export default function mountSolver(host, kandinsky) {
   host.replaceChildren(style, mk("div", { class: "solver-shell" }, bar, composerBar, ledgerDrawer, body));
 
   let iframeEl = null;
+  let iframeLoaded = false;
   let problemTextarea = null;
+  let pendingPrefill = null;
+  let userPinnedComposer = false;
+  let prefillSeq = 0;
+  let activePrefillSeq = 0;
 
-  function applyPrefill(payload, silent = false) {
-    const text = String((payload && payload.prompt) || "").trim();
-    if (!text) return;
-    const now = Date.now();
-    if (text === lastPrefillSig && now - lastPrefillAt < 900) return;
-    lastPrefillSig = text;
-    lastPrefillAt = now;
-    problemPrompt = text;
-    const parts = [];
-    if (payload.arxivId) parts.push(`arXiv:${payload.arxivId}`);
-    if (payload.path) parts.push(payload.path.split("/").pop());
-    else if (payload.title) parts.push(payload.title);
-    if (payload.page) parts.push(`p. ${payload.page}`);
-    prefillMeta = parts.join(" · ") || "Passage handoff";
+  function clearPendingAckTimer() {
+    if (pendingPrefill && pendingPrefill.ackTimer !== null) {
+      clearTimeout(pendingPrefill.ackTimer);
+      pendingPrefill.ackTimer = null;
+    }
+  }
+
+  function openComposerFallback(pending, notify = true) {
+    if (disposed || !pending || pending !== pendingPrefill || pending.acked) return;
     showComposer = true;
-
-    navigator.clipboard?.writeText(text).catch(() => {});
-    try { iframeEl?.contentWindow?.postMessage({ type: "solver:prefill", prompt: text, path: payload.path, page: payload.page }, "*"); } catch {}
+    navigator.clipboard?.writeText(pending.prompt).catch(() => {});
     renderBar();
     renderComposer();
     if (problemTextarea) {
       problemTextarea.focus();
       problemTextarea.setSelectionRange(problemTextarea.value.length, problemTextarea.value.length);
     }
-    if (!silent) kandinsky.toast("Loaded into Solver Problem Box", `${prefillMeta} — ready to solve or edit.`, "success");
+    if (notify && !pending.silent) {
+      kandinsky.toast("Loaded into Solver Problem Box", `${pending.meta} — ready to solve or edit.`, "success");
+    }
+  }
+
+  function schedulePrefillAckTimeout(pending) {
+    clearPendingAckTimer();
+    pending.ackTimer = setTimeout(() => {
+      if (disposed || pending !== pendingPrefill || pending.acked) return;
+      pending.ackTimer = null;
+      openComposerFallback(pending, true);
+    }, PREFILL_ACK_TIMEOUT_MS);
+  }
+
+  function postPrefillToIframe(pending) {
+    if (disposed || !pending || pending.acked || !iframeEl || !iframeEl.contentWindow || !iframeLoaded) return false;
+    const msg = {
+      type: "solver:prefill",
+      id: pending.id,
+      requestId: pending.id,
+      prompt: pending.prompt,
+      ...(pending.path ? { path: pending.path } : {}),
+      ...(pending.title ? { title: pending.title } : {}),
+      ...(pending.page !== undefined ? { page: pending.page } : {}),
+      ...(pending.arxivId ? { arxivId: pending.arxivId } : {}),
+      ...(pending.attachments && pending.attachments.length ? { attachments: pending.attachments } : {}),
+    };
+    try {
+      iframeEl.contentWindow.postMessage(msg, getSolverTargetOrigin(cfg.url));
+      schedulePrefillAckTimeout(pending);
+      return true;
+    } catch {
+      openComposerFallback(pending, true);
+      return false;
+    }
+  }
+
+  function handleIframeLoad() {
+    if (disposed) return;
+    iframeLoaded = true;
+    if (pendingPrefill && !pendingPrefill.acked && pendingPrefill.retries < MAX_PREFILL_LOAD_RETRIES) {
+      pendingPrefill.retries += 1;
+      postPrefillToIframe(pendingPrefill);
+    }
+  }
+
+  async function applyPrefill(payload, silent = false) {
+    if (disposed || !payload) return;
+    const rawText = String(payload.prompt || "").trim();
+    const hasGivenAttachments = Array.isArray(payload.attachments);
+    if (!rawText && !(hasGivenAttachments && payload.attachments.length) && !payload.path) return;
+
+    const now = Date.now();
+    const sig = payload.requestId ? `id:${payload.requestId}` : `${rawText}|${payload.path || ""}|${payload.page || ""}`;
+    if (sig === lastPrefillSig && now - lastPrefillAt < 900) return;
+    lastPrefillSig = sig;
+    lastPrefillAt = now;
+
+    const seq = ++activePrefillSeq;
+    const attachments = hasGivenAttachments
+      ? payload.attachments
+      : await collectContextAttachments(kandinsky, { path: payload.path, prompt: rawText });
+    if (disposed || seq !== activePrefillSeq) return;
+
+    const text = rawText || (attachments.length ? `Analyze the attached file${attachments.length === 1 ? "" : "s"}: ${attachments.map((a) => a.name).join(", ")}.` : "");
+    if (!text) return;
+
+    problemPrompt = text;
+    const parts = [];
+    if (payload.arxivId) parts.push(`arXiv:${payload.arxivId}`);
+    if (payload.path) parts.push(payload.path.split("/").pop());
+    else if (payload.title) parts.push(payload.title);
+    if (payload.page) parts.push(`p. ${payload.page}`);
+    if (attachments.length) parts.push(`${attachments.length} file${attachments.length === 1 ? "" : "s"}`);
+    prefillMeta = parts.join(" · ") || "Passage handoff";
+
+    clearPendingAckTimer();
+    const pending = {
+      id: String(payload.requestId || `sol-${Date.now()}-${++prefillSeq}`),
+      prompt: text,
+      path: payload.path,
+      title: payload.title,
+      page: payload.page,
+      arxivId: payload.arxivId ?? null,
+      attachments,
+      meta: prefillMeta,
+      silent,
+      acked: false,
+      retries: 0,
+      ackTimer: null,
+    };
+    pendingPrefill = pending;
+
+    if (!userPinnedComposer) showComposer = false;
+    renderBar();
+    renderComposer();
+
+    if (iframeEl && iframeEl.contentWindow && iframeLoaded) {
+      postPrefillToIframe(pending);
+    } else {
+      schedulePrefillAckTimeout(pending);
+    }
   }
 
   async function loadLedgerForSource(sourceKey) {
@@ -347,7 +787,7 @@ export default function mountSolver(host, kandinsky) {
         );
       },
     });
-    const closeBtn = mk("button", { class: "solver-btn", text: "Hide", onclick: () => { showComposer = false; renderBar(); renderComposer(); } });
+    const closeBtn = mk("button", { class: "solver-btn", text: "Hide", onclick: () => { showComposer = false; userPinnedComposer = false; renderBar(); renderComposer(); } });
     const top = mk("div", { class: "solver-composer-top" },
       mk("span", { class: "solver-composer-badge", text: `● Problem Input${prefillMeta ? ` · ${prefillMeta}` : ""}` }),
       mk("span", { class: "solver-inline-row" }, copyBtn, closeBtn),
@@ -437,7 +877,13 @@ export default function mountSolver(host, kandinsky) {
       class: `solver-btn ${showComposer ? "on" : ""}`,
       title: "Show/hide Solver problem input box (pre-filled by Send to Agent → Solver)",
       text: "Problem Box",
-      onclick: () => { showComposer = !showComposer; renderBar(); renderComposer(); },
+      onclick: () => {
+        showComposer = !showComposer;
+        userPinnedComposer = showComposer;
+        renderBar();
+        renderComposer();
+        if (showComposer && problemTextarea) problemTextarea.focus();
+      },
     });
     const importBtn = mk("button", {
       class: "solver-btn", title: "Save or append a Solver derivation as a Kandinsky Markdown note",
@@ -445,7 +891,16 @@ export default function mountSolver(host, kandinsky) {
     });
     const svcBtn = !running
       ? mk("button", { class: "solver-btn primary", disabled: starting, text: starting ? "Starting…" : "Start", onclick: () => void startSolver() })
-      : mk("button", { class: "solver-btn", title: "Reload Solver workspace", text: "↻", onclick: () => { frameKey++; iframeEl = null; void refreshStatus(false); } });
+      : mk("button", {
+          class: "solver-btn", title: "Reload Solver workspace", text: "↻",
+          onclick: () => {
+            frameKey++;
+            if (iframeEl) iframeEl.removeEventListener("load", handleIframeLoad);
+            iframeEl = null;
+            iframeLoaded = false;
+            void refreshStatus(false);
+          },
+        });
     const cfgBtn = mk("button", { class: "solver-btn", title: "Solver plugin settings", text: "⚙", onclick: () => kandinsky.plugin.openSettings() });
 
     bar.replaceChildren(brand, pill, mk("span", { class: "solver-spacer" }), insertBtn, stepsBtn, promptBtn, importBtn, svcBtn, cfgBtn);
@@ -454,15 +909,19 @@ export default function mountSolver(host, kandinsky) {
   function renderBody() {
     if (running) {
       if (!iframeEl) {
+        iframeLoaded = false;
         iframeEl = mk("iframe", {
           class: "solver-frame", title: "Solver Agent Workspace", allow: "clipboard-read; clipboard-write",
           src: `${cfg.url}${cfg.url.includes("?") ? "&" : "?"}_k=${frameKey}`,
         });
+        iframeEl.addEventListener("load", handleIframeLoad);
         body.replaceChildren(iframeEl);
       }
       return;
     }
+    if (iframeEl) iframeEl.removeEventListener("load", handleIframeLoad);
     iframeEl = null;
+    iframeLoaded = false;
     const card = mk("div", { class: "solver-card" },
       mk("h3", { text: starting ? "Starting Solver Agent…" : "Solver Agent Workspace" }),
       mk("p", { text: statusDetail }),
@@ -523,20 +982,60 @@ export default function mountSolver(host, kandinsky) {
 
   const onPrefillEvent = (ev) => {
     const detail = ev && ev.detail;
-    if (detail && detail.prompt) {
+    if (detail && (detail.prompt || (Array.isArray(detail.attachments) && detail.attachments.length) || detail.path)) {
       window.__kandinskyPendingSolverPrompt = undefined;
-      applyPrefill(detail, false);
+      void applyPrefill(detail, false);
     }
   };
   window.addEventListener("kandinsky:solver-prefill", onPrefillEvent);
 
+  const onWindowMessage = (ev) => {
+    if (disposed || !ev || !ev.data || typeof ev.data !== "object") return;
+    if (!isAllowedSolverOrigin(ev.origin, cfg.url)) return;
+    if (ev.source && iframeEl && iframeEl.contentWindow && ev.source !== iframeEl.contentWindow) return;
+
+    const msg = ev.data;
+    if (msg.type === "solver:prefill-ack") {
+      if (!iframeEl || !pendingPrefill || pendingPrefill.acked) return;
+      const ackId = msg.id ?? msg.requestId;
+      if (ackId && String(ackId) !== String(pendingPrefill.id)) return;
+      pendingPrefill.acked = true;
+      clearPendingAckTimer();
+      if (!userPinnedComposer && showComposer) {
+        showComposer = false;
+        renderBar();
+        renderComposer();
+      }
+      if (!pendingPrefill.silent) {
+        kandinsky.toast("Sent to Solver", `${pendingPrefill.meta || "Problem"} loaded in Solver.`, "success");
+      }
+      return;
+    }
+
+    if (msg.type === "solver:insert-derivation") {
+      const payload = msg.payload && typeof msg.payload === "object" ? msg.payload : msg;
+      const block = formatDerivationCallout(payload);
+      if (!block) {
+        kandinsky.toast("Nothing to insert", "Solver derivation message had no Markdown or LaTeX content.", "info");
+        return;
+      }
+      const ok = dispatchInsertToNote(block, kandinsky);
+      try {
+        if (ev.source && typeof ev.source.postMessage === "function") {
+          ev.source.postMessage({ type: "solver:insert-derivation-ack", ok: Boolean(ok), id: payload.id || msg.id }, ev.origin);
+        }
+      } catch {}
+    }
+  };
+  window.addEventListener("message", onWindowMessage);
+
   const initialArg = parseArg(kandinsky.arg);
-  if (window.__kandinskyPendingSolverPrompt && window.__kandinskyPendingSolverPrompt.prompt) {
+  if (window.__kandinskyPendingSolverPrompt && (window.__kandinskyPendingSolverPrompt.prompt || (Array.isArray(window.__kandinskyPendingSolverPrompt.attachments) && window.__kandinskyPendingSolverPrompt.attachments.length))) {
     const pending = window.__kandinskyPendingSolverPrompt;
     window.__kandinskyPendingSolverPrompt = undefined;
-    applyPrefill(pending, false);
-  } else if (initialArg && initialArg.prompt) {
-    applyPrefill(initialArg, true);
+    void applyPrefill(pending, false);
+  } else if (initialArg && (initialArg.prompt || initialArg.path)) {
+    void applyPrefill(initialArg, true);
   }
 
   syncUi();
@@ -544,6 +1043,9 @@ export default function mountSolver(host, kandinsky) {
 
   return () => {
     disposed = true;
+    clearPendingAckTimer();
+    if (iframeEl) iframeEl.removeEventListener("load", handleIframeLoad);
     window.removeEventListener("kandinsky:solver-prefill", onPrefillEvent);
+    window.removeEventListener("message", onWindowMessage);
   };
 }

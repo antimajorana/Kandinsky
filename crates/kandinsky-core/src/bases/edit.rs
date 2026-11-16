@@ -162,6 +162,20 @@ pub fn edit_view(base_src: &str, view: &str, edit: &ViewEdit) -> Result<String> 
             );
             return to_text(&doc);
         }
+        ViewEdit::BackRelation { column, back_relation } => {
+            mutate_prop_meta(&mut doc, column, |meta| {
+                meta.remove("backRelation");
+                match back_relation.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                    Some(b) => {
+                        meta.insert("back_relation".into(), b.into());
+                    }
+                    None => {
+                        meta.remove("back_relation");
+                    }
+                }
+            });
+            return to_text(&doc);
+        }
         _ => {}
     }
     let views = doc
@@ -300,7 +314,34 @@ pub fn edit_view(base_src: &str, view: &str, edit: &ViewEdit) -> Result<String> 
         }
         ViewEdit::Image { property: Some(p) } => set(&mut views[i], "image", column_key(p).into()),
         ViewEdit::Image { property: None } => unset(&mut views[i], "image"),
-        ViewEdit::BaseFilters { .. } | ViewEdit::DisplayName { .. } | ViewEdit::ColumnFormat { .. } => unreachable!("handled above"),
+        ViewEdit::Rollup { column, rollup } => {
+            let clean_col = column.trim();
+            if clean_col.is_empty() {
+                return Err(Error::BadRequest("a rollup column needs a name".into()));
+            }
+            if let Some(r) = rollup {
+                let mut o = order(&views[i]);
+                if !o.iter().any(|c| same(c, clean_col)) {
+                    o.push(Value::String(clean_col.to_string()));
+                    set(&mut views[i], "order", Value::Sequence(o));
+                }
+                let r_yaml = serde_yaml::to_value(r).map_err(|e| Error::BadRequest(e.to_string()))?;
+                mutate_prop_meta(&mut doc, clean_col, |meta| {
+                    meta.insert("rollup".into(), r_yaml);
+                });
+            } else {
+                let mut o = order(&views[i]);
+                o.retain(|c| !same(c, clean_col));
+                set(&mut views[i], "order", Value::Sequence(o));
+                mutate_prop_meta(&mut doc, clean_col, |meta| {
+                    meta.remove("rollup");
+                });
+            }
+        }
+        ViewEdit::BaseFilters { .. }
+        | ViewEdit::DisplayName { .. }
+        | ViewEdit::ColumnFormat { .. }
+        | ViewEdit::BackRelation { .. } => unreachable!("handled above"),
     }
     to_text(&doc)
 }

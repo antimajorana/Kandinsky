@@ -5,12 +5,14 @@
 pub(crate) use kandinsky_template::dates;
 mod edit;
 mod expr;
+mod relations;
 mod summary;
 mod value;
 
 pub use edit::{edit_view, new_row, prefill};
+pub use relations::sync_back_relations;
 
-use crate::api::{BaseCell, BaseColumn, BaseResult, BaseRow, BaseView, ColumnSummary, PropertyKind, SummaryKind};
+use crate::api::{BaseCell, BaseColumn, BaseResult, BaseRow, BaseView, ColumnSummary, PropertyKind, RollupSpec, SummaryKind};
 use crate::config::Config;
 use crate::links::{self, Parsed};
 use expr::{Context, Expr};
@@ -41,6 +43,10 @@ struct PropMeta {
     currency: Option<String>,
     #[serde(default)]
     max: Option<f64>,
+    #[serde(default, alias = "backRelation")]
+    back_relation: Option<String>,
+    #[serde(default)]
+    rollup: Option<RollupSpec>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -185,8 +191,125 @@ impl Note<'_> {
 struct Ctx<'a> {
     note: &'a Note<'a>,
     this: Option<&'a Note<'a>>,
+    notes_by_path: &'a HashMap<&'a str, &'a Note<'a>>,
+    vault: &'a links::Vault,
+    base_props: &'a BTreeMap<String, PropMeta>,
     props: BTreeMap<String, Val>,
     formulas: BTreeMap<String, Val>,
+}
+
+fn parse_summary_kind(raw: &str) -> Option<SummaryKind> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "average" | "avg" | "mean" => Some(SummaryKind::Average),
+        "median" => Some(SummaryKind::Median),
+        "min" => Some(SummaryKind::Min),
+        "max" => Some(SummaryKind::Max),
+        "sum" => Some(SummaryKind::Sum),
+        "range" => Some(SummaryKind::Range),
+        "stddev" | "std" => Some(SummaryKind::Stddev),
+        "earliest" => Some(SummaryKind::Earliest),
+        "latest" => Some(SummaryKind::Latest),
+        "checked" => Some(SummaryKind::Checked),
+        "unchecked" => Some(SummaryKind::Unchecked),
+        "empty" => Some(SummaryKind::Empty),
+        "filled" => Some(SummaryKind::Filled),
+        "unique" => Some(SummaryKind::Unique),
+        _ => None,
+    }
+}
+
+impl Ctx<'_> {
+    fn eval_rollup(&self, relation: &str, target: &str, summary_raw: Option<&str>) -> Val {
+        let mut linked_paths: Vec<String> = Vec::new();
+        let mut push_unique = |p: String| {
+            if !linked_paths.contains(&p) {
+                linked_paths.push(p);
+            }
+        };
+        let rel_trim = relation.trim();
+        if matches!(rel_trim, "file.links" | "links") {
+            for p in self.note.out {
+                push_unique(p.clone());
+            }
+        } else if matches!(rel_trim, "file.backlinks" | "backlinks") {
+            for p in self.note.incoming {
+                push_unique(p.clone());
+            }
+        } else {
+            let rel_key = rel_trim.strip_prefix("note.").unwrap_or(rel_trim);
+            if let Some(raw_val) = self.note.data.props.get(rel_key) {
+                let mut candidates = crate::note_props::extract_wikilinks_from_yaml(raw_val);
+                if candidates.is_empty() {
+                    match raw_val {
+                        serde_yaml::Value::String(s) if !s.trim().is_empty() => {
+                            candidates.extend(s.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()));
+                        }
+                        serde_yaml::Value::Sequence(seq) => {
+                            candidates.extend(seq.iter().filter_map(|v| v.as_str()).map(|x| x.trim().to_string()).filter(|x| !x.is_empty()));
+                        }
+                        _ => {}
+                    }
+                }
+                for cand in candidates {
+                    if let Some(resolved) = self.vault.resolve(&cand, self.note.path) {
+                        push_unique(resolved);
+                    }
+                }
+            }
+        }
+
+        let linked_notes: Vec<&Note<'_>> = linked_paths
+            .iter()
+            .filter_map(|p| self.notes_by_path.get(p.as_str()).copied())
+            .collect();
+
+        let sum_norm = summary_raw.map(str::trim).unwrap_or("");
+        if sum_norm.eq_ignore_ascii_case("count") {
+            return Val::Num(linked_notes.len() as f64);
+        }
+
+        let target_trim = target.trim();
+        let mut vals = Vec::new();
+        for tn in &linked_notes {
+            let v = if let Some(rest) = target_trim.strip_prefix("file.") {
+                tn.field(rest)
+            } else {
+                let key = target_trim.strip_prefix("note.").unwrap_or(target_trim);
+                tn.data.props.get(key).map(from_yaml).unwrap_or(Val::Null)
+            };
+            match v {
+                Val::List(items) if !items.is_empty() => vals.extend(items),
+                Val::List(_) => vals.push(Val::Null),
+                other => vals.push(other),
+            }
+        }
+
+        if sum_norm.is_empty() || sum_norm.eq_ignore_ascii_case("values") || sum_norm.eq_ignore_ascii_case("list") {
+            return Val::List(vals.into_iter().filter(|v| !v.is_empty()).collect());
+        }
+
+        let Some(kind) = parse_summary_kind(sum_norm) else {
+            return Val::Null;
+        };
+        match summary::summarize(kind, &vals) {
+            Some(s) => {
+                if matches!(kind, SummaryKind::Earliest | SummaryKind::Latest) {
+                    dates::parse(&s).map_or(Val::Str(s), Val::Date)
+                } else if let Ok(n) = s.parse::<f64>() {
+                    Val::Num(n)
+                } else {
+                    Val::Str(s)
+                }
+            }
+            None => {
+                if kind == SummaryKind::Sum {
+                    Val::Num(0.0)
+                } else {
+                    Val::Null
+                }
+            }
+        }
+    }
 }
 
 impl Context for Ctx<'_> {
@@ -197,6 +320,11 @@ impl Context for Ctx<'_> {
         self.note.field(name)
     }
     fn property(&self, name: &str) -> Val {
+        if let Some(meta) = prop_meta(name, self.base_props) {
+            if let Some(r) = &meta.rollup {
+                return self.eval_rollup(&r.relation, &r.property, r.summary.as_deref());
+            }
+        }
         self.props.get(name).cloned().unwrap_or(Val::Null)
     }
     fn has_property(&self, name: &str) -> bool {
@@ -208,6 +336,9 @@ impl Context for Ctx<'_> {
     fn this_field(&self, name: &str) -> Val {
         // no host note: `this.file.name` is null, so `x != this.file.name` keeps rows
         self.this.map_or(Val::Null, |n| n.field(name))
+    }
+    fn rollup(&self, relation: &str, target: &str, summary: Option<&str>) -> Val {
+        self.eval_rollup(relation, target, summary)
     }
 }
 
@@ -241,14 +372,20 @@ fn resolve_field(ctx: &Ctx, id: &str) -> Val {
         ctx.formula(rest)
     } else if let Some(rest) = id.strip_prefix("file.") {
         ctx.file_field(rest)
+    } else if let Some(r) = prop_meta(id, ctx.base_props).and_then(|m| m.rollup.as_ref()) {
+        ctx.eval_rollup(&r.relation, &r.property, r.summary.as_deref())
     } else {
         ctx.property(id.strip_prefix("note.").unwrap_or(id))
     }
 }
 
+fn is_rollup_col(id: &str, base_props: &BTreeMap<String, PropMeta>) -> bool {
+    prop_meta(id, base_props).is_some_and(|m| m.rollup.is_some())
+}
+
 /// The frontmatter value behind an editable column (`note.x` / bare `x`), if the note has it.
-fn raw_value<'a>(id: &str, note: &'a Note) -> Option<&'a serde_yaml::Value> {
-    if id.starts_with("file.") || id.starts_with("formula.") {
+fn raw_value<'a>(id: &str, note: &'a Note, base_props: &BTreeMap<String, PropMeta>) -> Option<&'a serde_yaml::Value> {
+    if id.starts_with("file.") || id.starts_with("formula.") || is_rollup_col(id, base_props) {
         return None;
     }
     note.data.props.get(id.strip_prefix("note.").unwrap_or(id))
@@ -266,12 +403,12 @@ fn yaml_text(v: &serde_yaml::Value) -> String {
     }
 }
 
-fn columns_raw(order: &[String], note: &Note) -> Vec<Option<String>> {
+fn columns_raw(order: &[String], note: &Note, base_props: &BTreeMap<String, PropMeta>) -> Vec<Option<String>> {
     order
         .iter()
         .map(|id| {
-            let editable = !id.starts_with("file.") && !id.starts_with("formula.");
-            editable.then(|| raw_value(id, note).map(yaml_text).unwrap_or_default())
+            let editable = !id.starts_with("file.") && !id.starts_with("formula.") && !is_rollup_col(id, base_props);
+            editable.then(|| raw_value(id, note, base_props).map(yaml_text).unwrap_or_default())
         })
         .collect()
 }
@@ -416,6 +553,7 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
         })
         .collect();
     let host = this.and_then(|t| notes.iter().find(|n| n.path == t));
+    let notes_by_path: HashMap<&str, &Note> = notes.iter().map(|n| (n.path, n)).collect();
     let formulas: Vec<(String, Option<Expr>)> =
         base.formulas.iter().map(|(k, v)| (k.clone(), expr::parse(v).ok())).collect();
     // a formula may use another (`formula.x`), whatever their order: one pass per formula reaches the end of any chain
@@ -428,7 +566,15 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
             let mut rows: Vec<Ctx> = notes
                 .iter()
                 .filter_map(|note| {
-                    let mut ctx = Ctx { note, this: host, props: note.props(), formulas: BTreeMap::new() };
+                    let mut ctx = Ctx {
+                        note,
+                        this: host,
+                        notes_by_path: &notes_by_path,
+                        vault: &vault,
+                        base_props: &base.properties,
+                        props: note.props(),
+                        formulas: BTreeMap::new(),
+                    };
                     for _ in 0..rounds {
                         for (name, e) in &formulas {
                             let v = e.as_ref().map_or(Val::Null, |e| expr::eval(e, &ctx));
@@ -464,6 +610,12 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
                     *seen.entry(k.to_string()).or_default() += 1;
                 }
             }
+            for (col_id, meta) in &base.properties {
+                if meta.rollup.is_some() {
+                    let bare = col_id.strip_prefix("note.").unwrap_or(col_id).to_string();
+                    seen.entry(bare).or_insert(rows.len() as u32 + 1);
+                }
+            }
             let shown: Vec<String> = view.order.iter().filter_map(|id| prop_key(id)).collect();
             let mut properties: Vec<(u32, String)> =
                 seen.into_iter().filter(|(k, _)| !shown.contains(k)).map(|(k, n)| (n, k)).collect();
@@ -494,11 +646,12 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
                 .iter()
                 .map(|id| {
                     let meta = prop_meta(id, &base.properties);
+                    let rollup = meta.and_then(|m| m.rollup.clone());
                     BaseColumn {
                         id: id.clone(),
                         label: column_label(id, &base.properties),
                         width: view.column_size.get(id).or_else(|| view.column_size.get(&format!("note.{id}"))).copied(),
-                        key: (!id.starts_with("file.") && !id.starts_with("formula."))
+                        key: (!id.starts_with("file.") && !id.starts_with("formula.") && rollup.is_none())
                             .then(|| id.strip_prefix("note.").unwrap_or(id).to_string()),
                         summary: view.summary(id).map(|kind| {
                             let vals: Vec<Val> = rows.iter().map(|r| resolve_field(r, id)).collect();
@@ -515,6 +668,12 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
                             .filter(|s| !s.is_empty())
                             .map(str::to_string),
                         max: meta.and_then(|m| m.max).filter(|v| v.is_finite() && *v > 0.0),
+                        back_relation: meta
+                            .and_then(|m| m.back_relation.as_deref())
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())
+                            .map(str::to_string),
+                        rollup,
                     }
                 })
                 .collect();
@@ -526,11 +685,11 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
                     BaseRow {
                     group: group_by.as_ref().map(|g| cell_text(&cell(&resolve_field(ctx, g), &resolve))),
                     image: view.image.as_ref().and_then(|p| picture(&resolve_field(ctx, p), ctx.note.path, &vault)),
-                    edit: columns_raw(&order, ctx.note),
-                    is_list: order.iter().map(|id| raw_value(id, ctx.note).is_some_and(|v| v.is_sequence())).collect(),
+                    edit: columns_raw(&order, ctx.note, &base.properties),
+                    is_list: order.iter().map(|id| raw_value(id, ctx.note, &base.properties).is_some_and(|v| v.is_sequence())).collect(),
                     values: order
                         .iter()
-                        .map(|id| raw_value(id, ctx.note).and_then(|v| serde_json::to_value(v).ok()).unwrap_or_default())
+                        .map(|id| raw_value(id, ctx.note, &base.properties).and_then(|v| serde_json::to_value(v).ok()).unwrap_or_default())
                         .collect(),
                     path: ctx.note.path.to_string(),
                     cells: order
@@ -743,5 +902,49 @@ views:
         let d = tempfile::tempdir().unwrap();
         let r = evaluate(d.path(), &Config::default(), "views: [oops", None);
         assert!(r.error.is_some() && r.views.is_empty());
+    }
+
+    #[test]
+    fn rollup_columns_and_rollup_expressions_aggregate_linked_notes() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(
+            d.path().join("Alpha.md"),
+            "---\ntype: project\ntasks:\n  - '[[Task 1]]'\n  - '[[Task 2]]'\n---\n",
+        )
+        .unwrap();
+        std::fs::write(d.path().join("Task 1.md"), "---\ntype: task\nhours: 3\ndone: true\nstatus: Done\n---\n").unwrap();
+        std::fs::write(d.path().join("Task 2.md"), "---\ntype: task\nhours: 7\ndone: false\nstatus: In progress\n---\n").unwrap();
+        let src = r#"filters: 'type == "project"'
+formulas:
+  AvgHours: rollup(tasks, "hours", "Average")
+  UniqueStates: rollup("tasks", "status", "Unique")
+properties:
+  tasks:
+    back_relation: project
+  total_hours:
+    displayName: Total Hours
+    rollup:
+      relation: tasks
+      property: hours
+      summary: Sum
+  done_tasks:
+    rollup:
+      relation: tasks
+      property: done
+      summary: Checked
+views:
+  - type: table
+    order: [file.name, tasks, total_hours, done_tasks, formula.AvgHours, formula.UniqueStates]
+"#;
+        let r = evaluate(d.path(), &Config::default(), src, None);
+        assert_eq!(r.error, None);
+        let v = &r.views[0];
+        assert_eq!(v.columns[1].back_relation.as_deref(), Some("project"));
+        assert!(v.columns[2].key.is_none() && v.columns[2].rollup.is_some(), "rollup columns are computed/read-only");
+        let cells = &v.rows[0].cells;
+        assert!(matches!(&cells[2], BaseCell::Num { value } if *value == 10.0), "{:?}", cells[2]);
+        assert!(matches!(&cells[3], BaseCell::Num { value } if *value == 1.0), "{:?}", cells[3]);
+        assert!(matches!(&cells[4], BaseCell::Num { value } if *value == 5.0), "{:?}", cells[4]);
+        assert!(matches!(&cells[5], BaseCell::Num { value } if *value == 2.0), "{:?}", cells[5]);
     }
 }

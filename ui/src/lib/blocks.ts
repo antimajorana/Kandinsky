@@ -12,6 +12,7 @@ import "./table-views-fence"; // the core's own fence: a table's saved views in 
 import "./tikz-fence"; // the core's own fence: a ```tikz picture drawn by TeX in the page
 import "./ink-fence"; // the core's own fence: an Obsidian Ink block shown as a card for its file
 import "./typst-fence"; // and a ```typst block drawn by the core's Typst
+import "./encrypted-fence"; // opt-in AES-GCM-256 encrypted block card (PBKDF2-SHA256 + WebCrypto)
 import { mount, unmount, type Component } from "svelte";
 import { parse as parseYaml } from "yaml";
 import type { DockviewPanelApi } from "dockview-core";
@@ -288,6 +289,28 @@ registerBlock({
     { key: "city", label: "City", kind: "text", hint: "e.g. Zurich, Paris, Tokyo (blank or offline shows local daylight card)" },
     { key: "units", label: "Units", kind: "choice", choices: ["C", "F"], default: "C" },
     { key: "live_fetch", label: "Fetch live forecast when online", kind: "toggle", default: true },
+  ],
+});
+registerBlock({
+  ...lazyBlock("button", "Action button", () => import("../components/widgets/ActionButtonWidget.svelte"), (c) => ({ options: c.options, doc: c.doc, host: c.host })),
+  icon: "plus", card: true,
+  options: [
+    { key: "label", label: "Button label", kind: "text", default: "New Note" },
+    { key: "subtitle", label: "Subtitle / description", kind: "text", hint: "optional caption shown beside the button" },
+    { key: "icon", label: "Icon glyph", kind: "text", hint: "e.g. +, ⚡, ✓, ●" },
+    { key: "tone", label: "Button style", kind: "choice", choices: ["primary", "default", "green", "yellow", "red"], default: "primary" },
+    { key: "action", label: "Action", kind: "choice", choices: ["create_note", "set_property", "toggle_property"], default: "create_note" },
+    { key: "folder", label: "Target folder", kind: "text", when: { action: ["create_note"] }, hint: "vault folder for the new note (e.g. tasks)" },
+    { key: "template", label: "Template", kind: "text", when: { action: ["create_note"] }, hint: "optional template name without .md" },
+    { key: "title", label: "Note title pattern", kind: "text", when: { action: ["create_note"] }, hint: "supports {{date}}, {{this}}, or {{title}}" },
+    { key: "base", label: "Target .base file", kind: "text", when: { action: ["set_property", "toggle_property"] }, hint: "blank: current note; or path/to/file.base to update matching rows" },
+    { key: "view", label: "Base view", kind: "text", when: { action: ["set_property", "toggle_property"] }, hint: "optional view name inside the .base" },
+    { key: "property", label: "Property key", kind: "text", when: { action: ["set_property", "toggle_property"] }, hint: "frontmatter key to set or toggle (e.g. status, done)" },
+    { key: "value", label: "Property value", kind: "text", when: { action: ["set_property"] }, hint: "value to write (supports {{date}}, {{this}})" },
+    { key: "preset_properties", label: "Preset properties (key=value)", kind: "text", hint: "comma-separated key=value pairs (e.g. status=To do, project=[[{{this}}]])" },
+    { key: "prompt", label: "Ask with quick input form before running", kind: "toggle", default: false },
+    { key: "prompt_fields", label: "Prompt form fields", kind: "text", hint: "comma-separated input keys (e.g. title, priority)" },
+    { key: "open", label: "Open created note", kind: "toggle", when: { action: ["create_note"] }, default: true },
   ],
 });
 

@@ -1336,6 +1336,27 @@ pub struct BaseColumn {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub max: Option<f64>,
+    /// Optional paired property name on target notes (`properties.<col>.back_relation`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub back_relation: Option<String>,
+    /// Optional rollup specification (`properties.<col>.rollup`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub rollup: Option<RollupSpec>,
+}
+
+/// A `.base` rollup property aggregating `property` across notes linked via `relation`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RollupSpec {
+    #[serde(alias = "relation_prop")]
+    pub relation: String,
+    #[serde(alias = "target", alias = "target_prop")]
+    pub property: String,
+    #[serde(default, alias = "summary_kind", alias = "function", skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub summary: Option<String>,
 }
 
 /// A column's summary and its value as shown under the table.
@@ -1503,6 +1524,18 @@ pub enum ViewEdit {
     Group { property: Option<String> },
     /// The property holding each card's picture; none: cards without pictures.
     Image { property: Option<String> },
+    /// Set or clear a bidirectional `back_relation` in `properties: {<col>: {back_relation}}`.
+    BackRelation {
+        column: String,
+        #[serde(default)]
+        back_relation: Option<String>,
+    },
+    /// Set, update, or clear a rollup column in `properties: {<col>: {rollup}}` (and show it in the view when set).
+    Rollup {
+        column: String,
+        #[serde(default)]
+        rollup: Option<RollupSpec>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -2056,3 +2089,128 @@ pub struct CaptureDay {
     /// `YYYY-MM-DD`.
     pub date: String,
 }
+
+// --- Round 4: Per-Page Snapshot History & Importers -----------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum HistorySource {
+    Snapshot,
+    Git,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PageHistoryEntry {
+    pub id: String,
+    pub source: HistorySource,
+    pub time: Mtime,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub author: Option<String>,
+    #[ts(type = "number")]
+    pub bytes: u64,
+    pub lines: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PageHistoryList {
+    pub path: String,
+    pub git_repo: bool,
+    pub entries: Vec<PageHistoryEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PageHistoryDetail {
+    pub path: String,
+    pub id: String,
+    pub source: HistorySource,
+    pub old_text: String,
+    pub current_text: String,
+    pub unified_diff: String,
+    pub added: u32,
+    pub removed: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PageSnapshotRequest {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub label: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PageHistoryRestore {
+    pub path: String,
+    pub source: HistorySource,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PageHistoryRestored {
+    pub path: String,
+    pub text: String,
+    pub mtime: Mtime,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum ImportFormat {
+    #[default]
+    Auto,
+    Notion,
+    Notecraft,
+    Onenote,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ImportPathRequest {
+    pub source_path: String,
+    #[serde(default)]
+    pub format: ImportFormat,
+    #[serde(default)]
+    pub target_dir: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ImportBundleFile {
+    pub rel_path: String,
+    pub data_base64: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ImportBundleRequest {
+    #[serde(default)]
+    pub format: ImportFormat,
+    #[serde(default)]
+    pub target_dir: String,
+    pub files: Vec<ImportBundleFile>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ImportReport {
+    pub detected_format: String,
+    pub target_dir: String,
+    pub notes_created: u32,
+    pub bases_created: u32,
+    pub attachments_saved: u32,
+    pub created_paths: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub first_open_path: Option<String>,
+    pub warnings: Vec<String>,
+}
+

@@ -395,6 +395,33 @@ export const api = {
   gitApply: (patch: string, cached: boolean, reverse: boolean) => request<void>("POST", "/api/git/apply", { body: { patch, cached, reverse } }),
   gitPull: () => request<GitSynced>("POST", "/api/git/pull"),
   gitPush: () => request<GitSynced>("POST", "/api/git/push"),
+  /** Per-page local snapshot + Git commit history list (core history.rs). */
+  pageHistory: (path: RelPath) => request<import("./gen/PageHistoryList").PageHistoryList>("GET", "/api/history", { query: { path } }),
+  /** One snapshot or Git commit version of `path`, with unified diff against current text. */
+  pageHistoryEntry: (path: RelPath, source: import("./gen/HistorySource").HistorySource, id: string) =>
+    request<import("./gen/PageHistoryDetail").PageHistoryDetail>("GET", "/api/history/entry", { query: { path, source, id } }),
+  /** Save an explicit local snapshot of `path` now. */
+  createPageSnapshot: (path: RelPath, label?: string) =>
+    request<import("./gen/PageHistoryEntry").PageHistoryEntry>("POST", "/api/history/snapshot", { body: { path, ...(label ? { label } : {}) } }),
+  /** Restore `path` to a snapshot or Git commit (snapshots current text first). */
+  restorePageHistory: (path: RelPath, source: import("./gen/HistorySource").HistorySource, id: string) =>
+    request<import("./gen/PageHistoryRestored").PageHistoryRestored>("POST", "/api/history/restore", { body: { path, source, id } }),
+  /** Import a `.zip` / `.one` / `.html` / `.md` / `.csv` archive or file by raw bytes. */
+  importArchive: async (data: Blob, opts: { format?: import("./gen/ImportFormat").ImportFormat; target_dir?: string; filename?: string } = {}) => {
+    const res = await fetch(url("/api/import/archive", {
+      format: opts.format ?? "auto",
+      target_dir: opts.target_dir || undefined,
+      filename: opts.filename || undefined,
+    }), { method: "POST", headers: { "x-kandinsky": "1" }, body: data });
+    if (!res.ok) throw new ApiError(res.status, `POST /api/import/archive: ${res.status} ${await res.text()}`);
+    return (await res.json()) as import("./gen/ImportReport").ImportReport;
+  },
+  /** Import multiple files picked from a folder (`webkitdirectory` / drag-drop). */
+  importBundle: (req: import("./gen/ImportBundleRequest").ImportBundleRequest) =>
+    request<import("./gen/ImportReport").ImportReport>("POST", "/api/import/bundle", { body: req }),
+  /** Import from a local folder, `.zip`, or `.one` path on this machine. */
+  importPath: (req: import("./gen/ImportPathRequest").ImportPathRequest) =>
+    request<import("./gen/ImportReport").ImportReport>("POST", "/api/import/path", { body: req }),
 };
 
 // --- WebSockets ----------------------------------------------------------------------------

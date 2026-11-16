@@ -162,22 +162,40 @@ async fn file_get(State(st): S, Query(q): Query<PathQuery>) -> Result<Json<FileT
 
 async fn file_put(State(st): S, Json(req): Json<FileWrite>) -> Result<Json<FileWritten>> {
     let path = req.path.clone();
-    let (written, note) = with_ws(&st, move |ws| {
-        // what it was, for a property that this save sets (template_apply.rs); notes only
-        let before = req.path.ends_with(".md").then(|| ws.resolve(&req.path).ok().and_then(|p| std::fs::read_to_string(p).ok())).flatten();
+    let (written, extra_paths) = with_ws(&st, move |ws| {
+        let track_hist = !crate::state_dir::is_state_rel(&req.path) && !files::is_write_tmp(&req.path);
+        let before = (req.path.ends_with(".md") || track_hist)
+            .then(|| ws.resolve(&req.path).ok().and_then(|p| std::fs::read_to_string(p).ok()))
+            .flatten();
         let mut written = files::write_text(&ws, &req)?;
+        let mut extra = Vec::new();
         if written.written {
             written = apply_template(&ws, &req, before.as_deref(), written)?;
+            if track_hist {
+                if let Err(e) = crate::history::record_edit(&ws, &req.path, before.as_deref(), &req.text) {
+                    eprintln!("kandinsky: snapshot of {} was not saved: {e}", req.path);
+                }
+            }
+            if req.path.ends_with(".md") {
+                if let Ok(cfg) = ws.config() {
+                    match crate::bases::sync_back_relations(ws.root(), &cfg, &req.path, before.as_deref().unwrap_or(""), &req.text) {
+                        Ok(synced) => extra.extend(synced),
+                        Err(e) => eprintln!("kandinsky: back-relation sync for {} failed: {e}", req.path),
+                    }
+                }
+            }
         }
         // a drawing's companion note follows each save (drawing_note.rs); a failure there never fails the save
-        let note = crate::drawing_note::update(&ws, &req.path, &req.text).unwrap_or_else(|e| {
+        if let Some(note) = crate::drawing_note::update(&ws, &req.path, &req.text).unwrap_or_else(|e| {
             eprintln!("kandinsky: the companion note of {} was not written: {e}", req.path);
             None
-        });
-        Ok((written, note))
+        }) {
+            extra.push(note);
+        }
+        Ok((written, extra))
     })
     .await?;
-    st.bus.publish(Event::Fs { paths: std::iter::once(path).chain(note).collect() });
+    st.bus.publish(Event::Fs { paths: std::iter::once(path).chain(extra_paths).collect() });
     Ok(Json(written))
 }
 
@@ -857,7 +875,7 @@ async fn backlinks_get(State(st): S, Query(q): Query<PathQuery>) -> Result<Json<
 }
 
 async fn property_put(State(st): S, Json(e): Json<PropertyEdit>) -> Result<StatusCode> {
-    with_ws(&st, move |ws| {
+    let touched = with_ws(&st, move |ws| {
         // the properties panel's rule (frontmatter::plain_key): `#x` would be a YAML comment, `- x` a list item
         if !e.path.ends_with(".md") || crate::frontmatter::plain_key(&e.key).is_err() {
             return Err(Error::BadRequest("a property edit needs a note and a plain key".into()));
@@ -867,9 +885,27 @@ async fn property_put(State(st): S, Json(e): Json<PropertyEdit>) -> Result<Statu
             Some(v) => serde_yaml::to_value(v).map_err(|x| Error::BadRequest(x.to_string()))?,
             None => crate::frontmatter::parse_cell(&e.text, e.list),
         };
-        vault_write::modify(&path, |text| Ok(crate::frontmatter::set_property(text, e.key.trim(), &value)))
+        let mut before_buf = String::new();
+        let mut after_buf = String::new();
+        vault_write::modify(&path, |text| {
+            before_buf = text.to_string();
+            let next = crate::frontmatter::set_property(text, e.key.trim(), &value);
+            after_buf = next.clone();
+            Ok(next)
+        })?;
+        let mut paths = vec![e.path.clone()];
+        if before_buf != after_buf {
+            let _ = crate::history::record_edit(&ws, &e.path, Some(&before_buf), &after_buf);
+            if let Ok(cfg) = ws.config() {
+                if let Ok(synced) = crate::bases::sync_back_relations(ws.root(), &cfg, &e.path, &before_buf, &after_buf) {
+                    paths.extend(synced);
+                }
+            }
+        }
+        Ok(paths)
     })
     .await?;
+    st.bus.publish(Event::Fs { paths: touched });
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1421,6 +1457,67 @@ async fn git_diff_get(State(st): S, Query(q): Query<GitDiffQuery>) -> Result<Jso
         })
         .await?,
     ))
+}
+
+#[derive(serde::Deserialize)]
+struct HistoryEntryQuery {
+    path: String,
+    source: HistorySource,
+    id: String,
+}
+
+async fn history_list_get(State(st): S, Query(q): Query<PathQuery>) -> Result<Json<PageHistoryList>> {
+    let rel = required_path(q)?;
+    Ok(Json(with_ws(&st, move |ws| crate::history::list(&ws, &rel)).await?))
+}
+
+async fn history_entry_get(State(st): S, Query(q): Query<HistoryEntryQuery>) -> Result<Json<PageHistoryDetail>> {
+    Ok(Json(with_ws(&st, move |ws| crate::history::entry_detail(&ws, &q.path, q.source, &q.id)).await?))
+}
+
+async fn history_snapshot_post(State(st): S, Json(req): Json<PageSnapshotRequest>) -> Result<Json<PageHistoryEntry>> {
+    Ok(Json(with_ws(&st, move |ws| crate::history::create_snapshot(&ws, &req.path, req.label.as_deref())).await?))
+}
+
+async fn history_restore_post(State(st): S, Json(req): Json<PageHistoryRestore>) -> Result<Json<PageHistoryRestored>> {
+    let path = req.path.clone();
+    let res = with_ws(&st, move |ws| crate::history::restore(&ws, &req.path, req.source, &req.id)).await?;
+    st.bus.publish(Event::Fs { paths: vec![path] });
+    Ok(Json(res))
+}
+
+#[derive(serde::Deserialize)]
+struct ImportArchiveQuery {
+    #[serde(default)]
+    format: ImportFormat,
+    #[serde(default)]
+    target_dir: String,
+    #[serde(default)]
+    filename: Option<String>,
+}
+
+async fn import_archive_post(State(st): S, Query(q): Query<ImportArchiveQuery>, body: Bytes) -> Result<Json<ImportReport>> {
+    let report = with_ws(&st, move |ws| crate::importers::import_archive_bytes(&ws, &body, q.format, &q.target_dir, q.filename.as_deref())).await?;
+    if !report.created_paths.is_empty() {
+        st.bus.publish(Event::Fs { paths: report.created_paths.clone() });
+    }
+    Ok(Json(report))
+}
+
+async fn import_bundle_post(State(st): S, Json(req): Json<ImportBundleRequest>) -> Result<Json<ImportReport>> {
+    let report = with_ws(&st, move |ws| crate::importers::import_bundle(&ws, &req)).await?;
+    if !report.created_paths.is_empty() {
+        st.bus.publish(Event::Fs { paths: report.created_paths.clone() });
+    }
+    Ok(Json(report))
+}
+
+async fn import_path_post(State(st): S, Json(req): Json<ImportPathRequest>) -> Result<Json<ImportReport>> {
+    let report = with_ws(&st, move |ws| crate::importers::import_local_path(&ws, &req)).await?;
+    if !report.created_paths.is_empty() {
+        st.bus.publish(Event::Fs { paths: report.created_paths.clone() });
+    }
+    Ok(Json(report))
 }
 
 async fn git_stage_post(State(st): S, Json(req): Json<GitStageRequest>) -> Result<StatusCode> {
@@ -2385,6 +2482,13 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/git/apply", post(git_apply_post))
         .route("/api/git/pull", post(|State(st): S| git_sync(st, git::Sync::Pull)))
         .route("/api/git/push", post(|State(st): S| git_sync(st, git::Sync::Push)))
+        .route("/api/history", get(history_list_get))
+        .route("/api/history/entry", get(history_entry_get))
+        .route("/api/history/snapshot", post(history_snapshot_post))
+        .route("/api/history/restore", post(history_restore_post))
+        .route("/api/import/archive", post(import_archive_post).layer(DefaultBodyLimit::max(512 * 1024 * 1024)))
+        .route("/api/import/bundle", post(import_bundle_post).layer(DefaultBodyLimit::max(512 * 1024 * 1024)))
+        .route("/api/import/path", post(import_path_post))
         .route("/api/ui/state", get(ui_state_get).put(ui_state_put))
         .route("/api/ui/log", post(ui_log_post))
         .route("/login", get(login_get).post(login_post))
