@@ -59,6 +59,11 @@
   import { startWhere } from "./lib/where.svelte";
   import { isNotionShell, shellMode } from "./lib/shell-mode.svelte";
   import { initFolderColors } from "./lib/folder-colors.svelte";
+  import { installZenListeners } from "./lib/zen.svelte";
+  import { installVoiceRecorderListener, voiceRecorder } from "./lib/voice-recorder.svelte";
+  import VoiceRecorderModal from "./components/VoiceRecorderModal.svelte";
+  import { dropFilePrompt } from "./lib/attach";
+  import DropFileChoiceModal from "./components/DropFileChoiceModal.svelte";
 
   let dockEl: HTMLDivElement;
 
@@ -204,6 +209,8 @@
       initBookmarks(),
       initFolderColors(),
       initSidebar(),
+      installZenListeners(),
+      installVoiceRecorderListener(),
       () => stopLayout(),
       offPhone,
       offEink,
@@ -252,6 +259,8 @@
 </div>
 <Palette />
 <QuickCapture />
+{#if voiceRecorder.open}<VoiceRecorderModal />{/if}
+{#if dropFilePrompt.current}<DropFileChoiceModal />{/if}
 <Toasts />
 
 <style>

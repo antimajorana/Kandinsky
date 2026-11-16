@@ -134,9 +134,90 @@
 .dv-groupview:hover > .half-close, .half-close:focus-visible { opacity: 1; }
 .half-close:hover { color: var(--text); background: var(--bg-hover); }
 
-/* a drawing's zen (panes/Excalidraw.svelte setZen): the page alone — no tab bar, not even fullscreen's icons, no status */
-html.kandinsky-zen .shell .main > :not(.work), html.kandinsky-zen .shell .status { display: none !important; }
-html.kandinsky-zen .shell .dock { inset: 0; }
+/* Global Zen mode (lib/zen.svelte.ts + panes/Excalidraw.svelte setZen): distraction-free focus across Editor, Page,
+   Canvas, and Excalidraw — hides sidebars, Dockview tab strips, pane topbars, format bars, and status bar */
+html.kandinsky-zen .shell .main > :not(.work),
+html.kandinsky-zen .notion-slot,
+html.kandinsky-zen footer.status,
+html.kandinsky-zen .shell .status,
+html.kandinsky-zen .dv-tabs-and-actions-container,
+html.kandinsky-zen .half-close,
+html.kandinsky-zen .editor-pane > .topbar,
+html.kandinsky-zen .editor-pane .format-bar,
+html.kandinsky-zen .page-pane > .topbar,
+html.kandinsky-zen .canvas-pane > .canvas-topbar { display: none !important; }
+html.kandinsky-zen .shell .dock { inset: 0 !important; }
+html.kandinsky-zen .dockview-theme-kandinsky .dv-groupview,
+html.kandinsky-zen .dockview-theme-kandinsky .dv-groupview.dv-active-group { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+html.kandinsky-zen:not(.phone) .editor-pane .live-cm .cm-scroller:not(:has(> .cm-note-hero-slot)) > .cm-content { padding-top: clamp(48px, 8vh, 88px); }
+html.kandinsky-zen:not(.phone) .page-pane > .page > .inner { padding-top: clamp(32px, 6vh, 68px); }
+
+.kandinsky-zen-exit {
+  position: fixed; top: 12px; right: 14px; z-index: 92; height: 28px; padding: 0 11px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-family: var(--font-ui); font-size: calc(12px * var(--ui-scale, 1)); font-weight: 500; color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-elev) 78%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+  opacity: .24; transition: opacity 160ms ease, background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.kandinsky-zen-exit:hover, .kandinsky-zen-exit:focus-visible {
+  opacity: 1; color: var(--heading); background: var(--bg-elev); border-color: var(--border-strong);
+}
+.kandinsky-zen-exit kbd { margin: 0; height: 1.45em; line-height: 1.4em; font-size: calc(10px * var(--ui-scale, 1)); }
+.kandinsky-zen-exit .zen-exit-sep { opacity: .6; }
+.kandinsky-zen-exit[hidden], html:not(.kandinsky-zen) .kandinsky-zen-exit,
+body:has(.draw-pane .zen-out) .kandinsky-zen-exit { display: none !important; }
+
+/* Arabic / Hebrew per-line BiDi & RTL document override (lib/editor/bidi.ts) — zero rules match pure LTR notes */
+.cm-line.cm-rtl-line, .cm-editor.is-rtl-override .cm-line { text-align: right; }
+.cm-editor.is-rtl-override .inline-title { direction: rtl; text-align: right; }
+.cm-line.cm-rtl-line .cm-math-inline, .cm-line.cm-rtl-line .cm-inline-code, .cm-line.cm-rtl-line .katex,
+.cm-editor.is-rtl-override .cm-math-inline, .cm-editor.is-rtl-override .cm-inline-code, .cm-editor.is-rtl-override .katex { direction: ltr; unicode-bidi: isolate; }
+.cm-editor.is-rtl-override .cm-codeblock, .cm-editor.is-rtl-override .cm-math-block,
+.cm-editor.is-rtl-override .cm-rendered-block pre { direction: ltr; text-align: left; }
+.markdown .cm-line.cm-rtl-line.cm-quote, .cm-editor.is-rtl-override .markdown .cm-line.cm-quote {
+  border-left: 0; border-right: 3px solid var(--border-strong); padding-left: 0 !important; padding-right: 14px !important;
+}
+.markdown .cm-line.cm-rtl-line.cm-callout, .cm-editor.is-rtl-override .markdown .cm-line.cm-callout {
+  border-left: 0; border-right: 3px solid var(--callout-edge, var(--accent));
+}
+.markdown .cm-line.cm-rtl-line.cm-list-1, .cm-editor.is-rtl-override .markdown .cm-line.cm-list-1 { padding-left: 0 !important; padding-right: 28px !important; }
+.markdown .cm-line.cm-rtl-line.cm-list-2, .cm-editor.is-rtl-override .markdown .cm-line.cm-list-2 { padding-left: 0 !important; padding-right: 56px !important; }
+.markdown .cm-line.cm-rtl-line.cm-list-3, .cm-editor.is-rtl-override .markdown .cm-line.cm-list-3 { padding-left: 0 !important; padding-right: 84px !important; }
+.markdown .cm-line.cm-rtl-line .cm-list-mark, .cm-editor.is-rtl-override .markdown .cm-line .cm-list-mark { text-align: left; padding-right: 0; padding-left: 9px; }
+.markdown .cm-line.cm-rtl-line .cm-task-mark, .cm-editor.is-rtl-override .markdown .cm-line .cm-task-mark { margin: 0 calc(19px - 1em) 0 9px; }
+
+/* Inline Bauhaus / Notion audio player card (lib/embeds.ts `.embed-audio-card`) */
+.markdown .cm-rendered-block:has(.embed-audio-card):hover { background: none; }
+.embed-audio-card {
+  display: flex; align-items: center; gap: 12px; width: min(100%, 480px); margin: .5em 0; padding: 9px 13px;
+  border-radius: var(--radius-lg, 10px); background: var(--bg-elev); border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm); font-family: var(--font-ui); direction: ltr; transition: border-color 120ms ease;
+}
+.embed-audio-card:hover { border-color: var(--border-strong); }
+.embed-audio-card.is-playing { border-color: color-mix(in srgb, var(--accent) 42%, var(--border-strong)); }
+.embed-audio-play {
+  width: 32px; height: 32px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-fg); cursor: pointer; transition: background 120ms ease, transform 100ms ease;
+}
+.embed-audio-play:hover { background: var(--accent-strong); }
+.embed-audio-play:active { transform: scale(.95); }
+.embed-audio-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.embed-audio-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; line-height: 1.25; }
+.embed-audio-title { font-size: calc(12.5px * var(--ui-scale, 1)); font-weight: 550; color: var(--heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.embed-audio-time { font-family: var(--font-mono); font-size: calc(11px * var(--ui-scale, 1)); font-variant-numeric: tabular-nums; color: var(--text-muted); flex: none; white-space: nowrap; }
+.embed-audio-scrub {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 5px; margin: 2px 0; border-radius: 999px; outline: none; cursor: pointer;
+  background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--audio-pct, 0%), var(--border-strong) var(--audio-pct, 0%), var(--border-strong) 100%);
+}
+.embed-audio-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--heading); border: 2px solid var(--accent); box-shadow: var(--shadow-sm); transition: transform 100ms ease;
+}
+.embed-audio-scrub::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.embed-audio-scrub::-moz-range-thumb {
+  width: 10px; height: 10px; border-radius: 50%; background: var(--heading); border: 2px solid var(--accent); box-shadow: var(--shadow-sm);
+}
 
 /* glance mode (lib/where.svelte.ts): following another device — what it shows alone, none of the app around it, the
    page as large as the window lets it be */

@@ -52,6 +52,7 @@ fn core_types(gen: &Path) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     let mut eat = |bytes: &[u8]| bytes.iter().for_each(|b| h = (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3));
     for n in names {
+        println!("cargo:rerun-if-changed=../../ui/src/lib/gen/{n}");
         eat(format!("{n}\0").as_bytes());
         eat(&std::fs::read(gen.join(&n)).unwrap_or_default());
         eat(&[0]);

@@ -30,6 +30,7 @@ export type PaneSpec =
   // Jupyter (.ipynb) and Wolfram WLJS (.wln) computational notebooks
   | { kind: "notebook"; path: RelPath }
   | { kind: "excalidraw"; path: RelPath; page?: string } // `page`: shown at open (an embed's `#Page 2`, draw-pages.ts frameRef)
+  | { kind: "canvas"; path: RelPath }
   | { kind: "outline" }
   | { kind: "commands" }
   | { kind: "graph" }
@@ -46,7 +47,7 @@ export type PaneKind = PaneSpec["kind"];
 const KINDS: Record<PaneKind, true> = {
   today: true, editor: true, terminal: true, files: true, search: true, pdf: true, image: true, web: true,
   settings: true, git: true, commit: true, diff: true, table: true, base: true, notebook: true, excalidraw: true,
-  outline: true, plugin: true, commands: true, graph: true, page: true, block: true, explorer: true,
+  canvas: true, outline: true, plugin: true, commands: true, graph: true, page: true, block: true, explorer: true,
 };
 export const PANE_KINDS = Object.keys(KINDS) as PaneKind[];
 export type SpecOf<K extends PaneKind> = Extract<PaneSpec, { kind: K }>;
@@ -85,6 +86,7 @@ export function paneId(s: PaneSpec): string {
     case "page":
     case "notebook":
     case "excalidraw":
+    case "canvas":
       return `${s.kind}:${s.path}`;
     case "terminal":
       return `terminal:${s.preset}:${s.n}`;
@@ -120,6 +122,7 @@ export function paneTitle(s: PaneSpec): string {
     case "base":
     case "notebook":
     case "excalidraw":
+    case "canvas":
       return tabName(s.path);
     case "page": return s.title ?? shownName(s.path);
     case "terminal": return s.title || (s.preset === "claude" ? "Claude" : s.n > 1 ? `Shell ${s.n}` : "Shell");
@@ -173,6 +176,8 @@ export function paneIcon(s: PaneSpec): IconName {
     case "notebook": return "sigma";
     case "excalidraw":
       return "edit";
+    case "canvas":
+      return "grid";
     case "outline": return "outline";
     case "commands": return "command";
     case "graph": return "graph";
@@ -188,6 +193,7 @@ const CODE_RE = /\.(rs|py|ts|js|mjs|cjs|tsx|jsx|svelte|c|h|cc|cpp|hpp|go|java|kt
 export const NOTEBOOK_RE = /\.(ipynb|wln)$/i;
 
 export function fileIcon(path: string): IconName {
+  if (/\.canvas$/i.test(path)) return "grid";
   if (/\.(excalidraw|rnote|excalidraw\.md)$/i.test(path)) return "edit";
   if (NOTEBOOK_RE.test(path)) return "sigma";
   if (/\.pdf$/i.test(path)) return "pdf";
@@ -203,6 +209,7 @@ export function fileIcon(path: string): IconName {
 export const tableViewIn = (anchor?: string) => /^view=(.+)$/.exec(anchor?.trim() ?? "")?.[1].trim() || undefined;
 
 export function specForPath(path: RelPath, line?: number, anchor?: string): PaneSpec {
+  if (/\.canvas$/i.test(path)) return { kind: "canvas", path };
   if (/\.excalidraw(\.md)?$/i.test(path)) return { kind: "excalidraw", path }; // .md: the Obsidian plugin's format
   if (NOTEBOOK_RE.test(path)) return { kind: "notebook", path };
   if (/\.pdf$/i.test(path)) return line === undefined ? { kind: "pdf", path } : { kind: "pdf", path, page: line }; // a PDF's "line" is its page
@@ -240,6 +247,7 @@ export function paneZone(k: PaneKind): PaneZone {
     case "page":
     case "notebook":
     case "excalidraw":
+    case "canvas":
     case "plugin":
     case "commands":
     case "graph":
@@ -259,7 +267,7 @@ export function embedOptions(s: PaneSpec): Record<string, string> | null {
     case "search": return s.q ? { q: s.q } : {};
     case "table": return s.view ? { path: s.path, view: s.view } : { path: s.path };
     case "base": return s.view ? { path: s.path, table: s.view } : { path: s.path }; // the block's option is `table`
-    case "editor": case "pdf": case "image": case "excalidraw": case "page": case "notebook":
+    case "editor": case "pdf": case "image": case "excalidraw": case "canvas": case "page": case "notebook":
       return { path: s.path };
     default: return null;
   }
@@ -287,6 +295,7 @@ export function specFromOptions(kind: PaneKind, o: Record<string, unknown>): Pan
     case "image":
     case "notebook":
     case "excalidraw":
+    case "canvas":
       return path ? { kind, path } : needPath;
     case "base": return path ? { kind, path, view: str(o.table) || undefined } : needPath;
     case "table": return path ? { kind, path, view: str(o.view) } : needPath;

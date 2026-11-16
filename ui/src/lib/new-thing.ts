@@ -32,6 +32,7 @@ async function items(): Promise<PickItem[]> {
       detail: [t.folder ? `into ${t.folder}` : "beside the note you are in", t.prompts.length ? `asks ${t.prompts.join(", ")}` : ""].filter(Boolean).join(" · "),
     })),
     { value: "drawing", title: "Drawing", detail: "Excalidraw", icon: "edit", section: "Drawings" },
+    { value: "canvas", title: "Canvas whiteboard", detail: "Obsidian .canvas JSON", icon: "grid", section: "Drawings" },
     ...[...kinds.values()].map((k): PickItem => ({ value: `kind:${k.id}`, title: k.title, detail: k.detail ?? k.plugin, icon: k.icon ?? "plugin", section: k.plugin })),
   ];
   // the last few used move to the top; one that no longer exists (a template deleted) is skipped
@@ -47,6 +48,7 @@ export function newThing(): void {
       if (v === "note") nameAndCreate();
       else if (v.startsWith("template:")) nameAndCreate(v.slice(9));
       else if (v === "drawing") await (await import("./draw-new")).newExcalidraw();
+      else if (v === "canvas") await (await import("./canvas-new")).newCanvas();
       else if (v.startsWith("kind:")) await kinds.get(v.slice(5))?.run();
     },
   });

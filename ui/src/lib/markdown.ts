@@ -250,6 +250,50 @@ function blockIds(state: StateCore): void {
 const escAttr = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const CALLOUT_RE = /^\[!([A-Za-z-]+)\]([+-]?)[ \t]*(.*)$/;
+const TOC_LINE_RE = /^[ \t]*(?:\[\[_TOC_\]\]|\[TOC\])[ \t]*$/i;
+const SEM_MAP: Record<string, [string, string, string]> = { "!": ["important", "Important", "▲"], "?": ["question", "Question", "?"], "*": ["idea", "Idea", "✦"], i: ["info", "Remember", "■"], TODO: ["todo", "To-do", "TODO"] };
+const SEM_TEXT_RE = /(^|[\s(>—–-])(\[([!?*i])\]|\[TODO\]|TODO:(?=\s|$))(?=$|[\s.,;:!?)}\]])/g;
+
+function semanticTags(state: StateCore): void {
+  const mk = (type: string, content: string) => { const t = new state.Token(type, "", 0); t.content = content; return t; };
+  for (const tok of state.tokens) {
+    if (tok.type !== "inline" || !tok.children?.length) continue;
+    let inLink = 0;
+    const out: InstanceType<typeof state.Token>[] = [];
+    for (const c of tok.children) {
+      if (c.type === "link_open" || c.type === "link_close") { inLink = Math.max(0, inLink + (c.type === "link_open" ? 1 : -1)); out.push(c); continue; }
+      if (inLink > 0 || c.type !== "text" || (!c.content.includes("[") && !c.content.includes("TODO:"))) { out.push(c); continue; }
+      let last = 0;
+      for (const m of c.content.matchAll(SEM_TEXT_RE)) {
+        if (m[2].startsWith("TODO:") && m.index! > 0 && !/[\n;—–(]\s*$/.test(c.content.slice(0, m.index! + m[1].length))) continue;
+        const tagAt = m.index! + m[1].length, [cls, title, glyph] = SEM_MAP[m[3] ?? "TODO"];
+        if (tagAt > last) out.push(mk("text", c.content.slice(last, tagAt)));
+        out.push(mk("html_inline", `<span class="k-sem-tag k-sem-${cls}" title="${title}">${glyph}</span>`));
+        last = tagAt + m[2].length;
+      }
+      if (!last) out.push(c); else if (last < c.content.length) out.push(mk("text", c.content.slice(last)));
+    }
+    tok.children = out;
+  }
+}
+
+function tocBlocks(state: StateCore): void {
+  const t = state.tokens;
+  if (!t.some((x, i) => x.type === "inline" && t[i - 1]?.type === "paragraph_open" && TOC_LINE_RE.test(x.content))) return;
+  const heads: { lvl: number; id: string; label: string }[] = [];
+  for (let i = 0; i < t.length; i++) {
+    const lvl = t[i].type === "heading_open" ? Number(t[i].tag.slice(1)) : 0;
+    if (lvl < 1 || lvl > 4) continue;
+    const id = `toc-${heads.length + 1}`;
+    t[i].attrSet("id", id); t[i].attrSet("data-eq-id", id);
+    const label = (t[i + 1]?.content ?? "").replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2").replace(/\[\[([^\]]+)\]\]/g, "$1").replace(/<[^>]+>|[*_`~]|==/g, "").trim();
+    if (label) heads.push({ lvl, id, label });
+  }
+  const minL = heads.length ? Math.min(...heads.map((h) => h.lvl)) : 1;
+  const body = heads.length ? `<ul class="md-toc-list">${heads.map((h) => `<li class="md-toc-item md-toc-d${h.lvl - minL}"><a class="md-toc-link" href="#${h.id}" data-eqref="${h.id}">${esc(h.label)}</a></li>`).join("")}</ul>` : `<p class="md-toc-empty">No headings yet</p>`;
+  const nav = `<nav class="md-toc" aria-label="Table of contents"><div class="md-toc-head">Contents</div>${body}</nav>\n`;
+  for (let i = 0; i + 2 < t.length; i++) if (t[i].type === "paragraph_open" && t[i + 1].type === "inline" && TOC_LINE_RE.test(t[i + 1].content)) { const b = new state.Token("html_block", "", 0); b.content = nav; t.splice(i, 3, b); }
+}
 function callouts(state: StateCore): void {
   const toks = state.tokens;
   for (let i = 0; i < toks.length; i++) {
@@ -331,6 +375,8 @@ function build() {
   md.inline.ruler.push("hashtag", hashtag);
   md.core.ruler.push("task_lists", taskLists);
   md.core.ruler.push("callouts", callouts);
+  md.core.ruler.push("semantic_tags", semanticTags);
+  md.core.ruler.before("inline", "toc_blocks", tocBlocks);
   md.core.ruler.after("block", "equation_ids", equationIds);
   md.core.ruler.after("inline", "block_ids", blockIds);
 
@@ -343,8 +389,14 @@ function build() {
   };
   const defaultFence = r.fence!;
   r.fence = (t, i, o, env, self) => {
+    const info = t[i].info.trim();
     // a view block (docs/guides/MALLEABLE.md): drawn by lib/blocks.ts once mounted (hydrateBlocks)
-    if (t[i].info.trim() === "view") return `<div class="view-block" data-src="${esc(t[i].content)}"><p class="view-loading">…</p></div>`;
+    if (info === "view") return `<div class="view-block" data-src="${esc(t[i].content)}"><p class="view-loading">…</p></div>`;
+    if (info === "columns" || /^columns\b/.test(info)) {
+      const raw = t[i].content.split(/^\s*(?:---|===)\s*$/m);
+      const cols = raw.length > 4 ? [...raw.slice(0, 3), raw.slice(3).join("\n\n---\n\n")] : raw;
+      return `<div class="md-columns" style="--col-count:${cols.length}">${cols.map((c) => `<div class="md-col">${md.render(c.trim(), env)}</div>`).join("")}</div>\n`;
+    }
     return defaultFence(t, i, o, env, self); // the Obsidian Ink blocks are a fence of their own (ink-fence.ts)
   };
   r.eqref = (t, i, _o, env) => {
@@ -485,7 +537,7 @@ DOMPurify.addHook("uponSanitizeElement", (node, data) => {
   el.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
   el.setAttribute("loading", "lazy");
 });
-const PURIFY = { ADD_ATTR: ["data-src", "data-href", "data-target", "data-eq", "data-eqref", "data-eq-id", "target", "allow", "allowfullscreen", "referrerpolicy", "loading"], ADD_TAGS: ["semantics", "annotation", "iframe"], FORBID_TAGS: ["style"] };
+const PURIFY = { ADD_ATTR: ["data-src", "data-href", "data-target", "data-eq", "data-eqref", "data-eq-id", "data-color", "data-bg", "open", "dir", "target", "allow", "allowfullscreen", "referrerpolicy", "loading"], ADD_TAGS: ["semantics", "annotation", "iframe"], FORBID_TAGS: ["style"] };
 
 /** Sanitized HTML for a raw HTML fragment written in a note (the editor's inline `<img>`, `<br>`). */
 export function sanitizeHtml(html: string, dir?: string): string {

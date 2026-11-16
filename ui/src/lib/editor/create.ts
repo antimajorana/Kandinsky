@@ -8,7 +8,7 @@ import { basename } from "../paths";
 import type { Problems } from "../state.svelte";
 import { SELECTION_TEXT_MAX } from "../context.svelte";
 import { ansiColors } from "./ansi";
-import "./md-format"; // registers the note keys' formatter (registry.noteFormat)
+import { formatNote } from "./md-format"; // registers the note keys' formatter (registry.noteFormat)
 import { settings, onSettings } from "../settings.svelte";
 import { EditorState, Compartment, Prec, Transaction, type Extension, type ChangeSet, type Text } from "@codemirror/state";
 import { EditorView, keymap, dropCursor, rectangularSelection, highlightActiveLine, highlightSpecialChars } from "@codemirror/view";
@@ -127,7 +127,11 @@ export function createEditor(o: EditorOptions): KandinskyEditor {
     } }, { key: "Mod-Shift-v", run: (v) => { stashVisual(v); return false; } },
     // VS Code / Obsidian: Ctrl+H is find & replace (vim would take it as "left"); Ctrl+E toggles source mode in notes
     { key: "Mod-h", preventDefault: true, run: openReplace },
-    ...(md ? [{ key: "Mod-e", preventDefault: true, run: () => { window.dispatchEvent(new CustomEvent("kandinsky-toggle-source")); return true; } }] : [])])),
+    ...(md ? [
+      { key: "Mod-e", preventDefault: true, run: () => { window.dispatchEvent(new CustomEvent("kandinsky-toggle-source")); return true; } },
+      { key: "Mod-Shift-h", preventDefault: true, run: (v: EditorView) => { formatNote(v, "highlight"); return true; } },
+      { key: "Mod-Shift-x", preventDefault: true, run: (v: EditorView) => { formatNote(v, "rtl"); return true; } },
+    ] : [])])),
     Prec.highest(EditorView.domEventHandlers({ paste: (_e, v) => { restoreVisual(v); return false; } })),
     desktopKeys, // before vim (first wins): see its comment
     md ? [] : [lspKeys, definitionClicks], // Ctrl+click a name: its definition, from the language server (definition.ts)

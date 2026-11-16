@@ -52,6 +52,8 @@
   import type { Problems } from "../lib/state.svelte";
   import { noteHeadings } from "../lib/note-anchor";
   import { mapHeadings } from "../lib/editor/heading-map";
+  import { attachDroppedFiles, extractDropUriHint, takeFiles } from "../lib/attach";
+  import { bodyStart } from "../lib/editor/live/live-preview.js";
   /** Vim, as the setting says — never in the mobile apps or on a phone's screen: a touch keyboard has no Escape, and normal mode ate the taps. */
   const vimHere = () => app.vimEnabled && !nativeShell.on && !phone.on;
 
@@ -338,15 +340,67 @@
     btns?.[index]?.click();
   }
 
+  function hasExternalFiles(e: DragEvent): boolean {
+    const types = e.dataTransfer?.types;
+    return !!types && Array.from(types).includes("Files");
+  }
+
+  function handlePaneDragOver(e: DragEvent): void {
+    if (e.defaultPrevented || !hasExternalFiles(e)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  }
+
+  function handlePaneDrop(e: DragEvent): void {
+    if (e.defaultPrevented || !hasExternalFiles(e)) return;
+    const uriHint = extractDropUriHint(e);
+    const pending = takeFiles(e);
+    if (!pending) {
+      e.preventDefault();
+      return;
+    }
+    e.stopPropagation();
+    if (!isMarkdown(path) || !ed || drawn) return;
+    const view = ed.view;
+    const contentRect = view.contentDOM.getBoundingClientRect();
+    const clampedX = Math.min(Math.max(e.clientX, contentRect.left + 8), Math.max(contentRect.left + 8, contentRect.right - 8));
+    const at = view.posAtCoords({ x: clampedX, y: e.clientY })
+      ?? (e.clientY < contentRect.top ? bodyStart(view.state.doc) : view.state.doc.length);
+    void pending.then(async (files) => {
+      if (!files.length || disposed || !ed) return;
+      const done = await attachDroppedFiles(path, files, uriHint);
+      if (!done.length || disposed || !ed) return;
+      const curView = ed.view;
+      const pos = Math.min(at, curView.state.doc.length);
+      const before = pos > 0 ? curView.state.sliceDoc(pos - 1, pos) : "\n";
+      const prefix = before === "\n" ? "" : "\n";
+      const insert = `${prefix}${done.map((a) => a.embed).join("\n")}\n`;
+      curView.dispatch({
+        changes: { from: pos, insert },
+        selection: { anchor: pos + insert.length },
+        scrollIntoView: true,
+        userEvent: "input.drop",
+      });
+      curView.focus();
+    });
+  }
+
   function openPageMenu(e: MouseEvent): void {
     popMenu(
       below(e, [
+        { label: "Zen mode (distraction-free)", hint: "F11", icon: "maximize" as const, run: () => { window.dispatchEvent(new CustomEvent("kandinsky:toggle-zen")); } },
         ...(isMarkdown(path)
           ? [
               { label: isFullWidth ? "Standard reading width (740px)" : "Full width page", icon: "maximize" as const, run: () => void toggleFullWidth() },
               { label: rawSource ? "Live preview mode" : "Source mode (raw Markdown)", hint: "Ctrl+E", icon: "code" as const, run: toggleSource },
               { label: "Toggle Properties panel", icon: "table" as const, run: handleToggleProperties },
-              "sep" as const,
+              { label: "Record voice note (/voice)…", icon: "headphones" as const, run: () => { window.dispatchEvent(new CustomEvent("kandinsky:voice-record", { detail: { view: ed?.view ?? null, path } })); } },
+            ]
+          : []),
+        { label: "Toggle RTL / LTR text direction", hint: "Ctrl+Shift+X", icon: "text" as const, run: () => { window.dispatchEvent(new CustomEvent("kandinsky:toggle-bidi", { detail: { view: ed?.view ?? null } })); } },
+        "sep",
+        ...(isMarkdown(path)
+          ? [
               { label: "Run c_lint verification", icon: "check" as const, run: () => triggerOracleButton(0) },
               { label: "File computation to Oracle Wiki…", icon: "bookmark" as const, run: () => triggerOracleButton(1) },
               "sep" as const,
@@ -592,7 +646,8 @@
   });
 </script>
 
-<div class="editor-pane" class:is-md={isMarkdown(path)} class:full-width={isFullWidth} class:drawn>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="editor-pane" class:is-md={isMarkdown(path)} class:full-width={isFullWidth} class:drawn ondragover={handlePaneDragOver} ondrop={handlePaneDrop}>
   {#if noteView}
     <button class="note-view-switch" onclick={() => (drawn ? shownAsNote.add(path) : shownAsNote.delete(path))}
       title={drawn ? "The note's markdown, to edit" : `Drawn as ${noteView.title.toLowerCase()}`}>{drawn ? "Show as note" : `Show as ${noteView.title.toLowerCase()}`}</button>
@@ -619,7 +674,7 @@
           </span>
           <span class="sep">›</span>
         {/if}
-        <strong class="doc-crumb">
+        <strong class="doc-crumb" dir="auto">
           {#if !isMarkdown(path)}<Icon name={fileIcon(path)} size={13} />{/if}
           {shownName(path)}
         </strong>

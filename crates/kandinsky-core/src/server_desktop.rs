@@ -179,6 +179,13 @@ impl DesktopVaults {
     pub(super) fn runs_now(&self) -> Option<Vec<Arc<Started>>> {
         self.started.try_lock().ok().map(|s| s.values().cloned().collect())
     }
+
+    /// Drops all started vaults and their file watchers on server shutdown.
+    pub(super) async fn stop(&self) {
+        for s in self.started.lock().await.drain().map(|(_, s)| s) {
+            drop(s);
+        }
+    }
 }
 
 impl Started {

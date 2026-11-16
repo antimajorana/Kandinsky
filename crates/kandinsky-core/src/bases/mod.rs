@@ -31,10 +31,16 @@ struct BaseFile {
     views: Vec<View>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 struct PropMeta {
     #[serde(rename = "displayName")]
     display_name: Option<String>,
+    #[serde(default)]
+    format: Option<String>,
+    #[serde(default)]
+    currency: Option<String>,
+    #[serde(default)]
+    max: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -270,11 +276,16 @@ fn columns_raw(order: &[String], note: &Note) -> Vec<Option<String>> {
         .collect()
 }
 
-fn column_label(id: &str, props: &BTreeMap<String, PropMeta>) -> String {
+fn prop_meta<'a>(id: &str, props: &'a BTreeMap<String, PropMeta>) -> Option<&'a PropMeta> {
     let bare = id.strip_prefix("note.").unwrap_or(id);
     [id.to_string(), format!("note.{bare}"), bare.to_string()]
         .iter()
-        .find_map(|c| props.get(c)?.display_name.clone())
+        .find_map(|c| props.get(c))
+}
+
+fn column_label(id: &str, props: &BTreeMap<String, PropMeta>) -> String {
+    prop_meta(id, props)
+        .and_then(|m| m.display_name.clone())
         .unwrap_or_else(|| {
             let last = id.rsplit('.').next().unwrap_or(id);
             let mut c = last.chars();
@@ -481,16 +492,30 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
             }
             let columns = order
                 .iter()
-                .map(|id| BaseColumn {
-                    id: id.clone(),
-                    label: column_label(id, &base.properties),
-                    width: view.column_size.get(id).or_else(|| view.column_size.get(&format!("note.{id}"))).copied(),
-                    key: (!id.starts_with("file.") && !id.starts_with("formula."))
-                        .then(|| id.strip_prefix("note.").unwrap_or(id).to_string()),
-                    summary: view.summary(id).map(|kind| {
-                        let vals: Vec<Val> = rows.iter().map(|r| resolve_field(r, id)).collect();
-                        ColumnSummary { kind, value: summary::summarize(kind, &vals).unwrap_or_default() }
-                    }),
+                .map(|id| {
+                    let meta = prop_meta(id, &base.properties);
+                    BaseColumn {
+                        id: id.clone(),
+                        label: column_label(id, &base.properties),
+                        width: view.column_size.get(id).or_else(|| view.column_size.get(&format!("note.{id}"))).copied(),
+                        key: (!id.starts_with("file.") && !id.starts_with("formula."))
+                            .then(|| id.strip_prefix("note.").unwrap_or(id).to_string()),
+                        summary: view.summary(id).map(|kind| {
+                            let vals: Vec<Val> = rows.iter().map(|r| resolve_field(r, id)).collect();
+                            ColumnSummary { kind, value: summary::summarize(kind, &vals).unwrap_or_default() }
+                        }),
+                        format: meta
+                            .and_then(|m| m.format.as_deref())
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("auto"))
+                            .map(str::to_string),
+                        currency: meta
+                            .and_then(|m| m.currency.as_deref())
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())
+                            .map(str::to_string),
+                        max: meta.and_then(|m| m.max).filter(|v| v.is_finite() && *v > 0.0),
+                    }
                 })
                 .collect();
             let rows = rows

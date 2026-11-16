@@ -109,7 +109,8 @@
   // --- arranging: add ---------------------------------------------------------------------------------
   const SECTIONS: [string, (type: string) => boolean][] = [
     ["Today", (t) => ["greeting", "capture", "focus", "log", "tasks", "activity"].includes(t)],
-    ["Content", (t) => ["note", "text", "base", "editor", "pdf", "image", "file-table", "excalidraw", "web"].includes(t)],
+    ["Widgets", (t) => ["chart", "progress", "countdown", "pomodoro", "habits", "clock", "weather"].includes(t)],
+    ["Content", (t) => ["note", "text", "base", "editor", "pdf", "image", "file-table", "excalidraw", "canvas", "web"].includes(t)],
     ["From plugins", (t) => t.includes(".")],
   ];
   const sectionOf = (type: string) => SECTIONS.find(([, has]) => has(type))?.[0] ?? "Tools";
@@ -345,6 +346,7 @@
   function openPageActions(e: MouseEvent): void {
     popMenu(
       below(e, [
+        { label: "Zen mode (distraction-free)", hint: "F11", icon: "maximize", run: () => { window.dispatchEvent(new CustomEvent("kandinsky:toggle-zen")); } },
         { label: isFullWidth ? "Standard width" : "Full width page", icon: "maximize", run: togglePageFullWidth },
         { label: showPageProps ? "Hide properties" : "Properties", icon: "table", run: () => { showPageProps = !showPageProps; } },
         { label: arranging ? "Finish arranging" : "Arrange blocks", icon: arranging ? "check" : "edit", run: () => { arranging = !arranging; } },
@@ -429,7 +431,7 @@
         </span>
         <span class="sep">›</span>
       {/if}
-      <strong class="doc-crumb">{pageTitle}</strong>
+      <strong class="doc-crumb" dir="auto">{pageTitle}</strong>
     </div>
     <div class="top-actions">
       {#if editedLabel}<span class="edited-lbl">{editedLabel}</span>{/if}
@@ -479,7 +481,7 @@
               title="Change page icon" aria-label="Change page icon">{emblemGlyph}</button>
           {/if}
           {#if editingTitle}
-            <input type="text" class="page-title-input" use:focusInput bind:value={titleDraft}
+            <input type="text" class="page-title-input" dir="auto" use:focusInput bind:value={titleDraft}
               aria-label="Page title" onblur={commitTitleEdit}
               onkeydown={(e) => {
                 e.stopPropagation();
@@ -488,7 +490,7 @@
               }} />
           {:else}
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_click_events_have_key_events -->
-            <h1 class="page-title" title="Click to rename page title" onclick={startTitleEdit}>{pageTitle}</h1>
+            <h1 class="page-title" dir="auto" title="Click to rename page title" onclick={startTitleEdit}>{pageTitle}</h1>
           {/if}
         </div>
 

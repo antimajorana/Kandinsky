@@ -2504,6 +2504,11 @@ impl ServerHandle {
         }
         let r = (&mut self.task).await;
         self.remove_server_file();
+        if let Some(d) = &self.desktop {
+            d.stop().await;
+        }
+        drop(lazy);
+        self.vaults.clear();
         r??;
         Ok(())
     }
@@ -2512,6 +2517,10 @@ impl ServerHandle {
     pub async fn wait(mut self) -> anyhow::Result<()> {
         let r = (&mut self.task).await;
         self.remove_server_file();
+        if let Some(d) = &self.desktop {
+            d.stop().await;
+        }
+        self.vaults.clear();
         r??;
         Ok(())
     }

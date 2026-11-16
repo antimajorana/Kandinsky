@@ -109,9 +109,10 @@
     document.body.appendChild(el);
     place();
     const node = el;
+    const anchorEl = anchor;
     const outside = (e: MouseEvent) => {
       const t = e.target as Node;
-      if (node.contains(t) || anchor.contains?.(t) || (t as Element).closest?.(".ctx-menu, [role=listbox], [role=menu], .backdrop")) return;
+      if (node.contains(t) || anchorEl.contains?.(t) || (t as Element).closest?.(".ctx-menu, [role=listbox], [role=menu], .backdrop")) return;
       onclose();
     };
     const key = (e: KeyboardEvent) => {
@@ -119,7 +120,7 @@
       e.preventDefault();
       e.stopPropagation();
       onclose();
-      if (!isHover) anchor.focus?.();
+      if (!isHover) anchorEl.focus?.();
     };
     const onResize = () => place();
     document.addEventListener("mousedown", outside, true);
@@ -138,8 +139,8 @@
       window.removeEventListener("keydown", key);
       window.removeEventListener("resize", onResize);
       off();
-      if (!isHover && node.contains(document.activeElement) && anchor.isConnected) {
-        anchor.focus?.({ preventScroll: true });
+      if (!isHover && node.contains(document.activeElement) && anchorEl.isConnected) {
+        anchorEl.focus?.({ preventScroll: true });
       }
       node.remove();
     };

@@ -22,6 +22,7 @@ export const paneComponents: PaneComponents = {
   page: () => import("../panes/Page.svelte"),
   notebook: () => import("../panes/Notebook.svelte"),
   excalidraw: () => import("../panes/Excalidraw.svelte"),
+  canvas: () => import("../panes/Canvas.svelte"),
   plugin: () => import("../panes/Plugin.svelte"),
   outline: () => import("../panes/Outline.svelte"),
   commands: () => import("../panes/Commands.svelte"),

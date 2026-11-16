@@ -20,8 +20,21 @@ import "./embed-open"; // the ↗ over an embed, Ctrl+click: the original
 /** How deep notes may embed notes (a note that embeds itself, or two that embed each other, stop here). */
 const MAX_DEPTH = 2;
 const PDF_HEIGHT = 520;
-const AUDIO = /\.(mp3|ogg|oga|opus|m4a|aac|wav|flac)$/i;
+const AUDIO = /\.(mp3|ogg|oga|opus|m4a|aac|wav|flac|weba)$/i;
+const VOICE_WEBM = /(?:^|\/)(?:recording|voice|audio)[^/]*\.webm$/i;
 const VIDEO = /\.(mp4|webm|mov|m4v|mkv|ogv)$/i;
+
+export const isAudioEmbedPath = (path: string): boolean => AUDIO.test(path) || VOICE_WEBM.test(path);
+const isVideoEmbedPath = (path: string): boolean => !isAudioEmbedPath(path) && VIDEO.test(path);
+
+const PLAY_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.2v13.6L19.2 12z"/></svg>';
+const PAUSE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="3.8" height="14" rx="1.2"/><rect x="13.7" y="5" width="3.8" height="14" rx="1.2"/></svg>';
+
+function fmtAudioTime(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return "0:00";
+  const whole = Math.floor(sec);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
 
 /** The block an embedded file is drawn with (`type: table\npath: …`), or null: a card. `section`: what follows the
  *  `#` (a table's `view=Name`). */
@@ -50,14 +63,130 @@ function card(el: HTMLElement, path: string): void {
   el.replaceChildren(a);
 }
 
-/** Sound or video, played in the note. */
+/** Sound or video, played in the note. Audio renders a compact Bauhaus/Notion inline `.embed-audio-card`. */
 async function media(el: HTMLElement, path: string, video: boolean): Promise<void> {
-  const m = document.createElement(video ? "video" : "audio");
-  m.controls = true;
-  m.preload = "metadata";
-  m.className = video ? "embed-video" : "embed-audio";
-  m.src = await blobUrl(path);
-  el.replaceChildren(m);
+  const src = await blobUrl(path);
+  if (released.has(el)) return;
+  if (video) {
+    const v = document.createElement("video");
+    v.controls = true;
+    v.preload = "metadata";
+    v.className = "embed-video";
+    v.src = src;
+    el.replaceChildren(v);
+    keep(el, () => { v.pause(); v.removeAttribute("src"); v.load(); });
+    return;
+  }
+
+  const label = basename(path);
+  const wrap = document.createElement("div");
+  wrap.className = "embed-audio-card";
+  wrap.dataset.testid = "embed-audio-card";
+  wrap.dataset.audioPath = path;
+
+  const playBtn = document.createElement("button");
+  playBtn.type = "button";
+  playBtn.className = "embed-audio-play";
+  playBtn.setAttribute("aria-label", `Play ${label}`);
+  playBtn.title = "Play";
+  playBtn.innerHTML = PLAY_SVG;
+
+  const main = document.createElement("div");
+  main.className = "embed-audio-main";
+
+  const meta = document.createElement("div");
+  meta.className = "embed-audio-meta";
+
+  const title = document.createElement("span");
+  title.className = "embed-audio-title";
+  title.textContent = label;
+  title.title = path;
+
+  const time = document.createElement("span");
+  time.className = "embed-audio-time";
+  time.textContent = "0:00 / 0:00";
+
+  const scrub = document.createElement("input");
+  scrub.type = "range";
+  scrub.className = "embed-audio-scrub";
+  scrub.min = "0";
+  scrub.max = "100";
+  scrub.step = "0.05";
+  scrub.value = "0";
+  scrub.setAttribute("aria-label", `Seek ${label}`);
+
+  const audio = document.createElement("audio");
+  audio.preload = "metadata";
+  audio.className = "embed-audio";
+  audio.hidden = true;
+  audio.src = src;
+
+  let dragging = false;
+  let probedInfinity = false;
+
+  const syncUi = () => {
+    const dur = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+    const cur = dragging ? Number(scrub.value) || 0 : (Number.isFinite(audio.currentTime) ? audio.currentTime : 0);
+    if (dur > 0) scrub.max = String(dur);
+    if (!dragging) scrub.value = String(dur > 0 ? Math.min(cur, dur) : 0);
+    const pct = dur > 0 ? Math.max(0, Math.min(100, (cur / dur) * 100)) : 0;
+    wrap.style.setProperty("--audio-pct", `${pct.toFixed(2)}%`);
+    time.textContent = `${fmtAudioTime(cur)} / ${fmtAudioTime(dur)}`;
+    const playing = !audio.paused && !audio.ended;
+    wrap.classList.toggle("is-playing", playing);
+    playBtn.innerHTML = playing ? PAUSE_SVG : PLAY_SVG;
+    playBtn.title = playing ? "Pause" : "Play";
+    playBtn.setAttribute("aria-label", `${playing ? "Pause" : "Play"} ${label}`);
+  };
+
+  for (const ev of ["pointerdown", "mousedown", "click"] as const) {
+    wrap.addEventListener(ev, (e) => e.stopPropagation());
+  }
+
+  playBtn.addEventListener("click", () => {
+    if (audio.paused) void audio.play().catch(() => {});
+    else audio.pause();
+  });
+
+  scrub.addEventListener("pointerdown", () => { dragging = true; });
+  scrub.addEventListener("pointerup", () => { dragging = false; });
+  scrub.addEventListener("change", () => {
+    dragging = false;
+    if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = Number(scrub.value);
+    syncUi();
+  });
+  scrub.addEventListener("input", () => {
+    if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = Number(scrub.value);
+    syncUi();
+  });
+
+  audio.addEventListener("loadedmetadata", () => {
+    if (audio.duration === Infinity && !probedInfinity) {
+      probedInfinity = true;
+      const onProbe = () => {
+        audio.removeEventListener("timeupdate", onProbe);
+        audio.currentTime = 0;
+        syncUi();
+      };
+      audio.addEventListener("timeupdate", onProbe);
+      audio.currentTime = 1e101;
+      return;
+    }
+    syncUi();
+  });
+  for (const ev of ["durationchange", "timeupdate", "play", "pause", "ended"] as const) {
+    audio.addEventListener(ev, syncUi);
+  }
+
+  meta.append(title, time);
+  main.append(meta, scrub);
+  wrap.append(playBtn, main, audio);
+  el.replaceChildren(wrap);
+  keep(el, () => {
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+  });
 }
 
 /** `compact` (a card on Home, the day's log): a file, PDF or note embedded there is its card, never a whole viewer.
@@ -122,9 +251,9 @@ async function mountEmbed(el: HTMLElement, notePath: string, compact: boolean): 
   if (!pdf && !file && depth >= MAX_DEPTH) return; // left as the link it was drawn with
   if (!pdf && !file && path === notePath && !section) return; // the note itself: the link stays
   track(el);
-  if (compact && !(AUDIO.test(path) || VIDEO.test(path))) return card(el, path);
+  if (compact && !(isAudioEmbedPath(path) || isVideoEmbedPath(path))) return card(el, path);
   if (file) {
-    if (AUDIO.test(path) || VIDEO.test(path)) return void media(el, path, VIDEO.test(path)).catch(() => card(el, path));
+    if (isAudioEmbedPath(path) || isVideoEmbedPath(path)) return void media(el, path, isVideoEmbedPath(path)).catch(() => card(el, path));
     const src = fileBlock(path, section);
     if (!src) return card(el, path);
     el.replaceChildren();

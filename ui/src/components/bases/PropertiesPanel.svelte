@@ -1,7 +1,6 @@
 <script lang="ts">
-  // The properties popover's content, as Obsidian's: every property of the notes, the base's formulas and the file's
-  // own, each with a checkbox to show it as a column; the shown ones first, in column order, dragged (or Alt+↑/↓) to
-  // reorder and renamed in place (a display name for every view of the base). A search narrows a long list.
+  // The properties popover's content: every property of the notes, the base's formulas and the file's own, each with a
+  // checkbox to show it as a column; shown ones reorder by drag (or Alt+↑/↓), rename in place, and pick display format.
   import Icon from "../Icon.svelte";
   import { reorder } from "../../lib/base-drag";
   import type { ViewEdit } from "../../lib/gen/ViewEdit";
@@ -13,6 +12,36 @@
     others: { id: string; label: string }[];
     onedit: (e: ViewEdit) => void;
   } = $props();
+
+  const FORMAT_OPTS: { key: string; label: string; format: string | null; currency: string | null }[] = [
+    { key: "auto", label: "Auto", format: null, currency: null },
+    { key: "status", label: "Status", format: "status", currency: null },
+    { key: "progress", label: "Progress", format: "progress", currency: null },
+    { key: "percent", label: "%", format: "percent", currency: null },
+    { key: "eur", label: "€", format: "currency", currency: "€" },
+    { key: "usd", label: "$", format: "currency", currency: "$" },
+    { key: "gbp", label: "£", format: "currency", currency: "£" },
+    { key: "url", label: "URL", format: "url", currency: null },
+    { key: "email", label: "Email", format: "email", currency: null },
+    { key: "phone", label: "Phone", format: "phone", currency: null },
+    { key: "file", label: "File", format: "file", currency: null },
+  ];
+
+  function selectKeyOf(c: BaseColumn): string {
+    const f = c.format?.trim().toLowerCase();
+    if (!f || f === "auto") return "auto";
+    if (f === "currency") {
+      const cur = (c.currency ?? "€").trim();
+      return cur === "$" ? "usd" : cur === "£" ? "gbp" : "eur";
+    }
+    return FORMAT_OPTS.some((o) => o.key === f) ? f : "auto";
+  }
+
+  function applyFormat(c: BaseColumn, key: string) {
+    const opt = FORMAT_OPTS.find((o) => o.key === key) ?? FORMAT_OPTS[0];
+    const max = opt.format === "progress" ? (c.max ?? 100) : null;
+    onedit({ op: "column_format", column: c.id, format: opt.format, currency: opt.currency, max });
+  }
 
   let q = $state("");
   const hit = (id: string, label: string) => !q.trim() || `${id} ${label}`.toLowerCase().includes(q.trim().toLowerCase());
@@ -49,6 +78,37 @@
         {:else}
           <span class="label" title={c.id}>{c.label}</span>
           {#if c.label.toLowerCase() !== c.id.replace(/^(note|file|formula)\./, "").toLowerCase()}<span class="id">{c.id}</span>{/if}
+          <span class="spacer"></span>
+          {#if c.id !== "file.name"}
+            {#if c.format === "progress"}
+              <input
+                class="max-edit"
+                type="number"
+                min="1"
+                step="any"
+                title="Progress target (max)"
+                aria-label="Max target for {c.label}"
+                value={c.max ?? 100}
+                onkeydown={(e) => { if (e.key !== "Escape") e.stopPropagation(); }}
+                onchange={(e) => {
+                  const n = Number(e.currentTarget.value);
+                  onedit({ op: "column_format", column: c.id, format: "progress", currency: null, max: Number.isFinite(n) && n > 0 ? n : 100 });
+                }}
+              />
+            {/if}
+            <select
+              class="fmt-select"
+              class:set={!!c.format && c.format !== "auto"}
+              aria-label="Display format of {c.label}"
+              title="Display format"
+              value={selectKeyOf(c)}
+              onchange={(e) => applyFormat(c, e.currentTarget.value)}
+            >
+              {#each FORMAT_OPTS as opt (opt.key)}
+                <option value={opt.key}>{opt.label}</option>
+              {/each}
+            </select>
+          {/if}
           <button type="button" class="icon-btn" aria-label="Rename {c.label}" title="Rename the column (every view)" onclick={() => (renaming = c.id)}><Icon name="edit" size={12} /></button>
         {/if}
       </li>
@@ -81,10 +141,16 @@
   input[type="checkbox"] { flex: none; accent-color: var(--accent); width: 14px; height: 14px; margin: 0; }
   .label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .label.muted { color: var(--text-muted); }
-  .id { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-family: var(--font-mono); font-size: .85em; }
+  .id { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-family: var(--font-mono); font-size: .85em; }
+  .spacer { flex: 1 1 0; }
+  .fmt-select { flex: none; height: 22px; max-width: 86px; padding: 0 4px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); font: inherit; font-size: .84em; cursor: pointer; }
+  .fmt-select.set { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: var(--accent-soft); }
+  .fmt-select:focus { outline: none; border-color: var(--accent); }
+  .max-edit { flex: none; width: 48px; height: 22px; padding: 0 4px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; font-size: .84em; font-variant-numeric: tabular-nums; text-align: right; }
+  .max-edit:focus { outline: none; border-color: var(--accent); }
   .name-edit { flex: 1; min-width: 0; height: 24px; padding: 0 6px; border-radius: var(--radius-sm); border: 1px solid var(--accent); background: var(--bg); color: var(--text); font: inherit; }
   .name-edit:focus { outline: none; }
-  .icon-btn { flex: none; margin-left: auto; display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-sm); color: var(--text-faint); opacity: 0; }
+  .icon-btn { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-sm); color: var(--text-faint); opacity: 0; }
   li:hover .icon-btn, .icon-btn:focus-visible { opacity: 1; }
   .icon-btn:hover { background: var(--bg-elev); color: var(--text); }
   .sep { height: 1px; background: var(--border); margin: 6px 2px; }

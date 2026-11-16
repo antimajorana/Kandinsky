@@ -74,6 +74,18 @@ fn slot(folder: &Path) -> PathBuf {
     home().join(h.iter().take(8).map(|b| format!("{b:02x}")).collect::<String>())
 }
 
+/// Target of a directory symlink or Windows directory junction (`None` for a real directory or file).
+fn read_dir_link(link: &Path) -> Option<PathBuf> {
+    let m = link.symlink_metadata().ok()?;
+    if !m.file_type().is_symlink() && (m.is_dir() || m.is_file()) {
+        return None;
+    }
+    let raw = std::fs::read_link(link).ok()?;
+    Some(crate::paths::real(&raw).unwrap_or_else(|_| {
+        raw.to_str().and_then(|s| s.strip_prefix(r"\\?\")).map(PathBuf::from).unwrap_or(raw)
+    }))
+}
+
 /// Readies `folder` as a guest of the vault at `opener` and gives back its canonical path, the root to serve. Opened
 /// again, the same state is reused (its config refreshed from the opener).
 pub fn prepare(folder: &Path, opener: &Path) -> std::result::Result<PathBuf, Refused> {
@@ -87,8 +99,9 @@ pub fn prepare(folder: &Path, opener: &Path) -> std::result::Result<PathBuf, Ref
     }
     let link = folder.join(".kandinsky");
     let state = slot(&folder).join(".kandinsky");
+    let canon_state = crate::paths::real(&state).unwrap_or_else(|_| state.clone());
     match link.symlink_metadata() {
-        Ok(m) if m.file_type().is_symlink() && std::fs::read_link(&link).is_ok_and(|t| t == state) => {}
+        Ok(_) if read_dir_link(&link).is_some_and(|t| t == state || t == canon_state) => {}
         Ok(_) => return Err(Refused::AVault),
         Err(_) => {}
     }
@@ -128,9 +141,7 @@ fn guest_config(opener: &Path) -> Result<String> {
 /// Whose guest the folder at `root` is; `None` for a vault.
 fn mark_of(root: &Path) -> Option<Mark> {
     let link = crate::state_dir::dir(root); // `.atlas` for a guest made by a build from before the rename
-    if !link.symlink_metadata().ok()?.file_type().is_symlink() {
-        return None;
-    }
+    read_dir_link(&link)?;
     toml::from_str(&std::fs::read_to_string(link.join(MARK)).ok()?).ok()
 }
 
@@ -202,7 +213,8 @@ pub fn sweep() -> usize {
         let state = slot.join(name);
         if let Some(m) = std::fs::read_to_string(state.join(MARK)).ok().and_then(|t| toml::from_str::<Mark>(&t).ok()) {
             let link = Path::new(&m.folder).join(name);
-            if std::fs::read_link(&link).is_ok_and(|t| t == state || links_to_slot(&t, &slot, name)) {
+            let canon_state = crate::paths::real(&state).unwrap_or_else(|_| state.clone());
+            if read_dir_link(&link).is_some_and(|t| t == state || t == canon_state || links_to_slot(&t, &slot, name)) {
                 // the folder's own entry: through its guard when one is still installed (it allows `.kandinsky`)
                 if let Err(e) = vault_write::remove_link(&link) {
                     eprintln!("kandinsky: the guest link {} stays: {e}", link.display());

@@ -17,4 +17,16 @@ key: string | null,
 /**
  * The view's summary of the column (Obsidian's `summaries`), worked out over the rows shown.
  */
-summary: ColumnSummary | null, };
+summary: ColumnSummary | null, 
+/**
+ * Optional rich display mode from `properties.<col>.format` (`status`, `progress`, `percent`, `currency`, `url`, `email`, `phone`, `file`).
+ */
+format?: string, 
+/**
+ * Optional currency symbol/code from `properties.<col>.currency` (`€`, `$`, `£`, …).
+ */
+currency?: string, 
+/**
+ * Optional target / maximum for `progress` columns from `properties.<col>.max` (default 100).
+ */
+max?: number, };

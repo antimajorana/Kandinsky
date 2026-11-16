@@ -4,7 +4,7 @@
 import { basename, dirOf, shownName } from "../paths";
 import { renameTo } from "../rename-file";
 import { noteHtml } from "./big-html";
-import { attachFiles, takeFiles } from "../attach";
+import { attachDroppedFiles, attachFiles, extractDropUriHint, takeFiles } from "../attach";
 import { closeDisplayMath } from "./display-math";
 import { wikilinkSource, slashSource, citeSource, citeApplies, taskSource, continueList, backspaceMarkup, taskShortForms, type TaskCompletion } from "./md-complete";
 import { taskIconEl } from "../task-complete";
@@ -47,6 +47,8 @@ import { citing, mdSymbols } from "./completion-sources";
 import { figureCaptions } from "./figure-captions";
 import { slashMenuExtension } from "./slash-menu";
 import { blockGutterExtension } from "./block-gutter";
+import { bidiExtension } from "./bidi";
+import { richBlocksExtension } from "./rich-blocks";
 
 // Fold like Obsidian: headings and lists only. lang-markdown makes every multi-line block foldable,
 // which put arrows beside ordinary paragraphs; lists inside the frontmatter are YAML, not lists.
@@ -256,6 +258,7 @@ export function noteExtensions(
   const live: Extension = [
     liveField,
     pageEmblemField,
+    richBlocksExtension(onOpenLink),
     figureCaptions(equationsOf),
     taskChips(() => settings.config?.editor.task_chips ?? true),
     logLines(isLog),
@@ -274,6 +277,7 @@ export function noteExtensions(
       mathPreview(() => settings.config?.editor.math_preview ?? true),
       slashMenuExtension(),
       blockGutterExtension(),
+      bidiExtension(),
       mentions,
       noteSuggestions(path),
       // paste / drop files → saved beside the note (editor.attachment_folder) and embedded
@@ -295,10 +299,11 @@ export function noteExtensions(
           return true;
         },
         drop: (e, view) => {
+          const uriHint = extractDropUriHint(e);
           const files = takeFiles(e);
           if (!files) return false;
           const at = view.posAtCoords({ x: e.clientX, y: e.clientY }) ?? view.state.selection.main.head;
-          void files.then((f) => attachAt(view, path, f, at));
+          void files.then((f) => dropAt(view, path, f, at, uriHint));
           return true;
         },
       }),
@@ -331,6 +336,15 @@ async function attachAt(view: EditorView, notePath: string, files: File[], at: n
   if (!done.length) return;
   const insert = done.map((a) => a.embed).join("\n");
   view.dispatch({ changes: { from: at, insert }, selection: { anchor: at + insert.length } });
+}
+
+async function dropAt(view: EditorView, notePath: string, files: File[], at: number, uriHint?: string): Promise<void> {
+  const done = await attachDroppedFiles(notePath, files, uriHint);
+  if (!done.length) return;
+  const clamped = Math.max(0, Math.min(at, view.state.doc.length));
+  const insert = done.map((a) => a.embed).join("\n");
+  view.dispatch({ changes: { from: clamped, insert }, selection: { anchor: clamped + insert.length } });
+  view.focus();
 }
 
 /** Settings-driven markdown options (heading folds); reconfigured live like codeOptions. */
@@ -385,6 +399,7 @@ export function headingRepeats(state: EditorState, name: string): boolean {
 function titleInput(path: string, name: string, glyph = "", viewRef?: { view: EditorView | null }): HTMLElement {
   const h = document.createElement("textarea");
   h.className = "inline-title";
+  h.dir = "auto";
   h.value = name;
   h.rows = 1;
   const fit = () => { h.style.height = "auto"; h.style.height = `${h.scrollHeight}px`; };

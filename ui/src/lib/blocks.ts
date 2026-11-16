@@ -140,7 +140,7 @@ export const paneBlockType = (kind: PaneKind) => PANE_BLOCK_TYPE[kind] ?? kind;
 // pane kinds that show a file, and which files (asked for when the block is added by hand)
 const PANE_FILES: Partial<Record<PaneKind, RegExp | true>> = {
   editor: true, pdf: /\.pdf$/i, image: IMAGE_RE, table: /\.(tsv|csv|tab|dat|txt)$/i,
-  page: /\.page$/i, notebook: /\.(ipynb|wln)$/i, excalidraw: /\.excalidraw(\.md)?$/i,
+  page: /\.page$/i, notebook: /\.(ipynb|wln)$/i, excalidraw: /\.excalidraw(\.md)?$/i, canvas: /\.canvas$/i,
 };
 const EMBED_HEIGHT = 420;
 let embeds = 0;
@@ -213,6 +213,82 @@ registerBlock({
   ...lazyBlock("base", "Database", () => import("../components/BaseTable.svelte"), (c) => ({ path: str(c.options.path), view: str(c.options.table) || undefined, thisPath: c.doc, embedded: true })),
   icon: "table", card: true, file: /\.base$/i,
   tab: (c) => (str(c.options.path) ? { kind: "base", path: str(c.options.path), view: str(c.options.table) || undefined } : null),
+});
+
+// --- Nootion dashboard widgets (Page.svelte & ```view blocks in Markdown) -------------------------
+registerBlock({
+  ...lazyBlock("chart", "Chart", () => import("../components/widgets/ChartWidget.svelte"), (c) => ({ options: c.options, doc: c.doc })),
+  icon: "chart", card: true,
+  options: [
+    { key: "path", label: "Source (.base or .csv)", kind: "text", hint: "vault path to a .base or .csv/.tsv file (blank: vault notes)" },
+    { key: "view", label: "Base view", kind: "text", hint: "optional view name inside the .base" },
+    { key: "chart", label: "Chart type", kind: "choice", choices: ["bar", "column", "donut", "line"], default: "bar" },
+    { key: "group_by", label: "Group by", kind: "text", hint: "property or column name (e.g. status, priority, folder)" },
+    { key: "metric", label: "Metric", kind: "choice", choices: ["count", "sum", "avg"], default: "count" },
+    { key: "value_field", label: "Value column", kind: "text", when: { metric: ["sum", "avg"] }, hint: "numeric property for sum or average" },
+    { key: "limit", label: "Max groups", kind: "number", default: 8 },
+  ],
+});
+registerBlock({
+  ...lazyBlock("progress", "Progress (year / month / goal)", () => import("../components/widgets/ProgressWidget.svelte"), (c) => ({ options: c.options, doc: c.doc, mode: "progress" })),
+  icon: "sliders", card: true,
+  options: [
+    { key: "kind", label: "Show", kind: "choice", choices: ["time", "goal", "both"], default: "time" },
+    { key: "label", label: "Goal label", kind: "text", hint: "optional goal name (e.g. Thesis chapters)" },
+    { key: "property", label: "Frontmatter property", kind: "text", hint: "optional numeric property in this note to read/step" },
+    { key: "current", label: "Current value", kind: "number", default: 0 },
+    { key: "target", label: "Target value", kind: "number", default: 100 },
+    { key: "unit", label: "Unit", kind: "text", hint: "%, pages, hrs…" },
+  ],
+});
+registerBlock({
+  ...lazyBlock("countdown", "Countdown (target date)", () => import("../components/widgets/ProgressWidget.svelte"), (c) => ({ options: c.options, doc: c.doc, mode: "countdown" })),
+  icon: "flag", card: true,
+  options: [
+    { key: "label", label: "Event / milestone", kind: "text", default: "Milestone" },
+    { key: "target_date", label: "Target date", kind: "text", hint: "YYYY-MM-DD (or YYYY-MM-DD HH:MM)" },
+    { key: "start_date", label: "Start date", kind: "text", hint: "optional YYYY-MM-DD for elapsed progress bar" },
+  ],
+});
+registerBlock({
+  ...lazyBlock("pomodoro", "Pomodoro focus timer", () => import("../components/widgets/PomodoroWidget.svelte"), (c) => ({ options: c.options, doc: c.doc })),
+  icon: "clock", card: true,
+  options: [
+    { key: "focus", label: "Focus minutes", kind: "number", default: 25 },
+    { key: "short_break", label: "Short break minutes", kind: "number", default: 5 },
+    { key: "long_break", label: "Long break minutes", kind: "number", default: 15 },
+    { key: "goal_sessions", label: "Daily session target", kind: "number", default: 4 },
+    { key: "sound", label: "Chime when done", kind: "toggle", default: true },
+  ],
+});
+registerBlock({
+  ...lazyBlock("habits", "Habit tracker", () => import("../components/widgets/HabitsWidget.svelte"), (c) => ({ options: c.options, doc: c.doc })),
+  icon: "check", card: true,
+  options: [
+    { key: "path", label: "Habits Markdown file", kind: "text", default: "Habits.md", hint: "plain Markdown table in your vault (never localStorage)" },
+    { key: "habits", label: "Default habits", kind: "list", hint: "comma-separated habit names used when creating the file" },
+    { key: "days", label: "Days shown", kind: "number", default: 7 },
+  ],
+});
+registerBlock({
+  ...lazyBlock("clock", "Clock", () => import("../components/widgets/ClockWidget.svelte"), (c) => ({ options: c.options })),
+  icon: "clock", card: true,
+  options: [
+    { key: "style", label: "Clock face", kind: "choice", choices: ["both", "digital", "analog"], default: "both" },
+    { key: "format_24h", label: "24-hour time", kind: "toggle", default: true },
+    { key: "seconds", label: "Show seconds", kind: "toggle", default: true },
+    { key: "timezone", label: "Time zone", kind: "text", hint: "IANA zone like Europe/Paris or America/New_York (blank: local)" },
+    { key: "label", label: "Caption", kind: "text" },
+  ],
+});
+registerBlock({
+  ...lazyBlock("weather", "Weather", () => import("../components/widgets/WeatherWidget.svelte"), (c) => ({ options: c.options })),
+  icon: "sun", card: true,
+  options: [
+    { key: "city", label: "City", kind: "text", hint: "e.g. Zurich, Paris, Tokyo (blank or offline shows local daylight card)" },
+    { key: "units", label: "Units", kind: "choice", choices: ["C", "F"], default: "C" },
+    { key: "live_fetch", label: "Fetch live forecast when online", kind: "toggle", default: true },
+  ],
 });
 
 // --- mounting -------------------------------------------------------------------------------------

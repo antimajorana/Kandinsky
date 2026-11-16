@@ -22,6 +22,7 @@ interface SlashBlock {
   template: string;
   isCallout?: boolean;
   openCompletion?: boolean;
+  action?: (view: EditorView) => void;
 }
 
 const SLASH_LINE_RE = /^(\s*(?:>\s*)?)\/([a-zA-Z0-9_-]*)$/;
@@ -120,6 +121,198 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "nb",
     keywords: ["nb", "notebook", "ipynb", "wln", "jupyter", "wolfram", "colab", "view"],
     template: "```view\ntype: notebook\npath: \0\n```",
+  },
+  {
+    id: "view-canvas",
+    badge: "⊞",
+    tone: "accent",
+    title: "Canvas Whiteboard (.canvas)",
+    hint: "canvas",
+    keywords: ["canvas", "whiteboard", "board", "shard", "diagram", "view"],
+    template: "```view\ntype: canvas\npath: \0\n```",
+  },
+  {
+    id: "widget-chart",
+    badge: "▅",
+    tone: "accent",
+    title: "Chart Widget (.base / .csv)",
+    hint: "chart",
+    keywords: ["chart", "bar", "column", "donut", "line", "plot", "analytics", "widget", "view"],
+    template: "```view\ntype: chart\npath: \0\nchart: bar\ngroup_by: status\nmetric: count\n```",
+  },
+  {
+    id: "widget-progress",
+    badge: "▰",
+    tone: "green",
+    title: "Progress Bar Widget (Year / Goal)",
+    hint: "progress",
+    keywords: ["progress", "year", "month", "goal", "bar", "percent", "widget", "view"],
+    template: "```view\ntype: progress\nkind: both\nlabel: \0Goal\ncurrent: 40\ntarget: 100\n```",
+  },
+  {
+    id: "widget-countdown",
+    badge: "◴",
+    tone: "yellow",
+    title: "Countdown Widget",
+    hint: "countdown",
+    keywords: ["countdown", "deadline", "target", "date", "days", "milestone", "widget", "view"],
+    template: "```view\ntype: countdown\nlabel: \0Deadline\ntarget_date: 2026-12-31\n```",
+  },
+  {
+    id: "widget-pomodoro",
+    badge: "◷",
+    tone: "red",
+    title: "Pomodoro Focus Timer",
+    hint: "pomodoro",
+    keywords: ["pomodoro", "timer", "focus", "break", "session", "widget", "view"],
+    template: "```view\ntype: pomodoro\nfocus: 25\nshort_break: 5\n```\n\0",
+  },
+  {
+    id: "widget-habits",
+    badge: "✓",
+    tone: "green",
+    title: "Habit Tracker Widget",
+    hint: "habits",
+    keywords: ["habits", "habit", "tracker", "daily", "streak", "routine", "widget", "view"],
+    template: "```view\ntype: habits\npath: Habits.md\n```\n\0",
+  },
+  {
+    id: "widget-clock",
+    badge: "◔",
+    tone: "muted",
+    title: "Clock Card Widget",
+    hint: "clock",
+    keywords: ["clock", "time", "analog", "digital", "timezone", "widget", "view"],
+    template: "```view\ntype: clock\nstyle: both\n```\n\0",
+  },
+  {
+    id: "widget-weather",
+    badge: "☀",
+    tone: "yellow",
+    title: "Weather Card Widget",
+    hint: "weather",
+    keywords: ["weather", "forecast", "temperature", "sun", "city", "widget", "view"],
+    template: "```view\ntype: weather\ncity: \0\nunits: C\n```",
+  },
+  {
+    id: "toggle-block",
+    badge: "▸",
+    tone: "muted",
+    title: "Toggle Block",
+    hint: "<details>",
+    keywords: ["toggle", "collapse", "collapsible", "details", "accordion", "fold"],
+    template: "<details open>\n<summary>\0Toggle heading</summary>\n\n\n</details>",
+  },
+  {
+    id: "columns-block",
+    badge: "||",
+    tone: "muted",
+    title: "2-Column Block",
+    hint: "```columns",
+    keywords: ["columns", "cols", "2col", "two", "side", "grid", "split"],
+    template: "```columns\n### Column 1\n\0\n\n---\n\n### Column 2\n\n```",
+  },
+  {
+    id: "toc-block",
+    badge: "≡",
+    tone: "accent",
+    title: "Table of Contents",
+    hint: "[[_TOC_]]",
+    keywords: ["toc", "contents", "outline", "index", "headings"],
+    template: "[[_TOC_]]\n\0",
+  },
+  {
+    id: "voice-note",
+    badge: "◉",
+    tone: "red",
+    title: "Voice Audio Note",
+    hint: "/voice",
+    keywords: ["voice", "audio", "mic", "record", "memo", "recording"],
+    template: "\0",
+    action: (view) => {
+      window.dispatchEvent(new CustomEvent("kandinsky:voice-record", { detail: { view } }));
+    },
+  },
+  {
+    id: "highlight-mark",
+    badge: "==",
+    tone: "yellow",
+    title: "Highlight Text",
+    hint: "==mark==",
+    keywords: ["highlight", "mark", "ochre", "yellow", "bg"],
+    template: "==\0==",
+  },
+  {
+    id: "color-cobalt",
+    badge: "A",
+    tone: "accent",
+    title: "Cobalt Text",
+    hint: "color",
+    keywords: ["color", "cobalt", "blue", "text", "pigment"],
+    template: '<span data-color="cobalt">\0</span>',
+  },
+  {
+    id: "color-ochre",
+    badge: "A",
+    tone: "yellow",
+    title: "Ochre Highlight",
+    hint: "wash",
+    keywords: ["color", "ochre", "gold", "wash", "pigment"],
+    template: '<mark data-bg="ochre">\0</mark>',
+  },
+  {
+    id: "color-viridian",
+    badge: "A",
+    tone: "green",
+    title: "Viridian Highlight",
+    hint: "wash",
+    keywords: ["color", "viridian", "green", "teal", "wash", "pigment"],
+    template: '<mark data-bg="viridian">\0</mark>',
+  },
+  {
+    id: "tag-important",
+    badge: "▲",
+    tone: "red",
+    title: "Important Tag",
+    hint: "[!]",
+    keywords: ["important", "bang", "alert", "priority", "notecraft", "tag"],
+    template: "[!] \0",
+  },
+  {
+    id: "tag-question",
+    badge: "?",
+    tone: "accent",
+    title: "Question Tag",
+    hint: "[?]",
+    keywords: ["question", "ask", "unknown", "doubt", "notecraft", "tag"],
+    template: "[?] \0",
+  },
+  {
+    id: "tag-idea",
+    badge: "✦",
+    tone: "yellow",
+    title: "Idea Tag",
+    hint: "[*]",
+    keywords: ["idea", "star", "spark", "insight", "notecraft", "tag"],
+    template: "[*] \0",
+  },
+  {
+    id: "tag-remember",
+    badge: "■",
+    tone: "green",
+    title: "Remember / Definition Tag",
+    hint: "[i]",
+    keywords: ["remember", "info", "def", "definition", "notecraft", "tag"],
+    template: "[i] \0",
+  },
+  {
+    id: "tag-todo",
+    badge: "☐",
+    tone: "accent",
+    title: "To-do Item",
+    hint: "- [ ]",
+    keywords: ["todo", "task", "checkbox", "action"],
+    template: "- [ ] \0",
   },
   {
     id: "heading-1",
@@ -507,6 +700,10 @@ class SlashMenuController {
 
     if (block.openCompletion) {
       requestAnimationFrame(() => startCompletion(this.view));
+    }
+    if (block.action) {
+      const v = this.view;
+      requestAnimationFrame(() => block.action?.(v));
     }
   }
 

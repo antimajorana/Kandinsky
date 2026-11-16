@@ -6,6 +6,7 @@
   import InputDialog from "../InputDialog.svelte";
   import Popover from "../Popover.svelte";
   import FilterPanel from "./FilterPanel.svelte";
+  import GroupPanel from "./GroupPanel.svelte";
   import SortPanel from "./SortPanel.svelte";
   import PropertiesPanel from "./PropertiesPanel.svelte";
   import { below, type MenuAt } from "../../lib/menu";
@@ -30,7 +31,7 @@
     onnew: () => void;
   } = $props();
 
-  type Pop = "sort" | "filter" | "props";
+  type Pop = "group" | "sort" | "filter" | "props";
   let pop = $state<{ which: Pop; anchor: HTMLElement } | null>(null);
   let menu = $state<MenuAt | null>(null);
   let dialog = $state<{ title: string; value?: string; confirm?: string; submit: (v: string) => void } | null>(null);
@@ -47,6 +48,16 @@
   const unique = (base: string) => { let n = base, i = 2; while (res.views.some((v) => v.name === n)) n = `${base} ${i++}`; return n; };
   const filters = $derived(countConditions(res.filters) + countConditions(view.filters));
   const columnIds = $derived(view.columns.map((c) => c.id));
+  const groupLabel = $derived.by(() => {
+    if (!view.group_by) return null;
+    const g = view.group_by;
+    const norm = g.replace(/^note\./, "");
+    return (
+      view.columns.find((c) => c.id === g || c.id.replace(/^note\./, "") === norm)?.label ??
+      props.find((p) => p.id === g || p.id.replace(/^note\./, "") === norm)?.label ??
+      norm
+    );
+  });
 
   function toggle(which: Pop, e: MouseEvent) {
     pop = pop?.which === which ? null : { which, anchor: e.currentTarget as HTMLElement };
@@ -92,6 +103,9 @@
   </button>
   <span class="count" title="Notes in this view">{view.count === view.rows.length ? view.count : `${view.rows.length} of ${view.count}`} {view.count === 1 ? "result" : "results"}</span>
   <span class="grow"></span>
+  <button type="button" class="tool" class:on={pop?.which === "group" || !!view.group_by} aria-expanded={pop?.which === "group"} aria-label="Group" title={groupLabel ? `Grouped by ${groupLabel}` : "Group"} onclick={(e) => toggle("group", e)}>
+    <Icon name="folder-tree" size={13} />{#if !compact}<span>Group</span>{#if groupLabel}<span class="badge group-badge">{groupLabel}</span>{/if}{/if}
+  </button>
   <button type="button" class="tool" class:on={pop?.which === "sort" || view.sort.length > 0} aria-expanded={pop?.which === "sort"} aria-label="Sort" title="Sort" onclick={(e) => toggle("sort", e)}>
     <Icon name="arrow-down" size={13} />{#if !compact}<span>Sort</span>{/if}{#if view.sort.length}<span class="badge">{view.sort.length}</span>{/if}
   </button>
@@ -105,18 +119,23 @@
 </div>
 
 {#if pop}
-  {#if pop.which === "filter"}
-    <Popover anchor={pop.anchor} label="Filter" width={560} onclose={() => (pop = null)}>
+  {@const p = pop}
+  {#if p.which === "group"}
+    <Popover anchor={p.anchor} label="Group" width={300} onclose={() => (pop = null)}>
+      <GroupPanel group={view.group_by} board={view.kind === "board"} {props} ongroup={(property) => onedit({ op: "group", property })} />
+    </Popover>
+  {:else if p.which === "filter"}
+    <Popover anchor={p.anchor} label="Filter" width={560} onclose={() => (pop = null)}>
       <FilterPanel base={res.filters} view={view.filters} viewName={view.name} {props} {typeOf} onedit={(e) => onedit(e)} />
     </Popover>
-  {:else if pop.which === "sort"}
-    <Popover anchor={pop.anchor} label="Sort" width={420} onclose={() => (pop = null)}>
+  {:else if p.which === "sort"}
+    <Popover anchor={p.anchor} label="Sort" width={420} onclose={() => (pop = null)}>
       <SortPanel sort={view.sort} {props} {typeOf} onsort={(sort) => onedit({ op: "sort", sort })}
         group={view.group_by} board={view.kind === "board"} ongroup={(property) => onedit({ op: "group", property })} />
     </Popover>
   {:else}
-    <Popover anchor={pop.anchor} label="Properties" width={340} onclose={() => (pop = null)}>
-      <PropertiesPanel columns={view.columns} others={props.filter((p) => !columnIds.includes(p.id))} onedit={(e) => onedit(e)} />
+    <Popover anchor={p.anchor} label="Properties" width={380} onclose={() => (pop = null)}>
+      <PropertiesPanel columns={view.columns} others={props.filter((x) => !columnIds.includes(x.id))} onedit={(e) => onedit(e)} />
     </Popover>
   {/if}
 {/if}
@@ -137,7 +156,7 @@
   .tool:hover { background: var(--bg-hover); color: var(--text); }
   .tool.on { color: var(--accent); }
   .tool[aria-expanded="true"] { background: var(--accent-soft); }
-  .badge { font-size: .8em; font-variant-numeric: tabular-nums; background: var(--accent-soft); color: var(--accent); padding: 0 6px; border-radius: 99px; line-height: 16px; }
+  .badge { font-size: .8em; font-variant-numeric: tabular-nums; background: var(--accent-soft); color: var(--accent); padding: 0 6px; border-radius: 99px; line-height: 16px; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .new { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; margin-left: 4px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); color: var(--text); }
   .new.compact { padding: 0 7px; }
   .new:hover { background: var(--bg-hover); }

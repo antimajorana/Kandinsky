@@ -152,6 +152,16 @@ pub fn edit_view(base_src: &str, view: &str, edit: &ViewEdit) -> Result<String> 
             display_name(&mut doc, column, name.as_deref().map(str::trim).filter(|n| !n.is_empty()));
             return to_text(&doc);
         }
+        ViewEdit::ColumnFormat { column, format, currency, max } => {
+            column_format(
+                &mut doc,
+                column,
+                format.as_deref().map(str::trim).filter(|f| !f.is_empty() && !f.eq_ignore_ascii_case("auto")),
+                currency.as_deref().map(str::trim).filter(|c| !c.is_empty()),
+                max.filter(|m| m.is_finite() && *m > 0.0),
+            );
+            return to_text(&doc);
+        }
         _ => {}
     }
     let views = doc
@@ -290,7 +300,7 @@ pub fn edit_view(base_src: &str, view: &str, edit: &ViewEdit) -> Result<String> 
         }
         ViewEdit::Image { property: Some(p) } => set(&mut views[i], "image", column_key(p).into()),
         ViewEdit::Image { property: None } => unset(&mut views[i], "image"),
-        ViewEdit::BaseFilters { .. } | ViewEdit::DisplayName { .. } => unreachable!("handled above"),
+        ViewEdit::BaseFilters { .. } | ViewEdit::DisplayName { .. } | ViewEdit::ColumnFormat { .. } => unreachable!("handled above"),
     }
     to_text(&doc)
 }
@@ -317,6 +327,48 @@ fn column_key(id: &str) -> String {
 
 /// Sets (or clears) `properties.<column>.displayName`, dropping the other spellings of the same column.
 fn display_name(doc: &mut Value, column: &str, name: Option<&str>) {
+    mutate_prop_meta(doc, column, |meta| match name {
+        Some(n) => {
+            meta.insert("displayName".into(), n.into());
+        }
+        None => {
+            meta.remove("displayName");
+        }
+    });
+}
+
+/// Sets (or clears) `properties.<column>.{format, currency, max}`, preserving `displayName`.
+fn column_format(doc: &mut Value, column: &str, format: Option<&str>, currency: Option<&str>, max: Option<f64>) {
+    mutate_prop_meta(doc, column, |meta| match format {
+        Some(fmt) => {
+            meta.insert("format".into(), fmt.into());
+            match currency {
+                Some(c) if fmt == "currency" => {
+                    meta.insert("currency".into(), c.into());
+                }
+                _ => {
+                    meta.remove("currency");
+                }
+            }
+            match max {
+                Some(m) if fmt == "progress" => {
+                    let v = if (m.fract()).abs() < 1e-9 { Value::from(m.round() as i64) } else { Value::from(m) };
+                    meta.insert("max".into(), v);
+                }
+                _ => {
+                    meta.remove("max");
+                }
+            }
+        }
+        None => {
+            meta.remove("format");
+            meta.remove("currency");
+            meta.remove("max");
+        }
+    });
+}
+
+fn mutate_prop_meta(doc: &mut Value, column: &str, f: impl FnOnce(&mut Mapping)) {
     let key = column_key(column);
     let mut props = doc.get("properties").and_then(Value::as_mapping).cloned().unwrap_or_default();
     let mut meta = Mapping::new();
@@ -329,14 +381,7 @@ fn display_name(doc: &mut Value, column: &str, name: Option<&str>) {
         }
         !same
     });
-    match name {
-        Some(n) => {
-            meta.insert("displayName".into(), n.into());
-        }
-        None => {
-            meta.remove("displayName");
-        }
-    }
+    f(&mut meta);
     if !meta.is_empty() {
         props.insert(key.into(), Value::Mapping(meta));
     }
@@ -458,6 +503,30 @@ mod tests {
         assert_eq!(named["properties"], serde_yaml::from_str::<Value>("{note.status: {displayName: State}}").unwrap(), "one spelling, as Obsidian writes it");
         let back: Value = serde_yaml::from_str(&edit_view(&serde_yaml::to_string(&named).unwrap(), "V", &ViewEdit::DisplayName { column: "status".into(), name: None }).unwrap()).unwrap();
         assert!(back.get("properties").is_none());
+
+        let fmt_src = edit_view(
+            src,
+            "V",
+            &ViewEdit::ColumnFormat {
+                column: "budget".into(),
+                format: Some("currency".into()),
+                currency: Some("€".into()),
+                max: None,
+            },
+        )
+        .unwrap();
+        let fmt_doc: Value = serde_yaml::from_str(&fmt_src).unwrap();
+        assert_eq!(fmt_doc["properties"]["note.budget"]["format"].as_str(), Some("currency"));
+        assert_eq!(fmt_doc["properties"]["note.budget"]["currency"].as_str(), Some("€"));
+        assert_eq!(fmt_doc["properties"]["status"]["displayName"].as_str(), Some("Old"));
+        let cleared_fmt = edit_view(
+            &fmt_src,
+            "V",
+            &ViewEdit::ColumnFormat { column: "note.budget".into(), format: None, currency: None, max: None },
+        )
+        .unwrap();
+        let cleared_doc: Value = serde_yaml::from_str(&cleared_fmt).unwrap();
+        assert!(cleared_doc["properties"].get("note.budget").is_none());
     }
 
     #[test]

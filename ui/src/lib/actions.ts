@@ -260,6 +260,12 @@ export const actions: Action[] = [
   // Obsidian's keys, in notes only (lib/editor/md-format.ts sets noteFormat when the editor loads)
   { id: "note.bold", title: "Note: bold", keys: "Ctrl+B", where: "note", run: () => noteFormat.run?.("bold") },
   { id: "note.italic", title: "Note: italic", keys: "Ctrl+I", where: "note", run: () => noteFormat.run?.("italic") },
+  { id: "note.highlight", title: "Note: highlight selection (==mark==)", keys: "Ctrl+Shift+H", where: "note", run: () => noteFormat.run?.("highlight") },
+  { id: "note.rtl", title: "Note: toggle RTL / LTR text direction", keys: "Ctrl+Shift+X", where: "note", run: () => noteFormat.run?.("rtl") },
+  { id: "note.toggle", title: "Note: insert collapsible toggle block", where: "note", run: () => noteFormat.run?.("toggle") },
+  { id: "note.columns", title: "Note: insert multi-column block", where: "note", run: () => noteFormat.run?.("columns") },
+  { id: "note.toc", title: "Note: insert Table of Contents ([[_TOC_]])", where: "note", run: () => noteFormat.run?.("toc") },
+  { id: "note.voice", title: "Note: record voice memo (/voice → zAttachments/)", icon: "headphones", run: () => { window.dispatchEvent(new CustomEvent("kandinsky:voice-record")); } },
   { id: "note.link", title: "Note: link", keys: "Ctrl+K", where: "note", run: () => noteFormat.run?.("link") },
   { id: "note.task", title: "Note: to-do on this line (again: done, again: open)", keys: "Ctrl+L", where: "note", run: () => noteFormat.run?.("task") },
   // Obsidian Tasks' dialog: the caret's line (a to-do, or text that becomes one) with its fields in a form
@@ -286,11 +292,13 @@ export const actions: Action[] = [
   { id: "ui.new", title: "New… (a note, from a template, a drawing, or what a plugin adds)", icon: "plus", label: "New…", run: () => void import("./new-thing").then((m) => m.newThing()) },
   { id: "ui.browse", title: "Browse the web… (an address, or words to search)", icon: "globe", label: "Browse", keys: "Super+Shift+B", run: () => browse() },
   { id: "ui.drawing", title: "New drawing (Excalidraw)", keys: "Super+Shift+D", run: () => import("./draw-new").then((m) => m.newExcalidraw()) },
+  { id: "ui.canvas", title: "New canvas whiteboard (.canvas)", icon: "grid", keys: "Super+Shift+C", run: () => import("./canvas-new").then((m) => m.newCanvas()) },
   { id: "draw.exportSvg", title: "Drawing: export as SVG (beside it)", run: () => void exportDrawing() },
   { id: "draw.properties", title: "Drawing: its properties (tags, project, topics — its note, beside it)", run: () => drawingProperties() },
   { id: "ui.terminal", title: "Focus terminal (again: hide)", keys: "Ctrl+`", fromTerminal: true, run: () => focusTerminalPanel() },
-  // Super+F; F11 as before
-  { id: "ui.fullscreen", title: "Fullscreen: this tab (terminal or editor) over the whole window; again: back", keys: "Super+F", alsoKeys: ["F11"], run: () => { void toggleFullscreen(); } },
+  // Super+F fullscreen; F11 distraction-free Zen mode across notes, pages, canvas & drawings
+  { id: "ui.zen", title: "Zen mode: distraction-free fullscreen (notes, pages, canvas & drawings)", icon: "maximize", keys: "F11", run: () => { window.dispatchEvent(new CustomEvent("kandinsky:toggle-zen")); } },
+  { id: "ui.fullscreen", title: "Fullscreen: this tab (terminal or editor) over the whole window; again: back", keys: "Super+F", run: () => { void toggleFullscreen(); } },
   { id: "ui.terminal.new", title: "New shell terminal", run: () => { open({ kind: "terminal", preset: "shell", n: nextTerminalN() }); } },
   // the id stays (keys the user rebound); the agent is the one used last (lib/agents.ts)
   { id: "ui.sendToClaude", title: "Send the selection to the AI agent (@file#lines for Claude)", keys: "Ctrl+Alt+Enter", run: () => sendToAgent() },

@@ -18,8 +18,9 @@ export interface Opener {
   spec(path: string, line?: number, anchor?: string): PaneSpec;
 }
 
-const TEXTISH = /\.(md|markdown|txt|tsv|csv|tab|dat|json|ipynb|wln|ya?ml|toml|base|page|svg|tex|bib|py|rs|js|ts|sh|log|ini|cfg|xml|html|css|lua)$/i;
+const TEXTISH = /\.(md|markdown|txt|tsv|csv|tab|dat|json|canvas|ipynb|wln|ya?ml|toml|base|page|svg|tex|bib|py|rs|js|ts|sh|log|ini|cfg|xml|html|css|lua)$/i;
 const builtins: Opener[] = [
+  { id: "canvas", title: "Canvas whiteboard", icon: "grid", accepts: (p) => /\.canvas$/i.test(p), spec: (path) => ({ kind: "canvas", path }) },
   { id: "notebook", title: "Notebook (Jupyter / WLJS)", icon: "sigma", accepts: (p) => NOTEBOOK_RE.test(p), spec: (path) => ({ kind: "notebook", path }) },
   { id: "editor", title: "Text editor", icon: "file-text", accepts: (p) => TEXTISH.test(p) || !/\.[^/]+$/.test(p), spec: (path, line) => (line === undefined ? { kind: "editor", path } : { kind: "editor", path, line }) },
   { id: "table", title: "Table", icon: "table", accepts: (p) => TABLE_RE.test(p) || /\.(dat|txt)$/i.test(p), spec: (path, _line, anchor) => ({ kind: "table", path, view: tableViewIn(anchor) }) },

@@ -5,6 +5,7 @@
   // written through the core (`onedit` for the `.base`, `onwrite` for a note's property). Rows come in groups when the
   // view has a `groupBy`; the footer holds each column's summary (click it to choose one).
   import { tick } from "svelte";
+  import { SvelteSet } from "svelte/reactivity";
   import Icon from "../Icon.svelte";
   import ContextMenu, { type MenuItem } from "../ContextMenu.svelte";
   import InputDialog from "../InputDialog.svelte";
@@ -13,8 +14,15 @@
   import { below, type MenuAt } from "../../lib/menu";
   import { openPath } from "../../lib/dock";
   import { reorder } from "../../lib/base-drag";
+  import {
+    classifyStatus,
+    COLUMN_FORMAT_CHOICES,
+    effectiveColumnFormat,
+    nextStatusValue,
+    type StatusTone,
+  } from "../../lib/base-format";
   import { context, setHover } from "../../lib/context.svelte";
-  import { groupRows } from "../../lib/base-groups";
+  import { groupRows, NO_VALUE } from "../../lib/base-groups";
   import { RowWindow } from "../../lib/windowed.svelte";
   import type { BaseView } from "../../lib/gen/BaseView";
   import type { BaseRow } from "../../lib/gen/BaseRow";
@@ -75,17 +83,60 @@
   const move = (from: number, to: number) => { if (to >= 0 && to < ids.length && from !== to) onedit({ op: "order", columns: reorder(ids, from, to) }); };
   const sortedBy = (id: string) => view.sort[0]?.property === id ? view.sort[0].direction : null;
 
+  function formatMenu(anchor: HTMLElement, c: BaseView["columns"][number]) {
+    const r = anchor.getBoundingClientRect();
+    const cur = c.format?.trim().toLowerCase() || "auto";
+    const curSym = (c.currency ?? "€").trim();
+    const items: MenuItem[] = [];
+    for (const ch of COLUMN_FORMAT_CHOICES) {
+      if (ch.value === "currency") {
+        for (const sym of ["€", "$", "£"]) {
+          items.push({
+            label: `Currency (${sym})`,
+            icon: cur === "currency" && curSym === sym ? ("check" as const) : undefined,
+            run: () => onedit({ op: "column_format", column: c.id, format: "currency", currency: sym, max: null }),
+          });
+        }
+      } else {
+        const nextFmt = ch.value === "auto" ? null : ch.value;
+        items.push({
+          label: ch.label,
+          icon: cur === ch.value ? ("check" as const) : undefined,
+          run: () => onedit({ op: "column_format", column: c.id, format: nextFmt, currency: null, max: ch.value === "progress" ? (c.max ?? 100) : null }),
+        });
+      }
+    }
+    menu = { x: r.left, y: r.bottom + 2, items };
+  }
+
   function headerMenu(e: MouseEvent, i: number) {
+    const anchor = e.currentTarget as HTMLElement;
     const c = view.columns[i];
+    const norm = (s: string) => s.replace(/^note\./, "");
+    const isGrouped = !!view.group_by && (view.group_by === c.id || norm(view.group_by) === norm(c.id));
     const items: MenuItem[] = [
       { label: "Sort ascending", icon: "arrow-up", run: () => onedit({ op: "sort", sort: [{ property: c.id, direction: "ASC" }, ...view.sort.filter((k) => k.property !== c.id)] }) },
       { label: "Sort descending", icon: "arrow-down", run: () => onedit({ op: "sort", sort: [{ property: c.id, direction: "DESC" }, ...view.sort.filter((k) => k.property !== c.id)] }) },
     ];
     if (view.sort.some((k) => k.property === c.id)) items.push({ label: "Remove from the sort", icon: "close", run: () => onedit({ op: "sort", sort: view.sort.filter((k) => k.property !== c.id) }) });
+    if (c.id !== "file.name" && view.kind !== "board") {
+      if (isGrouped) {
+        items.push({ label: "Ungroup", icon: "close", run: () => onedit({ op: "group", property: null }) });
+      } else {
+        items.push({ label: `Group by “${c.label}”`, icon: "folder-tree", run: () => onedit({ op: "group", property: c.id }) });
+        if (view.group_by) items.push({ label: "Ungroup", icon: "close", run: () => onedit({ op: "group", property: null }) });
+      }
+    }
+    const fmtDetail = !c.format || c.format === "auto"
+      ? "Auto"
+      : c.format === "currency"
+        ? `Currency (${c.currency ?? "€"})`
+        : (COLUMN_FORMAT_CHOICES.find((f) => f.value === c.format)?.label ?? c.format);
     items.push("sep",
       { label: "Move left", icon: "arrow-left", disabled: i === 0, run: () => move(i, i - 1) },
       { label: "Move right", icon: "arrow-right", disabled: i === ids.length - 1, run: () => move(i, i + 1) },
       { label: "Rename…", icon: "edit", run: () => (dialog = { column: c.id, label: c.label }) });
+    if (c.id !== "file.name") items.push({ label: "Display format…", icon: "sliders", detail: fmtDetail, run: () => formatMenu(anchor, c) });
     if (c.width) items.push({ label: "Reset the width", icon: "refresh", run: () => onedit({ op: "width", column: c.id, width: null }) });
     items.push("sep", { label: `Hide “${c.label}”`, icon: "eye", disabled: ids.length === 1, run: () => onedit({ op: "hide", column: c.id }) });
     menu = below(e, items);
@@ -110,14 +161,32 @@
     menu = below(e, items);
   }
   const groups = $derived(groupRows(view));
+  const collapsedGroups = new SvelteSet<string>();
+  function toggleGroup(title: string) {
+    if (collapsedGroups.has(title)) collapsedGroups.delete(title);
+    else collapsedGroups.add(title);
+  }
+  const groupCol = $derived(
+    view.group_by
+      ? view.columns.find((c) => c.id === view.group_by || c.id.replace(/^note\./, "") === view.group_by!.replace(/^note\./, "")) ?? { id: view.group_by }
+      : null,
+  );
+  function groupTone(title: string): StatusTone | null {
+    if (title === NO_VALUE) return null;
+    const t = classifyStatus(title).tone;
+    return effectiveColumnFormat(groupCol) === "status" || t !== "other" ? t : null;
+  }
 
   // --- cells ---------------------------------------------------------------------------------------------------------
   const editable = (r: BaseRow, i: number) => !!view.columns[i].key && r.edit[i] != null;
   /** A cell's kind: the property's, but a list stays a list where one note holds one. */
   const cellKind = (r: BaseRow, i: number): PropertyKind => {
-    const k = kindOf(view.columns[i].id);
+    const col = view.columns[i];
+    const k = kindOf(col.id);
     const v = r.values[i];
     if (Array.isArray(v)) return k === "tags" || k === "links" ? k : "list";
+    const fmt = col.format?.trim().toLowerCase();
+    if (fmt === "progress" || fmt === "percent" || fmt === "currency") return "number";
     // a date written without a time keeps that shape, whatever the vault's kind says
     return k === "datetime" && typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? "date" : k;
   };
@@ -139,13 +208,22 @@
 
   // --- the window: a group's title and a row are one height (32px), and only those around the view are drawn; a view
   // over every note of a vault has thousands, each a cell per column. 100 beyond each side: a usual view is drawn whole
-  type Line = { kind: "group"; title: string; n: number } | { kind: "row"; r: BaseRow };
-  const lines = $derived(groups.flatMap((g): Line[] => [...(g.title !== null ? [{ kind: "group" as const, title: g.title, n: g.rows.length }] : []), ...g.rows.map((r) => ({ kind: "row" as const, r }))]));
+  type Line = { kind: "group"; title: string; n: number; collapsed: boolean } | { kind: "row"; r: BaseRow };
+  const lines = $derived(
+    groups.flatMap((g): Line[] => {
+      if (g.title === null) return g.rows.map((r) => ({ kind: "row" as const, r }));
+      const collapsed = collapsedGroups.has(g.title);
+      return [
+        { kind: "group" as const, title: g.title, n: g.rows.length, collapsed },
+        ...(collapsed ? [] : g.rows.map((r) => ({ kind: "row" as const, r }))),
+      ];
+    }),
+  );
   let scroller = $state<HTMLElement>();
   const win = new RowWindow(100, 32);
   $effect(() => win.follow(scroller));
   const { first, last } = $derived(win.range(lines.length));
-  $effect(() => { void lines.length; win.measure(scroller?.querySelector<HTMLElement>("tbody tr:not(.pad, .group)")); });
+  $effect(() => { void lines.length; win.measure(scroller?.querySelector<HTMLElement>("tbody tr:not(.pad, .group, .empty-row)")); });
 </script>
 
 <div class="scroll" bind:this={scroller}>
@@ -178,23 +256,38 @@
       {#if first}<tr class="pad" aria-hidden="true"><td colspan={view.columns.length + 1} style:height="{first * win.rowH}px"></td></tr>{/if}
       {#each lines.slice(first, last) as l (l.kind === "row" ? l.r.path : `group:${l.title}`)}
       {#if l.kind === "group"}
-        <tr class="group"><td colspan={view.columns.length + 1}><span class="g-name">{l.title}</span><span class="g-n">{l.n}</span></td></tr>
+        {@const tone = groupTone(l.title)}
+        <tr class="group" class:collapsed={l.collapsed}>
+          <td colspan={view.columns.length + 1}>
+            <button type="button" class="g-toggle" aria-expanded={!l.collapsed} onclick={() => toggleGroup(l.title)}>
+              <span class="g-caret" aria-hidden="true">{l.collapsed ? "▸" : "▾"}</span>
+              {#if tone}
+                <span class="g-pill tone-{tone}"><span class="g-dot"></span><span class="g-name">{l.title}</span></span>
+              {:else}
+                <span class="g-name">{l.title}</span>
+              {/if}
+              <span class="g-n">{l.n}</span>
+            </button>
+          </td>
+        </tr>
       {:else}
         {@const r = l.r}
         <tr class:lit={lit(r.path)} onmouseenter={() => hoverIn(r.path)} onmouseleave={hoverOut}>
           {#each r.cells as c, i (i)}
+            {@const col = view.columns[i]}
+            {@const fmt = effectiveColumnFormat(col, c)}
             {@const kind = editable(r, i) ? cellKind(r, i) : null}
-            <td class:first={view.columns[i].id === "file.name"} class:editable={!!kind} class:bool={kind === "bool"} class:num={c.t === "num"} class:editing={isEditing(r, i)}
-              tabindex={kind ? 0 : undefined} aria-label={kind ? `${view.columns[i].label} of ${r.path}` : undefined}
-              onclick={() => activate(r, i)} onkeydown={(e) => cellKey(e, r, i)} ondblclick={() => { if (!kind && view.columns[i].id !== "file.name") openPath(r.path); }}>
+            <td class:first={col.id === "file.name"} class:editable={!!kind} class:bool={kind === "bool"} class:num={(c.t === "num" || fmt === "percent" || fmt === "currency") && fmt !== "progress"} class:progress={fmt === "progress"} class:editing={isEditing(r, i)}
+              tabindex={kind ? 0 : undefined} aria-label={kind ? `${col.label} of ${r.path}` : undefined}
+              onclick={() => activate(r, i)} onkeydown={(e) => cellKey(e, r, i)} ondblclick={() => { if (!kind && col.id !== "file.name") openPath(r.path); }}>
               {#if isEditing(r, i) && kind}
-                <CellEditor {kind} value={r.values[i]} label={view.columns[i].label} oncommit={(v) => onwrite(r.path, view.columns[i].key!, v)} onclose={closeEditor} />
-              {:else if view.columns[i].id === "file.name" && c.t === "link"}
+                <CellEditor {kind} column={col} value={r.values[i]} label={col.label} oncommit={(v) => onwrite(r.path, col.key!, v)} onclose={closeEditor} />
+              {:else if col.id === "file.name" && c.t === "link"}
                 <span class="name"><Icon name={c.path && !/\.md$/i.test(c.path) ? "file" : "file-text"} size={14} /><CellValue cell={c} /></span>
               {:else if kind === "bool"}
-                <CellValue cell={asBool(c)} />
+                <CellValue cell={asBool(c)} column={col} />
               {:else}
-                <CellValue cell={c} />
+                <CellValue cell={c} column={col} oncycle={kind && fmt === "status" ? () => onwrite(r.path, col.key!, nextStatusValue(String(r.values[i] ?? ""))) : undefined} />
               {/if}
             </td>
           {/each}
@@ -204,13 +297,13 @@
       {/each}
       {#if last < lines.length}<tr class="pad" aria-hidden="true"><td colspan={view.columns.length + 1} style:height="{(lines.length - last) * win.rowH}px"></td></tr>{/if}
       {#if !view.rows.length}
-        <tr><td class="empty" colspan={view.columns.length + 1}>No notes match this view. Change its filters, or add a note with “New”.</td></tr>
+        <tr class="empty-row"><td class="empty" colspan={view.columns.length + 1}>No notes match this view. Change its filters, or add a note with “New”.</td></tr>
       {/if}
     </tbody>
     <tfoot>
       <tr>
         {#each view.columns as c (c.id)}
-          <td><button type="button" class="sum" class:set={!!c.summary} class:left={kindOf(c.id) !== "number"} onclick={(e) => summaryMenu(e, c)} title="Summary of “{c.label}”" aria-label="Summary of {c.label}">
+          <td><button type="button" class="sum" class:set={!!c.summary} class:left={kindOf(c.id) !== "number" || effectiveColumnFormat(c) === "progress"} onclick={(e) => summaryMenu(e, c)} title="Summary of “{c.label}”" aria-label="Summary of {c.label}">
             {#if c.summary}<span class="sum-kind">{c.summary.kind}</span><span class="sum-val">{#if c.summary.value}<CellValue cell={{ t: "text", value: c.summary.value }} />{:else}—{/if}</span>{:else}<span class="sum-kind">Summarize</span>{/if}
           </button></td>
         {/each}
@@ -260,9 +353,22 @@
   th.add-col button:hover { background: var(--bg-hover); color: var(--text); }
   .empty { color: var(--text-faint); padding: 14px 10px; white-space: normal; }
   tr.pad td { padding: 0; border: 0; }
-  /* a group's title is a row's height: the window counts lines of one height */
-  tr.group td { position: sticky; left: 0; height: 32px; background: var(--bg-alt); font-weight: 600; color: var(--heading, var(--text)); }
-  .g-n { margin-left: 8px; color: var(--text-faint); font-weight: 400; font-size: .88em; font-variant-numeric: tabular-nums; }
+  /* a group's title is a row's height (32px): the window counts lines of one height */
+  tr.group td { position: sticky; left: 0; height: 32px; padding: 0; background: var(--bg-alt); }
+  .g-toggle { display: inline-flex; align-items: center; gap: 6px; width: 100%; height: 32px; padding: 0 10px; font: inherit; font-weight: 600; color: var(--heading, var(--text)); text-align: left; }
+  .g-toggle:hover { background: var(--bg-hover); }
+  .g-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .g-caret { width: 12px; color: var(--text-faint); font-size: .88em; text-align: center; flex: none; }
+  .g-pill { display: inline-flex; align-items: center; gap: 6px; height: 20px; padding: 0 8px 0 6px; border-radius: 999px; font-size: .88em; font-weight: 500; line-height: 1; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); }
+  .g-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+  .g-pill.tone-todo { background: var(--bg-hover); color: var(--text-muted); border-color: var(--border-strong); }
+  .g-pill.tone-progress { background: var(--accent-soft); color: var(--accent); }
+  .g-pill.tone-blocked { background: var(--red-soft, color-mix(in srgb, var(--red) 12%, transparent)); color: var(--red); }
+  .g-pill.tone-done { background: var(--green-soft, color-mix(in srgb, var(--green) 12%, transparent)); color: var(--green); }
+  .g-pill.tone-review { background: var(--yellow-soft, color-mix(in srgb, var(--yellow) 12%, transparent)); color: var(--yellow); }
+  .g-pill.tone-other { background: var(--accent-soft); color: var(--text); border-color: var(--border); }
+  .g-pill.tone-other .g-dot { background: var(--accent); }
+  .g-n { margin-left: 2px; padding: 0 6px; line-height: 18px; border-radius: 99px; background: var(--bg-hover); color: var(--text-faint); font-weight: 500; font-size: .82em; font-variant-numeric: tabular-nums; }
   tfoot td { position: sticky; bottom: 0; background: var(--bg); border-bottom: 0; border-top: 1px solid var(--border); padding: 0; height: 28px; }
   /* no column lines in the footer: unsummarised it is not read as one more, empty row */
   tfoot td + td { border-left: 0; }

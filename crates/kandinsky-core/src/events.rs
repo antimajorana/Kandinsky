@@ -121,11 +121,12 @@ fn all_dirs(root: &Path, cfg: &Config, dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// Stops the watcher thread on drop.
-pub struct WatcherGuard(Arc<AtomicBool>);
+pub struct WatcherGuard(Arc<AtomicBool>, mpsc::Sender<notify::Result<notify::Event>>);
 
 impl Drop for WatcherGuard {
     fn drop(&mut self) {
         self.0.store(true, Ordering::Relaxed);
+        let _ = self.1.send(Ok(notify::Event::default()));
     }
 }
 
@@ -164,6 +165,7 @@ impl Root {
 /// inotify watches; new directories are picked up as they appear. Changes are batched for 250 ms.
 pub fn spawn_watcher(root: &Path, cfg: Config, bus: EventBus) -> Result<WatcherGuard> {
     let (tx, rx) = mpsc::channel::<notify::Result<notify::Event>>();
+    let wake_tx = tx.clone();
     let root = root.to_path_buf();
     // the note index's change feed (vault_changes.rs): moved on in the callback itself, not after the 250 ms batch
     let feed = crate::vault_changes::Feed::new(&root, &cfg);
@@ -195,14 +197,21 @@ pub fn spawn_watcher(root: &Path, cfg: Config, bus: EventBus) -> Result<WatcherG
                 Err(mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             };
+            if stop_thread.load(Ordering::Relaxed) {
+                break;
+            }
             // batch: everything that arrives within 250 ms of the first event
             let mut batch = vec![first];
             let until = std::time::Instant::now() + Duration::from_millis(250);
-            while let Some(left) = until.checked_duration_since(std::time::Instant::now()) {
+            while !stop_thread.load(Ordering::Relaxed) {
+                let Some(left) = until.checked_duration_since(std::time::Instant::now()) else { break };
                 match rx.recv_timeout(left) {
                     Ok(ev) => batch.push(ev),
                     Err(_) => break,
                 }
+            }
+            if stop_thread.load(Ordering::Relaxed) {
+                break;
             }
             let (mut changed, mut gone) = (BTreeSet::new(), BTreeSet::new());
             let mut rescan = false;
@@ -269,7 +278,7 @@ pub fn spawn_watcher(root: &Path, cfg: Config, bus: EventBus) -> Result<WatcherG
         }
         drop(watcher);
     })?;
-    Ok(WatcherGuard(stop))
+    Ok(WatcherGuard(stop, wake_tx))
 }
 
 /// False when a folder could not be watched (inotify's limit).

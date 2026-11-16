@@ -625,7 +625,7 @@ function leadingH1(doc, afterLine) {
   for (let n = afterLine + 1; n <= Math.min(doc.lines, afterLine + 12); n++) {
     const line = doc.line(n);
     if (!line.text.trim()) continue;
-    if (/^#[ \t]+\S/.test(line.text)) return { prevEnd: doc.line(n - 1).to, line };
+    if (/^#[ \t]+\S/.test(line.text)) return { prevEnd: n > 1 ? doc.line(n - 1).to : 0, line };
     return null;
   }
   return null;
@@ -1363,6 +1363,7 @@ export function buildDecorations(state, ranges, options = {}) {
         if (name === "Link") {
           // Kandinsky: the target on the mark, for the hover preview (lib/preview.ts)
           const href = node.node.getChild("URL");
+          if (!href && !node.node.getChild("LinkLabel") && /^\[(?:[!?*i]|TODO)\]$/i.test(state.doc.sliceString(node.from, node.to))) return false;
           add(node.from, node.to, Decoration.mark({ class: "cm-link", attributes: href ? { "data-href": state.doc.sliceString(href.from, href.to) } : undefined }));
           if (!revealed(state, node.from, node.to)) {
             const url = node.node.getChild("URL");

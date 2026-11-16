@@ -277,3 +277,134 @@ html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone 
 /* An equation number's vertical list reaches 2px past its box (KaTeX's strut for a browser bug), which put a
    scrollbar under every numbered align, empty ones too: the number keeps 2px inside the edge */
 .katex .katex-tag { padding-right: 2px; }
+
+/* --- Bauhaus pigments (Velvet Circles dark & Bauhaus Paper light): text colors & watercolor washes --- */
+.markdown [data-color="cobalt"], .markdown .cm-pigment-color-cobalt { color: var(--accent-strong, var(--accent)); }
+.markdown [data-color="ochre"], .markdown .cm-pigment-color-ochre { color: var(--yellow); }
+[data-theme="light"] .markdown [data-color="ochre"], [data-theme="light"] .markdown .cm-pigment-color-ochre { color: var(--ansi-yellow, #9a6c0c); }
+.markdown [data-color="viridian"], .markdown .cm-pigment-color-viridian { color: var(--green); }
+.markdown [data-color="vermilion"], .markdown .cm-pigment-color-vermilion { color: var(--red); }
+.markdown [data-color="mauve"], .markdown .cm-pigment-color-mauve { color: var(--purple); }
+
+.markdown mark[data-bg], .markdown [class*="cm-pigment-bg-"] {
+  color: inherit; padding: .05em .2em; border-radius: 3px;
+}
+.markdown mark[data-bg="cobalt"], .markdown .cm-pigment-bg-cobalt {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.markdown mark[data-bg="ochre"], .markdown .cm-pigment-bg-ochre {
+  background: var(--highlight-bg, color-mix(in srgb, var(--yellow) 24%, transparent));
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--yellow) 40%, transparent);
+}
+.markdown mark[data-bg="viridian"], .markdown .cm-pigment-bg-viridian {
+  background: color-mix(in srgb, var(--green) 21%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--green) 38%, transparent);
+}
+.markdown mark[data-bg="vermilion"], .markdown .cm-pigment-bg-vermilion {
+  background: color-mix(in srgb, var(--red) 20%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--red) 36%, transparent);
+}
+.markdown mark[data-bg="mauve"], .markdown .cm-pigment-bg-mauve {
+  background: color-mix(in srgb, var(--purple) 22%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--purple) 38%, transparent);
+}
+
+/* --- Multi-column ```columns layout --- */
+.markdown .md-columns {
+  display: grid; grid-template-columns: repeat(var(--col-count, 2), minmax(0, 1fr));
+  gap: 16px; margin: .85em 0; align-items: stretch;
+}
+.markdown .md-col {
+  min-width: 0; padding: 12px 16px; border-radius: var(--radius, 6px);
+  background: color-mix(in srgb, var(--card-bg, var(--bg-alt)) 68%, transparent);
+  border: 1px solid var(--border);
+}
+.markdown .md-col > :first-child { margin-top: 0; }
+.markdown .md-col > :last-child { margin-bottom: 0; }
+@media (max-width: 640px) {
+  .markdown .md-columns { grid-template-columns: minmax(0, 1fr); }
+}
+html.phone .markdown .md-columns { grid-template-columns: minmax(0, 1fr); }
+
+/* --- Table of Contents ([[_TOC_]] / [TOC]) --- */
+.markdown .md-toc, .markdown .cm-toc-card {
+  display: block; margin: .75em 0; padding: 10px 14px; border-radius: var(--radius, 6px);
+  background: color-mix(in srgb, var(--card-bg, var(--bg-alt)) 72%, transparent);
+  border: 1px solid var(--border);
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, var(--border-strong));
+  font-family: var(--font-ui); font-size: .92em; line-height: 1.48; text-indent: 0; white-space: normal;
+}
+.markdown .md-toc-head {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 5px;
+  font-size: .75em; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--text-faint);
+}
+.markdown .md-toc-glyph { color: var(--accent); font-weight: 700; }
+.markdown .md-toc-count {
+  margin-left: auto; font-variant-numeric: tabular-nums; padding: 0 5px; border-radius: 99px;
+  background: var(--bg-hover); color: var(--text-faint);
+}
+.markdown .md-toc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.markdown .md-toc-item { margin: 0; padding: 0; }
+.markdown .md-toc-d1 { padding-left: 14px; }
+.markdown .md-toc-d2 { padding-left: 28px; }
+.markdown .md-toc-d3 { padding-left: 42px; }
+.markdown .md-toc-link {
+  all: unset; box-sizing: border-box; display: block; width: 100%; padding: 2.5px 7px; border-radius: 4px;
+  color: var(--text-muted); cursor: pointer; text-decoration: none; overflow: hidden; text-overflow: ellipsis;
+  transition: background .1s, color .1s;
+}
+.markdown .md-toc-link:hover { background: var(--bg-hover); color: var(--accent-strong, var(--accent)); text-decoration: none; }
+.markdown .md-toc-empty { margin: 2px 0 0; font-size: .9em; color: var(--text-faint); font-style: italic; }
+
+/* --- NoteCraft inline semantic badges ([!], [?], [*], [i], TODO:) --- */
+.markdown .k-sem-tag {
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  padding: 0 .42em; min-width: 1.45em; height: 1.42em; box-sizing: border-box;
+  border-radius: 4px; border: 1px solid transparent;
+  font-family: var(--font-ui); font-size: .78em; font-weight: 650; line-height: 1;
+  vertical-align: .06em; text-indent: 0; user-select: none; cursor: pointer;
+}
+.markdown .k-sem-important {
+  color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent);
+  border-color: color-mix(in srgb, var(--red) 28%, transparent);
+}
+.markdown .k-sem-question {
+  color: var(--accent-strong, var(--accent)); background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.markdown .k-sem-idea {
+  color: var(--yellow); background: color-mix(in srgb, var(--yellow) 15%, transparent);
+  border-color: color-mix(in srgb, var(--yellow) 30%, transparent);
+}
+[data-theme="light"] .markdown .k-sem-idea { color: var(--ansi-yellow, #9a6c0c); }
+.markdown .k-sem-info {
+  color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent);
+  border-color: color-mix(in srgb, var(--green) 28%, transparent);
+}
+.markdown .k-sem-todo {
+  font-family: var(--font-mono); font-size: .72em; letter-spacing: .04em; padding: 0 .48em;
+  color: var(--accent-strong, var(--accent)); background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* --- Notion-style collapsible <details><summary> toggles (excluding callouts) --- */
+.markdown details:not(.callout) {
+  margin: .65em 0; padding: 0 14px; border-radius: var(--radius, 6px);
+  border: 1px solid var(--border);
+  border-left: 2.5px solid color-mix(in srgb, var(--accent) 50%, var(--border-strong));
+  background: color-mix(in srgb, var(--card-bg, var(--bg-alt)) 46%, transparent);
+}
+.markdown details:not(.callout)[open] { padding-bottom: 10px; }
+.markdown details:not(.callout) > summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  padding: 8px 0; font-weight: 600; color: var(--heading); user-select: none;
+}
+.markdown details:not(.callout) > summary::-webkit-details-marker { display: none; }
+.markdown details:not(.callout) > summary::before {
+  content: "▸"; display: inline-block; font-size: .88em; line-height: 1;
+  color: var(--text-muted); transition: transform .14s var(--ease, ease), color .14s; flex: none;
+}
+.markdown details:not(.callout)[open] > summary::before { transform: rotate(90deg); color: var(--accent); }
+.markdown details:not(.callout) > :last-child:not(summary) { margin-bottom: 0; }
+.markdown [dir="rtl"] { direction: rtl; text-align: right; }

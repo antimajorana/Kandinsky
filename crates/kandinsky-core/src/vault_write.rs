@@ -137,6 +137,9 @@ fn rel_of(root: &Path, abs: &Path) -> String {
 }
 
 fn hash_file(abs: &Path) -> Result<Option<ContentHash>> {
+    if abs.is_dir() {
+        return Ok(None);
+    }
     match std::fs::read(abs) {
         Ok(bytes) => Ok(Some(ContentHash::of(&bytes))),
         Err(e) if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::IsADirectory) => Ok(None),
@@ -314,7 +317,15 @@ pub fn remove_dir_all(abs: &Path) -> Result<()> {
 pub fn remove_link(abs: &Path) -> Result<()> {
     run(abs, |_| WriteKind::Remove, None, || {
         #[cfg(windows)]
-        std::fs::remove_dir(abs)?;
+        for attempt in 0..10 {
+            match std::fs::remove_dir(abs) {
+                Ok(()) => break,
+                Err(e) if attempt < 9 && e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
         #[cfg(not(windows))]
         std::fs::remove_file(abs)?;
         Ok(())
@@ -529,6 +540,16 @@ pub mod cache {
     }
     pub fn remove_dir_all(abs: &Path) -> Result<()> {
         check(abs);
+        #[cfg(windows)]
+        for attempt in 0..10 {
+            match std::fs::remove_dir_all(abs) {
+                Ok(()) => return Ok(()),
+                Err(e) if attempt < 9 && e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
         Ok(std::fs::remove_dir_all(abs)?)
     }
     pub fn mkdir(abs: &Path) -> Result<()> {
@@ -584,21 +605,41 @@ pub mod outside {
     }
     pub fn remove_dir_all(abs: &Path) -> Result<()> {
         check(abs);
+        #[cfg(windows)]
+        for attempt in 0..10 {
+            match std::fs::remove_dir_all(abs) {
+                Ok(()) => return Ok(()),
+                Err(e) if attempt < 9 && e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
         Ok(std::fs::remove_dir_all(abs)?)
     }
     pub fn mkdir(abs: &Path) -> Result<()> {
         check(abs);
         Ok(std::fs::create_dir_all(abs)?)
     }
-    /// `link` made a link to the folder `target` (a guest folder's `.kandinsky`, guest.rs). On Windows a junction would
-    /// need no developer mode; a symlink is tried, and its refusal said.
+    /// `link` made a link to the folder `target` (a guest folder's `.kandinsky`, guest.rs). On Windows a junction needs
+    /// no developer mode: a symlink is tried first, and when privilege 1314 refuses it, a directory junction is made.
     pub fn symlink_dir(target: &Path, link: &Path) -> Result<()> {
         check(link);
         raw::mkdir_parent(link)?;
         #[cfg(unix)]
         std::os::unix::fs::symlink(target, link)?;
         #[cfg(windows)]
-        std::os::windows::fs::symlink_dir(target, link)?;
+        if let Err(e) = std::os::windows::fs::symlink_dir(target, link) {
+            if e.raw_os_error() != Some(1314) {
+                return Err(e.into());
+            }
+            let win_link = link.to_string_lossy().replace('/', "\\");
+            let win_target = target.to_string_lossy().replace('/', "\\");
+            let out = std::process::Command::new("cmd").args(["/C", "mklink", "/J", &win_link, &win_target]).output()?;
+            if !out.status.success() {
+                return Err(std::io::Error::other(String::from_utf8_lossy(&out.stderr).trim().to_string()).into());
+            }
+        }
         Ok(())
     }
 }

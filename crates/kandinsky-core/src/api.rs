@@ -1324,6 +1324,18 @@ pub struct BaseColumn {
     pub key: Option<String>,
     /// The view's summary of the column (Obsidian's `summaries`), worked out over the rows shown.
     pub summary: Option<ColumnSummary>,
+    /// Optional rich display mode from `properties.<col>.format` (`status`, `progress`, `percent`, `currency`, `url`, `email`, `phone`, `file`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub format: Option<String>,
+    /// Optional currency symbol/code from `properties.<col>.currency` (`€`, `$`, `£`, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub currency: Option<String>,
+    /// Optional target / maximum for `progress` columns from `properties.<col>.max` (default 100).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub max: Option<f64>,
 }
 
 /// A column's summary and its value as shown under the table.
@@ -1475,6 +1487,16 @@ pub enum ViewEdit {
     BaseFilters { filters: Option<Filter> },
     /// A column's display name, base-wide (Obsidian's `properties: {note.x: {displayName}}`); none: the default.
     DisplayName { column: String, name: Option<String> },
+    /// A column's rich display format in `properties: {note.x: {format, currency, max}}`; `format: None` resets to auto.
+    ColumnFormat {
+        column: String,
+        #[serde(default)]
+        format: Option<String>,
+        #[serde(default)]
+        currency: Option<String>,
+        #[serde(default)]
+        max: Option<f64>,
+    },
     /// A column's summary under the table (Obsidian's `summaries`); none: no summary.
     Summary { column: String, summary: Option<SummaryKind> },
     /// Rows gathered by a property's value, in every view type (a board's lanes); none: not grouped.
