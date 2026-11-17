@@ -3,6 +3,7 @@
   // file of the plugin changes (edit view.js → see it at once). Load errors are shown, never swallowed.
   // As a file's editor (`kandinsky.pane`, docs/guides/PLUGIN-API.md): the unsaved dot, Ctrl+S and saving on close.
   import { errText } from "../lib/text";
+  import { api } from "../lib/api";
   import { onMount } from "svelte";
   import type { PaneProps } from "../lib/dock";
   import { setDirty } from "../lib/dock";
@@ -19,6 +20,8 @@
   let cleanup: (() => void) | undefined;
   let scope = paneScope();
   let generation = 0;
+  let viewPath = "";
+  let viewText: string | null = null;
   // the mounted view's hooks; reset on every mount, so an older mount's calls change nothing
   let saver: (() => void | Promise<void>) | undefined;
   let goTo: ((anchor: string) => void) | undefined;
@@ -58,19 +61,26 @@
     setDirty(panel.id, false);
     host.replaceChildren();
     error = "";
+    viewText = null;
     if (!plugins.loaded) await loadPlugins();
     const p = plugins.list.find((x) => x.id === spec.id);
     if (!p) { error = `No plugin "${spec.id}" in .kandinsky/plugins/.`; return; }
     if (p.error) { error = p.error; return; }
     if (!pluginOn(p)) { error = `"${p.title}" is switched off (Settings → Plugins).`; return; }
     try {
-      const mod = await loadView(p);
+      viewPath = p.view ?? "";
+      const [mod, text] = await Promise.all([
+        loadView(p),
+        viewPath ? api.file(viewPath).then((f) => f.text, () => null) : Promise.resolve(null),
+      ]);
       if (mine !== generation) return;
+      viewText = text;
       if (typeof mod.default !== "function") throw new Error("the module has no default export function (host, kandinsky) => …");
       const r = await mod.default(host, pluginApi(p, { path: spec.path, arg: spec.arg, anchor: spec.anchor, pane: paneOf(mine), hold: scope.hold }));
       if (mine !== generation) { if (typeof r === "function") r(); return; }
       cleanup = typeof r === "function" ? r : undefined;
     } catch (e) {
+      viewText = null;
       error = `${p.view}: ${errText(e)}`;
       console.error("[kandinsky] plugin", p.id, e);
     }
@@ -88,14 +98,23 @@
     void mount();
     paneParks.set(panel.id, save);
     pluginAnchors.set(panel.id, (a) => goTo?.(a));
-    let t: ReturnType<typeof setTimeout> | undefined, manifest = false;
+    let t: ReturnType<typeof setTimeout> | undefined, manifest = false, other = false;
     const prefix = `.kandinsky/plugins/${spec.id}/`;
     const off = on("fs", (e) => {
       if (!touches(e.paths, (p) => p.startsWith(prefix))) return;
       // a manifest change in any event of the burst reloads the plugin list, not only one in the last
       manifest ||= !e.paths.length || e.paths.some((p) => p.endsWith("plugin.toml"));
+      other ||= !e.paths.length || !viewPath || e.paths.some((p) => p !== viewPath);
       clearTimeout(t);
-      t = setTimeout(() => { const m = manifest; manifest = false; void (m ? loadPlugins().then(mount) : mount()); }, 250);
+      t = setTimeout(async () => {
+        const m = manifest, o = other;
+        manifest = other = false;
+        if (!m && !o && viewPath && viewText !== null) {
+          const cur = await api.file(viewPath).then((f) => f.text, () => null);
+          if (cur !== null && cur === viewText) return;
+        }
+        await (m ? loadPlugins().then(mount) : mount());
+      }, 250);
     });
     return () => {
       off(); clearTimeout(t); generation++; cleanup?.(); scope.release();

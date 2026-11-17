@@ -1,12 +1,17 @@
 // Oracle Physics Runner UI plugin: palette commands, context-menu actions, and oracle.links / oracle.lint blocks.
 
+function normalizeVaultPath(raw) {
+  return String(raw || "").trim().replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
 function activeMdPath(kandinsky) {
   const ctx = kandinsky.context();
-  const p = (ctx && ctx.active && ctx.active.path) || (ctx && ctx.selection && ctx.selection.path) || "";
+  const p = normalizeVaultPath((ctx && ctx.active && ctx.active.path) || (ctx && ctx.selection && ctx.selection.path) || "");
   return /\.md$/i.test(p) ? p : "";
 }
 
-async function runLintToast(kandinsky, path) {
+async function runLintToast(kandinsky, rawPath) {
+  const path = normalizeVaultPath(rawPath);
   if (!path) {
     kandinsky.toast("Oracle lint", "Open a Markdown computation note first.", "info");
     return;
@@ -170,7 +175,7 @@ export function register(kandinsky) {
 
   kandinsky.registerBlock("oracle.links", (host, block) => {
     let gone = false;
-    const getNotePath = () => String((block.options && block.options.path) || block.doc || block.note || activeMdPath(kandinsky) || "");
+    const getNotePath = () => normalizeVaultPath((block.options && block.options.path) || block.doc || block.note || activeMdPath(kandinsky) || "");
 
     const wrap = document.createElement("div");
     wrap.style.cssText = "font-size:0.9rem;display:flex;flex-direction:column;gap:6px;";
@@ -268,7 +273,7 @@ export function register(kandinsky) {
     void refresh();
     const offWatch = kandinsky.onFilesChanged((paths) => {
       const notePath = getNotePath();
-      if (!paths.length || paths.includes(notePath)) void refresh();
+      if (!paths.length || paths.some((p) => normalizeVaultPath(p) === notePath)) void refresh();
     });
     return () => {
       gone = true;
@@ -283,14 +288,15 @@ export function register(kandinsky) {
 
   kandinsky.registerBlock("oracle.lint", (host, block) => {
     let gone = false;
-    const notePath = String((block.options && block.options.path) || block.doc || block.note || "");
+    const getNotePath = () => normalizeVaultPath((block.options && block.options.path) || block.doc || block.note || activeMdPath(kandinsky) || "");
+    const initialPath = getNotePath();
 
     const wrap = document.createElement("div");
     wrap.style.cssText = "font-size:0.9rem;display:flex;flex-direction:column;gap:8px;";
     const head = document.createElement("div");
     head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;";
     const statusEl = document.createElement("strong");
-    statusEl.textContent = notePath ? `c_lint: checking ${notePath}...` : "c_lint: no target path";
+    statusEl.textContent = initialPath ? `c_lint: checking ${initialPath}...` : "c_lint: no target path";
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = "Re-check";
@@ -303,7 +309,14 @@ export function register(kandinsky) {
     host.replaceChildren(wrap);
 
     async function refresh() {
-      if (gone || !notePath || !/\.md$/i.test(notePath)) return;
+      const notePath = getNotePath();
+      if (gone) return;
+      if (!notePath || !/\.md$/i.test(notePath)) {
+        listEl.replaceChildren();
+        statusEl.textContent = "c_lint: no target path";
+        statusEl.style.color = "var(--text-muted)";
+        return;
+      }
       statusEl.textContent = `c_lint: running on ${notePath}…`;
       try {
         const res = await kandinsky.helper.call("runCLint", { path: notePath, anyLayout: true }, { timeout: 60 });
@@ -330,7 +343,8 @@ export function register(kandinsky) {
     btn.onclick = () => void refresh();
     void refresh();
     const offWatch = kandinsky.onFilesChanged((paths) => {
-      if (!paths.length || paths.includes(notePath)) void refresh();
+      const notePath = getNotePath();
+      if (!paths.length || paths.some((p) => normalizeVaultPath(p) === notePath)) void refresh();
     });
     return () => {
       gone = true;

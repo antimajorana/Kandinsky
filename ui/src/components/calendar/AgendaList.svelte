@@ -2,7 +2,7 @@
   // Chronological upcoming Agenda view grouped by date, with Daily Note status, 1-click "Join meeting", & day jump.
   import Icon from "../Icon.svelte";
   import type { CalendarDaySummary, CalendarEvent } from "../../lib/types";
-  import { colorSpec, formatDayHeading, isVideoMeetingUrl, todayIso } from "./calendar-dates";
+  import { addDays, colorSpec, formatDayHeading, isVideoMeetingUrl, todayIso } from "./calendar-dates";
 
   let {
     days = [],
@@ -21,10 +21,16 @@
 
   const grouped = $derived.by(() => {
     const map = new Map<string, CalendarEvent[]>();
+    const minDay = days.length ? days[0].day : "";
+    const maxDay = days.length ? days[days.length - 1].day : "";
     for (const ev of events) {
-      const list = map.get(ev.date) ?? [];
-      list.push(ev);
-      map.set(ev.date, list);
+      const start = minDay && ev.date < minDay ? minDay : ev.date;
+      const end = maxDay && ev.end_date > maxDay ? maxDay : ev.end_date;
+      for (let d = start, guard = 0; d <= end && guard < 120; d = addDays(d, 1), guard++) {
+        const list = map.get(d) ?? [];
+        list.push(ev);
+        map.set(d, list);
+      }
     }
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
   });

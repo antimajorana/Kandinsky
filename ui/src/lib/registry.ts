@@ -83,6 +83,8 @@ export const searchRequest: { replace: boolean; q?: string } = { replace: false 
 export const paneFocus = new Map<string, () => void>();
 /** An open explorer tab asked for again: it goes to `path` and selects `select` (Show in the explorer, a breadcrumb). */
 export const explorerGo = new Map<string, (path: string, select?: string) => void>();
+/** An open calendar pane asked for again: navigate to `date` and/or switch `view`. */
+export const calendarGo = new Map<string, (date?: string, view?: "month" | "week" | "agenda" | "day") => void>();
 /** Open PDF panes by panel id: jump to a page (a search hit in a PDF that is already open). */
 /** An open PDF's "show this place": its page, and a link's words or annotation / mark id (lib/pdf-place.ts). */
 export const pdfPages = new Map<string, (page: number, at?: { quote?: string; annotation?: string }) => void>();

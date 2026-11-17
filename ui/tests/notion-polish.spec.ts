@@ -61,7 +61,10 @@ test("live / widgets hide raw YAML with hover Configure, synced blocks edit live
   await expect(page.locator(".cm-rendered-block").first()).toContainText("Updated Goal");
 
   // 3. Synced block live edit propagates to polish-src.md preserving surroundings
-  const syncedTa = page.getByTestId("synced-block").locator("textarea");
+  const syncedCard = page.getByTestId("synced-block");
+  await expect(syncedCard).toContainText("Shared specification paragraph.");
+  await syncedCard.getByRole("button", { name: "Edit synced block" }).click();
+  const syncedTa = syncedCard.locator("textarea");
   await expect(syncedTa).toHaveValue(/Shared specification paragraph/);
   await syncedTa.fill("Updated shared spec text.");
   await syncedTa.blur();
@@ -81,4 +84,6 @@ test("live / widgets hide raw YAML with hover Configure, synced blocks edit live
   await expect(drawer.getByTestId("comment-thread").first()).toContainText("Verify typo here");
   await drawer.getByTestId("comment-thread").first().getByRole("button", { name: "Resolve" }).click();
   await expect(drawer.getByTestId("comment-thread")).toHaveCount(0);
+  await request.post(`/api/fs/trash?path=${encodeURIComponent("notes/polish-host.md")}`, { headers: H }).catch(() => {});
+  await request.post(`/api/fs/trash?path=${encodeURIComponent("notes/polish-src.md")}`, { headers: H }).catch(() => {});
 });

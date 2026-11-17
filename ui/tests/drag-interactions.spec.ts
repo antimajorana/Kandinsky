@@ -77,6 +77,7 @@ test("Calendar Month drag-reschedules events and Week bottom-edge drag resizes d
 });
 
 test("Editor ⋮⋮ pointer drag reorders math blocks cleanly preserving frontmatter and wikilinks", async ({ page, request }) => {
+  const targetPath = "notes/drag-target.md";
   const notePath = "notes/drag-math.md";
   const initial = [
     "---",
@@ -87,12 +88,13 @@ test("Editor ⋮⋮ pointer drag reorders math blocks cleanly preserving frontma
     "# Drag Math",
     "",
     "$$",
-    "\\mathcal{H} = -t \\sum_{\\langle i,j \\rangle} c_i^\\dagger c_j \\quad \\text{ref: } [[hubbard]]",
+    "\\mathcal{H} = -t \\sum_{\\langle i,j \\rangle} c_i^\\dagger c_j \\quad \\text{ref: } [[drag-target]]",
     "$$",
     "",
     "Concluding paragraph after equation.",
   ].join("\n") + "\n";
 
+  await request.put("/api/file", { headers: H, data: { path: targetPath, text: "# Drag Target\n" } });
   await request.put("/api/file", { headers: H, data: { path: notePath, text: initial } });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
@@ -101,7 +103,9 @@ test("Editor ⋮⋮ pointer drag reorders math blocks cleanly preserving frontma
 
   // Hover near the math block until the ⋮⋮ gutter handle appears
   const cm = page.locator(".live-cm");
-  const mathBox = (await cm.locator(".cm-rendered-math, .katex-display, .cm-line", { hasText: "mathcal" }).first().boundingBox())!;
+  const mathBlock = cm.locator(".cm-rendered-block").filter({ has: page.locator(".katex-display, .katex") }).first();
+  await expect(mathBlock).toBeVisible();
+  const mathBox = (await mathBlock.boundingBox())!;
   await page.mouse.move(mathBox.x + 20, mathBox.y + mathBox.height / 2);
 
   const handle = cm.locator(".cm-block-gutter.is-visible .cm-block-handle");
@@ -126,7 +130,9 @@ test("Editor ⋮⋮ pointer drag reorders math blocks cleanly preserving frontma
 
   const finalText = String((await (await request.get(`/api/file?path=${encodeURIComponent(notePath)}`, { headers: H })).json()).text ?? "");
   expect(finalText.startsWith("---\nstatus: In progress\ntags:\n  - physics\n---\n# Drag Math")).toBe(true);
-  expect(finalText).toContain("\\mathcal{H} = -t \\sum_{\\langle i,j \\rangle} c_i^\\dagger c_j \\quad \\text{ref: } [[hubbard]]");
+  expect(finalText).toContain("\\mathcal{H} = -t \\sum_{\\langle i,j \\rangle} c_i^\\dagger c_j \\quad \\text{ref: } [[drag-target]]");
+  await request.post(`/api/fs/trash?path=${encodeURIComponent(notePath)}`, { headers: H }).catch(() => {});
+  await request.post(`/api/fs/trash?path=${encodeURIComponent(targetPath)}`, { headers: H }).catch(() => {});
 });
 
 test(".base sub-items tree folds/rolls up and Timeline dependency cascade drags & undoes cleanly", async ({ page, request }) => {
@@ -177,16 +183,16 @@ test(".base sub-items tree folds/rolls up and Timeline dependency cascade drags 
   await page.request.post("/api/cmd/open", { headers: H, data: { args: { path: "db/SubTimeline.base" } } });
 
   const base = page.locator(".kandinsky-pane-base");
-  await expect(base.getByRole("cell", { name: /ParentEpic/ })).toBeVisible();
+  await expect(base.locator("td.first", { hasText: "ParentEpic" })).toBeVisible();
   await expect(base.locator(".tree-rollup")).toHaveText("1/2");
-  await expect(base.getByRole("cell", { name: /ChildDone/ })).toBeVisible();
-  await expect(base.getByRole("cell", { name: /ChildOpen/ })).toBeVisible();
+  await expect(base.locator("td.first", { hasText: "ChildDone" })).toBeVisible();
+  await expect(base.locator("td.first", { hasText: "ChildOpen" })).toBeVisible();
 
   await base.locator('button[aria-label="Toggle sub-items"]').first().click();
-  await expect(base.getByRole("cell", { name: /ChildDone/ })).toHaveCount(0);
-  await expect(base.getByRole("cell", { name: /ChildOpen/ })).toHaveCount(0);
+  await expect(base.locator("td.first", { hasText: "ChildDone" })).toHaveCount(0);
+  await expect(base.locator("td.first", { hasText: "ChildOpen" })).toHaveCount(0);
   await base.locator('button[aria-label="Toggle sub-items"]').first().click();
-  await expect(base.getByRole("cell", { name: /ChildDone/ })).toBeVisible();
+  await expect(base.locator("td.first", { hasText: "ChildDone" })).toBeVisible();
 
   // Switch to Roadmap timeline view
   await base.getByRole("button", { name: /Tree/ }).click();
@@ -217,4 +223,7 @@ test(".base sub-items tree folds/rolls up and Timeline dependency cascade drags 
     const r = await (await request.get("/api/file?path=db/subtl/ChildDone.md", { headers: H })).json();
     return String(r.text ?? "");
   }, { timeout: 5000 }).toContain("start: 2026-11-15");
+  for (const p of ["db/subtl/ParentEpic.md", "db/subtl/ChildDone.md", "db/subtl/ChildOpen.md", "db/SubTimeline.base"]) {
+    await request.post(`/api/fs/trash?path=${encodeURIComponent(p)}`, { headers: H }).catch(() => {});
+  }
 });

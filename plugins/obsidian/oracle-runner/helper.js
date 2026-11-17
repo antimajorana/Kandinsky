@@ -14,6 +14,18 @@ const C_LINT_PY = path.join(ORACLE_RESEARCH_DIR, "framework", "tools", "c_lint.p
 const ORACLE_WIKI_PY = path.join(ORACLE_RESEARCH_DIR, "framework", "tools", "oracle_wiki.py");
 const VENV_JUPYTER = path.join(ORACLE_HOME, ".venvs", "jupyter", PY_BIN);
 const VENV_JUPYTER314 = path.join(ORACLE_HOME, ".venvs", "jupyter314", PY_BIN);
+function isInsideVault(vaultRoot, resolved) {
+  const baseCmp = process.platform === "win32" ? path.resolve(vaultRoot).toLowerCase() : path.resolve(vaultRoot);
+  const tgtCmp = process.platform === "win32" ? path.resolve(resolved).toLowerCase() : path.resolve(resolved);
+  const rel = path.relative(baseCmp, tgtCmp);
+  return rel !== ".." && !rel.startsWith(".." + path.sep) && !rel.startsWith("../") && !path.isAbsolute(rel);
+}
+function resolveInVault(vaultRoot, rawPath) {
+  const clean = String(rawPath || "").trim().replace(/\\\\/g, "/").replace(/^\\/+/, "");
+  if (!clean) return "";
+  const resolved = path.resolve(vaultRoot, clean);
+  return isInsideVault(vaultRoot, resolved) ? resolved : "";
+}
 `.trim();
 
 const JUPYTER_NODE_SCRIPT = `
@@ -52,10 +64,12 @@ for (const cand of candidates) {
 const vaultRoot = process.cwd();
 let workCwd = vaultRoot;
 if (req.path) {
-  const absNb = path.resolve(vaultRoot, String(req.path));
-  const nbDir = path.dirname(absNb);
-  if (nbDir.startsWith(vaultRoot) && fs.existsSync(nbDir)) {
-    workCwd = nbDir;
+  const absNb = resolveInVault(vaultRoot, req.path);
+  if (absNb) {
+    const nbDir = path.dirname(absNb);
+    if (isInsideVault(vaultRoot, nbDir) && fs.existsSync(nbDir)) {
+      workCwd = nbDir;
+    }
   }
 }
 
@@ -227,15 +241,15 @@ const { spawnSync } = require("node:child_process");
 
 const req = JSON.parse(fs.readFileSync(0, "utf8") || "{}");
 const vaultRoot = process.cwd();
-const notePath = path.resolve(vaultRoot, String(req.path || ""));
+const notePath = resolveInVault(vaultRoot, req.path);
 const pyExe = fs.existsSync(ORACLE_PY) ? ORACLE_PY : "python";
 const cLintPy = C_LINT_PY;
 
-if (!req.path || !fs.existsSync(notePath)) {
+if (!notePath || !fs.existsSync(notePath) || !fs.statSync(notePath).isFile()) {
   process.stdout.write(JSON.stringify({
     clean: false,
-    issues: [{ line: 1, code: "MISSING_FILE", severity: "ERROR", message: "Note file not found on disk: " + req.path }],
-    raw: "File not found: " + notePath,
+    issues: [{ line: 1, code: "MISSING_FILE", severity: "ERROR", message: "Note file not found on disk: " + String(req.path || "") }],
+    raw: "File not found: " + String(notePath || req.path || ""),
   }));
   process.exit(0);
 }
@@ -371,13 +385,13 @@ function extractSynthesisBody(noteText, fallbackSummary) {
 
 let tmpDir = "";
 try {
-  const compPathCand = req.computation ? path.resolve(vaultRoot, String(req.computation)) : "";
+  const compPathCand = req.computation ? resolveInVault(vaultRoot, req.computation) : "";
   let noteText = "";
-  if (compPathCand && compPathCand.startsWith(vaultRoot) && fs.existsSync(compPathCand) && fs.statSync(compPathCand).isFile()) {
+  if (compPathCand && fs.existsSync(compPathCand) && fs.statSync(compPathCand).isFile()) {
     noteText = fs.readFileSync(compPathCand, "utf8");
   } else if (req.notePath) {
-    const np = path.resolve(vaultRoot, String(req.notePath));
-    if (np.startsWith(vaultRoot) && fs.existsSync(np) && fs.statSync(np).isFile()) {
+    const np = resolveInVault(vaultRoot, req.notePath);
+    if (np && fs.existsSync(np) && fs.statSync(np).isFile()) {
       noteText = fs.readFileSync(np, "utf8");
     }
   }

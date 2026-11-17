@@ -21,6 +21,7 @@
   import { openHome } from "../lib/actions";
   import { editors, noteEditorActive, openIntent } from "../lib/registry";
   import { createEditor, isMarkdown, type KandinskyEditor } from "../lib/editor/create";
+  import { redecorateEditor } from "../lib/editor/note-extensions";
   import FormatBar from "../components/FormatBar.svelte";
   import NoteHero from "../components/NoteHero.svelte";
   import OracleBar from "../components/OracleBar.svelte";
@@ -342,6 +343,12 @@
       toggleProperties();
     }
   }
+
+  $effect(() => {
+    void propsPanel.open;
+    void settings.config?.editor.properties;
+    redecorateEditor(ed?.view ?? null);
+  });
 
   async function showPageHistory(): Promise<void> {
     if (autosave() && current() !== saved) await save(false);

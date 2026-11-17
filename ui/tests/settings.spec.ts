@@ -95,6 +95,7 @@ test("a plugin switched off in Settings saves plugins.off", async ({ page, reque
   await expect.poll(async () => (await cfg(request)).plugins.off).toContain("offable");
   await sw.click();
   await expect.poll(async () => (await cfg(request)).plugins.off).not.toContain("offable");
+  await request.post("/api/plugins/offable/remove", { headers: H });
 });
 
 // Found by clicking every button of every page: a choice detected twice (or "" both as Default and as
@@ -117,9 +118,7 @@ test("the detected-choice lists open without an error", async ({ page }) => {
 });
 
 test("the vim keys, formatting bar, formula preview, code bar and git gutter are on their pages", async ({ page }) => {
-  await page.goto("/");
-  await page.getByText("Finish the GW notes.").waitFor();
-  await page.keyboard.press("Meta+,");
+  await openSettings(page);
   await nav(page).getByRole("button", { name: /^Editor & Writing/ }).click();
   for (const name of [/Vim keys/i, /Format bar/i, /Math preview/i, /^Notes folder$/]) await expect(page.getByText(name).first()).toBeVisible();
   await nav(page).getByRole("button", { name: /^Extensions/ }).click();

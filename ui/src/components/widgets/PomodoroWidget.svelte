@@ -1,12 +1,37 @@
 <script lang="ts">
   // Nootion Pomodoro widget: Focus / Short break / Long break tabs, Bauhaus SVG progress ring,
   // tabular MM:SS countdown, Start/Pause/Reset/Skip controls, session dots, and gentle WebAudio chime.
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import * as prefs from "../../lib/prefs";
 
   type Phase = "focus" | "short" | "long";
+  interface PersistedPomodoro {
+    mode: Phase;
+    running: boolean;
+    remaining: number | null;
+    endAt: number | null;
+    completedSessions: number;
+  }
+
+  const STORAGE_KEY = "kandinsky.pomodoro.v1";
+  const pomodoroStates = new Map<string, PersistedPomodoro>();
+
+  function loadStoredMap(): Record<string, PersistedPomodoro> {
+    return prefs.load<Record<string, PersistedPomodoro>>(STORAGE_KEY, {});
+  }
+
+  function readStoredState(key: string): PersistedPomodoro | undefined {
+    return pomodoroStates.get(key) ?? loadStoredMap()[key];
+  }
+
+  function writeStoredState(key: string, next: PersistedPomodoro): void {
+    pomodoroStates.set(key, next);
+    const all = loadStoredMap();
+    all[key] = next;
+    prefs.save(STORAGE_KEY, all);
+  }
 
   let { options = {}, doc = "" }: { options?: Record<string, unknown>; doc?: string } = $props();
-  $effect(() => { void doc; });
 
   function intOpt(v: unknown, def: number, min: number, max: number): number {
     const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN;
@@ -18,10 +43,12 @@
   const longMin = $derived(intOpt(options.long_break, 15, 1, 120));
   const goalSessions = $derived(intOpt(options.goal_sessions, 4, 1, 12));
   const soundOn = $derived(options.sound !== false && options.sound !== "false");
+  const stateKey = $derived(typeof options.id === "string" && options.id.trim() ? options.id.trim() : doc || "global");
 
   let phase = $state<Phase>("focus");
   let leftSec = $state<number | null>(null);
   let running = $state(false);
+  let endAt = $state<number | null>(null);
   let completedSessions = $state(0);
 
   const totalSec = $derived((phase === "focus" ? focusMin : phase === "short" ? shortMin : longMin) * 60);
@@ -34,6 +61,70 @@
   const CIRC = 2 * Math.PI * R;
   const dashOffset = $derived(CIRC * (1 - (totalSec > 0 ? remaining / totalSec : 1)));
   const dotTotal = $derived(Math.min(12, Math.max(goalSessions, completedSessions)));
+
+  function persistState(): void {
+    writeStoredState(stateKey, {
+      mode: phase,
+      running,
+      remaining: leftSec,
+      endAt,
+      completedSessions,
+    });
+  }
+
+  function restoreState(key: string): void {
+    const saved = readStoredState(key);
+    if (!saved) {
+      phase = "focus";
+      leftSec = null;
+      running = false;
+      endAt = null;
+      completedSessions = 0;
+      return;
+    }
+    phase = saved.mode === "short" || saved.mode === "long" ? saved.mode : "focus";
+    completedSessions = Number.isFinite(saved.completedSessions) ? Math.max(0, Math.floor(saved.completedSessions)) : 0;
+    if (saved.running && typeof saved.endAt === "number") {
+      const rem = Math.ceil((saved.endAt - Date.now()) / 1000);
+      if (rem <= 0) {
+        const justFinished = Date.now() - saved.endAt < 3000;
+        running = false;
+        endAt = null;
+        leftSec = null;
+        if (justFinished) playChime();
+        if (phase === "focus") {
+          completedSessions += 1;
+          phase = completedSessions % goalSessions === 0 ? "long" : "short";
+        } else {
+          phase = "focus";
+        }
+        writeStoredState(key, {
+          mode: phase,
+          running: false,
+          remaining: null,
+          endAt: null,
+          completedSessions,
+        });
+      } else {
+        running = true;
+        endAt = saved.endAt;
+        leftSec = rem;
+      }
+    } else {
+      running = false;
+      endAt = null;
+      leftSec = typeof saved.remaining === "number" ? Math.max(0, Math.floor(saved.remaining)) : null;
+    }
+  }
+
+  let loadedKey = "";
+  $effect(() => {
+    const k = stateKey;
+    if (k !== loadedKey) {
+      loadedKey = k;
+      untrack(() => restoreState(k));
+    }
+  });
 
   function playChime(): void {
     if (!soundOn || typeof window === "undefined") return;
@@ -65,10 +156,13 @@
     running = false;
     phase = next;
     leftSec = null;
+    endAt = null;
+    persistState();
   }
 
   function advancePhase(chime: boolean): void {
     running = false;
+    endAt = null;
     if (chime) playChime();
     if (phase === "focus") {
       completedSessions += 1;
@@ -77,26 +171,50 @@
       phase = "focus";
     }
     leftSec = null;
+    persistState();
   }
 
   function toggleRun(): void {
-    if (!running && (leftSec === null || leftSec <= 0)) leftSec = totalSec;
-    running = !running;
+    if (running) {
+      const rem = endAt !== null ? Math.max(0, Math.ceil((endAt - Date.now()) / 1000)) : remaining;
+      running = false;
+      endAt = null;
+      leftSec = rem;
+    } else {
+      const rem = leftSec === null || leftSec <= 0 ? totalSec : leftSec;
+      leftSec = rem;
+      endAt = Date.now() + rem * 1000;
+      running = true;
+    }
+    persistState();
   }
 
   function resetTimer(): void {
     running = false;
     leftSec = null;
+    endAt = null;
+    persistState();
+  }
+
+  function syncFromClock(): void {
+    if (!running || endAt === null) return;
+    const rem = Math.ceil((endAt - Date.now()) / 1000);
+    if (rem <= 0) {
+      advancePhase(true);
+    } else if (rem !== leftSec) {
+      leftSec = rem;
+      persistState();
+    }
   }
 
   onMount(() => {
-    const id = setInterval(() => {
-      if (!running) return;
-      const cur = leftSec ?? totalSec;
-      if (cur <= 1) advancePhase(true);
-      else leftSec = cur - 1;
-    }, 1000);
-    return () => clearInterval(id);
+    syncFromClock();
+    const id = setInterval(syncFromClock, 500);
+    document.addEventListener("visibilitychange", syncFromClock);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", syncFromClock);
+    };
   });
 
   const PHASES: { id: Phase; label: string }[] = [

@@ -370,7 +370,7 @@
   function openShareMenu(e: MouseEvent): void {
     popMenu(
       below(e, [
-        { label: "Copy Page YAML", icon: "copy", run: () => void copyText(text, "Page YAML copied") },
+        { label: "Copy page source", icon: "copy", run: () => void copyText(text, "Page source copied") },
         { label: "Copy [[wikilink]]", icon: "link", run: () => void copyText(`[[${shownName(path)}]]`, "Wikilink copied") },
         { label: "Copy file path", icon: "file-text", run: () => void copyPath(path) },
         { label: "Export / Print…", icon: "external-link", run: () => window.print() },

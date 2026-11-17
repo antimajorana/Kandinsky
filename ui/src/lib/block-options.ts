@@ -87,18 +87,21 @@ export const BUILTIN_FIELDS: Record<string, OptionField[]> = {
   ],
   button: [
     { key: "label", label: "Button label", kind: "text" },
-    { key: "action", label: "Action", kind: "choice", choices: ["create_note", "set_property", "open"] },
+    { key: "action", label: "Action", kind: "choice", choices: ["create_note", "set_property", "toggle_property"] },
     { key: "folder", label: "Folder", kind: "text" },
   ],
   "table-preview": [
     { key: "path", label: "CSV / TSV file", kind: "text" },
+    { key: "limit", label: "Row limit", kind: "number", default: 25 },
   ],
   embed: [
     { key: "url", label: "URL or vault path", kind: "text" },
     { key: "title", label: "Title", kind: "text" },
   ],
   synced: [
-    { key: "source", label: "Source block (Note#^id)", kind: "text" },
+    { key: "source", label: "Synced source", kind: "text", hint: "Note title and block anchor" },
+    { key: "path", label: "Source note path", kind: "text" },
+    { key: "block", label: "Block identifier", kind: "text" },
   ],
   note: [path("The note shown")],
   text: [{ key: "text", label: "Text", kind: "text", hint: "markdown" }],

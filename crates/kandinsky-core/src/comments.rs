@@ -84,11 +84,13 @@ fn now_iso() -> String {
 }
 
 fn next_id(prefix: &str) -> String {
+    static ID_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    format!("{prefix}-{nanos:x}")
+    let seq = ID_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("{prefix}-{nanos:x}-{seq:x}")
 }
 
 fn read_file(path: &Path) -> Result<Vec<CommentThread>> {
@@ -108,88 +110,104 @@ pub fn mutate(root: &Path, req: &CommentMutation) -> Result<Vec<CommentThread>> 
     if let Some(dir) = file.parent() {
         vault_write::mkdir(dir)?;
     }
-    let mut threads = read_file(&file)?;
-    match &req.action {
-        CommentAction::Add { from, to, quote, anchor_line, text, author } => {
-            let text = text.trim();
-            if text.is_empty() {
-                return Err(Error::BadRequest("comment text cannot be empty".into()));
+    vault_write::locked(&file, || {
+        let mut threads = read_file(&file)?;
+        match &req.action {
+            CommentAction::Add { from, to, quote, anchor_line, text, author } => {
+                let text = text.trim();
+                if text.is_empty() {
+                    return Err(Error::BadRequest("comment text cannot be empty".into()));
+                }
+                threads.push(CommentThread {
+                    id: next_id("cmt"),
+                    path: req.path.clone(),
+                    from: *from,
+                    to: (*to).max(*from),
+                    quote: quote.clone(),
+                    anchor_line: (*anchor_line).max(1),
+                    resolved: false,
+                    created_at: now_iso(),
+                    author: if author.trim().is_empty() { "You".into() } else { author.trim().to_string() },
+                    text: text.to_string(),
+                    replies: Vec::new(),
+                });
             }
-            threads.push(CommentThread {
-                id: next_id("cmt"),
-                path: req.path.clone(),
-                from: *from,
-                to: (*to).max(*from),
-                quote: quote.clone(),
-                anchor_line: (*anchor_line).max(1),
-                resolved: false,
-                created_at: now_iso(),
-                author: if author.trim().is_empty() { "You".into() } else { author.trim().to_string() },
-                text: text.to_string(),
-                replies: Vec::new(),
-            });
-        }
-        CommentAction::Reply { thread_id, text, author } => {
-            let body = text.trim();
-            if body.is_empty() {
-                return Err(Error::BadRequest("reply text cannot be empty".into()));
+            CommentAction::Reply { thread_id, text, author } => {
+                let body = text.trim();
+                if body.is_empty() {
+                    return Err(Error::BadRequest("reply text cannot be empty".into()));
+                }
+                let t = threads.iter_mut().find(|t| t.id == *thread_id).ok_or_else(|| Error::NotFound("comment thread not found".into()))?;
+                t.replies.push(CommentReply {
+                    id: next_id("rpl"),
+                    author: if author.trim().is_empty() { "You".into() } else { author.trim().to_string() },
+                    created_at: now_iso(),
+                    text: body.to_string(),
+                });
             }
-            let t = threads.iter_mut().find(|t| t.id == *thread_id).ok_or_else(|| Error::NotFound("comment thread not found".into()))?;
-            t.replies.push(CommentReply {
-                id: next_id("rpl"),
-                author: if author.trim().is_empty() { "You".into() } else { author.trim().to_string() },
-                created_at: now_iso(),
-                text: body.to_string(),
-            });
-        }
-        CommentAction::Resolve { thread_id, resolved } => {
-            let t = threads.iter_mut().find(|t| t.id == *thread_id).ok_or_else(|| Error::NotFound("comment thread not found".into()))?;
-            t.resolved = *resolved;
-        }
-        CommentAction::Delete { thread_id } => {
-            let len_before = threads.len();
-            threads.retain(|t| t.id != *thread_id);
-            if threads.len() == len_before {
-                return Err(Error::NotFound("comment thread not found".into()));
+            CommentAction::Resolve { thread_id, resolved } => {
+                let t = threads.iter_mut().find(|t| t.id == *thread_id).ok_or_else(|| Error::NotFound("comment thread not found".into()))?;
+                t.resolved = *resolved;
+            }
+            CommentAction::Delete { thread_id } => {
+                let len_before = threads.len();
+                threads.retain(|t| t.id != *thread_id);
+                if threads.len() == len_before {
+                    return Err(Error::NotFound("comment thread not found".into()));
+                }
             }
         }
-    }
-    if threads.is_empty() {
-        if file.exists() {
-            vault_write::remove_file(&file)?;
+        if threads.is_empty() {
+            if file.exists() {
+                vault_write::remove_file(&file)?;
+            }
+        } else {
+            let json = serde_json::to_string_pretty(&threads).map_err(|e| Error::Other(e.into()))?;
+            vault_write::write(&file, json.as_bytes())?;
         }
-    } else {
-        let json = serde_json::to_string_pretty(&threads).map_err(|e| Error::Other(e.into()))?;
-        vault_write::write(&file, json.as_bytes())?;
-    }
-    Ok(threads)
+        Ok(threads)
+    })
 }
 
 pub fn moved(root: &Path, from: &str, to: &str) -> Result<()> {
     let old = file_for(root, from);
-    if !old.is_file() {
+    let dest = file_for(root, to);
+    if old == dest {
         return Ok(());
     }
-    let mut threads = read_file(&old)?;
-    for t in &mut threads {
-        t.path = to.to_string();
+    let mut threads = vault_write::locked(&old, || {
+        if !old.is_file() {
+            return Ok(Vec::new());
+        }
+        let mut threads = read_file(&old)?;
+        for t in &mut threads {
+            t.path = to.to_string();
+        }
+        vault_write::remove_file(&old)?;
+        Ok(threads)
+    })?;
+    if threads.is_empty() {
+        return Ok(());
     }
-    let dest = file_for(root, to);
     if let Some(dir) = dest.parent() {
         vault_write::mkdir(dir)?;
     }
-    let json = serde_json::to_string_pretty(&threads).map_err(|e| Error::Other(e.into()))?;
-    vault_write::write(&dest, json.as_bytes())?;
-    vault_write::remove_file(&old)?;
-    Ok(())
+    vault_write::locked(&dest, || {
+        let mut merged = read_file(&dest)?;
+        merged.append(&mut threads);
+        let json = serde_json::to_string_pretty(&merged).map_err(|e| Error::Other(e.into()))?;
+        vault_write::write(&dest, json.as_bytes())
+    })
 }
 
 pub fn removed(root: &Path, rel: &str) -> Result<()> {
     let old = file_for(root, rel);
-    if old.is_file() {
-        vault_write::remove_file(&old)?;
-    }
-    Ok(())
+    vault_write::locked(&old, || {
+        if old.is_file() {
+            vault_write::remove_file(&old)?;
+        }
+        Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -215,5 +233,39 @@ mod tests {
         assert_eq!(after[0].path, "notes/B.md");
         removed(d.path(), "notes/B.md").unwrap();
         assert!(list(d.path(), "notes/B.md").unwrap().is_empty());
+    }
+
+    #[test]
+    fn concurrent_mutations_keep_all_threads_with_unique_ids() {
+        let d = tempfile::tempdir().unwrap();
+        let handles: Vec<_> = (0..12)
+            .map(|i| {
+                let root = d.path().to_path_buf();
+                std::thread::spawn(move || {
+                    mutate(
+                        &root,
+                        &CommentMutation {
+                            path: "notes/Race.md".into(),
+                            action: CommentAction::Add {
+                                from: i,
+                                to: i + 1,
+                                quote: format!("q{i}"),
+                                anchor_line: 1,
+                                text: format!("comment {i}"),
+                                author: "".into(),
+                            },
+                        },
+                    )
+                    .unwrap();
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+        let all = list(d.path(), "notes/Race.md").unwrap();
+        assert_eq!(all.len(), 12);
+        let ids: std::collections::HashSet<_> = all.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids.len(), 12);
     }
 }

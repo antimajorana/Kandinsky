@@ -3,7 +3,7 @@
   // gets a named token of its own, shown once in the MCP server entry any client reads; revoking one shuts out that
   // agent alone, at its next request. Per machine, kept outside the vault. Generic: how one agent registers it (its
   // own command) is that agent's plugin's (REFACTOR-agents-as-plugins.md).
-  import { errReason } from "../../lib/text";
+  import { errReason, errText } from "../../lib/text";
   import { onMount } from "svelte";
   import { api } from "../../lib/api";
   import type { AgentsState } from "../../lib/types";
@@ -14,7 +14,7 @@
   let shown = $state<{ name: string; token: string; entry: string } | null>(null);
   let msg = $state("");
 
-  const why = errReason;
+  const why = (e: unknown) => errReason(e) || errText(e);
   const when = (t: number | null) => (t ? new Date(t * 1000).toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "never");
 
   async function load(): Promise<void> {

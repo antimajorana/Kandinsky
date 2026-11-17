@@ -43,7 +43,7 @@
     const data = str(o.data_dir) || str(o.zotero_dir);
     const base = str(o.base_attachment_path) || str(o.linked_attachment_base_dir);
     const zotmoov = str(o.zotmoov_folder) || str(o.zotmoov_dir) || str(o.zotmoov_dst_dir);
-    const bbt = Boolean(o.better_bibtex ?? o.has_better_bibtex ?? o.bbt_found ?? str(o.bbt_path));
+    const bbt = Boolean(o.better_bibtex || o.has_better_bibtex || o.bbt_found || str(o.better_bibtex_path) || str(o.bbt_path));
     const bbtCitekeys = typeof o.bbt_citekeys === "number" ? o.bbt_citekeys : null;
     const profile = str(o.profile_name) || str(o.profile) || str(o.profile_dir);
     return { found: Boolean(o.found ?? o.detected ?? (data || profile)), profile, dataDir: data, baseAttachmentPath: base, zotmoovFolder: zotmoov, betterBibtex: bbt, bbtCitekeys };
@@ -51,12 +51,14 @@
 
   function parseReport(raw: unknown, fallbackDry: boolean): ZoteroReport {
     const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-    const created = num(o.created ?? o.items_created);
+    const dryRun = typeof o.dry_run === "boolean" ? o.dry_run : fallbackDry;
+    const created = num(o.imported ?? o.created ?? o.items_created);
     const updated = num(o.updated ?? o.items_updated);
-    const unchanged = num(o.unchanged ?? o.items_unchanged);
-    const itemsTotal = num(o.items_found ?? o.items_total ?? o.total_items, created + updated + unchanged);
+    const hasUnchanged = o.unchanged !== undefined || o.items_unchanged !== undefined;
+    const itemsTotal = num(o.items_found ?? o.items_total ?? o.total_items, created + updated + num(o.unchanged ?? o.items_unchanged));
+    const unchanged = hasUnchanged ? num(o.unchanged ?? o.items_unchanged) : Math.max(0, itemsTotal - created - updated);
     const warnings: string[] = [];
-    for (const key of ["warnings", "missing_files", "collisions"]) {
+    for (const key of ["missing_pdfs", "warnings", "missing_files", "collisions"]) {
       const list = o[key];
       if (Array.isArray(list)) {
         for (const item of list) {
@@ -66,25 +68,37 @@
       }
     }
     const rawSample = Array.isArray(o.sample_items) ? o.sample_items : Array.isArray(o.preview_items) ? o.preview_items : Array.isArray(o.items) ? o.items : [];
-    const sampleItems: ZoteroPreviewItem[] = rawSample.slice(0, 8).map((entry) => {
-      const r = (entry && typeof entry === "object" ? entry : {}) as Record<string, unknown>;
-      return {
-        key: str(r.key ?? r.citekey) || "entry",
-        title: str(r.title) || "Untitled item",
-        year: str(r.year ?? r.date).slice(0, 4),
-        status: str(r.status ?? r.action) || (r.created ? "new" : "ready"),
-        pdfMode: str(r.pdf_mode ?? r.attachment_mode) || (r.linked ? "linked" : r.pdf ? "pdf" : ""),
-      };
-    });
+    const sampleItems: ZoteroPreviewItem[] = rawSample.length
+      ? rawSample.slice(0, 8).map((entry) => {
+          const r = (entry && typeof entry === "object" ? entry : {}) as Record<string, unknown>;
+          return {
+            key: str(r.key ?? r.citekey) || "entry",
+            title: str(r.title) || "Untitled item",
+            year: str(r.year ?? r.date).slice(0, 4),
+            status: str(r.status ?? r.action) || (r.created ? "new" : "ready"),
+            pdfMode: str(r.pdf_mode ?? r.attachment_mode) || (r.linked ? "linked" : r.pdf ? "pdf" : ""),
+          };
+        })
+      : (Array.isArray(o.citekeys) ? o.citekeys : [])
+          .map((ck) => str(ck))
+          .filter(Boolean)
+          .slice(0, 8)
+          .map((key) => ({
+            key,
+            title: key,
+            year: "",
+            status: dryRun ? "preview" : "imported",
+            pdfMode: "",
+          }));
     return {
-      dryRun: typeof o.dry_run === "boolean" ? o.dry_run : fallbackDry,
+      dryRun,
       created, updated, unchanged, itemsTotal,
       linkedInPlace: num(o.linked_in_place ?? o.linked_pdfs),
-      copiedFiles: num(o.copied_files ?? o.storage_pdfs ?? o.copied_pdfs),
-      collectionsCount: num(o.collections_count ?? (Array.isArray(o.collections) ? o.collections.length : o.collections)),
-      notesCount: num(o.notes_count ?? o.reading_notes ?? o.notes),
-      relationsCount: num(o.relations_count ?? o.relations),
-      annotationsCount: num(o.annotations_count ?? o.pdf_marks_count ?? o.annotations),
+      copiedFiles: num(o.copied_pdfs ?? o.copied_files ?? o.storage_pdfs),
+      collectionsCount: num(o.collections_found ?? o.collections_count ?? (Array.isArray(o.collections) ? o.collections.length : o.collections)),
+      notesCount: num(o.notes_imported ?? o.notes_count ?? o.reading_notes ?? o.notes),
+      relationsCount: num(o.relations_linked ?? o.relations_count ?? o.relations),
+      annotationsCount: num(o.annotations_imported ?? o.annotations_count ?? o.pdf_marks_count ?? o.annotations),
       trashSkipped: num(o.trash_skipped ?? o.skipped_trash),
       warnings, sampleItems,
     };
@@ -259,7 +273,7 @@
               <div class="sample-wrap">
                 <span class="field-label">Sample items</span>
                 <div class="sample-list">
-                  {#each report.sampleItems as item (item.key)}
+                  {#each report.sampleItems as item, idx (`${item.key}-${idx}`)}
                     <div class="sample-row">
                       <code class="sample-key">{item.key}</code>
                       <span class="sample-title">{item.title}</span>

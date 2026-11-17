@@ -667,6 +667,7 @@ async fn day_log_post(State(st): S, Json(q): Json<DayLogQuery>) -> Result<Json<c
 struct CalendarRangeQuery {
     from: Option<String>,
     to: Option<String>,
+    bases: Option<String>,
 }
 
 async fn calendar_get(State(st): S, Query(q): Query<CalendarRangeQuery>) -> Result<Json<crate::calendar::CalendarRangeResponse>> {
@@ -681,9 +682,16 @@ async fn calendar_get(State(st): S, Query(q): Query<CalendarRangeQuery>) -> Resu
         .as_deref()
         .and_then(|s| chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").ok())
         .unwrap_or_else(|| today + chrono::Duration::days(42));
+    let bases_filter: Option<Vec<String>> = q.bases.as_deref().map(|raw| {
+        raw.split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect()
+    });
     let (mut resp, has_dav) = with_ws(&st, move |ws| {
         let cfg = ws.config()?;
-        let res = crate::calendar::query_range(ws.root(), &cfg, from, to)?;
+        let res = crate::calendar::query_range_with_bases(ws.root(), &cfg, from, to, bases_filter.as_deref())?;
         let list = crate::plugins::list(ws.root());
         let dav_active = list.iter().any(|p| p.id == "dav" && p.has_helper)
             && crate::plugins::blocked(&list, &cfg.plugins.off, "dav").is_none();
@@ -733,9 +741,24 @@ async fn calendar_get(State(st): S, Query(q): Query<CalendarRangeQuery>) -> Resu
 }
 
 async fn calendar_event_post(State(st): S, Json(req): Json<crate::calendar::CalendarEventUpsert>) -> Result<Json<crate::calendar::CalendarEvent>> {
+    let prev_path = req.id.as_deref().and_then(|id| {
+        id.strip_prefix("page:")
+            .map(str::to_string)
+            .or_else(|| id.strip_prefix("dm:").and_then(|r| r.rsplit_once(':').map(|(p, _)| p.to_string())))
+            .or_else(|| id.strip_prefix("ds:").and_then(|r| r.rsplit_once(':').map(|(p, _)| p.to_string())))
+    });
     let ev = with_ws(&st, move |ws| crate::calendar::upsert_event(ws.root(), &ws.config()?, &req)).await?;
+    let mut paths = Vec::new();
+    if let Some(old) = prev_path {
+        paths.push(old);
+    }
     if let Some(p) = &ev.path {
-        st.bus.publish(Event::Fs { paths: vec![p.clone()] });
+        if !paths.contains(p) {
+            paths.push(p.clone());
+        }
+    }
+    if !paths.is_empty() {
+        st.bus.publish(Event::Fs { paths });
     }
     Ok(Json(ev))
 }
@@ -770,7 +793,10 @@ async fn calendar_ics_import_post(State(st): S, Json(req): Json<crate::calendar:
 async fn calendar_ics_export_get(State(st): S) -> Result<Response> {
     let body = with_ws(&st, |ws| Ok(crate::calendar::export_ics(ws.root(), &ws.config()?))).await?;
     Ok((
-        [(header::CONTENT_TYPE, "text/calendar; charset=utf-8")],
+        [
+            (header::CONTENT_TYPE, "text/calendar; charset=utf-8"),
+            (header::CONTENT_DISPOSITION, "attachment; filename=\"kandinsky-calendar.ics\""),
+        ],
         body,
     )
         .into_response())
@@ -1134,10 +1160,46 @@ async fn backlinks_get(State(st): S, Query(q): Query<PathQuery>) -> Result<Json<
     Ok(Json(with_ws(&st, move |ws| Ok(crate::links::backlinks(ws.root(), &ws.config()?, &path))).await?))
 }
 
+fn apply_note_property(
+    ws: &Workspace,
+    cfg: Option<&crate::config::Config>,
+    rel_path: &str,
+    abs: &std::path::Path,
+    transform: impl FnOnce(&str) -> Result<String>,
+) -> Result<(bool, Vec<String>)> {
+    let mut before_buf = String::new();
+    let mut after_buf = String::new();
+    vault_write::modify(abs, |text| {
+        before_buf = text.to_string();
+        let next = transform(text)?;
+        after_buf = next.clone();
+        Ok(next)
+    })?;
+    let changed = before_buf != after_buf;
+    let mut synced = Vec::new();
+    if changed {
+        let _ = crate::history::record_edit(ws, rel_path, Some(&before_buf), &after_buf);
+        let owned_cfg;
+        let cfg_ref = match cfg {
+            Some(c) => Some(c),
+            None => {
+                owned_cfg = ws.config().ok();
+                owned_cfg.as_ref()
+            }
+        };
+        if let Some(c) = cfg_ref {
+            if let Ok(extra) = crate::bases::sync_back_relations(ws.root(), c, rel_path, &before_buf, &after_buf) {
+                synced = extra;
+            }
+        }
+    }
+    Ok((changed, synced))
+}
+
 async fn property_put(State(st): S, Json(e): Json<PropertyEdit>) -> Result<StatusCode> {
     let touched = with_ws(&st, move |ws| {
         // the properties panel's rule (frontmatter::plain_key): `#x` would be a YAML comment, `- x` a list item
-        if !e.path.ends_with(".md") || crate::frontmatter::plain_key(&e.key).is_err() {
+        if !e.path.to_ascii_lowercase().ends_with(".md") || crate::frontmatter::plain_key(&e.key).is_err() {
             return Err(Error::BadRequest("a property edit needs a note and a plain key".into()));
         }
         let path = ws.resolve(&e.path)?;
@@ -1145,29 +1207,71 @@ async fn property_put(State(st): S, Json(e): Json<PropertyEdit>) -> Result<Statu
             Some(v) => serde_yaml::to_value(v).map_err(|x| Error::BadRequest(x.to_string()))?,
             None => crate::frontmatter::parse_cell(&e.text, e.list),
         };
-        let mut before_buf = String::new();
-        let mut after_buf = String::new();
-        vault_write::modify(&path, |text| {
-            before_buf = text.to_string();
-            let next = crate::frontmatter::set_property(text, e.key.trim(), &value);
-            after_buf = next.clone();
-            Ok(next)
-        })?;
-        let mut paths = vec![e.path.clone()];
-        if before_buf != after_buf {
-            let _ = crate::history::record_edit(&ws, &e.path, Some(&before_buf), &after_buf);
-            if let Ok(cfg) = ws.config() {
-                if let Ok(synced) = crate::bases::sync_back_relations(ws.root(), &cfg, &e.path, &before_buf, &after_buf) {
-                    paths.extend(synced);
-                }
-            }
-            paths.extend(crate::bases::automations::on_note_written(&ws, &e.path, false));
+        let key = e.key.trim().to_string();
+        let (changed, synced) = apply_note_property(&ws, None, &e.path, &path, |text| Ok(crate::frontmatter::set_property(text, &key, &value)))?;
+        if !changed {
+            return Ok(Vec::new());
         }
+        let mut paths = vec![e.path.clone()];
+        paths.extend(synced);
+        paths.extend(crate::bases::automations::on_note_written(&ws, &e.path, false));
         Ok(paths)
     })
     .await?;
-    st.bus.publish(Event::Fs { paths: touched });
+    if !touched.is_empty() {
+        st.bus.publish(Event::Fs { paths: touched });
+    }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(serde::Deserialize)]
+struct PropertySetRequest {
+    path: String,
+    key: String,
+    #[serde(default)]
+    value: serde_json::Value,
+    #[serde(default)]
+    remove: bool,
+    #[serde(default)]
+    force: bool,
+}
+
+/// Atomically set or remove one frontmatter property with schema validation, snapshot history,
+/// back-relation sync, and `Event::Fs` publication for the note and any synced targets.
+async fn property_set_post(State(st): S, Json(req): Json<PropertySetRequest>) -> Result<Json<serde_json::Value>> {
+    let (path, key, changed, synced, auto_paths) = with_ws(&st, move |ws| {
+        if !req.path.to_ascii_lowercase().ends_with(".md") {
+            return Err(Error::BadRequest("`path` must be a Markdown (.md) note".into()));
+        }
+        let key = crate::frontmatter::plain_key(&req.key)?.to_string();
+        let abs = ws.resolve(&req.path)?;
+        if !abs.is_file() {
+            return Err(Error::NotFound(req.path));
+        }
+        let cfg = ws.config()?;
+        if !req.remove && !req.value.is_null() && !req.force {
+            let specs = crate::property_spec::load(ws.root(), &cfg.editor.properties_spec);
+            if let Some(spec) = specs.properties.get(&key) {
+                if let Err(why) = crate::properties_audit::validate_property_json_value(spec, &req.value) {
+                    return Err(Error::BadRequest(format!("invalid value for `{key}`: {why}")));
+                }
+            }
+        }
+        let edit = if req.remove {
+            FrontmatterEdit::Remove { key: key.clone() }
+        } else {
+            FrontmatterEdit::Set { key: key.clone(), value: req.value }
+        };
+        let (changed, synced) = apply_note_property(&ws, Some(&cfg), &req.path, &abs, |text| crate::frontmatter::apply(text, &edit))?;
+        let auto_paths = if changed { crate::bases::automations::on_note_written(&ws, &req.path, false) } else { Vec::new() };
+        Ok((req.path, key, changed, synced, auto_paths))
+    })
+    .await?;
+    if changed {
+        let paths: Vec<String> = std::iter::once(path.clone()).chain(synced.iter().cloned()).chain(auto_paths).collect();
+        st.bus.publish(Event::Fs { paths });
+    }
+    Ok(Json(serde_json::json!({ "path": path, "key": key, "changed": changed, "synced_back_relations": synced })))
 }
 
 /// A properties-panel edit, applied to the text the editor holds (pure: nothing is written).
@@ -2768,7 +2872,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/open-outside", post(open_outside_post))
         .route("/api/desktop/capture-key", get(capture_key_get).post(capture_key_post))
         .route("/api/link-mention", post(link_mention_post))
-        .route("/api/property", put(property_put))
+        .route("/api/property", put(property_put).post(property_set_post))
         .route("/api/frontmatter/edit", post(frontmatter_edit_post))
         .route("/api/note/merge-template", post(merge_template_post))
         .route("/api/note/upstream", get(note_upstream_get))
@@ -2859,11 +2963,38 @@ pub struct ServerHandle {
 struct VaultRun {
     server_file: PathBuf,
     _watcher: Option<WatcherGuard>,
+    helpers: crate::helper::Helpers,
     scheduler: tokio::task::JoinHandle<()>,
     hooks: tokio::task::JoinHandle<()>,
     merges: tokio::task::JoinHandle<()>,
     /// A local vault's notices to the system (notify.rs); a server's reach devices through the notifications plugin.
     notices: Option<tokio::task::JoinHandle<()>>,
+    pdf_refresh: tokio::task::JoinHandle<()>,
+    keep_alive: tokio::task::JoinHandle<()>,
+}
+
+impl VaultRun {
+    fn abort_tasks(&self) {
+        self.scheduler.abort();
+        self.hooks.abort();
+        self.merges.abort();
+        if let Some(n) = &self.notices {
+            n.abort();
+        }
+        self.pdf_refresh.abort();
+        self.keep_alive.abort();
+    }
+
+    pub(super) fn stop(&self) {
+        self.abort_tasks();
+        self.helpers.shutdown();
+    }
+}
+
+impl Drop for VaultRun {
+    fn drop(&mut self) {
+        self.stop();
+    }
 }
 
 impl ServerHandle {
@@ -2902,19 +3033,17 @@ impl ServerHandle {
             None => Vec::new(),
         };
         for v in self.vaults.iter().chain(lazy.iter().map(|s| s.run())) {
-            v.scheduler.abort();
-            v.hooks.abort();
-            v.merges.abort();
-            if let Some(n) = &v.notices {
-                n.abort();
-            }
+            v.abort_tasks();
         }
         let r = (&mut self.task).await;
         self.remove_server_file();
+        drop(lazy);
+        for v in &self.vaults {
+            v.helpers.shutdown();
+        }
         if let Some(d) = &self.desktop {
             d.stop().await;
         }
-        drop(lazy);
         self.vaults.clear();
         r??;
         Ok(())
@@ -2924,6 +3053,9 @@ impl ServerHandle {
     pub async fn wait(mut self) -> anyhow::Result<()> {
         let r = (&mut self.task).await;
         self.remove_server_file();
+        for v in &self.vaults {
+            v.stop();
+        }
         if let Some(d) = &self.desktop {
             d.stop().await;
         }
@@ -3116,7 +3248,7 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
     // a PDF that arrives (a download, Syncthing, Zotero) gets its text and its cover at once, not when first shown
     let mut fs_events = bus.on_fs();
     let pdf_ws = ws.clone();
-    tokio::spawn(async move {
+    let pdf_refresh = tokio::spawn(async move {
         use tokio::sync::broadcast::error::RecvError;
         loop {
             // fallen behind: the events missed may have named a PDF, so a refresh (it only does what is missing)
@@ -3141,9 +3273,9 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
     // a server's lease table outlives a restart (lease.rs `kept_in`); a desktop's core keeps none
     let leases = Arc::new(if served.is_some() { crate::lease::Leases::kept_in(ws.cache_dir().join("leases.json")) } else { Default::default() });
     // the sign-ins kept for plugins visited now and then, so a gate's idle limit never ends them between uses
-    let _keep_alive = crate::service_signin::spawn_keep_alive(ws.root().to_path_buf());
+    let keep_alive = crate::service_signin::spawn_keep_alive(ws.root().to_path_buf());
     let state = Arc::new(AppState {
-        helpers,
+        helpers: helpers.clone(),
         ws,
         bus,
         port,
@@ -3164,7 +3296,7 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
         crate::guest::install(&state.ws); // a guest folder: read-only until its window's Edit switch
     }
     let routes = router(state.clone());
-    state.helpers.answer_with(routes.clone()); // helpers' calls back (helper_api.rs); a cycle that lives as long as the vault
+    state.helpers.answer_with(routes.clone()); // helpers' calls back (helper_api.rs); broken in VaultRun::stop/shutdown
     // the vault's former [refs] settings become catalog-papers' (REFACTOR-references-plugin.md), keys it has win
     if let Err(e) = crate::plugins::adopt_config_section(state.ws.root(), "refs", "catalog-papers") {
         eprintln!("kandinsky: [refs] → catalog-papers settings: {e}");
@@ -3179,7 +3311,31 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
             eprintln!("kandinsky: plugin {id}: its helper did not start with the vault: {e}");
         }
     }
-    Ok((routes, VaultRun { server_file, _watcher: watcher, scheduler, hooks, merges, notices }, state))
+    Ok((routes, VaultRun { server_file, _watcher: watcher, helpers, scheduler, hooks, merges, notices, pdf_refresh, keep_alive }, state))
+}
+
+/// Builds an in-process vault router for offline helper callbacks (`kandinsky mcp`, CLI helper calls)
+/// without binding a TCP port or writing `server.json`. Call [`crate::helper::Helpers::shutdown`] on
+/// teardown to stop running helpers and break the router reference cycle.
+pub fn standalone_helper_router(ws: Workspace, bus: EventBus, helpers: crate::helper::Helpers) -> Router {
+    let state = Arc::new(AppState {
+        ws,
+        bus,
+        port: 0,
+        ui: Default::default(),
+        helpers,
+        ptys: Default::default(),
+        auth: None,
+        lock: None,
+        prefix: String::new(),
+        served: None,
+        live: Default::default(),
+        media: Default::default(),
+        desktop: Default::default(),
+        leases: Default::default(),
+        leasing: std::sync::Once::new(),
+    });
+    router(state)
 }
 
 #[cfg(test)]
@@ -3413,5 +3569,150 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         let again = add(format!("http://{addr}/post")).await.unwrap();
         assert_eq!((again["path"].as_str(), again["outcome"].as_str()), (Some(path.as_str()), Some("unchanged")), "{again:#}");
         state.helpers.stop_all();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn property_post_syncs_back_relations_emits_fs_for_both_and_records_single_edit() {
+        use tower::ServiceExt;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("templates")).unwrap();
+        std::fs::create_dir_all(root.join("tasks")).unwrap();
+        std::fs::create_dir_all(root.join("projects")).unwrap();
+        std::fs::write(
+            root.join("templates/properties.yaml"),
+            "properties:\n  status:\n    kind: enum\n    values: [todo, done]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("Tasks.base"),
+            "properties:\n  note.project:\n    back_relation: tasks\nviews:\n  - type: table\n    name: All\n    order: [file.name, project]\n",
+        )
+        .unwrap();
+        std::fs::write(root.join("tasks/Fix.md"), "---\nstatus: todo\n---\n# Fix\n").unwrap();
+        std::fs::write(root.join("projects/Alpha.md"), "---\ntype: project\n---\n# Alpha\n").unwrap();
+
+        let (routes, _run, state) = start_vault(root, 0, None, None, None, "").unwrap();
+        let mut rx = state.bus.subscribe();
+
+        let post = |body: serde_json::Value| {
+            let req = Request::builder()
+                .method("POST")
+                .uri("/api/property")
+                .header("x-kandinsky", "1")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(body.to_string()))
+                .unwrap();
+            let app = routes.clone();
+            async move { app.oneshot(req).await.unwrap() }
+        };
+
+        // Schema rejection without force.
+        let bad = post(serde_json::json!({ "path": "tasks/Fix.md", "key": "status", "value": "bogus" })).await;
+        assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+
+        // Valid relation edit syncs back-relation and emits Event::Fs for both files.
+        let ok = post(serde_json::json!({ "path": "tasks/Fix.md", "key": "project", "value": "[[Alpha]]" })).await;
+        assert_eq!(ok.status(), StatusCode::OK);
+        let payload: serde_json::Value = serde_json::from_slice(&axum::body::to_bytes(ok.into_body(), 65536).await.unwrap()).unwrap();
+        assert_eq!(payload["changed"], true);
+        assert_eq!(payload["synced_back_relations"], serde_json::json!(["projects/Alpha.md"]));
+
+        let alpha = std::fs::read_to_string(root.join("projects/Alpha.md")).unwrap();
+        assert!(alpha.contains("tasks:") && alpha.contains("[[Fix]]"), "{alpha}");
+
+        // Wait for the API-published batch containing both paths (OS file watcher may emit partial batches first).
+        let fs_paths = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                match rx.recv().await {
+                    Ok(Event::Fs { paths }) if paths.iter().any(|p| p == "tasks/Fix.md") && paths.iter().any(|p| p == "projects/Alpha.md") => {
+                        return paths;
+                    }
+                    Ok(_) => continue,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(e) => panic!("event bus closed before both Fs paths arrived: {e}"),
+                }
+            }
+        })
+        .await
+        .expect("timed out waiting for Event::Fs containing both tasks/Fix.md and projects/Alpha.md");
+        assert!(fs_paths.contains(&"tasks/Fix.md".to_string()) && fs_paths.contains(&"projects/Alpha.md".to_string()), "{fs_paths:?}");
+
+        let hist = crate::history::list(&state.ws, "tasks/Fix.md").unwrap();
+        let snap_count = hist.entries.iter().filter(|e| e.source == HistorySource::Snapshot).count();
+        // One edit creates at most Before edit + Auto-saved (never a duplicate third entry).
+        assert_eq!(snap_count, 2, "{hist:?}");
+    }
+
+    fn seed_pid_helper(root: &std::path::Path) {
+        let plug = root.join(".kandinsky/plugins/h");
+        let out = plug.join("bin").join(crate::plugins::target());
+        std::fs::create_dir_all(&out).unwrap();
+        let src = plug.join("helper.rs");
+        std::fs::write(
+            &src,
+            r#"use std::io::BufRead;
+fn main() {
+    let pid_file = std::path::Path::new(&std::env::var("KANDINSKY_ROOT").unwrap()).join("helper.pid");
+    std::fs::write(pid_file, std::process::id().to_string()).unwrap();
+    for l in std::io::stdin().lock().lines() {
+        let l = l.unwrap();
+        let id: String = l.split("\"id\":").nth(1).unwrap().chars().take_while(|c| c.is_ascii_digit()).collect();
+        println!("{{\"id\":{id},\"result\":true}}");
+    }
+}"#,
+        )
+        .unwrap();
+        let built = std::process::Command::new(std::env::var("RUSTC").unwrap_or("rustc".into()))
+            .arg("-o")
+            .arg(out.join(format!("helper{}", std::env::consts::EXE_SUFFIX)))
+            .arg(&src)
+            .status()
+            .unwrap();
+        assert!(built.success(), "rustc");
+        std::fs::write(plug.join("plugin.toml"), "title = \"H\"\n[helper]\nrun = \"\\\"$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET/helper\\\"\"\n").unwrap();
+    }
+
+    async fn assert_shutdown_stops_helper(root: &std::path::Path, handle: ServerHandle, label: &str) {
+        let resp = reqwest::Client::new()
+            .post(format!("{}api/plugins/h/helper", handle.url()))
+            .header("x-kandinsky", "1")
+            .json(&serde_json::json!({ "method": "ping", "params": {} }))
+            .send()
+            .await
+            .unwrap();
+        assert!(resp.status().is_success());
+        let pid: u32 = std::fs::read_to_string(root.join("helper.pid")).unwrap().trim().parse().unwrap();
+        assert!(crate::platform::proc::pid_alive(pid));
+
+        handle.shutdown().await.unwrap();
+        for _ in 0..50 {
+            if !crate::platform::proc::pid_alive(pid) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert!(!crate::platform::proc::pid_alive(pid), "{label} helper process {pid} leaked after shutdown");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn server_shutdown_stops_helpers_and_breaks_router_cycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("vault");
+        seed_pid_helper(&root);
+
+        let handle = serve_on(root.clone(), Listen::Local(0, crate::local_lock::Lock::Open)).await.unwrap();
+        assert_shutdown_stops_helper(&root, handle, "server").await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn desktop_vaults_shutdown_stops_helpers() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("vault");
+        seed_pid_helper(&root);
+
+        let list = dir.path().join("vaults.toml");
+        let handle = serve_vaults(Vaults::Desktop { first: root.clone(), list }, Listen::Local(0, crate::local_lock::Lock::Open)).await.unwrap();
+        assert_shutdown_stops_helper(&root, handle, "desktop").await;
     }
 }

@@ -1,7 +1,7 @@
 //! SHA-256 verification and interactive prompt before workspace or community plugins spawn external OS binaries.
 use crate::api::{BinaryApprovalChoice, BinaryDecision, Event, PendingBinaryApproval, TrustedBinary};
 use crate::events::EventBus;
-use crate::{plugins, vault_write, Error, Result};
+use crate::{vault_write, Error, Result};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -157,16 +157,44 @@ fn resolve_exe(program: &Path, cwd: &Path) -> PathBuf {
     cand.canonicalize().unwrap_or(cand)
 }
 
-fn is_bundled_plugin(root: &Path, plugin: &str) -> bool {
-    if plugin.is_empty() {
+fn dir_contains_matching_sha(dir: &Path, file_name: &std::ffi::OsStr, target_sha: &str) -> bool {
+    let Ok(rd) = std::fs::read_dir(dir) else { return false };
+    for entry in rd.flatten() {
+        let p = entry.path();
+        if p.is_dir() {
+            if dir_contains_matching_sha(&p, file_name, target_sha) {
+                return true;
+            }
+        } else if p.file_name() == Some(file_name) && file_sha256(&p) == target_sha {
+            return true;
+        }
+    }
+    false
+}
+
+/// Only genuine app-bundled binaries (living inside `bundled-plugins` beside `current_exe()`, or matching a bundled
+/// plugin's binary by exact SHA-256) may bypass the prompt; vault-writable `.source` files are never trusted.
+fn is_trusted_bundled_binary(root: &Path, plugin: &str, exe: &Path) -> bool {
+    let canon_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    if exe.starts_with(&canon_root) || exe.starts_with(root) {
         return false;
     }
-    let src = crate::state_dir::join(root, plugins::PLUGINS_DIR).join(plugin).join(".source");
-    let Ok(text) = std::fs::read_to_string(src) else { return false };
-    toml::from_str::<toml::Table>(&text)
-        .ok()
-        .and_then(|t| t.get("kind")?.as_str().map(|k| k == "bundled"))
-        .unwrap_or(false)
+    let Some(bdir) = crate::plugin_install::bundled_dir().and_then(|d| d.canonicalize().ok()) else {
+        return false;
+    };
+    if exe.starts_with(&bdir) {
+        return true;
+    }
+    if plugin.is_empty() || plugin == "." || plugin == ".." || plugin.contains(['/', '\\']) {
+        return false;
+    }
+    let bundled_plugin = bdir.join(plugin);
+    if !bundled_plugin.is_dir() {
+        return false;
+    }
+    let Some(name) = exe.file_name() else { return false };
+    let target_sha = file_sha256(exe);
+    dir_contains_matching_sha(&bundled_plugin, name, &target_sha)
 }
 
 fn should_bypass(root: &Path, plugin: &str, exe: &Path, force_prompt: bool) -> bool {
@@ -176,8 +204,7 @@ fn should_bypass(root: &Path, plugin: &str, exe: &Path, force_prompt: bool) -> b
     if cfg!(test) || crate::env::var_os("TRUST_TEST_BINARIES").is_some() {
         return true;
     }
-    let inside_vault = exe.starts_with(root);
-    is_bundled_plugin(root, plugin) && !inside_vault
+    is_trusted_bundled_binary(root, plugin, exe)
 }
 
 fn is_already_allowed(command: &str, sha256: &str, trust_file: &Path) -> bool {
@@ -349,5 +376,18 @@ mod tests {
 
         // Revoking removes from session allowlist cleanly.
         assert!(revoke(&exe.canonicalize().unwrap_or(exe).to_string_lossy(), None).is_ok());
+    }
+
+    #[test]
+    fn vault_forged_bundled_source_never_bypasses_trust() {
+        let vault = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let plugin_dir = vault.path().join(".kandinsky/plugins/evil");
+        std::fs::create_dir_all(&plugin_dir).unwrap();
+        std::fs::write(plugin_dir.join(".source"), "kind = \"bundled\"\nsource = \"forged\"\n").unwrap();
+        let external_exe = outside.path().join("payload.sh");
+        std::fs::write(&external_exe, b"echo evil\n").unwrap();
+        let canon = external_exe.canonicalize().unwrap_or(external_exe);
+        assert!(!is_trusted_bundled_binary(vault.path(), "evil", &canon));
     }
 }

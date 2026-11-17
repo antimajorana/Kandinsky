@@ -49,6 +49,10 @@
   const canPromote = $derived(
     Boolean(initial?.id && (initial.source === "daily_frontmatter" || initial.source === "daily_schedule")),
   );
+  const canDelete = $derived(
+    Boolean(initial?.editable && initial.source !== "task" && initial.source !== "base"),
+  );
+  const dateOnlySource = $derived(initial?.source === "task" || initial?.source === "base");
   const isEventPage = $derived(initial?.source === "event_page" && !!initial.path);
   const joinUrl = $derived(isVideoMeetingUrl(location) ? location.trim() : null);
 
@@ -147,43 +151,49 @@
     </header>
 
     <!-- svelte-ignore a11y_autofocus -->
-    <input class="title-in" placeholder="Event title…" bind:value={title} required autofocus data-testid="cal-event-title" />
+    <input class="title-in" placeholder="Event title…" bind:value={title} required readonly={dateOnlySource} autofocus data-testid="cal-event-title" />
 
     <div class="grid-two">
       <label class="fld"><span>Date</span><input type="date" bind:value={date} required /></label>
-      <label class="fld"><span>End date (optional)</span><input type="date" min={date} bind:value={endDate} /></label>
-    </div>
-
-    <div class="time-row">
-      <label class="toggle"><input type="checkbox" bind:checked={allDay} /> <span>All day</span></label>
-      {#if !allDay}
-        <label class="hm"><span>From</span><input type="time" bind:value={start} /></label>
-        <label class="hm"><span>To</span><input type="time" bind:value={end} /></label>
+      {#if !dateOnlySource}
+        <label class="fld"><span>End date (optional)</span><input type="date" min={date} bind:value={endDate} /></label>
       {/if}
     </div>
 
-    <div class="swatches" role="radiogroup" aria-label="Category color">
-      {#each EVENT_COLORS as sw (sw.id)}
-        <button type="button" class="swatch" class:active={color === sw.id} aria-label={sw.label} title={sw.label}
-          style:background={sw.dot} onclick={() => (color = sw.id)}></button>
-      {/each}
-    </div>
+    {#if !dateOnlySource}
+      <div class="time-row">
+        <label class="toggle"><input type="checkbox" bind:checked={allDay} /> <span>All day</span></label>
+        {#if !allDay}
+          <label class="hm"><span>From</span><input type="time" bind:value={start} /></label>
+          <label class="hm"><span>To</span><input type="time" bind:value={end} /></label>
+        {/if}
+      </div>
 
-    <div class="grid-two">
-      <label class="fld"><span>Location or meeting link</span><input placeholder="Room 301 or https://meet…" bind:value={location} /></label>
-      <label class="fld">
-        <span>Repeat</span>
-        <select bind:value={repeat}>
-          <option value="none">Does not repeat</option>
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-          <option value="yearly">Yearly</option>
-        </select>
-      </label>
-    </div>
+      <div class="swatches" role="radiogroup" aria-label="Category color">
+        {#each EVENT_COLORS as sw (sw.id)}
+          <button type="button" class="swatch" class:active={color === sw.id} aria-label={sw.label} title={sw.label}
+            style:background={sw.dot} onclick={() => (color = sw.id)}></button>
+        {/each}
+      </div>
 
-    <label class="fld"><span>Linked notes (comma-separated)</span><input placeholder="[[Project]], [[Paper]]" bind:value={linksText} /></label>
+      <div class="grid-two">
+        <label class="fld"><span>Location or meeting link</span><input placeholder="Room 301 or https://meet…" bind:value={location} /></label>
+        <label class="fld">
+          <span>Repeat</span>
+          <select bind:value={repeat}>
+            <option value="none">Does not repeat</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="fld"><span>Linked notes (comma-separated)</span><input placeholder="[[Project]], [[Paper]]" bind:value={linksText} /></label>
+    {:else if initial?.path}
+      <p class="readonly-hint">Scheduled date updates in {initial.path}. Open note to edit task/page details.</p>
+    {/if}
 
     {#if !initial}
       <div class="storage-row">
@@ -199,8 +209,10 @@
     {#if error}<p class="err">{error}</p>{/if}
 
     <footer class="card-foot">
-      {#if initial?.editable}
+      {#if canDelete}
         <button type="button" class="danger" disabled={busy} onclick={() => void remove()}>Delete</button>
+      {:else if dateOnlySource && initial?.path}
+        <button type="button" class="link-btn" onclick={() => { openPath(initial.path!, initial.line ?? undefined); onclose(); }}>Open note</button>
       {:else}<span></span>{/if}
       <div class="foot-right">
         <button type="button" class="ghost" onclick={onclose}>Cancel</button>
@@ -236,6 +248,7 @@
   .x-btn { width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--text-muted); }
   .x-btn:hover { background: var(--bg-hover); color: var(--text); }
   .err { margin: 0; font-size: 12px; color: var(--red); }
+  .readonly-hint { margin: 0; font-size: 12px; color: var(--text-muted); }
   .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }
   .foot-right { display: inline-flex; gap: 8px; }
   .primary { padding: 6px 14px; border-radius: var(--radius); background: var(--accent); color: var(--accent-fg); font-weight: 600; font-size: 13px; }

@@ -72,16 +72,30 @@
   $effect(() => {
     const v = view();
     if (!v) { gutterWidth = 0; return; }
-    const syncGutter = () => {
+    let raf = 0;
+    const measure = () => {
       const g = v.dom.querySelector<HTMLElement>(".cm-gutters");
-      gutterWidth = g ? Math.round(g.getBoundingClientRect().width) : 0;
+      const next = g ? Math.round(g.getBoundingClientRect().width) : 0;
+      if (next !== gutterWidth) gutterWidth = next;
     };
-    syncGutter();
-    const ro = new ResizeObserver(syncGutter);
+    const syncGutter = () => {
+      raf = 0;
+      if (!v.dom.isConnected) return;
+      measure();
+    };
+    const scheduleSync = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(syncGutter);
+    };
+    if (v.dom.isConnected) measure();
+    const ro = new ResizeObserver(scheduleSync);
     const g = v.dom.querySelector<HTMLElement>(".cm-gutters");
     if (g) ro.observe(g);
     ro.observe(v.dom);
-    return () => ro.disconnect();
+    return () => {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      ro.disconnect();
+    };
   });
 
   // Resolve non-preset vault or remote cover URLs and remeasure CodeMirror when cover toggles

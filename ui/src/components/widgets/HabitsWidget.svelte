@@ -110,20 +110,21 @@
     return { dow, dom: String(d.getDate()) };
   }
 
-  async function load(): Promise<void> {
+  async function load(preserveError = false): Promise<void> {
     if (saving > 0) return;
     const p = targetPath;
     todayIso = localDay();
     try {
       const f = await api.file(p);
       if (p !== targetPath) return;
-      fileExists = true; mtime = f.mtime; docState = parseHabits(f.text, seedHabits); error = "";
+      fileExists = true; mtime = f.mtime; docState = parseHabits(f.text, seedHabits);
+      if (!preserveError) error = "";
     } catch (e) {
       if (p !== targetPath) return;
       if (e instanceof ApiError && e.status === 404) {
         fileExists = false; mtime = undefined;
         docState = { prefix: DEFAULT_PREFIX, suffix: "\n", habits: [...seedHabits], checks: {} };
-        error = "";
+        if (!preserveError) error = "";
       } else error = errReason(e);
     } finally { loaded = true; }
   }
@@ -143,6 +144,7 @@
     mutate(optimistic);
     docState = optimistic;
     saving++;
+    let failed = false;
     try {
       if (!fileExists) {
         const res = await api.createFile(p, serializeHabits(optimistic, todayIso));
@@ -171,9 +173,10 @@
       }
     } catch (e) {
       error = errReason(e);
-      void load();
+      failed = true;
     } finally {
       saving--;
+      if (failed) void load(true);
     }
   }
 

@@ -317,7 +317,7 @@ fn number_yaml(v: f64) -> Yaml {
 
 pub fn normalize_notion_date(raw: &str) -> Option<String> {
     let head = raw.split("→").next().unwrap_or(raw).split("->").next().unwrap_or(raw).trim();
-    if head.len() >= 10 {
+    if head.len() >= 10 && head.as_bytes()[..10].is_ascii() {
         let iso = &head[..10];
         let sep = iso.as_bytes()[4];
         if (sep == b'-' || sep == b'/') && iso.as_bytes()[7] == sep {
@@ -789,5 +789,12 @@ mod tests {
         assert!(spec.contains("budget: 1250.5\n") && spec.contains("progress: 75\n"), "{spec}");
         assert!(spec.contains("due_date: 2026-11-16\n"), "{spec}");
         assert!(spec.contains("[[Roadmap]]") && spec.contains("Detailed specification body."), "{spec}");
+    }
+
+    #[test]
+    fn normalize_notion_date_handles_multibyte_utf8_without_panicking() {
+        assert_eq!(normalize_notion_date("2026-01-€"), None);
+        assert_eq!(normalize_notion_date("2026年01月01日"), None);
+        assert_eq!(normalize_notion_date("2026/11/16 → 2026/11/20").as_deref(), Some("2026-11-16"));
     }
 }

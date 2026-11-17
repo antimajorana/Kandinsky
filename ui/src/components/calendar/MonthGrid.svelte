@@ -32,27 +32,28 @@
   const cells = $derived(monthGridDays(year, month0, weekStart));
   const summaryByDate = $derived(new Map(days.map((d) => [d.day, d])));
 
-  let draggingEventId = $state<string | null>(null);
+  let draggingOcc = $state<{ occId: string; date: string } | null>(null);
   let dragOverDate = $state<string | null>(null);
 
   function eventsForDay(iso: string): CalendarEvent[] {
     return events.filter((e) => e.date <= iso && e.end_date >= iso);
   }
 
-  function onDragStart(e: DragEvent, ev: CalendarEvent): void {
+  function onDragStart(e: DragEvent, ev: CalendarEvent, cellIso: string): void {
     if (!ev.editable) return;
-    draggingEventId = ev.id;
-    e.dataTransfer?.setData("text/plain", ev.id);
+    draggingOcc = { occId: ev.occurrence_id, date: cellIso };
+    e.dataTransfer?.setData("text/plain", ev.occurrence_id);
     if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
   }
 
   function onDropDay(e: DragEvent, iso: string): void {
     e.preventDefault();
-    const id = draggingEventId || e.dataTransfer?.getData("text/plain") || "";
-    draggingEventId = null;
+    const occId = draggingOcc?.occId || e.dataTransfer?.getData("text/plain") || "";
+    const fromDate = draggingOcc?.date;
+    draggingOcc = null;
     dragOverDate = null;
-    const ev = events.find((x) => x.id === id);
-    if (ev && ev.editable && ev.date !== iso) onmoveevent?.(ev, iso);
+    const ev = events.find((x) => x.occurrence_id === occId);
+    if (ev && ev.editable && (fromDate ?? ev.date) !== iso) onmoveevent?.(ev, iso);
   }
 </script>
 
@@ -77,7 +78,7 @@
         data-date={c.iso}
         onclick={() => onselectday(c.iso)}
         onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onselectday(c.iso); } }}
-        ondragover={(e) => { if (draggingEventId) { e.preventDefault(); dragOverDate = c.iso; } }}
+        ondragover={(e) => { if (draggingOcc) { e.preventDefault(); dragOverDate = c.iso; } }}
         ondragleave={() => { if (dragOverDate === c.iso) dragOverDate = null; }}
         ondrop={(e) => onDropDay(e, c.iso)}
         role="button"
@@ -103,8 +104,8 @@
                 class:span={isSpan}
                 class:done={ev.completed}
                 draggable={ev.editable}
-                ondragstart={(e) => onDragStart(e, ev)}
-                ondragend={() => { draggingEventId = null; dragOverDate = null; }}
+                ondragstart={(e) => onDragStart(e, ev, c.iso)}
+                ondragend={() => { draggingOcc = null; dragOverDate = null; }}
                 onclick={(e) => { e.stopPropagation(); oneditevent?.(ev); }}
                 style:background={col.bg}
                 style:color={col.fg}

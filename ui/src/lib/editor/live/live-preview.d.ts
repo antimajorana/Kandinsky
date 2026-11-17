@@ -21,7 +21,7 @@ export interface LivePreviewOptions {
   /** A task box clicked: true when the caller ticked it (else the box only flips). */
   toggleTask?: (view: import("@codemirror/view").EditorView, line: number) => boolean;
   /** Receives the frontmatter source, fences included. */
-  noteProperties?: (frontmatter: string) => { key: string; render: () => HTMLElement } | null;
+  noteProperties?: (frontmatter: string, state?: import("@codemirror/state").EditorState) => { key: string; render: () => HTMLElement } | null;
   /** Raw `<img …>` / `<br>` source → sanitized HTML for an inline widget, or null. */
   inlineHtml?: (source: string) => string | null;
   icon?: (name: string) => HTMLElement | null;

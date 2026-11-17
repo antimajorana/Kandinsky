@@ -486,7 +486,7 @@ pub fn available(root: &Path, index: &str) -> Result<Vec<Available>> {
         .collect())
 }
 
-fn bundled_dir() -> Option<PathBuf> {
+pub(crate) fn bundled_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?.join("bundled-plugins");
     dir.is_dir().then_some(dir)
@@ -595,9 +595,14 @@ pub fn catalog(root: &Path, index: &str) -> Result<Vec<Available>> {
     }
 
     if out.is_empty() && !index.trim().is_empty() {
-        if let Ok(remote) = available(root, index) {
-            return Ok(remote);
-        }
+        return match available(root, index) {
+            Ok(list) => Ok(list),
+            Err(e) => {
+                static WARNED: std::sync::Once = std::sync::Once::new();
+                WARNED.call_once(|| eprintln!("kandinsky: plugin catalog fallback unavailable: {e}"));
+                Ok(Vec::new())
+            }
+        };
     }
     Ok(out)
 }
@@ -938,19 +943,25 @@ mod tests {
         assert!(crate::state_dir::join(vault.path(), PLUGINS_DIR).join("dice/main.js").is_file());
     }
 
-    /// Serves `body` once on a local port; returns the port.
-    fn serve_once(body: Vec<u8>) -> u16 {
+    /// Serves `body` with HTTP `status` once on a local port; returns the port.
+    fn serve_status(status: &str, body: Vec<u8>) -> u16 {
         let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = server.local_addr().unwrap().port();
+        let status = status.to_string();
         std::thread::spawn(move || {
             use std::io::{Read, Write};
             let (mut c, _) = server.accept().unwrap();
             let mut req = [0u8; 4096];
             let _ = c.read(&mut req);
-            let _ = c.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).as_bytes());
+            let _ = c.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).as_bytes());
             let _ = c.write_all(&body);
         });
         port
+    }
+
+    /// Serves `body` once on a local port; returns the port.
+    fn serve_once(body: Vec<u8>) -> u16 {
+        serve_status("200 OK", body)
     }
 
     /// A release's index: each archive's address beside it, whether it runs here, and what the vault already has.
@@ -989,5 +1000,29 @@ mod tests {
         assert!(kept.contains("kind = \"download\"") && kept.contains(&url), "{kept}");
         let left: Vec<_> = std::fs::read_dir(vault.path().join(".kandinsky/cache")).unwrap().flatten().map(|e| e.file_name()).collect();
         assert!(left.is_empty(), "the download and the work folder are gone: {left:?}");
+    }
+
+    #[test]
+    fn catalog_falls_back_gracefully_when_remote_index_fails() {
+        let vault = tempfile::tempdir().unwrap();
+        let p404 = serve_status("404 Not Found", b"not found".to_vec());
+        let url_404 = format!("http://127.0.0.1:{p404}/releases/latest/download/plugins.json");
+        assert!(available(vault.path(), &url_404).is_err());
+
+        let p404_cat = serve_status("404 Not Found", b"not found".to_vec());
+        let url_404_cat = format!("http://127.0.0.1:{p404_cat}/releases/latest/download/plugins.json");
+        let got = catalog(vault.path(), &url_404_cat).unwrap();
+        if bundled_dir().is_none() {
+            assert!(got.is_empty());
+        }
+
+        let dead = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let dead_port = dead.local_addr().unwrap().port();
+        drop(dead);
+        let url_dead = format!("http://127.0.0.1:{dead_port}/plugins.json");
+        let got_dead = catalog(vault.path(), &url_dead).unwrap();
+        if bundled_dir().is_none() {
+            assert!(got_dead.is_empty());
+        }
     }
 }

@@ -401,7 +401,7 @@ class PropertiesWidget extends KeyedWidget {
     const host = (this.render && this.render()) || chip("cm-properties", "Properties");
     if (view) host.addEventListener("mousedown", (event) => {
       // a plain click: links, the panel — never the YAML; YAML that does not parse is entered by any click, to fix it
-      if (event.button !== 0 || !(event.altKey || host.querySelector(".prop-error"))) return;
+      if (event.button !== 0 || !(event.altKey || host.matches(".inline-props.invalid") || host.querySelector(".prop-error, .inline-props.invalid"))) return;
       event.preventDefault();
       editRawProperties(view);
     });
@@ -802,10 +802,6 @@ class RenderedBlockWidget extends KeyedWidget {
     this.hydrate = hydrate;
     this.release = release;
   }
-  // Kandinsky: the same source can render anew (an equation's number moved when one was added above it)
-  eq(other) {
-    return super.eq(other) && other.html === this.html;
-  }
   // CodeMirror drops the DOM (scrolled away, edited, the view destroyed): what
   // hydrate() mounted goes with it. Never on a detached editor (a hidden tab),
   // which keeps its DOM and comes back with it intact.
@@ -814,8 +810,8 @@ class RenderedBlockWidget extends KeyedWidget {
     if (this.release) this.release(dom);
   }
   eq(other) {
-    // Compare the HTML too: the same source re-rendered differently (a base
-    // whose query now returns more rows) has to replace its DOM.
+    // Compare the HTML too (e.g. an equation's number moved or a base returned more rows):
+    // when rendered HTML changed, replace the DOM even if the source string stayed identical.
     return super.eq(other) && other.html === this.html;
   }
   /**

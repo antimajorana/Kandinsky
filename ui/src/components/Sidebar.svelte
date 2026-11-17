@@ -40,6 +40,8 @@
     window.addEventListener("pointerdown", outside, true);
     window.addEventListener("keydown", esc, true);
     return () => {
+      stopResize?.();
+      clearTimeout(hoverT);
       window.removeEventListener("kandinsky-tabs-focus", take);
       window.removeEventListener("kandinsky-side-needed", need);
       window.removeEventListener("pointerdown", outside, true);
@@ -103,8 +105,10 @@
     if (side.kb && !(e.currentTarget as HTMLElement).contains(to) && !side.menu && !wsMenuOpen) { side.kb = false; side.peek = false; side.cursor = null; side.filtering = false; side.filter = ""; }
   }
 
+  let stopResize: (() => void) | null = null;
   function resize(e: PointerEvent) {
     e.preventDefault();
+    stopResize?.();
     const x0 = e.clientX, w0 = tabs.sidebar.width;
     document.body.classList.add("kandinsky-resizing");
     const move = (ev: PointerEvent) => setSidebarWidth(w0 + ev.clientX - x0);
@@ -112,9 +116,13 @@
       document.body.classList.remove("kandinsky-resizing");
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      stopResize = null;
     };
+    stopResize = up;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }
 </script>
 

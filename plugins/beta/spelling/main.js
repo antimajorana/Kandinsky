@@ -314,7 +314,7 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 		if (typeof e == "string" || n(e) ? (typeof t == "string" || n(t)) && (o = [{ dic: t }]) : e && ("length" in e ? (o = e, e = e[0] && e[0].aff) : (e.dic && (o = [e]), e = e.aff)), !e) throw Error("Missing `aff` in dictionary");
 		if (e = r(e), this.data = Object.create(null), this.compoundRuleCodes = e.compoundRuleCodes, this.replacementTable = e.replacementTable, this.conversion = e.conversion, this.compoundRules = e.compoundRules, this.rules = e.rules, this.flags = e.flags, o) for (; ++i < o.length;) o[i].dic && this.dictionary(o[i].dic);
 	}
-})))(), 1), k = /* @__PURE__ */ new Set([
+})))()), k = /* @__PURE__ */ new Set([
 	"FencedCode",
 	"CodeBlock",
 	"InlineCode",

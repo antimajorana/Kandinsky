@@ -84,6 +84,17 @@ function getSolverTargetOrigin(configuredUrl = "http://localhost:4200") {
   return "http://localhost:4200";
 }
 
+function isValidSolverUrl(rawUrl) {
+  const s = String(rawUrl || "").trim();
+  if (!/^https?:\/\//i.test(s)) return false;
+  try {
+    const u = new URL(s);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 const pad2 = (n) => String(n).padStart(2, "0");
 function nowStamp() {
   const d = new Date();
@@ -529,7 +540,7 @@ function mk(tag, props = {}, ...children) {
 }
 
 export default function mountSolver(host, kandinsky) {
-  let disposed = false, starting = false, running = false, inserting = false;
+  let disposed = false, starting = false, running = false, inserting = false, statusChecked = false;
   let statusDetail = "Checking local Solver services…", errorMsg = "", frameKey = 0;
   let showComposer = false, problemPrompt = "", prefillMeta = "", lastPrefillSig = "", lastPrefillAt = 0;
   let showLedger = false, loadingLedger = false, ledgerConvs = [], ledgerZips = [], activeSourceKey = "";
@@ -716,8 +727,8 @@ export default function mountSolver(host, kandinsky) {
 
     if (iframeEl && iframeEl.contentWindow && iframeLoaded) {
       postPrefillToIframe(pending);
-    } else {
-      schedulePrefillAckTimeout(pending);
+    } else if (statusChecked && !running && !starting) {
+      openComposerFallback(pending, true);
     }
   }
 
@@ -908,6 +919,26 @@ export default function mountSolver(host, kandinsky) {
 
   function renderBody() {
     if (running) {
+      if (!isValidSolverUrl(cfg.url)) {
+        if (iframeEl) iframeEl.removeEventListener("load", handleIframeLoad);
+        iframeEl = null;
+        iframeLoaded = false;
+        const card = mk("div", { class: "solver-card" },
+          mk("h3", { text: "Invalid Solver URL" }),
+          mk("p", { text: "The configured Solver UI URL must start with http:// or https://." }),
+          mk("div", { class: "solver-err", text: `Configured URL: ${cfg.url || "(empty)"}` }),
+          mk("div", { class: "solver-actions" },
+            mk("button", { class: "solver-btn primary", text: "Open Solver Settings", onclick: () => kandinsky.plugin.openSettings() }),
+            mk("button", { class: "solver-btn bauhaus-insert", text: "● Insert into Active Note", onclick: () => void handleInsertActiveNote() }),
+            mk("button", { class: "solver-btn", text: "Save .zip as Note…", onclick: () => openImportFallback(kandinsky) }),
+          ),
+        );
+        body.replaceChildren(mk("div", { class: "solver-card-wrap" }, card));
+        if (pendingPrefill && !pendingPrefill.acked && !showComposer) {
+          openComposerFallback(pendingPrefill, false);
+        }
+        return;
+      }
       if (!iframeEl) {
         iframeLoaded = false;
         iframeEl = mk("iframe", {
@@ -957,7 +988,11 @@ export default function mountSolver(host, kandinsky) {
       statusDetail = "Could not run the Solver background launcher.";
     } finally {
       starting = false;
+      statusChecked = true;
       syncUi();
+      if (!running && pendingPrefill && !pendingPrefill.acked && !showComposer) {
+        openComposerFallback(pendingPrefill, false);
+      }
     }
   }
 
@@ -966,17 +1001,25 @@ export default function mountSolver(host, kandinsky) {
     try {
       const st = await kandinsky.helper.call("status", { url: cfg.url, apiUrl: cfg.apiUrl }, { timeout: 15 });
       if (disposed) return;
-      if (st && st.running) { running = true; errorMsg = ""; statusDetail = "Solver Agent is running."; syncUi(); return; }
+      if (st && st.running) { running = true; statusChecked = true; errorMsg = ""; statusDetail = "Solver Agent is running."; syncUi(); return; }
       running = false;
       if (allowAutoStart && cfg.autoStart) { await startSolver(); return; }
+      statusChecked = true;
       statusDetail = "Solver's local services are currently stopped. Click Start Solver Services to launch them inside Kandinsky.";
       syncUi();
+      if (pendingPrefill && !pendingPrefill.acked && !showComposer) {
+        openComposerFallback(pendingPrefill, true);
+      }
     } catch (e) {
       if (disposed) return;
       running = false;
+      statusChecked = true;
       errorMsg = String((e && e.message) || e);
       statusDetail = "Could not reach the Solver helper.";
       syncUi();
+      if (pendingPrefill && !pendingPrefill.acked && !showComposer) {
+        openComposerFallback(pendingPrefill, false);
+      }
     }
   }
 

@@ -11,20 +11,23 @@ function isDarkTheme(): boolean {
 
 registerFence("kandinsky-mermaid", "mermaid", (host, fence) => {
   let gone = false;
+  let lastDark = isDarkTheme();
   const box = document.createElement("div");
   box.className = "tikz-figure mermaid-figure";
   box.dataset.state = "drawing";
   box.textContent = "Rendering diagram…";
   host.append(box);
 
-  void (async () => {
+  const draw = async () => {
+    const dark = isDarkTheme();
+    lastDark = dark;
     try {
       const { default: mermaid } = await import("mermaid");
       if (gone) return;
       mermaid.initialize({
         startOnLoad: false,
         securityLevel: "strict",
-        theme: isDarkTheme() ? "dark" : "default",
+        theme: dark ? "dark" : "default",
       });
       const id = `kdy-mmd-${++mermaidSeq}`;
       const { svg, bindFunctions } = await mermaid.render(id, fence.source);
@@ -46,10 +49,23 @@ registerFence("kandinsky-mermaid", "mermaid", (host, fence) => {
       });
       box.replaceChildren(title, why);
     }
-  })();
+  };
+
+  void draw();
+
+  let mo: MutationObserver | null = null;
+  if (typeof MutationObserver !== "undefined" && typeof document !== "undefined") {
+    mo = new MutationObserver(() => {
+      const dark = isDarkTheme();
+      if (dark !== lastDark) void draw();
+    });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] });
+  }
 
   return () => {
     gone = true;
+    mo?.disconnect();
+    mo = null;
     box.remove();
   };
 });

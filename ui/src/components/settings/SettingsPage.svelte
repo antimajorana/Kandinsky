@@ -151,6 +151,7 @@
               <button class="btn" onclick={() => openPath(settings.path)}><Icon name="edit" size={13} /> Open settings file</button></section>
           {:else if panel === "drafts"}
             <section class="panel"><h3>Suggested tools</h3>
+              <p class="what">Nothing is created until you press Keep.</p>
               <ToolDrafts /></section>
           {/if}
         {/each}

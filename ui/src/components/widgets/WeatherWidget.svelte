@@ -2,9 +2,15 @@
   // Nootion Weather widget: live Open-Meteo geocoding + forecast (3.5s AbortController, zero uncaught
   // rejections), inline city switcher, Bauhaus weather glyphs, and calm Local Daylight & Sky fallback.
   import { onMount } from "svelte";
+  import * as prefs from "../../lib/prefs";
 
   type Glyph = "sun" | "partly" | "cloudy" | "rain" | "snow" | "storm";
+  type WeatherError = "" | "not_found" | "timeout" | "api" | "network";
   interface Forecast { place: string; tempC: number; highC: number; lowC: number; code: number; windKmh: number }
+  interface StoredCity { base: string; val: string }
+
+  const CITY_KEY = "kandinsky.weather.city.v1";
+  let cachedCustomCity: StoredCity | null = prefs.load<StoredCity | null>(CITY_KEY, null);
 
   let { options = {} }: { options?: Record<string, unknown> } = $props();
 
@@ -12,7 +18,7 @@
   const units = $derived(options.units === "F" ? "F" : "C");
   const liveFetch = $derived(options.live_fetch !== false && options.live_fetch !== "false");
 
-  let customCity = $state<{ base: string; val: string } | null>(null);
+  let customCity = $state<StoredCity | null>(cachedCustomCity);
   const activeCity = $derived(customCity && customCity.base === optCity ? customCity.val : optCity);
 
   let editingCity = $state(false);
@@ -21,6 +27,7 @@
   let online = $state(typeof navigator === "undefined" ? true : navigator.onLine !== false);
   let forecast = $state<Forecast | null>(null);
   let loading = $state(false);
+  let fetchErr = $state<WeatherError>("");
 
   onMount(() => {
     const syncNet = () => { online = navigator.onLine !== false; };
@@ -39,33 +46,53 @@
     if (!q || !liveFetch || !online || typeof fetch === "undefined") {
       forecast = null;
       loading = false;
+      fetchErr = q && liveFetch && online && typeof fetch === "undefined" ? "api" : "";
       return;
     }
     let cancelled = false;
+    let timedOut = false;
     const ctrl = new AbortController();
-    const timer = setTimeout(() => { try { ctrl.abort(); } catch { /* ignore */ } }, 3500);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { ctrl.abort(); } catch { /* ignore */ }
+    }, 3500);
     loading = true;
+    fetchErr = "";
     void (async () => {
       try {
         const gRes = await fetch(
           `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en&format=json`,
           { signal: ctrl.signal },
         );
-        if (!gRes.ok) throw new Error("geo");
+        if (!gRes.ok) {
+          if (!cancelled) { forecast = null; fetchErr = "api"; }
+          return;
+        }
         const gData = (await gRes.json()) as { results?: { name: string; country_code?: string; latitude: number; longitude: number }[] };
         const loc = gData.results?.[0];
-        if (!loc) { if (!cancelled) forecast = null; return; }
+        if (!loc) {
+          if (!cancelled) { forecast = null; fetchErr = "not_found"; }
+          return;
+        }
         const fRes = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1`,
           { signal: ctrl.signal },
         );
-        if (!fRes.ok) throw new Error("wx");
+        if (!fRes.ok) {
+          if (!cancelled) { forecast = null; fetchErr = "api"; }
+          return;
+        }
         const fData = (await fRes.json()) as {
           current?: { temperature_2m?: number; weather_code?: number; wind_speed_10m?: number };
           daily?: { temperature_2m_max?: number[]; temperature_2m_min?: number[] };
         };
         const c = fData.current?.temperature_2m;
-        if (cancelled || typeof c !== "number") return;
+        if (cancelled) return;
+        if (typeof c !== "number") {
+          forecast = null;
+          fetchErr = "api";
+          return;
+        }
         forecast = {
           place: loc.country_code ? `${loc.name}, ${loc.country_code}` : loc.name,
           tempC: c,
@@ -74,8 +101,16 @@
           code: fData.current?.weather_code ?? 0,
           windKmh: fData.current?.wind_speed_10m ?? 0,
         };
+        fetchErr = "";
       } catch {
-        if (!cancelled) forecast = null;
+        if (cancelled) return;
+        forecast = null;
+        if (typeof navigator !== "undefined" && navigator.onLine === false) {
+          online = false;
+          fetchErr = "";
+        } else {
+          fetchErr = timedOut ? "timeout" : "network";
+        }
       } finally {
         clearTimeout(timer);
         if (!cancelled) loading = false;
@@ -110,13 +145,33 @@
     const dateStr = now.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
     const pill = !activeCity
       ? (!online ? "Offline · Set city for live forecast" : "Set city…")
-      : !liveFetch ? `${activeCity} · Live fetch off` : loading ? `Checking ${activeCity}…` : `Offline · ${activeCity}`;
+      : !liveFetch
+        ? `${activeCity} · Live fetch off`
+        : !online
+          ? `Offline · ${activeCity}`
+          : loading
+            ? `Checking ${activeCity}…`
+            : fetchErr === "not_found"
+              ? `City not found · ${activeCity}`
+              : fetchErr === "timeout"
+                ? `Forecast timed out · ${activeCity}`
+                : fetchErr === "api" || fetchErr === "network"
+                  ? `Forecast unavailable · ${activeCity}`
+                  : `Checking ${activeCity}…`;
     return { isDay, prog, sx, sy, tod, season, dateStr, pill };
   });
 
   function focusEl(el: HTMLInputElement) { el.focus(); el.select(); }
   function openCityEdit(): void { cityDraft = activeCity; editingCity = true; }
-  function saveCity(): void { editingCity = false; customCity = { base: optCity, val: cityDraft.trim() }; }
+  function saveCity(): void {
+    editingCity = false;
+    const val = cityDraft.trim();
+    const next = val ? { base: optCity, val } : null;
+    customCity = next;
+    cachedCustomCity = next;
+    if (next) prefs.save(CITY_KEY, next);
+    else prefs.drop(CITY_KEY);
+  }
 </script>
 
 <div class="widget">
@@ -174,7 +229,7 @@
         <span class="sky-kicker">Local Daylight &amp; Sky</span>
         <div class="sky-phase">{sky.tod} · {sky.season}</div>
         <div class="sky-date">{sky.dateStr}</div>
-        <button type="button" class="pill-btn" onclick={openCityEdit}>{sky.pill}</button>
+        <button type="button" class="pill-btn" class:is-error={Boolean(fetchErr) && online} onclick={openCityEdit}>{sky.pill}</button>
       </div>
       <svg viewBox="0 0 168 68" class="sky-arc" role="img" aria-label="{sky.tod}, {sky.season}">
         <line x1="12" y1="52" x2="156" y2="52" stroke="var(--border-strong)" stroke-width="1" />
@@ -203,6 +258,7 @@
   .city-in:focus { border-color: var(--accent); }
   .pill-btn { align-self: flex-start; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--border-strong); background: var(--bg-elev); color: var(--text-muted); font-size: 11.5px; font-weight: 500; cursor: pointer; transition: border-color 120ms, color 120ms; }
   .pill-btn:hover { border-color: var(--accent); color: var(--heading); }
+  .pill-btn.is-error { border-color: color-mix(in srgb, var(--yellow) 55%, var(--border-strong)); color: var(--text); }
   .pill-btn.save { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
   :global(html.phone) .pill-btn, :global(html.phone) .city-in { min-height: 40px; }
   .live-row, .sky-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }

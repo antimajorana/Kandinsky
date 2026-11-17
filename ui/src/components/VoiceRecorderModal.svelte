@@ -16,8 +16,17 @@
     { mime: "audio/webm", ext: "webm" },
     { mime: "audio/ogg;codecs=opus", ext: "ogg" },
     { mime: "audio/ogg", ext: "ogg" },
-    { mime: "audio/mp4", ext: "m4a" },
+    { mime: "audio/mp4", ext: "mp4" },
   ];
+
+  function extFromMime(mimeType: string): string {
+    const t = mimeType.toLowerCase();
+    if (t.includes("ogg")) return "ogg";
+    if (t.includes("mp4")) return "mp4";
+    if (t.includes("m4a") || t.includes("aac")) return "m4a";
+    if (t.includes("wav")) return "wav";
+    return "webm";
+  }
 
   let phase = $state<Phase>("idle");
   let elapsedMs = $state(0);
@@ -25,7 +34,7 @@
   let errorMsg = $state("");
   let previewUrl = $state("");
   let recordedBlob = $state<Blob | null>(null);
-  let recordedExt = $state("webm");
+  let recordedExt = $state(pickMime().ext);
   let startBtn = $state<HTMLButtonElement>();
 
   let stream: MediaStream | null = null;
@@ -38,6 +47,7 @@
   let tickTimer: ReturnType<typeof setInterval> | undefined;
   let baseElapsedMs = 0;
   let runStartedAt = 0;
+  let abortFinalize: (() => void) | null = null;
 
   const timerLabel = $derived.by(() => {
     const s = Math.max(0, Math.floor(elapsedMs / 1000));
@@ -66,9 +76,12 @@
   }
 
   function resetAll(): void {
+    abortFinalize?.();
+    abortFinalize = null;
     if (recorder && recorder.state !== "inactive") {
       recorder.ondataavailable = null;
       recorder.onstop = null;
+      recorder.onerror = null;
       try { recorder.stop(); } catch { /* ignore */ }
     }
     recorder = null;
@@ -125,10 +138,29 @@
       stream = media;
       const picked = pickMime();
       chosenMime = picked.mime;
-      recordedExt = picked.ext;
       chunks = [];
       const rec = chosenMime ? new MediaRecorder(media, { mimeType: chosenMime }) : new MediaRecorder(media);
-      rec.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) chunks.push(ev.data); };
+      const actualRecMime = rec.mimeType || chosenMime;
+      if (actualRecMime) {
+        chosenMime = actualRecMime;
+        recordedExt = extFromMime(actualRecMime);
+      } else {
+        recordedExt = picked.ext;
+      }
+      rec.ondataavailable = (ev) => {
+        if (rec.mimeType && rec.mimeType !== chosenMime) {
+          chosenMime = rec.mimeType;
+          recordedExt = extFromMime(rec.mimeType);
+        }
+        if (ev.data && ev.data.size > 0) chunks.push(ev.data);
+      };
+      rec.onerror = (ev) => {
+        const err = (ev as Event & { error?: unknown }).error;
+        recorder = null;
+        stopLiveGraph();
+        phase = "idle";
+        errorMsg = `Recording error: ${errText(err ?? "MediaRecorder failure")}`;
+      };
       recorder = rec;
 
       const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -144,6 +176,10 @@
       elapsedMs = 0;
       runStartedAt = Date.now();
       rec.start(200);
+      if (rec.mimeType) {
+        chosenMime = rec.mimeType;
+        recordedExt = extFromMime(rec.mimeType);
+      }
       phase = "recording";
       tickTimer = setInterval(() => {
         if (phase === "recording") elapsedMs = baseElapsedMs + (Date.now() - runStartedAt);
@@ -176,9 +212,40 @@
     const rec = recorder;
     if (!rec || rec.state === "inactive") return Promise.resolve(null);
     if (phase === "recording") { baseElapsedMs += Date.now() - runStartedAt; elapsedMs = baseElapsedMs; }
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return true;
+        settled = true;
+        clearTimeout(timeoutId);
+        if (abortFinalize === cancelFinalize) abortFinalize = null;
+        rec.onstop = null;
+        rec.onerror = null;
+        return false;
+      };
+      const cancelFinalize = () => {
+        if (finish()) return;
+        resolve(null);
+      };
+      abortFinalize = cancelFinalize;
+      const timeoutId = setTimeout(() => {
+        if (finish()) return;
+        recorder = null;
+        stopLiveGraph();
+        reject(new Error("Recording failed to finalize (recorder timed out)."));
+      }, 5000);
+      rec.onerror = (ev) => {
+        if (finish()) return;
+        recorder = null;
+        stopLiveGraph();
+        const err = (ev as Event & { error?: unknown }).error;
+        reject(err instanceof Error ? err : new Error(errText(err ?? "Audio recorder error")));
+      };
       rec.onstop = () => {
-        const blob = new Blob(chunks, { type: chosenMime || rec.mimeType || "audio/webm" });
+        if (finish()) return;
+        const actualMime = rec.mimeType || chosenMime || (chunks[0] instanceof Blob ? chunks[0].type : "") || "audio/webm";
+        recordedExt = extFromMime(actualMime);
+        const blob = new Blob(chunks, { type: actualMime });
         recorder = null;
         stopLiveGraph();
         recordedBlob = blob;
@@ -186,20 +253,44 @@
         resolve(blob);
       };
       try { rec.requestData(); } catch { /* ignore */ }
-      rec.stop();
+      try {
+        rec.stop();
+      } catch (err) {
+        if (!finish()) {
+          recorder = null;
+          stopLiveGraph();
+          reject(err instanceof Error ? err : new Error(errText(err)));
+        }
+      }
     });
   }
 
   async function stopAndPreview(): Promise<void> {
     errorMsg = "";
-    const blob = await finalizeRecording();
-    if (!blob || !blob.size) { phase = "idle"; errorMsg = "No audio data was captured. Check your microphone and try again."; return; }
-    phase = "preview";
+    try {
+      const blob = await finalizeRecording();
+      if (!voiceRecorder.open) return;
+      if (!blob || !blob.size) { phase = "idle"; errorMsg = "No audio data was captured. Check your microphone and try again."; return; }
+      phase = "preview";
+    } catch (err) {
+      if (!voiceRecorder.open) return;
+      phase = "idle";
+      errorMsg = `Could not stop recording: ${errText(err)}`;
+    }
   }
 
   async function saveAndInsert(): Promise<void> {
     errorMsg = "";
-    const blob = await finalizeRecording();
+    let blob: Blob | null;
+    try {
+      blob = await finalizeRecording();
+    } catch (err) {
+      if (!voiceRecorder.open) return;
+      phase = "idle";
+      errorMsg = `Could not finalize recording: ${errText(err)}`;
+      return;
+    }
+    if (!voiceRecorder.open) return;
     if (!blob || !blob.size) { phase = "idle"; errorMsg = "No audio data was captured to save."; return; }
     phase = "saving";
     try {
@@ -242,7 +333,7 @@
           {#each bars as lv, idx (idx)}<span class="vr-bar" style:--lv={lv.toFixed(3)}></span>{/each}
         </div>
         <div class="vr-status">
-          {#if phase === "idle"}Ready — saves into <code>zAttachments/recording-….webm</code>
+          {#if phase === "idle"}Ready — saves into <code>zAttachments/recording-….{recordedExt}</code>
           {:else if phase === "requesting"}Requesting microphone permission…
           {:else if phase === "recording"}Recording live audio…
           {:else if phase === "paused"}Recording paused

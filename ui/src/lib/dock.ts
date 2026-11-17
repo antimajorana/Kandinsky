@@ -24,7 +24,7 @@ import { travelSign } from "./nav-signs";
 import { isSideKind, showSide, sideInBar, sidePanel, toggleSide, type SideId, type SideKind } from "./side-panel.svelte";
 import { TOOL, sideToolOf, sideTools, toolId } from "./side-tools.svelte";
 import { emitPluginEvent } from "./plugin-events";
-import { drawingPages, editors, noteEditorActive, shownHooks, openIntent, paneFocus, explorerGo, parkOf, pdfPages, pluginAnchors, terminals } from "./registry";
+import { calendarGo, drawingPages, editors, noteEditorActive, shownHooks, openIntent, paneFocus, explorerGo, parkOf, pdfPages, pluginAnchors, terminals } from "./registry";
 import { rememberFile } from "./recent";
 import { app } from "./state.svelte";
 import { iconSvg } from "./icons";
@@ -411,6 +411,7 @@ export function open(spec: PaneSpec, opts: { activate?: boolean; beside?: boolea
     if (spec.kind === "excalidraw" && spec.page) drawingPages.get(id)?.(spec.page);
     if (spec.kind === "plugin" && spec.anchor) pluginAnchors.get(id)?.(spec.anchor);
     if (spec.kind === "explorer" && spec.path !== undefined) explorerGo.get(id)?.(spec.path, spec.select);
+    if (spec.kind === "calendar" && (spec.date !== undefined || spec.view !== undefined)) calendarGo.get(id)?.(spec.date, spec.view);
     return existing.api;
   }
   setOpening(opts.activate === false ? null : id);

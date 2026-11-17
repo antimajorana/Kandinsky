@@ -29,8 +29,8 @@
   const cols = $derived(weekDays(anchorDate, weekStart));
   const summaryByDate = $derived(new Map(days.map((d) => [d.day, d])));
   let nowMins = $state(new Date().getHours() * 60 + new Date().getMinutes());
-  let resizing = $state<{ ev: CalendarEvent; startMins: number; endMins: number } | null>(null);
-  let dragEventId = $state<string | null>(null);
+  let resizing = $state<{ occId: string; startMins: number; endMins: number } | null>(null);
+  let dragOccId = $state<string | null>(null);
   let scroller = $state<HTMLElement>();
 
   onMount(() => {
@@ -47,17 +47,27 @@
   }
 
   function timedFor(iso: string): CalendarEvent[] {
-    return events.filter((e) => !e.all_day && e.date === iso);
+    return events.filter((e) => !e.all_day && e.date <= iso && e.end_date >= iso);
   }
 
-  function blockTop(ev: CalendarEvent): number {
-    const s = minutesOf(ev.start) ?? 9 * 60;
-    return (s / 60) * HOUR_PX;
+  function dayStartMins(ev: CalendarEvent, iso: string): number {
+    return ev.date < iso ? 0 : (minutesOf(ev.start) ?? 9 * 60);
   }
 
-  function blockHeight(ev: CalendarEvent): number {
-    const s = minutesOf(ev.start) ?? 9 * 60;
-    const e = resizing?.ev.id === ev.id ? resizing.endMins : (minutesOf(ev.end) ?? s + 60);
+  function dayEndMins(ev: CalendarEvent, iso: string): number {
+    const s = dayStartMins(ev, iso);
+    if (resizing?.occId === ev.occurrence_id && ev.end_date === iso) return resizing.endMins;
+    if (ev.end_date > iso) return 24 * 60;
+    return minutesOf(ev.end) ?? s + 60;
+  }
+
+  function blockTop(ev: CalendarEvent, iso: string): number {
+    return (dayStartMins(ev, iso) / 60) * HOUR_PX;
+  }
+
+  function blockHeight(ev: CalendarEvent, iso: string): number {
+    const s = dayStartMins(ev, iso);
+    const e = dayEndMins(ev, iso);
     return Math.max(22, ((Math.max(e, s + 15) - s) / 60) * HOUR_PX);
   }
 
@@ -66,32 +76,39 @@
     e.stopPropagation();
     e.preventDefault();
     const s = minutesOf(ev.start) ?? 9 * 60;
-    let curEnd = minutesOf(ev.end) ?? s + 60;
+    const baseEnd = minutesOf(ev.end) ?? s + 60;
     const y0 = e.clientY;
-    resizing = { ev, startMins: s, endMins: curEnd };
+    resizing = { occId: ev.occurrence_id, startMins: s, endMins: baseEnd };
     const move = (mv: PointerEvent) => {
       const delta = ((mv.clientY - y0) / HOUR_PX) * 60;
-      curEnd = Math.max(s + 15, Math.min(23 * 60 + 55, Math.round((curEnd + delta - (resizing ? 0 : 0)) / 15) * 15));
-      const base = minutesOf(ev.end) ?? s + 60;
-      curEnd = Math.max(s + 15, Math.min(23 * 60 + 55, Math.round((base + delta) / 15) * 15));
-      resizing = { ev, startMins: s, endMins: curEnd };
+      const snapped = Math.max(s + 15, Math.min(23 * 60 + 55, Math.round((baseEnd + delta) / 15) * 15));
+      resizing = { occId: ev.occurrence_id, startMins: s, endMins: snapped };
     };
-    const up = () => {
+    const cleanup = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      const finalEnd = resizing?.endMins ?? curEnd;
+      window.removeEventListener("pointercancel", cancel);
+    };
+    const up = () => {
+      cleanup();
+      const finalEnd = resizing?.endMins ?? baseEnd;
       resizing = null;
       onreschedule(ev, ev.date, ev.start ?? formatHm(s), formatHm(finalEnd));
     };
+    const cancel = () => {
+      cleanup();
+      resizing = null;
+    };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up, { once: true });
+    window.addEventListener("pointercancel", cancel, { once: true });
   }
 
   function dropOnColumn(e: DragEvent, iso: string): void {
     e.preventDefault();
-    const id = dragEventId || e.dataTransfer?.getData("text/plain") || "";
-    dragEventId = null;
-    const ev = events.find((x) => x.id === id);
+    const occId = dragOccId || e.dataTransfer?.getData("text/plain") || "";
+    dragOccId = null;
+    const ev = events.find((x) => x.occurrence_id === occId);
     if (!ev || !ev.editable) return;
     const colEl = e.currentTarget as HTMLElement;
     const y = e.clientY - colEl.getBoundingClientRect().top;
@@ -141,7 +158,7 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="day-col"
-          ondragover={(e) => { if (dragEventId) e.preventDefault(); }}
+          ondragover={(e) => { if (dragOccId) e.preventDefault(); }}
           ondrop={(e) => dropOnColumn(e, iso)}
           onclick={(e) => {
             if (e.target !== e.currentTarget) return;
@@ -164,21 +181,21 @@
             <div
               class="timed-card"
               class:done={ev.completed}
-              style:top="{blockTop(ev)}px"
-              style:height="{blockHeight(ev)}px"
+              style:top="{blockTop(ev, iso)}px"
+              style:height="{blockHeight(ev, iso)}px"
               style:background={c.bg}
               style:border-left="3px solid {c.dot}"
               draggable={ev.editable}
-              ondragstart={(e) => { dragEventId = ev.id; e.dataTransfer?.setData("text/plain", ev.id); }}
-              ondragend={() => (dragEventId = null)}
+              ondragstart={(e) => { dragOccId = ev.occurrence_id; e.dataTransfer?.setData("text/plain", ev.occurrence_id); }}
+              ondragend={() => (dragOccId = null)}
               onclick={(e) => { e.stopPropagation(); oneditevent(ev); }}
               role="button"
               tabindex="0"
               onkeydown={(e) => { if (e.key === "Enter") { e.stopPropagation(); oneditevent(ev); } }}
             >
               <span class="t-title">{ev.title}</span>
-              <span class="t-time">{ev.start ?? ""}{ev.end ? `–${ev.end}` : ""}</span>
-              {#if ev.editable}
+              <span class="t-time">{ev.date < iso ? "00:00" : (ev.start ?? "")}{ev.end_date > iso ? "–24:00" : ev.end ? `–${ev.end}` : ""}</span>
+              {#if ev.editable && ev.date === ev.end_date}
                 <div class="resize-edge" title="Drag to change duration" onpointerdown={(e) => startResize(e, ev)}></div>
               {/if}
             </div>

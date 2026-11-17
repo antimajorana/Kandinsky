@@ -15,12 +15,10 @@ interface LogicalSpan {
   kind: "fence" | "math" | "table" | "quote" | "list" | "line";
 }
 
-const FENCE_OPEN = /^\s*(`{3,}|~{3,})/;
 const TABLE_ROW = /^\s*\|/;
 const QUOTE_ROW = /^\s*>/;
 const LIST_ITEM_ROW = /^(\s*)(?:[-*+]|\d+[.)])\s/;
 const TRAILING_BLOCK_ID = /(?:^|\s)\^([A-Za-z0-9-]+)\s*$/;
-const LABEL_IN_MATH = /\\label\{([A-Za-z0-9:_-]+)\}/;
 
 function indentCols(s: string): number {
   let n = 0;
@@ -38,22 +36,37 @@ function resolveLogicalSpan(state: EditorState, from: number, to: number): Logic
   if (startLine < minLine) startLine = minLine;
   if (endLine < startLine) endLine = startLine;
 
-  // Check if inside a fenced code block
-  let inFence: string | null = null;
-  let fenceStart = -1;
+  // Check if inside a fenced code block (CommonMark-compliant, including nested and unclosed EOF fences)
+  let openFence: { char: string; len: number; start: number } | null = null;
   for (let i = minLine; i <= doc.lines; i++) {
     const text = doc.line(i).text;
-    const m = FENCE_OPEN.exec(text);
-    if (!inFence && m) {
-      inFence = m[1][0].repeat(m[1].length);
-      fenceStart = i;
-    } else if (inFence && text.trimStart().startsWith(inFence)) {
-      if (startLine >= fenceStart && startLine <= i) {
-        return { from: doc.line(fenceStart).from, to: doc.line(i).to, kind: "fence" };
+    const t0 = text.replace(/^ +/, "");
+    const indented = text.length - t0.length > 3;
+    const trimmedRight = t0.replace(/[\r\n]+$/, "");
+    if (!openFence) {
+      if (!indented) {
+        for (const ch of ["`", "~"] as const) {
+          let run = 0;
+          while (trimmedRight[run] === ch) run++;
+          if (run >= 3 && (ch === "~" || !trimmedRight.slice(run).includes("`"))) {
+            openFence = { char: ch, len: run, start: i };
+            break;
+          }
+        }
       }
-      inFence = null;
-      fenceStart = -1;
+    } else {
+      let run = 0;
+      while (trimmedRight[run] === openFence.char) run++;
+      if (!indented && run >= openFence.len && trimmedRight.slice(run).trim() === "") {
+        if (startLine >= openFence.start && startLine <= i) {
+          return { from: doc.line(openFence.start).from, to: doc.line(i).to, kind: "fence" };
+        }
+        openFence = null;
+      }
     }
+  }
+  if (openFence && startLine >= openFence.start) {
+    return { from: doc.line(openFence.start).from, to: doc.line(doc.lines).to, kind: "fence" };
   }
 
   // Check if inside a multi-line `$$ ... $$` display math block
@@ -166,14 +179,11 @@ function duplicateBlock(view: EditorView, span: LogicalSpan): void {
 
 function ensureBlockId(view: EditorView, span: LogicalSpan): string {
   const doc = view.state.doc;
-  const raw = view.state.sliceDoc(span.from, span.to);
   const endLine = doc.lineAt(span.to);
 
-  let id =
-    (span.kind === "math" ? LABEL_IN_MATH.exec(raw)?.[1] : undefined) ??
-    TRAILING_BLOCK_ID.exec(endLine.text)?.[1];
+  let id = TRAILING_BLOCK_ID.exec(endLine.text)?.[1];
 
-  // Check if a standalone `^blk-...` already sits on the line immediately below a table/fence/callout
+  // Check if a standalone `^blk-...` already sits on the line immediately below a table/fence/callout/math block
   if (!id && endLine.number < doc.lines) {
     const nextLine = doc.line(endLine.number + 1).text.trim();
     const standalone = /^\^([A-Za-z0-9-]+)$/.exec(nextLine);
@@ -182,7 +192,7 @@ function ensureBlockId(view: EditorView, span: LogicalSpan): string {
 
   if (!id) {
     id = makeBlockId();
-    if (span.kind === "table" || span.kind === "fence" || span.kind === "quote") {
+    if (span.kind === "table" || span.kind === "fence" || span.kind === "quote" || span.kind === "math") {
       view.dispatch({
         changes: { from: span.to, insert: `\n^${id}` },
         userEvent: "input",
@@ -224,23 +234,25 @@ function copySyncedBlock(view: EditorView, span: LogicalSpan): void {
 
 function moveBlockToLine(view: EditorView, span: LogicalSpan, insertBeforeLine: number): void {
   const doc = view.state.doc;
+  const minLine = frontmatterClose(doc) + 1;
+  const clampedTarget = Math.max(minLine, Math.min(doc.lines + 1, insertBeforeLine));
   const srcStart = doc.lineAt(span.from).number;
   const srcEnd = doc.lineAt(span.to).number;
-  if (insertBeforeLine >= srcStart && insertBeforeLine <= srcEnd + 1) return;
+  if (srcStart < minLine || (clampedTarget >= srcStart && clampedTarget <= srcEnd + 1)) return;
 
   const text = view.state.sliceDoc(span.from, span.to);
   let delFrom = span.from;
   let delTo = span.to;
   if (srcEnd < doc.lines) {
     delTo = doc.line(srcEnd + 1).from;
-  } else if (srcStart > 1) {
+  } else if (srcStart > minLine) {
     delFrom = doc.line(srcStart - 1).to;
   } else {
     return;
   }
 
-  const insChange = insertBeforeLine <= doc.lines
-    ? { from: doc.line(insertBeforeLine).from, to: doc.line(insertBeforeLine).from, insert: `${text}\n` }
+  const insChange = clampedTarget <= doc.lines
+    ? { from: doc.line(clampedTarget).from, to: doc.line(clampedTarget).from, insert: `${text}\n` }
     : { from: doc.length, to: doc.length, insert: `\n${text}` };
   const delChange = { from: delFrom, to: delTo, insert: "" };
   const changes = insChange.from <= delChange.from ? [insChange, delChange] : [delChange, insChange];
@@ -346,7 +358,7 @@ class BlockGutterOverlay {
         return;
       }
       this.wrapEl.classList.remove("is-hovered");
-      if (target?.closest(".inline-title, .cm-properties, .cm-panels, .cm-slash-menu")) {
+      if (target?.closest(".inline-title, .cm-properties, .cm-notion-props-slot, .cm-notion-inline-props, .cm-panels, .cm-slash-menu")) {
         this.hide();
         return;
       }
@@ -472,7 +484,9 @@ class BlockGutterOverlay {
       const docY = Math.max(0, clientY - this.view.documentTop);
       const blk = this.view.lineBlockAtHeight(docY);
       const tSpan = resolveLogicalSpan(this.view.state, blk.from, blk.to);
-      const before = docY < (blk.top + blk.bottom) / 2;
+      const spanTop = this.view.lineBlockAt(tSpan.from).top;
+      const spanBottom = this.view.lineBlockAt(tSpan.to).bottom;
+      const before = docY < (spanTop + spanBottom) / 2;
       const rawLine = before ? doc.lineAt(tSpan.from).number : doc.lineAt(tSpan.to).number + 1;
       targetLine = Math.max(minLine, Math.min(doc.lines + 1, rawLine));
 

@@ -348,13 +348,6 @@ function buildRichDecorations(
           const pigment = m[3].toLowerCase();
           const cls = mode === "color" ? `cm-pigment-color-${pigment}` : `cm-pigment-bg-${pigment}`;
           if (closeFrom > openTo) marksAndLines.push(Decoration.mark({ class: cls }).range(openTo, closeFrom));
-          if (!revealed(state, fullFrom, fullTo)) {
-            replaces.push({ from: fullFrom, to: openTo, deco: Decoration.replace({}) });
-            replaces.push({ from: closeFrom, to: fullTo, deco: Decoration.replace({}) });
-          } else {
-            marksAndLines.push(Decoration.mark({ class: "cm-formatting cm-html-tag" }).range(fullFrom, openTo));
-            marksAndLines.push(Decoration.mark({ class: "cm-formatting cm-html-tag" }).range(closeFrom, fullTo));
-          }
         }
       }
 

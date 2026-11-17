@@ -182,6 +182,7 @@ test("panel: known names and values are offered, [[ offers notes, an address and
   const popup = page.waitForEvent("popup");
   await panel.getByRole("button", { name: "Open source: text" }).click();
   expect((await popup).url()).toContain("example.org/x");
+  await request.put("/api/file", { headers: H, data: { path: "props/known-c.md", text: "---\nmood: tense\n---\nC.\n" } });
 });
 
 // Raw YAML only on purpose (Ctrl+E / Edit source): Live Preview keeps raw frontmatter hidden.

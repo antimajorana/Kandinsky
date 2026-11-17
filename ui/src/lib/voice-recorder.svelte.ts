@@ -21,17 +21,37 @@ export const voiceRecorder = $state<{
   onInsert: null,
 });
 
-function fallbackEditorInsert(embed: string): void {
-  const id = activeEditorId() ?? lastEditorId();
-  const ed = id ? editors.get(id) : undefined;
-  if (ed) {
-    ed.insertBlock(embed);
-    ed.focus();
+async function appendToNoteOnDisk(notePath: string, embed: string): Promise<void> {
+  try {
+    const f = await api.file(notePath);
+    const sep = f.text.endsWith("\n") || !f.text ? "" : "\n";
+    await api.putFile(notePath, `${f.text}${sep}${embed}\n`, f.mtime);
+  } catch (e) {
+    console.warn("[kandinsky] voice note fallback append failed", notePath, e);
   }
 }
 
-function buildViewInserter(view: EditorView): (embed: string) => void {
+function fallbackEditorInsert(embed: string, notePath?: string): void {
+  const id = activeEditorId() ?? lastEditorId();
+  const activeEd = id ? editors.get(id) : undefined;
+  const targetEd =
+    (activeEd && (!notePath || activeEd.path === notePath) ? activeEd : undefined) ??
+    (notePath ? [...editors.values()].find((e) => e.path === notePath) : undefined) ??
+    activeEd;
+  if (targetEd) {
+    targetEd.insertBlock(embed);
+    targetEd.focus();
+    return;
+  }
+  if (notePath) void appendToNoteOnDisk(notePath, embed);
+}
+
+function buildViewInserter(view: EditorView, notePath?: string): (embed: string) => void {
   return (embed: string) => {
+    if (!view.dom.isConnected) {
+      fallbackEditorInsert(embed, notePath);
+      return;
+    }
     const at = view.state.selection.main.head;
     const line = view.state.doc.lineAt(at);
     const before = view.state.sliceDoc(line.from, at);
@@ -50,8 +70,9 @@ function buildViewInserter(view: EditorView): (embed: string) => void {
 export function openVoiceRecorder(notePath?: string, onInsert?: (embed: string) => void): void {
   const id = activeEditorId() ?? lastEditorId();
   const activePath = id ? (editors.get(id)?.path ?? "") : "";
-  voiceRecorder.notePath = notePath ?? activePath;
-  voiceRecorder.onInsert = onInsert ?? fallbackEditorInsert;
+  const resolvedPath = notePath ?? activePath;
+  voiceRecorder.notePath = resolvedPath;
+  voiceRecorder.onInsert = onInsert ?? ((embed: string) => fallbackEditorInsert(embed, resolvedPath));
   voiceRecorder.open = true;
 }
 
@@ -70,7 +91,7 @@ export function installVoiceRecorderListener(): () => void {
       view?.dom.getAttribute("data-note") ??
       editors.get(activeEditorId() ?? lastEditorId() ?? "")?.path ??
       "";
-    const onInsert = detail.onInsert ?? (view ? buildViewInserter(view) : fallbackEditorInsert);
+    const onInsert = detail.onInsert ?? (view ? buildViewInserter(view, notePath) : (embed: string) => fallbackEditorInsert(embed, notePath));
     openVoiceRecorder(notePath, onInsert);
   };
   window.addEventListener("kandinsky:voice-record", onRecord);

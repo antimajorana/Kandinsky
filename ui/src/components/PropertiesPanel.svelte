@@ -82,12 +82,12 @@
   <div class="side-head">
     <span class="side-title">Properties</span>
     <span class="grow"></span>
-    <button class="icon-btn" onclick={asText} title="Edit the properties as YAML text" aria-label="Edit as text"><Icon name="file-code" size={13} /></button>
+    <button class="icon-btn" onclick={asText} title="Edit properties as plain text" aria-label="Edit as text"><Icon name="file-code" size={13} /></button>
     {#if closable}<button class="icon-btn" onclick={() => toggleProperties(false)} title="Hide the panel (the “Properties” line opens it again)" aria-label="Hide properties"><Icon name="close" size={13} /></button>{/if}
   </div>
   <div class="body">
     {#if !data}
-      <p class="note warn">The properties are not valid YAML. Click the “Properties” line in the note to fix them there.</p>
+      <p class="note warn">Properties formatting could not be read cleanly. Click “Edit as text” above or click the “Properties” line in the note to fix it.</p>
     {:else}
       {#if !rows.length}<p class="note">No properties yet. Add one below.</p>{/if}
       {#each rows as r (r.key)}

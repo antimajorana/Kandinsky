@@ -42,12 +42,15 @@ export function parseNlDate(raw: string, ref = new Date()): ParsedNlDate | null 
   if (clean === "today") date = addDaysLocal(ref, 0);
   else if (clean === "tomorrow" || clean === "tmrw") date = addDaysLocal(ref, 1);
   else if (clean === "yesterday") date = addDaysLocal(ref, -1);
-  else if (clean.startsWith("next ")) {
+  else if (clean === "this week") date = addDaysLocal(ref, 0);
+  else if (clean === "next week") date = addDaysLocal(ref, 7);
+  else if (clean.startsWith("next ") || clean.startsWith("this ")) {
+    const isNext = clean.startsWith("next ");
     const dayName = clean.slice(5).trim();
     const idx = WEEKDAYS.findIndex((w) => w.startsWith(dayName) && dayName.length >= 3);
     if (idx >= 0) {
-      const diff = (idx - ref.getDay() + 7) % 7 || 7;
-      date = addDaysLocal(ref, diff);
+      const diff = (idx - ref.getDay() + 7) % 7;
+      date = addDaysLocal(ref, isNext ? (diff || 7) : diff);
     }
   } else {
     const inM = /^in\s+(\d+)\s+(day|days|week|weeks)$/.exec(clean);
@@ -55,8 +58,15 @@ export function parseNlDate(raw: string, ref = new Date()): ParsedNlDate | null 
       const n = Number(inM[1]);
       const mult = inM[2].startsWith("week") ? 7 : 1;
       date = addDaysLocal(ref, n * mult);
-    } else if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
-      return { iso: clean, time, display: time ? `${clean} ${time}` : clean };
+    } else {
+      const ym = /^(\d{4})-(\d{2})-(\d{2})$/.exec(clean);
+      if (ym) {
+        const y = Number(ym[1]), mo = Number(ym[2]), da = Number(ym[3]);
+        const cand = new Date(y, mo - 1, da);
+        if (cand.getFullYear() === y && cand.getMonth() === mo - 1 && cand.getDate() === da) {
+          return { iso: clean, time, display: time ? `${clean} ${time}` : clean };
+        }
+      }
     }
   }
 
@@ -105,7 +115,7 @@ export function nlDateCompletions(query: string, ref = new Date()): Completion[]
   return out.slice(0, 8);
 }
 
-const NL_DATE_BEFORE = /@(?:[a-z]+(?:\s+(?:\d+|[a-z]+|\d{1,2}:\d{0,2}))*)?$/i;
+const NL_DATE_BEFORE = /(?:^|[\s([{"'“‘.,;!?])@(?:[a-z]+(?:\s+(?:\d+|[a-z]+|\d{1,2}:\d{0,2}))*)?$/i;
 
 export const nlDateSource = {
   applies: (ctx: CompletionContext): boolean =>

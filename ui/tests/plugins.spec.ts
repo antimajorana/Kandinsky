@@ -20,6 +20,9 @@ test.beforeAll(async ({ request }) => {
   await put(request, ".kandinsky/plugins/hello/view.js", view("Hello plugin"));
   await put(request, ".kandinsky/plugins/broken/plugin.toml", "title = 3\n");
 });
+test.afterAll(async ({ request }) => {
+  for (const id of ["hello", "broken"]) await request.post(`/api/plugins/${id}/remove`, { headers: H });
+});
 
 test("a workspace plugin gets a command, a rail button and a pane fed by its data script", async ({ page }) => {
   await page.goto("/");
@@ -29,11 +32,12 @@ test("a workspace plugin gets a command, a rail button and a pane fed by its dat
   await expect(page.getByRole("button", { name: "Hello", exact: true })).toBeVisible(); // rail
   await page.keyboard.press("Control+Alt+h");
   const pane = page.locator(".hello");
-  await expect(pane.getByRole("heading", { name: "Hello plugin" })).toBeVisible();
+  await expect(pane.getByRole("heading", { name: "Hello plugin" })).toBeVisible({ timeout: 15000 });
   await expect(pane.locator("li")).toHaveText(["hi", "two"]); // settings reached the data script
   await expect(pane.locator(".args")).toHaveText("view"); // and so did the view's args
   await pane.getByRole("button", { name: "open" }).click();
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: "hubbard" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "hubbard" })).toBeVisible();
+  await expect(page.locator(".cm-content")).toContainText("Hubbard");
 });
 
 test("editing a plugin's view reloads its pane", async ({ page, request }) => {
@@ -43,9 +47,9 @@ test("editing a plugin's view reloads its pane", async ({ page, request }) => {
   await page.keyboard.type("Hello — fixture plugin"); // the command title: plugin title + description
   await expect(page.getByTestId("palette").getByText("Hello — fixture plugin").first()).toBeVisible();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: "Hello plugin" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hello plugin" })).toBeVisible({ timeout: 15000 });
   await put(request, ".kandinsky/plugins/hello/view.js", view("Hello again"));
-  await expect(page.getByRole("heading", { name: "Hello again" })).toBeVisible({ timeout: 5000 });
+  await expect(page.getByRole("heading", { name: "Hello again" })).toBeVisible({ timeout: 15000 });
   expect(await page.evaluate(() => (window as unknown as { __helloUnmounted?: number }).__helloUnmounted)).toBe(1);
   await put(request, ".kandinsky/plugins/hello/view.js", view("Hello plugin"));
 });

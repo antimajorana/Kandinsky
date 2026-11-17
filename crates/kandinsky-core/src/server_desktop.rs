@@ -180,9 +180,11 @@ impl DesktopVaults {
         self.started.try_lock().ok().map(|s| s.values().cloned().collect())
     }
 
-    /// Drops all started vaults and their file watchers on server shutdown.
+    /// Drops all started vaults, stops their helpers, and aborts background tasks on server shutdown.
     pub(super) async fn stop(&self) {
-        for s in self.started.lock().await.drain().map(|(_, s)| s) {
+        let drained: Vec<_> = self.started.lock().await.drain().map(|(_, s)| s).collect();
+        for s in drained {
+            s.run.stop();
             drop(s);
         }
     }

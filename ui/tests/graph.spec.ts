@@ -20,17 +20,34 @@ test("graph of notes: counts, local neighbourhood of the active note, hover show
   // Local: hubbard.md and the two notes that link to it
   await pane.getByTestId("graph-local-toggle").click();
   await expect(pane.locator(".meta")).toHaveText("3 nodes · 2 links");
-  // the layout settles around the centre: hovering it finds a note
+  // the layout settles around the centre: sample drawn canvas pixels to hover a node cleanly
   await page.waitForTimeout(1500);
-  const box = (await page.getByTestId("graph-canvas").boundingBox())!;
-  const pts: [number, number][] = [];
-  for (let dx = -252; dx <= 252; dx += 14) {
-    for (let dy = -196; dy <= 196; dy += 14) pts.push([dx, dy]);
-  }
-  pts.sort((a, b) => a[0] * a[0] + a[1] * a[1] - (b[0] * b[0] + b[1] * b[1]));
+  const canvas = page.getByTestId("graph-canvas");
+  const box = (await canvas.boundingBox())!;
+  const pts = await canvas.evaluate((c: HTMLCanvasElement) => {
+    const ctx = c.getContext("2d");
+    const rect = c.getBoundingClientRect();
+    if (!ctx || !rect.width || !rect.height) return [] as [number, number][];
+    const img = ctx.getImageData(0, 0, c.width, c.height).data;
+    const bgR = img[0], bgG = img[1], bgB = img[2];
+    const sx = c.width / rect.width, sy = c.height / rect.height;
+    const hits: [number, number][] = [];
+    for (let cy = 12; cy < rect.height - 12; cy += 10) {
+      for (let cx = 12; cx < rect.width - 12; cx += 10) {
+        const px = Math.min(c.width - 1, Math.round(cx * sx));
+        const py = Math.min(c.height - 1, Math.round(cy * sy));
+        const i = (py * c.width + px) * 4;
+        const diff = Math.abs(img[i] - bgR) + Math.abs(img[i + 1] - bgG) + Math.abs(img[i + 2] - bgB);
+        if (diff > 36) hits.push([cx, cy]);
+      }
+    }
+    const midX = rect.width / 2, midY = rect.height / 2;
+    hits.sort((a, b) => (a[0] - midX) ** 2 + (a[1] - midY) ** 2 - ((b[0] - midX) ** 2 + (b[1] - midY) ** 2));
+    return hits.slice(0, 80);
+  });
   let found = false;
-  for (const [dx, dy] of pts) {
-    await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy);
+  for (const [cx, cy] of pts) {
+    await page.mouse.move(box.x + cx, box.y + cy);
     if (await pane.locator(".tip").isVisible()) {
       found = true;
       break;

@@ -5,7 +5,7 @@
   import Markdown from "../components/Markdown.svelte";
   import { api } from "../lib/api";
   import { on, touches } from "../lib/bus";
-  import { open, type PaneProps } from "../lib/dock";
+  import { open, setDirty, type PaneProps } from "../lib/dock";
   import { insertIntoActiveNote, sendPassageToAgent, type AgentTarget } from "../lib/editor-insert-bus";
   import { superOf } from "../lib/keys";
   import {
@@ -22,7 +22,8 @@
     type JupyterKernelChoice,
   } from "../lib/oracle-runner";
   import { shownName } from "../lib/paths";
-  import { app, toast } from "../lib/state.svelte";
+  import { paneParks } from "../lib/registry";
+  import { toast } from "../lib/state.svelte";
   import { errText } from "../lib/text";
 
   let { spec, panel }: PaneProps<"notebook"> = $props();
@@ -33,6 +34,10 @@
   let mtime = $state<number | undefined>(undefined);
   let dirty = $state(false);
   let saving = $state(false);
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  let inflight: Promise<void> | null = null;
+  let editRev = 0;
+  let disposed = false;
 
   let kernel = $state<JupyterKernelChoice>("auto");
   let activeKernelLabel = $state("");
@@ -53,9 +58,13 @@
   );
 
   function markDirty(next: boolean) {
+    if (next) editRev++;
     dirty = next;
-    if (next) app.dirty[panel.id] = true;
-    else delete app.dirty[panel.id];
+    setDirty(panel.id, next);
+    clearTimeout(saveTimer);
+    if (next && !isWln && nb?.format === "ipynb" && !disposed) {
+      saveTimer = setTimeout(() => void saveNotebook({ quiet: true }), 800);
+    }
   }
 
   async function loadNotebook() {
@@ -86,8 +95,13 @@
   });
 
   onMount(() => {
+    const park = () => (!isWln && dirty ? saveNotebook({ quiet: true }) : Promise.resolve());
+    paneParks.set(panel.id, park);
+    const offVis = panel.onDidVisibilityChange?.((e) => {
+      if (!e.isVisible && !isWln && dirty) void saveNotebook({ quiet: true });
+    });
     const offFs = on("fs", (e) => {
-      if (!dirty && !saving && touches(e.paths, (p) => p === spec.path)) {
+      if (!dirty && !saving && !inflight && touches(e.paths, (p) => p === spec.path)) {
         void loadNotebook();
       }
     });
@@ -96,25 +110,55 @@
     };
     window.addEventListener("click", onWinClick);
     return () => {
+      disposed = true;
+      clearTimeout(saveTimer);
+      if (!isWln && nb?.format === "ipynb" && dirty) {
+        void saveNotebook({ quiet: true, closingRaw: serializeIpynb(nb) });
+      }
+      if (paneParks.get(panel.id) === park) paneParks.delete(panel.id);
+      offVis?.dispose();
       offFs();
       window.removeEventListener("click", onWinClick);
-      delete app.dirty[panel.id];
+      setDirty(panel.id, false);
     };
   });
 
-  async function saveNotebook() {
-    if (!nb || nb.format !== "ipynb" || saving) return;
+  async function saveNotebook(opts: { quiet?: boolean; closingRaw?: string } = {}) {
+    clearTimeout(saveTimer);
+    while (inflight) await inflight;
+    const closingRaw = opts.closingRaw;
+    if (closingRaw === undefined && (!nb || nb.format !== "ipynb" || (opts.quiet && !dirty))) return;
+    const savedRev = editRev;
+    const raw = closingRaw ?? serializeIpynb(nb!);
     saving = true;
+    inflight = (async () => {
+      try {
+        const res = await api.putFile(spec.path, raw, mtime);
+        mtime = res.mtime;
+        if (closingRaw === undefined) {
+          if (editRev === savedRev) {
+            dirty = false;
+            setDirty(panel.id, false);
+          } else {
+            dirty = true;
+            setDirty(panel.id, true);
+            if (!disposed) {
+              clearTimeout(saveTimer);
+              saveTimer = setTimeout(() => void saveNotebook({ quiet: true }), 800);
+            }
+          }
+        }
+        if (!opts.quiet && !disposed) toast("Notebook saved", shownName(spec.path), "success", 2600);
+      } catch (e) {
+        if (!disposed) toast("Save failed", errText(e), "error");
+      } finally {
+        saving = false;
+      }
+    })();
     try {
-      const raw = serializeIpynb(nb);
-      const res = await api.putFile(spec.path, raw, mtime);
-      mtime = res.mtime;
-      markDirty(false);
-      toast("Notebook saved", shownName(spec.path), "success", 2600);
-    } catch (e) {
-      toast("Save failed", errText(e), "error");
+      await inflight;
     } finally {
-      saving = false;
+      inflight = null;
     }
   }
 
@@ -157,10 +201,15 @@
 
   async function runIpynbCells(upToCellId?: string) {
     if (!nb || nb.format !== "ipynb" || runningAll || runningCellId) return;
-    const codeSlice: Array<{ index: number; source: string; cellIdx: number }> = [];
+    const runPath = spec.path;
+    const codeSlice: Array<{ index: number; id: string; source: string }> = [];
+    const indexToId = new Map<number, string>();
     for (let i = 0; i < nb.cells.length; i++) {
       const c = nb.cells[i];
-      if (c.kind === "code") codeSlice.push({ index: i, source: c.source, cellIdx: i });
+      if (c.kind === "code") {
+        codeSlice.push({ index: i, id: c.id, source: c.source });
+        indexToId.set(i, c.id);
+      }
       if (upToCellId && c.id === upToCellId) break;
     }
     if (!codeSlice.length) return;
@@ -170,7 +219,7 @@
 
     try {
       const res = await runJupyterNotebook({
-        path: spec.path,
+        path: runPath,
         cells: codeSlice.map(({ index, source }) => ({ index, source })),
         kernel,
       });
@@ -179,10 +228,15 @@
         toast("Kernel execution failed", res.error, "error");
         return;
       }
+      if (!nb || nb.format !== "ipynb" || spec.path !== runPath) return;
       for (const r of res.results || []) {
-        const target = nb.cells[r.index];
+        const cellId = indexToId.get(r.index);
+        if (!cellId) continue;
+        const targetIdx = nb.cells.findIndex((c) => c.id === cellId);
+        if (targetIdx < 0) continue;
+        const target = nb.cells[targetIdx];
         if (target && target.kind === "code") {
-          nb.cells[r.index] = applyJupyterResultToCell(target, r);
+          nb.cells[targetIdx] = applyJupyterResultToCell(target, r);
         }
       }
       markDirty(true);
@@ -237,11 +291,24 @@
   }
 
   function onCodeKeydown(e: KeyboardEvent, cell: NotebookCell) {
+    if (isWln) return;
     if ((e.shiftKey || e.ctrlKey || superOf(e)) && e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
-      if (!isWln) void runIpynbCells(cell.id);
+      void runIpynbCells(cell.id);
     }
+  }
+
+  async function openAsText() {
+    if (!isWln && dirty) await saveNotebook({ quiet: true });
+    open({ kind: "editor", path: spec.path });
+  }
+
+  function svgDataUri(svg: string): string {
+    const clean = svg
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "")
+      .replace(/<script\b[^>]*\/?>/gi, "");
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(clean)}`;
   }
 
   function formatLatex(tex: string): string {
@@ -292,7 +359,7 @@
       </div>
     {/if}
 
-    <button class="nb-btn subtle" onclick={() => open({ kind: "editor", path: spec.path })} title="Open raw file in the text editor"><Icon name="file-code" size={13} /> Open as JSON/Text</button>
+    <button class="nb-btn subtle" onclick={() => void openAsText()} title="Open raw file in the text editor"><Icon name="file-code" size={13} /> Open as JSON/Text</button>
   </header>
 
   <div class="nb-scroll">
@@ -301,7 +368,7 @@
     {:else if loadErr}
       <div class="nb-state error">
         <p>Could not parse notebook <code>{shownName(spec.path)}</code>: {loadErr}</p>
-        <button class="nb-btn" onclick={() => open({ kind: "editor", path: spec.path })}>Open as JSON/Text</button>
+        <button class="nb-btn" onclick={() => void openAsText()}>Open as JSON/Text</button>
       </div>
     {:else if nb}
       <div class="nb-column">
@@ -317,27 +384,27 @@
               <div class="cell-head md-head">
                 <span class="cell-tag">Markdown</span>
                 <span class="spacer"></span>
-                {#if editingMd[cell.id]}
-                  <button class="cell-act" onclick={() => (editingMd[cell.id] = false)}>Done</button>
-                {:else}
-                  <button class="cell-act" onclick={() => (editingMd[cell.id] = true)} title="Edit Markdown">
-                    <Icon name="edit" size={12} /> Edit
-                  </button>
-                {/if}
                 {#if !isWln}
+                  {#if editingMd[cell.id]}
+                    <button class="cell-act" onclick={() => (editingMd[cell.id] = false)}>Done</button>
+                  {:else}
+                    <button class="cell-act" onclick={() => (editingMd[cell.id] = true)} title="Edit Markdown">
+                      <Icon name="edit" size={12} /> Edit
+                    </button>
+                  {/if}
                   <button class="icon-xs" onclick={() => moveCell(cell.id, -1)} title="Move cell up"><Icon name="arrow-up" size={12} /></button>
                   <button class="icon-xs" onclick={() => moveCell(cell.id, 1)} title="Move cell down"><Icon name="arrow-down" size={12} /></button>
                   <button class="icon-xs" onclick={() => deleteCell(cell.id)} title="Delete cell"><Icon name="trash" size={12} /></button>
                 {/if}
               </div>
 
-              {#if editingMd[cell.id]}
+              {#if !isWln && editingMd[cell.id]}
                 <textarea class="md-editor" rows={Math.max(3, cell.source.split("\n").length)} bind:value={cell.source} oninput={() => { if (!isWln) markDirty(true); }}
                   onkeydown={(e) => { if ((e.ctrlKey || superOf(e) || e.shiftKey) && e.key === "Enter") { e.preventDefault(); editingMd[cell.id] = false; } else if (e.key === "Escape") editingMd[cell.id] = false; }}
                   placeholder="Write Markdown + $LaTeX$…"></textarea>
               {:else}
-                <div class="md-body" ondblclick={() => (editingMd[cell.id] = true)}>
-                  {#if cell.source.trim()}<Markdown text={cell.source} path={spec.path} />{:else}<span class="empty-md">Double-click to write Markdown…</span>{/if}
+                <div class="md-body" ondblclick={() => { if (!isWln) editingMd[cell.id] = true; }}>
+                  {#if cell.source.trim()}<Markdown text={cell.source} path={spec.path} />{:else if !isWln}<span class="empty-md">Double-click to write Markdown…</span>{/if}
                 </div>
               {/if}
             {:else}
@@ -385,7 +452,9 @@
                             </div>
                           {/if}
                           {#if out.svg}
-                            <div class="nb-plot nb-svg">{@html out.svg}</div>
+                            <div class="nb-plot nb-svg">
+                              <img src={svgDataUri(out.svg)} alt="Cell plot output" />
+                            </div>
                           {/if}
                           {#if out.latex}
                             <div class="nb-rich"><Markdown text={formatLatex(out.latex)} path={spec.path} /></div>
@@ -469,7 +538,7 @@
   .out-tag { font-family: var(--font-mono); font-size: 11px; color: var(--accent); padding-top: 6px; flex: none; }
   .nb-plain pre { flex: 1; }
   .nb-plot { padding: 8px; background: #fff; border-radius: 5px; border: 1px solid var(--border); overflow-x: auto; max-width: 100%; width: fit-content; } /* literal: plot paper for transparent PNG/SVG axes */
-  .nb-plot img, .nb-svg :global(svg) { display: block; max-width: 100%; height: auto; }
+  .nb-plot img { display: block; max-width: 100%; max-height: 540px; width: auto; height: auto; object-fit: contain; }
   .nb-rich { padding: 4px 6px; background: var(--bg); border-radius: 4px; }
 
   .menu-anchor { position: relative; display: inline-flex; }

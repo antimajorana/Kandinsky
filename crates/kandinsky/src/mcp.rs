@@ -171,15 +171,24 @@ async fn set_note_property(ws: &Workspace, server: Option<&Server>, a: &Value) -
     if key.contains([':', '\n', '\r']) || key.contains(" #") || key.starts_with(['-', '#', '"', '\'', '[', ']', '{', '}', ',', '&', '*', '!', '|', '>', '%', '@', '`', '?']) {
         return Err(anyhow!("`{key}` is not a valid frontmatter property name"));
     }
+    let remove = a["remove"].as_bool().unwrap_or(false);
+    let force = a["force"].as_bool().unwrap_or(false);
+    let val = a.get("value").cloned().unwrap_or(Value::Null);
+    if let Some(s) = server {
+        return s
+            .post(
+                "/api/property",
+                &json!({ "path": path, "key": key, "value": val, "remove": remove, "force": force }),
+                std::time::Duration::from_secs(30),
+            )
+            .await;
+    }
     let abs = ws.resolve(path)?;
     if !abs.is_file() {
         return Err(anyhow!("note not found: {path}"));
     }
     let cfg = ws.config()?;
     let specs = kandinsky_core::property_spec::load(ws.root(), &cfg.editor.properties_spec);
-    let remove = a["remove"].as_bool().unwrap_or(false);
-    let force = a["force"].as_bool().unwrap_or(false);
-    let val = a.get("value").cloned().unwrap_or(Value::Null);
     if !remove && !val.is_null() && !force {
         if let Some(spec) = specs.properties.get(key) {
             if let Err(why) = kandinsky_core::properties_audit::validate_property_json_value(spec, &val) {
@@ -205,9 +214,6 @@ async fn set_note_property(ws: &Workspace, server: Option<&Server>, a: &Value) -
         let _ = kandinsky_core::history::record_edit(ws, path, Some(&before_buf), &after_buf);
         if let Ok(extra) = kandinsky_core::bases::sync_back_relations(ws.root(), &cfg, path, &before_buf, &after_buf) {
             synced = extra;
-        }
-        if let Some(s) = server {
-            let _ = s.put("/api/file", &json!({ "path": path, "text": after_buf })).await;
         }
     }
     Ok(json!({ "path": path, "key": key, "changed": before_buf != after_buf, "synced_back_relations": synced }))
@@ -310,7 +316,7 @@ pub async fn serve(ws: Workspace) -> Result<()> {
     }
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     let mut out = tokio::io::stdout();
-    let local = kandinsky_core::helper::Helpers::new(ws.root(), kandinsky_core::events::EventBus::default());
+    let (local, _guard) = crate::standalone_helpers(&ws);
     while let Some(line) = lines.next_line().await? {
         if line.trim().is_empty() {
             continue;

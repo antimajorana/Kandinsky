@@ -9,6 +9,12 @@ const STYLE_ID = "kandinsky-obsidian-theme";
 let applySeq = 0;
 let lastApplied = "";
 
+function sanitizeObsidianCss(css: string): string {
+  return css
+    .replace(/@import\s+(?:url\s*\([^)]*\)|"[^"]*"|'[^']*'|[^;]+);?/gi, "/* blocked-import */")
+    .replace(/url\(\s*(?:"(?:https?:|\/\/|javascript:|vbscript:)[^"]*"|'(?:https?:|\/\/|javascript:|vbscript:)[^']*'|(?:https?:|\/\/|javascript:|vbscript:)[^)]*)\s*\)/gi, 'url("about:invalid")');
+}
+
 function removeThemeStyle(): void {
   document.getElementById(STYLE_ID)?.remove();
   lastApplied = "";
@@ -23,7 +29,7 @@ export async function applyObsidianTheme(force = false): Promise<void> {
   if (!force && id === lastApplied && document.getElementById(STYLE_ID)) return;
   const seq = ++applySeq;
   try {
-    const css = await api.obsidianThemeCss(id);
+    const css = sanitizeObsidianCss(await api.obsidianThemeCss(id));
     if (seq !== applySeq) return;
     let el = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
     if (!el) {

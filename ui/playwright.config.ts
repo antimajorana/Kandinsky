@@ -95,6 +95,8 @@ if (!process.env.TEST_WORKER_INDEX) {
   rmSync(`${WS}-secrets`, { recursive: true, force: true }); // the plugins' secret store is outside the vault: start each run without one
   rmSync(`${WS}-server.toml`, { force: true }); // Settings → Server writes these (server mode's sign-in), never ~/.config here
   rmSync(`${WS}-server.json`, { force: true });
+  rmSync(`${WS}-agents.json`, { force: true });
+  rmSync(`${WS}-agents.terminals.json`, { force: true });
   rmSync(`${WS}-personal`, { recursive: true, force: true });
   rmSync(`${WS}-capture-other`, { recursive: true, force: true });
   rmSync(SFTP_ROOT, { recursive: true, force: true });

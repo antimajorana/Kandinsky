@@ -28,6 +28,7 @@
   let replyText = $state<Record<string, string>>({});
   let loading = $state(true);
   let busy = $state(false);
+  let loadSeq = 0;
 
   const visibleThreads = $derived(showResolved ? threads : threads.filter((t) => !t.resolved));
   const resolvedCount = $derived(threads.filter((t) => t.resolved).length);
@@ -37,15 +38,20 @@
   }
 
   async function load(): Promise<void> {
-    if (!path) return;
+    const targetPath = path;
+    if (!targetPath) return;
+    const seq = ++loadSeq;
     loading = true;
     try {
-      threads = await api.comments(path);
+      const next = await api.comments(targetPath);
+      if (seq !== loadSeq || targetPath !== path) return;
+      threads = next;
       notifyCount(threads);
     } catch (e) {
+      if (seq !== loadSeq || targetPath !== path) return;
       toast("Could not load comments", errText(e));
     } finally {
-      loading = false;
+      if (seq === loadSeq) loading = false;
     }
   }
 

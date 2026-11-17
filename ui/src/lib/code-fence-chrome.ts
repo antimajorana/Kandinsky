@@ -89,7 +89,7 @@ function buildFenceDecos(view: EditorView): DecorationSet {
       const text = node.node.getChild("CodeText");
       const lang = info ? doc.sliceString(info.from, info.to).trim().split(/\s+/)[0] : "text";
       const from = text ? text.from : openLine.to;
-      const to = text ? text.to : node.to;
+      const to = text ? text.to : openLine.to;
       b.add(openLine.to, openLine.to, Decoration.widget({ widget: new CodeFenceChromeWidget(lang, from, to), side: 1 }));
     },
   });

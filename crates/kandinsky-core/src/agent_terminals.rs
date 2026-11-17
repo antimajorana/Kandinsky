@@ -113,7 +113,10 @@ pub fn command(decl: &AgentDecl, settings: &toml::Table, session: Option<&str>, 
                 let _ = crate::vault_write::mkdir(dir);
             }
             args.extend(decl.session_report.iter().cloned());
-            env.push(("KANDINSKY_SESSION_REPORT".into(), r.to_string_lossy().into_owned()));
+            let report_path = r.to_string_lossy().into_owned();
+            for name in crate::env::both("SESSION_REPORT") {
+                env.push((name, report_path.clone()));
+            }
         }
     }
     (program, args, env)
@@ -183,7 +186,9 @@ session_file = "{account:~/.claude}/projects/*/{session}.jsonl"
         let report = t.path().join("cache/agent-sessions").join(format!("{tab}.json"));
         let (_, a, env) = command(&decl, &s, Some(tab), Some(&report));
         assert_eq!(a, ["--session-id", tab, "--settings", r#"{"hooks":{}}"#], "no report yet: the tab's own id; the hook passed as written");
-        assert!(env.contains(&("KANDINSKY_SESSION_REPORT".to_string(), report.to_string_lossy().into_owned())));
+        let report_str = report.to_string_lossy().into_owned();
+        assert!(env.contains(&("KANDINSKY_SESSION_REPORT".to_string(), report_str.clone())));
+        assert!(env.contains(&("ATLAS_SESSION_REPORT".to_string(), report_str)));
         // the agent moved the conversation (/clear) and reported it; its transcript exists
         std::fs::write(&report, format!(r#"{{"session_id":"{moved}","source":"clear"}}"#)).unwrap();
         std::fs::create_dir_all(t.path().join("projects/-home-x")).unwrap();

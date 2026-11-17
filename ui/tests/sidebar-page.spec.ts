@@ -48,9 +48,8 @@ test("bookmarks: a tab and a saved search go to the bookmarks file and show in F
   await page.keyboard.type("self-energy");
   await palette.getByText("Save the search").click();
   await expect(fav.locator(".fav-row", { hasText: "Search: self-energy" })).toBeVisible();
-  const text = await fileText(page, FILES.bookmarks);
-  expect(text).toContain("# mine");
-  expect(text).toContain("search: self-energy");
+  await expect.poll(() => fileText(page, FILES.bookmarks)).toContain("search: self-energy");
+  expect(await fileText(page, FILES.bookmarks)).toContain("# mine");
 
   // edited as text: Favorites follows the file, and clicking Preferences opens Settings
   await put(page, FILES.bookmarks, "pins: []\nbookmarks:\n  - {command: ui.settings, title: Preferences}\n");

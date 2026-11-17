@@ -17,6 +17,8 @@ export function createInlinePropsHost(
   el.className = "cm-notion-inline-props";
   const state = $state({ text: initialText, view: initialView, onopen: onopen ?? (() => {}) });
   const app = mount(InlineProperties, { target: el, props: state });
+  const ro = new ResizeObserver(() => state.view()?.requestMeasure());
+  ro.observe(el);
   return {
     el,
     update(text, view, open) {
@@ -25,6 +27,7 @@ export function createInlinePropsHost(
       state.onopen = open ?? (() => {});
     },
     destroy() {
+      ro.disconnect();
       void unmount(app);
     },
   };

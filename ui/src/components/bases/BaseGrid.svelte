@@ -302,13 +302,22 @@
     };
     const out: { r: BaseRow; depth: number; childCount: number; doneChildren: number }[] = [];
     const visited = new Set<string>();
+    const markHidden = (p: string) => {
+      for (const ch of kids.get(p) ?? []) {
+        if (!visited.has(ch.path)) {
+          visited.add(ch.path);
+          markHidden(ch.path);
+        }
+      }
+    };
     const pushNode = (r: BaseRow, depth: number) => {
       if (visited.has(r.path)) return;
       visited.add(r.path);
       const st = countSub(r.path);
       out.push({ r, depth, childCount: st.total, doneChildren: st.done });
-      if (st.total > 0 && !collapsedParents.has(r.path)) {
-        for (const ch of kids.get(r.path) ?? []) pushNode(ch, Math.min(4, depth + 1));
+      if (st.total > 0) {
+        if (collapsedParents.has(r.path)) markHidden(r.path);
+        else for (const ch of kids.get(r.path) ?? []) pushNode(ch, Math.min(4, depth + 1));
       }
     };
     for (const r of rows) { if (!hasParent.has(r.path)) pushNode(r, 0); }

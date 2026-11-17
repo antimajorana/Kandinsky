@@ -1,16 +1,17 @@
 <script lang="ts">
   // Unified Day Workspace: pairs chronological Day Events & Tasks with that day's lazy Daily Note editor (`@container` responsive).
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import Icon from "../Icon.svelte";
   import EventPopover from "./EventPopover.svelte";
-  import { api } from "../../lib/api";
+  import { api, ApiError } from "../../lib/api";
   import { openPath } from "../../lib/dock";
   import { createEditor, type KandinskyEditor } from "../../lib/editor/create";
-  import { toast } from "../../lib/state.svelte";
-  import { app } from "../../lib/state.svelte";
+  import { phone } from "../../lib/phone.svelte";
+  import { app, toast } from "../../lib/state.svelte";
   import { errText } from "../../lib/text";
+  import { onVaultChange } from "../../lib/vault";
   import type { CalendarEvent, DayLogInfo, WeekStart } from "../../lib/types";
-  import { addDays, colorSpec, formatDayHeading, isVideoMeetingUrl, monthGridDays, pad2, parseIso, todayIso, weekdayNames } from "./calendar-dates";
+  import { addDays, colorSpec, formatDayHeading, isVideoMeetingUrl, monthGridDays, parseIso, todayIso, weekdayNames } from "./calendar-dates";
 
   let {
     date,
@@ -41,7 +42,11 @@
   let loadedFor = "";
   let dirtyPath = "";
   let dirtyMtime: number | undefined;
+  let dirtySeq = 0;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  let inFlightSave: Promise<void> | null = null;
+  let draftSnapshot: { path: string; text: string; mtime: number | undefined } | null = null;
+  const savedDrafts = new Map<string, { text: string; mtime: number | undefined }>();
 
   // Mini-month picker state follows selected date when opened.
   let pickYear = $state(parseIso(today).getFullYear());
@@ -53,44 +58,133 @@
       .sort((a, b) => Number(a.all_day) - Number(b.all_day) || (a.start ?? "").localeCompare(b.start ?? "") || a.title.localeCompare(b.title)),
   );
 
-  async function flushSave(path = dirtyPath, text = editor?.view.state.doc.toString() ?? "", mtime = dirtyMtime): Promise<void> {
+  async function flushSave(
+    path = dirtyPath,
+    text = editor?.view.state.doc.toString() ?? draftSnapshot?.text ?? "",
+    keepalive = false,
+  ): Promise<void> {
     clearTimeout(saveTimer);
     saveTimer = undefined;
     if (!dirty || !path) return;
-    dirty = false;
-    saving = true;
-    try {
-      const r = await api.putFile(path, text, mtime);
-      dirtyMtime = r.mtime;
-      if (dayInfo && dayInfo.path === path) {
-        dayInfo = { ...dayInfo, exists: true, mtime: r.mtime, text };
+    if (keepalive) {
+      const seqAtStart = dirtySeq;
+      const mtimeAtStart = dirtyMtime;
+      void api.putFile(path, text, mtimeAtStart, false, true, mtimeAtStart === undefined).then((r) => {
+        if (dirtyPath === path && dirtySeq === seqAtStart) {
+          dirtyMtime = r.mtime;
+          if (r.written !== false) {
+            dirty = false;
+            if (draftSnapshot?.path === path) draftSnapshot = null;
+            savedDrafts.delete(path);
+          }
+        }
+      }).catch(() => {});
+      return;
+    }
+    while (inFlightSave) {
+      await inFlightSave;
+    }
+    if (!dirty || !path) return;
+    const run = (async () => {
+      while (dirty) {
+        const seqAtStart = dirtySeq;
+        const savePath = dirtyPath || path;
+        const saveText = editor && loadedFor.endsWith(`:${savePath}`)
+          ? editor.view.state.doc.toString()
+          : (draftSnapshot?.path === savePath ? draftSnapshot.text : text);
+        const saveMtime = dirtyMtime;
+        saving = true;
+        try {
+          const r = await api.putFile(savePath, saveText, saveMtime, false, false, saveMtime === undefined);
+          dirtyMtime = r.mtime;
+          if (r.written === false) {
+            toast("Could not save Daily Note", "Daily Note was created elsewhere — save again to keep your edits or switch days to reload.", "error");
+            break;
+          }
+          savedDrafts.delete(savePath);
+          if (draftSnapshot && draftSnapshot.path === savePath && dirtySeq === seqAtStart) {
+            draftSnapshot = null;
+          }
+          if (dayInfo && dayInfo.path === savePath) {
+            dayInfo = { ...dayInfo, exists: true, mtime: r.mtime, text: saveText };
+          }
+          if (dirtySeq === seqAtStart) dirty = false;
+          onrefresh();
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 409 && err.diskMtime !== undefined) {
+            dirtyMtime = err.diskMtime;
+          }
+          toast("Could not save Daily Note", errText(err), "error");
+          break;
+        } finally {
+          saving = false;
+        }
       }
-      onrefresh();
-    } catch (err) {
-      toast("Could not save Daily Note", errText(err), "error");
+    })();
+    inFlightSave = run;
+    try {
+      await run;
     } finally {
-      saving = false;
+      if (inFlightSave === run) inFlightSave = null;
     }
   }
 
   function scheduleSave(path: string): void {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => { void flushSave(path, editor?.view.state.doc.toString() ?? "", dirtyMtime); }, 450);
+    saveTimer = setTimeout(() => { void flushSave(path); }, 450);
+  }
+
+  async function refreshCurrentDayMetadata(): Promise<void> {
+    const targetDate = date;
+    try {
+      const info = await api.dayLog(targetDate);
+      if (targetDate !== date) return;
+      if (dirty || inFlightSave) {
+        return;
+      }
+      dayInfo = info;
+      dirtyPath = info.path;
+      dirtyMtime = info.mtime;
+      if (editor && info.text !== editor.view.state.doc.toString()) {
+        editor.setDoc(info.text);
+      }
+    } catch { /* silent background sync */ }
   }
 
   async function loadDay(targetDate: string): Promise<void> {
     if (dirty && dirtyPath) await flushSave();
+    while (inFlightSave) await inFlightSave;
+    if (dirty && dirtyPath) {
+      const unsaved = editor?.view.state.doc.toString() ?? draftSnapshot?.text;
+      if (unsaved !== undefined) {
+        savedDrafts.set(dirtyPath, { text: unsaved, mtime: dirtyMtime });
+      }
+      toast("Kept unsaved draft", `${dirtyPath} could not be saved yet.`, "error");
+    }
     loadingNote = true;
     noteError = "";
     try {
       const info = await api.dayLog(targetDate);
       if (targetDate !== date) return;
-      dayInfo = info;
-      dirty = false;
-      dirtyPath = info.path;
-      dirtyMtime = info.mtime;
-      loadedFor = `${info.day}:${info.path}`;
-      mountEditor(info);
+      const pending = savedDrafts.get(info.path);
+      if (pending) {
+        dayInfo = { ...info, text: pending.text };
+        dirty = true;
+        dirtySeq += 1;
+        draftSnapshot = { path: info.path, text: pending.text, mtime: pending.mtime ?? info.mtime };
+        dirtyPath = info.path;
+        dirtyMtime = pending.mtime ?? info.mtime;
+        loadedFor = `${info.day}:${info.path}`;
+        mountEditor(dayInfo);
+      } else {
+        dayInfo = info;
+        dirty = false;
+        draftSnapshot = null;
+        dirtyPath = info.path;
+        dirtyMtime = info.mtime;
+        loadedFor = `${info.day}:${info.path}`;
+        mountEditor(info);
+      }
     } catch (err) {
       if (targetDate === date) noteError = errText(err);
     } finally {
@@ -106,16 +200,28 @@
       parent: editorHost,
       doc: info.text,
       path: info.path,
-      vim: app.vimEnabled,
+      vim: app.vimEnabled && !phone.on,
       caretEnd: true,
       onChange: (typed) => {
         if (!typed) return;
         dirty = true;
+        dirtySeq += 1;
+        draftSnapshot = {
+          path: info.path,
+          text: editor?.view.state.doc.toString() ?? info.text,
+          mtime: dirtyMtime,
+        };
         scheduleSave(info.path);
       },
       onSave: () => {
         dirty = true;
-        void flushSave(info.path, editor?.view.state.doc.toString() ?? "", dirtyMtime);
+        dirtySeq += 1;
+        draftSnapshot = {
+          path: info.path,
+          text: editor?.view.state.doc.toString() ?? info.text,
+          mtime: dirtyMtime,
+        };
+        void flushSave(info.path);
       },
       onOpenLink: (target, opts) => {
         openPath(target, undefined, { beside: opts?.beside });
@@ -135,21 +241,45 @@
     }
   });
 
+  let offVault: (() => void) | undefined;
+  const onBeforeUnload = () => {
+    if (dirty && dirtyPath) {
+      const text = editor?.view.state.doc.toString() ?? draftSnapshot?.text ?? "";
+      void flushSave(dirtyPath, text, true);
+    }
+  };
+  onMount(() => {
+    window.addEventListener("beforeunload", onBeforeUnload);
+    offVault = onVaultChange(() => {
+      if (dayInfo) void refreshCurrentDayMetadata();
+    });
+  });
+
   onDestroy(() => {
-    if (dirty && dirtyPath) void flushSave();
+    window.removeEventListener("beforeunload", onBeforeUnload);
+    offVault?.();
     clearTimeout(saveTimer);
+    if (dirty && dirtyPath) {
+      const text = editor?.view.state.doc.toString() ?? draftSnapshot?.text ?? "";
+      void flushSave(dirtyPath, text, true);
+    }
     editor?.destroy();
     editor = null;
   });
 
   async function openInFullPane(): Promise<void> {
     if (!dayInfo) return;
-    if (!dayInfo.exists) {
-      const created = await api.ensureDayLog(date);
-      dayInfo = created;
-      dirtyMtime = created.mtime;
-    } else if (dirty) {
+    if (dirty) {
       await flushSave();
+      while (inFlightSave) await inFlightSave;
+      if (dirty) return;
+    } else {
+      while (inFlightSave) await inFlightSave;
+      if (!dayInfo.exists) {
+        const created = await api.ensureDayLog(date);
+        dayInfo = created;
+        dirtyMtime = created.mtime;
+      }
     }
     openPath(dayInfo.path);
   }
@@ -251,7 +381,7 @@
 
     <section class="note-col">
       <div class="note-status">
-        <span class="note-path">{dayInfo?.path ?? `notes/log/${pad2(parseIso(date).getMonth() + 1)}-${pad2(parseIso(date).getDate())}`}</span>
+        <span class="note-path">{dayInfo?.path ?? `Daily Note · ${date}`}</span>
         <span class="draft-pill" class:saved={dayInfo?.exists && !dirty}>
           {#if saving}Saving…{:else if dirty}Unsaved changes{:else if dayInfo?.exists}Saved{:else}Draft — created when you start writing{/if}
         </span>
@@ -271,7 +401,7 @@
     initial={editingEvent === "new" ? null : editingEvent}
     defaultDate={date}
     onclose={() => (editingEvent = null)}
-    onsaved={onrefresh}
+    onsaved={() => { onrefresh(); void refreshCurrentDayMetadata(); }}
   />
 {/if}
 

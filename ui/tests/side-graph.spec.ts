@@ -41,7 +41,7 @@ test("Graph: Local follows the active note; Enter in the filter opens the match"
 test("Graph: an empty drawing explains itself", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await page.route("**/api/graph*", (r) => r.fulfill({ json: { nodes: [], edges: [] } }));
+  await page.route("**/api/base/query", (r) => r.fulfill({ json: { views: [{ name: "graph", columns: [], rows: [] }] } }));
   await page.keyboard.press("Meta+Shift+G");
   await expect(page.locator(".graph-pane .empty")).toContainText("No notes yet");
 });

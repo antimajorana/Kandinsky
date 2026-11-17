@@ -15,8 +15,8 @@ use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 pub const PORT: u16 = 23119;
 const API_VERSION: &str = "3";
@@ -501,44 +501,79 @@ fn serve_one<H: Host>(c: &Connector<H>, mut stream: std::net::TcpStream) {
 /// The listener while the connector is wanted: stopped by [`Listener::stop`] (the setting switched off, the helper
 /// ending). A port held by Zotero (or another vault's Kandinsky) is tried again each minute.
 pub struct Listener {
-    stop: Arc<AtomicBool>,
+    stop: Arc<(Mutex<bool>, Condvar)>,
     bound: Arc<AtomicBool>,
     pub port: u16,
 }
 
+fn is_stopped(stop: &(Mutex<bool>, Condvar)) -> bool {
+    *stop.0.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+fn wait_or_stop(stop: &(Mutex<bool>, Condvar), dur: Duration) -> bool {
+    let (lock, cv) = stop;
+    let mut stopped = lock.lock().unwrap_or_else(|e| e.into_inner());
+    let deadline = Instant::now() + dur;
+    while !*stopped {
+        let rem = deadline.saturating_duration_since(Instant::now());
+        if rem.is_zero() {
+            return false;
+        }
+        let (guard, _) = cv.wait_timeout(stopped, rem).unwrap_or_else(|e| e.into_inner());
+        stopped = guard;
+    }
+    true
+}
+
 impl Listener {
     pub fn start<H: Host + Send + 'static>(c: Connector<H>, port: u16) -> Listener {
-        let (stop, bound) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+        let stop = Arc::new((Mutex::new(false), Condvar::new()));
+        let bound = Arc::new(AtomicBool::new(false));
         let (s, b) = (stop.clone(), bound.clone());
         std::thread::spawn(move || {
             let mut said = false;
-            while !s.load(Ordering::Relaxed) {
+            while !is_stopped(&s) {
                 match std::net::TcpListener::bind(("127.0.0.1", port)) {
                     Ok(l) => {
                         eprintln!("papers: Zotero Connector endpoint on 127.0.0.1:{port} (browser saves go to the references)");
                         b.store(true, Ordering::Relaxed);
                         let _ = l.set_nonblocking(true); // so a stop is seen between connections
-                        while !s.load(Ordering::Relaxed) {
+                        let mut accept_err_said = false;
+                        while !is_stopped(&s) {
                             match l.accept() {
                                 Ok((stream, _)) => serve_one(&c, stream),
-                                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(150)),
-                                Err(e) => eprintln!("papers: connector: {e}"),
+                                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                                    if wait_or_stop(&s, Duration::from_millis(150)) {
+                                        break;
+                                    }
+                                }
+                                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                                Err(e) => {
+                                    if !accept_err_said {
+                                        eprintln!("papers: connector: {e}");
+                                        accept_err_said = true;
+                                    }
+                                    if wait_or_stop(&s, Duration::from_millis(250)) {
+                                        break;
+                                    }
+                                }
                             }
                         }
                         b.store(false, Ordering::Relaxed);
                         return;
                     }
-                    Err(_) if !said => {
-                        eprintln!("papers: port {port} is taken (Zotero is running?) — the browser saves to Zotero; retrying each minute");
+                    Err(e) if !said => {
+                        if e.kind() == std::io::ErrorKind::AddrInUse {
+                            eprintln!("papers: port {port} is taken (Zotero or another Kandinsky instance is running?) — retrying each minute");
+                        } else {
+                            eprintln!("papers: connector port {port} bind failed ({e}) — retrying each minute");
+                        }
                         said = true;
                     }
                     Err(_) => {}
                 }
-                for _ in 0..60 {
-                    if s.load(Ordering::Relaxed) {
-                        return;
-                    }
-                    std::thread::sleep(Duration::from_secs(1));
+                if wait_or_stop(&s, Duration::from_secs(60)) {
+                    return;
                 }
             }
         });
@@ -551,7 +586,9 @@ impl Listener {
     }
 
     pub fn stop(&self) {
-        self.stop.store(true, Ordering::Relaxed);
+        let (lock, cv) = &*self.stop;
+        *lock.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        cv.notify_all();
     }
 }
 
@@ -721,5 +758,19 @@ mod tests {
         stream.read_to_string(&mut out).unwrap();
         assert!(out.starts_with("HTTP/1.1 200 OK") && out.contains("X-Zotero-Connector-API-Version: 3") && out.contains("supportsAttachmentUpload"), "{out}");
         l.stop();
+    }
+
+    #[test]
+    fn listener_handles_taken_port_and_stops_promptly() {
+        let (_t, a) = app();
+        let held = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = held.local_addr().unwrap().port();
+        let l = Listener::start(a, port);
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!l.listening());
+        let t0 = Instant::now();
+        l.stop();
+        drop(l);
+        assert!(t0.elapsed() < Duration::from_secs(2));
     }
 }

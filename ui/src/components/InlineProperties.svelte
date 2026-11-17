@@ -77,8 +77,8 @@
 
 {#if data === null}
   <div class="inline-props invalid" data-testid="inline-properties-error">
-    <span>Frontmatter syntax needs attention.</span>
-    <button type="button" class="fix-btn" onclick={() => { const v = view(); if (v) editRawProperties(v); }}>Edit YAML</button>
+    <span>Properties syntax needs attention.</span>
+    <button type="button" class="fix-btn" onclick={() => { const v = view(); if (v) editRawProperties(v); }}>Edit properties text</button>
   </div>
 {:else}
   <div class="inline-props" bind:this={root} data-testid="inline-properties">
@@ -141,8 +141,8 @@
 {/if}
 
 <style>
-  .inline-props { max-width: var(--measure, 740px); margin: 4px auto 12px; padding: 4px 0 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
-  .inline-props.invalid { flex-direction: row; align-items: center; gap: 10px; font-size: 12.5px; color: var(--red); padding: 8px 10px; border-radius: var(--radius); background: var(--red-soft); }
+  .inline-props { max-width: var(--measure, 740px); margin: 0 auto; padding: 8px 0 12px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
+  .inline-props.invalid { margin: 0 auto; flex-direction: row; align-items: center; gap: 10px; font-size: 12.5px; color: var(--red); padding: 8px 10px; border-radius: var(--radius); background: var(--red-soft); }
   .fix-btn { padding: 2px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); color: var(--text); font-size: 12px; }
   .prop-row { display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr) 22px; align-items: center; gap: 6px; padding: 1px 0; }
   .prop-key { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-muted); font-size: calc(12.5px * var(--ui-scale, 1)); padding: 3px 6px; border-radius: var(--radius-sm); }

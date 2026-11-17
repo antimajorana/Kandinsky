@@ -3,7 +3,8 @@
   import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
   import { EditorView } from "@codemirror/view";
   import Icon from "../Icon.svelte";
-  import { BUILTIN_FIELDS, ROW_VIEW_FIELDS, type OptionField } from "../../lib/block-options";
+  import { optionFields } from "../../lib/blocks";
+  import type { OptionField } from "../../lib/block-options";
   import { blockType } from "../../lib/panes";
 
   let {
@@ -21,7 +22,7 @@
   let error = $state("");
 
   const type = $derived(blockType(src));
-  const fields: OptionField[] = $derived(BUILTIN_FIELDS[type] ?? ROW_VIEW_FIELDS);
+  const fields: OptionField[] = $derived(optionFields(type));
 
   function loadDraft(): void {
     error = "";
@@ -52,13 +53,28 @@
     const doc = view.state.doc;
     const startLine = doc.lineAt(Math.max(0, Math.min(at, doc.length)));
     let openLineNo = startLine.number;
-    // Walk backwards/forwards briefly to locate exact opening fence matching block content
-    for (let ln = Math.max(1, startLine.number - 2); ln <= Math.min(doc.lines, startLine.number + 2); ln++) {
-      if (/^\s*```+\s*\S/.test(doc.line(ln).text)) { openLineNo = ln; break; }
+    // Check the anchor line first, then immediate neighbours, so a neighbouring fence above isn't matched first.
+    for (const delta of [0, -1, 1, -2, 2]) {
+      const ln = startLine.number + delta;
+      if (ln < 1 || ln > doc.lines) continue;
+      const m = /^[ \t]*(`{3,}|~{3,})[ \t]*\S/.exec(doc.line(ln).text);
+      if (m) {
+        openLineNo = ln;
+        break;
+      }
     }
-    if (!/^\s*```/.test(doc.line(openLineNo).text)) return null;
+    const openMatch = /^[ \t]*(`{3,}|~{3,})/.exec(doc.line(openLineNo).text);
+    if (!openMatch) return null;
+    const fenceChar = openMatch[1][0];
+    const fenceLen = openMatch[1].length;
     let closeLineNo = openLineNo + 1;
-    while (closeLineNo <= doc.lines && !/^\s*```\s*$/.test(doc.line(closeLineNo).text)) closeLineNo++;
+    while (closeLineNo <= doc.lines) {
+      const t = doc.line(closeLineNo).text.replace(/^[ \t]+/, "");
+      let run = 0;
+      while (t[run] === fenceChar) run++;
+      if (run >= fenceLen && t.slice(run).trim() === "") break;
+      closeLineNo++;
+    }
     if (closeLineNo > doc.lines) return null;
     return {
       from: doc.line(openLineNo).from,

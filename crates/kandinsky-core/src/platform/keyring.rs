@@ -67,7 +67,7 @@ pub fn set(vault_key: &str, plugin: &str, name: &str, value: &str) -> Result<(),
 pub fn delete(vault_key: &str, plugin: &str, name: &str) -> Result<bool, String> {
     let target = secret_target(vault_key, plugin, name);
     let existed = delete_chunked(&target)?;
-    let _ = update_index(vault_key, plugin, name, false);
+    update_index(vault_key, plugin, name, false)?;
     Ok(existed)
 }
 
@@ -83,8 +83,11 @@ fn read_index(vault_key: &str) -> Result<BTreeMap<String, Vec<String>>, String> 
     serde_json::from_str(&raw).map_err(|e| format!("keyring index: {e}"))
 }
 
+static INDEX_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn update_index(vault_key: &str, plugin: &str, name: &str, present: bool) -> Result<(), String> {
-    let mut map = read_index(vault_key).unwrap_or_default();
+    let _guard = INDEX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut map = read_index(vault_key)?;
     let entry = map.entry(plugin.to_string()).or_default();
     if present {
         if !entry.iter().any(|x| x == name) {
@@ -126,10 +129,28 @@ fn get_chunked(target: &str) -> Result<Option<String>, String> {
     Ok(Some(first))
 }
 
+fn existing_chunk_count(target: &str) -> usize {
+    let Some(first) = raw_get(target).ok().flatten() else {
+        return 0;
+    };
+    if let Some(rest) = first.strip_prefix("kchunk:") {
+        if let Some((count_s, _)) = rest.split_once(':') {
+            if let Ok(count) = count_s.parse::<usize>() {
+                return count.max(1);
+            }
+        }
+    }
+    1
+}
+
 fn set_chunked(target: &str, value: &str) -> Result<(), String> {
-    let _ = delete_chunked(target);
+    let old_count = existing_chunk_count(target);
     if value.len() <= CHUNK_BYTES && !value.starts_with("kchunk:") {
-        return raw_set(target, value);
+        raw_set(target, value)?;
+        for i in 1..old_count {
+            let _ = raw_delete(&format!("{target}#{i}"));
+        }
+        return Ok(());
     }
     // Split UTF-8 cleanly at codepoint boundaries inside CHUNK_BYTES.
     let mut chunks: Vec<&str> = Vec::new();
@@ -144,12 +165,19 @@ fn set_chunked(target: &str, value: &str) -> Result<(), String> {
         start = end;
     }
     if chunks.is_empty() {
-        return raw_set(target, "");
+        raw_set(target, "")?;
+        for i in 1..old_count {
+            let _ = raw_delete(&format!("{target}#{i}"));
+        }
+        return Ok(());
+    }
+    for (i, chunk) in chunks.iter().enumerate().skip(1) {
+        raw_set(&format!("{target}#{i}"), chunk)?;
     }
     let head = format!("kchunk:{}:{}", chunks.len(), chunks[0]);
     raw_set(target, &head)?;
-    for (i, chunk) in chunks.iter().enumerate().skip(1) {
-        raw_set(&format!("{target}#{i}"), chunk)?;
+    for i in chunks.len()..old_count {
+        let _ = raw_delete(&format!("{target}#{i}"));
     }
     Ok(())
 }
@@ -263,15 +291,42 @@ fn raw_get(target: &str) -> Result<Option<String>, String> {
 }
 
 #[cfg(target_os = "macos")]
+fn quote_security_arg(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for ch in s.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' | '\r' => {}
+            _ => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
+}
+
+#[cfg(target_os = "macos")]
 fn raw_set(target: &str, value: &str) -> Result<(), String> {
-    let status = std::process::Command::new("/usr/bin/security")
-        .args(["add-generic-password", "-U", "-s", target, "-a", "kandinsky", "-w", value])
+    use std::io::Write;
+    let cmd = format!(
+        "add-generic-password -U -s {} -a kandinsky -w {}\n",
+        quote_security_arg(target),
+        quote_security_arg(value)
+    );
+    let mut child = std::process::Command::new("/usr/bin/security")
+        .arg("-i")
+        .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
-        .output()
+        .spawn()
         .map_err(|e| e.to_string())?;
-    if !status.status.success() {
-        return Err(String::from_utf8_lossy(&status.stderr).to_string());
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(cmd.as_bytes());
+    }
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).to_string());
     }
     Ok(())
 }
@@ -294,7 +349,8 @@ fn raw_get(target: &str) -> Result<Option<String>, String> {
     if !out.status.success() {
         return Ok(None);
     }
-    Ok(Some(String::from_utf8_lossy(&out.stdout).trim_end_matches('\n').to_string()))
+    let s = String::from_utf8_lossy(&out.stdout);
+    Ok(Some(s.strip_suffix('\n').unwrap_or(&s).to_string()))
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]

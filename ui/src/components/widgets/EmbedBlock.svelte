@@ -27,6 +27,21 @@
     try { return new URL(rawTarget).hostname.replace(/^www\./, ""); }
     catch { return ""; }
   });
+  const isSameOrigin = $derived.by(() => {
+    if (!isWebUrl) return false;
+    try {
+      const targetUrl = new URL(rawTarget);
+      if (typeof window === "undefined") return false;
+      const loc = window.location;
+      if (targetUrl.origin === loc.origin) return true;
+      const isLoopback = (h: string) => h === "127.0.0.1" || h === "localhost" || h === "[::1]";
+      const targetPort = targetUrl.port || (targetUrl.protocol === "https:" ? "443" : "80");
+      const locPort = loc.port || (loc.protocol === "https:" ? "443" : "80");
+      return isLoopback(targetUrl.hostname) && isLoopback(loc.hostname) && targetPort === locPort;
+    } catch {
+      return true;
+    }
+  });
 
   $effect(() => {
     const target = rawTarget;
@@ -72,13 +87,17 @@
       </div>
     </div>
     {#if showIframe}
-      <iframe
-        class="web-frame"
-        title={customTitle || hostName || "Embedded web content"}
-        src={rawTarget}
-        sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-        referrerpolicy="no-referrer"
-      ></iframe>
+      {#if isSameOrigin}
+        <p class="empty">Same-origin URLs cannot be previewed inside a sandboxed frame. Use Open instead.</p>
+      {:else}
+        <iframe
+          class="web-frame"
+          title={customTitle || hostName || "Embedded web content"}
+          src={rawTarget}
+          sandbox="allow-scripts allow-popups allow-forms"
+          referrerpolicy="no-referrer"
+        ></iframe>
+      {/if}
     {/if}
   {:else if resolvedVaultPath && AUDIO_RE.test(resolvedVaultPath)}
     <div class="media-bar">

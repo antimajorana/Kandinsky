@@ -2,10 +2,10 @@
 import { foldable, foldEffect, foldedRanges, unfoldEffect } from "@codemirror/language";
 import { RangeSetBuilder, type EditorState, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from "@codemirror/view";
+import { fences } from "../fence-walk";
 import { frontmatterClose } from "./live/live-preview.js";
 
 const HEADING_RE = /^\s{0,3}(#{1,4})\s+\S/;
-const FENCE_RE = /^\s*(`{3,}|~{3,})/;
 
 function headingSectionRange(state: EditorState, lineNumber: number, level: number): { from: number; to: number } | null {
   const f = foldable(state, state.doc.line(lineNumber).from, state.doc.line(lineNumber).to);
@@ -14,13 +14,10 @@ function headingSectionRange(state: EditorState, lineNumber: number, level: numb
   const doc = state.doc;
   const openLine = doc.line(lineNumber);
   let endLine = lineNumber;
-  let inFence = "";
+  const walk = fences();
   for (let i = lineNumber + 1; i <= doc.lines; i++) {
     const txt = doc.line(i).text;
-    const fm = FENCE_RE.exec(txt);
-    if (!inFence && fm) inFence = fm[1][0].repeat(fm[1].length);
-    else if (inFence && txt.trimStart().startsWith(inFence)) inFence = "";
-    if (!inFence) {
+    if (!walk.code(txt)) {
       const hm = HEADING_RE.exec(txt);
       if (hm && hm[1].length <= level) break;
     }
@@ -81,13 +78,11 @@ function buildDecorations(view: EditorView): DecorationSet {
   const doc = view.state.doc;
   const fmEnd = frontmatterClose(doc);
   const folded = foldedRanges(view.state);
-  let inFence = "";
+  const walk = fences();
 
   for (let i = fmEnd + 1; i <= doc.lines; i++) {
     const line = doc.line(i);
-    const fm = FENCE_RE.exec(line.text);
-    if (!inFence && fm) { inFence = fm[1][0].repeat(fm[1].length); continue; }
-    if (inFence) { if (line.text.trimStart().startsWith(inFence)) inFence = ""; continue; }
+    if (walk.code(line.text)) continue;
     const hm = HEADING_RE.exec(line.text);
     if (!hm) continue;
     let hiddenLines = 0;

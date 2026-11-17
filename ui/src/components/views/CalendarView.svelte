@@ -2,11 +2,13 @@
   // Interactive `calendar` view widget: shows tasks/notes (when passed via /api/view) AND local calendar events, and clicking any day opens the native Calendar Day Workspace.
   import { onMount } from "svelte";
   import MonthGrid from "../calendar/MonthGrid.svelte";
-  import { addMonths, parseIso, todayIso } from "../calendar/calendar-dates";
+  import { addMonths, monthGridDays, parseIso, todayIso } from "../calendar/calendar-dates";
   import { api } from "../../lib/api";
   import { open, openPath } from "../../lib/dock";
   import type { ViewRow } from "../../lib/gen/ViewRow";
-  import type { CalendarEvent, CalendarRangeResponse } from "../../lib/types";
+  import { reloadOnChange } from "../../lib/reload-on-change";
+  import { settings } from "../../lib/settings.svelte";
+  import type { CalendarEvent, CalendarRangeResponse, WeekStart } from "../../lib/types";
 
   let {
     rows = [],
@@ -27,17 +29,26 @@
   // svelte-ignore state_referenced_locally
   let anchor = $state(initialDate);
   let rangeData = $state<CalendarRangeResponse | null>(null);
+  let hostEl: HTMLDivElement | undefined = $state();
 
+  const weekStart: WeekStart = $derived(settings.config?.calendar.week_start ?? "monday");
   const d = $derived(parseIso(anchor));
   const year = $derived(d.getFullYear());
   const month0 = $derived(d.getMonth());
   const title = $derived(d.toLocaleDateString(undefined, { month: "long", year: "numeric" }));
 
-  $effect(() => {
-    const from = `${year}-${String(month0 + 1).padStart(2, "0")}-01`;
-    const last = new Date(year, month0 + 1, 0).getDate();
-    const to = `${year}-${String(month0 + 1).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+  function refreshCalendar(): void {
+    const cells = monthGridDays(year, month0, weekStart);
+    const from = cells[0].iso;
+    const to = cells[cells.length - 1].iso;
     void api.calendar(from, to).then((r) => { rangeData = r; }, () => {});
+  }
+
+  $effect(() => {
+    void year;
+    void month0;
+    void weekStart;
+    refreshCalendar();
   });
 
   const combinedEvents = $derived.by<CalendarEvent[]>(() => {
@@ -79,10 +90,15 @@
 
   onMount(() => {
     anchor = initialDate;
+    return reloadOnChange(() => refreshCalendar(), {
+      wait: 400,
+      wants: (p) => /\.(md|base|ics)$/i.test(p),
+      host: () => hostEl ?? null,
+    });
   });
 </script>
 
-<div class="cal-embed kandinsky-view-calendar" data-testid="embedded-calendar">
+<div class="cal-embed kandinsky-view-calendar" data-testid="embedded-calendar" bind:this={hostEl}>
   <header class="cal-top">
     <button type="button" aria-label="Previous month" onclick={() => (anchor = addMonths(anchor, -1))}>‹</button>
     <button type="button" class="t" onclick={() => open({ kind: "calendar", date: anchor, view: "month" })} title="Open full Calendar">{title}</button>
@@ -94,6 +110,7 @@
     {year}
     {month0}
     selectedDate={today}
+    {weekStart}
     days={rangeData?.days ?? []}
     events={combinedEvents}
     {compact}

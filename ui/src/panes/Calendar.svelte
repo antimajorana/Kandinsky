@@ -11,13 +11,14 @@
   import { api } from "../lib/api";
   import type { PaneProps } from "../lib/dock";
   import { openPath } from "../lib/dock";
+  import { calendarGo } from "../lib/registry";
   import { reloadOnChange } from "../lib/reload-on-change";
   import { settings } from "../lib/settings.svelte";
   import { toast } from "../lib/state.svelte";
   import { errText } from "../lib/text";
   import type { CalendarDefaultView, CalendarEvent, CalendarRangeResponse, WeekStart } from "../lib/types";
 
-  let { spec }: PaneProps<"calendar"> = $props();
+  let { spec, panel }: PaneProps<"calendar"> = $props();
 
   const calCfg = $derived(settings.config?.calendar);
   const weekStart: WeekStart = $derived(calCfg?.week_start ?? "monday");
@@ -34,9 +35,17 @@
   let baseChoices = $state<string[]>([]);
   // svelte-ignore state_referenced_locally
   let selectedBases = $state<string[]>(calCfg?.bases ? [...calCfg.bases] : []);
+  let basesCustomized = $state(false);
   let baseMenuOpen = $state(false);
   let jumperOpen = $state(false);
+  let exporting = $state(false);
   let icsInput: HTMLInputElement;
+
+  $effect(() => {
+    if (!basesCustomized && calCfg?.bases) {
+      selectedBases = [...calCfg.bases];
+    }
+  });
 
   const anchorObj = $derived(parseIso(selectedDate));
   const viewYear = $derived(anchorObj.getFullYear());
@@ -61,7 +70,7 @@
     loading = true;
     error = "";
     try {
-      const bases = selectedBases.length ? selectedBases : undefined;
+      const bases = basesCustomized || calCfg?.bases !== undefined ? selectedBases : undefined;
       rangeData = await api.calendar(queryWindow.from, queryWindow.to, bases);
     } catch (err) {
       error = errText(err);
@@ -88,12 +97,20 @@
 
   onMount(() => {
     if (!spec.view && calCfg?.default_view) mode = calCfg.default_view;
+    calendarGo.set(panel.id, (nextDate, nextView) => {
+      if (nextDate) selectedDate = nextDate;
+      if (nextView) mode = nextView;
+    });
     void loadBaseFiles();
-    return reloadOnChange(() => void loadCalendar(), {
+    const offChange = reloadOnChange(() => void loadCalendar(), {
       wait: 400,
       wants: (p) => /\.(md|base|ics)$/i.test(p),
       host: () => host,
     });
+    return () => {
+      offChange();
+      calendarGo.delete(panel.id);
+    };
   });
 
   function stepPeriod(dir: -1 | 1): void {
@@ -149,10 +166,42 @@
   }
 
   function toggleBaseSource(b: string): void {
+    basesCustomized = true;
     selectedBases = selectedBases.includes(b) ? selectedBases.filter((x) => x !== b) : [...selectedBases, b];
   }
 
+  async function exportIcs(): Promise<void> {
+    if (exporting) return;
+    exporting = true;
+    try {
+      const blob = await api.exportCalendarIcs();
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = "kandinsky-calendar.ics";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 1000);
+    } catch (err) {
+      toast("ICS export failed", errText(err), "error");
+    } finally {
+      exporting = false;
+    }
+  }
+
+  function onWindowPointerDown(e: PointerEvent): void {
+    const t = e.target as HTMLElement | null;
+    if (jumperOpen && !t?.closest(".jumper-wrap")) jumperOpen = false;
+    if (baseMenuOpen && !t?.closest(".sources-wrap")) baseMenuOpen = false;
+  }
+
   function onKeydown(e: KeyboardEvent): void {
+    if (e.key === "Escape" && (jumperOpen || baseMenuOpen)) {
+      jumperOpen = false;
+      baseMenuOpen = false;
+      return;
+    }
     const t = e.target as HTMLElement | null;
     if (t && (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t.isContentEditable || t.closest(".cm-editor"))) return;
     if (e.key === "t" || e.key === "T") { e.preventDefault(); selectedDate = todayIso(); }
@@ -166,6 +215,8 @@
 
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 </script>
+
+<svelte:window onpointerdown={onWindowPointerDown} />
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="cal-pane" bind:this={host} onkeydown={onKeydown} role="region" aria-label="Calendar" tabindex="-1" data-testid="calendar-pane">
@@ -225,7 +276,7 @@
       {/if}
       <input type="file" accept=".ics,text/calendar" bind:this={icsInput} onchange={(e) => void handleIcsFile(e)} hidden />
       <button type="button" class="pill-btn" onclick={() => icsInput?.click()} title="Import .ics calendar file">Import .ics</button>
-      <a class="pill-btn" href={api.calendarIcsExportUrl()} download="kandinsky-calendar.ics" title="Export local events as .ics">Export .ics</a>
+      <button type="button" class="pill-btn" disabled={exporting} onclick={() => void exportIcs()} title="Export local events as .ics">Export .ics</button>
       <button type="button" class="primary-btn" onclick={() => (editingEvent = "new")} data-testid="cal-new-event">
         <Icon name="plus" size={13} /> New event
       </button>

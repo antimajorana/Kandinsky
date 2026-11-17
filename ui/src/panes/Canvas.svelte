@@ -27,7 +27,7 @@
   const markerId = `ca-${canvasId().slice(0, 8)}`, MAX_HISTORY = 40;
   let paneEl = $state<HTMLDivElement>(), stageEl = $state<HTMLDivElement>();
   let doc = $state<CanvasDoc>({ nodes: [], edges: [] });
-  let baseMtime: number | undefined, original = "", saving: Promise<void> | null = null, saveTimer = 0;
+  let baseMtime: number | undefined, original = "", saving: Promise<void> | null = null, saveTimer = 0, editRev = 0, disposed = false;
   let dirty = $state(false), conflict = $state(false), error = $state("");
   let panX = $state(120), panY = $state(80), zoom = $state(1), spaceHeld = $state(false);
   const selectedNodes = new SvelteSet<string>();
@@ -35,6 +35,8 @@
   let edit = $state<{ kind: "text" | "group" | "edge"; id: string; value: string } | null>(null);
   let undoStack = $state<string[]>([]), redoStack = $state<string[]>([]);
   const noteCache = new SvelteMap<string, string>(), blobCache = new SvelteMap<string, string>();
+  const blobInflight = new Set<string>(), blobFailed = new Map<string, number>();
+  let endDrag: (() => void) | null = null;
 
   type DragState =
     | { kind: "pan"; sx: number; sy: number; ox: number; oy: number; moved: boolean; clearOnClick: boolean }
@@ -54,18 +56,37 @@
   const isMd = (p: string): boolean => /\.(md|markdown|txt)$/i.test(p);
   const domainOf = (u: string): string => { try { return new URL(u).hostname.replace(/^www\./, "") || u; } catch { return u; } };
 
+  function ensureBlob(path: string): void {
+    if (blobCache.has(path) || blobInflight.has(path)) return;
+    const failedAt = blobFailed.get(path);
+    if (failedAt !== undefined && Date.now() - failedAt < 10_000) return;
+    blobInflight.add(path);
+    void blobUrl(path).then(
+      (u) => {
+        blobInflight.delete(path);
+        blobFailed.delete(path);
+        if (!disposed) blobCache.set(path, u);
+      },
+      () => {
+        blobInflight.delete(path);
+        blobFailed.set(path, Date.now());
+        blobCache.delete(path);
+      },
+    );
+  }
+
   $effect(() => { setDirty(panel.id, dirty); });
   $effect(() => {
     for (const n of doc.nodes) {
       if (n.type === "file" && n.file) {
-        if (IMAGE_RE.test(n.file) && !blobCache.has(n.file)) {
-          blobCache.set(n.file, ""); void blobUrl(n.file).then((u) => blobCache.set(n.file, u), () => {});
+        if (IMAGE_RE.test(n.file)) {
+          ensureBlob(n.file);
         } else if (isMd(n.file) && !noteCache.has(n.file)) {
           noteCache.set(n.file, "…");
           void api.file(n.file).then((f) => noteCache.set(n.file, stripFrontmatter(f.text)), () => noteCache.set(n.file, "*File not found in vault.*"));
         }
-      } else if (n.type === "group" && n.background && !blobCache.has(n.background)) {
-        const bg = n.background; blobCache.set(bg, ""); void blobUrl(bg).then((u) => blobCache.set(bg, u), () => {});
+      } else if (n.type === "group" && n.background) {
+        ensureBlob(n.background);
       }
     }
   });
@@ -87,7 +108,12 @@
     const snap = serializeCanvas(doc);
     if (undoStack[undoStack.length - 1] !== snap) { undoStack = [...undoStack.slice(-(MAX_HISTORY - 1)), snap]; redoStack = []; }
   }
-  function markDirty(): void { dirty = true; clearTimeout(saveTimer); saveTimer = window.setTimeout(() => void save(), 500); }
+  function markDirty(): void {
+    editRev++;
+    dirty = true;
+    clearTimeout(saveTimer);
+    if (!disposed) saveTimer = window.setTimeout(() => void save(), 500);
+  }
   function pruneSelection(): void {
     const valid = new Set(doc.nodes.map((n) => n.id));
     for (const id of [...selectedNodes]) if (!valid.has(id)) selectedNodes.delete(id);
@@ -117,6 +143,7 @@
     if (!dirty && closingText === undefined) return;
     if (conflict) { if (closingText !== undefined) rescue(closingText); return; }
     saving = (async () => {
+      const savedRev = editRev;
       const text = closingText ?? serializeCanvas(doc);
       try {
         let r;
@@ -126,7 +153,15 @@
           else throw e;
         }
         baseMtime = r.mtime; original = text; error = "";
-        if (closingText === undefined) dirty = false;
+        if (closingText === undefined) {
+          if (editRev === savedRev) {
+            dirty = false;
+          } else {
+            dirty = true;
+            clearTimeout(saveTimer);
+            if (!disposed) saveTimer = window.setTimeout(() => void save(), 500);
+          }
+        }
       } catch (e) {
         if (e instanceof ApiError && e.status === 409) conflict = true;
         else error = `Save failed: ${errText(e)}`;
@@ -145,8 +180,13 @@
   async function load(initial = true): Promise<void> {
     try {
       const f = await api.file(spec.path);
-      baseMtime = f.mtime; original = f.text; doc = parseCanvas(f.text); dirty = false; conflict = false; error = "";
-      if (initial) { undoStack = []; redoStack = []; requestAnimationFrame(() => fitToView()); }
+      clearTimeout(saveTimer);
+      edit = null;
+      baseMtime = f.mtime; original = f.text; doc = parseCanvas(f.text);
+      dirty = false; conflict = false; error = "";
+      undoStack = []; redoStack = [];
+      pruneSelection();
+      if (initial) requestAnimationFrame(() => fitToView());
     } catch (e) { error = errText(e); }
   }
 
@@ -193,6 +233,7 @@
   }
 
   function beginDrag(next: DragState): void {
+    endDrag?.();
     drag = next;
     const onMove = (e: PointerEvent) => {
       if (!drag) return;
@@ -233,8 +274,14 @@
         } else { drag.toNode = null; drag.toSide = null; }
       }
     };
+    const detach = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      if (endDrag === onCancel) endDrag = null;
+    };
     const onUp = () => {
-      window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); window.removeEventListener("pointercancel", onUp);
+      detach();
       if (!drag) return;
       if (drag.kind === "pan" && !drag.moved && drag.clearOnClick) { commitEdit(); selectedNodes.clear(); selectedEdgeId = null; }
       else if ((drag.kind === "move" || drag.kind === "resize") && drag.recorded) markDirty();
@@ -245,7 +292,14 @@
       }
       drag = null;
     };
-    window.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp); window.addEventListener("pointercancel", onUp);
+    const onCancel = () => {
+      detach();
+      if (!drag) return;
+      if ((drag.kind === "move" || drag.kind === "resize") && drag.recorded) markDirty();
+      drag = null;
+    };
+    endDrag = onCancel;
+    window.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp); window.addEventListener("pointercancel", onCancel);
   }
 
   function onStageDown(e: PointerEvent): void {
@@ -348,11 +402,33 @@
     }
   }
 
+  async function openRawJson(): Promise<void> {
+    commitEdit();
+    await save();
+    open({ kind: "editor", path: spec.path });
+  }
+
   onMount(() => {
     void load(true);
     paneParks.set(panel.id, () => { commitEdit(); return dirty ? save() : Promise.resolve(); });
     paneFocus.set(panel.id, () => paneEl?.focus({ preventScroll: true }));
+    const onBlur = () => { spaceHeld = false; endDrag?.(); };
+    window.addEventListener("blur", onBlur);
     const offFs = on("fs", (e) => {
+      const activeImages = new Set<string>();
+      for (const n of doc.nodes) {
+        if (n.type === "file" && n.file && IMAGE_RE.test(n.file)) activeImages.add(n.file);
+        else if (n.type === "group" && n.background) activeImages.add(n.background);
+      }
+      for (const p of [...blobCache.keys()]) {
+        if (touches(e.paths, (x) => x === p)) blobCache.delete(p);
+      }
+      for (const p of [...blobFailed.keys()]) {
+        if (touches(e.paths, (x) => x === p)) {
+          blobFailed.delete(p);
+          if (activeImages.has(p)) ensureBlob(p);
+        }
+      }
       for (const [p] of noteCache) if (touches(e.paths, (x) => x === p)) void api.file(p).then((f) => noteCache.set(p, stripFrontmatter(f.text)), () => {});
       if (!touches(e.paths, (p) => p === spec.path) || dirty || saving) return;
       void api.file(spec.path).then((f) => {
@@ -361,6 +437,10 @@
       }, () => {});
     });
     return () => {
+      disposed = true;
+      endDrag?.();
+      spaceHeld = false;
+      window.removeEventListener("blur", onBlur);
       commitEdit(); clearTimeout(saveTimer); if (dirty) void save(serializeCanvas(doc));
       paneParks.delete(panel.id); paneFocus.delete(panel.id); offFs(); setDirty(panel.id, false);
     };
@@ -406,7 +486,7 @@
       <button type="button" class="tbtn" onclick={fitToView} title="Fit all cards into view">Fit</button>
       <span class="sep"></span>
       <button type="button" class="tbtn" onclick={() => window.dispatchEvent(new CustomEvent("kandinsky:toggle-zen"))} title="Zen mode (F11)"><Icon name="maximize" size={13} /> Zen</button>
-      <button type="button" class="tbtn" onclick={() => open({ kind: "editor", path: spec.path })} title="Edit raw .canvas JSON"><Icon name="file-code" size={13} /> JSON</button>
+      <button type="button" class="tbtn" onclick={() => void openRawJson()} title="Edit raw .canvas JSON"><Icon name="file-code" size={13} /> JSON</button>
     </div>
   </div>
 

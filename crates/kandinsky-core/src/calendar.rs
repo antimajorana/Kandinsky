@@ -191,6 +191,16 @@ struct RawEvent {
 }
 
 pub fn query_range(root: &Path, cfg: &Config, from: NaiveDate, to: NaiveDate) -> Result<CalendarRangeResponse> {
+    query_range_with_bases(root, cfg, from, to, None)
+}
+
+pub fn query_range_with_bases(
+    root: &Path,
+    cfg: &Config,
+    from: NaiveDate,
+    to: NaiveDate,
+    bases_filter: Option<&[String]>,
+) -> Result<CalendarRangeResponse> {
     let (from, to) = if to < from { (to, from) } else { (from, to) };
     let mut days = Vec::new();
     let mut d = from;
@@ -206,7 +216,7 @@ pub fn query_range(root: &Path, cfg: &Config, from: NaiveDate, to: NaiveDate) ->
         d = next;
     }
 
-    let raw = collect_raw_events(root, cfg);
+    let raw = collect_raw_events_with_bases(root, cfg, bases_filter);
     let mut events = Vec::new();
     for ev in raw {
         expand_event(&ev, from, to, &mut events);
@@ -228,7 +238,8 @@ pub fn query_range(root: &Path, cfg: &Config, from: NaiveDate, to: NaiveDate) ->
 
 fn note_has_meaningful_content(txt: &str) -> bool {
     let (_, body) = frontmatter::split(txt);
-    let has_fm_events = txt.contains("events:");
+    let props = crate::note_props::Props::from_markdown(txt);
+    let has_fm_events = props.get("events").and_then(Value::as_sequence).is_some_and(|s| !s.is_empty());
     has_fm_events || body.lines().any(|l| {
         let t = l.trim();
         !t.is_empty() && !t.starts_with("# ")
@@ -236,6 +247,10 @@ fn note_has_meaningful_content(txt: &str) -> bool {
 }
 
 fn collect_raw_events(root: &Path, cfg: &Config) -> Vec<RawEvent> {
+    collect_raw_events_with_bases(root, cfg, None)
+}
+
+fn collect_raw_events_with_bases(root: &Path, cfg: &Config, bases_filter: Option<&[String]>) -> Vec<RawEvent> {
     let mut out = Vec::new();
     let events_dir = cfg.calendar.events_dir.trim().trim_matches('/');
     let log_prefix = cfg.log_dir.trim_matches('/');
@@ -284,14 +299,15 @@ fn collect_raw_events(root: &Path, cfg: &Config) -> Vec<RawEvent> {
         }
     }
 
-    collect_base_events(root, cfg, &mut out);
+    collect_base_events(root, cfg, bases_filter, &mut out);
     collect_ics_feeds(root, cfg, &mut out);
     out
 }
 
-fn collect_base_events(root: &Path, cfg: &Config, out: &mut Vec<RawEvent>) {
+fn collect_base_events(root: &Path, cfg: &Config, bases_filter: Option<&[String]>, out: &mut Vec<RawEvent>) {
     let mut seen_notes: HashSet<(String, String)> = HashSet::new();
-    for base_rel in &cfg.calendar.bases {
+    let active_bases: &[String] = bases_filter.unwrap_or(&cfg.calendar.bases);
+    for base_rel in active_bases {
         let Ok(abs) = paths::safe_join(root, base_rel) else { continue };
         let Ok(src) = std::fs::read_to_string(&abs) else { continue };
         let res = crate::bases::evaluate(root, cfg, &src, None);
@@ -624,7 +640,7 @@ pub fn upsert_event(root: &Path, cfg: &Config, req: &CalendarEventUpsert) -> Res
             return reschedule_base_item(root, rest, date, title);
         }
         if let Some(rest) = id.strip_prefix("ds:") {
-            return update_schedule_line(root, rest, title, req);
+            return update_schedule_line(root, cfg, rest, date, title, req);
         }
         if let Some(rest) = id.strip_prefix("dm:") {
             return update_inline_fm_event(root, cfg, rest, date, end_date, req);
@@ -790,29 +806,41 @@ pub fn write_event_page_in_dir(
     end_date: NaiveDate,
     req: &CalendarEventUpsert,
 ) -> Result<CalendarEvent> {
-    let rel = if let Some(r) = existing_rel {
-        r.to_string()
-    } else {
-        let dir = cfg.calendar.events_dir.trim().trim_matches('/');
-        let stem = crate::notes::file_stem(req.title.trim());
-        let stem = if stem.is_empty() { "Event".into() } else { stem };
-        let base_name = format!("{} {stem}", date.format("%Y-%m-%d"));
-        let mut cand = if dir.is_empty() { format!("{base_name}.md") } else { format!("{dir}/{base_name}.md") };
-        let mut n = 2;
-        while paths::safe_join(root, &cand)?.exists() {
-            cand = if dir.is_empty() { format!("{base_name} {n}.md") } else { format!("{dir}/{base_name} {n}.md") };
-            n += 1;
+    if let Some(r) = existing_rel {
+        return write_event_page_at(root, r, true, date, end_date, req);
+    }
+    let dir = cfg.calendar.events_dir.trim().trim_matches('/');
+    let stem = crate::notes::file_stem(req.title.trim());
+    let stem = if stem.is_empty() { "Event".into() } else { stem };
+    let base_name = format!("{} {stem}", date.format("%Y-%m-%d"));
+    let body_seed = req
+        .notes
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| format!("# {}\n\n{s}\n", req.title.trim()))
+        .unwrap_or_else(|| format!("# {}\n", req.title.trim()));
+    let text = build_event_page_markdown(&body_seed, date, end_date, req);
+    let mut n = 1usize;
+    let rel = loop {
+        let cand = if n == 1 {
+            if dir.is_empty() { format!("{base_name}.md") } else { format!("{dir}/{base_name}.md") }
+        } else if dir.is_empty() {
+            format!("{base_name} {n}.md")
+        } else {
+            format!("{dir}/{base_name} {n}.md")
+        };
+        let abs = paths::safe_join(root, &cand)?;
+        if vault_write::create(&abs, text.as_bytes())? == vault_write::Created::New {
+            break cand;
         }
-        cand
+        n += 1;
     };
-    write_event_page_at(root, &rel, date, end_date, req)
+    Ok(calendar_event_for_page(&rel, date, end_date, req))
 }
 
-fn write_event_page_at(root: &Path, rel: &str, date: NaiveDate, end_date: NaiveDate, req: &CalendarEventUpsert) -> Result<CalendarEvent> {
-    let abs = paths::safe_join(root, rel)?;
-    let body_seed = req.notes.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(|s| format!("# {}\n\n{s}\n", req.title.trim())).unwrap_or_else(|| format!("# {}\n", req.title.trim()));
-    let initial = if abs.is_file() { std::fs::read_to_string(&abs)? } else { body_seed };
-    let mut text = frontmatter::set_property(&initial, "type", &"event".into());
+fn build_event_page_markdown(initial: &str, date: NaiveDate, end_date: NaiveDate, req: &CalendarEventUpsert) -> String {
+    let mut text = frontmatter::set_property(initial, "type", &"event".into());
     text = frontmatter::set_property(&text, "title", &req.title.trim().into());
     text = frontmatter::set_property(&text, "date", &date.format("%Y-%m-%d").to_string().into());
     if end_date != date {
@@ -824,9 +852,13 @@ fn write_event_page_at(root: &Path, rel: &str, date: NaiveDate, end_date: NaiveD
     if !req.all_day {
         if let Some(s) = req.start.as_deref().and_then(parse_hm) {
             text = frontmatter::set_property(&text, "start", &s.into());
+        } else {
+            text = frontmatter::remove_property(&text, "start");
         }
         if let Some(e) = req.end.as_deref().and_then(parse_hm) {
             text = frontmatter::set_property(&text, "end", &e.into());
+        } else {
+            text = frontmatter::remove_property(&text, "end");
         }
     } else {
         text = frontmatter::remove_property(&text, "start");
@@ -834,6 +866,8 @@ fn write_event_page_at(root: &Path, rel: &str, date: NaiveDate, end_date: NaiveD
     }
     if !req.color.trim().is_empty() {
         text = frontmatter::set_property(&text, "color", &req.color.trim().into());
+    } else {
+        text = frontmatter::remove_property(&text, "color");
     }
     if !req.location.trim().is_empty() {
         text = frontmatter::set_property(&text, "location", &req.location.trim().into());
@@ -850,8 +884,33 @@ fn write_event_page_at(root: &Path, rel: &str, date: NaiveDate, end_date: NaiveD
     } else {
         text = frontmatter::remove_property(&text, "links");
     }
-    vault_write::write(&abs, text.as_bytes())?;
-    Ok(CalendarEvent {
+    text
+}
+
+fn write_event_page_at(root: &Path, rel: &str, expect_existing: bool, date: NaiveDate, end_date: NaiveDate, req: &CalendarEventUpsert) -> Result<CalendarEvent> {
+    let abs = paths::safe_join(root, rel)?;
+    if expect_existing {
+        vault_write::locked(&abs, || {
+            if !abs.is_file() {
+                return Err(Error::NotFound("event page not found".into()));
+            }
+            let existing = std::fs::read_to_string(&abs)?;
+            let next = build_event_page_markdown(&existing, date, end_date, req);
+            if next != existing {
+                vault_write::write(&abs, next.as_bytes())?;
+            }
+            Ok(())
+        })?;
+    } else {
+        let body_seed = req.notes.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(|s| format!("# {}\n\n{s}\n", req.title.trim())).unwrap_or_else(|| format!("# {}\n", req.title.trim()));
+        let text = build_event_page_markdown(&body_seed, date, end_date, req);
+        vault_write::write(&abs, text.as_bytes())?;
+    }
+    Ok(calendar_event_for_page(rel, date, end_date, req))
+}
+
+fn calendar_event_for_page(rel: &str, date: NaiveDate, end_date: NaiveDate, req: &CalendarEventUpsert) -> CalendarEvent {
+    CalendarEvent {
         id: format!("page:{rel}"),
         occurrence_id: format!("page:{rel}@{}", date.format("%Y-%m-%d")),
         title: req.title.trim().to_string(),
@@ -869,30 +928,73 @@ fn write_event_page_at(root: &Path, rel: &str, date: NaiveDate, end_date: NaiveD
         line: None,
         completed: false,
         editable: true,
-    })
+    }
 }
 
-fn update_schedule_line(root: &Path, rest: &str, title: &str, req: &CalendarEventUpsert) -> Result<CalendarEvent> {
+fn join_lines_preserving_eol(src: &str, lines: &[String]) -> String {
+    let eol = if src.contains("\r\n") { "\r\n" } else { "\n" };
+    let trailing = if src.is_empty() || src.ends_with('\n') { eol } else { "" };
+    format!("{}{trailing}", lines.join(eol))
+}
+
+fn update_schedule_line(root: &Path, cfg: &Config, rest: &str, date: NaiveDate, title: &str, req: &CalendarEventUpsert) -> Result<CalendarEvent> {
     let (rel, line_s) = rest.rsplit_once(':').ok_or_else(|| Error::BadRequest("bad schedule id".into()))?;
     let line_no: usize = line_s.parse().map_err(|_| Error::BadRequest("bad line".into()))?;
     let abs = paths::safe_join(root, rel)?;
     let s_t = req.start.as_deref().and_then(parse_hm).unwrap_or_else(|| "09:00".into());
     let e_t = req.end.as_deref().and_then(parse_hm).unwrap_or_else(|| "10:00".into());
-    vault_write::modify(&abs, |txt| {
-        let mut lines: Vec<String> = txt.lines().map(String::from).collect();
-        let idx = line_no.checked_sub(1).ok_or_else(|| Error::BadRequest("bad line".into()))?;
-        if idx >= lines.len() {
-            return Err(Error::NotFound("line not found".into()));
+    let new_line = format!("- {s_t}–{e_t} {title}");
+    let dest_rel = capture::day_log(cfg, date);
+    let idx = line_no.checked_sub(1).ok_or_else(|| Error::BadRequest("bad line".into()))?;
+
+    let (out_rel, out_line) = if dest_rel == rel {
+        vault_write::modify(&abs, |txt| {
+            let mut lines: Vec<String> = txt.lines().map(String::from).collect();
+            if idx >= lines.len() {
+                return Err(Error::NotFound("line not found".into()));
+            }
+            lines[idx] = new_line.clone();
+            Ok(join_lines_preserving_eol(txt, &lines))
+        })?;
+        (rel.to_string(), line_no)
+    } else {
+        let now = chrono::Local::now().naive_local();
+        let dest = capture::ensure_day_log(root, cfg, date, now)?;
+        let dest_abs = paths::safe_join(root, &dest.path)?;
+        let mut inserted_line = 1usize;
+        vault_write::modify(&dest_abs, |txt| {
+            let mut lines: Vec<String> = txt.lines().map(String::from).collect();
+            lines.push(new_line.clone());
+            inserted_line = lines.len();
+            Ok(join_lines_preserving_eol(txt, &lines))
+        })?;
+        if let Err(e) = vault_write::modify(&abs, |txt| {
+            let mut lines: Vec<String> = txt.lines().map(String::from).collect();
+            if idx >= lines.len() {
+                return Err(Error::NotFound("line not found".into()));
+            }
+            lines.remove(idx);
+            Ok(join_lines_preserving_eol(txt, &lines))
+        }) {
+            // Roll back appended line on destination if source deletion failed.
+            let _ = vault_write::modify(&dest_abs, |txt| {
+                let mut lines: Vec<String> = txt.lines().map(String::from).collect();
+                if lines.last().is_some_and(|l| l == &new_line) {
+                    lines.pop();
+                }
+                Ok(join_lines_preserving_eol(txt, &lines))
+            });
+            return Err(e);
         }
-        lines[idx] = format!("- {s_t}–{e_t} {title}");
-        Ok(format!("{}\n", lines.join("\n")))
-    })?;
+        (dest.path, inserted_line)
+    };
+    let out_date = date.format("%Y-%m-%d").to_string();
     Ok(CalendarEvent {
-        id: format!("ds:{rel}:{line_no}"),
-        occurrence_id: format!("ds:{rel}:{line_no}@{}", req.date),
+        id: format!("ds:{out_rel}:{out_line}"),
+        occurrence_id: format!("ds:{out_rel}:{out_line}@{out_date}"),
         title: title.to_string(),
-        date: req.date.clone(),
-        end_date: req.date.clone(),
+        date: out_date.clone(),
+        end_date: out_date,
         start: Some(s_t),
         end: Some(e_t),
         all_day: false,
@@ -901,8 +1003,8 @@ fn update_schedule_line(root: &Path, rest: &str, title: &str, req: &CalendarEven
         repeat: CalendarRecurrence::None,
         links: Vec::new(),
         source: CalendarSource::DailySchedule,
-        path: Some(rel.to_string()),
-        line: Some(line_no as u32),
+        path: Some(out_rel),
+        line: Some(out_line as u32),
         completed: false,
         editable: true,
     })
@@ -913,24 +1015,34 @@ fn reschedule_task(root: &Path, rest: &str, date: NaiveDate, title: &str) -> Res
     let line_no: usize = line_s.parse().map_err(|_| Error::BadRequest("bad line".into()))?;
     let abs = paths::safe_join(root, rel)?;
     let new_d = date.format("%Y-%m-%d").to_string();
+    let mut parsed: Option<(String, bool)> = None;
     vault_write::modify(&abs, |txt| {
         let mut lines: Vec<String> = txt.lines().map(String::from).collect();
         let idx = line_no.checked_sub(1).ok_or_else(|| Error::BadRequest("bad line".into()))?;
         if idx >= lines.len() {
             return Err(Error::NotFound("task line not found".into()));
         }
-        let line = &lines[idx];
-        lines[idx] = if let Some((_, i)) = crate::tasks::first_date(line) {
-            format!("{}{new_d}{}", &line[..i], &line[i + 10..])
-        } else {
-            format!("{} 📅 {new_d}", line.trim_end())
+        let updated = {
+            let line = &lines[idx];
+            if let Some((_, i)) = crate::tasks::first_date(line) {
+                format!("{}{new_d}{}", &line[..i], &line[i + 10..])
+            } else {
+                format!("{} 📅 {new_d}", line.trim_end())
+            }
         };
-        Ok(format!("{}\n", lines.join("\n")))
+        if let Some((_, body, done)) = crate::today::task_lines(std::iter::once(updated.as_str())).next() {
+            let t = crate::tasks::parse(body);
+            let task_title = if t.title.is_empty() { title.to_string() } else { t.title };
+            parsed = Some((task_title, done));
+        }
+        lines[idx] = updated;
+        Ok(join_lines_preserving_eol(txt, &lines))
     })?;
+    let (actual_title, completed) = parsed.unwrap_or_else(|| (title.to_string(), false));
     Ok(CalendarEvent {
         id: format!("task:{rel}:{line_no}"),
         occurrence_id: format!("task:{rel}:{line_no}@{new_d}"),
-        title: title.to_string(),
+        title: actual_title,
         date: new_d.clone(),
         end_date: new_d,
         start: None,
@@ -943,12 +1055,12 @@ fn reschedule_task(root: &Path, rest: &str, date: NaiveDate, title: &str) -> Res
         source: CalendarSource::Task,
         path: Some(rel.to_string()),
         line: Some(line_no as u32),
-        completed: false,
+        completed,
         editable: true,
     })
 }
 
-fn reschedule_base_item(root: &Path, rest: &str, date: NaiveDate, title: &str) -> Result<CalendarEvent> {
+fn reschedule_base_item(root: &Path, rest: &str, date: NaiveDate, _title: &str) -> Result<CalendarEvent> {
     let parts: Vec<&str> = rest.splitn(3, ':').collect();
     if parts.len() != 3 {
         return Err(Error::BadRequest("bad base item id".into()));
@@ -956,11 +1068,22 @@ fn reschedule_base_item(root: &Path, rest: &str, date: NaiveDate, title: &str) -
     let (base_rel, col_key, note_rel) = (parts[0], parts[1], parts[2]);
     let abs = paths::safe_join(root, note_rel)?;
     let new_d = date.format("%Y-%m-%d").to_string();
-    vault_write::modify(&abs, |txt| Ok(frontmatter::set_property(txt, col_key, &new_d.clone().into())))?;
+    vault_write::locked(&abs, || {
+        if !abs.is_file() {
+            return Err(Error::NotFound("base item note not found".into()));
+        }
+        let txt = std::fs::read_to_string(&abs)?;
+        let next = frontmatter::set_property(&txt, col_key, &new_d.clone().into());
+        if next != txt {
+            vault_write::write(&abs, next.as_bytes())?;
+        }
+        Ok(())
+    })?;
+    let actual_title = note_rel.rsplit('/').next().unwrap_or(note_rel).trim_end_matches(".md").to_string();
     Ok(CalendarEvent {
         id: format!("base:{base_rel}:{col_key}:{note_rel}"),
         occurrence_id: format!("base:{base_rel}:{col_key}:{note_rel}@{new_d}"),
-        title: title.to_string(),
+        title: actual_title.clone(),
         date: new_d.clone(),
         end_date: new_d,
         start: None,
@@ -969,7 +1092,7 @@ fn reschedule_base_item(root: &Path, rest: &str, date: NaiveDate, title: &str) -
         color: "purple".into(),
         location: String::new(),
         repeat: CalendarRecurrence::None,
-        links: Vec::new(),
+        links: vec![format!("[[{actual_title}]]")],
         source: CalendarSource::Base,
         path: Some(note_rel.to_string()),
         line: None,
@@ -1005,13 +1128,13 @@ pub fn delete_event(root: &Path, id: &str) -> Result<Vec<String>> {
         let line_no: usize = line_s.parse().map_err(|_| Error::BadRequest("bad line".into()))?;
         let abs = paths::safe_join(root, rel)?;
         vault_write::modify(&abs, |txt| {
-            let mut lines: Vec<&str> = txt.lines().collect();
+            let mut lines: Vec<String> = txt.lines().map(String::from).collect();
             let idx = line_no.checked_sub(1).ok_or_else(|| Error::BadRequest("bad line".into()))?;
             if idx >= lines.len() {
                 return Err(Error::NotFound("line not found".into()));
             }
             lines.remove(idx);
-            Ok(format!("{}\n", lines.join("\n")))
+            Ok(join_lines_preserving_eol(txt, &lines))
         })?;
         return Ok(vec![rel.to_string()]);
     }
@@ -1039,7 +1162,14 @@ pub fn promote_inline_to_page(root: &Path, cfg: &Config, id: &str) -> Result<Cal
         notes: None,
     };
     let ev = write_event_page_in_dir(root, cfg, None, raw.date, raw.end_date, &req)?;
-    let _ = delete_event(root, id);
+    if let Err(e) = delete_event(root, id) {
+        if let Some(rel) = &ev.path {
+            if let Ok(p) = paths::safe_join(root, rel) {
+                let _ = vault_write::remove_file(&p);
+            }
+        }
+        return Err(e);
+    }
     let path = ev.path.clone().unwrap_or_default();
     Ok(CalendarPromoteResult { path, event: ev })
 }
@@ -1220,5 +1350,136 @@ mod tests {
         let imp_dir = tempfile::tempdir().unwrap();
         let imp = import_ics(imp_dir.path(), &cfg, &IcsImportRequest { ics, as_pages: Some(true) }).unwrap();
         assert_eq!(imp.imported, 1);
+    }
+
+    #[test]
+    fn meaningful_content_ignores_prose_events_and_ds_move_preserves_crlf() {
+        let d = tempfile::tempdir().unwrap();
+        let cfg = Config::default();
+        assert!(!note_has_meaningful_content("# 2026-11-18\n\n"));
+        assert!(note_has_meaningful_content("# 2026-11-18\n\nNotes here\n"));
+        assert!(!note_has_meaningful_content("---\ntags: [log]\n---\n# 2026-11-18\n"));
+        // Empty frontmatter sequence + heading only -> not meaningful
+        assert!(!note_has_meaningful_content("---\nevents: []\n---\n# 2026-11-18\n"));
+        // Real frontmatter events entry -> meaningful
+        assert!(note_has_meaningful_content("---\nevents:\n  - title: Sync\n---\n# 2026-11-18\n"));
+
+        // Seed a CRLF daily note with a schedule item and move it to the next day.
+        let src_log = capture::day_log(&cfg, NaiveDate::from_ymd_opt(2026, 11, 18).unwrap());
+        let src_abs = d.path().join(&src_log);
+        std::fs::create_dir_all(src_abs.parent().unwrap()).unwrap();
+        std::fs::write(&src_abs, "# 2026-11-18\r\n- 09:00–10:00 Standup\r\n").unwrap();
+
+        let moved = upsert_event(
+            d.path(),
+            &cfg,
+            &CalendarEventUpsert {
+                id: Some(format!("ds:{src_log}:2")),
+                storage: None,
+                title: "Standup".into(),
+                date: "2026-11-19".into(),
+                end_date: None,
+                start: Some("10:00".into()),
+                end: Some("11:00".into()),
+                all_day: false,
+                color: "green".into(),
+                location: String::new(),
+                repeat: CalendarRecurrence::None,
+                links: Vec::new(),
+                notes: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(moved.date, "2026-11-19");
+        let old_txt = std::fs::read_to_string(&src_abs).unwrap();
+        assert_eq!(old_txt, "# 2026-11-18\r\n");
+        let new_abs = d.path().join(moved.path.as_deref().unwrap());
+        let new_txt = std::fs::read_to_string(new_abs).unwrap();
+        assert!(new_txt.contains("- 10:00–11:00 Standup"), "{new_txt}");
+
+        // Custom bases filter overrides cfg.calendar.bases (even empty slice omits bases).
+        let empty = query_range_with_bases(
+            d.path(),
+            &cfg,
+            NaiveDate::from_ymd_opt(2026, 11, 18).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 11, 20).unwrap(),
+            Some(&[]),
+        )
+        .unwrap();
+        assert!(empty.events.iter().any(|e| e.title == "Standup"));
+    }
+
+    #[test]
+    fn missing_event_page_returns_not_found_and_reschedule_keeps_real_fields() {
+        let d = tempfile::tempdir().unwrap();
+        let cfg = Config::default();
+        let err = upsert_event(
+            d.path(),
+            &cfg,
+            &CalendarEventUpsert {
+                id: Some("page:events/missing.md".into()),
+                storage: None,
+                title: "Missing".into(),
+                date: "2026-11-20".into(),
+                end_date: None,
+                start: None,
+                end: None,
+                all_day: true,
+                color: "blue".into(),
+                location: String::new(),
+                repeat: CalendarRecurrence::None,
+                links: Vec::new(),
+                notes: None,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::NotFound(_)), "{err:?}");
+
+        std::fs::write(d.path().join("todo.md"), "- [x] Submit abstract 📅 2026-11-18\n").unwrap();
+        let moved_task = upsert_event(
+            d.path(),
+            &cfg,
+            &CalendarEventUpsert {
+                id: Some("task:todo.md:1".into()),
+                storage: None,
+                title: "Client stale title".into(),
+                date: "2026-11-21".into(),
+                end_date: None,
+                start: None,
+                end: None,
+                all_day: true,
+                color: "amber".into(),
+                location: String::new(),
+                repeat: CalendarRecurrence::None,
+                links: Vec::new(),
+                notes: None,
+            },
+        )
+        .unwrap();
+        assert!(moved_task.completed, "completed task flag must survive reschedule");
+        assert_eq!(moved_task.title, "Submit abstract");
+
+        std::fs::write(d.path().join("Real Note.md"), "---\ndue: 2026-11-18\n---\nbody\n").unwrap();
+        let moved_base = upsert_event(
+            d.path(),
+            &cfg,
+            &CalendarEventUpsert {
+                id: Some("base:Tasks.base:due:Real Note.md".into()),
+                storage: None,
+                title: "Stale client base title".into(),
+                date: "2026-11-22".into(),
+                end_date: None,
+                start: None,
+                end: None,
+                all_day: true,
+                color: "purple".into(),
+                location: String::new(),
+                repeat: CalendarRecurrence::None,
+                links: Vec::new(),
+                notes: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(moved_base.title, "Real Note");
     }
 }

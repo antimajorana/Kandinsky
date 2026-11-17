@@ -69,7 +69,7 @@ function signInThroughBridge(page: string): void {
 // Every call goes to this vault's own core (apiBase): a mirrored vault's writes are local, and the core asks the server
 // for a lease first (core mirror_guard.rs; docs/design/DESIGN-mirror-v2.md). `base: ""` is the desktop's own core
 // whatever vault the page shows (ownCore).
-async function request<T>(method: string, path: string, opts: { query?: Query; body?: unknown; base?: string; signal?: AbortSignal } = {}): Promise<T> {
+async function request<T>(method: string, path: string, opts: { query?: Query; body?: unknown; base?: string; signal?: AbortSignal; keepalive?: boolean } = {}): Promise<T> {
   const headers: Record<string, string> = { "x-kandinsky": "1" };
   if (opts.body !== undefined) headers["content-type"] = "application/json";
   const res = await fetch(url(path, opts.query, opts.base), {
@@ -77,6 +77,7 @@ async function request<T>(method: string, path: string, opts: { query?: Query; b
     headers,
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
     signal: opts.signal,
+    keepalive: opts.keepalive,
   });
   const text = await res.text();
   let data: unknown = undefined;
@@ -174,8 +175,8 @@ export const api = {
    *  is behind the server's: core mirror_guard.rs). */
   /** `applyHere`: the caller (an editor holding the note) applies a template the save brings itself — the answer's
    *  `template.text` (core template_apply.rs). */
-  putFile: (path: RelPath, text: string, base_mtime?: number, applyHere = false) =>
-    request<PutFileResult>("PUT", "/api/file", { body: { path, text, ...(base_mtime === undefined ? {} : { base_mtime }), ...(applyHere ? { apply_here: true } : {}) } })
+  putFile: (path: RelPath, text: string, base_mtime?: number, applyHere = false, keepalive = false, onlyNew = false) =>
+    request<PutFileResult>("PUT", "/api/file", { body: { path, text, ...(base_mtime === undefined ? (onlyNew ? { only_new: true } : {}) : { base_mtime }), ...(applyHere ? { apply_here: true } : {}) }, keepalive })
       .then(told({ type: "file:save", path })),
   /** `template` merged into `text` (the note at `path` as an editor holds it): only what it lacks is added. */
   mergeTemplate: (path: RelPath, template: string, text: string, atCursor = false) =>
@@ -439,7 +440,7 @@ export const api = {
     request<import("./gen/DayLogInfo").DayLogInfo>("POST", "/api/log/day", { body: { day: date } }),
   calendar: (from: string, to: string, bases?: string[]) =>
     request<import("./gen/CalendarRangeResponse").CalendarRangeResponse>("GET", "/api/calendar", {
-      query: { from, to, bases: bases?.length ? bases.join(",") : undefined },
+      query: { from, to, bases: bases !== undefined ? bases.join(",") : undefined },
     }),
   upsertCalendarEvent: (req: import("./gen/CalendarEventUpsert").CalendarEventUpsert) =>
     request<import("./gen/CalendarEvent").CalendarEvent>("POST", "/api/calendar/event", { body: req }),
@@ -450,14 +451,19 @@ export const api = {
   importCalendarIcs: (req: import("./gen/IcsImportRequest").IcsImportRequest) =>
     request<import("./gen/IcsImportResult").IcsImportResult>("POST", "/api/calendar/ics/import", { body: req }),
   calendarIcsExportUrl: () => url("/api/calendar/ics/export"),
+  exportCalendarIcs: async (): Promise<Blob> => {
+    const res = await fetch(url("/api/calendar/ics/export"), { headers: { "x-kandinsky": "1" }, credentials: "same-origin" });
+    if (!res.ok) throw new ApiError(res.status, `GET /api/calendar/ics/export: ${res.status} ${await res.text()}`);
+    return res.blob();
+  },
   /** Base guided formulas & recurring note templates. */
   formulaPreview: (req: import("./gen/FormulaPreviewRequest").FormulaPreviewRequest) =>
     request<import("./gen/FormulaPreviewResponse").FormulaPreviewResponse>("POST", "/api/base/formula-preview", { body: req }),
   runBaseRecurring: (path: string) =>
     request<{ created: string[] }>("POST", "/api/base/run-recurring", { body: { path } }),
   /** Synced block source edits. */
-  updateSyncedBlock: (req: import("./gen/SyncedBlockWrite").SyncedBlockWrite) =>
-    request<import("./gen/SyncedBlockResult").SyncedBlockResult>("POST", "/api/note/synced-block", { body: req }),
+  updateSyncedBlock: (req: import("./gen/SyncedBlockWrite").SyncedBlockWrite, keepalive = false) =>
+    request<import("./gen/SyncedBlockResult").SyncedBlockResult>("POST", "/api/note/synced-block", { body: req, keepalive }),
   /** Inline margin comments (sidecar `.kandinsky/comments`). */
   comments: (path: string) =>
     request<import("./gen/CommentThread").CommentThread[]>("GET", "/api/comments", { query: { path } }),
@@ -467,7 +473,7 @@ export const api = {
   obsidianThemes: () =>
     request<import("./gen/ObsidianThemeInfo").ObsidianThemeInfo[]>("GET", "/api/obsidian-themes"),
   obsidianThemeCss: async (id: string): Promise<string> => {
-    const res = await fetch(url("/api/obsidian-themes/css", { id }), { credentials: "same-origin" });
+    const res = await fetch(url("/api/obsidian-themes/css", { id }), { headers: { "x-kandinsky": "1" }, credentials: "same-origin" });
     if (!res.ok) throw new ApiError(res.status, `GET /api/obsidian-themes/css: ${res.status} ${await res.text()}`);
     return res.text();
   },

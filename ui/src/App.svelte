@@ -235,7 +235,14 @@
     window.addEventListener("keydown", onKey, true);
     const offNav = installNavInput();
     const offMiddle = guardMiddlePaste();
-    const ro = new ResizeObserver(() => dock.layout(dockEl.clientWidth, dockEl.clientHeight));
+    let roFrame = 0;
+    const ro = new ResizeObserver(() => {
+      if (roFrame) return;
+      roFrame = requestAnimationFrame(() => {
+        roFrame = 0;
+        dock.layout(dockEl.clientWidth, dockEl.clientHeight);
+      });
+    });
     ro.observe(dockEl);
     // best effort: flush pending editor saves when the window goes away
     const beforeUnload = () => { void Promise.allSettled(parkAll()); };
@@ -250,6 +257,7 @@
       offNav();
       offMiddle();
       window.removeEventListener("beforeunload", beforeUnload);
+      if (roFrame) { cancelAnimationFrame(roFrame); roFrame = 0; }
       ro.disconnect();
       dock.dispose();
     };

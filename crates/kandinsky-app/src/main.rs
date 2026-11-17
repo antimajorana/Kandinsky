@@ -429,6 +429,70 @@ fn leave_appimage_interpreters() {
     }
 }
 
+fn parse_paper_deep_link(uri: &str) -> Option<serde_json::Map<String, serde_json::Value>> {
+    if !(uri.starts_with("kandinsky://capture-paper") || uri.starts_with("kandinsky://paper")) {
+        return None;
+    }
+    let u = uri.parse::<tauri::Url>().ok()?;
+    let mut params = serde_json::Map::new();
+    for (k, v) in u.query_pairs() {
+        if !v.trim().is_empty() {
+            params.insert(k.into_owned(), serde_json::Value::String(v.into_owned()));
+        }
+    }
+    if let Some(best) = params
+        .get("doi")
+        .or_else(|| params.get("arxiv"))
+        .or_else(|| params.get("url"))
+        .or_else(|| params.get("id"))
+        .or_else(|| params.get("title"))
+        .cloned()
+    {
+        params.entry("id").or_insert(best);
+    }
+    Some(params)
+}
+
+fn capture_paper_note_path(raw: &str) -> Option<String> {
+    let v = serde_json::from_str::<serde_json::Value>(raw).ok()?;
+    if let (Some(dir), Some(key)) = (v["paper"]["dir"].as_str(), v["paper"]["key"].as_str()) {
+        let dir = dir.trim_matches('/');
+        let key = key.trim();
+        if !key.is_empty() {
+            return Some(if dir.is_empty() { format!("{key}.md") } else { format!("{dir}/{key}.md") });
+        }
+    }
+    v["note"].as_str().or_else(|| v["key"].as_str()).map(String::from)
+}
+
+async fn add_and_open_paper(base: &str, params: serde_json::Map<String, serde_json::Value>, show_window: bool) {
+    let body = serde_json::json!({ "method": "add", "params": params, "timeout_secs": 120 }).to_string();
+    let added = post(base, "/api/plugins/@references/helper", &body).await;
+    let note = added.as_deref().ok().and_then(capture_paper_note_path);
+    let shown = if show_window {
+        let show_body = serde_json::json!({ "open": note }).to_string();
+        post(base, "/api/shell/show", &show_body).await.is_ok()
+    } else {
+        true
+    };
+    if let Some(path) = note {
+        let open_body = serde_json::json!({ "args": { "path": path } }).to_string();
+        let attempts = if show_window { if shown { 3 } else { 1 } } else { 20 };
+        for _ in 0..attempts {
+            if let Ok(resp) = post(base, "/api/cmd/open", &open_body).await {
+                if serde_json::from_str::<serde_json::Value>(&resp).is_ok_and(|v| v["ok"].as_bool() == Some(true)) {
+                    break;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+    } else if let Err(e) = added {
+        eprintln!("kandinsky-app: capture-paper failed: {e}");
+        let notify_body = serde_json::json!({ "args": { "title": "Paper capture failed", "body": e.to_string() } }).to_string();
+        let _ = post(base, "/api/cmd/notify", &notify_body).await;
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     leave_appimage_interpreters();
     // GTK's Wayland app id (X11: WM_CLASS) is the program name; "kandinsky" makes KWin find kandinsky.desktop and its Icon=kandinsky,
@@ -442,28 +506,20 @@ fn main() -> anyhow::Result<()> {
         let out = args.get(1).map(PathBuf::from).ok_or_else(|| anyhow::anyhow!("{} <rules.json>", web_filters::CONVERT_FLAG))?;
         return Ok(web_filters::convert_main(&out)?);
     }
-    let folder = args.iter().find(|a| !a.to_string_lossy().starts_with("--")).map(PathBuf::from);
+    let mut folder = args.iter().find(|a| !a.to_string_lossy().starts_with("--")).map(PathBuf::from);
+    let mut pending_paper: Option<serde_json::Map<String, serde_json::Value>> = None;
     if let Some(uri) = folder.as_ref().map(|f| f.to_string_lossy().into_owned()).filter(|s| s.starts_with("kandinsky://capture-paper") || s.starts_with("kandinsky://paper")) {
+        folder = None;
+        let Some(params) = parse_paper_deep_link(&uri) else {
+            eprintln!("kandinsky-app: invalid paper URI: {uri}");
+            return Ok(());
+        };
         let root = vault_to_open(None)?;
-        if let Ok(u) = uri.parse::<tauri::Url>() {
-            let mut params = serde_json::Map::new();
-            for (k, v) in u.query_pairs() {
-                if !v.trim().is_empty() {
-                    params.insert(k.into_owned(), serde_json::Value::String(v.into_owned()));
-                }
-            }
-            if let Some(best) = params.get("doi").or_else(|| params.get("arxiv")).or_else(|| params.get("url")).or_else(|| params.get("id")).cloned() {
-                params.entry("id").or_insert(best);
-            }
-            if let Some(base) = kandinsky_core::vaults::running_server(&root) {
-                let body = serde_json::json!({ "method": "add", "params": params, "timeout_secs": 120 }).to_string();
-                let added = tauri::async_runtime::block_on(post(&base, "/api/plugins/@references/helper", &body));
-                let note = added.ok().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).and_then(|v| v["note"].as_str().or_else(|| v["key"].as_str()).map(String::from));
-                let show_body = serde_json::json!({ "open": note }).to_string();
-                let _ = tauri::async_runtime::block_on(post(&base, "/api/shell/show", &show_body));
-                return Ok(());
-            }
+        if let Some(base) = kandinsky_core::vaults::running_server(&root) {
+            tauri::async_runtime::block_on(add_and_open_paper(&base, params, true));
+            return Ok(());
         }
+        pending_paper = Some(params);
     }
     if args.iter().any(|a| a == "--capture") {
         if let Some(code) = native_capture(folder.as_deref()) {
@@ -578,6 +634,12 @@ fn main() -> anyhow::Result<()> {
             }
             start_tray(&handle, &shell, background_start);
             shell.watch_sleep();
+            if let Some(params) = pending_paper {
+                let core = core.clone();
+                tauri::async_runtime::spawn(async move {
+                    add_and_open_paper(&core, params, false).await;
+                });
+            }
             Ok(())
         })
         .on_window_event(|window, event| match (window.label(), event) {
@@ -1157,5 +1219,30 @@ mod tests {
         for plain in ["https://example.org/page", "https://x.example/auth?redirect_uri=https://app.example/cb", "https://x.example/?redirect_uri=file:///etc"] {
             assert!(signin_return(&plain.parse().unwrap()).is_none(), "{plain} goes to the browser");
         }
+    }
+
+    #[test]
+    fn capture_paper_deep_link_parses_id_including_title_and_extracts_note_path() {
+        let with_title = parse_paper_deep_link("kandinsky://capture-paper?title=More%20Is%20Different").unwrap();
+        assert_eq!(with_title.get("id").and_then(|v| v.as_str()), Some("More Is Different"));
+
+        let with_doi = parse_paper_deep_link("kandinsky://paper?doi=10.1126/science.177&title=Ignored").unwrap();
+        assert_eq!(with_doi.get("id").and_then(|v| v.as_str()), Some("10.1126/science.177"));
+
+        assert!(parse_paper_deep_link("https://example.org").is_none());
+
+        assert_eq!(
+            capture_paper_note_path(r#"{"paper":{"dir":"refs/papers/anderson1972more","key":"anderson1972more"},"created":true}"#).as_deref(),
+            Some("refs/papers/anderson1972more/anderson1972more.md")
+        );
+        assert_eq!(
+            capture_paper_note_path(r#"{"paper":{"dir":"","key":"solo"}}"#).as_deref(),
+            Some("solo.md")
+        );
+        assert_eq!(
+            capture_paper_note_path(r#"{"note":"notes/fallback.md"}"#).as_deref(),
+            Some("notes/fallback.md")
+        );
+        assert_eq!(capture_paper_note_path(r#"{"key":"k1"}"#).as_deref(), Some("k1"));
     }
 }

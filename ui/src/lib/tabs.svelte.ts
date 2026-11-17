@@ -81,8 +81,9 @@ function refresh(): void {
     }
   }
   const v = vertical();
-  const hidden = new Set(v ? tabs.pins.map(pinId) : []);
-  const app = (p: IDockviewPanel) => v && isApp(p.id, p.params as PaneSpec);
+  const managed = chromelessMain();
+  const hidden = new Set(managed ? tabs.pins.map(pinId) : []);
+  const app = (p: IDockviewPanel) => managed && isApp(p.id, p.params as PaneSpec);
   const activeId = d.activePanel?.id ?? null;
   // order: terminal, editors left→right / top→bottom (hidden groups measure 0). With vertical tabs the
   // side panel is not a group of tabs: its tools are the row on top of it (SideHead.svelte).
@@ -255,7 +256,7 @@ export function unpin(id: string): void {
 
 export function togglePin(id: string | null = tabs.active): void {
   if (!id) return;
-  if (!vertical()) { toast("Pinned tabs live in the vertical tab sidebar", "Settings → Appearance → Tabs: vertical."); return; }
+  if (!chromelessMain()) { toast("Pinned tabs live in the vertical tab sidebar", "Settings → Appearance → Tabs: vertical."); return; }
   if (isPinned(id)) unpin(id); else pin(id);
 }
 
@@ -369,7 +370,7 @@ export function renameTab(id: string, name: string): void {
 
 /** Every tab in sidebar order: pins first (also resting ones), then the groups top to bottom. */
 export function tabOrder(): string[] {
-  return [...(vertical() ? tabs.pins.map(pinId) : []), ...tabs.groups.flatMap((g) => g.tabs.map((t) => t.id))];
+  return [...(chromelessMain() ? tabs.pins.map(pinId) : []), ...tabs.groups.flatMap((g) => g.tabs.map((t) => t.id))];
 }
 
 /** Ctrl+Tab / Ctrl+Shift+Tab: the next open tab in sidebar order, wrapping. */

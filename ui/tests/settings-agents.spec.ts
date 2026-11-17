@@ -19,7 +19,8 @@ test("Settings → AI agents: allow an agent, its token works for kandinsky mcp,
   await p.getByRole("button", { name: "Allow an agent" }).click();
   const entry = JSON.parse((await p.locator(".shown pre").textContent()) ?? "{}");
   const token: string = entry.mcpServers?.kandinsky?.env?.KANDINSKY_AGENT_TOKEN ?? "";
-  expect(entry.mcpServers.kandinsky).toMatchObject({ command: "kandinsky", args: ["mcp"] });
+  expect(entry.mcpServers.kandinsky.args).toEqual(["mcp"]);
+  expect(entry.mcpServers.kandinsky.command).toMatch(/(?:^|[\\/])kandinsky(?:\.exe)?$/i);
   expect(token).toMatch(/^atl_/);
   await expect(p.locator(".agent", { hasText: name })).toContainText("last used never");
   expect(readFileSync(`${WS}-agents.json`, "utf8")).not.toContain(token);

@@ -589,17 +589,17 @@ pub fn update_synced_block(ws: &crate::Workspace, req: &SyncedBlockWrite) -> Res
         return Err(Error::BadRequest(format!("invalid block id `{}`", req.block_id)));
     }
     let abs = ws.resolve(&req.path)?;
-    if let Some(expected) = req.base_mtime {
-        let meta = std::fs::metadata(&abs).map_err(|_| Error::NotFound(req.path.clone()))?;
-        let current = crate::api::Mtime::of(&meta)?;
-        if current != expected {
-            return Err(Error::Conflict { current: Some(current) });
-        }
-    }
     let clean_body = req.text.replace("\r\n", "\n").trim_end_matches('\n').to_string();
     let tag = format!("^{bid}");
     crate::vault_write::modify(&abs, |src| {
-        replace_synced_block(src, &tag, &clean_body, req.attach_line)
+        if let Some(expected) = req.base_mtime {
+            let meta = std::fs::metadata(&abs).map_err(|_| Error::NotFound(req.path.clone()))?;
+            let current = crate::api::Mtime::of(&meta)?;
+            if current != expected {
+                return Err(Error::Conflict { current: Some(current) });
+            }
+        }
+        replace_synced_block(src, bid, &tag, &clean_body, req.attach_line)
     })?;
     let meta = std::fs::metadata(&abs)?;
     Ok(SyncedBlockResult {
@@ -610,7 +610,41 @@ pub fn update_synced_block(ws: &crate::Workspace, req: &SyncedBlockWrite) -> Res
     })
 }
 
-fn replace_synced_block(src: &str, tag: &str, replacement: &str, attach_line: Option<u32>) -> Result<String> {
+fn fence_run(line: &str) -> Option<(char, usize)> {
+    let trimmed = line.trim_start();
+    let first = trimmed.chars().next()?;
+    if first != '`' && first != '~' {
+        return None;
+    }
+    let count = trimmed.chars().take_while(|&c| c == first).count();
+    (count >= 3).then_some((first, count))
+}
+
+fn is_closing_fence(line: &str) -> Option<(char, usize)> {
+    let (ch, count) = fence_run(line)?;
+    let rest = line.trim_start()[count..].trim();
+    rest.is_empty().then_some((ch, count))
+}
+
+fn has_blank_line_outside_fences(text: &str) -> bool {
+    let mut fences = kandinsky_text::fence::Fences::default();
+    for line in text.lines() {
+        if fences.code(line) {
+            continue;
+        }
+        if line.trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+fn ends_with_fence(text: &str) -> bool {
+    text.lines().last().is_some_and(|l| fence_run(l).is_some())
+}
+
+fn replace_synced_block(src: &str, bid: &str, tag: &str, replacement: &str, attach_line: Option<u32>) -> Result<String> {
+    let eol = if src.contains("\r\n") { "\r\n" } else { "\n" };
     let lines: Vec<&str> = src.lines().collect();
     let mut fences = kandinsky_text::fence::Fences::default();
     let mut anchor_idx: Option<usize> = None;
@@ -624,25 +658,34 @@ fn replace_synced_block(src: &str, tag: &str, replacement: &str, attach_line: Op
             break;
         }
     }
-    let trailing_nl = if src.ends_with('\n') { "\n" } else { "" };
+    let trailing_nl = if src.ends_with('\n') { eol } else { "" };
     if let Some(idx) = anchor_idx {
+        let start_marker = format!("<!-- synced:{bid} -->");
+        let marker_above = (0..idx).rev().find(|&i| lines[i].trim() == start_marker);
         let trimmed = lines[idx].trim_end();
-        let (start, end, standalone) = if trimmed == tag {
-            let mut s = idx.saturating_sub(1);
-            if idx > 0 && lines[s].trim_start().starts_with("```") {
-                while s > 0 && !lines[s - 1].trim_start().starts_with("```") {
-                    s -= 1;
-                }
-                s = s.saturating_sub(1);
+        let (start, end, standalone) = if let Some(m_idx) = marker_above {
+            (m_idx, idx + 1, trimmed == tag)
+        } else if trimmed == tag {
+            if idx == 0 || lines[idx - 1].trim().is_empty() {
+                (idx, idx + 1, true)
             } else {
-                while s > 0 && !lines[s].trim().is_empty() {
-                    s -= 1;
+                let mut s = idx - 1;
+                if let Some((f_ch, f_len)) = is_closing_fence(lines[s]) {
+                    while s > 0 {
+                        s -= 1;
+                        if let Some((o_ch, o_len)) = fence_run(lines[s]) {
+                            if o_ch == f_ch && o_len >= f_len {
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    while s > 0 && !lines[s - 1].trim().is_empty() && !lines[s - 1].trim_start().starts_with('#') {
+                        s -= 1;
+                    }
                 }
-                if lines.get(s).is_some_and(|l| l.trim().is_empty()) {
-                    s += 1;
-                }
+                (s, idx + 1, true)
             }
-            (s, idx + 1, true)
         } else if is_list_line(lines[idx]) {
             let indent = leading_spaces(lines[idx]);
             let mut e = idx + 1;
@@ -657,24 +700,33 @@ fn replace_synced_block(src: &str, tag: &str, replacement: &str, attach_line: Op
             }
             (s, idx + 1, false)
         };
+        let multi_para = has_blank_line_outside_fences(replacement);
         let mut rep_lines: Vec<String> = if replacement.is_empty() {
-            vec![String::new()]
-        } else {
-            replacement.lines().map(String::from).collect()
-        };
-        if standalone || replacement.trim_start().starts_with("```") {
-            rep_lines.push(tag.to_string());
-        } else if let Some(last) = rep_lines.last_mut() {
-            if last.trim().is_empty() {
-                *last = tag.to_string();
+            if start > 0 && !lines[start - 1].trim().is_empty() {
+                vec![String::new(), tag.to_string()]
             } else {
-                *last = format!("{} {tag}", last.trim_end());
+                vec![tag.to_string()]
             }
-        }
+        } else {
+            let mut body: Vec<String> = replacement.lines().map(String::from).collect();
+            if multi_para {
+                body.insert(0, start_marker);
+            }
+            if standalone || multi_para || ends_with_fence(replacement) || replacement.trim_start().starts_with('#') {
+                body.push(tag.to_string());
+            } else if let Some(last) = body.last_mut() {
+                if last.trim().is_empty() {
+                    *last = tag.to_string();
+                } else {
+                    *last = format!("{} {tag}", last.trim_end());
+                }
+            }
+            body
+        };
         let mut out: Vec<String> = lines[..start].iter().map(|s| (*s).to_string()).collect();
-        out.extend(rep_lines);
+        out.append(&mut rep_lines);
         out.extend(lines[end..].iter().map(|s| (*s).to_string()));
-        return Ok(format!("{}{trailing_nl}", out.join("\n")));
+        return Ok(format!("{}{trailing_nl}", out.join(eol)));
     }
 
     if let Some(line_no) = attach_line {
@@ -685,7 +737,7 @@ fn replace_synced_block(src: &str, tag: &str, replacement: &str, attach_line: Op
         let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
         let body = if replacement.is_empty() { lines[idx].trim_end().to_string() } else { replacement.to_string() };
         out[idx] = format!("{body} {tag}");
-        return Ok(format!("{}{trailing_nl}", out.join("\n")));
+        return Ok(format!("{}{trailing_nl}", out.join(eol)));
     }
     Err(Error::NotFound(format!("block anchor {tag} not found")))
 }
@@ -1048,5 +1100,57 @@ mod tests {
         assert_eq!(res.block_id, "abc123");
         let saved = std::fs::read_to_string(d.path().join("Source.md")).unwrap();
         assert_eq!(saved, "# Head\n\nUpdated from transclusion ^abc123\n\nAfter.\n");
+
+        // Stale mtime returns Error::Conflict.
+        let err = update_synced_block(
+            &ws,
+            &SyncedBlockWrite {
+                path: "Source.md".into(),
+                block_id: "abc123".into(),
+                text: "Should conflict".into(),
+                base_mtime: Some(crate::api::Mtime(0)),
+                attach_line: None,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::Conflict { .. }), "{err:?}");
+
+        // Multi-paragraph round-trips without losing first paragraph.
+        update_synced_block(
+            &ws,
+            &SyncedBlockWrite { path: "Source.md".into(), block_id: "abc123".into(), text: "Para 1\n\nPara 2".into(), base_mtime: None, attach_line: None },
+        )
+        .unwrap();
+        update_synced_block(
+            &ws,
+            &SyncedBlockWrite { path: "Source.md".into(), block_id: "abc123".into(), text: "Single again".into(), base_mtime: None, attach_line: None },
+        )
+        .unwrap();
+        let after_single = std::fs::read_to_string(d.path().join("Source.md")).unwrap();
+        assert_eq!(after_single, "# Head\n\nSingle again\n^abc123\n\nAfter.\n");
+
+        // Empty replacement does not capture "# Head" on subsequent edit.
+        update_synced_block(
+            &ws,
+            &SyncedBlockWrite { path: "Source.md".into(), block_id: "abc123".into(), text: "".into(), base_mtime: None, attach_line: None },
+        )
+        .unwrap();
+        update_synced_block(
+            &ws,
+            &SyncedBlockWrite { path: "Source.md".into(), block_id: "abc123".into(), text: "Restored".into(), base_mtime: None, attach_line: None },
+        )
+        .unwrap();
+        let restored = std::fs::read_to_string(d.path().join("Source.md")).unwrap();
+        assert!(restored.starts_with("# Head\n") && restored.contains("Restored\n^abc123"), "{restored}");
+
+        // Tilde fences `~~~` are preserved as a single block.
+        std::fs::write(d.path().join("Tilde.md"), "# Code\n\n~~~py\nprint(1)\n~~~\n^til1\n\nTail.\n").unwrap();
+        update_synced_block(
+            &ws,
+            &SyncedBlockWrite { path: "Tilde.md".into(), block_id: "til1".into(), text: "~~~py\nprint(2)\n~~~".into(), base_mtime: None, attach_line: None },
+        )
+        .unwrap();
+        let t_saved = std::fs::read_to_string(d.path().join("Tilde.md")).unwrap();
+        assert_eq!(t_saved, "# Code\n\n~~~py\nprint(2)\n~~~\n^til1\n\nTail.\n");
     }
 }
