@@ -9,14 +9,26 @@
   import type { BinaryApprovalChoice } from "../lib/gen/BinaryApprovalChoice";
   import type { PendingBinaryApproval } from "../lib/gen/PendingBinaryApproval";
 
+  let dialogEl = $state<HTMLDialogElement | null>(null);
   let queue = $state<PendingBinaryApproval[]>([]);
   let busy = $state(false);
 
   const current = $derived(queue[0] ?? null);
 
   function enqueue(req: PendingBinaryApproval): void {
-    if (queue.some((q) => q.id === req.id)) return;
+    if (queue.some((q) => q.id === req.id || (q.command === req.command && q.sha256 === req.sha256))) {
+      return;
+    }
     queue = [...queue, req];
+  }
+
+  async function refreshPending(): Promise<void> {
+    try {
+      const res = await api.securityBinaries();
+      for (const req of res.pending) enqueue(req);
+    } catch {
+      // Ignore background sync failures when polling pending binary approvals.
+    }
   }
 
   async function decide(choice: BinaryApprovalChoice): Promise<void> {
@@ -25,25 +37,49 @@
     busy = true;
     try {
       await api.decideBinary({ id: req.id, choice });
-      queue = queue.filter((q) => q.id !== req.id);
+      queue = queue.filter(
+        (q) => q.id !== req.id && !(q.command === req.command && q.sha256 === req.sha256),
+      );
     } catch (e) {
-      toast("Could not save security decision", errText(e));
+      const msg = errText(e);
+      if (/404|expired or not found/i.test(msg)) {
+        queue = queue.filter((q) => q.id !== req.id);
+        void refreshPending();
+      } else {
+        toast("Could not save security decision", msg);
+      }
     } finally {
       busy = false;
     }
   }
 
+  $effect(() => {
+    if (!dialogEl) return;
+    if (current) {
+      if (!dialogEl.open && dialogEl.isConnected) dialogEl.showModal();
+    } else if (dialogEl.open) {
+      dialogEl.close();
+    }
+  });
+
   onMount(() => {
-    void api.securityBinaries().then((res) => {
-      for (const req of res.pending) enqueue(req);
-    }, () => {});
+    void refreshPending();
     const off = on("binaryapproval", (ev) => enqueue(ev));
     return () => off();
   });
 </script>
 
-{#if current}
-  <div class="trust-backdrop" role="dialog" aria-modal="true" aria-labelledby="trust-title" data-testid="binary-trust-modal">
+<dialog
+  bind:this={dialogEl}
+  class="trust-dialog"
+  aria-labelledby="trust-title"
+  data-testid="binary-trust-modal"
+  oncancel={(e) => {
+    e.preventDefault();
+    void decide("deny");
+  }}
+>
+  {#if current}
     <div class="trust-card">
       <header class="trust-head">
         <span class="trust-icon"><Icon name="warning" size={18} /></span>
@@ -63,19 +99,41 @@
       </div>
 
       <footer class="trust-actions">
-        <button type="button" class="btn-deny" disabled={busy} onclick={() => void decide("deny")} data-testid="binary-deny">Deny</button>
+        <!-- svelte-ignore a11y_autofocus -->
+        <button type="button" class="btn-deny" disabled={busy} autofocus onclick={() => void decide("deny")} data-testid="binary-deny">Deny</button>
         <div class="allow-group">
           <button type="button" class="btn-once" disabled={busy} onclick={() => void decide("allow_once")} data-testid="binary-allow-once">Allow once</button>
           <button type="button" class="btn-always" disabled={busy} onclick={() => void decide("always_allow")} data-testid="binary-always-allow">Always allow</button>
         </div>
       </footer>
     </div>
-  </div>
-{/if}
+  {/if}
+</dialog>
 
 <style>
-  .trust-backdrop { position: fixed; inset: 0; z-index: 950; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--bg) 58%, transparent); backdrop-filter: blur(4px); }
-  .trust-card { width: min(500px, 95vw); display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: var(--radius); background: var(--bg-elev); border: 1px solid var(--border-strong); box-shadow: var(--shadow-pop); }
+  dialog.trust-dialog {
+    padding: 0;
+    margin: auto;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    width: min(500px, 95vw);
+    max-width: min(500px, 95vw);
+    overflow: visible;
+  }
+  dialog.trust-dialog[open] {
+    display: flex;
+  }
+  dialog.trust-dialog:modal {
+    overscroll-behavior: contain;
+  }
+  dialog.trust-dialog::backdrop {
+    overflow: hidden;
+    overscroll-behavior: contain;
+    background: color-mix(in srgb, var(--bg) 58%, transparent);
+    backdrop-filter: blur(4px);
+  }
+  .trust-card { width: 100%; display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: var(--radius); background: var(--bg-elev); border: 1px solid var(--border-strong); box-shadow: var(--shadow-pop); }
   .trust-head { display: flex; align-items: flex-start; gap: 12px; }
   .trust-icon { flex: none; width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; background: var(--yellow-soft, color-mix(in srgb, var(--yellow) 16%, transparent)); color: var(--yellow); }
   .trust-head h2 { margin: 0; font-size: calc(15px * var(--ui-scale, 1)); color: var(--heading); }

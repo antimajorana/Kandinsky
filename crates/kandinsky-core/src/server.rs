@@ -2737,7 +2737,7 @@ async fn server_signout_all(State(st): S) -> Result<Json<serde_json::Value>> {
 }
 
 fn router(state: Arc<AppState>) -> Router {
-    crate::binary_trust::register_bus(state.bus.clone());
+    crate::binary_trust::register_bus(state.ws.root(), state.bus.clone());
     Router::new()
         .route("/api/workspace", get(workspace))
         .route("/api/tree", get(tree))
