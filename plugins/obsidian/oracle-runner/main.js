@@ -1,4 +1,4 @@
-// Oracle Physics Runner UI plugin: palette commands, context-menu actions, and `oracle.lint` block.
+// Oracle Physics Runner UI plugin: palette commands, context-menu actions, and oracle.links / oracle.lint blocks.
 
 function activeMdPath(kandinsky) {
   const ctx = kandinsky.context();
@@ -55,6 +55,85 @@ async function copyProblemContext(kandinsky, path) {
   }
 }
 
+function extractFrontmatterLinks(text) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(String(text || ""));
+  if (!m) return {};
+  const fields = ["up", "conventions", "depends_on", "sources", "used_in", "problems", "computations"];
+  const want = new Set(fields);
+  const out = {};
+  let currentKey = "";
+  const stripQuotes = (v) => String(v || "").trim().replace(/^(['"])(.*)\1$/, "$2").trim();
+  for (const rawLine of m[1].split(/\r?\n/)) {
+    const item = /^\s*-\s+(.+)$/.exec(rawLine);
+    if (item && currentKey) {
+      const val = stripQuotes(item[1]);
+      if (val) (out[currentKey] ||= []).push(val);
+      continue;
+    }
+    const kv = /^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/.exec(rawLine);
+    if (!kv) {
+      currentKey = "";
+      continue;
+    }
+    const key = kv[1];
+    const rest = kv[2].trim();
+    currentKey = want.has(key) ? key : "";
+    if (!currentKey || !rest || rest === "[]") continue;
+    if (rest.startsWith("[") && rest.endsWith("]")) {
+      for (const part of rest.slice(1, -1).split(",")) {
+        const val = stripQuotes(part);
+        if (val) (out[currentKey] ||= []).push(val);
+      }
+    } else {
+      const val = stripQuotes(rest);
+      if (val) (out[currentKey] ||= []).push(val);
+    }
+  }
+  return out;
+}
+
+const SKIP_INDEX_DIRS = new Set([".git", ".kandinsky", ".obsidian", ".vault-meta", ".claude", ".agents", "zArchive", "zAI", ".trash"]);
+
+async function buildVaultNoteLookup(kandinsky) {
+  const byPath = new Map();
+  const byStem = new Map();
+  const queue = [""];
+  while (queue.length) {
+    const batch = queue.splice(0, 12);
+    const lists = await Promise.all(batch.map((d) => kandinsky.list(d).catch(() => [])));
+    for (const entries of lists) {
+      for (const entry of entries || []) {
+        if (!entry || !entry.path) continue;
+        if (entry.dir) {
+          if (!entry.ignored && !SKIP_INDEX_DIRS.has(entry.name) && !entry.name.startsWith(".")) {
+            queue.push(entry.path);
+          }
+        } else if (/\.md$/i.test(entry.path)) {
+          const norm = entry.path.replace(/\\/g, "/");
+          byPath.set(norm.toLowerCase(), norm);
+          const stem = norm.slice(norm.lastIndexOf("/") + 1, -3).toLowerCase();
+          if (!byStem.has(stem)) byStem.set(stem, norm);
+        }
+      }
+    }
+  }
+  return { byPath, byStem };
+}
+
+function parseLinkRef(raw) {
+  const s = String(raw || "").trim();
+  const wiki = /^!?\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|([^\]]+))?\]\]$/.exec(s);
+  if (wiki) {
+    const target = wiki[1].trim();
+    const anchor = (wiki[2] || "").trim();
+    const alias = (wiki[3] || "").trim();
+    const base = target.split("/").pop().replace(/\.md$/i, "");
+    return { kind: "wiki", target, anchor, label: alias || (anchor ? `${base}#${anchor}` : base) };
+  }
+  if (/^https?:\/\//i.test(s)) return { kind: "url", url: s, label: s };
+  return { kind: "raw", target: s, label: s };
+}
+
 export function register(kandinsky) {
   kandinsky.registerCommand({
     id: "lint-computation",
@@ -89,9 +168,122 @@ export function register(kandinsky) {
     ];
   });
 
+  kandinsky.registerBlock("oracle.links", (host, block) => {
+    let gone = false;
+    const getNotePath = () => String((block.options && block.options.path) || block.doc || block.note || activeMdPath(kandinsky) || "");
+
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "font-size:0.9rem;display:flex;flex-direction:column;gap:6px;";
+    host.replaceChildren(wrap);
+
+    async function refresh() {
+      const notePath = getNotePath();
+      if (gone) return;
+      if (!notePath || !/\.md$/i.test(notePath)) {
+        const empty = document.createElement("span");
+        empty.style.color = "var(--text-muted)";
+        empty.textContent = "No note selected for typed links.";
+        wrap.replaceChildren(empty);
+        return;
+      }
+      try {
+        const [text, lookup] = await Promise.all([
+          kandinsky.readText(notePath),
+          buildVaultNoteLookup(kandinsky),
+        ]);
+        if (gone) return;
+        const grouped = extractFrontmatterLinks(text);
+        const rows = [];
+        const labels = {
+          up: "Parent",
+          conventions: "Conventions",
+          depends_on: "Depends on",
+          sources: "Sources",
+          used_in: "Used in",
+          problems: "Problems",
+          computations: "Computations",
+        };
+        for (const key of Object.keys(labels)) {
+          const vals = grouped[key];
+          if (!vals || !vals.length) continue;
+          const row = document.createElement("div");
+          row.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;";
+          const kSpan = document.createElement("span");
+          kSpan.style.cssText = "font-weight:600;color:var(--text-muted);min-width:96px;font-size:0.84em;";
+          kSpan.textContent = labels[key];
+          row.appendChild(kSpan);
+
+          for (const raw of vals) {
+            const parsed = parseLinkRef(raw);
+            if (parsed.kind === "url") {
+              const a = document.createElement("a");
+              a.href = parsed.url;
+              a.textContent = parsed.label;
+              a.style.cssText = "padding:2px 8px;border:1px solid var(--border);border-radius:999px;font-size:0.84em;color:var(--link);text-decoration:none;";
+              a.onclick = (ev) => {
+                ev.preventDefault();
+                if (typeof kandinsky.openLink === "function") kandinsky.openLink(parsed.url, { outside: ev.shiftKey });
+                else window.open(parsed.url, "_blank", "noopener");
+              };
+              row.appendChild(a);
+            } else {
+              const normTarget = parsed.target.replace(/\\/g, "/");
+              const withMd = /\.md$/i.test(normTarget) ? normTarget : `${normTarget}.md`;
+              const resolved = lookup.byPath.get(withMd.toLowerCase()) || lookup.byStem.get(normTarget.split("/").pop().replace(/\.md$/i, "").toLowerCase()) || "";
+              const btn = document.createElement("button");
+              btn.type = "button";
+              btn.textContent = parsed.label;
+              btn.title = resolved || `${parsed.target} (unresolved)`;
+              btn.style.cssText = resolved
+                ? "padding:2px 9px;border:1px solid var(--border-strong, var(--border));border-radius:999px;background:var(--bg-alt);color:var(--link);font-size:0.84em;cursor:pointer;"
+                : "padding:2px 9px;border:1px dashed var(--border);border-radius:999px;background:transparent;color:var(--text-muted);font-size:0.84em;cursor:default;";
+              if (resolved) {
+                btn.onmouseenter = () => kandinsky.hover?.(resolved);
+                btn.onmouseleave = () => kandinsky.hover?.(null);
+                btn.onclick = (ev) => kandinsky.open(resolved, undefined, { beside: ev.ctrlKey || ev.metaKey || ev.shiftKey });
+              }
+              row.appendChild(btn);
+            }
+          }
+          rows.push(row);
+        }
+        if (!rows.length) {
+          const none = document.createElement("span");
+          none.style.color = "var(--text-muted)";
+          none.textContent = "No typed parent, convention, dependency, or source links yet.";
+          wrap.replaceChildren(none);
+        } else {
+          wrap.replaceChildren(...rows);
+        }
+      } catch (err) {
+        if (!gone) {
+          const errEl = document.createElement("span");
+          errEl.style.color = "var(--red, var(--text-muted))";
+          errEl.textContent = `oracle.links error: ${String(err && err.message ? err.message : err)}`;
+          wrap.replaceChildren(errEl);
+        }
+      }
+    }
+
+    void refresh();
+    const offWatch = kandinsky.onFilesChanged((paths) => {
+      const notePath = getNotePath();
+      if (!paths.length || paths.includes(notePath)) void refresh();
+    });
+    return () => {
+      gone = true;
+      offWatch();
+    };
+  }, {
+    title: "Oracle Typed Links",
+    icon: "link",
+    card: true,
+    options: [{ key: "path", label: "Note path (defaults to current note)", kind: "text" }],
+  });
+
   kandinsky.registerBlock("oracle.lint", (host, block) => {
     let gone = false;
-    const notePath = String((block.options && block.options.path) || block.doc || "");
+    const notePath = String((block.options && block.options.path) || block.doc || block.note || "");
 
     const wrap = document.createElement("div");
     wrap.style.cssText = "font-size:0.9rem;display:flex;flex-direction:column;gap:8px;";
