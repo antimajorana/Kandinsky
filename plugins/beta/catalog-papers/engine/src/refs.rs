@@ -1594,9 +1594,15 @@ fn extract_paren_tags(s: &str) -> (String, Option<String>, Option<String>) {
                         }
                         true
                     } else if let Some(y) = inner_year {
-                        // e.g. "(2nd ed., 2020)" or "(Springer, 2008)"
+                        // e.g. "(2nd ed., 2020)" or "(Springer, 2008)" or "(1967, Editions de Minuit)"
                         let without_y = inner.replace(&y, "");
                         let without_y_trim = without_y.trim().trim_matches([',', ';']).trim();
+                        let starts_or_ends_with_year = inner
+                            .strip_prefix(y.as_str())
+                            .is_some_and(|r| r.trim_start().starts_with(','))
+                            || inner
+                                .strip_suffix(y.as_str())
+                                .is_some_and(|r| r.trim_end().ends_with(','));
                         if let Some(ed) = parse_edition_phrase(without_y_trim) {
                             if edition.is_none() {
                                 edition = Some(ed);
@@ -1605,7 +1611,7 @@ fn extract_paren_tags(s: &str) -> (String, Option<String>, Option<String>) {
                                 year = Some(y);
                             }
                             true
-                        } else if without_y_trim.is_empty() {
+                        } else if without_y_trim.is_empty() || starts_or_ends_with_year {
                             if year.is_none() {
                                 year = Some(y);
                             }
@@ -1651,17 +1657,61 @@ fn extract_author_year(seg: &str) -> (String, Option<String>) {
     (t.to_string(), None)
 }
 
+fn strip_mirror_tags(stem: &str) -> String {
+    let is_mirror_token = |raw: &str| -> bool {
+        let low = raw.trim().to_ascii_lowercase();
+        matches!(
+            low.as_str(),
+            "z-library" | "z-lib" | "z-lib.org" | "zlibrary" | "libgen" | "libgen.li" | "libgen.lc" | "libgen.rs" | "libgen.is"
+        )
+    };
+    let mut cur = stem.to_string();
+    let mut stripped = true;
+    while stripped {
+        stripped = false;
+        let low = cur.to_ascii_lowercase();
+        for suf in [" - libgen.li", " - libgen.lc", " - libgen.rs", " - libgen.is", " - libgen", " - z-lib.org", " - z-library", " - z-lib"] {
+            if low.ends_with(suf) {
+                cur.truncate(cur.len() - suf.len());
+                cur = cur.trim_end().to_string();
+                stripped = true;
+                break;
+            }
+        }
+    }
+    let mut out = String::with_capacity(cur.len());
+    let mut i = 0;
+    while i < cur.len() {
+        let ch = cur[i..].chars().next().unwrap();
+        if ch == '(' || ch == '[' {
+            let close = if ch == '(' { ')' } else { ']' };
+            if let Some(rel_end) = cur[i + 1..].find(close) {
+                let inner = &cur[i + 1..i + 1 + rel_end];
+                if is_mirror_token(inner) {
+                    i += 1 + rel_end + 1;
+                    continue;
+                }
+            }
+        }
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// Parses structured PDF filenames (`Author - Title - Year.pdf`, `Author - Title (Year).pdf`,
 /// `{Author}{Year} - {Title}.pdf`, `Author - Title, Vol. N.pdf`) while preserving unstructured filename
 /// behavior (`stem.replace(['_', '-'], " ")` with `structured = false`).
 pub fn parse_filename(name: &str) -> ParsedFilename {
     let decoded = kandinsky_text::links::percent_decoded(name);
     let fname = decoded.rsplit(['/', '\\']).next().unwrap_or(&decoded);
-    let stem = if fname.len() > 4 && fname.as_bytes()[fname.len() - 4..].eq_ignore_ascii_case(b".pdf") {
+    let raw_stem = if fname.len() > 4 && fname.as_bytes()[fname.len() - 4..].eq_ignore_ascii_case(b".pdf") {
         &fname[..fname.len() - 4]
     } else {
         fname
     };
+    let clean_stem = strip_mirror_tags(raw_stem);
+    let stem = if clean_stem.is_empty() { raw_stem } else { clean_stem.as_str() };
     let isbn = parse_isbn(stem);
     let ax = remote::parse_arxiv_anywhere(stem);
     let arxiv = ax.as_ref().map(|(a, _)| a.clone());
@@ -1972,6 +2022,10 @@ pub fn classify_pdf(input: &ClassifyInput<'_>) -> ItemClass {
         || front_low.contains("master's thesis")
         || front_low.contains("submitted in partial fulfillment")
         || front_low.contains("a dissertation presented")
+        || front_low.contains("thèse de doctorat")
+        || front_low.contains("these de doctorat")
+        || name_low.starts_with("these de ")
+        || name_low.starts_with("thèse de ")
     {
         return ItemClass::Thesis;
     }
@@ -2654,6 +2708,34 @@ pub mod tests {
         assert!(!d.structured);
         assert_eq!(d.arxiv.as_deref(), Some("2604.06107"));
         assert_eq!(d.arxiv_version.as_deref(), Some("v1"));
+
+        let e = parse_filename("Différence et Répétition (Gilles Deleuze) (Z-Library).pdf");
+        assert!(!e.structured);
+        assert_eq!(e.title, "Différence et Répétition (Gilles Deleuze)");
+
+        let f = parse_filename("Jacques Derrida - De La Grammatologie (1967, Editions de Minuit) - libgen.li.pdf");
+        assert!(f.structured);
+        assert_eq!(f.authors, vec!["Derrida, Jacques"]);
+        assert_eq!(f.title, "De La Grammatologie");
+        assert_eq!(f.year.as_deref(), Some("1967"));
+
+        let g = parse_filename("Roland Barthes - Mythologies (Editions du Seuil, 1957).pdf");
+        assert!(g.structured);
+        assert_eq!(g.authors, vec!["Barthes, Roland"]);
+        assert_eq!(g.title, "Mythologies");
+        assert_eq!(g.year.as_deref(), Some("1957"));
+
+        assert_eq!(
+            classify_pdf(&ClassifyInput {
+                text: "Thèse de doctorat en physique théorique",
+                pages: 199,
+                filename: "These de Pierre Clavier - Analytical and Geometric approaches.pdf",
+                rel_dir: Some("The Beyond/Quantum gravity/papers"),
+                parsed: &ParsedFilename::default(),
+                ..Default::default()
+            }),
+            ItemClass::Thesis
+        );
     }
 
     #[test]

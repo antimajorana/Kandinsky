@@ -1,7 +1,8 @@
 //! Lossless, read-only cross-platform Zotero 6/7/8 + Better BibTeX + ZotMoov importer.
 use crate::entry;
-use crate::external::{self, format_pdf_filename, path_in_external_roots, sanitize_pdf_filename, write_external_pdf};
-use crate::refs::{citekey, year_of, Lib, Res};
+use crate::external::{self, clean_ref_token, format_pdf_filename, path_in_external_roots, resolve_pdf_ref, sanitize_pdf_filename, write_external_pdf};
+use crate::refs::{arxiv_of, citekey, isbn_core, list, norm_doi, normalized_kind, s, year_of, Lib, Res};
+use crate::remote;
 use kandinsky_text::paths::{real, rel_path, safe_join};
 use rusqlite::{types::ValueRef, Connection, OpenFlags};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -287,6 +288,93 @@ fn zotero_annotation_lines(ann_key: &str, kind_raw: &str, text: &str, comment: &
     out
 }
 
+struct ExistingEntry {
+    key: String,
+    zotero_key: Option<String>,
+    live_paths: Vec<PathBuf>,
+    doi: Option<String>,
+    arxiv_base: Option<String>,
+    isbn_core: Option<String>,
+    claimed: bool,
+}
+
+fn entry_live_paths(lib: &Lib, dir: &Path, m: &serde_yaml::Mapping) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for raw in list(m, "pdf").into_iter().chain(list(m, "external_pdf")).chain(list(m, "files")) {
+        let clean = clean_ref_token(&raw);
+        if clean.is_empty() {
+            continue;
+        }
+        let found = resolve_pdf_ref(lib.root, lib.cfg, clean)
+            .filter(|(_, abs)| abs.is_file())
+            .map(|(_, abs)| real(&abs).unwrap_or(abs))
+            .or_else(|| {
+                if !clean.contains("..") && !Path::new(clean).is_absolute() {
+                    safe_join(dir, clean)
+                        .ok()
+                        .filter(|p| p.is_file())
+                        .or_else(|| safe_join(lib.root, clean).ok().filter(|p| p.is_file()))
+                        .map(|abs| real(&abs).unwrap_or(abs))
+                } else {
+                    None
+                }
+            });
+        if let Some(rp) = found.filter(|rp| !out.contains(rp)) {
+            out.push(rp);
+        }
+    }
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for p in rd.flatten().map(|e| e.path()) {
+            if p.is_file() && p.extension().is_some_and(|x| x.eq_ignore_ascii_case("pdf")) {
+                let rp = real(&p).unwrap_or(p);
+                if !out.contains(&rp) {
+                    out.push(rp);
+                }
+            }
+        }
+    }
+    out
+}
+
+fn load_existing_entries(lib: &Lib, refs_base: &Path) -> Vec<ExistingEntry> {
+    let Ok(rd) = std::fs::read_dir(refs_base) else {
+        return Vec::new();
+    };
+    let mut dirs: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    dirs.sort();
+    let mut out = Vec::new();
+    for dir in dirs {
+        let key = entry::key_of(&dir);
+        if key.is_empty() {
+            continue;
+        }
+        let Some(m) = entry::read(&dir) else { continue };
+        out.push(ExistingEntry {
+            key,
+            zotero_key: s(&m, "zoteroKey"),
+            live_paths: entry_live_paths(lib, &dir, &m),
+            doi: s(&m, "DOI").map(|d| norm_doi(&d)).filter(|d| !d.is_empty()),
+            arxiv_base: arxiv_of(&m).map(|a| a.to_ascii_lowercase()),
+            isbn_core: s(&m, "ISBN").or_else(|| s(&m, "isbn")).and_then(|x| isbn_core(&x)),
+            claimed: false,
+        });
+    }
+    out
+}
+
+fn resolve_attachment_path(data_dir: &Path, base_att: Option<&Path>, akey: &str, raw_path: &str) -> Option<(PathBuf, bool)> {
+    let norm = raw_path.trim().replace('\\', "/");
+    if let Some(rel) = norm.strip_prefix("attachments:") {
+        base_att.and_then(|b| safe_join(b, rel.trim_start_matches('/')).ok()).map(|p| (p, true))
+    } else if let Some(fname) = norm.strip_prefix("storage:") {
+        safe_join(&data_dir.join("storage").join(akey), fname.rsplit('/').next().unwrap_or(fname)).ok().map(|p| (p, false))
+    } else if !norm.is_empty() && (Path::new(raw_path).is_absolute() || Path::new(&norm).is_absolute()) {
+        Some((PathBuf::from(raw_path), true))
+    } else {
+        None
+    }
+}
+
 pub fn import_zotero(lib: &Lib, opts: &ZoteroImportOpts) -> Res<ZoteroImportReport> {
     let disc = discover_zotero(opts.data_dir.as_deref(), opts.prefs_path.as_deref(), opts.base_attachment_path.as_deref());
     let data_dir_str = opts.data_dir.clone().or(disc.data_dir).ok_or_else(|| "Zotero data folder not found".to_string())?;
@@ -358,21 +446,77 @@ pub fn import_zotero(lib: &Lib, opts: &ZoteroImportOpts) -> Res<ZoteroImportRepo
         }
     }
 
+    let (mut att_to_parent, mut item_atts) = (HashMap::new(), HashMap::<i64, Vec<(String, String, Option<(PathBuf, bool)>)>>::new());
+    if !table_cols(conn, "itemAttachments").is_empty() {
+        let sql = "SELECT ia.itemID, ia.parentItemID, i.key, COALESCE(ia.contentType, ''), COALESCE(ia.path, '') FROM itemAttachments ia JOIN items i ON ia.itemID = i.itemID";
+        for (aid, pid, akey, ctype, path) in qvec(conn, sql, |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?)))? {
+            if let Some(p) = pid.filter(|_| !deleted.contains(&aid)) {
+                att_to_parent.insert(aid, p);
+                if ctype.eq_ignore_ascii_case("application/pdf") || path.to_ascii_lowercase().ends_with(".pdf") {
+                    let resolved = resolve_attachment_path(&data_dir, base_att.as_deref(), &akey, &path);
+                    item_atts.entry(p).or_default().push((akey, path, resolved));
+                }
+            }
+        }
+    }
+
     let (bbt_by_id, bbt_by_key) = read_bbt_keys(&data_dir);
     let refs_base = safe_join(lib.root, &lib.cfg.dir)?;
+    let mut existing = load_existing_entries(lib, &refs_base);
     let (mut assigned, mut zkey_to_ck, mut iid_to_ck) = (HashSet::new(), HashMap::new(), HashMap::new());
     for (iid, zkey, _, _) in &bib_items {
         let f = item_fields.get(iid);
+        let z_live_paths: Vec<PathBuf> = item_atts
+            .get(iid)
+            .into_iter()
+            .flatten()
+            .filter_map(|(_, _, res)| res.as_ref())
+            .filter(|(p, _)| p.is_file())
+            .map(|(p, _)| real(p).unwrap_or_else(|_| p.clone()))
+            .collect();
+        let z_doi = f.and_then(|m| m.get("DOI")).map(|d| norm_doi(d)).filter(|d| !d.is_empty());
+        let z_arxiv_base = f
+            .and_then(|m| ["archiveID", "DOI", "url", "extra"].into_iter().find_map(|k| m.get(k).and_then(|v| remote::parse_arxiv(v))))
+            .map(|a| a.to_ascii_lowercase());
+        let z_isbn_core = f.and_then(|m| m.get("ISBN").or_else(|| m.get("isbn"))).and_then(|x| isbn_core(x));
         let pinned = f.and_then(|m| m.get("extra")).and_then(|e| extra_citekey(e)).or_else(|| bbt_by_id.get(iid).cloned()).or_else(|| bbt_by_key.get(zkey).cloned());
-        let key = if let Some(pk) = pinned {
-            if !assigned.contains(&pk) { pk } else { (2..).map(|n| format!("{pk}_{n}")).find(|k| !assigned.contains(k)).unwrap() }
+        let authors = item_creators.get(iid).and_then(|c| c.get("author")).cloned().unwrap_or_default();
+        let year = f.and_then(|m| m.get("date")).and_then(|d| year_of(d));
+        let title = f.and_then(|m| m.get("title")).map(String::as_str).unwrap_or("");
+        let base_ck = citekey(&authors, year.as_deref(), title, &|_| false);
+
+        let no_id_conflict = |e: &ExistingEntry| {
+            z_doi.as_ref().is_none_or(|zd| e.doi.as_ref().is_none_or(|ed| ed == zd))
+                && z_arxiv_base.as_ref().is_none_or(|za| e.arxiv_base.as_ref().is_none_or(|ea| ea == za))
+                && z_isbn_core.as_ref().is_none_or(|zi| e.isbn_core.as_ref().is_none_or(|ei| ei == zi))
+        };
+        let matched_idx = existing
+            .iter()
+            .position(|e| !e.claimed && e.zotero_key.as_deref() == Some(zkey.as_str()))
+            .or_else(|| (!z_live_paths.is_empty()).then(|| existing.iter().position(|e| !e.claimed && e.live_paths.iter().any(|lp| z_live_paths.contains(lp)))).flatten())
+            .or_else(|| z_doi.is_some().then(|| existing.iter().position(|e| !e.claimed && e.doi == z_doi)).flatten())
+            .or_else(|| z_arxiv_base.is_some().then(|| existing.iter().position(|e| !e.claimed && e.arxiv_base == z_arxiv_base)).flatten())
+            .or_else(|| z_isbn_core.is_some().then(|| existing.iter().position(|e| !e.claimed && e.isbn_core == z_isbn_core)).flatten())
+            .or_else(|| {
+                existing.iter().position(|e| {
+                    !e.claimed
+                        && e.zotero_key.is_none()
+                        && (pinned.as_deref() == Some(e.key.as_str()) || e.key == base_ck)
+                        && no_id_conflict(e)
+                })
+            });
+
+        let key = if let Some(idx) = matched_idx {
+            existing[idx].claimed = true;
+            existing[idx].key.clone()
+        } else if let Some(pk) = pinned {
+            if !assigned.contains(&pk) && !refs_base.join(&pk).exists() {
+                pk
+            } else {
+                (2..).map(|n| format!("{pk}_{n}")).find(|k| !assigned.contains(k) && !refs_base.join(k).exists()).unwrap()
+            }
         } else {
-            let authors = item_creators.get(iid).and_then(|c| c.get("author")).cloned().unwrap_or_default();
-            let year = f.and_then(|m| m.get("date")).and_then(|d| year_of(d));
-            let title = f.and_then(|m| m.get("title")).map(String::as_str).unwrap_or("");
-            citekey(&authors, year.as_deref(), title, &|k| {
-                assigned.contains(k) || (refs_base.join(k).exists() && entry::read(&refs_base.join(k)).and_then(|em| em.get("zoteroKey").and_then(Value::as_str).map(|zk| zk != zkey)).unwrap_or(true))
-            })
+            citekey(&authors, year.as_deref(), title, &|k| assigned.contains(k) || refs_base.join(k).exists())
         };
         assigned.insert(key.clone());
         zkey_to_ck.insert(zkey.clone(), key.clone());
@@ -385,17 +529,6 @@ pub fn import_zotero(lib: &Lib, opts: &ZoteroImportOpts) -> Res<ZoteroImportRepo
             if let Some(tck) = obj.split("/items/").nth(1).map(|s| s.split(['/', '?', '#']).next().unwrap_or(s)).and_then(|zk| zkey_to_ck.get(zk)) {
                 let (link, list) = (format!("[[{tck}]]"), relations.entry(iid).or_default());
                 if !list.contains(&link) { list.push(link); report.relations_linked += 1; }
-            }
-        }
-    }
-
-    let (mut att_to_parent, mut item_atts) = (HashMap::new(), HashMap::<i64, Vec<(String, String)>>::new());
-    if !table_cols(conn, "itemAttachments").is_empty() {
-        let sql = "SELECT ia.itemID, ia.parentItemID, i.key, COALESCE(ia.contentType, ''), COALESCE(ia.path, '') FROM itemAttachments ia JOIN items i ON ia.itemID = i.itemID";
-        for (aid, pid, akey, ctype, path) in qvec(conn, sql, |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?)))? {
-            if let Some(p) = pid.filter(|_| !deleted.contains(&aid)) {
-                att_to_parent.insert(aid, p);
-                if ctype.eq_ignore_ascii_case("application/pdf") || path.to_ascii_lowercase().ends_with(".pdf") { item_atts.entry(p).or_default().push((akey, path)); }
             }
         }
     }
@@ -436,7 +569,12 @@ pub fn import_zotero(lib: &Lib, opts: &ZoteroImportOpts) -> Res<ZoteroImportRepo
         let existed = entry::read(&entry_dir).is_some();
         let mut m = entry::read(&entry_dir).unwrap_or_default();
         m.insert("citekey".into(), key.clone().into());
-        m.insert("type".into(), tname.into());
+        let keep_existing_type = s(&m, "type").as_deref().is_some_and(|et| {
+            (et == "science_book" && normalized_kind(&tname) == "book") || (tname == "document" && et != "document")
+        });
+        if !keep_existing_type {
+            m.insert("type".into(), tname.into());
+        }
         m.insert("zoteroKey".into(), zkey.into());
         if let Some(da) = date_added.filter(|s| !s.is_empty()) { m.entry("dateAdded".into()).or_insert_with(|| da.into()); }
         for (fk, fv) in item_fields.get(&iid).into_iter().flatten() { m.insert(fk.as_str().into(), fv.as_str().into()); }
@@ -444,24 +582,27 @@ pub fn import_zotero(lib: &Lib, opts: &ZoteroImportOpts) -> Res<ZoteroImportRepo
             m.insert(role.as_str().into(), Value::Sequence(names.iter().map(|s| Value::from(s.as_str())).collect()));
         }
         for (prop, src) in [("tags", item_tags.get(&iid)), ("collections", item_cols.get(&iid)), ("related", relations.get(&iid))] {
-            if let Some(vals) = src { m.insert(prop.into(), Value::Sequence(vals.iter().map(|s| Value::from(s.as_str())).collect())); }
+            if let Some(vals) = src {
+                let mut merged = list(&m, prop);
+                for v in vals {
+                    if !merged.contains(v) { merged.push(v.clone()); }
+                }
+                m.insert(prop.into(), Value::Sequence(merged.into_iter().map(Value::from).collect()));
+            }
         }
 
-        let mut files: Vec<String> = m.get("files").and_then(Value::as_sequence).map(|s| s.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
-        let existing_external: Vec<String> = ["pdf", "external_pdf"].into_iter().filter_map(|k| m.get(k).and_then(Value::as_str).map(String::from)).collect();
+        let existing_live = entry_live_paths(lib, &entry_dir, &m);
+        let existing_external: Vec<String> = ["pdf", "external_pdf"].into_iter().filter_map(|k| s(&m, k)).collect();
+        let mut files = list(&m, "files");
         let add_file = |files: &mut Vec<String>, r: String| { if !files.contains(&r) && !existing_external.contains(&r) { files.push(r); } };
-        for (akey, raw_path) in item_atts.remove(&iid).unwrap_or_default() {
-            let norm = raw_path.trim().replace('\\', "/");
-            let resolved: Option<(PathBuf, bool)> = if let Some(rel) = norm.strip_prefix("attachments:") {
-                base_att.as_ref().and_then(|b| safe_join(b, rel.trim_start_matches('/')).ok()).map(|p| (p, true))
-            } else if let Some(fname) = norm.strip_prefix("storage:") {
-                safe_join(&data_dir.join("storage").join(&akey), fname.rsplit('/').next().unwrap_or(fname)).ok().map(|p| (p, false))
-            } else if !norm.is_empty() && (Path::new(&raw_path).is_absolute() || Path::new(&norm).is_absolute()) {
-                Some((PathBuf::from(&raw_path), true))
-            } else { None };
+        for (_akey, raw_path, resolved) in item_atts.remove(&iid).unwrap_or_default() {
             let Some((src_path, prefer_in_place)) = resolved else { continue };
             if !src_path.is_file() { report.missing_pdfs.push(raw_path); continue; }
             let real_src = real(&src_path).unwrap_or(src_path);
+            if existing_live.contains(&real_src) {
+                if prefer_in_place { report.linked_in_place += 1; }
+                continue;
+            }
             if prefer_in_place {
                 if let Some((portable, _)) = path_in_external_roots(lib.root, lib.cfg, &real_src).or_else(|| rel_path(lib.root, &real_src).map(|r| (r, real_src.clone()))) {
                     add_file(&mut files, portable);
@@ -581,5 +722,68 @@ mod tests {
 
         let r2 = import_zotero(&v.lib(), &apply).unwrap();
         assert_eq!((r2.imported, r2.updated, entry::split_pdf_marks(&std::fs::read_to_string(v.root.join("refs/papers/anderson1972pinned/anderson1972pinned.md")).unwrap()).1.len()), (0, 2, 3));
+    }
+
+    #[test]
+    fn reconciles_existing_vault_notes_by_pdf_doi_and_arxiv_without_duplicate_citekeys() {
+        let (mut v, ws) = (Vault::new(), tempfile::tempdir().unwrap());
+        let ws_real = real(ws.path()).unwrap();
+        let (vault_dir, pool_dir, zot_dir, prof_dir) = (ws_real.join("vault"), ws_real.join("The Study"), ws_real.join("ZoteroData"), ws_real.join("Profile/abc.default"));
+        for d in [&vault_dir, &pool_dir.join("The World"), &zot_dir, &prof_dir] { std::fs::create_dir_all(d).unwrap(); }
+        v.root = vault_dir;
+        v.trash = crate::refs::tests::TempTrash(v.root.clone());
+        v.cfg.external_pdf_roots = vec!["../The Study".into()];
+        std::fs::write(pool_dir.join("The World/Simon - Topological Quantum.pdf"), b"%PDF-1.4 book").unwrap();
+
+        let write_existing = |ck: &str, front: &str| {
+            let dir = v.root.join("refs/papers").join(ck);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join(format!("{ck}.md")), format!("---\n{front}---\n# {ck}\n")).unwrap();
+        };
+        write_existing("simon2023topological", "type: literature\ncitekey: simon2023topological\nitemType: science_book\ntitle: Topological Quantum\ncollections:\n  - The World\nexternal_pdf: ../The Study/The World/Simon - Topological Quantum.pdf\n");
+        write_existing("customdoi", "type: literature\ncitekey: customdoi\nitemType: journalArticle\ntitle: Custom DOI Entry\nDOI: 10.1000/custom.doi.1\ncollections:\n  - Custom Folder\n");
+        write_existing("customarxiv", "type: literature\ncitekey: customarxiv\nitemType: preprint\ntitle: Custom arXiv Entry\narxiv: 2501.00001v1\n");
+
+        let prefs_path = prof_dir.join("prefs.js");
+        std::fs::write(&prefs_path, format!(
+            "user_pref(\"extensions.zotero.dataDir\", \"{}\");\nuser_pref(\"extensions.zotero.baseAttachmentPath\", \"{}\");\n",
+            zot_dir.to_string_lossy().replace('\\', "\\\\"), pool_dir.to_string_lossy().replace('\\', "\\\\")
+        )).unwrap();
+
+        let zconn = Connection::open(zot_dir.join("zotero.sqlite")).unwrap();
+        zconn.execute_batch(
+            "CREATE TABLE itemTypes(itemTypeID INT PRIMARY KEY, typeName TEXT); INSERT INTO itemTypes VALUES(1,'book'),(2,'journalArticle'),(3,'preprint'),(4,'attachment'),(5,'note');
+             CREATE TABLE items(itemID INT PRIMARY KEY, itemTypeID INT, key TEXT, dateAdded TEXT);
+             INSERT INTO items VALUES(1,1,'ZBOOK1','2026-01-01'),(2,2,'ZDOI1','2026-01-02'),(3,3,'ZAXV1','2026-01-03'),(10,4,'ZATT1','2026-01-01'),(20,5,'ZNOTE1','2026-01-01');
+             CREATE TABLE deletedItems(itemID INT PRIMARY KEY);
+             CREATE TABLE fields(fieldID INT PRIMARY KEY, fieldName TEXT); INSERT INTO fields VALUES(1,'title'),(2,'DOI'),(3,'url'),(4,'abstractNote');
+             CREATE TABLE itemDataValues(valueID INT PRIMARY KEY, value TEXT); INSERT INTO itemDataValues VALUES(1,'Topological Quantum'),(2,'Existing DOI Title'),(3,'10.1000/custom.doi.1'),(4,'Existing arXiv Title'),(5,'https://arxiv.org/abs/2501.00001v2'),(6,'Helpful Zotero abstract');
+             CREATE TABLE itemData(itemID INT, fieldID INT, valueID INT); INSERT INTO itemData VALUES(1,1,1),(2,1,2),(2,2,3),(2,4,6),(3,1,4),(3,3,5);
+             CREATE TABLE creatorTypes(creatorTypeID INT PRIMARY KEY, creatorType TEXT); INSERT INTO creatorTypes VALUES(1,'author');
+             CREATE TABLE creators(creatorID INT PRIMARY KEY, firstName TEXT, lastName TEXT, fieldMode INT); INSERT INTO creators VALUES(1,'Steven H.','Simon',0);
+             CREATE TABLE itemCreators(itemID INT, creatorID INT, creatorTypeID INT, orderIndex INT); INSERT INTO itemCreators VALUES(1,1,1,0);
+             CREATE TABLE collections(collectionID INT PRIMARY KEY, collectionName TEXT, parentCollectionID INT); INSERT INTO collections VALUES(1,'Zotero Top',NULL);
+             CREATE TABLE collectionItems(collectionID INT, itemID INT); INSERT INTO collectionItems VALUES(1,1),(1,2);
+             CREATE TABLE itemAttachments(itemID INT PRIMARY KEY, parentItemID INT, contentType TEXT, path TEXT);
+             INSERT INTO itemAttachments VALUES(10,1,'application/pdf','attachments:The World/Simon - Topological Quantum.pdf');
+             CREATE TABLE itemNotes(itemID INT PRIMARY KEY, parentItemID INT, note TEXT);
+             INSERT INTO itemNotes VALUES(20,1,'<p>Chapter 1 notes</p>');",
+        ).unwrap();
+        drop(zconn);
+
+        let dry: ZoteroImportOpts = serde_json::from_value(json!({ "prefs_path": prefs_path.to_str().unwrap() })).unwrap();
+        let r_dry = import_zotero(&v.lib(), &dry).unwrap();
+        assert_eq!((r_dry.imported, r_dry.updated, r_dry.linked_in_place, r_dry.notes_imported), (0, 3, 1, 1));
+        assert_eq!(r_dry.citekeys, vec!["simon2023topological", "customdoi", "customarxiv"]);
+
+        let apply: ZoteroImportOpts = serde_json::from_value(json!({ "prefs_path": prefs_path.to_str().unwrap(), "apply": true })).unwrap();
+        let r = import_zotero(&v.lib(), &apply).unwrap();
+        assert_eq!((r.imported, r.updated), (0, 3));
+        let simon_md = std::fs::read_to_string(v.root.join("refs/papers/simon2023topological/simon2023topological.md")).unwrap();
+        assert!(simon_md.contains("itemType: science_book") && simon_md.contains("zoteroKey: ZBOOK1"), "{simon_md}");
+        assert!(simon_md.contains("The World") && simon_md.contains("Zotero Top"), "collections unioned: {simon_md}");
+        assert!(!simon_md.contains("files:"), "no duplicate files: when external_pdf matches canonical path: {simon_md}");
+        assert!(simon_md.contains("<!-- zotero:note ZNOTE1 -->") && simon_md.contains("Chapter 1 notes"));
+        assert!(!v.root.join("refs/papers/customdoia").exists() && !v.root.join("refs/papers/customarxiva").exists());
     }
 }
