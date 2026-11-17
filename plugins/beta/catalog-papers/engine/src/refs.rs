@@ -358,6 +358,7 @@ impl Lib<'_> {
         let key = s(m, "citekey").unwrap_or_else(|| key.to_string());
         let pdf = list(m, "pdf")
             .into_iter()
+            .chain(list(m, "external_pdf"))
             .chain(list(m, "files"))
             .find_map(|raw| {
                 let f = crate::external::clean_ref_token(&raw);

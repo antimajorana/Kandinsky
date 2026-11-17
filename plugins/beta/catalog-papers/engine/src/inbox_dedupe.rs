@@ -396,8 +396,9 @@ pub fn merge_entries(lib: &Lib, opts: &MergeOpts, relink: &dyn Fn(&str, &str) ->
     }
 
     let (mut files, into_had_pdf) = (ylist(&m, "files"), i.pdf.is_some());
-    for f in ylist(&from, "files") {
-        if files.contains(&f) || (into_had_pdf && opts.trash_duplicate_pdf) { continue; }
+    let existing_refs: Vec<String> = ylist(&m, "files").into_iter().chain(ylist(&m, "pdf")).chain(ylist(&m, "external_pdf")).collect();
+    for f in ylist(&from, "files").into_iter().chain(ylist(&from, "pdf")).chain(ylist(&from, "external_pdf")) {
+        if existing_refs.contains(&f) || files.contains(&f) || (into_had_pdf && opts.trash_duplicate_pdf) { continue; }
         if external::resolve_pdf_ref(lib.root, lib.cfg, &f).is_some() {
             files.push(f);
         } else if dup_dir.join(&f).is_file() {

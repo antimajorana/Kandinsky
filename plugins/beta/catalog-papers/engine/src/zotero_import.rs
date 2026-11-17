@@ -448,7 +448,8 @@ pub fn import_zotero(lib: &Lib, opts: &ZoteroImportOpts) -> Res<ZoteroImportRepo
         }
 
         let mut files: Vec<String> = m.get("files").and_then(Value::as_sequence).map(|s| s.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
-        let add_file = |files: &mut Vec<String>, r: String| { if !files.contains(&r) { files.push(r); } };
+        let existing_external: Vec<String> = ["pdf", "external_pdf"].into_iter().filter_map(|k| m.get(k).and_then(Value::as_str).map(String::from)).collect();
+        let add_file = |files: &mut Vec<String>, r: String| { if !files.contains(&r) && !existing_external.contains(&r) { files.push(r); } };
         for (akey, raw_path) in item_atts.remove(&iid).unwrap_or_default() {
             let norm = raw_path.trim().replace('\\', "/");
             let resolved: Option<(PathBuf, bool)> = if let Some(rel) = norm.strip_prefix("attachments:") {

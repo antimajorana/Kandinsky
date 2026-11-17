@@ -177,18 +177,23 @@ fn unquote_wikilink(raw: &str) -> String {
 
 fn note_pdf_candidates(fm: &Mapping) -> Vec<String> {
     let mut out = Vec::new();
-    if let Some(s) = fm.get("pdf").and_then(Value::as_str) {
-        let p = unquote_wikilink(s);
-        if !p.is_empty() {
-            out.push(p);
-        }
-    }
-    if let Some(seq) = fm.get("files").and_then(Value::as_sequence) {
-        for item in seq.iter().filter_map(Value::as_str) {
-            let p = unquote_wikilink(item);
-            if p.to_ascii_lowercase().ends_with(".pdf") {
-                out.push(p);
+    for key in ["pdf", "external_pdf", "files"] {
+        match fm.get(key) {
+            Some(Value::String(s)) => {
+                let p = unquote_wikilink(s);
+                if !p.is_empty() && (key != "files" || p.to_ascii_lowercase().ends_with(".pdf")) && !out.contains(&p) {
+                    out.push(p);
+                }
             }
+            Some(Value::Sequence(seq)) => {
+                for item in seq.iter().filter_map(Value::as_str) {
+                    let p = unquote_wikilink(item);
+                    if !p.is_empty() && (key != "files" || p.to_ascii_lowercase().ends_with(".pdf")) && !out.contains(&p) {
+                        out.push(p);
+                    }
+                }
+            }
+            _ => {}
         }
     }
     out
@@ -380,5 +385,26 @@ mod tests {
         let sc = write_sidecar_block(&vault, &cfg, "../Papers/CondMat/Maier2005.pdf", &b).unwrap();
         assert_eq!(sc, pool.join("CondMat/Maier2005.pdf.kandinsky-marks"));
         assert_eq!(read_sidecar_block(&vault, &cfg, "../Papers/CondMat/Maier2005.pdf").unwrap().live().len(), 1);
+    }
+
+    #[test]
+    fn maps_external_pdf_frontmatter_key_to_owner_note() {
+        let (_d, vault, _pool, cfg) = setup();
+        let note_dir = vault.join("refs/papers/maier2005ext");
+        std::fs::create_dir_all(&note_dir).unwrap();
+        std::fs::write(
+            note_dir.join("maier2005ext.md"),
+            "---\ncitekey: maier2005ext\nexternal_pdf: ../Papers/CondMat/Maier2005.pdf\n---\n# Maier\n",
+        )
+        .unwrap();
+        assert_eq!(
+            owner_note_for_external_pdf(&vault, &cfg, "../Papers/CondMat/Maier2005.pdf").as_deref(),
+            Some("refs/papers/maier2005ext/maier2005ext.md")
+        );
+        assert_eq!(
+            pdf_from_note_frontmatter(&vault, &cfg, "refs/papers/maier2005ext/maier2005ext.md").as_deref(),
+            Some("../Papers/CondMat/Maier2005.pdf")
+        );
+        assert_eq!(linked_external_pdfs(&vault, &cfg).len(), 1);
     }
 }

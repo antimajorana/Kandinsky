@@ -154,12 +154,12 @@ pub(crate) fn thing_in<'p>(root: &Path, rel: &str, props: impl Fn(&str) -> Optio
     None
 }
 
-/// The file a note hidden behind its thing (`shown: false`) names in its `drawing`, `pdf` or `book` property.
+/// The file a note hidden behind its thing (`shown: false`) names in its `drawing`, `pdf`, `external_pdf` or `book` property.
 fn hidden_behind<'a>(get: impl Fn(&str) -> Option<&'a Value>) -> Option<String> {
     if get("shown").and_then(Value::as_bool) != Some(false) {
         return None;
     }
-    let link = ["drawing", "pdf", "book"].iter().find_map(|k| get(k)?.as_str())?;
+    let link = ["drawing", "pdf", "external_pdf", "book"].iter().find_map(|k| get(k)?.as_str())?;
     Some(link.trim().strip_prefix("[[")?.strip_suffix("]]")?.split('|').next()?.trim().to_string())
 }
 

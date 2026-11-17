@@ -376,7 +376,7 @@ fn build_entry_record(lib: &Lib, roots: &[ExternalRoot], key: String, dir: PathB
     let mut stale_derived_cols = Vec::new();
     let mut missing_pdf_names = Vec::new();
 
-    for raw in list(&m, "pdf").into_iter().chain(list(&m, "files")) {
+    for raw in list(&m, "pdf").into_iter().chain(list(&m, "external_pdf")).chain(list(&m, "files")) {
         let clean = clean_ref_token(&raw);
         if clean.is_empty() {
             continue;
@@ -836,6 +836,7 @@ fn process_matched_entry(
         let stale_refs: HashSet<String> = entry.stale_refs.iter().cloned().collect();
         let stale_cols: HashSet<String> = entry.stale_derived_cols.iter().cloned().collect();
         let mut ref_replaced = replace_stale_ref_field(&mut m, "pdf", &stale_refs, &disc.pdf_ref);
+        ref_replaced |= replace_stale_ref_field(&mut m, "external_pdf", &stale_refs, &disc.pdf_ref);
         ref_replaced |= replace_stale_ref_field(&mut m, "files", &stale_refs, &disc.pdf_ref);
         if !ref_replaced {
             let mut files = list(&m, "files");
@@ -847,8 +848,13 @@ fn process_matched_entry(
         update_collections_for_scan(&mut m, &stale_cols, &disc.derived_collection);
         dirty = true;
     } else if is_attach {
-        let mut files = list(&m, "files");
-        if !files.iter().any(|f| f == &disc.pdf_ref) {
+        let has_pdf_ref = list(&m, "pdf")
+            .into_iter()
+            .chain(list(&m, "external_pdf"))
+            .chain(list(&m, "files"))
+            .any(|f| clean_ref_token(&f).replace('\\', "/") == disc.pdf_ref);
+        if !has_pdf_ref {
+            let mut files = list(&m, "files");
             files.insert(0, disc.pdf_ref.clone());
             m.insert("files".into(), Value::Sequence(files.into_iter().map(Value::from).collect()));
             dirty = true;
@@ -1242,5 +1248,27 @@ mod tests {
         let mv = move_res.items.iter().find(|i| i.citekey == "zoteroitem").unwrap();
         assert_eq!(mv.action, "move");
         assert_eq!(mv.pdf_ref, "../Library/Papers/NewSub/UniqueFile.pdf");
+    }
+
+    #[test]
+    fn reconciles_existing_entry_using_external_pdf_property() {
+        let (_ws, v, papers_dir, _) = ext_vault();
+        let topic = papers_dir.join("Topic");
+        std::fs::create_dir_all(&topic).unwrap();
+        std::fs::write(topic.join("ExistingPaper.pdf"), tiny_pdf(&["No embedded IDs"])).unwrap();
+
+        let note_dir = v.root.join("refs/papers/customkey2025");
+        std::fs::create_dir_all(&note_dir).unwrap();
+        let mut fm = Mapping::new();
+        fm.insert("citekey".into(), "customkey2025".into());
+        fm.insert("type".into(), "journalArticle".into());
+        fm.insert("title".into(), "Completely Different Title".into());
+        fm.insert("external_pdf".into(), "../Library/Papers/Topic/ExistingPaper.pdf".into());
+        crate::entry::write(&Plain, &note_dir, &fm).unwrap();
+
+        let res = scan_external_roots(&v.lib(), &ScanRootsOpts { dry_run: true, max_lookups: Some(0), ..Default::default() }).unwrap();
+        assert_eq!((res.created, res.updated, res.skipped), (0, 1, 0), "{res:?}");
+        assert_eq!(res.items[0].citekey, "customkey2025");
+        assert_eq!(res.items[0].action, "update");
     }
 }
