@@ -236,7 +236,9 @@ html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone 
 .kandinsky-mention-card .p { color: var(--text-faint); font-family: var(--font-mono); font-size: .9em; }
 .kandinsky-mention-card .hint { color: var(--text-faint); font-size: .85em; margin-top: 4px; }
 /* view blocks (lib/views.ts): a framed, quiet panel inside the note */
-.markdown .view-block { margin: .6em 0; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); font-family: var(--font-ui); white-space: normal; }
+.markdown .view-block { position: relative; margin: .6em 0; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); font-family: var(--font-ui); white-space: normal; }
+.markdown .view-block .block-cfg-slot { position: absolute; top: 6px; right: 34px; z-index: 6; opacity: 0; transition: opacity .12s; }
+.markdown .view-block:hover .block-cfg-slot, .markdown .view-block:focus-within .block-cfg-slot { opacity: 1; }
 /* a Today part brings its own card: no second frame around it */
 .markdown .view-block.own { border: 0; padding: 0; background: none; margin: .9em 0; }
 .markdown .view-block .view-loading { color: var(--text-faint); margin: 0; padding: 4px 8px; }
@@ -408,3 +410,25 @@ html.phone .markdown .md-columns { grid-template-columns: minmax(0, 1fr); }
 .markdown details:not(.callout)[open] > summary::before { transform: rotate(90deg); color: var(--accent); }
 .markdown details:not(.callout) > :last-child:not(summary) { margin-bottom: 0; }
 .markdown [dir="rtl"] { direction: rtl; text-align: right; }
+
+/* --- Code block Notion chrome & Mermaid diagrams --- */
+.markdown pre:has(> .code-fence-bar) { position: relative; padding-top: 32px; }
+.code-fence-bar {
+  position: absolute; top: 0; left: 0; right: 0; height: 28px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 10px; border-bottom: 1px solid var(--border);
+  background: var(--bg-side); border-radius: var(--radius) var(--radius) 0 0;
+  font-family: var(--font-ui); font-size: 11px; color: var(--text-muted);
+}
+.code-fence-lang { text-transform: lowercase; font-family: var(--font-mono); letter-spacing: .02em; }
+.code-fence-copy {
+  padding: 1px 7px; border-radius: 4px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text-muted); font-size: 11px; cursor: pointer;
+}
+.code-fence-copy:hover { background: var(--bg-hover); color: var(--heading); border-color: var(--border-strong); }
+.cm-code-fence-chrome {
+  display: inline-flex; align-items: center; gap: 6px; float: right;
+  font-family: var(--font-ui); user-select: none;
+}
+.mermaid-figure { display: flex; justify-content: center; overflow-x: auto; padding: 10px; border-radius: var(--radius); background: var(--bg-side); border: 1px solid var(--border); }
+.mermaid-figure svg { max-width: 100%; height: auto; }

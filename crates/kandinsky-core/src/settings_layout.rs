@@ -38,6 +38,14 @@ const FIELD_LABELS: &[(&str, &str)] = &[
     ("notifications.system_seconds", "A system notification stays (seconds)"),
     ("ui.sleep_after_min", "Tabs sleep after (minutes)"), ("desktop.on_close", "Closing the window"),
     ("desktop.sleep_after_min", "Hidden window closes after (minutes)"),
+    ("ui.obsidian_theme", "Obsidian community theme"),
+    ("notifications.calendar_reminders", "Event & @mention reminders"),
+    ("calendar.events_dir", "Event notes folder"),
+    ("calendar.default_view", "Default calendar view"),
+    ("calendar.week_start", "Week starts on"),
+    ("calendar.day_start_hour", "Week view starts at hour"),
+    ("calendar.bases", "Databases shown on calendar"),
+    ("calendar.ics_feeds", "Subscribed calendar feeds (.ics)"),
 ];
 
 /// Where Settings runs (the web's `hostOf`): this machine's app, a server's vault through it, the phone apps, a

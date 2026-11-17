@@ -9,6 +9,8 @@
   import GroupPanel from "./GroupPanel.svelte";
   import SortPanel from "./SortPanel.svelte";
   import PropertiesPanel from "./PropertiesPanel.svelte";
+  import FormulaEditorPopover from "./FormulaEditorPopover.svelte";
+  import AutomationsPopover from "./AutomationsPopover.svelte";
   import { below, type MenuAt } from "../../lib/menu";
   import { countConditions, type FieldType } from "../../lib/base-filter";
   import type { BaseResult } from "../../lib/gen/BaseResult";
@@ -16,7 +18,8 @@
   import type { ViewEdit } from "../../lib/gen/ViewEdit";
   import type { IconName } from "../../lib/panes";
 
-  let { res, view, pinned, compact, props, typeOf, onpick, onedit, onnew }: {
+  let { basePath = "", res, view, pinned, compact, props, typeOf, onpick, onedit, onnew }: {
+    basePath?: string;
     res: BaseResult;
     view: BaseView;
     /** an embed that names its view: no switching */
@@ -31,8 +34,9 @@
     onnew: () => void;
   } = $props();
 
-  type Pop = "group" | "sort" | "filter" | "props";
+  type Pop = "group" | "sort" | "filter" | "props" | "formulas" | "automations";
   let pop = $state<{ which: Pop; anchor: HTMLElement } | null>(null);
+  const autoCount = $derived((res.automations?.filter((a) => a.enabled).length ?? 0) + (res.recurring?.filter((r) => r.enabled).length ?? 0));
   let menu = $state<MenuAt | null>(null);
   let dialog = $state<{ title: string; value?: string; confirm?: string; submit: (v: string) => void } | null>(null);
 
@@ -115,6 +119,14 @@
   <button type="button" class="tool" class:on={pop?.which === "props"} aria-expanded={pop?.which === "props"} aria-label="Properties" title="Properties shown as columns" onclick={(e) => toggle("props", e)}>
     <Icon name="list" size={13} />{#if !compact}<span>Properties</span>{/if}
   </button>
+  {#if basePath}
+    <button type="button" class="tool" class:on={pop?.which === "formulas"} aria-expanded={pop?.which === "formulas"} aria-label="Formulas" title="Formula columns" data-testid="base-formulas-btn" onclick={(e) => toggle("formulas", e)}>
+      <Icon name="sigma" size={13} />{#if !compact}<span>Formulas</span>{/if}
+    </button>
+    <button type="button" class="tool" class:on={pop?.which === "automations" || autoCount > 0} aria-expanded={pop?.which === "automations"} aria-label="Automations" title="Local automations & recurring notes" data-testid="base-automations-btn" onclick={(e) => toggle("automations", e)}>
+      <Icon name="clock" size={13} />{#if !compact}<span>Automations</span>{/if}{#if autoCount}<span class="badge">{autoCount}</span>{/if}
+    </button>
+  {/if}
   <button type="button" class="new" class:compact onclick={onnew} aria-label="New" title="New note in this view (its filters fill the folder and properties)"><Icon name="plus" size={12} />{#if !compact} New{/if}</button>
 </div>
 
@@ -122,7 +134,7 @@
   {@const p = pop}
   {#if p.which === "group"}
     <Popover anchor={p.anchor} label="Group" width={300} onclose={() => (pop = null)}>
-      <GroupPanel group={view.group_by} board={view.kind === "board"} {props} ongroup={(property) => onedit({ op: "group", property })} />
+      <GroupPanel group={view.group_by} board={view.kind === "board"} subItemsBy={view.sub_items_by ?? null} {props} ongroup={(property) => onedit({ op: "group", property })} onsubitems={(property) => onedit({ op: "sub_items", property })} />
     </Popover>
   {:else if p.which === "filter"}
     <Popover anchor={p.anchor} label="Filter" width={560} onclose={() => (pop = null)}>
@@ -132,6 +144,14 @@
     <Popover anchor={p.anchor} label="Sort" width={420} onclose={() => (pop = null)}>
       <SortPanel sort={view.sort} {props} {typeOf} onsort={(sort) => onedit({ op: "sort", sort })}
         group={view.group_by} board={view.kind === "board"} ongroup={(property) => onedit({ op: "group", property })} />
+    </Popover>
+  {:else if p.which === "formulas"}
+    <Popover anchor={p.anchor} label="Formulas" width={480} onclose={() => (pop = null)}>
+      <FormulaEditorPopover {basePath} {res} {view} {props} {onedit} onclose={() => (pop = null)} />
+    </Popover>
+  {:else if p.which === "automations"}
+    <Popover anchor={p.anchor} label="Automations" width={480} onclose={() => (pop = null)}>
+      <AutomationsPopover {basePath} {res} {props} {onedit} onclose={() => (pop = null)} />
     </Popover>
   {:else}
     <Popover anchor={p.anchor} label="Properties" width={380} onclose={() => (pop = null)}>

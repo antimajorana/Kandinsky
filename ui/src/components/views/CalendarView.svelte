@@ -1,70 +1,132 @@
 <script lang="ts">
-  // The `calendar` view: a month grid (Monday first) of dated items; ‹ › change month, undated items
-  // are listed under it. A click opens the item (a task at its line); a checkbox ticks a task.
+  // Interactive `calendar` view widget: shows tasks/notes (when passed via /api/view) AND local calendar events, and clicking any day opens the native Calendar Day Workspace.
+  import { onMount } from "svelte";
+  import MonthGrid from "../calendar/MonthGrid.svelte";
+  import { addMonths, parseIso, todayIso } from "../calendar/calendar-dates";
+  import { api } from "../../lib/api";
+  import { open, openPath } from "../../lib/dock";
   import type { ViewRow } from "../../lib/gen/ViewRow";
-  import { openPath } from "../../lib/dock";
-  import ListView from "./ListView.svelte";
-  import { localDay as iso } from "../../lib/local-day";
-  let { rows, ontick }: { rows: ViewRow[]; ontick: (r: ViewRow) => void } = $props();
+  import type { CalendarEvent, CalendarRangeResponse } from "../../lib/types";
 
-  const today = iso(new Date());
-  // start on the month of the next dated item (else the last one, else now)
-  const dated = $derived(rows.filter((r) => r.date).sort((a, b) => a.date!.localeCompare(b.date!)));
-  const pick = () => { const d = dated.find((r) => r.date! >= today) ?? dated[dated.length - 1]; return d ? new Date(d.date! + "T00:00") : new Date(); };
-  // svelte-ignore state_referenced_locally -- the first month only seeds the navigation
-  let month = $state(new Date(pick().getFullYear(), pick().getMonth(), 1));
-  const byDay = $derived.by(() => { const m = new Map<string, ViewRow[]>(); for (const r of dated) { if (!m.has(r.date!)) m.set(r.date!, []); m.get(r.date!)!.push(r); } return m; });
-  const days = $derived.by(() => {
-    const first = new Date(month), lead = (first.getDay() + 6) % 7;
-    const start = new Date(first); start.setDate(1 - lead);
-    return Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
+  let {
+    rows = [],
+    ontick,
+    compact = false,
+  }: {
+    rows?: ViewRow[];
+    ontick?: (r: ViewRow) => void;
+    compact?: boolean;
+  } = $props();
+
+  const today = todayIso();
+  const initialDate = $derived.by(() => {
+    const dated = rows.filter((r) => r.date).sort((a, b) => a.date!.localeCompare(b.date!));
+    return dated.find((r) => r.date! >= today)?.date ?? dated[dated.length - 1]?.date ?? today;
   });
-  const title = $derived(month.toLocaleDateString(undefined, { month: "long", year: "numeric" }));
-  const step = (n: number) => (month = new Date(month.getFullYear(), month.getMonth() + n, 1));
+
+  // svelte-ignore state_referenced_locally
+  let anchor = $state(initialDate);
+  let rangeData = $state<CalendarRangeResponse | null>(null);
+
+  const d = $derived(parseIso(anchor));
+  const year = $derived(d.getFullYear());
+  const month0 = $derived(d.getMonth());
+  const title = $derived(d.toLocaleDateString(undefined, { month: "long", year: "numeric" }));
+
+  $effect(() => {
+    const from = `${year}-${String(month0 + 1).padStart(2, "0")}-01`;
+    const last = new Date(year, month0 + 1, 0).getDate();
+    const to = `${year}-${String(month0 + 1).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+    void api.calendar(from, to).then((r) => { rangeData = r; }, () => {});
+  });
+
+  const combinedEvents = $derived.by<CalendarEvent[]>(() => {
+    const base = [...(rangeData?.events ?? [])];
+    const seen = new Set(base.map((e) => `${e.date}:${e.title}`));
+    for (const r of rows) {
+      if (!r.date || seen.has(`${r.date}:${r.title}`)) continue;
+      base.push({
+        id: `view:${r.path ?? ""}:${r.line ?? 0}`,
+        occurrence_id: `view:${r.path ?? ""}:${r.line ?? 0}@${r.date}`,
+        title: r.title,
+        date: r.date,
+        end_date: r.date,
+        all_day: true,
+        color: r.done ? "green" : "blue",
+        location: "",
+        repeat: "none",
+        links: [],
+        source: "task",
+        path: r.path ?? undefined,
+        line: r.line ?? undefined,
+        completed: r.done === true,
+        editable: false,
+      });
+    }
+    return base;
+  });
+
   const undated = $derived(rows.filter((r) => !r.date));
+
+  function openDay(iso: string): void {
+    open({ kind: "calendar", date: iso, view: "day" });
+  }
+
+  function clickEvent(ev: CalendarEvent): void {
+    if (ev.path) openPath(ev.path, ev.line ?? undefined);
+    else openDay(ev.date);
+  }
+
+  onMount(() => {
+    anchor = initialDate;
+  });
 </script>
 
-<div class="cal kandinsky-view-calendar">
-  <header>
-    <button onclick={() => step(-1)} aria-label="Previous month">‹</button>
-    <span class="t">{title}</span>
-    <button onclick={() => step(1)} aria-label="Next month">›</button>
+<div class="cal-embed kandinsky-view-calendar" data-testid="embedded-calendar">
+  <header class="cal-top">
+    <button type="button" aria-label="Previous month" onclick={() => (anchor = addMonths(anchor, -1))}>‹</button>
+    <button type="button" class="t" onclick={() => open({ kind: "calendar", date: anchor, view: "month" })} title="Open full Calendar">{title}</button>
+    <button type="button" class="today" onclick={() => (anchor = today)}>Today</button>
+    <button type="button" aria-label="Next month" onclick={() => (anchor = addMonths(anchor, 1))}>›</button>
   </header>
-  <div class="grid">
-    {#each ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as w}<div class="wd">{w}</div>{/each}
-    {#each days as d (iso(d))}
-      <div class="day" class:out={d.getMonth() !== month.getMonth()} class:today={iso(d) === today}>
-        <span class="n">{d.getDate()}</span>
-        {#each byDay.get(iso(d)) ?? [] as r (`${r.path}:${r.line}:${r.title}`)}
-          <div class="item" class:done={r.done}>
-            {#if r.done === false}<input type="checkbox" aria-label="Done: {r.title}" onchange={() => ontick(r)} />{/if}
-            <button data-path={r.path} data-line={r.line} onclick={() => r.path && openPath(r.path, r.line ?? undefined)} title="{r.title} — {r.path}">{r.title}</button>
+
+  <MonthGrid
+    {year}
+    {month0}
+    selectedDate={today}
+    days={rangeData?.days ?? []}
+    events={combinedEvents}
+    {compact}
+    onselectday={openDay}
+    oneditevent={clickEvent}
+  />
+
+  {#if undated.length > 0}
+    <div class="undated">
+      <span class="uh">Undated tasks ({undated.length})</span>
+      <div class="ulist">
+        {#each undated.slice(0, 6) as r (`${r.path}:${r.line}:${r.title}`)}
+          <div class="uitem">
+            {#if r.done === false && ontick}<input type="checkbox" aria-label="Done: {r.title}" onchange={() => ontick(r)} />{/if}
+            <button type="button" onclick={() => r.path && openPath(r.path, r.line ?? undefined)}>{r.title}</button>
           </div>
         {/each}
       </div>
-    {/each}
-  </div>
-  {#if undated.length}<div class="undated"><span class="h">No date</span><ListView rows={undated} {ontick} /></div>{/if}
+    </div>
+  {/if}
 </div>
 
 <style>
-  .cal { font-size: calc(12.5px * var(--ui-scale, 1)); }
-  header { display: flex; align-items: center; gap: 8px; padding: 4px 6px; }
-  header .t { font-weight: 600; color: var(--heading); text-transform: capitalize; min-width: 9em; text-align: center; }
-  header button { width: 24px; height: 22px; border-radius: 4px; color: var(--text-muted); }
-  header button:hover { background: var(--bg-hover); color: var(--text); }
-  .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-  .wd { background: var(--bg-alt); color: var(--text-faint); font-size: .85em; text-align: center; padding: 2px 0; }
-  .day { background: var(--bg); min-height: 62px; padding: 2px 3px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .day.out { background: var(--bg-alt); }
-  .day.out .n { opacity: .45; }
-  .day.today .n { background: var(--accent); color: var(--accent-fg); border-radius: 999px; padding: 0 5px; }
-  .n { align-self: flex-end; font-size: .85em; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-  .item { display: flex; align-items: center; gap: 3px; background: var(--accent-soft); border-radius: 4px; padding: 0 3px; min-width: 0; }
-  .item button { color: var(--text); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; font-size: .92em; }
-  .item.done { opacity: .55; }
-  .item.done button { text-decoration: line-through; }
-  .item input { margin: 0; width: 11px; height: 11px; accent-color: var(--accent); }
-  .undated { margin-top: 6px; }
-  .undated .h { font-size: .85em; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); padding: 0 8px; }
+  .cal-embed { display: flex; flex-direction: column; gap: 6px; padding: 6px; background: var(--bg); border-radius: var(--radius); }
+  .cal-top { display: flex; align-items: center; gap: 6px; padding: 2px 4px; }
+  .cal-top button { padding: 2px 7px; border-radius: var(--radius-sm); color: var(--text-muted); font-size: 12px; }
+  .cal-top button:hover { background: var(--bg-hover); color: var(--text); }
+  .cal-top .t { flex: 1; text-align: center; font-weight: 600; color: var(--heading); font-size: 13px; }
+  .cal-top .today { border: 1px solid var(--border); font-size: 11px; }
+  .undated { border-top: 1px solid var(--border); padding-top: 6px; }
+  .uh { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); }
+  .ulist { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+  .uitem { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .uitem button { color: var(--text); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .uitem button:hover { color: var(--accent); text-decoration: underline; }
 </style>

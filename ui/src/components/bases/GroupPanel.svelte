@@ -2,11 +2,13 @@
   // Toolbar Group popover: search properties, ungroup (disabled on boards, which require lanes), or pick a group property.
   import Icon from "../Icon.svelte";
 
-  let { group, board, props, ongroup }: {
+  let { group, board, subItemsBy = null, props, ongroup, onsubitems }: {
     group: string | null;
     board: boolean;
+    subItemsBy?: string | null;
     props: { id: string; label: string }[];
     ongroup: (property: string | null) => void;
+    onsubitems?: (property: string | null) => void;
   } = $props();
 
   let q = $state("");
@@ -69,6 +71,19 @@
   {/each}
 </ul>
 
+{#if !board && onsubitems}
+  <div class="sep"></div>
+  <label class="sub-row">
+    <span>Sub-items (parent link)</span>
+    <select value={subItemsBy ?? ""} onchange={(e) => onsubitems(e.currentTarget.value || null)}>
+      <option value="">Off (flat rows)</option>
+      {#each props.filter((p) => !p.id.startsWith("file.")) as p (p.id)}
+        <option value={norm(p.id)}>{p.label}</option>
+      {/each}
+    </select>
+  </label>
+{/if}
+
 <style>
   .search { height: 28px; width: 100%; padding: 0 8px; margin-bottom: 6px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; }
   .search:focus { outline: none; border-color: var(--accent); }
@@ -82,5 +97,7 @@
   .id { flex: none; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-family: var(--font-mono); font-size: .84em; }
   .board-note { margin: 2px 6px 4px 27px; color: var(--text-faint); font-size: .86em; line-height: 1.3; }
   .sep { height: 1px; background: var(--border); margin: 4px 2px; }
+  .sub-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; font-size: .9em; color: var(--text-muted); }
+  .sub-row select { max-width: 150px; padding: 3px 6px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; }
   .empty { padding: 6px 8px; color: var(--text-faint); font-size: .92em; }
 </style>

@@ -5,6 +5,7 @@
   import Self from "./CellValue.svelte";
   import type { BaseCell } from "../../lib/gen/BaseCell";
   import type { BaseColumn } from "../../lib/gen/BaseColumn";
+  import type { PropertyKind } from "../../lib/gen/PropertyKind";
   import type { IconName } from "../../lib/panes";
   import {
     classifyStatus,
@@ -18,13 +19,20 @@
   import { resolveLink } from "../../lib/vault";
   import { openOutside } from "../../lib/web-links";
 
-  let { cell, column, oncycle }: {
+  let { cell, column, kind, oncycle, onrate }: {
     cell: BaseCell;
     column?: BaseColumn;
+    kind?: PropertyKind;
     oncycle?: () => void;
+    onrate?: (value: number) => void;
   } = $props();
 
-  const fmt = $derived(effectiveColumnFormat(column, cell));
+  const fmt = $derived(
+    kind === "status" ? "status"
+    : kind === "rating" ? "rating"
+    : kind === "auto_id" ? "auto_id"
+    : effectiveColumnFormat(column, cell),
+  );
   const num = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(Math.abs(n) < 1 ? 3 : 2));
   const ISO = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/;
 
@@ -72,6 +80,19 @@
   <span class="chips">
     {#each cell.items as it, i (i)}
       <span class="chip" class:bare={selfStyled(it)} class:linkchip={it.t === "link"}><Self cell={it} {column} /></span>
+    {/each}
+  </span>
+{:else if fmt === "auto_id" && ((cell.t === "text" && cell.value.trim()) || cell.t === "num")}
+  <span class="auto-id-pill">{cell.t === "num" ? num(cell.value) : cell.value}</span>
+{:else if fmt === "rating"}
+  {@const ratingVal = Math.max(0, Math.min(5, Math.round(numVal(cell) ?? 0)))}
+  <span class="rating-row" aria-label="Rating {ratingVal} of 5">
+    {#each [1, 2, 3, 4, 5] as star (star)}
+      {#if onrate}
+        <button type="button" class="star-btn" class:filled={star <= ratingVal} aria-label="Rate {star}" onclick={(e) => { e.stopPropagation(); onrate(star === ratingVal ? 0 : star); }}>★</button>
+      {:else}
+        <span class="star" class:filled={star <= ratingVal}>★</span>
+      {/if}
     {/each}
   </span>
 {:else if fmt === "status" && cell.t === "text" && cell.value.trim()}
@@ -176,4 +197,10 @@
   .ext-chip:hover, .file-chip:hover { border-color: var(--border-strong); background: var(--accent-soft); }
   .ext-chip :global(.icon), .file-chip :global(.icon) { flex: none; color: var(--text-muted); }
   .ext-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .auto-id-pill { display: inline-flex; align-items: center; padding: 0 7px; height: 20px; border-radius: var(--radius-sm); background: var(--bg-side); border: 1px solid var(--border); color: var(--text-muted); font-family: var(--font-mono); font-size: .82em; font-weight: 600; }
+  .rating-row { display: inline-flex; align-items: center; gap: 1px; vertical-align: middle; }
+  .star, .star-btn { padding: 0 1px; font-size: 13px; line-height: 1; color: var(--border-strong); background: transparent; border: 0; }
+  .star.filled, .star-btn.filled { color: var(--yellow); }
+  .star-btn { cursor: pointer; }
+  .star-btn:hover { transform: scale(1.15); }
 </style>

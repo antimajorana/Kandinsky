@@ -14,6 +14,7 @@
   import CellEditor from "./CellEditor.svelte";
   import { below, type MenuAt } from "../../lib/menu";
   import { openPath } from "../../lib/dock";
+  import { shownName } from "../../lib/paths";
   import { reorder } from "../../lib/base-drag";
   import {
     classifyStatus,
@@ -229,6 +230,92 @@
     return effectiveColumnFormat(groupCol) === "status" || t !== "other" ? t : null;
   }
 
+  const statusColIdx = $derived(view.columns.findIndex((c) => effectiveColumnFormat(c) === "status" || kindOf(c.id) === "status"));
+  const isStatusGrouped = $derived(!!groupCol && (effectiveColumnFormat(groupCol) === "status" || kindOf(groupCol.id) === "status"));
+  function groupMetaLabel(title: string): string | null {
+    if (!isStatusGrouped || title === NO_VALUE) return null;
+    const t = classifyStatus(title).tone;
+    return t === "done" ? "Complete" : t === "todo" ? "To-do" : "In progress";
+  }
+  function isRowDone(r: BaseRow): boolean {
+    if (statusColIdx < 0) return false;
+    const c = r.cells[statusColIdx];
+    return c?.t === "text" && classifyStatus(c.value).tone === "done";
+  }
+
+  // --- sub-items hierarchy --------------------------------------------------------------------------------------------
+  const subColIdx = $derived(
+    view.sub_items_by
+      ? view.columns.findIndex((c) => c.id === view.sub_items_by || c.key === view.sub_items_by || c.id === `note.${view.sub_items_by}`)
+      : -1,
+  );
+  const collapsedParents = new SvelteSet<string>();
+  function toggleParentRow(path: string): void {
+    if (collapsedParents.has(path)) collapsedParents.delete(path);
+    else collapsedParents.add(path);
+  }
+  function buildTreeRows(rows: BaseRow[]): { r: BaseRow; depth: number; childCount: number; doneChildren: number }[] {
+    if (subColIdx < 0) return rows.map((r) => ({ r, depth: 0, childCount: 0, doneChildren: 0 }));
+    const byPath = new Map<string, BaseRow>();
+    const nameToPath = new Map<string, string>();
+    for (const r of rows) {
+      byPath.set(r.path, r);
+      nameToPath.set(r.path.toLowerCase(), r.path);
+      nameToPath.set(shownName(r.path).toLowerCase(), r.path);
+    }
+    const resolveRef = (c: BaseCell | undefined): string | null => {
+      if (!c) return null;
+      if (c.t === "link") return c.path ?? nameToPath.get(c.text.toLowerCase()) ?? null;
+      if (c.t === "list") {
+        for (const it of c.items) { const p = resolveRef(it); if (p) return p; }
+        return null;
+      }
+      if (c.t === "text") {
+        const clean = c.value.trim().replace(/^\[\[/, "").replace(/\]\]$/, "").split("|")[0].trim().toLowerCase();
+        return nameToPath.get(clean) ?? null;
+      }
+      return null;
+    };
+    const kids = new Map<string, BaseRow[]>();
+    const hasParent = new Set<string>();
+    for (const r of rows) {
+      const p = resolveRef(r.cells[subColIdx]);
+      if (p && p !== r.path && byPath.has(p)) {
+        hasParent.add(r.path);
+        const list = kids.get(p) ?? [];
+        list.push(r);
+        kids.set(p, list);
+      }
+    }
+    const countSub = (p: string, seen = new Set<string>()): { total: number; done: number } => {
+      let total = 0, done = 0;
+      for (const ch of kids.get(p) ?? []) {
+        if (seen.has(ch.path)) continue;
+        seen.add(ch.path);
+        total += 1;
+        if (isRowDone(ch)) done += 1;
+        const nested = countSub(ch.path, seen);
+        total += nested.total;
+        done += nested.done;
+      }
+      return { total, done };
+    };
+    const out: { r: BaseRow; depth: number; childCount: number; doneChildren: number }[] = [];
+    const visited = new Set<string>();
+    const pushNode = (r: BaseRow, depth: number) => {
+      if (visited.has(r.path)) return;
+      visited.add(r.path);
+      const st = countSub(r.path);
+      out.push({ r, depth, childCount: st.total, doneChildren: st.done });
+      if (st.total > 0 && !collapsedParents.has(r.path)) {
+        for (const ch of kids.get(r.path) ?? []) pushNode(ch, Math.min(4, depth + 1));
+      }
+    };
+    for (const r of rows) { if (!hasParent.has(r.path)) pushNode(r, 0); }
+    for (const r of rows) { if (!visited.has(r.path)) pushNode(r, 0); }
+    return out;
+  }
+
   // --- cells ---------------------------------------------------------------------------------------------------------
   const editable = (r: BaseRow, i: number) => !view.columns[i].rollup && !!view.columns[i].key && r.edit[i] != null;
   /** A cell's kind: the property's, but a list stays a list where one note holds one. */
@@ -260,14 +347,18 @@
 
   // --- the window: a group's title and a row are one height (32px), and only those around the view are drawn; a view
   // over every note of a vault has thousands, each a cell per column. 100 beyond each side: a usual view is drawn whole
-  type Line = { kind: "group"; title: string; n: number; collapsed: boolean } | { kind: "row"; r: BaseRow };
+  type Line =
+    | { kind: "group"; title: string; n: number; meta: string | null; done: number; collapsed: boolean }
+    | { kind: "row"; r: BaseRow; depth: number; childCount: number; doneChildren: number };
   const lines = $derived(
     groups.flatMap((g): Line[] => {
-      if (g.title === null) return g.rows.map((r) => ({ kind: "row" as const, r }));
+      const tree = buildTreeRows(g.rows);
+      if (g.title === null) return tree.map((t) => ({ kind: "row" as const, ...t }));
       const collapsed = collapsedGroups.has(g.title);
+      const done = g.rows.reduce((acc, r) => acc + (isRowDone(r) ? 1 : 0), 0);
       return [
-        { kind: "group" as const, title: g.title, n: g.rows.length, collapsed },
-        ...(collapsed ? [] : g.rows.map((r) => ({ kind: "row" as const, r }))),
+        { kind: "group" as const, title: g.title, n: g.rows.length, meta: groupMetaLabel(g.title), done, collapsed },
+        ...(collapsed ? [] : tree.map((t) => ({ kind: "row" as const, ...t }))),
       ];
     }),
   );
@@ -314,12 +405,13 @@
           <td colspan={view.columns.length + 1}>
             <button type="button" class="g-toggle" aria-expanded={!l.collapsed} onclick={() => toggleGroup(l.title)}>
               <span class="g-caret" aria-hidden="true">{l.collapsed ? "▸" : "▾"}</span>
+              {#if l.meta}<span class="g-meta">{l.meta}</span>{/if}
               {#if tone}
                 <span class="g-pill tone-{tone}"><span class="g-dot"></span><span class="g-name">{l.title}</span></span>
               {:else}
                 <span class="g-name">{l.title}</span>
               {/if}
-              <span class="g-n">{l.n}</span>
+              <span class="g-n">{statusColIdx >= 0 ? `${l.done}/${l.n}` : l.n}</span>
             </button>
           </td>
         </tr>
@@ -329,18 +421,29 @@
           {#each r.cells as c, i (i)}
             {@const col = view.columns[i]}
             {@const fmt = effectiveColumnFormat(col, c)}
-            {@const kind = editable(r, i) ? cellKind(r, i) : null}
+            {@const k = cellKind(r, i)}
+            {@const kind = editable(r, i) ? k : null}
             <td class:first={col.id === "file.name"} class:editable={!!kind} class:bool={kind === "bool"} class:num={(c.t === "num" || fmt === "percent" || fmt === "currency") && fmt !== "progress"} class:progress={fmt === "progress"} class:editing={isEditing(r, i)}
               tabindex={kind ? 0 : undefined} aria-label={kind ? `${col.label} of ${r.path}` : undefined}
               onclick={() => activate(r, i)} onkeydown={(e) => cellKey(e, r, i)} ondblclick={() => { if (!kind && col.id !== "file.name") openPath(r.path); }}>
               {#if isEditing(r, i) && kind}
                 <CellEditor {kind} column={col} value={r.values[i]} label={col.label} oncommit={(v) => onwrite(r.path, col.key!, v)} onclose={closeEditor} />
               {:else if col.id === "file.name" && c.t === "link"}
-                <span class="name"><Icon name={c.path && !/\.md$/i.test(c.path) ? "file" : "file-text"} size={14} /><CellValue cell={c} /></span>
+                <span class="name" style:padding-left={l.depth ? `${l.depth * 18}px` : undefined}>
+                  {#if l.childCount > 0}
+                    <button type="button" class="tree-caret" aria-label="Toggle sub-items" onclick={(e) => { e.stopPropagation(); toggleParentRow(r.path); }}>
+                      {collapsedParents.has(r.path) ? "▸" : "▾"}
+                    </button>
+                  {/if}
+                  <Icon name={c.path && !/\.md$/i.test(c.path) ? "file" : "file-text"} size={14} /><CellValue cell={c} />
+                  {#if l.childCount > 0}<span class="tree-rollup" title="Sub-items completed">{l.doneChildren}/{l.childCount}</span>{/if}
+                </span>
               {:else if kind === "bool"}
-                <CellValue cell={asBool(c)} column={col} />
+                <CellValue cell={asBool(c)} column={col} kind={k} />
               {:else}
-                <CellValue cell={c} column={col} oncycle={kind && fmt === "status" ? () => onwrite(r.path, col.key!, nextStatusValue(String(r.values[i] ?? ""))) : undefined} />
+                <CellValue cell={c} column={col} kind={k}
+                  oncycle={kind && fmt === "status" ? () => onwrite(r.path, col.key!, nextStatusValue(String(r.values[i] ?? ""))) : undefined}
+                  onrate={kind && k === "rating" ? (v) => onwrite(r.path, col.key!, v) : undefined} />
               {/if}
             </td>
           {/each}
@@ -448,6 +551,10 @@
   .g-pill.tone-other { background: var(--accent-soft); color: var(--text); border-color: var(--border); }
   .g-pill.tone-other .g-dot { background: var(--accent); }
   .g-n { margin-left: 2px; padding: 0 6px; line-height: 18px; border-radius: 99px; background: var(--bg-hover); color: var(--text-faint); font-weight: 500; font-size: .82em; font-variant-numeric: tabular-nums; }
+  .g-meta { font-size: .75em; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); margin-right: 2px; }
+  .tree-caret { width: 16px; height: 18px; display: inline-grid; place-items: center; border-radius: 4px; color: var(--text-faint); font-size: 11px; flex: none; }
+  .tree-caret:hover { background: var(--bg-hover); color: var(--text); }
+  .tree-rollup { margin-left: 4px; padding: 0 6px; border-radius: 99px; background: var(--bg-side); border: 1px solid var(--border); color: var(--text-muted); font-size: .78em; font-variant-numeric: tabular-nums; flex: none; }
   tfoot td { position: sticky; bottom: 0; background: var(--bg); border-bottom: 0; border-top: 1px solid var(--border); padding: 0; height: 28px; }
   /* no column lines in the footer: unsummarised it is not read as one more, empty row */
   tfoot td + td { border-left: 0; }

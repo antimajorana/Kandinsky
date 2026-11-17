@@ -130,6 +130,16 @@ pub fn validate_property_value(spec: &PropertySpec, value: &Value) -> Result<(),
             Value::Sequence(seq) if seq.iter().all(|v| !v.is_mapping() && !v.is_sequence()) => Ok(()),
             _ => Err(format!("expected list of scalars, got {}", describe_value(value))),
         },
+        PropertyKind::Status => validate_enum(spec, value),
+        PropertyKind::Rating => match value {
+            Value::Number(n) if n.as_f64().is_some_and(|x| (0.0..=5.0).contains(&x)) => Ok(()),
+            _ => Err(format!("expected rating between 0 and 5, got {}", describe_value(value))),
+        },
+        PropertyKind::AutoId => match value {
+            Value::String(s) if !s.trim().is_empty() => Ok(()),
+            Value::Number(_) => Ok(()),
+            _ => Err(format!("expected auto ID text, got {}", describe_value(value))),
+        },
     }
 }
 
@@ -144,14 +154,20 @@ fn validate_enum(spec: &PropertySpec, value: &Value) -> Result<(), String> {
         Value::Sequence(seq) => seq.iter().filter(|v| !is_empty_yaml(v)).collect(),
         other => vec![other],
     };
+    let mut allowed: Vec<&str> = spec.values.iter().map(String::as_str).collect();
+    if allowed.is_empty() {
+        if let Some(groups) = &spec.groups {
+            allowed.extend(groups.todo.iter().chain(groups.in_progress.iter()).chain(groups.done.iter()).map(String::as_str));
+        }
+    }
     for item in items {
         let Some(raw) = scalar_text(item) else {
             return Err(format!("expected enum scalar, got {}", describe_value(item)));
         };
-        if !spec.values.is_empty() {
+        if !allowed.is_empty() {
             let bare = clean_scalar_token(&raw);
-            if !spec.values.iter().any(|a| a.trim() == raw || clean_scalar_token(a) == bare) {
-                return Err(format!("invalid value `{raw}` (allowed: {})", spec.values.join(", ")));
+            if !allowed.iter().any(|a| a.trim() == raw || clean_scalar_token(a) == bare) {
+                return Err(format!("invalid value `{raw}` (allowed: {})", allowed.join(", ")));
             }
         }
     }

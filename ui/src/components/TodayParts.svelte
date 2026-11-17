@@ -14,7 +14,6 @@
   import { open, openPath } from "../lib/dock";
   import { openCaptures, openTasks } from "../lib/quick-capture.svelte";
   import { settings } from "../lib/settings.svelte";
-  import CommitRow from "../components/CommitRow.svelte";
   import { capture } from "../lib/registry";
   import { inPhoneApp } from "../lib/eink";
   import { captureHint } from "../lib/capture-hints.svelte";
@@ -40,28 +39,16 @@
   const full = $derived(parts.length === ALL.length);
 
   const today = $derived<Today | null>(todayData.v);
-  // Activity: your commits first, Claude's apart, housekeeping (history/session logs) as one line.
-  const commits = $derived(today?.activity.commits ?? []);
-  const showHouse = $derived(settings.config?.activity.show_housekeeping ?? false);
-  const showClaude = $derived(settings.config?.activity.show_claude ?? true);
-  const house = $derived(commits.filter((c) => c.kind === "housekeeping"));
-  const work = $derived(commits.filter((c) => showHouse || c.kind !== "housekeeping"));
-  const mine = $derived(work.filter((c) => c.by === "you"));
-  const claude = $derived(work.filter((c) => c.by === "agent"));
-  let claudeAll = $state(false);
   // Changed files: ≥ group_threshold files in one folder collapse into one expandable row.
   let openDirs = $state<Record<string, boolean>>({});
-  // Activity, a day at a time: what was made that day (the core decides when a file was made: its
-  // `created:` property, git, then the disk), what else changed, and today's commits
+  // Activity, a day at a time: what was made that day, and what else changed.
   let actDay = $state<string | null>(null); // null: today
-  let actTab = $state<"created" | "changed" | "commits">("created");
+  let actTab = $state<"created" | "changed">("created");
   let dayAct = $state<import("../lib/gen/DayActivity").DayActivity | null>(null);
   const shownDay = $derived(fixedDay ?? actDay ?? today?.date ?? "");
   // no day yet (Today still loading) counts as today: no "Invalid date" title, no day buttons on nothing
   const onToday = $derived(!shownDay || (!!today && shownDay === today.date));
-  // the commits tab is today's only: on another day (or none to show) the card shows what was made
-  const hasCommits = $derived(onToday && !fixedDay && (mine.length + claude.length > 0));
-  const tab = $derived(actTab === "commits" && !hasCommits ? "created" : actTab);
+  const tab = $derived(actTab);
   async function loadActivity() {
     const d = shownDay;
     if (!d || !show("activity")) return; // each Home block is its own instance: only the activity one asks
@@ -346,10 +333,8 @@
           </div>
           {#if focusText}
             <Markdown text={focusText} path={today!.focus.path} class="focus-md" />
-          {:else if today?.focus.text}
-            <p class="empty">Nothing written in it yet. <button class="link" onclick={() => openPath(today!.focus.path)}>Write what matters now</button></p>
           {:else if today}
-            <p class="empty">No <code>{today.focus.path}</code> yet. <button class="link" onclick={() => openPath(today!.focus.path)}>Write one</button> — it's yours; Kandinsky only shows it.</p>
+            <p class="empty"><button class="link placeholder-btn" onclick={() => openPath(today!.focus.path)}>Click to write your priorities for today…</button></p>
           {/if}
         </section>
         {/if}
@@ -403,7 +388,7 @@
               <button class="link more" onclick={() => (showAllTasks = !showAllTasks)}>{showAllTasks ? "Show fewer" : `Show all ${today.tasks.length}`}</button>
             {/if}
           {:else if today}
-            <p class="empty">No open <code>- [ ]</code> tasks.</p>
+            <p class="empty">All clear — no open tasks right now.</p>
           {/if}
         </section>
         {/if}
@@ -419,15 +404,11 @@
                 <button class="icon-btn" title="The day after" aria-label="Activity of the day after" disabled={onToday} onclick={() => (actDay = shiftDay(shownDay, 1) === today?.date ? null : shiftDay(shownDay, 1))}>›</button>
               {/if}
               <button class="icon-btn" title="Files" aria-label="Open the file explorer" onclick={() => open({ kind: "files" })}><Icon name="folder" size={15} /></button>
-              {#if !fixedDay}<button class="icon-btn" title="Git" aria-label="Git" onclick={() => open({ kind: "git" })}><Icon name="git" size={15} /></button>{/if}
             </span>
           </div>
           <div class="act-tabs kandinsky-seg" role="tablist" aria-label="Activity">
             <button role="tab" class:on={tab === "created"} aria-selected={tab === "created"} onclick={() => (actTab = "created")}>Created <span class="count">{created.length}</span></button>
             <button role="tab" class:on={tab === "changed"} aria-selected={tab === "changed"} onclick={() => (actTab = "changed")}>Changed <span class="count">{dayAct?.changed.length ?? 0}</span></button>
-            {#if hasCommits}
-              <button role="tab" class:on={tab === "commits"} aria-selected={tab === "commits"} onclick={() => (actTab = "commits")}>Commits <span class="count">{mine.length + claude.length}</span></button>
-            {/if}
           </div>
           {#if tab === "created"}
             {#if created.length}
@@ -440,7 +421,7 @@
             {:else}
               <p class="empty">{onToday ? "Nothing made yet today." : "Nothing was made that day."}</p>
             {/if}
-          {:else if tab === "changed"}
+          {:else}
             {#if groups.length}
               <ul class="activity changed">
                 {#each changedAll ? groups : groups.slice(0, 8) as g (g.key)}
@@ -459,19 +440,6 @@
               {#if groups.length > 8}<button class="link more" onclick={() => (changedAll = !changedAll)}>{changedAll ? "Show fewer" : `Show all ${groups.length}`}</button>{/if}
             {:else}
               <p class="empty">Nothing else changed.</p>
-            {/if}
-          {:else}
-            {#if mine.length}
-              <div class="sub-head"><span class="dot-you"></span>Yours <span class="count">{mine.length}</span></div>
-              <div class="activity">{#each mine as c (c.hash)}<CommitRow {c} />{/each}</div>
-            {/if}
-            {#if showClaude && claude.length}
-              <div class="sub-head"><Icon name="claude" size={12} />{[...new Set(claude.map((c) => c.agent ?? "Agent"))].join(", ")} <span class="count">{claude.length}</span></div>
-              <div class="activity">{#each claudeAll ? claude : claude.slice(0, 6) as c (c.hash)}<CommitRow {c} compact />{/each}</div>
-              {#if claude.length > 6}<button class="link more" onclick={() => (claudeAll = !claudeAll)}>{claudeAll ? "Show fewer" : `Show all ${claude.length}`}</button>{/if}
-            {/if}
-            {#if house.length && !showHouse}
-              <button class="link more house" onclick={() => open({ kind: "git" })} title="History, session logs, HTML views — see the Git pane">+ {house.length} housekeeping commit{house.length === 1 ? "" : "s"}</button>
             {/if}
           {/if}
         </section>
@@ -582,12 +550,9 @@
     padding: 4px 8px; border-radius: var(--radius-sm); color: var(--text-muted); text-align: left; }
   .changed-row:hover { background: var(--bg-hover); color: var(--text); }
   .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(12.5px * var(--ui-scale, 1)); }
-  .sub-head { display: flex; align-items: center; gap: 6px; margin: 10px 0 2px; font-size: calc(11px * var(--ui-scale, 1)); font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); }
-  .sub-head:first-of-type { margin-top: 2px; }
-  .sub-head .count { font-weight: 500; color: var(--text-faint); }
-  .dot-you { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
   .more { display: block; margin: 4px 0 0; font-size: calc(12px * var(--ui-scale, 1)); }
-  .more.house { color: var(--text-faint); }
+  .placeholder-btn { color: var(--text-faint); font-style: italic; }
+  .placeholder-btn:hover { color: var(--text); }
   .changed-row.nested { padding-left: 28px; }
   .changed-row .n { color: var(--text-faint); }
 </style>

@@ -83,7 +83,7 @@
 <div class="base" class:embedded class:tall-embed={embedded && (view?.kind === "calendar" || view?.kind === "timeline")} bind:this={host} bind:clientWidth={width} onmousedown={(e) => embedded && e.stopPropagation()}>
   {#if res && view}
     <div class="top">
-      <Toolbar {res} {view} {pinned} compact={embedded && width < 560} props={fields} {typeOf} onpick={(n) => (viewName = n)} onedit={(e, then) => void editView(e, then)} onnew={() => void newRow()} />
+      <Toolbar basePath={path} {res} {view} {pinned} compact={embedded && width < 560} props={fields} {typeOf} onpick={(n) => (viewName = n)} onedit={(e, then) => void editView(e, then)} onnew={() => void newRow()} />
       {#if embedded}<button type="button" class="open" onclick={() => openPath(path)} title="Open {path}">{shownName(path)}</button>{/if}
     </div>
   {/if}

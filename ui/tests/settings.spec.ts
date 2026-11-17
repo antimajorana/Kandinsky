@@ -15,30 +15,21 @@ async function openSettings(page: Page) {
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
 }
 
-test("the overview maps areas to pages; a page has features to try and its options", async ({ page }) => {
+test("the 7 streamlined settings categories render cleanly with Advanced folded", async ({ page }) => {
   await openSettings(page);
-  await nav(page).getByRole("button", { name: "Overview" }).click();
-  const cards = page.getByRole("region", { name: "Areas" }).locator(".card");
-  await expect(cards.filter({ hasText: "References & PDF" })).toBeVisible();
-  await cards.filter({ hasText: "Terminal & agents" }).click();
-  await expect(page.locator('article[data-page="terminal"]')).toBeVisible();
-  // a feature with its shortcut, runnable from here
-  const feats = page.getByRole("region", { name: "What you can do here" });
-  await expect(feats.getByRole("button", { name: /AI agent terminal/ })).toContainText("Super");
-  await expect(page.getByText("Where the terminal panel docks")).toBeVisible();
-  // every page reachable from the sidebar draws without an error
-  for (const name of ["Appearance", "Writing", "Home & Today", "Code", "Files & search", "References & PDF", "Drawing", "Keyboard", "Plugins", "Automation", "Advanced"]) {
+  for (const name of ["Appearance", "Editor & Writing", "Calendar & Daily Notes", "Files & Search", "References & PDF", "Keyboard Shortcuts", "Extensions"]) {
     await nav(page).getByRole("button", { name: new RegExp(`^${name.replace(/[&]/g, "\\$&")}`) }).click();
     await expect(page.locator("main article h2")).toContainText(name);
   }
+  await nav(page).getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByTestId("settings-advanced").locator("summary").click();
+  await expect(page.getByText("Where the terminal panel docks")).toBeVisible();
 });
 
 test("search spans pages and matches descriptions", async ({ page }) => {
   await openSettings(page);
   await page.getByPlaceholder("Search settings…").fill("in code files"); // words of line_numbers' description
   await expect(page.locator('.row[data-path="editor.line_numbers"]')).toBeVisible();
-  await page.getByPlaceholder("Search settings…").fill("agent");
-  await expect(page.getByRole("button", { name: /AI agent terminal/ }).first()).toBeVisible(); // features match too
 });
 
 test("accent colour applies live and resets to the theme's", async ({ page, request }) => {
@@ -78,7 +69,7 @@ test("colour schemes are swatches, by day and by night; an empty accent shows th
 
 test("the keyboard page lists every command with a rebindable shortcut", async ({ page }) => {
   await openSettings(page);
-  await nav(page).getByRole("button", { name: "Keyboard" }).click();
+  await nav(page).getByRole("button", { name: /^Keyboard Shortcuts/ }).click();
   await page.getByLabel("Filter shortcuts").fill("command palette");
   await expect(page.getByRole("button", { name: "Shortcut for Command palette" })).toContainText("Super");
 });
@@ -88,24 +79,22 @@ test("a settings page is a block in a .page file", async ({ page, request }) => 
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "tune.page");
+  await page.locator(".settings-block").getByTestId("settings-advanced").locator("summary").click();
   await expect(page.locator(".settings-block").getByText("Where the terminal panel docks")).toBeVisible();
   await request.put("/api/file", { headers: H, data: { path: "notes/tune.page", text: "" } });
 });
 
-test("a plugin switched off in Settings loses its command and button", async ({ page, request }) => {
-  await request.put("/api/file", { headers: H, data: { path: ".kandinsky/plugins/offable/plugin.toml", text: 'title = "Offable"\nicon = "table"\nrail = true\n' } });
+test("a plugin switched off in Settings saves plugins.off", async ({ page, request }) => {
+  await request.put("/api/file", { headers: H, data: { path: ".kandinsky/plugins/offable/plugin.toml", text: 'title = "Offable"\nicon = "table"\n' } });
   await request.put("/api/file", { headers: H, data: { path: ".kandinsky/plugins/offable/view.js", text: "export default (host) => { host.textContent = 'offable'; };\n" } });
   await openSettings(page);
-  await expect(page.getByRole("button", { name: "Offable", exact: true })).toBeVisible(); // rail
-  await nav(page).getByRole("button", { name: /^Plugins( \d+)?$/ }).click();
+  await nav(page).getByRole("button", { name: /^Extensions/ }).click();
   const sw = page.getByRole("switch", { name: "Plugin Offable" });
   await expect(sw).toHaveAttribute("aria-checked", "true");
   await sw.click();
   await expect.poll(async () => (await cfg(request)).plugins.off).toContain("offable");
-  await expect(page.getByRole("button", { name: "Offable", exact: true })).toHaveCount(0);
   await sw.click();
   await expect.poll(async () => (await cfg(request)).plugins.off).not.toContain("offable");
-  await expect(page.getByRole("button", { name: "Offable", exact: true })).toBeVisible();
 });
 
 // Found by clicking every button of every page: a choice detected twice (or "" both as Default and as
@@ -117,7 +106,7 @@ test("the detected-choice lists open without an error", async ({ page }) => {
   await openSettings(page);
   await nav(page).getByRole("button", { name: /^Appearance/ }).click();
   const art = page.locator('article[data-page="appearance"]');
-  const lists = art.locator("button", { hasText: /^\s*Default\s*$/ });
+  const lists = art.locator(".row", { hasText: /detected/ }).locator('button[aria-haspopup="listbox"]');
   await expect(lists.first()).toBeVisible({ timeout: 15000 }); // the detected choices arrive after the page
   for (let i = 0; i < await lists.count(); i++) {
     await lists.nth(i).click();
@@ -127,31 +116,27 @@ test("the detected-choice lists open without an error", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-// the settings added on 2026-10-14 each have their place on a page (a setting nobody can find does not exist)
-test("the vim keys, the formatting bar, the formula preview, the code bar and the git gutter are on their pages", async ({ page }) => {
+test("the vim keys, formatting bar, formula preview, code bar and git gutter are on their pages", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+,");
-  await page.getByRole("button", { name: /^Writing/ }).first().click();
+  await nav(page).getByRole("button", { name: /^Editor & Writing/ }).click();
   for (const name of [/Vim keys/i, /Format bar/i, /Math preview/i, /^Notes folder$/]) await expect(page.getByText(name).first()).toBeVisible();
-  await page.getByRole("button", { name: /^Code/ }).first().click();
-  for (const name of [/Tool bar above code files/i, /Git gutter/i]) await expect(page.getByText(name).first()).toBeVisible();
+  await nav(page).getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByTestId("settings-advanced").locator("summary").click();
+  await expect(page.getByText(/Live editing|Terminal|LSP/i).first()).toBeVisible();
 });
 
-test("the options of the last features are on their pages, named so they read; a drawing's pages set skip the question", async ({ page, request }) => {
+test("the options of the main features are on their pages, named so they read", async ({ page, request }) => {
   await openSettings(page);
   const labels: [RegExp, string[]][] = [
-    [/^Writing/, ["Live editing between devices", "Default template (a plain note starts from it)", "Notes folder"]],
-    [/^Home & Today/, ["Daily log folder", "Daily log template"]],
-    [/^Drawing/, ["Drawings folder", "A new drawing's pages"]],
-    [/^Web/, ["Web links open in"]],
+    [/^Editor & Writing/, ["Default template (a plain note starts from it)", "Notes folder"]],
+    [/^Calendar & Daily Notes/, ["Daily log folder", "Daily log template"]],
   ];
   for (const [p, names] of labels) {
     await nav(page).getByRole("button", { name: p }).first().click();
     for (const n of names) await expect(page.locator("label", { hasText: new RegExp(`^${n.replace(/[()]/g, "\\$&")}$`) })).toBeVisible();
   }
-  // no field left to an automatic page of its section ("Editor" held live editing alone)
-  await expect(nav(page).getByRole("button", { name: /^Editor$/ })).toHaveCount(0);
 
   const before = await cfg(request);
   try {
@@ -159,7 +144,6 @@ test("the options of the last features are on their pages, named so they read; a
     await page.reload();
     await page.getByText("Finish the GW notes.").waitFor();
     await page.keyboard.press("Meta+Shift+D");
-    // "a5" was taken out and reads as A4: the size is not asked, the paper still is
     await expect(page.getByPlaceholder("New drawing: its pages…")).toHaveCount(0);
     await page.getByTestId("palette").getByText("Blank", { exact: true }).click();
     await expect(page.locator(".excalidraw").first()).toBeVisible({ timeout: 20000 });

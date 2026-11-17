@@ -4,6 +4,7 @@
 import { hydrateImages } from "./raw";
 import { hydrateEmbeds } from "./embeds";
 import { hydrateBlocks } from "./blocks";
+import { enhanceCodeBlocks } from "./code-fence-chrome";
 import { hydrateExprs } from "./expr";
 import { equationLabel, equationTarget, forgetEquations, linkText } from "./equations";
 import { onVaultChange, resolveLink } from "./vault";
@@ -20,7 +21,7 @@ export interface HydrateOptions {
 
 export function hydrateRendered(root: HTMLElement, notePath: string, opts: HydrateOptions = {}): () => void {
   void hydrateImages(root);
-  const undo = [hydrateEmbeds(root, notePath, opts.compact), hydrateBlocks(root, notePath)];
+  const undo = [hydrateEmbeds(root, notePath, opts.compact), hydrateBlocks(root, notePath), enhanceCodeBlocks(root)];
   if (opts.exprText !== undefined) hydrateExprs(root, notePath, opts.exprText);
   hydrateEquationRefs(root, notePath);
   markDoiLinks(root); // a cited paper not in the library yet looks it

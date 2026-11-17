@@ -84,17 +84,15 @@ The note index (backlinks, graph, Bases, tasks, and so every block above) leaves
 
 Text search still finds both: searching is asking for files, not for knowledge.
 
-## Properties: hidden, in the note, or in a panel to edit them
+## Properties: inline under the title, hidden, or in a panel
 
-Properties are hidden by default, with a setting to show them in a right panel and edit them visually, and they follow a written spec (inspired by a real Obsidian vault) so they do not become a mess.
-
-**The setting** `[editor] properties` (Settings → Writing → Properties; also the palette commands *Properties: show / hide the panel beside the note* (`ui.properties`) and *Properties: show them in the note* (`ui.properties.inline`)):
+In the Notion-style workspace shell, properties default to clean clickable controls rendered directly beneath the note header (`NoteHero` → `InlineProperties.svelte`: status pills, date pickers, `[[relation]]` chips, rating stars, and `+ Add property`, collapsing past 5 properties with a *"Show N more properties"* toggle) while keeping raw YAML hidden unless switched to `SOURCE` mode (`Ctrl+E`). Power users can still toggle the right-hand panel or fallback mode via `[editor] properties`:
 
 | value | what a note with frontmatter looks like |
 |---|---|
-| `hidden` (default) | one faint "PROPERTIES n" line above the text; a click on it shows the YAML to edit by hand. The file is never changed by the look. |
-| `inline` | Obsidian's table in the note: a row per key, the kind's icon, links and tags as pills, read-only (a click shows the YAML). The audits (`npm run audit:md`, the look parity) run with this value, since they compare with Obsidian (`ui/audit/props-inline.ts`). |
-| `panel` | the faint line in the note, and a panel at the right of the note with one control per property. |
+| `inline` (default) | Clickable property rows directly beneath the page title in Live Preview (`InlineProperties.svelte`). |
+| `hidden` | Collapses inline properties cleanly while keeping raw YAML accessible in Raw Markdown (`Ctrl+E`). |
+| `panel` | Shows properties in a dedicated side drawer (`PropertiesPanel.svelte`). |
 
 **The spec** `[editor] properties_spec` (default `templates/properties.yaml`, a path in the vault): which properties exist, their kind, and what each note `type:` requires. It is the vault's file, not Kandinsky's — one modelled on an Obsidian vault can also be read by that vault's own linter (`props_check.py`). Read leniently by `crates/kandinsky-core/src/property_spec.rs` (`GET /api/properties/spec`): an unknown kind is read as text and reported in `problems`, broken YAML gives an empty spec, a path outside the vault is refused. Shape:
 
@@ -223,3 +221,15 @@ Notes, reading notes (`<citekey>.md`), and `properties-audit` work seamlessly wi
 
 - **Zero-copy linking & auditing:** PDFs inside configured `external_pdf_roots` are linked in place by relative path without copying files into the vault or creating OS symlinks, and `kandinsky properties-audit` / `kandinsky_properties_audit` resolves links into those roots without false broken-link warnings.
 - **Folder scanning & Books:** `kandinsky scan-external-roots` (or the **Scan folders** modal tab and `catalog_papers_scan_external_roots` MCP tool) indexes PDFs across `external_pdf_roots` into papers and first-class `@book` entries (`book` / `science_book`), derives collections from nested subfolders, updates paths and collections when PDFs move, and ignores non-PDF companion files (such as `.ipynb` notebooks). Agents can filter local lookups via `catalog_papers_search_papers` using `item_type` (`"paper"`, `"book"`, `"thesis"`, or `"notes"`). See [ZOTERO.md](ZOTERO.md) and [PAPERS-PDF-SOURCES.md](PAPERS-PDF-SOURCES.md).
+
+## Native Calendar & Unified Day Workspace
+
+- **Local-first calendar pane** (`ui/src/panes/Calendar.svelte`, `crates/kandinsky-core/src/calendar.rs`): Month, Week (hourly grid + drag/resize), Agenda, and Day views powered by vault files with zero server setup. Optional `.ics` import/export and external `dav` accounts merge seamlessly.
+- **Click-a-day Unified Day Workspace** (`ui/src/components/calendar/DayWorkspace.svelte`): Pairs the chronological schedule + `+ New event` card directly beside/above `<log_dir>/YYYY-MM-DD.md`. Daily Notes are seeded lazily only on first keystroke/save so browsing calendar dates leaves zero empty files on disk.
+- **Event notes & promotion**: Inline `events:` frontmatter entries in a Daily Note can be promoted in 1 click to full Markdown event pages under `<events_dir>/YYYY-MM-DD Title.md` (`POST /api/calendar/promote`).
+
+## Live Widget Cards, Synced Blocks, Margin Comments & `@date` Mentions
+
+- **Visual `/` blocks & hover Configure** (`ui/src/lib/editor/slash-menu.ts`, `ui/src/components/widgets/WidgetConfigureBar.svelte`): `/` widgets insert cleanly and render as live visual cards right away in Live Preview with a hover `⚙ Configure` popover instead of raw YAML blocks.
+- **Synced blocks & rich embeds** (`ui/src/components/widgets/SyncedBlockEmbed.svelte`, `EmbedBlock.svelte`, `POST /api/note/synced-block`): `type: synced` fences and `![[Note#^block-id]]` transclusions edit the source note live with recursion cycle protection.
+- **Margin comments & `@date` completions** (`ui/src/components/MarginComments.svelte`, `ui/src/lib/nl-dates.ts`): Anchored comment threads persist under `.kandinsky/comments` sidecars (`/api/comments`), and `@today`, `@tomorrow`, `@next <weekday>`, and `@in N days` complete inline to ISO dates.

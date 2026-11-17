@@ -22,6 +22,9 @@ const PERSON_KEY_RE = /^(author|authors|owner|assignee|speaker|instructor)$/i;
 const ICON: Record<PropertyKind, string> = {
   text: '<path d="M4 7h16M4 12h16M4 17h10"/>',
   enum: '<path d="m8.5 10.5 3.5 3.5 3.5-3.5"/><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/>',
+  status: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2"/>',
+  rating: '<path d="m12 3.5 2.6 5.3 5.9.8-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8-4.2-4.1 5.9-.8Z"/>',
+  auto_id: '<rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M8 10h2v4M14 10h2v4M7.5 14h3"/>',
   list: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
   date: BAUHAUS_CALENDAR_ICON,
   datetime: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',

@@ -1,6 +1,6 @@
 # Pages — screens you arrange by hand
 
-A `.page` file is a screen made of blocks: rows, and optionally columns inside a row. The home screen is one (`Home.page`). Phase 2 of the overhaul (`~/.claude/plans/prancy-swinging-kay.md`) made pages editable **by hand**; before, the only way to reshape one was to edit its YAML.
+A `.page` file is a screen made of blocks: rows, and optionally columns inside a row. The home screen is one (`Home.page`). Visual arranging lets users reshape `.page` screens directly without editing raw YAML.
 
 ## The file
 
@@ -22,7 +22,7 @@ Three content blocks exist for pages: `note` (a note rendered; "open as a tab" e
 
 ## Arranging
 
-**Arrange** (top right of a page) turns every block into an object with a bar:
+**Layout** (top right of a page, or **Arrange blocks** in the **···** menu; **+ Add block** opens the visual block picker `PageBlockPicker.svelte`) turns every block into an object with a bar:
 
 | gesture | what it does |
 |---|---|
@@ -53,7 +53,7 @@ Every drag has a menu alternative, so the whole thing works from the keyboard.
 - Moving a block to another column remounts it (an embedded terminal restarts). Reordering inside one column keeps it.
 - Dragging a block's height by its corner (a framed block) is not saved yet; **Height…** in the menu is.
 - The core keeps a small `.page` reader (`crates/kandinsky-core/src/page.rs`) for two things only: the home page's title and checking the pages the toolsmith drafts. The route `GET /api/page` and its generated TypeScript types were removed (the UI's model is `ui/src/lib/page-doc.ts`).
-- **Options…** in a block's menu (while arranging) opens a form with the block's options: where a list's rows come from, a database's view, a terminal's preset, a file's path… Saving writes them into the `.page`; an emptied field removes its key. The form is drawn from the fields the block declares (`{ key, label, hint?, kind }` with `kind` one of `text`, `number`, `toggle`, `list` (comma-separated, written as a YAML list) or `choice` (with `choices: [...]`)): built-in blocks in `ui/src/lib/block-options.ts` (`BUILTIN_FIELDS`, and `ROW_VIEW_FIELDS` shared by every row view), a plugin's block as the third argument of `registerBlock`. A block that declares nothing has no Options… and is configured as text (Edit layout). Options that are structures (`filters:`) stay text. In a note a block is its own text, so there is no form there. Code: `components/BlockOptions.svelte`, `optionFields` in `blocks.ts`; test `block-options.spec.ts`.
+- **Options…** in a block's menu (while arranging) opens a form with the block's options: where a list's rows come from, a database's view, a terminal's preset, a file's path… Saving writes them into the `.page`; an emptied field removes its key. The form is drawn from the fields the block declares (`{ key, label, hint?, kind }` with `kind` one of `text`, `number`, `toggle`, `list` (comma-separated, written as a YAML list) or `choice` (with `choices: [...]`)): built-in blocks in `ui/src/lib/block-options.ts` (`BUILTIN_FIELDS`, and `ROW_VIEW_FIELDS` shared by every row view), a plugin's block as the third argument of `registerBlock`. A block that declares nothing has no Options… and is configured as text (Edit layout). Options that are structures (`filters:`) stay text. In a note, rendered `/` blocks in Live Preview show a hover **Configure** popover (`WidgetConfigureBar.svelte`) backed by the same option fields while keeping raw Markdown one keystroke away (`Ctrl+E`). Code: `components/BlockOptions.svelte`, `WidgetConfigureBar.svelte`, `optionFields` in `blocks.ts`; tests `block-options.spec.ts`, `notion-polish.spec.ts`.
 
 ## Tests
 

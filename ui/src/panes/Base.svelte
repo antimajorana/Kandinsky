@@ -12,7 +12,7 @@
 <div class="base-pane">
   <header>
     <span class="name"><Icon name="table" size={14} /> {shownPath(spec.path)}</span>
-    <button class="btn" onclick={() => open({ kind: "editor", path: spec.path })} title="Edit the base's filters, formulas and views (YAML)"><Icon name="file-code" size={14} /> Edit YAML</button>
+    <button class="btn" onclick={() => open({ kind: "editor", path: spec.path })} title="Edit database source"><Icon name="file-code" size={14} /> Edit source</button>
   </header>
   <BaseTable path={spec.path} view={spec.view} />
 </div>

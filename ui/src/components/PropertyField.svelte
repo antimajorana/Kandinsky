@@ -143,8 +143,18 @@
   </div>
 {:else if kind === "bool"}
   <label class="check"><input type="checkbox" aria-label={label} checked={value === true} onchange={(e) => onset((e.currentTarget as HTMLInputElement).checked)} /><span>{value === true ? "Yes" : "No"}</span></label>
-{:else if kind === "enum"}
+{:else if kind === "enum" || kind === "status"}
   <Select label={label} value={scalarText(value)} {options} onchange={(v) => onset(v || null)} />
+{:else if kind === "rating"}
+  {@const cur = Math.max(0, Math.min(5, Math.round(Number(value) || 0)))}
+  <div class="rating-row" role="radiogroup" aria-label={label}>
+    {#each [1, 2, 3, 4, 5] as star (star)}
+      <button type="button" class="star-btn" class:lit={cur >= star} aria-label="{star} star"
+        onclick={() => onset(cur === star ? null : star)}>★</button>
+    {/each}
+  </div>
+{:else if kind === "auto_id"}
+  <span class="auto-id">{scalarText(value) || "Auto"}</span>
 <!-- a template's `{{date}}` stays its text, never read as a date -->
 {:else if (kind === "date" || kind === "datetime") && !/\{\{/.test(scalarText(value))}
   <!-- a datetime property holding a bare day (a daily note's `date: 2026-11-02`) is edited as that day, not as its midnight -->
@@ -182,6 +192,10 @@
   input[type="date"], input[type="datetime-local"] { font-variant-numeric: tabular-nums; color-scheme: light dark; }
   .check { display: inline-flex; align-items: center; gap: 7px; min-height: calc(26px * var(--ui-scale, 1)); padding: 0 7px; color: var(--text-muted); font-size: calc(12.5px * var(--ui-scale, 1)); cursor: pointer; }
   .check input { accent-color: var(--accent); width: calc(14px * var(--ui-scale, 1)); height: calc(14px * var(--ui-scale, 1)); }
+  .rating-row { display: inline-flex; align-items: center; gap: 2px; min-height: calc(26px * var(--ui-scale, 1)); padding: 0 4px; }
+  .star-btn { padding: 1px 2px; font-size: 14px; line-height: 1; color: var(--text-faint); transition: color .1s; }
+  .star-btn.lit, .star-btn:hover { color: var(--yellow); }
+  .auto-id { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 4px; background: var(--bg-alt); border: 1px solid var(--border); font-family: var(--font-mono); font-size: calc(11.5px * var(--ui-scale, 1)); color: var(--text-muted); }
   .pills { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: calc(26px * var(--ui-scale, 1)); padding: 2px 4px; border-radius: var(--radius-sm); border: 1px solid transparent; }
   .pills:hover { border-color: var(--border); }
   .pills:focus-within { border-color: var(--accent); background: var(--bg); }

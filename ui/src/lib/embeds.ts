@@ -263,7 +263,9 @@ async function mountEmbed(el: HTMLElement, notePath: string, compact: boolean): 
   const page = /^page=(\d+)/.exec(section)?.[1];
   const src = pdf
     ? `type: pdf\npath: ${JSON.stringify(path)}\nheight: ${PDF_HEIGHT}${page ? `\npage: ${page}` : ""}`
-    : `type: note\npath: ${JSON.stringify(path)}${section ? `\nsection: ${JSON.stringify(section)}` : ""}`;
+    : !file && !compact && section.startsWith("^")
+      ? `type: synced\npath: ${JSON.stringify(path)}\nblock: ${JSON.stringify(section.slice(1))}`
+      : `type: note\npath: ${JSON.stringify(path)}${section ? `\nsection: ${JSON.stringify(section)}` : ""}`;
   keep(el, mountBlock(el, notePath, src));
 }
 

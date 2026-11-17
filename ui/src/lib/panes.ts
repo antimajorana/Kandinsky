@@ -7,6 +7,7 @@ import { basename, IMAGE_RE, shownName } from "./paths";
 
 export type PaneSpec =
   | { kind: "today" }
+  | { kind: "calendar"; date?: string; view?: "month" | "week" | "agenda" | "day" }
   | { kind: "editor"; path: RelPath; line?: number }
   | { kind: "terminal"; preset: PtyPreset; n: number; /** the user's name for it (double-click the tab) */ title?: string; /** run directly (no interactive shell); the tab closes when it ends */ command?: string; /** a Claude tab's own session id: resumed when the layout is restored */ session?: string; /** an AI agent a plugin declares (`<plugin>/<id>`, agent_terminals.rs); its tab is an agent tab like Claude's */ agent?: string }
   | { kind: "files" }
@@ -45,7 +46,7 @@ export type PaneKind = PaneSpec["kind"];
 // Every pane kind, for coverage (the UX audit reports kinds no journey opened). A Record keyed by
 // PaneKind: forgetting a new kind here is a compile error, not a silent gap.
 const KINDS: Record<PaneKind, true> = {
-  today: true, editor: true, terminal: true, files: true, search: true, pdf: true, image: true, web: true,
+  today: true, calendar: true, editor: true, terminal: true, files: true, search: true, pdf: true, image: true, web: true,
   settings: true, git: true, commit: true, diff: true, table: true, base: true, notebook: true, excalidraw: true,
   canvas: true, outline: true, plugin: true, commands: true, graph: true, page: true, block: true, explorer: true,
 };
@@ -64,6 +65,7 @@ export function tabName(path: string): string {
 export function paneId(s: PaneSpec): string {
   switch (s.kind) {
     case "today":
+    case "calendar":
     case "files":
     case "search":
     case "settings":
@@ -112,6 +114,7 @@ export const blockType = (src: string) => /^\s*type:\s*["']?([\w.:-]+)/m.exec(sr
 export function paneTitle(s: PaneSpec): string {
   switch (s.kind) {
     case "today": return "Today";
+    case "calendar": return s.date ? `Calendar · ${s.date}` : "Calendar";
     case "files": return "Files";
     case "explorer": return s.path ? basename(s.path) : s.place || "Files";
     case "search": return "Search";
@@ -157,6 +160,7 @@ export type IconName =
 export function paneIcon(s: PaneSpec): IconName {
   switch (s.kind) {
     case "today": return "today";
+    case "calendar": return "calendar";
     case "files": return "files";
     case "explorer": return s.source === "vault" ? "folder-open" : "server";
     case "search": return "search";
@@ -235,6 +239,7 @@ export function paneZone(k: PaneKind): PaneZone {
     case "terminal":
       return "bottom";
     case "today":
+    case "calendar":
     case "editor":
     case "pdf":
     case "image":
@@ -262,7 +267,7 @@ const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
  *  pane that is not a thing to embed (a terminal, a commit, another block's own tab). */
 export function embedOptions(s: PaneSpec): Record<string, string> | null {
   switch (s.kind) {
-    case "today": case "files": case "git": case "outline": case "commands": case "graph":
+    case "today": case "calendar": case "files": case "git": case "outline": case "commands": case "graph":
       return {};
     case "search": return s.q ? { q: s.q } : {};
     case "table": return s.view ? { path: s.path, view: s.view } : { path: s.path };
@@ -289,6 +294,12 @@ export function specFromOptions(kind: PaneKind, o: Record<string, unknown>): Pan
     case "commands":
     case "graph":
       return { kind };
+    case "calendar":
+      return {
+        kind: "calendar",
+        date: str(o.date),
+        view: o.view === "month" || o.view === "week" || o.view === "agenda" || o.view === "day" ? o.view : undefined,
+      };
     case "search": return { kind, q: str(o.q) };
     case "editor":
     case "pdf":

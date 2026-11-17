@@ -85,10 +85,13 @@
     {:else}
       <span class="val none"></span>
     {/if}
-    <button type="button" class="icon-btn more" title="Edit as an expression" aria-label="Edit as an expression" onclick={asExpression}><Icon name="code" size={12} /></button>
+    <button type="button" class="icon-btn more" title="Advanced expression" aria-label="Advanced expression" onclick={asExpression}><Icon name="code" size={12} /></button>
   {:else}
-    <input class="val expr" aria-label="Expression" spellcheck="false" placeholder={'status == "done"'} value={shown.text}
-      onchange={(e) => { const v = e.currentTarget.value.trim(); if (v) { last = v; shown = read(v) ? { cond: read(v)! } : { text: v }; onchange(v); } }} onkeydown={enterCommits} />
+    <input class="val expr" aria-label="Advanced expression" spellcheck="false" placeholder={'status == "done"'} value={shown.text}
+      onchange={(e) => { const v = e.currentTarget.value.trim(); if (v) { last = v; shown = { text: v }; onchange(v); } }} onkeydown={enterCommits} />
+    {#if "text" in shown && read(shown.text)}
+      <button type="button" class="icon-btn more" title="Visual filter builder" aria-label="Visual filter builder" onclick={() => { if ("text" in shown) { const r = read(shown.text); if (r) shown = { cond: r }; } }}><Icon name="sliders" size={12} /></button>
+    {/if}
   {/if}
   <button type="button" class="icon-btn" title="Remove this filter" aria-label="Remove this filter" onclick={onremove}><Icon name="close" size={12} /></button>
 </div>

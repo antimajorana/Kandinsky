@@ -6,7 +6,7 @@
   import { onMount } from "svelte";
   import { settings, loadSuggestions } from "../lib/settings.svelte";
   import { load, save } from "../lib/prefs";
-  import { leaves, sectionDescription, isModified, fieldTitle, sectionTitle, shownOn } from "../lib/settings-schema";
+  import { leaves, sectionDescription, isModified, fieldTitle, shownOn } from "../lib/settings-schema";
   import { placeFields, GROUPS, hostOf, pageDef } from "../lib/settings-pages";
   import { nativeShell } from "../lib/native-shell.svelte";
   import { apiBase } from "../lib/api";
@@ -22,6 +22,7 @@
   import { pluginBlocked } from "../lib/plugins.svelte";
   import { plugins, loadPlugins } from "../lib/plugins.svelte";
   import { settingsNav, pluginPageId } from "../lib/settings-nav.svelte";
+  import { sections } from "../lib/settings-sections.svelte";
   import { isOff } from "../lib/plugin-manage";
   import SettingField from "../components/settings/SettingField.svelte";
   import { forgetPaths } from "../components/settings/SettingField.svelte";
@@ -31,7 +32,9 @@
 
   const PAGE_KEY = "kandinsky.settings.page";
   const ACCOUNTS = "accounts";
-  let current = $state(load<string>(PAGE_KEY, "overview"));
+  const normalizePage = (id: string) =>
+    id === "overview" ? "appearance" : id === "today" ? "calendar" : ["automation", "server", "agents", "terminal", "desktop", "code", "web", "drawing", "advanced"].includes(id) ? "plugins" : id;
+  let current = $state(normalizePage(load<string>(PAGE_KEY, "appearance")));
   let filter = $state("");
   let body = $state<HTMLElement>();
   let search = $state<HTMLInputElement>();
@@ -40,10 +43,10 @@
   const fields = $derived.by(() => { void settings.schema; return leaves(); });
   const host = $derived(hostOf({ server: !!me.info?.server, phone: nativeShell.on, path: apiBase() }));
   // a setting that does nothing here (a terminal's on the phone) is not offered (its `x-hosts`)
-  const pages = $derived(placeFields([...fields].filter(([, s]) => shownOn(s, host)).map(([p]) => p), host, sectionTitle));
-  // each plugin with settings is a page of its own, under the core's (components/settings/PluginPage.svelte)
-  const pluginPages = $derived(plugins.list.filter((p) => p.fields.length).sort((a, b) => a.title.localeCompare(b.title)));
-  const builtinPages = $derived(pages.filter((p) => p.plugin));
+  const pages = $derived(placeFields([...fields].filter(([, s]) => shownOn(s, host)).map(([p]) => p), host));
+  // only show enabled extensions that actually have configurable fields or custom settings sections in the Settings nav
+  const pluginPages = $derived(plugins.list.filter((p) => (p.fields.length || (sections[p.id]?.length ?? 0) > 0) && !isOff(p.id)).sort((a, b) => a.title.localeCompare(b.title)));
+  const builtinPages = $derived(pages.filter((p) => p.plugin && !isOff(p.plugin)));
   // every plugin has a page (its problems, actions); the bar lists those with settings
   const plugin = $derived(current.startsWith("plugin:") ? plugins.list.find((p) => pluginPageId(p.id) === current) : undefined);
   const accounts = $derived(current === ACCOUNTS);
@@ -54,8 +57,8 @@
   const showLit = () => requestAnimationFrame(() => requestAnimationFrame(() => navEl?.querySelector(".nav.on")?.scrollIntoView({ block: "nearest" })));
   $effect(() => { void [plugin, page, pluginPages]; showLit(); });
   $effect(() => { if (!navEl) return; const ro = new ResizeObserver(showLit); ro.observe(navEl); return () => ro.disconnect(); });
-  // a plugin with no settings has no entry of its own: the Plugins page it is opened from stays lit
-  const navOn = (id: string): boolean => !words.length && (id === page?.page || (id === "plugins" && !!plugin && !plugin.fields.length));
+  // a plugin with no settings has no entry of its own: the Extensions page it is opened from stays lit
+  const navOn = (id: string): boolean => !words.length && (id === page?.page || (id === "plugins" && !!plugin && !plugin.fields.length && !(sections[plugin.id]?.length)));
   const accountCount = $derived(accountLists().reduce((n, l) => n + (Array.isArray(l.plugin.settings?.[l.setting.key]) ? (l.plugin.settings[l.setting.key] as unknown[]).length : 0), 0));
   // an account in trouble shows on the Accounts entry: a red dot, without opening the page
   const accountTrouble = $derived(Object.values(statuses).some((m) => Object.values(m).some((x) => x.state === "error")));
@@ -69,10 +72,10 @@
   $effect(() => { if (phone.on && reading) return closable(() => (reading = false), () => onScreen(body)); }); // Back: the list of areas, while on screen (lib/back.ts)
 
   function go(id: string) {
-    current = id;
+    current = normalizePage(id);
     reading = true;
     filter = "";
-    save(PAGE_KEY, id);
+    save(PAGE_KEY, current);
     body?.scrollTo({ top: 0 });
   }
 
@@ -83,7 +86,8 @@
     return pages.flatMap((p) => {
       const feats = (pageDef(p.page)?.features ?? []).flatMap((id) => { const a = actions.find((x) => x.id === id); return a ? [a] : []; })
         .filter((a) => words.every((w) => a.title.toLowerCase().includes(w)));
-      const opts = p.fields.filter((path) => {
+      const allPageFields = [...p.fields, ...p.advancedFields];
+      const opts = allPageFields.filter((path) => {
         const s = fields.get(path);
         const hay = `${fieldTitle(path)} ${path} ${s?.description ?? ""} ${sectionDescription(path.split(".")[0])} ${p.title}`.toLowerCase();
         return words.every((w) => hay.includes(w));
@@ -125,23 +129,23 @@
          own page: the built-ins' first (their fields come from the config schema like the core's) -->
     {#each GROUPS as g (g.id)}
       {@const own = pages.filter((p) => !p.plugin && p.group === g.id)}
-      {#if own.length || g.id === "plugins"}
+      {#if own.length || g.id === "extensions"}
       <h2 class="group">{g.title}</h2>
       {#each own as p (p.page)}
-        {@const n = changedIn(p.fields)}
-        <button class="nav" class:on={navOn(p.page)} onclick={() => go(p.page)} aria-current={navOn(p.page) ? "page" : undefined}>
+        {@const n = changedIn([...p.fields, ...p.advancedFields])}
+        <button class="nav" class:on={navOn(p.page)} onclick={() => go(p.page)} aria-current={navOn(p.page) ? "page" : undefined} data-testid="settings-nav-{p.page}">
           <span class="ico"><Icon name={p.icon} size={14} /></span> <span>{p.title}</span>{#if n}<i title="{n} changed">{n}</i>{/if}
         </button>
       {/each}
-      {#if g.id === "plugins"}
+      {#if g.id === "extensions"}
       {#each builtinPages as p (p.page)}
         {@const n = changedIn(p.fields)}
-        <button class="nav plugin" class:on={navOn(p.page)} class:off={isOff(p.plugin ?? "")} onclick={() => go(p.page)} aria-current={navOn(p.page) ? "page" : undefined}>
+        <button class="nav plugin" class:on={navOn(p.page)} onclick={() => go(p.page)} aria-current={navOn(p.page) ? "page" : undefined}>
           <span class="ico plug"><Icon name={p.icon} size={14} /></span> <span>{p.title}</span>{#if n}<i title="{n} changed">{n}</i>{/if}
         </button>
       {/each}
       {#each pluginPages as p (p.id)}
-        <button class="nav plugin" class:on={!words.length && plugin?.id === p.id} class:off={isOff(p.id)} onclick={() => go(pluginPageId(p.id))} aria-current={!words.length && plugin?.id === p.id ? "page" : undefined}>
+        <button class="nav plugin" class:on={!words.length && plugin?.id === p.id} onclick={() => go(pluginPageId(p.id))} aria-current={!words.length && plugin?.id === p.id ? "page" : undefined}>
           <span class="ico plug"><Icon name={pluginIcon(p)} size={14} /></span> <span>{p.title}</span>{#if pluginTrouble(p)}<b class="bad" title="It has a problem"></b>{/if}
         </button>
       {/each}
@@ -192,7 +196,6 @@
   .nav:hover { background: var(--bg-hover); color: var(--text); }
   .nav.on { background: var(--accent-soft); color: var(--text); font-weight: 600; }
   .group { margin: 14px 10px 4px; font-size: calc(10.5px * var(--ui-scale, 1)); letter-spacing: .07em; text-transform: uppercase; color: var(--text-faint); font-weight: 600; }
-  .nav.plugin.off { opacity: .55; }
   .nav i { font-style: normal; font-size: calc(10.5px * var(--ui-scale, 1)); color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 0 6px; }
   main { flex: 1; min-width: 0; overflow-y: auto; padding: 28px max(24px, calc(50% - 420px)) 80px; }
   h1 { margin: 0 10px 10px; font-size: calc(17px * var(--ui-scale, 1)); color: var(--heading); letter-spacing: -.01em; }

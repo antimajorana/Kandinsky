@@ -318,6 +318,13 @@ pub async fn run_script_with(root: &Path, script: &ScriptCommand, env: &[(String
     use tokio::io::AsyncWriteExt;
     let mut vars = vec![("KANDINSKY_ROOT".to_string(), root.as_os_str().to_owned()), ("KANDINSKY_COMMAND".to_string(), script.id.clone().into())];
     vars.extend_from_slice(env);
+    let plan_env = crate::env::with_legacy(&vars);
+    if let Ok(plan) = crate::platform::run_line::plan(&script.manifest.run, root, &plan_env) {
+        let plugin = script.id.strip_prefix("plugin.").unwrap_or("");
+        crate::binary_trust::authorize_async(root, plugin, &plan.program, &plan.args, None)
+            .await
+            .map_err(|e| Error::CommandFailed(format!("{}: {e}", script.id)))?;
+    }
     let mut cmd = crate::platform::run_line::command(&script.manifest.run, root, &vars).map_err(|e| Error::CommandFailed(format!("{}: {e}", script.id)))?;
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     crate::platform::proc::own_group(&mut cmd);

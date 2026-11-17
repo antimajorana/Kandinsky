@@ -23,7 +23,8 @@ struct RelationPropMeta {
 }
 
 /// Active `(canonical_root, note_a, note_b, prop)` sync edges in flight to prevent re-entrant cycles.
-static IN_FLIGHT: LazyLock<Mutex<HashSet<(PathBuf, String, String, String)>>> =
+type InFlightEdges = HashSet<(PathBuf, String, String, String)>;
+static IN_FLIGHT: LazyLock<Mutex<InFlightEdges>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
 struct FlightGuard {

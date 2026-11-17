@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Unified Nootion-style sidebar: Vault header ("Several Circles" emblem + switcher), compact primary nav,
-  // Favorites, colored Vault Pages tree with Notecraft folder color picker, and pinned footer (Trash, Plugins, Settings).
+  // Unified Notion-style sidebar: Vault header ("Several Circles" emblem + switcher), calm primary nav,
+  // Favorites, colored Vault Pages tree with folder color picker, and pinned footer (Import, Trash, Plugins, Settings).
   import { onMount, untrack } from "svelte";
   import { api } from "../lib/api";
   import { app, toast } from "../lib/state.svelte";
@@ -13,7 +13,8 @@
   import { chooseVault } from "../lib/vaults";
   import { openWorkspacesMenu, workspaceState } from "../lib/workspaces";
   import { keysOf, tipFor } from "../lib/keymap.svelte";
-  import { tabs, activate, closeTab, setSidebarWidth, toggleSidebar } from "../lib/tabs.svelte";
+  import { appLaunchers, moveApp, setAppHidden, type AppTile } from "../lib/apps.svelte";
+  import { tabs, setSidebarWidth, toggleSidebar, activate, closeTab } from "../lib/tabs.svelte";
   import { fullscreen } from "../lib/fullscreen.svelte";
   import { notificationsInbox, openNotificationsModal, closeNotificationsModal, requestNotificationsSync } from "../lib/notifications-inbox.svelte";
   import { bookmarks, bookmarkTitle, bookmarkIcon, bookmarkDetail, openBookmark, removeBookmark, isFileStarred, toggleFileStar, type Bookmark } from "../lib/bookmarks.svelte";
@@ -42,7 +43,6 @@
   const collapsed = $derived(tabs.sidebar.collapsed || fullscreen.on);
   let peek = $state(false);
   let wsMenuOpen = $state(false);
-  let panesOpen = $state(true);
   let favOpen = $state(true);
   let trashOpen = $state(false);
   let homePath = $state<string | null>(null);
@@ -58,9 +58,35 @@
   let backTo = "";
 
   const isHomeActive = $derived(tabs.active === "today" || (!!homePath && context.active?.path === homePath));
-  const mainGroups = $derived(tabs.groups.filter((g) => g.zone === "main"));
-  const mainTabs = $derived(mainGroups.flatMap((g, gi) => g.tabs.map((t) => ({ ...t, groupIndex: gi, groupCount: mainGroups.length }))));
-  const bottomTabs = $derived(tabs.groups.filter((g) => g.zone === "bottom").flatMap((g) => g.tabs));
+  const homeTile = $derived(appLaunchers().find((a) => a.key === "home"));
+  const extraApps = $derived(appLaunchers().filter((a) => !["home", "graph", "bases"].includes(a.key)));
+  const openAppId = (a: AppTile): string | null =>
+    (a.ids.includes(tabs.active ?? "") ? tabs.active : a.ids.find((id) => tabs.apps.some((t) => t.id === id))) ?? null;
+  const isAppActive = (a: AppTile): boolean => a.ids.includes(tabs.active ?? "");
+  function launchApp(a: AppTile): void {
+    const id = openAppId(a);
+    if (id) activate(id);
+    else a.open();
+  }
+  function onAppMenu(e: MouseEvent, a: AppTile): void {
+    e.preventDefault();
+    e.stopPropagation();
+    const id = openAppId(a);
+    const all = appLaunchers();
+    const i = all.findIndex((l) => l.key === a.key);
+    const items: MenuItem[] = id ? [{ label: `Close ${a.title}`, icon: "close", run: () => closeTab(id) }] : [];
+    if (i >= 0) {
+      if (items.length) items.push("sep");
+      items.push(
+        { label: "Move earlier", icon: "arrow-up", disabled: i <= 0, run: () => moveApp(a.key, -1) },
+        { label: "Move later", icon: "arrow-down", disabled: i >= all.length - 1, run: () => moveApp(a.key, 1) },
+        { label: `Hide ${a.title} from the bar`, detail: "it still opens from the palette and its keys", icon: "eye", run: () => setAppHidden(a.key, true) },
+        "sep",
+        { label: "Arrange the apps…", icon: "settings", run: () => openSettingsAt("plugins") },
+      );
+    }
+    if (items.length) menu = atPointer(e, items);
+  }
 
   function onNotificationsMenu(e: MouseEvent) {
     e.preventDefault();
@@ -291,51 +317,27 @@
     <nav class="nav-list" aria-label="Primary">
       <button class="nav-row" onclick={() => openPalette("all")}><span class="nav-left"><Icon name="search" size={14} /><span>Search</span></span><span class="kbd">Ctrl K</span></button>
       <button class="nav-row" onclick={() => openQuickCapture()}><span class="nav-left"><Icon name="edit" size={14} /><span>Quick capture</span></span><span class="kbd">Ctrl Alt N</span></button>
-      <button class="nav-row" class:active={isHomeActive} onclick={() => void openHome()}><span class="nav-left"><Icon name="home" size={14} /><span>Home</span></span></button>
-      <button class="nav-row" class:active={notificationsInbox.modalOpen} onclick={() => openNotificationsModal()} oncontextmenu={onNotificationsMenu}>
-        <span class="nav-left"><Icon name="bell" size={14} /><span>Notifications</span></span>
-        {#if notificationsInbox.totalBadgeCount > 0}<span class="nav-badge">{notificationsInbox.totalBadgeCount}</span>{/if}
-      </button>
-      <button class="nav-row" class:active={context.active?.kind === "explorer"} onclick={() => open({ kind: "explorer", source: "vault", place: "" })}><span class="nav-left"><Icon name="pages" size={14} /><span>All pages</span></span></button>
-      <button class="nav-row" class:active={tabs.active === "graph"} onclick={() => open({ kind: "graph" })}><span class="nav-left"><Icon name="graph" size={14} /><span>Graph</span></span></button>
-    </nav>
-
-    {#if mainTabs.length > 1}
-      <section class="panes-sec" aria-label="Open panes">
-        <div class="sec-row panes-head">
-          <button type="button" class="panes-toggle" onclick={() => (panesOpen = !panesOpen)} aria-expanded={panesOpen}>
-            <span class="sec-label">Open panes</span>
-            <span class="panes-count">{mainTabs.length}</span>
-            <span class="sec-chev" class:open={panesOpen}><Icon name="chevron" size={11} /></span>
+      <div class="nav-apps" data-testid="apps">
+        <button class="nav-row app" class:active={isHomeActive} class:open={homeTile ? Boolean(openAppId(homeTile)) : isHomeActive}
+          aria-label="Home" data-app-id="today" onclick={() => void openHome()}>
+          <span class="nav-left"><Icon name="home" size={14} /><span>Home</span></span>
+        </button>
+        <button class="nav-row" class:active={tabs.active === "calendar"} onclick={() => open({ kind: "calendar" })} data-testid="nav-calendar"><span class="nav-left"><Icon name="calendar" size={14} /><span>Calendar</span></span></button>
+        <button class="nav-row" class:active={notificationsInbox.modalOpen} onclick={() => openNotificationsModal()} oncontextmenu={onNotificationsMenu}>
+          <span class="nav-left"><Icon name="bell" size={14} /><span>Notifications</span></span>
+          {#if notificationsInbox.totalBadgeCount > 0}<span class="nav-badge">{notificationsInbox.totalBadgeCount}</span>{/if}
+        </button>
+        <button class="nav-row" class:active={context.active?.kind === "explorer"} onclick={() => open({ kind: "explorer", source: "vault", place: "" })}><span class="nav-left"><Icon name="pages" size={14} /><span>All pages</span></span></button>
+        <button class="nav-row" class:active={tabs.active === "graph"} onclick={() => open({ kind: "graph" })}><span class="nav-left"><Icon name="graph" size={14} /><span>Graph</span></span></button>
+        {#each extraApps as a (a.ids[0] ?? `app:${a.key}`)}
+          <button class="nav-row app" class:active={isAppActive(a)} class:open={Boolean(openAppId(a))}
+            aria-label={a.title} data-app-id={a.ids[0]}
+            onclick={() => launchApp(a)} oncontextmenu={(e) => onAppMenu(e, a)}>
+            <span class="nav-left"><Icon name={a.icon} size={14} /><span>{a.title}</span></span>
           </button>
-          <button type="button" class="kbd panes-kbd" title="Switch open panes in Quick Switcher (Ctrl+K %)" onclick={() => openPalette("all", "%")}>Ctrl K %</button>
-        </div>
-        {#if panesOpen}
-          <div class="panes-list">
-            {#each mainTabs as t (t.id)}
-              {@const customIcon = t.path ? getNoteIcon(t.path) : null}
-              {@const paneActive = t.active && t.id === tabs.active}
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div class="pane-row" class:active={paneActive} class:split-shown={t.shown && t.groupCount > 1 && !paneActive}
-                onmousedown={(e) => { if (e.button === 1) e.preventDefault(); }}
-                onauxclick={(e) => { if (e.button === 1) { e.preventDefault(); closeTab(t.id); } }}>
-                <button type="button" class="pane-main" onclick={() => activate(t.id)} title={t.tip}>
-                  <span class="nav-left">
-                    {#if customIcon}<span class="fav-glyph">{customIcon}</span>{:else}<Icon name={t.icon} size={13} />{/if}
-                    <span class="trunc">{t.title}</span>
-                  </span>
-                  {#if t.groupCount > 1}<span class="split-badge">Split {t.groupIndex + 1}</span>{/if}
-                </button>
-                <button type="button" class="pane-close" aria-label="Close {t.title}" title="Close pane"
-                  onclick={(e) => { e.stopPropagation(); closeTab(t.id); }}>
-                  <Icon name="close" size={11} />
-                </button>
-              </div>
-            {/each}
-          </div>
-        {/if}
-      </section>
-    {/if}
+        {/each}
+      </div>
+    </nav>
 
     {#if bookmarks.list.length > 0}
       <section class="fav-sec" aria-label="Favorites">
@@ -360,23 +362,11 @@
       </section>
     {/if}
 
-    {#if bottomTabs.length > 0}
-      <section class="term-sec" aria-label="Open terminals">
-        <div class="sec-row"><span class="sec-label">Sessions</span></div>
-        {#each bottomTabs as t (t.id)}
-          <button class="nav-row fav-row" class:active={t.active} onclick={() => activate(t.id)} title={t.tip}>
-            <span class="nav-left"><Icon name={t.icon} size={13} /><span class="trunc">{t.title}</span></span>
-          </button>
-        {/each}
-      </section>
-    {/if}
-
     <div class="sec-row tree-head">
       <span class="sec-label">Vault Pages</span>
       <span class="sec-actions">
         <button class="sec-btn" title="New note" aria-label="New note" onclick={() => newFile("")}><Icon name="plus" size={13} /></button>
         <button class="sec-btn" title="New folder" aria-label="New folder" onclick={() => newFolder("")}><Icon name="folder" size={13} /></button>
-        <button class="sec-btn" title="Import notes (Notion, NoteCraft, OneNote)…" aria-label="Import notes" data-testid="sidebar-import-icon" onclick={() => openImportModal()}><Icon name="move-in" size={13} /></button>
         <button class="sec-btn" class:on={treeView.showAll} title={treeView.showAll ? "Hide dotfiles & companions" : "Show hidden files"} aria-label="Show hidden files" aria-pressed={treeView.showAll} onclick={toggleShowAll}><Icon name="eye" size={13} /></button>
       </span>
     </div>
@@ -432,6 +422,7 @@
   .head-icon { width: 24px; height: 24px; border-radius: 5px; display: grid; place-items: center; color: var(--text-faint); }
   .head-icon:hover, .head-icon.on { background: var(--bg-hover); color: var(--text); }
   .nav-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; flex: none; }
+  .nav-apps { display: flex; flex-direction: column; gap: 2px; }
   .nav-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; padding: 5px 8px; border-radius: 6px; color: var(--text-muted); font-size: calc(13px * var(--ui-scale, 1)); text-align: left; transition: background .1s, color .1s; }
   .nav-row:hover { background: var(--bg-hover); color: var(--text); }
   .nav-row.active { background: var(--accent-soft, var(--bg-active)); color: var(--heading); font-weight: 500; }
@@ -441,24 +432,8 @@
   .trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .kbd { flex: none; font-size: calc(10.5px * var(--ui-scale, 1)); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-faint); font-family: var(--font-mono); }
   .nav-badge { flex: none; font-size: calc(10.5px * var(--ui-scale, 1)); font-weight: 600; padding: 0 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-variant-numeric: tabular-nums; }
-  .panes-sec, .fav-sec, .term-sec { display: flex; flex-direction: column; gap: 1px; margin-bottom: 8px; flex: none; }
-  .panes-head { gap: 4px; }
-  .panes-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 0; color: var(--text-faint); }
-  .panes-toggle:hover .sec-chev { opacity: 1; }
-  .panes-count { font-size: calc(10px * var(--ui-scale, 1)); font-weight: 600; padding: 0 5px; border-radius: 999px; background: var(--bg-hover); color: var(--text-muted); font-variant-numeric: tabular-nums; }
-  .panes-kbd { opacity: 0.72; transition: opacity .12s, color .12s; }
-  .panes-kbd:hover { opacity: 1; color: var(--text); background: var(--bg-hover); }
-  .panes-list, .fav-list { max-height: 136px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 1px; }
-  .pane-row { display: flex; align-items: center; gap: 2px; width: 100%; padding: 2px 4px 2px 8px; border-radius: 6px; color: var(--text-muted); transition: background .1s, color .1s; }
-  .pane-row:hover { background: var(--bg-hover); color: var(--text); }
-  .pane-row.active { background: var(--accent-soft, var(--bg-active)); color: var(--heading); font-weight: 500; }
-  .pane-row.split-shown { background: var(--bg-hover); color: var(--text); }
-  .pane-main { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 0; font-size: calc(13px * var(--ui-scale, 1)); color: inherit; text-align: left; }
-  .pane-row:hover .nav-left :global(.icon), .pane-row.active .nav-left :global(.icon) { color: currentColor; }
-  .split-badge { flex: none; font-size: calc(9.5px * var(--ui-scale, 1)); font-weight: 600; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-faint); font-family: var(--font-mono); }
-  .pane-close { flex: none; width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; color: var(--text-faint); opacity: 0; transition: opacity .1s, background .1s, color .1s; }
-  .pane-row:hover .pane-close, .pane-close:focus-visible { opacity: 1; }
-  .pane-close:hover { background: var(--bg-active); color: var(--text); }
+  .fav-sec { display: flex; flex-direction: column; gap: 1px; margin-bottom: 8px; flex: none; }
+  .fav-list { max-height: 136px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 1px; }
   .fav-glyph { width: 14px; text-align: center; font-size: 13px; line-height: 1; flex: none; }
   .sec-toggle, .sec-row { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 5px 8px 3px; }
   .sec-label { font-size: calc(10.5px * var(--ui-scale, 1)); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint); }

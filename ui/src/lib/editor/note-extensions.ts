@@ -13,7 +13,8 @@ import { tickTaskLine } from "./task-tick";
 import { settings } from "../settings.svelte";
 import type { WorkspaceConfig } from "../types";
 import { Compartment, Prec, StateField, type EditorState, type Extension } from "@codemirror/state";
-import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from "@codemirror/view";
+import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type DecorationSet, type ViewUpdate } from "@codemirror/view";
+import { createInlinePropsHost, type InlinePropsHost } from "../inline-properties-mount.svelte";
 import { extractFrontmatterIcon } from "../folder-colors.svelte";
 import { isNotionShell } from "../shell-mode.svelte";
 import { foldGutter, foldNodeProp, foldKeymap } from "@codemirror/language";
@@ -36,6 +37,7 @@ import { hydrateTables } from "./table-edit";
 import { followLinksIn } from "../rendered-links";
 import { hoverSync } from "./hover-sync";
 import { mentions, entitySource } from "./mentions";
+import { nlDateSource } from "../nl-dates";
 import { noteSuggestions } from "./suggest";
 import { expressions } from "./expr";
 import { mathPreview } from "./math-preview";
@@ -48,6 +50,9 @@ import { figureCaptions } from "./figure-captions";
 import { slashMenuExtension } from "./slash-menu";
 import { blockGutterExtension } from "./block-gutter";
 import { bidiExtension } from "./bidi";
+import { headingFoldsExtension } from "./heading-folds";
+import { zenScrollExtension } from "./zen-scroll";
+import { codeFenceChromeExtension } from "../code-fence-chrome";
 import { richBlocksExtension } from "./rich-blocks";
 
 // Fold like Obsidian: headings and lists only. lang-markdown makes every multi-line block foldable,
@@ -193,6 +198,9 @@ export function noteExtensions(
     }
   };
   const unmount = new WeakMap<HTMLElement, () => void>(); // a rendered block's views, per widget host
+  let inlinePropsHost: InlinePropsHost | null = null;
+  let inlinePropsView: EditorView | null = null;
+  const getInlineView = () => viewRef.view ?? inlinePropsView;
   const [liveField, liveKeys] = livePreview({
     renderMath: renderNoteMath,
     mathReady: () => Boolean(katexNow()),
@@ -211,8 +219,22 @@ export function noteExtensions(
     toggleTask: tickTaskLine, // a box ticks as on Home: done date, next occurrence
     // the YAML between the fences: Notion/Obsidian's Properties rows in the note (`inline`), else one faint
     // "Properties" line (`hidden`; `panel` edits them beside the note). Keyed by mode + text.
-    noteProperties: (fm: string) => {
+    noteProperties: (fm: string, state?: EditorState) => {
       const mode = settings.config?.editor.properties ?? "inline";
+      if (isNotionShell()) {
+        const docText = state?.doc.toString() ?? fm;
+        return {
+          key: "notion-inline",
+          render: () => {
+            if (!inlinePropsHost) inlinePropsHost = createInlinePropsHost(docText, getInlineView, onOpenLink);
+            const slot = document.createElement("div");
+            slot.className = "cm-notion-props-slot";
+            slot.appendChild(inlinePropsHost.el);
+            return slot;
+          },
+        };
+      }
+      if (!fm) return null;
       const yaml = fm.replace(/^---\r?\n/, "").replace(/\r?\n(---|\.\.\.)\s*$/, "");
       return mode === "inline"
         ? { key: `inline:${propertySpec.version}:${fm}`, render: () => enhanceNotionProperties(propertiesElement(yaml, dir, (t) => onOpenLink?.(t)), yaml) }
@@ -258,6 +280,20 @@ export function noteExtensions(
   const live: Extension = [
     liveField,
     pageEmblemField,
+    ViewPlugin.fromClass(class {
+      constructor(view: EditorView) {
+        inlinePropsView = view;
+        inlinePropsHost?.update(view.state.doc.toString(), getInlineView, onOpenLink);
+      }
+      update(u: ViewUpdate) {
+        if (u.docChanged) inlinePropsHost?.update(u.state.doc.toString(), () => u.view, onOpenLink);
+      }
+      destroy() {
+        inlinePropsView = null;
+        inlinePropsHost?.destroy();
+        inlinePropsHost = null;
+      }
+    }),
     richBlocksExtension(onOpenLink),
     figureCaptions(equationsOf),
     taskChips(() => settings.config?.editor.task_chips ?? true),
@@ -278,6 +314,9 @@ export function noteExtensions(
       slashMenuExtension(),
       blockGutterExtension(),
       bidiExtension(),
+      headingFoldsExtension(),
+      zenScrollExtension(),
+      codeFenceChromeExtension(),
       mentions,
       noteSuggestions(path),
       // paste / drop files → saved beside the note (editor.attachment_folder) and embedded
@@ -314,6 +353,7 @@ export function noteExtensions(
         taskSource,
         { applies: (ctx) => citing() && citeApplies(ctx), answer: citeSource(true) },
         entitySource,
+        nlDateSource,
         { applies: (ctx) => pluginCompletionApplies(ctx, true), answer: pluginCompletions(path, true) },
         syncSource(mdSymbols),
       ], {

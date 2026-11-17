@@ -104,6 +104,7 @@ pub fn new_row(root: &Path, cfg: &Config, base_rel: &str, base_src: &str, view: 
             }
         }
     }
+    assign_auto_ids(root, cfg, &mut keys);
     let mut fm = String::new();
     for (k, v) in &keys {
         match v {
@@ -174,6 +175,46 @@ pub fn edit_view(base_src: &str, view: &str, edit: &ViewEdit) -> Result<String> 
                     }
                 }
             });
+            return to_text(&doc);
+        }
+        ViewEdit::Formula { name, expr } => {
+            let name = name.trim();
+            if name.is_empty() {
+                return Err(Error::BadRequest("formula needs a name".into()));
+            }
+            let mut formulas = doc.get("formulas").and_then(Value::as_mapping).cloned().unwrap_or_default();
+            match expr.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                Some(src) => {
+                    super::expr::parse(src).map_err(|e| Error::BadRequest(format!("formula: {e}")))?;
+                    formulas.insert(name.into(), Value::String(src.to_string()));
+                }
+                None => {
+                    formulas.remove(name);
+                }
+            }
+            if formulas.is_empty() {
+                unset(&mut doc, "formulas");
+            } else {
+                set(&mut doc, "formulas", Value::Mapping(formulas));
+            }
+            return to_text(&doc);
+        }
+        ViewEdit::Automations { automations } => {
+            if automations.is_empty() {
+                unset(&mut doc, "automations");
+            } else {
+                let v = serde_yaml::to_value(automations).map_err(|e| Error::BadRequest(e.to_string()))?;
+                set(&mut doc, "automations", v);
+            }
+            return to_text(&doc);
+        }
+        ViewEdit::Recurring { recurring } => {
+            if recurring.is_empty() {
+                unset(&mut doc, "recurring");
+            } else {
+                let v = serde_yaml::to_value(recurring).map_err(|e| Error::BadRequest(e.to_string()))?;
+                set(&mut doc, "recurring", v);
+            }
             return to_text(&doc);
         }
         _ => {}
@@ -338,12 +379,66 @@ pub fn edit_view(base_src: &str, view: &str, edit: &ViewEdit) -> Result<String> 
                 });
             }
         }
+        ViewEdit::DateProperty { column, end_column } => {
+            match column.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                Some(c) => set(&mut views[i], "dateProperty", c.into()),
+                None => unset(&mut views[i], "dateProperty"),
+            }
+            match end_column.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                Some(c) => set(&mut views[i], "endDateProperty", c.into()),
+                None => unset(&mut views[i], "endDateProperty"),
+            }
+        }
+        ViewEdit::SubItems { property } => match property.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            Some(p) => set(&mut views[i], "subItemsBy", p.into()),
+            None => unset(&mut views[i], "subItemsBy"),
+        },
+        ViewEdit::DependencyProperty { property } => match property.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            Some(p) => set(&mut views[i], "blockedBy", p.into()),
+            None => unset(&mut views[i], "blockedBy"),
+        },
         ViewEdit::BaseFilters { .. }
         | ViewEdit::DisplayName { .. }
         | ViewEdit::ColumnFormat { .. }
-        | ViewEdit::BackRelation { .. } => unreachable!("handled above"),
+        | ViewEdit::BackRelation { .. }
+        | ViewEdit::Formula { .. }
+        | ViewEdit::Automations { .. }
+        | ViewEdit::Recurring { .. } => unreachable!("handled above"),
     }
     to_text(&doc)
+}
+
+fn assign_auto_ids(root: &Path, cfg: &Config, keys: &mut [(String, Option<Value>)]) {
+    let specs = crate::property_spec::load(root, &cfg.editor.properties_spec);
+    if specs.properties.is_empty() {
+        return;
+    }
+    let vault = crate::links::vault(root, cfg);
+    for (k, val) in keys.iter_mut() {
+        if val.is_some() {
+            continue;
+        }
+        let Some(spec) = specs.properties.get(k) else { continue };
+        if spec.kind != crate::api::PropertyKind::AutoId {
+            continue;
+        }
+        let prefix = spec.prefix.as_deref().unwrap_or("");
+        let pad = spec.padding.unwrap_or(2) as usize;
+        let mut max_num = 0u64;
+        for (_, data, _) in &vault.notes {
+            let Some(v) = data.props.get(k.as_str()) else { continue };
+            let raw = match v {
+                Value::String(s) => s.trim().to_string(),
+                Value::Number(n) => n.to_string(),
+                _ => continue,
+            };
+            let rest = raw.strip_prefix(prefix).unwrap_or(raw.as_str());
+            if let Ok(n) = rest.trim().parse::<u64>() {
+                max_num = max_num.max(n);
+            }
+        }
+        *val = Some(Value::String(format!("{prefix}{:0pad$}", max_num + 1)));
+    }
 }
 
 fn to_text(doc: &Value) -> Result<String> {
@@ -594,5 +689,25 @@ mod tests {
         assert!(v.get("filters").is_none(), "a new view starts unfiltered");
         assert_eq!(v["order"], two["views"][0]["order"]);
         assert!(matches!(edit_view(BASE, "Open", &ViewEdit::Add { name: "Open".into(), kind: "table".into() }), Err(Error::Conflict { .. })));
+    }
+
+    #[test]
+    fn formulas_automations_timeline_props_and_auto_ids_persist() {
+        let f_doc: Value = serde_yaml::from_str(&edit_view(BASE, "Open", &ViewEdit::Formula { name: "Score".into(), expr: Some("prio * 2".into()) }).unwrap()).unwrap();
+        assert_eq!(f_doc["formulas"]["Score"].as_str(), Some("prio * 2"));
+        let dp: Value = serde_yaml::from_str(&edit_view(BASE, "Open", &ViewEdit::DateProperty { column: Some("start".into()), end_column: Some("end".into()) }).unwrap()).unwrap();
+        assert_eq!((dp["views"][0]["dateProperty"].as_str(), dp["views"][0]["endDateProperty"].as_str()), (Some("start"), Some("end")));
+        let sub: Value = serde_yaml::from_str(&edit_view(BASE, "Open", &ViewEdit::SubItems { property: Some("parent".into()) }).unwrap()).unwrap();
+        assert_eq!(sub["views"][0]["subItemsBy"].as_str(), Some("parent"));
+        let dep: Value = serde_yaml::from_str(&edit_view(BASE, "Open", &ViewEdit::DependencyProperty { property: Some("blocked_by".into()) }).unwrap()).unwrap();
+        assert_eq!(dep["views"][0]["blockedBy"].as_str(), Some("blocked_by"));
+
+        let d = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(d.path().join("templates")).unwrap();
+        std::fs::write(d.path().join("templates/properties.yaml"), "properties:\n  code:\n    kind: auto_id\n    prefix: \"PRJ-\"\n    padding: 3\n").unwrap();
+        std::fs::write(d.path().join("One.md"), "---\ncode: PRJ-004\n---\n").unwrap();
+        let r = new_row(d.path(), &Config::default(), "Tasks.base", "views:\n  - type: table\n    order: [file.name, code]\n", None).unwrap();
+        let created = std::fs::read_to_string(d.path().join(&r.path)).unwrap();
+        assert!(created.contains("code: PRJ-005"), "{created}");
     }
 }

@@ -360,28 +360,35 @@ pub fn parse(src: &str) -> Result<Expr, String> {
 /// `&dyn Context` means "a reference to some type implementing Context" — the
 /// concrete type (`NoteCtx`) is decided at runtime.
 pub fn eval(e: &Expr, ctx: &dyn Context) -> Val {
-    eval_scoped(e, ctx, None)
+    eval_scoped(e, ctx, Scope::default())
+}
+
+#[derive(Clone, Copy, Default)]
+struct Scope<'a> {
+    value: Option<&'a Val>,
+    vars: &'a [(String, Val)],
 }
 
 /// The real recursive evaluator. `scope` carries the current `value` binding used
-/// inside `.filter(value …)` (it's `None` everywhere else). Each `match` arm
-/// handles one kind of AST node, recursing into children as needed.
-fn eval_scoped(e: &Expr, ctx: &dyn Context, scope: Option<&Val>) -> Val {
+/// inside `.filter`/`.map` plus lexical variables bound by `let`/`lets`.
+fn eval_scoped(e: &Expr, ctx: &dyn Context, scope: Scope<'_>) -> Val {
     match e {
         Expr::Null => Val::Null,
         Expr::Bool(b) => Val::Bool(*b),
         Expr::Num(n) => Val::Num(*n),
         Expr::Str(s) => Val::Str(s.clone()),
-        // A bare identifier: `value` is the filter scope; the reserved roots
-        // (file/note/this/formula) only mean something with a `.member` after them, so
-        // alone they're Null; anything else is looked up as a note property — including
-        // `date` / `link`, which are functions only when called (Kandinsky change: a `date`
-        // property is common in the user's notes).
-        Expr::Ident(name) => match name.as_str() {
-            "value" => scope.cloned().unwrap_or(Val::Null),
-            "file" | "note" | "this" | "formula" => Val::Null,
-            other => ctx.property(other),
-        },
+        // A bare identifier: check `let`/`lets` bindings first, then `value`, reserved
+        // roots (`file`/`note`/`this`/`formula`), and finally note properties.
+        Expr::Ident(name) => {
+            if let Some((_, v)) = scope.vars.iter().rev().find(|(k, _)| k == name) {
+                return v.clone();
+            }
+            match name.as_str() {
+                "value" => scope.value.cloned().unwrap_or(Val::Null),
+                "file" | "note" | "this" | "formula" => Val::Null,
+                other => ctx.property(other),
+            }
+        }
         Expr::Unary(op, inner) => {
             let v = eval_scoped(inner, ctx, scope);
             match op {
@@ -412,7 +419,7 @@ fn eval_scoped(e: &Expr, ctx: &dyn Context, scope: Option<&Val>) -> Val {
     }
 }
 
-fn eval_binary(op: &str, a: &Expr, b: &Expr, ctx: &dyn Context, scope: Option<&Val>) -> Val {
+fn eval_binary(op: &str, a: &Expr, b: &Expr, ctx: &dyn Context, scope: Scope<'_>) -> Val {
     match op {
         "&&" => Val::Bool(eval_scoped(a, ctx, scope).truthy() && eval_scoped(b, ctx, scope).truthy()),
         "||" => Val::Bool(eval_scoped(a, ctx, scope).truthy() || eval_scoped(b, ctx, scope).truthy()),
@@ -472,7 +479,7 @@ fn eval_binary(op: &str, a: &Expr, b: &Expr, ctx: &dyn Context, scope: Option<&V
     }
 }
 
-fn eval_member(obj: &Expr, name: &str, ctx: &dyn Context, scope: Option<&Val>) -> Val {
+fn eval_member(obj: &Expr, name: &str, ctx: &dyn Context, scope: Scope<'_>) -> Val {
     // this.file.<name>  (host file: name, path, ext, folder, ctime, mtime, properties, …)
     if let Expr::Member(inner, mid) = obj {
         if matches!(inner.as_ref(), Expr::Ident(i) if i == "this") && mid == "file" {
@@ -503,13 +510,46 @@ fn eval_member(obj: &Expr, name: &str, ctx: &dyn Context, scope: Option<&Val>) -
     }
 }
 
-fn eval_call(callee: &Expr, args: &[Expr], ctx: &dyn Context, scope: Option<&Val>) -> Val {
-    // free functions: link(), date(), number()
+fn eval_call(callee: &Expr, args: &[Expr], ctx: &dyn Context, scope: Scope<'_>) -> Val {
+    // free functions: link(), date(), number(), prop(), let(), lets(), dateBetween(), math
     if let Expr::Ident(f) = callee {
         match f.as_str() {
             "link" => {
                 let a = args.first().map(|e| eval_scoped(e, ctx, scope)).unwrap_or(Val::Null);
                 return Val::Link(to_plain(&a));
+            }
+            "prop" => {
+                let name = args.first().map(|e| to_plain(&eval_scoped(e, ctx, scope))).unwrap_or_default();
+                let key = name.trim().strip_prefix("note.").unwrap_or(name.trim());
+                return if key.is_empty() { Val::Null } else { ctx.property(key) };
+            }
+            "let" | "lets" => return eval_let(args, ctx, scope),
+            "dateBetween" | "date_between" => return eval_date_between(args, ctx, scope),
+            "round" => {
+                let Some(n) = args.first().and_then(|e| eval_scoped(e, ctx, scope).as_num()) else {
+                    return Val::Null;
+                };
+                let digits = args.get(1).and_then(|e| eval_scoped(e, ctx, scope).as_num()).unwrap_or(0.0).clamp(0.0, 9.0) as i32;
+                let factor = 10f64.powi(digits);
+                return Val::Num((n * factor).round() / factor);
+            }
+            "abs" => {
+                return args.first().and_then(|e| eval_scoped(e, ctx, scope).as_num()).map_or(Val::Null, |n| Val::Num(n.abs()));
+            }
+            "floor" => {
+                return args.first().and_then(|e| eval_scoped(e, ctx, scope).as_num()).map_or(Val::Null, |n| Val::Num(n.floor()));
+            }
+            "ceil" => {
+                return args.first().and_then(|e| eval_scoped(e, ctx, scope).as_num()).map_or(Val::Null, |n| Val::Num(n.ceil()));
+            }
+            "min" | "max" => {
+                let nums = collect_nums(args, ctx, scope);
+                let out = if f == "min" { nums.into_iter().reduce(f64::min) } else { nums.into_iter().reduce(f64::max) };
+                return out.map_or(Val::Null, Val::Num);
+            }
+            "concat" => {
+                let out: String = args.iter().map(|e| to_plain(&eval_scoped(e, ctx, scope))).collect();
+                return Val::Str(out);
             }
             "date" => {
                 let a = args.first().map(|e| eval_scoped(e, ctx, scope)).unwrap_or(Val::Null);
@@ -596,11 +636,26 @@ fn eval_call(callee: &Expr, args: &[Expr], ctx: &dyn Context, scope: Option<&Val
             let target = eval_scoped(obj, ctx, scope);
             if let Val::List(items) = target {
                 if let Some(pred) = args.first() {
-                    let kept: Vec<Val> =
-                        items.into_iter().filter(|item| eval_scoped(pred, ctx, Some(item)).truthy()).collect();
+                    let kept: Vec<Val> = items
+                        .into_iter()
+                        .filter(|item| eval_scoped(pred, ctx, Scope { value: Some(item), vars: scope.vars }).truthy())
+                        .collect();
                     return Val::List(kept);
                 }
                 return Val::List(items);
+            }
+            return Val::Null;
+        }
+        // .map(expr) transforms each item with `value` bound cleanly
+        if method == "map" {
+            let target = eval_scoped(obj, ctx, scope);
+            if let Val::List(items) = target {
+                let Some(mapper) = args.first() else { return Val::List(items) };
+                let out: Vec<Val> = items
+                    .into_iter()
+                    .map(|item| eval_scoped(mapper, ctx, Scope { value: Some(&item), vars: scope.vars }))
+                    .collect();
+                return Val::List(out);
             }
             return Val::Null;
         }
@@ -641,14 +696,94 @@ fn eval_call(callee: &Expr, args: &[Expr], ctx: &dyn Context, scope: Option<&Val
             "toString" => Val::Str(to_plain(&recv)),
             "lower" => Val::Str(to_plain(&recv).to_lowercase()),
             "upper" => Val::Str(to_plain(&recv).to_uppercase()),
+            "join" => {
+                let sep = arg0.as_ref().map_or(", ".to_string(), to_plain);
+                match recv {
+                    Val::List(items) => Val::Str(items.iter().map(to_plain).collect::<Vec<_>>().join(&sep)),
+                    other => Val::Str(to_plain(&other)),
+                }
+            }
+            "sum" => match recv {
+                Val::List(items) => Val::Num(items.iter().filter_map(Val::as_num).sum()),
+                other => other.as_num().map_or(Val::Num(0.0), Val::Num),
+            },
+            "avg" | "mean" => match recv {
+                Val::List(items) => {
+                    let nums: Vec<f64> = items.iter().filter_map(Val::as_num).collect();
+                    if nums.is_empty() {
+                        Val::Null
+                    } else {
+                        Val::Num(nums.iter().sum::<f64>() / nums.len() as f64)
+                    }
+                }
+                other => other.as_num().map_or(Val::Null, Val::Num),
+            },
             _ => Val::Null,
         };
     }
     Val::Null
 }
 
+fn eval_let(args: &[Expr], ctx: &dyn Context, scope: Scope<'_>) -> Val {
+    if args.len() < 3 || args.len().is_multiple_of(2) {
+        return Val::Null;
+    }
+    let mut vars = scope.vars.to_vec();
+    for pair in args[..args.len() - 1].as_chunks::<2>().0 {
+        let name = match &pair[0] {
+            Expr::Ident(s) | Expr::Str(s) => s.trim().to_string(),
+            other => to_plain(&eval_scoped(other, ctx, Scope { value: scope.value, vars: &vars })),
+        };
+        let val = eval_scoped(&pair[1], ctx, Scope { value: scope.value, vars: &vars });
+        if !name.is_empty() {
+            vars.push((name, val));
+        }
+    }
+    let Some(body) = args.last() else { return Val::Null };
+    eval_scoped(body, ctx, Scope { value: scope.value, vars: &vars })
+}
+
+fn eval_date_between(args: &[Expr], ctx: &dyn Context, scope: Scope<'_>) -> Val {
+    let as_dt = |e: &Expr| match eval_scoped(e, ctx, scope) {
+        Val::Date(d) => Some(d),
+        other => dates::parse(&to_plain(&other)),
+    };
+    let (Some(d1), Some(d2)) = (args.first().and_then(as_dt), args.get(1).and_then(as_dt)) else {
+        return Val::Null;
+    };
+    let diff = d1 - d2;
+    let unit = args.get(2).map(|e| to_plain(&eval_scoped(e, ctx, scope)).to_ascii_lowercase()).unwrap_or_else(|| "days".into());
+    use chrono::Datelike;
+    let v = match unit.as_str() {
+        "days" | "day" | "d" => diff.num_seconds() as f64 / 86_400.0,
+        "weeks" | "week" | "w" => diff.num_seconds() as f64 / 604_800.0,
+        "hours" | "hour" | "h" => diff.num_seconds() as f64 / 3_600.0,
+        "minutes" | "minute" | "min" | "m" => diff.num_seconds() as f64 / 60.0,
+        "seconds" | "second" | "s" => diff.num_seconds() as f64,
+        "months" | "month" => ((d1.year() - d2.year()) * 12 + d1.month() as i32 - d2.month() as i32) as f64,
+        "years" | "year" | "y" => (d1.year() - d2.year()) as f64,
+        _ => return Val::Null,
+    };
+    Val::Num(v)
+}
+
+fn collect_nums(args: &[Expr], ctx: &dyn Context, scope: Scope<'_>) -> Vec<f64> {
+    let mut out = Vec::new();
+    for e in args {
+        match eval_scoped(e, ctx, scope) {
+            Val::List(items) => out.extend(items.iter().filter_map(Val::as_num)),
+            v => {
+                if let Some(n) = v.as_num() {
+                    out.push(n);
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Extracts a property/summary key passed either as `"hours"`, `hours`, `note.hours`, `note["hours"]`, or `file.size`.
-fn expr_key_arg(e: &Expr, ctx: &dyn Context, scope: Option<&Val>) -> String {
+fn expr_key_arg(e: &Expr, ctx: &dyn Context, scope: Scope<'_>) -> String {
     match e {
         Expr::Str(s) => s.trim().to_string(),
         Expr::Ident(s) => s.trim().to_string(),
@@ -818,5 +953,24 @@ mod tests {
         // a dangling open paren must return Err, not panic
         assert!(parse("(").is_err());
         assert!(parse("1 + ").is_err());
+    }
+
+    #[test]
+    fn formula_helpers_let_prop_date_between_math_and_list_ops() {
+        let ctx = TestCtx::new(&[
+            ("start", Val::Str("2026-01-01".into())),
+            ("end", Val::Str("2026-01-11".into())),
+            ("my-score", Val::Num(4.25)),
+            ("nums", Val::List(vec![Val::Num(2.0), Val::Num(4.0), Val::Num(6.0)])),
+        ]);
+        assert!(run("prop(\"my-score\") == 4.25", &ctx).truthy());
+        assert!(run("let(\"a\", 10, a * 2) == 20", &ctx).truthy());
+        assert!(run("lets(a, 3, b, a + 4, b * 2) == 14", &ctx).truthy());
+        assert!(run("dateBetween(end, start, \"days\") == 10", &ctx).truthy());
+        assert!(run("round(3.456, 1) == 3.5 && floor(3.9) == 3 && ceil(3.1) == 4 && abs(-7) == 7", &ctx).truthy());
+        assert!(run("min(nums) == 2 && max(1, 9, 4) == 9", &ctx).truthy());
+        assert!(run("concat(\"v\", 1, \"-\", prop(\"my-score\")) == \"v1-4.25\"", &ctx).truthy());
+        assert!(run("nums.map(value * 10).join(\"|\") == \"20|40|60\"", &ctx).truthy());
+        assert!(run("nums.sum() == 12 && nums.avg() == 4", &ctx).truthy());
     }
 }

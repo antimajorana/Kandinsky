@@ -180,13 +180,18 @@ impl Engine {
             // a program run off the context's thread; its answer comes back as a turn (`__kandinsky_exec`), so the
             // script's other calls and timers go on meanwhile
             // the helper stopped (a Stop in its page, switched off): its programs are ended too
-            let (root, Exec { allowed, inbox }, halt) = (root.to_path_buf(), exec, stop.clone());
+            let (root, plugin_id, Exec { allowed, inbox }, halt) = (root.to_path_buf(), id.to_string(), exec, stop.clone());
             host.set("exec", Function::new(ctx.clone(), move |n: f64, ask: String| {
-                let (n, root, allowed, inbox, halt) = (n as u64, root.clone(), allowed.clone(), inbox.clone(), halt.clone());
+                let (n, root, plugin_id, allowed, inbox, halt) = (n as u64, root.clone(), plugin_id.clone(), allowed.clone(), inbox.clone(), halt.clone());
                 std::thread::spawn(move || {
                     let answer = serde_json::from_str::<crate::js_exec::Run>(&ask)
                         .map_err(|e| format!("exec: {e}"))
-                        .and_then(|run| crate::js_exec::check(&root, &allowed, &run).and_then(|(exe, cwd)| crate::js_exec::run(&exe, &cwd, &run, &halt)))
+                        .and_then(|run| {
+                            let (exe, cwd) = crate::js_exec::check(&root, &allowed, &run)?;
+                            crate::binary_trust::authorize_blocking(&root, &plugin_id, &exe, &run.args, None)
+                                .map_err(|e| format!("exec: {e}"))?;
+                            crate::js_exec::run(&exe, &cwd, &run, &halt)
+                        })
                         .unwrap_or_else(|why| serde_json::json!({ "error": why }));
                     let _ = inbox.send(In::Exec(n, answer.to_string()));
                 });

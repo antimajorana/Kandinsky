@@ -13,4 +13,8 @@ system: SystemNotices,
  * How many seconds a system notification stays on the desktop before the system puts it away; a failure stays
  * three times as long. 0: until you close it. (A phone keeps its notifications by its own rules.)
  */
-system_seconds: number, };
+system_seconds: number, 
+/**
+ * Show local desktop or toast reminders before upcoming calendar events and timed @date mentions.
+ */
+calendar_reminders: boolean, };

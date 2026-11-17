@@ -65,6 +65,41 @@ export const TASK_FIELDS: OptionField[] = [
 /** Fields of the built-in blocks, by type. A plugin gives its own to `registerBlock`. */
 export const BUILTIN_FIELDS: Record<string, OptionField[]> = {
   "task-list": TASK_FIELDS,
+  calendar: [
+    { key: "view", label: "Default view", kind: "choice", choices: ["month", "week", "agenda", "day"] },
+    { key: "date", label: "Focus date", kind: "text", hint: "YYYY-MM-DD (optional)" },
+  ],
+  chart: [
+    { key: "path", label: "Base or CSV file", kind: "text" },
+    { key: "chart", label: "Chart type", kind: "choice", choices: ["bar", "donut", "line"] },
+    { key: "group_by", label: "Group by property", kind: "text" },
+    { key: "metric", label: "Metric", kind: "choice", choices: ["count", "sum", "avg"] },
+  ],
+  progress: [
+    { key: "kind", label: "Mode", kind: "choice", choices: ["both", "year", "month", "goal"] },
+    { key: "label", label: "Label", kind: "text" },
+    { key: "current", label: "Current", kind: "number" },
+    { key: "target", label: "Target", kind: "number" },
+  ],
+  countdown: [
+    { key: "label", label: "Label", kind: "text" },
+    { key: "target_date", label: "Target date", kind: "text", hint: "YYYY-MM-DD" },
+  ],
+  button: [
+    { key: "label", label: "Button label", kind: "text" },
+    { key: "action", label: "Action", kind: "choice", choices: ["create_note", "set_property", "open"] },
+    { key: "folder", label: "Folder", kind: "text" },
+  ],
+  "table-preview": [
+    { key: "path", label: "CSV / TSV file", kind: "text" },
+  ],
+  embed: [
+    { key: "url", label: "URL or vault path", kind: "text" },
+    { key: "title", label: "Title", kind: "text" },
+  ],
+  synced: [
+    { key: "source", label: "Source block (Note#^id)", kind: "text" },
+  ],
   note: [path("The note shown")],
   text: [{ key: "text", label: "Text", kind: "text", hint: "markdown" }],
   base: [path("The database (.base)"), { key: "table", label: "View", kind: "text", hint: "one of the database's views, by name (default: the first)" }],

@@ -26,11 +26,13 @@
   import { allCommands, keysOf } from "../../lib/keymap.svelte";
   import { chordLabel } from "../../lib/keys";
   import { pageDef, type Placed, type NextRung } from "../../lib/settings-pages";
-  import { settings } from "../../lib/settings.svelte";
+  import { settings, change } from "../../lib/settings.svelte";
   import { openPath } from "../../lib/dock";
   import { newSnippet, newPlugin, newBlock, editHome, copyViewExample } from "../../lib/settings-actions";
-  import { setShellMode, shellMode } from "../../lib/shell-mode.svelte";
   import { oracleExplorer, setHidePlumbing } from "../../lib/oracle-explorer.svelte";
+  import { api } from "../../lib/api";
+  import { onMount } from "svelte";
+  import type { ObsidianThemeInfo } from "../../lib/types";
   import type { Schema } from "../../lib/settings-schema";
 
   let { page, fields, pages = [], go = () => {}, embedded = false }: {
@@ -40,6 +42,11 @@
   const def = $derived(pageDef(page.page));
   const features = $derived((def?.features ?? []).flatMap((id) => { const a = allCommands().find((x) => x.id === id); return a ? [a] : []; }));
   let naming = $state<null | "snippet" | "plugin" | "block">(null);
+  let obsidianThemes = $state<ObsidianThemeInfo[]>([]);
+  onMount(() => { void api.obsidianThemes().then((t) => { obsidianThemes = t; }, () => {}); });
+  const PRIMARY_PANELS = new Set(["preview", "device", "snippets", "templates", "keys", "plugins", "openwith", "capturekey", "overview"]);
+  const mainPanels = $derived((def?.panels ?? []).filter((p) => PRIMARY_PANELS.has(p)));
+  const advPanels = $derived((def?.panels ?? []).filter((p) => !PRIMARY_PANELS.has(p)));
 
   function next(n: NextRung) {
     if (n.run === "settings.newSnippet") naming = "snippet";
@@ -58,45 +65,31 @@
   </header>
 
   {#if page.page === "appearance"}
-    <section class="panel shell-panel" aria-label="Workspace shell">
-      <h3>Workspace shell</h3>
-      <div class="shell-cards" role="radiogroup" aria-label="Workspace shell">
-        <button
-          type="button"
-          role="radio"
-          aria-checked={shellMode.value === "notion"}
-          class="shell-card"
-          class:active={shellMode.value === "notion"}
-          onclick={() => setShellMode("notion")}
-        >
-          <span class="shell-card-head">
-            <span class="shell-card-title"><Icon name="panel-left" size={14} /> Nootion Unified Sidebar</span>
-            {#if shellMode.value === "notion"}<span class="shell-dot" aria-hidden="true">●</span>{/if}
-          </span>
-          <span class="shell-card-desc">Single clean sidebar with vault switcher, quick nav, favorites, and colored page tree; hides the outer icon rail and IDE tab strip.</span>
-        </button>
-        <button
-          type="button"
-          role="radio"
-          aria-checked={shellMode.value === "classic"}
-          class="shell-card"
-          class:active={shellMode.value === "classic"}
-          onclick={() => setShellMode("classic")}
-        >
-          <span class="shell-card-head">
-            <span class="shell-card-title"><Icon name="rows" size={14} /> Classic Rail + Tabs</span>
-            {#if shellMode.value === "classic"}<span class="shell-dot" aria-hidden="true">●</span>{/if}
-          </span>
-          <span class="shell-card-desc">Traditional activity icon rail and Dockview tab strips (or Zen vertical tabs).</span>
-        </button>
-      </div>
+    <section class="panel shell-panel" aria-label="Workspace display">
+      {#if obsidianThemes.length > 0}
+        <label class="obs-theme-row">
+          <span>Obsidian community theme</span>
+          <select
+            value={settings.config?.ui.obsidian_theme ?? ""}
+            onchange={(e) => {
+              const v = e.currentTarget.value;
+              change("Obsidian theme", (c) => { c.ui.obsidian_theme = v; });
+            }}
+          >
+            <option value="">Default (Kandinsky Bauhaus)</option>
+            {#each obsidianThemes as t (t.id)}
+              <option value={t.id} disabled={!t.valid}>{t.name}{t.valid ? "" : ` — ${t.error ?? "invalid"}`}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
       <label class="plumbing-check">
         <input
           type="checkbox"
           checked={oracleExplorer.hidePlumbing}
           onchange={(e) => setHidePlumbing(e.currentTarget.checked)}
         />
-        <span>Hide AI agent plumbing in Vault Pages (<code>AGENTS.md</code>, <code>zAI</code>, <code>zMeta</code>, <code>wiki/meta</code>…)</span>
+        <span>Hide agent &amp; metadata folders in sidebar (<code>AGENTS.md</code>, <code>zAI</code>, <code>zMeta</code>…)</span>
       </label>
     </section>
   {/if}
@@ -116,45 +109,61 @@
     </section>
   {/if}
 
-  {#each def?.panels ?? [] as panel (panel)}
+  {#each mainPanels as panel (panel)}
     {#if panel === "overview"}<OverviewPanel {pages} {go} />
     {:else if panel === "preview"}<PreviewPanel />
     {:else if panel === "device"}<DeviceLookPanel />
-    {:else if panel === "apps"}
-      <SwitchList title="Apps in the left bar" label="Apps" items={ordered(allApps())} hidden={appHidden} setHidden={setAppHidden} move={moveApp}
-        desc="The tiles above the tabs. A hidden app still opens from the palette and its keys; a plugin's pane gets a tile when its manifest says <code>rail = true</code>." />
-      {#if librariesPage()}
-        <SwitchList title="Libraries" label="Libraries" items={libraryChoices().map((e) => ({ key: e.id, title: e.title, icon: isIconName(e.icon) ? e.icon : "library" }))} hidden={libraryHidden} setHidden={setLibraryHidden} move={moveLibrary} movable={(k) => !libraryHidden(k)}
-          desc="The tabs of the Library page (the Catalog plugin's), in this order: Kandinsky's own and those your plugins add (the catalog adds one per group of kinds)." />
-      {/if}
     {:else if panel === "snippets"}<SnippetsPanel onnew={() => (naming = "snippet")} />
     {:else if panel === "templates"}<TemplatesPanel />
     {:else if panel === "keys"}<KeysPanel />
     {:else if panel === "plugins"}<PluginsPanel onnew={() => (naming = "plugin")} onblock={() => (naming = "block")} />
-    {:else if panel === "scripts"}<ScriptsPanel />
     {:else if panel === "openwith"}<OpenWithPanel />
     {:else if panel === "capturekey"}<CaptureKeyPanel />
-    {:else if panel === "server"}<ServerPanel />
-    {:else if panel === "agents"}<AgentsPanel />
-    {:else if panel === "file"}
-      <section class="panel"><h3>The settings file</h3>
-        <p class="what">Every page here writes <code>{settings.path}</code>, and a change made in the file shows here at once. Your comments in it are kept.</p>
-        <button class="btn" onclick={() => openPath(settings.path)}><Icon name="edit" size={13} /> Edit the file</button></section>
-    {:else if panel === "drafts"}
-      <section class="panel"><h3>Suggested tools</h3>
-        <p class="what">Kandinsky looks through your vault for things you do again and again — a folder of notes that all look alike, two notes you open together, a search you keep running — and drafts a small tool for each: a table of the folder, a page with both notes, a page with the live search. Nothing is created until you press Keep, and what Keep writes is a plain file you can edit or delete.</p>
-        <ToolDrafts /></section>
     {/if}
   {/each}
 
   {#if page.fields.length}
     <section class="fields" aria-label="{page.title} options">
-      {#if def?.panels?.length || features.length}<h3>Options</h3>{/if}
+      {#if mainPanels.length || features.length}<h3>Options</h3>{/if}
       {#each page.fields as path (path)}
         {@const s = fields.get(path)}
         {#if s}<SettingField {path} schema={s} />{/if}
       {/each}
     </section>
+  {/if}
+
+  {#if page.advancedFields.length || advPanels.length}
+    <details class="adv-box" data-testid="settings-advanced">
+      <summary>Advanced &amp; Server settings</summary>
+      <div class="adv-inner">
+        {#each advPanels as panel (panel)}
+          {#if panel === "apps"}
+            <SwitchList title="Apps" label="Apps" items={ordered(allApps())} hidden={appHidden} setHidden={setAppHidden} move={moveApp} desc="Optional workspace tools." />
+            {#if librariesPage()}
+              <SwitchList title="Libraries" label="Libraries" items={libraryChoices().map((e) => ({ key: e.id, title: e.title, icon: isIconName(e.icon) ? e.icon : "library" }))} hidden={libraryHidden} setHidden={setLibraryHidden} move={moveLibrary} movable={(k) => !libraryHidden(k)} desc="Library groups." />
+            {/if}
+          {:else if panel === "scripts"}<ScriptsPanel />
+          {:else if panel === "server"}<ServerPanel />
+          {:else if panel === "agents"}<AgentsPanel />
+          {:else if panel === "file"}
+            <section class="panel"><h3>Configuration file</h3>
+              <p class="what">Every setting writes <code>{settings.path}</code>.</p>
+              <button class="btn" onclick={() => openPath(settings.path)}><Icon name="edit" size={13} /> Open settings file</button></section>
+          {:else if panel === "drafts"}
+            <section class="panel"><h3>Suggested tools</h3>
+              <ToolDrafts /></section>
+          {/if}
+        {/each}
+        {#if page.advancedFields.length}
+          <section class="fields" aria-label="Advanced options">
+            {#each page.advancedFields as path (path)}
+              {@const s = fields.get(path)}
+              {#if s}<SettingField {path} schema={s} />{/if}
+            {/each}
+          </section>
+        {/if}
+      </div>
+    </details>
   {/if}
 
   {#if def?.next?.length && !embedded}
@@ -200,14 +209,11 @@
   .rung b { color: var(--accent); }
   .rung span { color: var(--text-muted); font-size: calc(12.5px * var(--ui-scale, 1)); }
   .shell-panel { display: flex; flex-direction: column; gap: 10px; padding: 12px 18px 14px; }
-  .shell-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; }
-  .shell-card { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-alt); text-align: left; transition: border-color .12s, background .12s; }
-  .shell-card:hover { border-color: var(--border-strong); background: var(--bg-hover); }
-  .shell-card.active { border-color: var(--accent); background: var(--accent-soft); }
-  .shell-card-head { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .shell-card-title { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; color: var(--heading); font-size: calc(13px * var(--ui-scale, 1)); }
-  .shell-dot { color: var(--accent); font-size: 10px; }
-  .shell-card-desc { color: var(--text-muted); font-size: calc(12px * var(--ui-scale, 1)); line-height: 1.42; }
   .plumbing-check { display: inline-flex; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px solid var(--border); color: var(--text); font-size: calc(12.5px * var(--ui-scale, 1)); cursor: pointer; }
   .plumbing-check input { accent-color: var(--accent); }
+  .obs-theme-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text); }
+  .obs-theme-row select { padding: 4px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); font: inherit; }
+  .adv-box { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-side); padding: 6px 12px; }
+  .adv-box summary { cursor: pointer; font-size: calc(12.5px * var(--ui-scale, 1)); font-weight: 600; color: var(--text-muted); padding: 4px 0; }
+  .adv-inner { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
 </style>

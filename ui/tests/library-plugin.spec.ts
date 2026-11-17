@@ -43,9 +43,9 @@ test("the Library is a plugin: an app at the top of the bar, gone when switched 
   await expect(page.getByTestId("palette").getByText("Library: references, then the vault's other libraries", { exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  // Settings → Plugins lists it, with the same switch as a vault plugin
+  // Settings → Extensions lists it, with the same switch as a vault plugin
   await page.keyboard.press("Meta+,");
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Plugins( \d+)?$/ }).click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions( \d+)?$/ }).click();
   const sw = page.getByRole("switch", { name: "Plugin Library" });
   await expect(sw).toHaveAttribute("aria-checked", "false");
   await sw.click();

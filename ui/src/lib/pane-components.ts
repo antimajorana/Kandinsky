@@ -5,6 +5,7 @@ import type { PaneComponents } from "./dock";
 
 export const paneComponents: PaneComponents = {
   today: () => import("../panes/Today.svelte"),
+  calendar: () => import("../panes/Calendar.svelte"),
   editor: () => import("../panes/Editor.svelte"),
   terminal: () => import("../panes/Terminal.svelte"),
   files: () => import("../panes/Files.svelte"),

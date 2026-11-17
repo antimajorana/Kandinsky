@@ -282,7 +282,10 @@ impl<L: LeaseLink> LeaseGuard<L> {
         let Ok(recent) = self.link.versions() else { return 0 };
         let mut brought = 0;
         for r in recent {
-            if in_state(&r.path, "cache/") || self.granted.lock().unwrap_or_else(|e| e.into_inner()).contains_key(&r.path) {
+            if in_state(&r.path, "cache/")
+                || in_state(&r.path, "history/")
+                || self.granted.lock().unwrap_or_else(|e| e.into_inner()).contains_key(&r.path)
+            {
                 continue;
             }
             let here = self.disk(&r.path);
@@ -339,7 +342,7 @@ impl<L> LeaseGuard<L> {
 /// The paths a change needs the lease of, and whether it only adds to them. Folders have no content to lease: their
 /// files' own changes are what Syncthing compares.
 fn leased(rel: &str, kind: &WriteKind) -> Vec<(String, bool)> {
-    if in_state(rel, "cache/") {
+    if in_state(rel, "cache/") || in_state(rel, "history/") {
         return vec![]; // per device, never synced
     }
     match kind {

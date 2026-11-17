@@ -346,12 +346,46 @@ pub fn attach_note(cfg: &Config, note: &str, today: chrono::NaiveDate) -> String
 /// Today's log, made from the log template when it is missing (the Home log card's one button: "create or edit the
 /// log"). Never rewrites one that is there; `create_new` so two doors making it at once never clobber each other.
 pub fn today_log(root: &Path, cfg: &Config, now: NaiveDateTime) -> Result<crate::api::TodayLog> {
-    let rel = day_log(cfg, now.date());
+    ensure_day_log(root, cfg, now.date(), now)
+}
+
+/// Daily note state for any date `YYYY-MM-DD`, returning a rendered draft in memory when missing without writing to disk.
+#[derive(Debug, Clone, serde::Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct DayLogInfo {
+    pub day: String,
+    pub path: String,
+    pub exists: bool,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub mtime: Option<crate::api::Mtime>,
+}
+
+/// Reads `<log_dir>/YYYY-MM-DD.md` if present, or returns its seeded `log_template` draft without creating a file.
+pub fn day_log_info(root: &Path, cfg: &Config, day: chrono::NaiveDate) -> Result<DayLogInfo> {
+    let rel = day_log(cfg, day);
+    let path = paths::safe_join(root, &rel)?;
+    let day_str = day.format("%Y-%m-%d").to_string();
+    if let Ok(meta) = std::fs::metadata(&path) {
+        if meta.is_file() {
+            let text = std::fs::read_to_string(&path)?;
+            return Ok(DayLogInfo { day: day_str, path: rel, exists: true, text, mtime: crate::api::Mtime::of(&meta).ok() });
+        }
+    }
+    let at = day.and_hms_opt(9, 0, 0).expect("09:00 exists");
+    let text = crate::notes::daily_log_start(root, cfg, &day_str, at);
+    Ok(DayLogInfo { day: day_str, path: rel, exists: false, text, mtime: None })
+}
+
+/// Creates `<log_dir>/YYYY-MM-DD.md` from `log_template` if missing (used only when actually writing or explicitly requested).
+pub fn ensure_day_log(root: &Path, cfg: &Config, day: chrono::NaiveDate, now: NaiveDateTime) -> Result<crate::api::TodayLog> {
+    let rel = day_log(cfg, day);
     let path = paths::safe_join(root, &rel)?;
     if path.exists() {
         return Ok(crate::api::TodayLog { path: rel, created: false });
     }
-    let text = crate::notes::daily_log_start(root, cfg, &now.format("%Y-%m-%d").to_string(), now);
+    let text = crate::notes::daily_log_start(root, cfg, &day.format("%Y-%m-%d").to_string(), now);
     let created = vault_write::create(&path, text.as_bytes())? == vault_write::Created::New;
     Ok(crate::api::TodayLog { path: rel, created })
 }
@@ -469,6 +503,10 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let made = today_log(d.path(), &Config::default(), at(8, 0)).unwrap();
         assert_eq!((made.path.as_str(), made.created), ("notes/log/2026-10-05.md", true));
+        let next_day = chrono::NaiveDate::from_ymd_opt(2026, 10, 6).unwrap();
+        let draft = day_log_info(d.path(), &Config::default(), next_day).unwrap();
+        assert!(!draft.exists && !d.path().join(&draft.path).exists(), "previewing a day never litters an empty file");
+        assert!(draft.text.contains("date: 2026-10-06"), "{}", draft.text);
         let text = std::fs::read_to_string(d.path().join(&made.path)).unwrap();
         assert!(text.starts_with("---\ndate: 2026-10-05\ntype: log\n---\n# Monday"), "{text}");
         std::fs::write(d.path().join(&made.path), "mine\n").unwrap();

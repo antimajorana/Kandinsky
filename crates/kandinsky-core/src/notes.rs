@@ -559,6 +559,146 @@ pub struct NoteFileResult {
     pub added: Vec<String>,
 }
 
+#[derive(Debug, Clone, serde::Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct SyncedBlockWrite {
+    pub path: String,
+    pub block_id: String,
+    pub text: String,
+    #[serde(default)]
+    #[ts(optional)]
+    pub base_mtime: Option<crate::api::Mtime>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub attach_line: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct SyncedBlockResult {
+    pub path: String,
+    pub block_id: String,
+    pub text: String,
+    pub mtime: crate::api::Mtime,
+}
+
+/// Atomically updates the `^block_id` block in `req.path` with `req.text`, preserving its anchor id.
+pub fn update_synced_block(ws: &crate::Workspace, req: &SyncedBlockWrite) -> Result<SyncedBlockResult> {
+    let bid = req.block_id.trim().trim_start_matches('^');
+    if bid.is_empty() || !bid.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(Error::BadRequest(format!("invalid block id `{}`", req.block_id)));
+    }
+    let abs = ws.resolve(&req.path)?;
+    if let Some(expected) = req.base_mtime {
+        let meta = std::fs::metadata(&abs).map_err(|_| Error::NotFound(req.path.clone()))?;
+        let current = crate::api::Mtime::of(&meta)?;
+        if current != expected {
+            return Err(Error::Conflict { current: Some(current) });
+        }
+    }
+    let clean_body = req.text.replace("\r\n", "\n").trim_end_matches('\n').to_string();
+    let tag = format!("^{bid}");
+    crate::vault_write::modify(&abs, |src| {
+        replace_synced_block(src, &tag, &clean_body, req.attach_line)
+    })?;
+    let meta = std::fs::metadata(&abs)?;
+    Ok(SyncedBlockResult {
+        path: ws.rel(&abs),
+        block_id: bid.to_string(),
+        text: clean_body,
+        mtime: crate::api::Mtime::of(&meta)?,
+    })
+}
+
+fn replace_synced_block(src: &str, tag: &str, replacement: &str, attach_line: Option<u32>) -> Result<String> {
+    let lines: Vec<&str> = src.lines().collect();
+    let mut fences = kandinsky_text::fence::Fences::default();
+    let mut anchor_idx: Option<usize> = None;
+    for (i, line) in lines.iter().enumerate() {
+        if fences.code(line) {
+            continue;
+        }
+        let trimmed = line.trim_end();
+        if trimmed == tag || trimmed.ends_with(&format!(" {tag}")) {
+            anchor_idx = Some(i);
+            break;
+        }
+    }
+    let trailing_nl = if src.ends_with('\n') { "\n" } else { "" };
+    if let Some(idx) = anchor_idx {
+        let trimmed = lines[idx].trim_end();
+        let (start, end, standalone) = if trimmed == tag {
+            let mut s = idx.saturating_sub(1);
+            if idx > 0 && lines[s].trim_start().starts_with("```") {
+                while s > 0 && !lines[s - 1].trim_start().starts_with("```") {
+                    s -= 1;
+                }
+                s = s.saturating_sub(1);
+            } else {
+                while s > 0 && !lines[s].trim().is_empty() {
+                    s -= 1;
+                }
+                if lines.get(s).is_some_and(|l| l.trim().is_empty()) {
+                    s += 1;
+                }
+            }
+            (s, idx + 1, true)
+        } else if is_list_line(lines[idx]) {
+            let indent = leading_spaces(lines[idx]);
+            let mut e = idx + 1;
+            while e < lines.len() && !lines[e].trim().is_empty() && leading_spaces(lines[e]) > indent {
+                e += 1;
+            }
+            (idx, e, false)
+        } else {
+            let mut s = idx;
+            while s > 0 && !lines[s - 1].trim().is_empty() && !lines[s - 1].trim_start().starts_with('#') && !is_list_line(lines[s - 1]) {
+                s -= 1;
+            }
+            (s, idx + 1, false)
+        };
+        let mut rep_lines: Vec<String> = if replacement.is_empty() {
+            vec![String::new()]
+        } else {
+            replacement.lines().map(String::from).collect()
+        };
+        if standalone || replacement.trim_start().starts_with("```") {
+            rep_lines.push(tag.to_string());
+        } else if let Some(last) = rep_lines.last_mut() {
+            if last.trim().is_empty() {
+                *last = tag.to_string();
+            } else {
+                *last = format!("{} {tag}", last.trim_end());
+            }
+        }
+        let mut out: Vec<String> = lines[..start].iter().map(|s| (*s).to_string()).collect();
+        out.extend(rep_lines);
+        out.extend(lines[end..].iter().map(|s| (*s).to_string()));
+        return Ok(format!("{}{trailing_nl}", out.join("\n")));
+    }
+
+    if let Some(line_no) = attach_line {
+        let idx = (line_no as usize).saturating_sub(1);
+        if idx >= lines.len() {
+            return Err(Error::BadRequest("attach_line out of range".into()));
+        }
+        let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
+        let body = if replacement.is_empty() { lines[idx].trim_end().to_string() } else { replacement.to_string() };
+        out[idx] = format!("{body} {tag}");
+        return Ok(format!("{}{trailing_nl}", out.join("\n")));
+    }
+    Err(Error::NotFound(format!("block anchor {tag} not found")))
+}
+
+fn is_list_line(line: &str) -> bool {
+    let t = line.trim_start();
+    t.starts_with("- ") || t.starts_with("* ") || t.starts_with("+ ") || t.split_once(". ").is_some_and(|(n, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+}
+
+fn leading_spaces(line: &str) -> usize {
+    line.chars().take_while(|c| *c == ' ' || *c == '\t').count()
+}
+
 pub fn new_note_file(root: &Path, cfg: &Config, req: &NoteFile) -> Result<NoteFileResult> {
     new_note_file_at(root, cfg, req, chrono::Local::now().naive_local())
 }
@@ -887,5 +1027,26 @@ mod tests {
         // a Spanish vault's days are "2026-03-07 sáb..md": a trimmed dot would make a second note beside Obsidian's
         assert_eq!(file_stem("2026-03-07 sáb."), "2026-03-07 sáb.");
         assert_eq!(file_stem(".hidden idea"), "hidden idea");
+    }
+
+    #[test]
+    fn synced_block_replaces_only_targeted_anchor_preserving_surroundings() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("Source.md"), "# Head\n\nOriginal copy ^abc123\n\nAfter.\n").unwrap();
+        let ws = crate::Workspace::open(d.path()).unwrap();
+        let res = update_synced_block(
+            &ws,
+            &SyncedBlockWrite {
+                path: "Source.md".into(),
+                block_id: "abc123".into(),
+                text: "Updated from transclusion".into(),
+                base_mtime: None,
+                attach_line: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(res.block_id, "abc123");
+        let saved = std::fs::read_to_string(d.path().join("Source.md")).unwrap();
+        assert_eq!(saved, "# Head\n\nUpdated from transclusion ^abc123\n\nAfter.\n");
     }
 }

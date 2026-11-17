@@ -26,7 +26,10 @@
   let s = $state<GraphSettings>(clean({}));
   let from = $state<GraphSettingsSource>("defaults");
   let ready = $state(false); // the settings are read: building and saving may start
+  let allNotes = $state.raw<NoteData[] | null>(null);
   let notes = $state.raw<NoteData[] | null>(null);
+  let tagFilter = $state("");
+  let folderFilter = $state("");
   let failed = $state("");
   let local = $state(false);
   let depth = $state(1);
@@ -112,10 +115,35 @@
   /** The properties the filter and the groups read: asked for in the notes' query. */
   const wanted = $derived([...new Set([s.search, ...s.colorGroups.map((g) => g.query)].flatMap(propertiesIn))].sort().join("\n"));
 
+  const availableTags = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const n of allNotes ?? []) {
+      for (const t of n.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 12).map(([t]) => t);
+  });
+
+  const availableFolders = $derived.by(() => {
+    const set = new Set<string>();
+    for (const n of allNotes ?? []) {
+      const idx = n.path.indexOf("/");
+      if (idx > 0) set.add(n.path.slice(0, idx));
+    }
+    return [...set].sort((a, b) => a.localeCompare(b)).slice(0, 12);
+  });
+
   async function load() {
-    try { notes = await loadNotes(wanted ? wanted.split("\n") : []); failed = ""; }
+    try { allNotes = await loadNotes(wanted ? wanted.split("\n") : []); failed = ""; }
     catch (e) { failed = errText(e); }
   }
+
+  $effect(() => {
+    if (!allNotes) { notes = null; return; }
+    if (!tagFilter && !folderFilter) { notes = allNotes; return; }
+    notes = allNotes.filter(
+      (n) => (!tagFilter || n.tags.includes(tagFilter)) && (!folderFilter || n.path.startsWith(`${folderFilter}/`)),
+    );
+  });
 
   /** What to draw, from the notes and the settings; nodes already drawn keep their place. */
   function build() {
@@ -528,10 +556,33 @@
   <header>
     <span class="title">Graph</span>
     <span class="meta">{count.nodes} node{count.nodes === 1 ? "" : "s"} · {count.edges} link{count.edges === 1 ? "" : "s"}</span>
+    <div class="pill-filters" role="group" aria-label="Quick graph filters">
+      {#if availableTags.length > 0}
+        <select class="pill-select" aria-label="Filter by tag" bind:value={tagFilter} data-testid="graph-tag-filter">
+          <option value="">All #tags</option>
+          {#each availableTags as t (t)}<option value={t}>#{t}</option>{/each}
+        </select>
+      {/if}
+      {#if availableFolders.length > 0}
+        <select class="pill-select" aria-label="Filter by folder" bind:value={folderFilter} data-testid="graph-folder-filter">
+          <option value="">All folders</option>
+          {#each availableFolders as f (f)}<option value={f}>{f}/</option>{/each}
+        </select>
+      {/if}
+      <button type="button" class="pill-btn" class:on={!s.showOrphans} aria-pressed={!s.showOrphans} onclick={() => { s.showOrphans = !s.showOrphans; }} data-testid="graph-hide-orphans">
+        Hide orphans
+      </button>
+    </div>
     <span class="grow"></span>
-    <label class="toggle"><input type="checkbox" bind:checked={local} /> Local</label>
+    <button type="button" class="pill-btn" class:on={local} aria-pressed={local} onclick={() => (local = !local)} data-testid="graph-local-toggle">Local</button>
     {#if local && noActive}<span class="hint">no note open: showing all</span>{/if}
-    {#if local}<label class="toggle">depth <input type="number" min="1" max="4" bind:value={depth} aria-label="Depth" /></label>{/if}
+    {#if local}
+      <div class="hop-pills" role="group" aria-label="Local hop depth">
+        {#each [1, 2, 3] as h (h)}
+          <button type="button" class="pill-btn" class:on={depth === h} aria-pressed={depth === h} onclick={() => (depth = h)}>{h} hop{h === 1 ? "" : "s"}</button>
+        {/each}
+      </div>
+    {/if}
     <button class="btn" onclick={() => { moved = false; fit(); kick(); }} title="The whole graph in view">Fit</button>
     <button class="btn icon" class:on={!s.close} onclick={() => (s.close = !s.close)} title="Graph settings: filters, groups, display, forces" aria-label="Graph settings" aria-pressed={!s.close}><Icon name="settings" size={14} /></button>
   </header>
@@ -554,7 +605,7 @@
       </div>
     {/if}
     {#if failed}<p class="empty">The graph could not be read: {failed}</p>
-    {:else if notes && !count.nodes}<p class="empty">{notes.length ? "Nothing to show with these filters: change the search, or turn on Orphans." : "No notes yet: write a note, and link it to another with [[its name]]."}</p>{/if}
+    {:else if notes && !count.nodes}<p class="empty">{allNotes?.length ? "Nothing to show with these filters: clear filters, or turn off Hide orphans." : "No notes yet: write a note, and link it to another with [[its name]]."}</p>{/if}
   </div>
 </div>
 
@@ -564,9 +615,12 @@
   .title { color: var(--heading); font-weight: 600; letter-spacing: -0.01em; }
   .meta, .hint { color: var(--text-muted); }
   .grow { flex: 1; }
-  .toggle { display: inline-flex; gap: 5px; align-items: center; color: var(--text-muted); }
-  .toggle input[type="checkbox"] { accent-color: var(--accent); }
-  .toggle input[type="number"] { width: 46px; font: inherit; color: var(--text); background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 4px; padding: 1px 4px; }
+  .pill-filters, .hop-pills { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .pill-select { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; font-size: calc(11.5px * var(--ui-scale, 1)); cursor: pointer; max-width: 130px; }
+  .pill-select:focus { outline: none; border-color: var(--accent); }
+  .pill-btn { padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); font: inherit; font-size: calc(11.5px * var(--ui-scale, 1)); transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+  .pill-btn:hover { background: var(--bg-hover); color: var(--text); }
+  .pill-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 500; }
   .btn { border: 1px solid var(--border); padding: 3px 10px; border-radius: var(--radius-sm); color: var(--text-muted); transition: background 120ms ease, color 120ms ease; }
   .btn.icon { display: inline-grid; place-items: center; padding: 3px 6px; }
   .btn:hover, .btn.on { background: var(--bg-hover); color: var(--text); }

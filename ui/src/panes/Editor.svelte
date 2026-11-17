@@ -34,6 +34,7 @@
   import type { PaneProps } from "../lib/dock";
   import { setSelection } from "../lib/context.svelte";
   import Backlinks from "../components/Backlinks.svelte";
+  import MarginComments from "../components/MarginComments.svelte";
   import PropertiesPanel from "../components/PropertiesPanel.svelte";
   import { propsPanel, toggleProperties } from "../lib/properties-panel.svelte";
   import { isNotionShell } from "../lib/shell-mode.svelte";
@@ -41,7 +42,7 @@
   import { copyPath, tabs, toggleSidebar } from "../lib/tabs.svelte";
   import { phone } from "../lib/phone.svelte";
   import { nativeShell } from "../lib/native-shell.svelte";
-  import { frontmatterOf } from "../lib/property-model";
+  import { frontmatterOf, splitFrontmatter } from "../lib/property-model";
   import { noteViewFor, shownAsNote } from "../lib/note-views.svelte";
   import type { LiveNote } from "../lib/note-live";
   import { hostOf, mirrorState, signInToMirror, type MirrorState } from "../lib/mirror";
@@ -72,6 +73,25 @@
   let isNew = $state(false);
   let problems = $state<Problems | null>(null); // this file's counts, for its own code bar (app.problems: the focused file's)
   let docText = $state(""); // what the properties panel reads; set on every change of the text
+  let smallText = $state(false);
+  let typewriterOn = $state(false);
+  let showBacklinks = $state(true);
+  let showComments = $state(false);
+  let commentCount = $state(0);
+  let commentSel = $state<{ from: number; to: number; quote: string; anchor_line: number } | null>(null);
+  function openCommentOnSelection(): void {
+    if (!ed) return;
+    const doc = ed.view.state.doc;
+    const sel = ed.view.state.selection.main;
+    const line = doc.lineAt(sel.from);
+    const rawQuote = sel.empty ? line.text.trim() : doc.sliceString(sel.from, sel.to).trim();
+    commentSel = { from: sel.empty ? line.from : sel.from, to: sel.empty ? line.to : sel.to, quote: rawQuote.slice(0, 140), anchor_line: line.number };
+    showComments = true;
+  }
+  $effect(() => {
+    if (!isMarkdown(path)) { commentCount = 0; return; }
+    void api.comments(path).then((list) => { commentCount = list.filter((t) => !t.resolved).length; }, () => { commentCount = 0; });
+  });
   let live: LiveNote | null = null; // the note shared with the other devices that have it open (lib/note-live.ts)
   let livePeers = $state<string[]>([]);
   let upstream = $state<import("../lib/gen/UpstreamHealth").UpstreamHealth | null>(null);
@@ -272,6 +292,15 @@
   // a note a plugin draws its own way (a mail note as the mail): drawn over the editor, which stays loaded underneath
   const noteProps = $derived(isMarkdown(path) && status === "ready" ? frontmatterOf(docText)?.data : null);
   const isFullWidth = $derived(isMarkdown(path) ? (localFullWidth ?? (noteProps?.width === "full")) : Boolean(localFullWidth));
+  const isResearchNote = $derived(
+    /(?:^|\/)(?:research|derivations|computations|papers|runs)\//i.test(path) ||
+    /^(?:computation|derivation|proof|experiment|research|literature)$/i.test(String(noteProps?.type ?? "")),
+  );
+  const wordCount = $derived.by(() => {
+    const body = splitFrontmatter(docText).body.trim();
+    return body ? body.split(/\s+/).length : 0;
+  });
+  const readMins = $derived(Math.max(1, Math.ceil(wordCount / 220)));
   const starred = $derived(isFileStarred(path));
   const pathSegments = $derived(path.split("/"));
   const folderSegments = $derived(pathSegments.slice(0, -1));
@@ -416,29 +445,38 @@
   function openPageMenu(e: MouseEvent): void {
     popMenu(
       below(e, [
-        { label: "Zen mode (distraction-free)", hint: "F11", icon: "maximize" as const, run: () => { window.dispatchEvent(new CustomEvent("kandinsky:toggle-zen")); } },
         ...(isMarkdown(path)
           ? [
+              { label: smallText ? "Standard text size" : "Small text", icon: "text" as const, run: () => { smallText = !smallText; } },
               { label: isFullWidth ? "Standard reading width (740px)" : "Full width page", icon: "maximize" as const, run: () => void toggleFullWidth() },
-              { label: rawSource ? "Live preview mode" : "Source mode (raw Markdown)", hint: "Ctrl+E", icon: "code" as const, run: toggleSource },
-              { label: "Toggle Properties panel", icon: "table" as const, run: handleToggleProperties },
+              { label: typewriterOn ? "Typewriter mode: On" : "Typewriter mode", icon: "rows" as const, run: () => { typewriterOn = !typewriterOn; window.dispatchEvent(new CustomEvent("kandinsky:toggle-typewriter", { detail: { view: ed?.view ?? null, enabled: typewriterOn } })); } },
+              { label: rawSource ? "Live preview mode" : "Raw Markdown (Ctrl+E)", hint: "Ctrl+E", icon: "code" as const, run: toggleSource },
+              { label: "Properties drawer", icon: "table" as const, run: handleToggleProperties },
+              { label: showBacklinks ? "Hide backlinks" : "Show backlinks", icon: "link" as const, run: () => { showBacklinks = !showBacklinks; } },
+              { label: "Add comment on selection", icon: "notes" as const, run: openCommentOnSelection },
+              { label: showComments ? "Hide comments" : `Comments${commentCount ? ` (${commentCount})` : ""}`, icon: "notes" as const, run: () => { showComments = !showComments; } },
               { label: "Record voice note (/voice)…", icon: "headphones" as const, run: () => { window.dispatchEvent(new CustomEvent("kandinsky:voice-record", { detail: { view: ed?.view ?? null, path } })); } },
             ]
           : []),
+        { label: "Outline", icon: "outline" as const, run: () => open({ kind: "outline" }) },
+        { label: "Local Graph", icon: "graph" as const, run: () => open({ kind: "graph" }) },
+        { label: "Zen mode (distraction-free)", hint: "F11", icon: "maximize" as const, run: () => { window.dispatchEvent(new CustomEvent("kandinsky:toggle-zen")); } },
         { label: "Toggle RTL / LTR text direction", hint: "Ctrl+Shift+X", icon: "text" as const, run: () => { window.dispatchEvent(new CustomEvent("kandinsky:toggle-bidi", { detail: { view: ed?.view ?? null } })); } },
         "sep",
-        ...(isMarkdown(path)
+        ...(isMarkdown(path) && isResearchNote
           ? [
               { label: "Run c_lint verification", icon: "check" as const, run: () => triggerOracleButton(0) },
               { label: "File computation to Oracle Wiki…", icon: "bookmark" as const, run: () => triggerOracleButton(1) },
               "sep" as const,
             ]
           : []),
-        { label: "Version history & restore…", icon: "clock" as const, run: () => void showPageHistory() },
+        { label: "Page history & restore…", icon: "clock" as const, run: () => void showPageHistory() },
         { label: blameOn ? "Hide Git blame" : "Git blame (line history)", icon: "clock" as const, run: () => void editors.get(panel.id)?.toggleBlame() },
-        { label: "Open Git repository pane", icon: "git" as const, run: () => open({ kind: "git" }) },
         "sep",
-        { label: isMarkdown(path) ? "Move note to Trash" : "Move file to Trash", icon: "trash" as const, danger: true, run: () => void trashThisNote() },
+        { label: isMarkdown(path) ? "Move to Trash" : "Move file to Trash", icon: "trash" as const, danger: true, run: () => void trashThisNote() },
+        ...(isMarkdown(path)
+          ? ["sep" as const, { label: `${wordCount.toLocaleString()} words · ${readMins} min read`, disabled: true, run: () => {} }]
+          : []),
       ], 4),
     );
   }
@@ -679,7 +717,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="editor-pane" class:is-md={isMarkdown(path)} class:full-width={isFullWidth} class:drawn ondragover={handlePaneDragOver} ondrop={handlePaneDrop}>
+<div class="editor-pane" class:is-md={isMarkdown(path)} class:full-width={isFullWidth} class:small-text={smallText} class:drawn ondragover={handlePaneDragOver} ondrop={handlePaneDrop}>
   {#if noteView}
     <button class="note-view-switch" onclick={() => (drawn ? shownAsNote.add(path) : shownAsNote.delete(path))}
       title={drawn ? "The note's markdown, to edit" : `Drawn as ${noteView.title.toLowerCase()}`}>{drawn ? "Show as note" : `Show as ${noteView.title.toLowerCase()}`}</button>
@@ -723,25 +761,26 @@
           </button>
         {/if}
         {#if editedLabel}<span class="edited-lbl">{editedLabel}</span>{/if}
-        {#if isMarkdown(path) && status === "ready"}
+        {#if isMarkdown(path) && status === "ready" && isResearchNote}
           <span class="oracle-slot" class:notion-quiet={isNotionShell()} bind:this={oracleSlotEl}>
             <OracleBar {path} flush={() => save(false)} gotoLine={(line) => ed?.gotoLine(line)} />
           </span>
         {/if}
-        <button type="button" class="top-pill star-pill" class:starred={starred}
-          onclick={() => toggleFileStar(path, shownName(path))}
-          title={starred ? "Remove from Favorites" : "Add to Favorites"}>
-          {starred ? "★ Starred" : "★ Star"}
+        <button type="button" class="icon-btn star-icon" class:starred={starred}
+          aria-label={starred ? "Remove from Favorites" : "Add to Favorites"}
+          title={starred ? "Remove from Favorites" : "Add to Favorites"}
+          onclick={() => toggleFileStar(path, shownName(path))}>
+          {starred ? "★" : "☆"}
         </button>
-        <button type="button" class="top-link" data-testid="editor-history-btn" onclick={() => void showPageHistory()} title="Per-page version history, diff & restore">History</button>
-        <button type="button" class="top-more" aria-label="Page actions" title="Page actions" onclick={openPageMenu}>···</button>
+        <button type="button" class="icon-btn" title="Split right" aria-label="Split right"
+          onclick={() => open(isMarkdown(path) ? { kind: "editor", path } : { kind: "editor", path }, { beside: true })}>
+          <Icon name="panel-right" size={14} />
+        </button>
         <button type="button" class="top-pill" onclick={openShareMenu} title="Copy or export note">Share</button>
-        <button type="button" class="icon-btn trash-btn" title="Move to Trash" aria-label="Move to Trash" onclick={() => void trashThisNote()}>
-          <Icon name="trash" size={14} />
-        </button>
+        <button type="button" class="top-more" data-testid="editor-more-btn" aria-label="Page actions" title="Page actions" onclick={openPageMenu}>···</button>
       </div>
     </header>
-  {:else if isMarkdown(path) && status === "ready"}
+  {:else if isMarkdown(path) && status === "ready" && isResearchNote}
     <header class="topbar compact">
       <div class="top-actions" style="margin-left: auto;">
         {#if upstream}
@@ -791,17 +830,37 @@
   <div class="editor-row">
     <div class="editor-col">
       {#if isMarkdown(path) && status !== "error" && (settings.config?.editor.format_bar ?? false)}<FormatBar view={() => ed?.view ?? null} />{/if}
-      <div class="editor-host" bind:this={host}></div>
+      <div class="editor-body">
+        <div class="editor-host" bind:this={host}></div>
+        {#if isMarkdown(path) && showComments}
+          <MarginComments
+            {path}
+            selection={commentSel}
+            onjump={(from, to, anchorLine) => {
+              if (!ed) return;
+              const doc = ed.view.state.doc;
+              const line = Math.min(Math.max(1, anchorLine), doc.lines);
+              const pos = from >= 0 && from <= doc.length ? from : doc.line(line).from;
+              const endPos = to >= pos && to <= doc.length ? to : pos;
+              ed.view.dispatch({ selection: { anchor: pos, head: endPos }, scrollIntoView: true });
+              ed.view.focus();
+            }}
+            oncount={(n) => (commentCount = n)}
+            onclose={() => { showComments = false; commentSel = null; }}
+          />
+        {/if}
+      </div>
     </div>
     {#if isMarkdown(path) && status === "ready" && (settings.config?.editor.properties === "panel" || propsPanel.open)}
       <PropertiesPanel text={docText} view={() => ed?.view ?? null} onopen={openLink} closable={settings.config?.editor.properties !== "panel"} />
     {/if}
   </div>
-  {#if isMarkdown(path) && status !== "error" && (settings.config?.editor.backlinks ?? true)}<Backlinks {path} />{/if}
+  {#if isMarkdown(path) && status !== "error" && showBacklinks && (settings.config?.editor.backlinks ?? true)}<Backlinks {path} />{/if}
 </div>
 
 <style>
   .editor-pane { height: 100%; display: flex; flex-direction: column; background: var(--bg); position: relative; }
+  .editor-pane.small-text { --prose-size: 13.5px; }
   .note-view { flex: 1; min-height: 0; overflow: auto; }
   .live-chip { position: absolute; z-index: 3; bottom: 10px; right: 14px; padding: 3px 10px; border-radius: 999px; pointer-events: none;
     background: var(--accent); color: var(--accent-fg, #fff); font-size: calc(12px * var(--ui-scale, 1)); }
@@ -814,6 +873,7 @@
   .note-view-switch:hover { color: var(--text); background: var(--bg-hover); }
   .editor-row { flex: 1; min-height: 0; display: flex; position: relative; } /* the phone's properties sheet covers it */
   .editor-col { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .editor-body { flex: 1; display: flex; min-width: 0; min-height: 0; }
   .editor-host { flex: 1; min-width: 0; min-height: 0; }
 
   .topbar {
@@ -908,12 +968,11 @@
   .upstream-chip.stale:hover { background: color-mix(in srgb, var(--red) 18%, transparent); }
   .top-pill { padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font: inherit; cursor: pointer; transition: background 120ms, color 120ms, border-color 120ms; }
   .top-pill:hover { background: var(--bg-hover); color: var(--text); border-color: var(--border-strong); }
-  .star-pill.starred { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 11%, transparent); border-color: color-mix(in srgb, var(--yellow) 36%, var(--border)); font-weight: 500; }
-  .top-link, .top-more { padding: 3px 5px; border-radius: 5px; color: var(--text-muted); font: inherit; cursor: pointer; transition: background 120ms, color 120ms; }
-  .top-link:hover, .top-more:hover { background: var(--bg-hover); color: var(--text); }
-  .top-more { font-weight: 600; letter-spacing: 0.06em; padding: 3px 6px; }
-  .trash-btn { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 5px; color: var(--text-faint); transition: background 120ms, color 120ms; }
-  .trash-btn:hover { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+  .star-icon { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 5px; font-size: 15px; line-height: 1; color: var(--text-faint); transition: background 120ms, color 120ms; }
+  .star-icon:hover { background: var(--bg-hover); color: var(--heading); }
+  .star-icon.starred { color: var(--yellow); }
+  .top-more { padding: 3px 6px; border-radius: 5px; color: var(--text-muted); font: inherit; font-weight: 600; letter-spacing: 0.06em; cursor: pointer; transition: background 120ms, color 120ms; }
+  .top-more:hover { background: var(--bg-hover); color: var(--text); }
 
   @media (max-width: 820px) {
     .edited-lbl { display: none; }

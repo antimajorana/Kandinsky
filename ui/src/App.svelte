@@ -1,6 +1,8 @@
 <script lang="ts">
   import { errText } from "./lib/text";
   import { initCssSnippets } from "./lib/css-snippets.svelte";
+  import { initObsidianTheme } from "./lib/obsidian-theme.svelte";
+  import { startCalendarReminders } from "./lib/reminders.svelte";
   import { allCommands, bindings, loadKeymap } from "./lib/keymap.svelte";
   import { loadPlugins, watchPlugins } from "./lib/plugins.svelte";
   import { PANE_KINDS } from "./lib/panes";
@@ -54,6 +56,7 @@
   import Palette from "./components/Palette.svelte";
   import QuickCapture from "./components/QuickCapture.svelte";
   import Toasts from "./components/Toasts.svelte";
+  import BinaryTrustModal from "./components/BinaryTrustModal.svelte";
   import GuestBar from "./components/GuestBar.svelte";
   import { guest, loadGuest } from "./lib/guest.svelte";
   import { startWhere } from "./lib/where.svelte";
@@ -173,6 +176,8 @@
 
     void loadKeymap().catch(() => {});
     initCssSnippets();
+    const stopObsidianTheme = initObsidianTheme();
+    const stopReminders = startCalendarReminders();
     // the side panes' code, fetched once the app is idle: a shortcut then mounts its pane at once,
     // instead of the keys typed right after it landing in whatever had the focus (depth audit)
     // …and the renderers a note's math and code wait for (math.ts, highlight.ts), kept off the start's path
@@ -237,6 +242,8 @@
     window.addEventListener("beforeunload", beforeUnload);
 
     return () => {
+      stopObsidianTheme();
+      stopReminders();
       events.close();
       offs.forEach((f) => f());
       window.removeEventListener("keydown", onKey, true);
@@ -273,6 +280,7 @@
 {#if zoteroModal.open}<ZoteroImportModal />{/if}
 {#if paperWorkflowModal.open}<PaperWorkflowsModal />{/if}
 <Toasts />
+<BinaryTrustModal />
 
 <style>
   /* clip: the shell never scrolls, not even programmatically (focus/scrollIntoView) */

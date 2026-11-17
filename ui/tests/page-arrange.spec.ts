@@ -10,16 +10,15 @@ test("arrange a page by hand: the file follows every gesture", async ({ page, re
   const text = () => request.get("/api/file?path=Arr.page", { headers: H }).then((r) => r.json()).then((j) => j.text as string);
   await page.goto("/");
   await openFile(page, "Arr.page");
-  const pane = page.locator(".kandinsky-pane-page .page");
+  const pagePane = page.locator(".kandinsky-pane-page");
+  const pane = pagePane.locator(".page");
   await expect(pane.locator('[data-block="greeting"]')).toBeVisible();
 
-  await pane.getByRole("button", { name: "Arrange" }).click();
-  // add: the "+" under the greeting → the chooser → Open tasks
+  await pagePane.getByRole("button", { name: "Layout" }).click();
+  // add: the "+" under the greeting → visual block picker → Open Tasks
   await pane.locator('[data-slot="b0.0.end"]').hover();
   await pane.locator('[data-slot="b0.0.end"] .add').click();
-  await page.keyboard.type("Open tasks");
-  await expect(page.getByTestId("palette").getByText("Open tasks").first()).toBeVisible();
-  await page.keyboard.press("Enter");
+  await page.getByTestId("page-block-picker").getByRole("button", { name: /Open Tasks/i }).click();
   await expect.poll(text).toContain("- [greeting, tasks]");
   // the block is drawn with its list (which tasks lead depends on what other tests left; in arrange mode it takes no clicks)
   // (its head: the title, the All button that opens every task in a tab, the count)
@@ -39,13 +38,13 @@ test("arrange a page by hand: the file follows every gesture", async ({ page, re
   await pane.getByRole("button", { name: "Block menu: Open tasks" }).click();
   await page.getByRole("menuitem", { name: "Remove" }).click();
   await expect.poll(text).toContain("  - [greeting, focus]");
-  await pane.getByRole("button", { name: "Undo" }).click();
+  await pagePane.getByRole("button", { name: "Undo" }).click();
   await expect.poll(text).toContain("      - [greeting, focus]\n      - [tasks]");
   await expect(pane.locator('[data-block="tasks"]')).toBeVisible();
 
   // the rest of the file is untouched
   expect(await text()).toMatch(/^# my desk: keep this comment\ntitle: Arr\n/);
-  await pane.getByRole("button", { name: "Done", exact: true }).click();
+  await pagePane.getByRole("button", { name: "Done", exact: true }).click();
   await expect(pane.locator(".bar")).toHaveCount(0);
 });
 
@@ -54,16 +53,16 @@ test("a block that shows a file asks which one; older shorthands still read", as
   const text = () => request.get("/api/file?path=Arr2.page", { headers: H }).then((r) => r.json()).then((j) => j.text as string);
   await page.goto("/");
   await openFile(page, "Arr2.page");
-  const pane = page.locator(".kandinsky-pane-page .page");
+  const pagePane = page.locator(".kandinsky-pane-page");
+  const pane = pagePane.locator(".page");
   await expect(pane.locator('[data-block="note"]')).toContainText("Finish the GW notes.");
   await expect(pane.locator('[data-block="text"] strong')).toHaveText("hello");
-  await pane.getByRole("button", { name: "Arrange" }).click();
+  await pagePane.getByRole("button", { name: "Layout" }).click();
   await pane.locator('[data-slot="rend"]').hover();
   await pane.locator('[data-slot="rend"] .add').click();
-  await page.keyboard.type("Database");
-  await page.keyboard.press("Enter");
+  await page.getByTestId("page-block-picker").getByRole("button", { name: /Database/i }).click();
   await page.keyboard.type("all.base");
-  await page.getByTestId("palette").getByText("all.base", { exact: true }).first().click();
+  await page.getByTestId("palette").getByText("all.base", { exact: false }).first().click();
   await expect.poll(text).toContain("{view: base, path: db/all.base}");
   await expect(pane.locator('[data-block="base"]')).toContainText("l1");
 });

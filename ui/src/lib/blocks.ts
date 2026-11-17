@@ -12,10 +12,12 @@ import "./table-views-fence"; // the core's own fence: a table's saved views in 
 import "./tikz-fence"; // the core's own fence: a ```tikz picture drawn by TeX in the page
 import "./ink-fence"; // the core's own fence: an Obsidian Ink block shown as a card for its file
 import "./typst-fence"; // and a ```typst block drawn by the core's Typst
+import "./mermaid-fence"; // dynamic SVG Mermaid diagrams (lazy-loaded)
 import "./encrypted-fence"; // opt-in AES-GCM-256 encrypted block card (PBKDF2-SHA256 + WebCrypto)
 import "./notebook-preview-fence"; // read-only .ipynb cell & output transclusion fence
 import "./table-preview-fence"; // read-only .tsv / .csv / .dat tabular preview fence
 import { mount, unmount, type Component } from "svelte";
+import WidgetConfigureBar from "../components/widgets/WidgetConfigureBar.svelte";
 import { parse as parseYaml } from "yaml";
 import type { DockviewPanelApi } from "dockview-core";
 import { api } from "./api";
@@ -349,6 +351,14 @@ registerBlock({
     { key: "path_prefix", label: "Folder prefix filter", kind: "text", hint: "optional folder prefix, e.g. notes/" },
   ],
 });
+registerBlock({
+  ...lazyBlock("synced", "Synced block", () => import("../components/widgets/SyncedBlockEmbed.svelte"), (c) => ({ options: c.options, doc: c.doc })),
+  icon: "link", card: false,
+});
+registerBlock({
+  ...lazyBlock("embed", "Media / Web Embed", () => import("../components/widgets/EmbedBlock.svelte"), (c) => ({ options: c.options, doc: c.doc })),
+  icon: "external-link", card: false,
+});
 
 // --- mounting -------------------------------------------------------------------------------------
 
@@ -389,7 +399,10 @@ function mountRows(body: HTMLElement, doc: string, src: string): () => void {
   };
   void load();
   const off = reloadOnChange(() => void load(), { wait: 400, wants: (p) => p.endsWith(".md") || p.endsWith(".base"), host: () => body });
-  return () => { off(); clean(); };
+  return () => {
+    off();
+    clean();
+  };
 }
 
 /** Draws one block (its YAML `src`, in the context of document `doc`) into `el`; returns the cleanup.
@@ -404,7 +417,23 @@ export function mountBlock(el: HTMLElement, doc: string, src: string, host: Bloc
   let title = "";
   const ctx: BlockCtx = { src, options: parseOptions(src), doc, host, setTitle: (t) => { title = t; }, props: () => docProps(doc, src) };
   const pop = host === "tab" || registry.get(type)?.bare ? null : popButton(() => open(blockTab(src, doc, title)));
-  el.replaceChildren(body, ...(pop ? [pop] : []));
+  let cfgBar: Record<string, unknown> | undefined;
+  let cfgSlot: HTMLDivElement | null = null;
+  if (host !== "tab") {
+    cfgSlot = document.createElement("div");
+    cfgSlot.className = "block-cfg-slot";
+  }
+  el.replaceChildren(body, ...(cfgSlot ? [cfgSlot] : []), ...(pop ? [pop] : []));
+  if (cfgSlot) {
+    queueMicrotask(() => {
+      if (cfgSlot && el.closest(".cm-editor")) {
+        cfgBar = mount(WidgetConfigureBar, { target: cfgSlot, props: { blockEl: el, src } });
+      } else {
+        cfgSlot?.remove();
+        cfgSlot = null;
+      }
+    });
+  }
 
   let clean = () => {};
   const draw = () => {
@@ -425,7 +454,13 @@ export function mountBlock(el: HTMLElement, doc: string, src: string, host: Bloc
   };
   draw();
   const off = onChange(type, draw);
-  return () => { off(); clean(); };
+  return () => {
+    off();
+    clean();
+    if (cfgBar) void unmount(cfgBar);
+    cfgSlot?.remove();
+    cfgSlot = null;
+  };
 }
 
 /** The tab a block opens as: its own pane when it has one (a PDF block → the PDF pane), else the

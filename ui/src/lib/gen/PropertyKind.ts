@@ -3,4 +3,4 @@
 /**
  * How a property is shown and edited in the properties panel.
  */
-export type PropertyKind = "text" | "number" | "bool" | "date" | "datetime" | "list" | "tags" | "link" | "links" | "enum";
+export type PropertyKind = "text" | "number" | "bool" | "date" | "datetime" | "list" | "tags" | "link" | "links" | "enum" | "status" | "rating" | "auto_id";

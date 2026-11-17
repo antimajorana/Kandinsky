@@ -946,6 +946,8 @@ pub enum Event {
         #[ts(type = "unknown")]
         data: serde_json::Value,
     },
+    /// A plugin or helper tried to execute an external binary that is not yet trusted.
+    BinaryApproval(PendingBinaryApproval),
 }
 
 /// Terminal presets for `WS /api/pty`.
@@ -1427,6 +1429,22 @@ pub struct BaseView {
     pub sort: Vec<SortKey>,
     /// The property whose value is each card's picture (Obsidian's cards `image`).
     pub image: Option<String>,
+    /// Primary date property used by Calendar and Timeline views (`dateProperty`).
+    #[serde(default)]
+    #[ts(optional)]
+    pub date_property: Option<String>,
+    /// End date property for multi-day Calendar spans and Timeline bars (`endDateProperty`).
+    #[serde(default)]
+    #[ts(optional)]
+    pub end_date_property: Option<String>,
+    /// Relation property linking child sub-items to parent rows (`subItemsBy`).
+    #[serde(default)]
+    #[ts(optional)]
+    pub sub_items_by: Option<String>,
+    /// Relation property indicating blocking dependencies (`blockedBy`).
+    #[serde(default)]
+    #[ts(optional)]
+    pub blocked_by: Option<String>,
 }
 
 /// A Base filter as Obsidian writes it: one expression (`status == "done"`, `file.hasTag("paper")`), or a group of them
@@ -1535,6 +1553,37 @@ pub enum ViewEdit {
         column: String,
         #[serde(default)]
         rollup: Option<RollupSpec>,
+    },
+    /// Set or clear primary/end date properties (`dateProperty` / `endDateProperty`).
+    DateProperty {
+        #[serde(default)]
+        column: Option<String>,
+        #[serde(default)]
+        end_column: Option<String>,
+    },
+    /// Set or clear sub-item parent link property (`subItemsBy`).
+    SubItems {
+        #[serde(default)]
+        property: Option<String>,
+    },
+    /// Set or clear blocking dependency property (`blockedBy`).
+    DependencyProperty {
+        #[serde(default)]
+        property: Option<String>,
+    },
+    /// Add, update, or remove a formula expression in `formulas:`.
+    Formula {
+        name: String,
+        #[serde(default)]
+        expr: Option<String>,
+    },
+    /// Replace the base's local rule automations (`automations:`).
+    Automations {
+        automations: Vec<BaseAutomation>,
+    },
+    /// Replace the base's recurring templates (`recurring:`).
+    Recurring {
+        recurring: Vec<BaseRecurringTemplate>,
     },
 }
 
@@ -1690,6 +1739,134 @@ pub struct BaseResult {
     /// the filter editor's operators and the cell editors follow it (a vault's property spec, when there is one, wins
     /// in the UI).
     pub kinds: std::collections::BTreeMap<String, PropertyKind>,
+    /// Formula sources keyed by name (without `formula.` prefix) for guided editing.
+    #[serde(default)]
+    pub formula_exprs: std::collections::BTreeMap<String, String>,
+    /// Local automations triggered when matching notes change.
+    #[serde(default)]
+    pub automations: Vec<BaseAutomation>,
+    /// Recurring note templates configured on this base.
+    #[serde(default)]
+    pub recurring: Vec<BaseRecurringTemplate>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BaseAutomation {
+    pub name: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    pub trigger: AutomationTrigger,
+    pub action: AutomationAction,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export)]
+pub enum AutomationTrigger {
+    PropertyChanged {
+        property: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        to: Option<String>,
+    },
+    NoteCreated,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export)]
+pub enum AutomationAction {
+    SetProperty { property: String, value: String },
+    AppendLog { text: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum RecurringCadence {
+    Daily,
+    #[default]
+    Weekly,
+    Monthly,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BaseRecurringTemplate {
+    pub name: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub cadence: RecurringCadence,
+    #[serde(default)]
+    pub folder: String,
+    #[serde(default)]
+    pub title_pattern: String,
+    #[serde(default)]
+    pub template: String,
+    #[serde(default)]
+    pub last_run: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct FormulaPreviewRequest {
+    pub path: String,
+    pub expr: String,
+    #[serde(default)]
+    #[ts(optional)]
+    pub sample_note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct FormulaPreviewResponse {
+    pub ok: bool,
+    pub sample_title: String,
+    pub value: Option<BaseCell>,
+    pub kind: Option<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PendingBinaryApproval {
+    pub id: String,
+    pub plugin: String,
+    pub command: String,
+    pub args: Vec<String>,
+    pub sha256: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum BinaryApprovalChoice {
+    AllowOnce,
+    AlwaysAllow,
+    Deny,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BinaryDecision {
+    pub id: String,
+    pub choice: BinaryApprovalChoice,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TrustedBinary {
+    pub plugin: String,
+    pub command: String,
+    pub sha256: String,
+    pub allowed_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -1903,7 +2080,7 @@ pub struct FrontmatterText {
 
 /// How a property is shown and edited in the properties panel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum PropertyKind {
     Text,
@@ -1916,6 +2093,21 @@ pub enum PropertyKind {
     Link,
     Links,
     Enum,
+    Status,
+    Rating,
+    AutoId,
+}
+
+/// Meta-groups for `status` properties (`todo`, `in_progress`, `done`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct StatusGroups {
+    #[serde(default)]
+    pub todo: Vec<String>,
+    #[serde(default)]
+    pub in_progress: Vec<String>,
+    #[serde(default)]
+    pub done: Vec<String>,
 }
 
 /// One property of the vault's spec file.
@@ -1923,7 +2115,7 @@ pub enum PropertyKind {
 #[ts(export)]
 pub struct PropertySpec {
     pub kind: PropertyKind,
-    /// The choices of an `enum`.
+    /// The choices of an `enum` or `status`.
     #[serde(default)]
     pub values: Vec<String>,
     /// Values offered while typing (a `link` / `links` / `list` property's usual hubs).
@@ -1934,6 +2126,18 @@ pub struct PropertySpec {
     /// How a date is written (`YYYY-MM-DD HH:mm`); empty = the kind's usual form.
     #[serde(default)]
     pub format: String,
+    /// Optional status meta-groups (`todo`, `in_progress`, `done`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub groups: Option<StatusGroups>,
+    /// Prefix for `auto_id` properties (e.g. `"PRJ-"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub prefix: Option<String>,
+    /// Minimum zero-padded digits for `auto_id` properties (default 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub padding: Option<u8>,
 }
 
 /// The properties a note of one `type:` has.

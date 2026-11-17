@@ -10,38 +10,47 @@ async function serverPage(page: Page) {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+,");
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: "Server" }).click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByTestId("settings-advanced").locator("summary").click();
   return page.getByTestId("server-panel");
 }
 
-test("Settings → Server is not listed outside server mode", async ({ page }) => {
+test("Settings → Server is folded under Extensions, not listed in the main Settings nav", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+,");
   const nav = page.getByRole("navigation", { name: "Settings pages" });
-  await expect(nav.getByRole("button", { name: "Appearance" })).toBeVisible();
+  await expect(nav.getByRole("button", { name: /^Appearance/ })).toBeVisible();
   await expect(nav.getByRole("button", { name: "Server" })).toHaveCount(0);
+  await expect(nav.getByRole("button", { name: "Advanced" })).toHaveCount(0);
 });
 
-// Server settings appear only on a server, Advanced (the GPU render options) only on the desktop
-// (settings-pages.ts `only`, hostOf)
-test("Server shows only in a browser on the server's page; Advanced (the settings file) everywhere", async ({ page }) => {
+test("Server shows inside folded Advanced & Server settings under Extensions without cluttering main nav", async ({ page }) => {
   const nav = page.getByRole("navigation", { name: "Settings pages" });
-  const open = async () => { await page.goto("/"); await page.getByText("Finish the GW notes.").waitFor(); await page.keyboard.press("Meta+,"); await expect(nav.getByRole("button", { name: "Appearance" })).toBeVisible(); };
-  await open(); // this machine: Advanced, no Server
-  await expect(nav.getByRole("button", { name: "Advanced" })).toBeVisible();
+  const open = async () => { await page.goto("/"); await page.getByText("Finish the GW notes.").waitFor(); await page.keyboard.press("Meta+,"); await expect(nav.getByRole("button", { name: /^Appearance/ })).toBeVisible(); };
+  await open();
+  await expect(nav.getByRole("button", { name: "Advanced" })).toHaveCount(0);
   await expect(nav.getByRole("button", { name: "Server" })).toHaveCount(0);
+  await nav.getByRole("button", { name: /^Extensions/ }).click();
+  const adv = page.getByTestId("settings-advanced");
+  await expect(adv).not.toHaveAttribute("open", "");
+  await adv.locator("summary").click();
+  await expect(page.getByTestId("server-panel")).toBeVisible();
+
   await page.route("**/api/auth/me", (r) => r.fulfill({ json: { server: true, via: "proxy", user: "u", signOut: false } }));
-  await open(); // a browser on the server: Server, and Advanced with the file (its GPU field is the desktop's only)
-  await expect(nav.getByRole("button", { name: "Server" })).toBeVisible();
-  await expect(nav.getByRole("button", { name: "Advanced" })).toBeVisible();
+  await open();
+  await expect(nav.getByRole("button", { name: "Server" })).toHaveCount(0);
+  await expect(nav.getByRole("button", { name: "Advanced" })).toHaveCount(0);
+  await nav.getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByTestId("settings-advanced").locator("summary").click();
+  await expect(page.getByTestId("server-panel")).toBeVisible();
+
   await page.addInitScript(() => { (window as unknown as { KandinskyNative: unknown }).KandinskyNative = { ready() {}, tabs() {} }; });
   await page.goto("/");
   await page.waitForFunction(() => "kandinskyShell" in window);
   await page.evaluate(() => (window as unknown as { kandinskyShell: { view(k: string): void } }).kandinskyShell.view("settings"));
-  await expect(nav.getByRole("button", { name: "Appearance" })).toBeVisible(); // the phone, a server's vault: no Server
+  await expect(nav.getByRole("button", { name: /^Appearance/ })).toBeVisible();
   await expect(nav.getByRole("button", { name: "Server" })).toHaveCount(0);
-  await expect(nav.getByRole("button", { name: "Advanced" })).toBeVisible();
 });
 
 test("Settings → Server: the password, a phone's token shown once and revoked, AI agents off by default", async ({ page }) => {

@@ -504,7 +504,7 @@ mod toast {
     fn icon() -> Result<std::path::PathBuf, String> {
         let dir = crate::platform::dirs::app(crate::platform::dirs::Base::Cache);
         let file = dir.join("toast-icon.png");
-        std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&file, include_bytes!("../../kandinsky-app/icons/128x128.png"))).map_err(|e| e.to_string())?;
+        crate::vault_write::outside::write(&file, include_bytes!("../../kandinsky-app/icons/128x128.png")).map_err(|e| e.to_string())?;
         Ok(file)
     }
 

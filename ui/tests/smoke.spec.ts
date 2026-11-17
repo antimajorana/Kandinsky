@@ -54,17 +54,13 @@ test("editor selection reaches /api/ui/state (what kandinsky_context returns)", 
   }).toMatchObject({ active: { kind: "editor", path: "notes/hubbard.md" }, path: "notes/hubbard.md", line: 5, text: expect.stringContaining("check the sign") });
 });
 
-test("Today activity separates your commits, Claude's, and housekeeping", async ({ page }) => {
+test("Today activity separates Created and Changed without Git/Commits jargon", async ({ page }) => {
   await page.goto("/");
-  // the commits are the activity's third tab since 636b421 (Created, Changed, Commits)
-  await page.getByRole("tablist", { name: "Activity" }).getByRole("tab", { name: /^Commits/ }).click();
-  await expect(page.getByText("My own hubbard note")).toBeVisible();
-  await expect(page.getByText("Claude adds a note")).toBeVisible();
-  await expect(page.getByText(/\+ 1 housekeeping commit/)).toBeVisible();
-  await page.getByText("My own hubbard note").click();
-  await expect(page.locator(".commit-pane h1")).toHaveText("My own hubbard note");
-  await expect(page.locator(".commit-pane .badge").first()).toHaveText("You");
-  await expect(page.locator(".commit-pane .l.add").first()).toBeVisible();
+  const tabs = page.getByRole("tablist", { name: "Activity" });
+  await expect(tabs.getByRole("tab", { name: /^Created/ })).toBeVisible();
+  await expect(tabs.getByRole("tab", { name: /^Changed/ })).toBeVisible();
+  await expect(tabs.getByRole("tab", { name: /^Commits/ })).toHaveCount(0);
+  await expect(page.getByText(/housekeeping commit/)).toHaveCount(0);
 });
 
 test("Settings is generated from the schema and saves to config.toml", async ({ page, request }) => {
@@ -73,18 +69,20 @@ test("Settings is generated from the schema and saves to config.toml", async ({ 
   await page.getByText("Finish the GW notes.").waitFor(); // the keymap is attached once the app is up (was flaky)
   await page.keyboard.press("Meta+,");
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: "Terminal & agents" }).click();
-  await expect(page.getByText("Where the terminal panel docks")).toBeVisible();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions/ }).click();
+  const adv = page.getByTestId("settings-advanced");
+  await adv.locator("summary").click();
+  await expect(adv.getByText("Where the terminal panel docks")).toBeVisible();
   // a two-way choice is a segmented control
-  const pos = page.locator('[id="terminal.position"]');
+  const pos = adv.locator('[id="terminal.position"]');
   await pos.getByRole("radio", { name: "Right" }).click();
   await expect.poll(async () => (await cfg()).terminal.position).toBe("right");
-  await expect(page.locator('.row[data-path="terminal.position"]')).toContainText("modified");
-  await page.locator('.row[data-path="terminal.position"]').getByRole("button", { name: /reset to bottom/ }).click();
+  await expect(adv.locator('.row[data-path="terminal.position"]')).toContainText("modified");
+  await adv.locator('.row[data-path="terminal.position"]').getByRole("button", { name: /reset to bottom/ }).click();
   await expect.poll(async () => (await cfg()).terminal.position).toBe("bottom");
-  await expect(page.locator('.row[data-path="terminal.position"]')).not.toContainText("modified");
+  await expect(adv.locator('.row[data-path="terminal.position"]')).not.toContainText("modified");
   // the themed dropdown (no native <select>) for longer lists: keyboard picks
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: "Writing" }).click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Editor & Writing/ }).click();
   await page.locator('[id="editor.date_names"]').waitFor();
   await page.getByPlaceholder("Search settings…").fill("housekeeping");
   await expect(page.getByText("Show housekeeping commits", { exact: false })).toBeVisible();

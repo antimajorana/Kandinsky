@@ -19,6 +19,9 @@ fn kind_of(name: &str) -> Option<PropertyKind> {
         "link" | "wikilink" => PropertyKind::Link,
         "links" | "wikilinks" => PropertyKind::Links,
         "enum" | "select" | "choice" => PropertyKind::Enum,
+        "status" => PropertyKind::Status,
+        "rating" | "stars" => PropertyKind::Rating,
+        "auto_id" | "autoid" | "id" => PropertyKind::AutoId,
         _ => return None,
     })
 }
@@ -58,8 +61,23 @@ pub fn parse(text: &str) -> PropertySpecs {
             });
             let description = v.get("description").and_then(Value::as_str).unwrap_or_default().to_string();
             let format = v.get("format").and_then(Value::as_str).unwrap_or_default().to_string();
-            let (values, suggest) = (strings(v.get("values")), strings(v.get("suggest")));
-            out.properties.insert(key.to_string(), PropertySpec { kind, values, suggest, description, format });
+            let groups = v.get("groups").and_then(Value::as_mapping).map(|g| crate::api::StatusGroups {
+                todo: strings(g.get("todo")),
+                in_progress: strings(g.get("in_progress")),
+                done: strings(g.get("done")),
+            }).filter(|g| !g.todo.is_empty() || !g.in_progress.is_empty() || !g.done.is_empty());
+            let (mut values, suggest) = (strings(v.get("values")), strings(v.get("suggest")));
+            if kind == PropertyKind::Status && values.is_empty() {
+                if let Some(g) = &groups {
+                    values.extend(g.todo.iter().chain(g.in_progress.iter()).chain(g.done.iter()).cloned());
+                }
+            }
+            let prefix = v.get("prefix").and_then(Value::as_str).map(str::to_string).filter(|s| !s.is_empty());
+            let padding = v.get("padding").and_then(Value::as_u64).and_then(|n| u8::try_from(n).ok()).map(|n| n.clamp(1, 12));
+            out.properties.insert(
+                key.to_string(),
+                PropertySpec { kind, values, suggest, description, format, groups, prefix, padding },
+            );
         }
     }
     if let Some(Value::Mapping(types)) = doc.get("types") {
@@ -158,7 +176,7 @@ pub fn creation_stamp(specs: &PropertySpecs, now: chrono::NaiveDateTime) -> (Str
 mod tests {
     use super::*;
 
-    const SPEC: &str = "properties:\n  created: {kind: date, description: When it was made}\n  date: {kind: datetime, format: \"YYYY-MM-DD HH:mm\"}\n  status: {kind: enum, values: [open, done, 3]}\n  up: {kind: links, suggest: [\"[[Hub]]\"]}\n  odd: {kind: colour}\n  done: checkbox\ntypes:\n  project:\n    required: [status, created]\n    optional: [up]\n";
+    const SPEC: &str = "properties:\n  created: {kind: date, description: When it was made}\n  date: {kind: datetime, format: \"YYYY-MM-DD HH:mm\"}\n  status: {kind: enum, values: [open, done, 3]}\n  stage: {kind: status, groups: {todo: [Backlog], in_progress: [Active], done: [Shipped]}}\n  score: {kind: rating}\n  code: {kind: auto_id, prefix: \"PRJ-\", padding: 3}\n  up: {kind: links, suggest: [\"[[Hub]]\"]}\n  odd: {kind: colour}\n  done: checkbox\ntypes:\n  project:\n    required: [status, created]\n    optional: [up]\n";
 
     #[test]
     fn reads_kinds_values_and_types() {
@@ -168,6 +186,12 @@ mod tests {
         assert_eq!(s.properties["created"].description, "When it was made");
         assert_eq!(s.properties["date"].format, "YYYY-MM-DD HH:mm");
         assert_eq!(s.properties["status"].values, ["open", "done", "3"]);
+        assert_eq!(s.properties["stage"].kind, PropertyKind::Status);
+        assert_eq!(s.properties["stage"].values, ["Backlog", "Active", "Shipped"]);
+        assert_eq!(s.properties["score"].kind, PropertyKind::Rating);
+        assert_eq!(s.properties["code"].kind, PropertyKind::AutoId);
+        assert_eq!(s.properties["code"].prefix.as_deref(), Some("PRJ-"));
+        assert_eq!(s.properties["code"].padding, Some(3));
         assert_eq!(s.properties["up"].kind, PropertyKind::Links);
         assert_eq!(s.properties["up"].suggest, ["[[Hub]]"]);
         assert_eq!(s.properties["done"].kind, PropertyKind::Bool, "the short form, Obsidian's name");

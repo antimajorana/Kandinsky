@@ -18,27 +18,35 @@
   import { errText } from "../../lib/text";
   import { onMount } from "svelte";
 
+  import type { TrustedBinary } from "../../lib/types";
   type ObsidianItem = { id: string; name: string; version?: string; description?: string; author?: string; enabled: boolean };
-  type TabFilter = "all" | "installed" | "obsidian" | "catalog";
+  type TabFilter = "installed" | "obsidian" | "catalog";
 
   let { onnew, onblock }: { onnew: () => void; onblock: () => void } = $props();
   const PROPS = 4;
 
   let query = $state("");
-  let tab = $state<TabFilter>("all");
+  let tab = $state<TabFilter>("installed");
   let catalog = $state<Available[]>([]);
   let obsidianList = $state<ObsidianItem[]>([]);
+  let trustedBins = $state<TrustedBinary[]>([]);
   let busyIds = $state<Record<string, boolean>>({});
   let batchBusy = $state(false);
   let trashBusy = $state(false);
 
   async function refreshCatalog(): Promise<void> {
-    const [avail, obs] = await Promise.all([
+    const [avail, obs, bins] = await Promise.all([
       api.availablePlugins().catch(() => [] as Available[]),
       api.obsidianPlugins().catch(() => [] as ObsidianItem[]),
+      api.securityBinaries().catch(() => ({ pending: [], trusted: [] as TrustedBinary[] })),
     ]);
     catalog = avail;
     obsidianList = obs;
+    trustedBins = bins.trusted;
+  }
+
+  async function revokeTrustedBinary(command: string, sha256: string): Promise<void> {
+    trustedBins = await api.revokeBinary(command, sha256).catch(() => trustedBins);
   }
 
   onMount(() => {
@@ -177,22 +185,21 @@
       {#if query}<button class="clear-btn" onclick={() => (query = "")} aria-label="Clear filter"><Icon name="close" size={12} /></button>{/if}
     </div>
     <div class="tabs" role="tablist">
-      <button class="pill" class:active={tab === "all"} onclick={() => (tab = "all")}>All</button>
       <button class="pill" class:active={tab === "installed"} onclick={() => (tab = "installed")}>
-        Installed <span class="cnt">{BUILTINS.length + plugins.list.length}</span>
+        Installed &amp; Active <span class="cnt">{BUILTINS.length + plugins.list.length}</span>
       </button>
       {#if neededObsidian.length || unnecessaryObsidian.length}
         <button class="pill" class:active={tab === "obsidian"} onclick={() => (tab = "obsidian")}>
           Your Obsidian Plugins <span class="cnt">{neededObsidian.length}</span>
         </button>
       {/if}
-      <button class="pill" class:active={tab === "catalog"} onclick={() => (tab = "catalog")}>
-        Browse Catalog <span class="cnt">{sortedCatalog.length}</span>
+      <button class="pill" class:active={tab === "catalog"} onclick={() => (tab = "catalog")} data-testid="browse-extensions-tab">
+        Browse Extensions <span class="cnt">{sortedCatalog.length}</span>
       </button>
     </div>
   </div>
 
-  {#if showSolverCard && (tab === "all" || tab === "installed" || tab === "catalog")}
+  {#if showSolverCard && (tab === "installed" || tab === "catalog")}
     {@const solverOn = !!(solverInstalled && !isOff("solver"))}
     {@const solverNeedsUpdate = !!(solverInstalled && solverOffer?.version && solverInstalled.version !== solverOffer.version)}
     <div class="solver-feature">
@@ -219,7 +226,7 @@
     </div>
   {/if}
 
-  {#if showAgyCard && (tab === "all" || tab === "installed" || tab === "catalog")}
+  {#if showAgyCard && (tab === "installed" || tab === "catalog")}
     {@const agyOn = !!(agyInstalled && !isOff("antigravity"))}
     {@const agyNeedsUpdate = !!(agyInstalled && agyOffer?.version && agyInstalled.version !== agyOffer.version)}
     <div class="solver-feature">
@@ -246,7 +253,7 @@
     </div>
   {/if}
 
-  {#if tab === "all" || tab === "installed"}
+  {#if tab === "installed"}
     <div class="group-head">
       <h3>Installed &amp; Core Plugins <span class="n">{shownBuiltins.length + shownInstalled.length}</span></h3>
       <span class="group-acts">
@@ -299,7 +306,7 @@
     </ul>
   {/if}
 
-  {#if (neededObsidian.length || unnecessaryObsidian.length) && (tab === "all" || tab === "obsidian")}
+  {#if (neededObsidian.length || unnecessaryObsidian.length) && tab === "obsidian"}
     <div class="group-head spaced">
       <div>
         <h3>Your Obsidian Plugins <span class="n">{shownObsidian.length}</span></h3>
@@ -373,7 +380,7 @@
     {/if}
   {/if}
 
-  {#if tab === "all" || tab === "catalog"}
+  {#if tab === "catalog"}
     <div class="group-head spaced">
       <div>
         <h3>Browse Kandinsky Plugin Catalog <span class="n">{sortedCatalog.length}</span></h3>
@@ -424,7 +431,27 @@
           </span>
         </li>
       {:else}
-        <li class="muted">No matching plugins in catalog.</li>
+        <li class="muted">No matching extensions in catalog.</li>
+      {/each}
+    </ul>
+  {/if}
+
+  {#if trustedBins.length > 0 && tab === "installed"}
+    <div class="group-head spaced">
+      <h3>Trusted External Binaries <span class="n">{trustedBins.length}</span></h3>
+    </div>
+    <ul>
+      {#each trustedBins as tb (tb.sha256)}
+        <li>
+          <div class="main">
+            <b>{tb.command}</b>
+            <code>{tb.plugin}</code>
+            <code>sha256:{tb.sha256.slice(0, 12)}…</code>
+          </div>
+          <span class="acts">
+            <button class="btn small" onclick={() => void revokeTrustedBinary(tb.command, tb.sha256)}>Revoke</button>
+          </span>
+        </li>
       {/each}
     </ul>
   {/if}

@@ -595,7 +595,9 @@ pub fn catalog(root: &Path, index: &str) -> Result<Vec<Available>> {
     }
 
     if out.is_empty() && !index.trim().is_empty() {
-        return available(root, index);
+        if let Ok(remote) = available(root, index) {
+            return Ok(remote);
+        }
     }
     Ok(out)
 }

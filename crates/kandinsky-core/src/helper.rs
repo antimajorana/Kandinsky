@@ -240,6 +240,11 @@ impl Helpers {
         ];
         // the core's address and the plugin's key: helper_api.rs
         env.extend(crate::helper_api::env(&self.root, id).into_iter().map(|(k, v)| (k.to_string(), std::ffi::OsString::from(v))));
+        let plan_env = crate::env::with_legacy(&env);
+        if let Ok(plan) = crate::platform::run_line::plan(run, &self.root, &plan_env) {
+            crate::binary_trust::authorize_blocking(&self.root, id, &plan.program, &plan.args, Some(&self.bus))
+                .map_err(|e| Error::CommandFailed(format!("plugin {id}: helper: {e}")))?;
+        }
         let mut cmd = crate::platform::run_line::command(run, &self.root, &env).map_err(|e| Error::CommandFailed(format!("plugin {id}: helper: {e}")))?;
         cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
         crate::platform::proc::own_group(&mut cmd);

@@ -19,8 +19,9 @@
   const list = $derived(isListKind(kind));
   const isDate = $derived(kind === "date" || kind === "datetime");
   const colFmt = $derived(effectiveColumnFormat(column));
-  const isStatus = $derived(!list && !isDate && colFmt === "status");
-  const isNum = $derived(kind === "number" || (!list && !isDate && (colFmt === "progress" || colFmt === "percent" || colFmt === "currency")));
+  const isStatus = $derived(!list && !isDate && (kind === "status" || colFmt === "status"));
+  const isRating = $derived(!list && !isDate && kind === "rating");
+  const isNum = $derived(kind === "number" || (!list && !isDate && !isRating && (colFmt === "progress" || colFmt === "percent" || colFmt === "currency")));
 
   // svelte-ignore state_referenced_locally -- the editor starts from the value it was opened on
   let items = $state(listOf(value));
@@ -104,6 +105,14 @@
       </button>
     </div>
     <input class="cell-edit" placeholder="Custom status…" aria-label="Edit {label}" bind:value={text} spellcheck="false" />
+  {:else if isRating}
+    {@const cur = Math.max(0, Math.min(5, Math.round(Number(text) || 0)))}
+    <div class="rating-row" role="radiogroup" aria-label={label}>
+      {#each [1, 2, 3, 4, 5] as star (star)}
+        <button type="button" class="star-btn" class:lit={cur >= star} onmousedown={(e) => e.preventDefault()}
+          onclick={() => { oncommit(cur === star ? null : star); done = true; onclose(); }}>★</button>
+      {/each}
+    </div>
   {:else if isDate}
     <input class="cell-edit" type={kind === "date" ? "date" : "datetime-local"} aria-label="Edit {label}" bind:value={text} />
   {:else if isNum}
@@ -144,4 +153,7 @@
   .chip .t { padding: 0 2px 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .x { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: var(--text-faint); }
   .x:hover { color: var(--text); background: var(--bg-hover); }
+  .rating-row { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; }
+  .star-btn { padding: 1px 2px; font-size: 13px; color: var(--text-faint); }
+  .star-btn.lit, .star-btn:hover { color: var(--yellow); }
 </style>

@@ -284,7 +284,7 @@ pub fn list(ws: &Workspace, rel: &str) -> Result<PageHistoryList> {
     };
     let (git_repo, git) = git_entries(ws, &rel);
     let mut entries: Vec<PageHistoryEntry> = snaps.into_iter().chain(git).collect();
-    entries.sort_by(|a, b| b.time.cmp(&a.time));
+    entries.sort_by_key(|a| std::cmp::Reverse(a.time));
     Ok(PageHistoryList { path: rel, git_repo, entries })
 }
 

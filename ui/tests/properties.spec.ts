@@ -31,39 +31,33 @@ async function note(page: Page, path: string, mode?: Mode) {
   return ed;
 }
 
-test("by default a note's properties are hidden behind one line that opens the panel on a click", async ({ page }) => {
+test("by default a note's properties are clickable inline under NoteHero with raw YAML hidden", async ({ page }) => {
   const before = await read(page, "props/hidden.md");
   const ed = await note(page, "props/hidden.md");
-  const chip = ed.locator(".cm-properties");
-  await expect(chip).toBeVisible();
-  await expect(chip).toContainText("Properties");
-  await expect(chip.locator(".cm-properties-n")).toHaveText("3");
-  await expect(ed.locator(".note-properties")).toHaveCount(0);
-  await expect(page.getByTestId("properties-panel")).toHaveCount(0);
-  await expect(ed.locator(".cm-content")).not.toContainText("physics");
+  const inline = page.getByTestId("inline-properties");
+  await expect(inline).toBeVisible();
+  await expect(inline.locator(".prop-row")).toHaveCount(3);
+  await expect(inline).toContainText("Concept");
+  await expect(ed.locator(".cm-content")).not.toContainText("type: Concept");
   await expect(ed.locator(".cm-content")).toContainText("The body.");
-  // Properties are rich controls in a right panel, hidden by default:
-  // the line opens the panel with its controls, the caret stays out of the YAML
-  await chip.click();
+  await expect(page.getByTestId("properties-panel")).toHaveCount(0);
+  // Properties panel is still available from the page menu / palette when wanted
+  await page.getByRole("button", { name: "Page actions" }).click();
+  await page.getByRole("menuitem", { name: "Properties drawer" }).click();
   const panel = page.getByTestId("properties-panel");
   await expect(panel).toBeVisible();
   await expect(panel).toContainText("Concept");
-  await expect(ed.locator(".cm-content")).not.toContainText("type: Concept");
-  // the YAML is one button away; the panel's × hides it, and it stays hidden on the next note
-  await panel.getByRole("button", { name: "Edit as text" }).click();
-  await expect(ed.locator(".cm-content")).toContainText("type: Concept");
   await panel.getByRole("button", { name: "Hide properties" }).click();
   await expect(panel).toHaveCount(0);
-  expect(await read(page, "props/hidden.md"), "hidden is a look: the file keeps its frontmatter").toBe(before);
+  expect(await read(page, "props/hidden.md"), "display keeps the file frontmatter untouched").toBe(before);
 });
 
-test("inline: the properties are a table in the note, with the spec's kinds", async ({ page }) => {
+test("inline: the properties show clickable controls under the title with the spec's kinds", async ({ page }) => {
   const ed = await note(page, "props/hidden.md", "inline");
-  const props = ed.locator(".note-properties");
+  const props = page.getByTestId("inline-properties");
   await expect(props.locator(".prop-row")).toHaveCount(3);
-  await expect(props.locator(".prop-key", { hasText: "date" })).toBeVisible();
-  await expect(props.locator(".prop-value.prop-datetime")).toContainText("2026-10-01 09:00");
-  await expect(props.locator(".prop-value.prop-enum")).toContainText("Concept");
+  await expect(props.locator(".k-name", { hasText: "date" })).toBeVisible();
+  await expect(props).toContainText("Concept");
   await expect(ed.locator(".cm-properties")).toHaveCount(0);
   await expect(page.getByTestId("properties-panel")).toHaveCount(0);
 });
@@ -74,7 +68,6 @@ test("panel: a date, a tag and a link are edited with controls; only the frontma
   const ed = await note(page, "props/panel.md", "panel");
   const panel = page.getByTestId("properties-panel");
   await expect(panel).toBeVisible();
-  await expect(ed.locator(".cm-properties"), "the note itself shows the folded line").toBeVisible();
   // five keys in file order, then the one its type (Talk) requires and lacks
   await expect(panel.locator(".row")).toHaveCount(6);
   await expect(panel.locator(".row").first()).toHaveAttribute("data-key", "date");
@@ -191,16 +184,16 @@ test("panel: known names and values are offered, [[ offers notes, an address and
   expect((await popup).url()).toContain("example.org/x");
 });
 
-// Raw YAML only on purpose: a plain click or Ctrl+Home keeps the table; Alt+click (or "Edit as text") shows the text.
-test("the properties turn into raw text only on purpose", async ({ page }) => {
+// Raw YAML only on purpose (Ctrl+E / Edit source): Live Preview keeps raw frontmatter hidden.
+test("the properties turn into raw text only on Ctrl+E", async ({ page }) => {
   const ed = await note(page, "props/hidden.md");
   const content = ed.locator(".cm-content");
   await content.getByText("The body.").click();
   await page.keyboard.press("Control+Home");
   await page.keyboard.press("ArrowUp");
   await expect(content).not.toContainText("type: Concept");
-  await ed.locator(".cm-properties").click({ modifiers: ["Alt"] });
+  await page.keyboard.press("Control+e");
   await expect(content).toContainText("type: Concept");
-  await content.getByText("The body.").click();
+  await page.keyboard.press("Control+e");
   await expect(content).not.toContainText("type: Concept");
 });

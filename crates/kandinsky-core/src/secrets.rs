@@ -17,6 +17,8 @@ type Table = BTreeMap<String, BTreeMap<String, String>>;
 pub struct Store {
     file: PathBuf,
     mounted: Option<PathBuf>,
+    vault_key: String,
+    use_keyring: bool,
 }
 
 /// FNV-1a, written out: the id must be the same in every Kandinsky version (std's hasher is not).
@@ -38,13 +40,18 @@ impl Store {
         let dir = crate::env::var_os("SECRETS_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| crate::vaults::list_file().parent().map(Path::to_path_buf).unwrap_or_default().join("secrets"));
-        Self { mounted: crate::env::var_os("SECRET_FILES").map(PathBuf::from), ..Self::in_dir(&dir, root) }
+        Self {
+            mounted: crate::env::var_os("SECRET_FILES").map(PathBuf::from),
+            use_keyring: crate::platform::keyring::active_for_vault(),
+            ..Self::in_dir(&dir, root)
+        }
     }
 
     pub fn in_dir(dir: &Path, root: &Path) -> Self {
         let full = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         let name: String = full.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default().chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').take(24).collect();
-        Self { file: dir.join(format!("{name}-{:016x}.json", fnv1a(full.to_string_lossy().as_bytes()))), mounted: None }
+        let vault_key = format!("{name}-{:016x}", fnv1a(full.to_string_lossy().as_bytes()));
+        Self { file: dir.join(format!("{vault_key}.json")), mounted: None, vault_key, use_keyring: false }
     }
 
     /// The file this store keeps its secrets in (named by the vault's path: `platform::dirs_migrate` renames it when
@@ -92,12 +99,32 @@ impl Store {
         if let Some(f) = self.mounted_file(plugin, name) {
             return Ok(Some(std::fs::read_to_string(f)?.trim_end_matches(['\n', '\r']).to_string()));
         }
+        if self.use_keyring {
+            if let Ok(Some(v)) = crate::platform::keyring::get(&self.vault_key, plugin, name) {
+                return Ok(Some(v));
+            }
+            if let Some(legacy) = self.read()?.get(plugin).and_then(|p| p.get(name)).cloned() {
+                if crate::platform::keyring::set(&self.vault_key, plugin, name, &legacy).is_ok() {
+                    let _ = self.delete_from_file(plugin, name);
+                }
+                return Ok(Some(legacy));
+            }
+            return Ok(None);
+        }
         Ok(self.read()?.get(plugin).and_then(|p| p.get(name)).cloned())
     }
 
     /// The names a plugin has stored (never the values).
     pub fn names(&self, plugin: &str) -> Result<Vec<String>> {
-        Ok(self.names_in(plugin, &self.read()?.remove(plugin).unwrap_or_default()))
+        let mut own = self.read()?.remove(plugin).unwrap_or_default();
+        if self.use_keyring {
+            if let Ok(kr_names) = crate::platform::keyring::list_names(&self.vault_key, plugin) {
+                for n in kr_names {
+                    own.entry(n).or_default();
+                }
+            }
+        }
+        Ok(self.names_in(plugin, &own))
     }
 
     /// The names in `own` (the file's, for `plugin`) and the host's mounted ones, sorted, once each.
@@ -112,6 +139,15 @@ impl Store {
     /// `plugin`'s secrets by name, every one (`only` None) or those of `only` it has, with one read of the file.
     pub fn values(&self, plugin: &str, only: Option<&[String]>) -> Result<BTreeMap<String, String>> {
         let mut own = self.read()?.remove(plugin).unwrap_or_default();
+        if self.use_keyring {
+            if let Ok(kr_names) = crate::platform::keyring::list_names(&self.vault_key, plugin) {
+                for n in kr_names {
+                    if let Ok(Some(v)) = crate::platform::keyring::get(&self.vault_key, plugin, &n) {
+                        own.insert(n, v);
+                    }
+                }
+            }
+        }
         let names: Vec<String> = match only {
             Some(names) => names.to_vec(),
             None => self.names_in(plugin, &own),
@@ -120,7 +156,9 @@ impl Store {
         for name in names {
             let v = match self.mounted_file(plugin, &name) {
                 Some(f) => Some(std::fs::read_to_string(f)?.trim_end_matches(['\n', '\r']).to_string()),
-                None => own.remove(&name),
+                None => own.remove(&name).or_else(|| {
+                    self.use_keyring.then(|| crate::platform::keyring::get(&self.vault_key, plugin, &name).ok().flatten()).flatten()
+                }),
             };
             if let Some(v) = v {
                 out.insert(name, v);
@@ -147,12 +185,27 @@ impl Store {
             return Err(Error::BadRequest(format!("secret name {name:?}: letters, digits, spaces, - _ . @ (at most 200)")));
         }
         self.refuse_mounted(plugin, name)?;
+        if self.use_keyring && crate::platform::keyring::set(&self.vault_key, plugin, name, value).is_ok() {
+            let _ = self.delete_from_file(plugin, name);
+            return Ok(());
+        }
         self.edit(|t| t.entry(plugin.to_string()).or_default().insert(name.to_string(), value.to_string()).as_deref() != Some(value)).map(|_| ())
     }
 
     /// True when there was one.
     pub fn delete(&self, plugin: &str, name: &str) -> Result<bool> {
         self.refuse_mounted(plugin, name)?;
+        let mut had = false;
+        if self.use_keyring {
+            if let Ok(existed) = crate::platform::keyring::delete(&self.vault_key, plugin, name) {
+                had |= existed;
+            }
+        }
+        had |= self.delete_from_file(plugin, name)?;
+        Ok(had)
+    }
+
+    fn delete_from_file(&self, plugin: &str, name: &str) -> Result<bool> {
         self.edit(|t| {
             let Some(p) = t.get_mut(plugin) else { return false };
             let had = p.remove(name).is_some();

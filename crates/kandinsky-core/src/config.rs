@@ -45,6 +45,7 @@ pub struct Config {
     pub automation: AutomationConfig,
     pub plugins: PluginsConfig,
     pub notes: NotesConfig,
+    pub calendar: CalendarConfig,
     pub web: WebConfig,
     pub notifications: NotificationsConfig,
     /// The desktop app around its window: closing it, the tray, starting with the session.
@@ -374,6 +375,8 @@ pub struct UiConfig {
     pub apps_order: Vec<String>,
     /// Apps not shown at the top of the left bar (same keys); they still open from the palette and their keys.
     pub apps_hidden: Vec<String>,
+    /// Folder name inside `.obsidian/themes/` whose `theme.css` overrides Kandinsky tokens; empty = built-in only.
+    pub obsidian_theme: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
@@ -781,11 +784,64 @@ pub struct NotificationsConfig {
     /// three times as long. 0: until you close it. (A phone keeps its notifications by its own rules.)
     #[schemars(range(min = 0, max = 120))]
     pub system_seconds: u32,
+    /// Show local desktop or toast reminders before upcoming calendar events and timed @date mentions.
+    pub calendar_reminders: bool,
 }
 
 impl Default for NotificationsConfig {
     fn default() -> Self {
-        Self { system: SystemNotices::default(), system_seconds: 10 }
+        Self { system: SystemNotices::default(), system_seconds: 10, calendar_reminders: true }
+    }
+}
+
+/// Which view opens first when entering the Calendar pane.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum CalendarDefaultView {
+    #[default]
+    Month,
+    Week,
+    Agenda,
+}
+
+/// Which weekday opens each row in the Calendar.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum WeekStart {
+    #[default]
+    Monday,
+    Sunday,
+}
+
+/// Native click-a-day calendar and event notes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(default)]
+pub struct CalendarConfig {
+    /// Folder where full-page event notes (`YYYY-MM-DD Title.md`) are created.
+    pub events_dir: String,
+    /// Default Calendar layout when opening the pane (`month`, `week`, `agenda`).
+    pub default_view: CalendarDefaultView,
+    /// First day of the week in grid views (`monday` or `sunday`).
+    pub week_start: WeekStart,
+    /// First hour displayed in the Week time grid (0–12).
+    #[schemars(range(min = 0, max = 12))]
+    pub day_start_hour: u8,
+    /// Vault `.base` files whose dated items appear directly on the Calendar.
+    pub bases: Vec<String>,
+    /// Optional `.ics` subscription URLs or vault-relative paths merged into Calendar views.
+    pub ics_feeds: Vec<String>,
+}
+
+impl Default for CalendarConfig {
+    fn default() -> Self {
+        Self {
+            events_dir: "events".into(),
+            default_view: CalendarDefaultView::default(),
+            week_start: WeekStart::default(),
+            day_start_hour: 8,
+            bases: Vec::new(),
+            ics_feeds: Vec::new(),
+        }
     }
 }
 
@@ -1087,6 +1143,7 @@ impl Default for Config {
             automation: AutomationConfig::default(),
             plugins: PluginsConfig::default(),
             notes: NotesConfig::default(),
+            calendar: CalendarConfig::default(),
             web: WebConfig::default(),
             notifications: NotificationsConfig::default(),
             desktop: DesktopConfig::default(),
@@ -1096,7 +1153,7 @@ impl Default for Config {
 
 impl Default for UiConfig {
     fn default() -> Self {
-        Self { theme: Theme::System, accent: String::new(), palette: Palette::default(), palette_dark: None, contrast: Contrast::default(), shape: Shape::default(), ui_font: String::new(), font_size: 14, gpu_rendering: GpuRendering::Auto, css_snippets_off: Vec::new(), tabs: TabsLayout::Horizontal, side_panel: SidePanelPlace::Dock, motion: Motion::default(), notices: NoticeCorner::default(), eink: Eink::Auto, eink_refresh: EinkRefresh::Often, restore_layout: true, tab_preview: true, tab_switcher: TabSwitcher::Glance, sleep_after_min: 10, awake_tabs: 8, libraries: Vec::new(), apps_order: Vec::new(), apps_hidden: Vec::new() }
+        Self { theme: Theme::System, accent: String::new(), palette: Palette::default(), palette_dark: None, contrast: Contrast::default(), shape: Shape::default(), ui_font: String::new(), font_size: 14, gpu_rendering: GpuRendering::Auto, css_snippets_off: Vec::new(), tabs: TabsLayout::Horizontal, side_panel: SidePanelPlace::Dock, motion: Motion::default(), notices: NoticeCorner::default(), eink: Eink::Auto, eink_refresh: EinkRefresh::Often, restore_layout: true, tab_preview: true, tab_switcher: TabSwitcher::Glance, sleep_after_min: 10, awake_tabs: 8, libraries: Vec::new(), apps_order: Vec::new(), apps_hidden: Vec::new(), obsidian_theme: String::new() }
     }
 }
 

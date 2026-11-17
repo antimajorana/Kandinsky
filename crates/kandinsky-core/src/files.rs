@@ -455,6 +455,7 @@ pub fn move_path(ws: &Workspace, from: &str, to: &str) -> Result<()> {
     if let Err(e) = crate::drawing_note::moved(ws, from, to) {
         eprintln!("kandinsky: the note of {from} did not follow it to {to}: {e}");
     }
+    let _ = crate::comments::moved(ws.root(), from, to);
     Ok(())
 }
 
@@ -487,12 +488,16 @@ pub fn trash(ws: &Workspace, rel: &str) -> Result<String> {
             })
         };
         match vault_write::guarded(&p, kind, system) {
-            Ok(()) => return Ok("the Trash".into()),
+            Ok(()) => {
+                let _ = crate::comments::removed(ws.root(), rel.trim_matches('/'));
+                return Ok("the Trash".into());
+            }
             Err(_) if failed.get() => {}
             Err(e) => return Err(e),
         }
     }
     let to = to_vault_trash(ws.root(), rel.trim_matches('/'))?;
+    let _ = crate::comments::removed(ws.root(), rel.trim_matches('/'));
     Ok(to.rsplit_once(&format!("/{}", rel.trim_matches('/'))).map_or(to.clone(), |(stamp, _)| stamp.to_string()))
 }
 

@@ -294,10 +294,9 @@ fn parse_currency(s: &str) -> Option<(Yaml, &'static str)> {
         ("EUR", r)
     } else if let Some(r) = rest.strip_prefix('£').or_else(|| rest.strip_prefix("GBP ")) {
         ("GBP", r)
-    } else if let Some(r) = rest.strip_prefix('¥').or_else(|| rest.strip_prefix("JPY ")) {
-        ("JPY", r)
     } else {
-        return None;
+        let r = rest.strip_prefix('¥').or_else(|| rest.strip_prefix("JPY "))?;
+        ("JPY", r)
     };
     let cleaned = num_str.trim().replace(',', "");
     if cleaned.is_empty() {

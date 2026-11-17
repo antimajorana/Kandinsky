@@ -9,7 +9,8 @@ test("Settings → AI agents: allow an agent, its token works for kandinsky mcp,
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+,");
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: "AI agents" }).click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByTestId("settings-advanced").locator("summary").click();
   const p = page.getByTestId("agents-panel");
   await expect(p).not.toContainText("not locked"); // the test core runs locked
 
@@ -38,7 +39,8 @@ test("Settings → AI agents: agent terminals can be kept out and let in again",
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+,");
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: "AI agents" }).click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByTestId("settings-advanced").locator("summary").click();
   const p = page.getByTestId("agents-panel");
   const box = p.getByRole("checkbox", { name: /Agent terminals Kandinsky starts get a token/ });
   await expect(box).toBeChecked();

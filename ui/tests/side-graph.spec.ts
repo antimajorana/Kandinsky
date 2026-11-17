@@ -15,29 +15,26 @@ test("Graph: Local follows the active note; Enter in the filter opens the match"
   await openNote(page, "hubbard.md", "Energy");
   await page.keyboard.press("Meta+Shift+G");
   const pane = page.locator(".graph-pane");
-  await expect(pane.locator(".meta")).toHaveText(/[1-9]\d* notes/);
-  await pane.getByLabel("Local (active note)").check();
-  await expect(pane.locator(".meta")).toHaveText("3 notes · 2 links");
+  await expect(pane.locator(".meta")).toHaveText(/[1-9]\d* nodes/);
+  await pane.getByTestId("graph-local-toggle").click();
+  await expect(pane.locator(".meta")).toHaveText("3 nodes · 2 links");
 
-  // a typed depth past the field's max is brought back to it
-  await pane.getByLabel("Depth").fill("9");
-  await pane.getByLabel("Depth").press("Tab");
-  await expect(pane.getByLabel("Depth")).toHaveValue("4");
-  await pane.getByLabel("Depth").fill("1");
-  await pane.getByLabel("Depth").press("Tab");
-  await expect(pane.locator(".meta")).toHaveText("3 notes · 2 links");
+  const hops = pane.getByRole("group", { name: "Local hop depth" });
+  await hops.getByRole("button", { name: "2 hops" }).click();
+  await expect(hops.getByRole("button", { name: "2 hops" })).toHaveAttribute("aria-pressed", "true");
+  await hops.getByRole("button", { name: "1 hop" }).click();
+  await expect(pane.locator(".meta")).toHaveText("3 nodes · 2 links");
 
   await openNote(page, "related.md", "See the");
   await page.keyboard.press("Meta+Shift+G");
-  await expect(pane.locator(".meta")).toHaveText("2 notes · 1 link");
+  await expect(pane.locator(".meta")).toHaveText("2 nodes · 1 link");
 
-  // the filter's Enter opens the note it names; Esc empties it
-  await pane.getByLabel("Filter notes").fill("hubbard");
-  await pane.getByLabel("Filter notes").press("Enter");
-  await expect(page.locator(".cm-content").first()).toContainText("Energy");
-  await page.keyboard.press("Meta+Shift+G");
-  await pane.getByLabel("Filter notes").press("Escape");
-  await expect(pane.getByLabel("Filter notes")).toHaveValue("");
+  await pane.getByRole("button", { name: "Graph settings" }).click();
+  await pane.getByRole("button", { name: "Filters" }).click();
+  await pane.getByLabel("Search files").fill("hubbard");
+  await expect(pane.locator(".meta")).toHaveText("1 node · 0 links");
+  await pane.getByLabel("Search files").fill("");
+  await expect(pane.locator(".meta")).toHaveText("2 nodes · 1 link");
 });
 
 // Nothing drawn: the canvas says why instead of staying blank.

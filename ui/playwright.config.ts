@@ -40,7 +40,7 @@ const files: Record<string, string> = {
   ".kandinsky/plugins/claude/plugin.toml": `title = "Claude"\nicon = "claude"\n\n[[agent]]\nid = "claude"\ntitle = "Claude"\nicon = "claude"\ncommand = "cat"\nsend_selection = "@{path}#L{from}-{to} "\n`,
   // the references library is the catalog-papers plugin's: its manifest, its helper the debug build (webServer builds it)
   ".kandinsky/plugins/catalog-papers/plugin.toml": readFileSync(fileURLToPath(new URL("../plugins/beta/catalog-papers/plugin.toml", import.meta.url)), "utf8")
-    .replace(/^run = .*$/m, `run = "${fileURLToPath(new URL("../target/debug/papers", import.meta.url)).replaceAll("\\", "/")}"`),
+    .replace(/^run = .*$/m, `run = "${fileURLToPath(new URL(`../target/debug/papers${process.platform === "win32" ? ".exe" : ""}`, import.meta.url)).replaceAll("\\", "/")}"`),
   // the Libraries page is the Catalog plugin's pane: its page, without its helper (tests/fixtures/catalog.ts)
   ...catalogFixture(),
   // the snippets are a plugin's: its build, as a vault holds it
@@ -142,11 +142,11 @@ export default defineConfig({
     // KANDINSKY_SERVER_CMD runs another build of the CLI instead, e.g. the Windows one under Wine
     // (`bash scripts/dev/windows.sh run kandinsky`; docs/design/DESIGN-desktop-ports.md)
     command: process.env.KANDINSKY_SERVER_CMD
-      ? `${process.env.KANDINSKY_SERVER_CMD} serve ${WS} --port ${PORT}`
-      : `cargo build -q -p kandinsky-papers -p kandinsky-ssh && cargo run -q -p kandinsky -- serve ${WS} --port ${PORT}`,
+      ? `${process.env.KANDINSKY_SERVER_CMD} serve "${WS}" --port ${PORT}`
+      : `cargo build -q -p kandinsky-papers -p kandinsky-ssh && cargo run -q -p kandinsky -- serve "${WS}" --port ${PORT}`,
     cwd: "..",
     // the vault list and the secret store are the test's own, and "open a vault" starts nothing
-    env: { ...(process.env as Record<string, string>), KANDINSKY_VAULTS: `${WS}-vaults.toml`, KANDINSKY_SECRETS_DIR: `${WS}-secrets`, KANDINSKY_SERVER_CONFIG: `${WS}-server.toml`, KANDINSKY_SERVER_STATE: `${WS}-server.json`, KANDINSKY_AGENTS_FILE: `${WS}-agents.json`, KANDINSKY_APP: "true", KANDINSKY_LOCAL_LOCK: "1", KANDINSKY_LOCAL_KEY: KEY, KANDINSKY_SSH_BIN: FAKE_SSH, KANDINSKY_FAKE_SFTP_ROOT: SFTP_ROOT },
+    env: { ...(process.env as Record<string, string>), KANDINSKY_VAULTS: `${WS}-vaults.toml`, KANDINSKY_SECRETS_DIR: `${WS}-secrets`, KANDINSKY_SERVER_CONFIG: `${WS}-server.toml`, KANDINSKY_SERVER_STATE: `${WS}-server.json`, KANDINSKY_AGENTS_FILE: `${WS}-agents.json`, KANDINSKY_APP: "true", KANDINSKY_LOCAL_LOCK: "1", KANDINSKY_LOCAL_KEY: KEY, KANDINSKY_SSH_BIN: FAKE_SSH, KANDINSKY_FAKE_SFTP_ROOT: SFTP_ROOT, KANDINSKY_TRUST_TEST_BINARIES: "1" },
     url: `http://127.0.0.1:${PORT}/`,
     timeout: 300_000,
     reuseExistingServer: false,

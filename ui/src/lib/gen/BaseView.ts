@@ -29,4 +29,20 @@ filters: Filter | null, sort: Array<SortKey>,
 /**
  * The property whose value is each card's picture (Obsidian's cards `image`).
  */
-image: string | null, };
+image: string | null, 
+/**
+ * Primary date property used by Calendar and Timeline views (`dateProperty`).
+ */
+date_property?: string, 
+/**
+ * End date property for multi-day Calendar spans and Timeline bars (`endDateProperty`).
+ */
+end_date_property?: string, 
+/**
+ * Relation property linking child sub-items to parent rows (`subItemsBy`).
+ */
+sub_items_by?: string, 
+/**
+ * Relation property indicating blocking dependencies (`blockedBy`).
+ */
+blocked_by?: string, };

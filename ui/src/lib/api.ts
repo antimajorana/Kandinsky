@@ -432,6 +432,57 @@ export const api = {
   /** Import from a local folder, `.zip`, or `.one` path on this machine. */
   importPath: (req: import("./gen/ImportPathRequest").ImportPathRequest) =>
     request<import("./gen/ImportReport").ImportReport>("POST", "/api/import/path", { body: req }),
+  /** Native Calendar & Daily Notes (lazy: does not create missing day note on GET). */
+  dayLog: (date: string) =>
+    request<import("./gen/DayLogInfo").DayLogInfo>("GET", "/api/log/day", { query: { day: date } }),
+  ensureDayLog: (date: string) =>
+    request<import("./gen/DayLogInfo").DayLogInfo>("POST", "/api/log/day", { body: { day: date } }),
+  calendar: (from: string, to: string, bases?: string[]) =>
+    request<import("./gen/CalendarRangeResponse").CalendarRangeResponse>("GET", "/api/calendar", {
+      query: { from, to, bases: bases?.length ? bases.join(",") : undefined },
+    }),
+  upsertCalendarEvent: (req: import("./gen/CalendarEventUpsert").CalendarEventUpsert) =>
+    request<import("./gen/CalendarEvent").CalendarEvent>("POST", "/api/calendar/event", { body: req }),
+  deleteCalendarEvent: (id: string) =>
+    request<void>("DELETE", "/api/calendar/event", { query: { id } }),
+  promoteCalendarEvent: (id: string) =>
+    request<import("./gen/CalendarPromoteResult").CalendarPromoteResult>("POST", "/api/calendar/promote", { body: { id } }),
+  importCalendarIcs: (req: import("./gen/IcsImportRequest").IcsImportRequest) =>
+    request<import("./gen/IcsImportResult").IcsImportResult>("POST", "/api/calendar/ics/import", { body: req }),
+  calendarIcsExportUrl: () => url("/api/calendar/ics/export"),
+  /** Base guided formulas & recurring note templates. */
+  formulaPreview: (req: import("./gen/FormulaPreviewRequest").FormulaPreviewRequest) =>
+    request<import("./gen/FormulaPreviewResponse").FormulaPreviewResponse>("POST", "/api/base/formula-preview", { body: req }),
+  runBaseRecurring: (path: string) =>
+    request<{ created: string[] }>("POST", "/api/base/run-recurring", { body: { path } }),
+  /** Synced block source edits. */
+  updateSyncedBlock: (req: import("./gen/SyncedBlockWrite").SyncedBlockWrite) =>
+    request<import("./gen/SyncedBlockResult").SyncedBlockResult>("POST", "/api/note/synced-block", { body: req }),
+  /** Inline margin comments (sidecar `.kandinsky/comments`). */
+  comments: (path: string) =>
+    request<import("./gen/CommentThread").CommentThread[]>("GET", "/api/comments", { query: { path } }),
+  mutateComments: (req: import("./gen/CommentMutation").CommentMutation) =>
+    request<import("./gen/CommentThread").CommentThread[]>("POST", "/api/comments", { body: req }),
+  /** Obsidian `.obsidian/themes` discovery & CSS payload. */
+  obsidianThemes: () =>
+    request<import("./gen/ObsidianThemeInfo").ObsidianThemeInfo[]>("GET", "/api/obsidian-themes"),
+  obsidianThemeCss: async (id: string): Promise<string> => {
+    const res = await fetch(url("/api/obsidian-themes/css", { id }), { credentials: "same-origin" });
+    if (!res.ok) throw new ApiError(res.status, `GET /api/obsidian-themes/css: ${res.status} ${await res.text()}`);
+    return res.text();
+  },
+  /** Plugin OS-binary execution trust decisions. */
+  securityBinaries: () =>
+    request<{ pending: import("./gen/PendingBinaryApproval").PendingBinaryApproval[]; trusted: import("./gen/TrustedBinary").TrustedBinary[] }>(
+      "GET",
+      "/api/security/binaries",
+    ),
+  decideBinary: (req: import("./gen/BinaryDecision").BinaryDecision) =>
+    request<void>("POST", "/api/security/binaries/decide", { body: req }),
+  revokeBinary: (command: string, sha256?: string) =>
+    request<import("./gen/TrustedBinary").TrustedBinary[]>("DELETE", "/api/security/binaries", {
+      query: { command, sha256 },
+    }),
 };
 
 // --- WebSockets ----------------------------------------------------------------------------

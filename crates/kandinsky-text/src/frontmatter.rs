@@ -10,9 +10,38 @@ fn render(key: &str, value: &Value) -> String {
         Value::Sequence(items) if !items.is_empty() => {
             let mut out = format!("{key}:\n");
             for it in items {
-                out.push_str(&format!("  - {}\n", scalar(it)));
+                let s = scalar(it);
+                let mut lines = s.lines();
+                if let Some(first) = lines.next() {
+                    out.push_str(&format!("  - {first}\n"));
+                    for rest in lines {
+                        if rest.is_empty() {
+                            out.push('\n');
+                        } else {
+                            out.push_str(&format!("    {rest}\n"));
+                        }
+                    }
+                } else {
+                    out.push_str("  - null\n");
+                }
             }
             out
+        }
+        Value::Mapping(_) => {
+            let s = scalar(value);
+            if s.is_empty() || s == "{}" {
+                format!("{key}: {{}}\n")
+            } else {
+                let mut out = format!("{key}:\n");
+                for line in s.lines() {
+                    if line.is_empty() {
+                        out.push('\n');
+                    } else {
+                        out.push_str(&format!("  {line}\n"));
+                    }
+                }
+                out
+            }
         }
         Value::Null => format!("{key}:\n"),
         v => format!("{key}: {}\n", scalar(v)),

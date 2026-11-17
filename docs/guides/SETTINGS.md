@@ -197,3 +197,11 @@ After a day of features, Settings had fallen behind: many new things were not in
 - **Not done, on purpose:** a device name for live editing (config is per vault and shared between devices, so a
   name there would be every device's); a Vaults page (it comes with "core serves all"); a kinds editor for
   the catalog (it comes with the library page).
+
+## Streamlined 7-Page Layout
+
+To keep normal workspaces uncluttered, `ui/src/lib/settings-pages.ts` consolidates Settings into 7 primary workspace categories plus active extensions:
+
+1. **Workspace:** `Appearance`, `Editor & Writing`, `Calendar & Daily Notes`, `Files & Search`, `References & PDF`, and `Keyboard Shortcuts`.
+2. **Extensions:** the `Extensions` page (manage active plugins, browse catalog extensions, review trusted OS binaries) plus navigation entries only for enabled extensions that declare settings (`fields` or custom `registerSettingsSection` panels).
+3. **Folded Advanced & Server Settings:** developer plumbing (`desktop.*`, `terminal.*`, `automation.*`, `lsp.*`, `notifications.*`), `Apps`/`Scripts`, `ServerPanel`, and `AgentsPanel` remain accessible inside a collapsed `<details>` drawer at the bottom of `Extensions`.

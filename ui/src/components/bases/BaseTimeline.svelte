@@ -5,6 +5,7 @@
   import { openPath } from "../../lib/dock";
   import { shownName } from "../../lib/paths";
   import { context, setHover } from "../../lib/context.svelte";
+  import { toast } from "../../lib/state.svelte";
   import { groupRows, NO_VALUE } from "../../lib/base-groups";
   import { classifyStatus } from "../../lib/base-format";
   import type { BaseView } from "../../lib/gen/BaseView";
@@ -232,6 +233,146 @@
     const isSpan = eDay > sDay;
     return { isSpan, leftPct: ((clampS - winRange.startDay) / winRange.totalDays) * 100, widthPct: isSpan ? Math.max(1.4, ((clampE + 1 - clampS) / winRange.totalDays) * 100) : 0 };
   }
+
+  // --- Dependencies (`view.blocked_by`), SVG arrows & cascade drag undo ------------------------------------
+  const depColIdx = $derived(
+    view.blocked_by
+      ? view.columns.findIndex((c) => c.id === view.blocked_by || c.key === view.blocked_by || c.id === `note.${view.blocked_by}`)
+      : -1,
+  );
+  const relProps = $derived(
+    props.filter((p) => !p.id.startsWith("file.") && p.id !== startEntry?.col.id && p.id !== endEntry?.col.id),
+  );
+  function resolveCellPaths(cell: BaseCell | undefined, byName: Map<string, string>): string[] {
+    if (!cell || cell.t === "null") return [];
+    if (cell.t === "link") {
+      const p = cell.path ?? byName.get(cell.text.toLowerCase());
+      return p ? [p] : [];
+    }
+    if (cell.t === "list") return cell.items.flatMap((it) => resolveCellPaths(it, byName));
+    if (cell.t === "text") {
+      return cell.value
+        .split(",")
+        .map((s) => s.trim().replace(/^\[\[/, "").replace(/\]\]$/, "").split("|")[0].trim().toLowerCase())
+        .map((k) => byName.get(k) ?? "")
+        .filter(Boolean);
+    }
+    return [];
+  }
+
+  const depData = $derived.by(() => {
+    const empty = { arrows: [] as { id: string; d: string; conflict: boolean }[], conflicts: new Set<string>(), totalH: 120 };
+    const nameMap = new Map<string, string>();
+    for (const r of view.rows) {
+      nameMap.set(r.path.toLowerCase(), r.path);
+      nameMap.set(shownName(r.path).toLowerCase(), r.path);
+    }
+    type Pos = { sDay: number; eDay: number; row: BaseRow; leftPct: number; widthPct: number; isSpan: boolean; y: number };
+    const posMap = new Map<string, Pos>();
+    let y = 29;
+    for (const lane of computed.lanes) {
+      const col = collapsedLanes.has(lane.title);
+      const h = col ? 35 : Math.max(44, lane.tracks * 28 + 12) + 1;
+      if (!col) {
+        for (const b of lane.bars) {
+          const d = liveDrag?.path === b.row.path ? liveDrag : null;
+          const sDay = d ? d.sDay : b.sDay;
+          const eDay = d ? d.eDay : b.eDay;
+          const g = d ? barGeom(d.sDay, d.eDay) : b;
+          posMap.set(b.row.path, { sDay, eDay, row: b.row, leftPct: g.leftPct, widthPct: g.widthPct, isSpan: g.isSpan, y: y + 6 + b.track * 28 + 11 });
+        }
+      }
+      y += h;
+    }
+    empty.totalH = Math.max(80, y);
+    if (depColIdx < 0) return empty;
+
+    const arrows: { id: string; d: string; conflict: boolean }[] = [];
+    const conflicts = new Set<string>();
+    for (const [succPath, succ] of posMap) {
+      const preds = resolveCellPaths(succ.row.cells[depColIdx], nameMap);
+      for (const predPath of preds) {
+        const pred = posMap.get(predPath);
+        if (!pred || predPath === succPath) continue;
+        const x1 = (pred.isSpan ? pred.leftPct + pred.widthPct : pred.leftPct + 1.2) * 10;
+        const x2 = succ.leftPct * 10;
+        const dx = Math.max(24, Math.abs(x2 - x1) * 0.45);
+        const d = `M ${x1.toFixed(1)} ${pred.y.toFixed(1)} C ${(x1 + dx).toFixed(1)} ${pred.y.toFixed(1)}, ${(x2 - dx).toFixed(1)} ${succ.y.toFixed(1)}, ${x2.toFixed(1)} ${succ.y.toFixed(1)}`;
+        const conflict = pred.eDay > succ.sDay;
+        if (conflict) conflicts.add(succPath);
+        arrows.push({ id: `${predPath}->${succPath}`, d, conflict });
+      }
+    }
+    return { arrows, conflicts, totalH: Math.max(80, y) };
+  });
+
+  let depUndoStack = $state<{ writes: { path: string; key: string; value: unknown }[] }[]>([]);
+  function undoDepCascade(): void {
+    const top = depUndoStack[depUndoStack.length - 1];
+    if (!top || !onwrite) return;
+    depUndoStack = depUndoStack.slice(0, -1);
+    for (const w of top.writes) onwrite(w.path, w.key, w.value);
+    toast("Reverted dependent schedule");
+  }
+
+  function trackDepDrag(bar: BarItem): void {
+    if (depColIdx < 0 || !onwrite || !startEntry?.col.key) return;
+    const origEnd = bar.eDay;
+    const predPath = bar.row.path;
+    const onCapUp = () => {
+      window.removeEventListener("pointerup", onCapUp, true);
+      if (!liveDrag || liveDrag.path !== predPath || !startEntry?.col.key) return;
+      const newEnd = liveDrag.eDay;
+      if (newEnd <= origEnd) return;
+      const nameMap = new Map<string, string>();
+      const byPath = new Map<string, BarItem>();
+      for (const lane of computed.lanes) {
+        for (const it of lane.bars) {
+          byPath.set(it.row.path, it);
+          nameMap.set(it.row.path.toLowerCase(), it.row.path);
+          nameMap.set(shownName(it.row.path).toLowerCase(), it.row.path);
+        }
+      }
+      const adj = new Map<string, BarItem[]>();
+      for (const it of byPath.values()) {
+        for (const p of resolveCellPaths(it.row.cells[depColIdx], nameMap)) {
+          const arr = adj.get(p) ?? [];
+          arr.push(it);
+          adj.set(p, arr);
+        }
+      }
+      const writes: { path: string; key: string; value: unknown }[] = [];
+      const shiftedEnds = new Map<string, number>([[predPath, newEnd]]);
+      const queue = [predPath];
+      const visited = new Set<string>([predPath]);
+      while (queue.length) {
+        const cur = queue.shift()!;
+        const parentEnd = shiftedEnds.get(cur) ?? newEnd;
+        for (const succ of adj.get(cur) ?? []) {
+          if (visited.has(succ.row.path)) continue;
+          visited.add(succ.row.path);
+          if (succ.sDay < parentEnd) {
+            const shift = parentEnd - succ.sDay;
+            writes.push({ path: succ.row.path, key: startEntry.col.key, value: withPreservedTime(succ.row.cells[startEntry.idx], fromDay(succ.sDay)) });
+            onwrite(succ.row.path, startEntry.col.key, withPreservedTime(succ.row.cells[startEntry.idx], fromDay(succ.sDay + shift)));
+            if (succ.hasEnd && endEntry?.col.key) {
+              writes.push({ path: succ.row.path, key: endEntry.col.key, value: withPreservedTime(succ.row.cells[endEntry.idx], fromDay(succ.eDay)) });
+              onwrite(succ.row.path, endEntry.col.key, withPreservedTime(succ.row.cells[endEntry.idx], fromDay(succ.eDay + shift)));
+            }
+            shiftedEnds.set(succ.row.path, succ.eDay + shift);
+          } else {
+            shiftedEnds.set(succ.row.path, succ.eDay);
+          }
+          queue.push(succ.row.path);
+        }
+      }
+      if (writes.length) {
+        depUndoStack = [...depUndoStack.slice(-7), { writes }];
+        toast("Shifted dependent tasks", "Click Undo cascade in timeline bar to revert");
+      }
+    };
+    window.addEventListener("pointerup", onCapUp, true);
+  }
   function detachBarDrag(): void {
     window.removeEventListener("pointermove", onBarMove); window.removeEventListener("pointerup", onBarUp);
     window.removeEventListener("pointercancel", cancelBarDrag); window.removeEventListener("keydown", onBarKey);
@@ -338,8 +479,41 @@
   {#if !dateColumns.length}
     <p class="empty">No date columns found in this view.</p>
   {:else}
+    <div class="tl-dep-bar">
+      <label class="pill">
+        <span class="lbl">Blocked by</span>
+        <select aria-label="Dependency property" value={view.blocked_by ?? ""} onchange={(e) => onedit({ op: "dependency_property", property: e.currentTarget.value || null })}>
+          <option value="">None</option>
+          {#each relProps as p (p.id)}
+            <option value={p.id.replace(/^note\./, "")}>{p.label}</option>
+          {/each}
+        </select>
+      </label>
+      {#if depData.conflicts.size > 0}
+        <span class="dep-warn">{depData.conflicts.size} dependency conflict{depData.conflicts.size === 1 ? "" : "s"}</span>
+      {/if}
+      {#if depUndoStack.length > 0}
+        <button type="button" class="today-btn" onclick={undoDepCascade}>Undo cascade</button>
+      {/if}
+    </div>
     <div class="tl-scroll">
       <div class="tl-grid" class:zoom-year={zoom === "year"}>
+        {#if depData.arrows.length > 0}
+          <svg class="dep-svg" viewBox="0 0 1000 {depData.totalH}" style:height="{depData.totalH}px" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <marker id="tl-arrow-ok" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M0,1 L7,4 L0,7 Z" fill="var(--accent)"></path>
+              </marker>
+              <marker id="tl-arrow-err" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M0,1 L7,4 L0,7 Z" fill="var(--red)"></path>
+              </marker>
+            </defs>
+            {#each depData.arrows as a (a.id)}
+              <path d={a.d} class="dep-path" class:conflict={a.conflict} vector-effect="non-scaling-stroke"
+                marker-end={a.conflict ? "url(#tl-arrow-err)" : "url(#tl-arrow-ok)"}></path>
+            {/each}
+          </svg>
+        {/if}
         <div class="tl-ruler">
           <div class="lane-sticky ruler-corner">Swimlane</div>
           <div class="canvas ruler-canvas">
@@ -373,12 +547,12 @@
                   {@const g = drag ? barGeom(drag.sDay, drag.eDay) : b}
                   {@const sYmd = drag ? fromDay(drag.sDay) : b.sYmd}
                   {@const eYmd = drag ? fromDay(drag.eDay) : b.eYmd}
-                  <button type="button" class="tl-item" class:span={g.isSpan} class:lit={lit(b.row.path)} class:movable={canWriteStart} class:dragging={Boolean(drag)}
+                  <button type="button" class="tl-item" class:span={g.isSpan} class:lit={lit(b.row.path)} class:conflict={depData.conflicts.has(b.row.path)} class:movable={canWriteStart} class:dragging={Boolean(drag)}
                     style:left="{g.leftPct}%" style:width={g.isSpan ? `${g.widthPct}%` : undefined} style:top="{6 + b.track * 28}px"
                     style:--bar-color={laneColor(lane.title)}
                     title="{rowTitle(b.row)} — {g.isSpan ? `${sYmd} → ${eYmd}` : sYmd} ({b.row.path})"
                     onmouseenter={() => hoverIn(b.row.path)} onmouseleave={hoverOut}
-                    onpointerdown={(e) => startBarDrag(e, b)}
+                    onpointerdown={(e) => { trackDepDrag(b); startBarDrag(e, b); }}
                     onclick={(e) => { if (!suppressClick && !(e.target as HTMLElement).closest("[data-grip]")) openPath(b.row.path); }}
                     onkeydown={(e) => nudgeBar(e, b)}>
                     {#if g.isSpan && canWriteStart}<span class="bar-grip start" data-grip="start" aria-hidden="true"></span>{/if}
@@ -434,7 +608,13 @@
   .win-lbl { min-width: 98px; text-align: center; font-size: .88em; font-weight: 600; color: var(--heading, var(--text)); font-variant-numeric: tabular-nums; }
 
   .tl-scroll { flex: 1; min-height: 0; overflow: auto; }
-  .tl-grid { display: flex; flex-direction: column; min-width: 760px; }
+  .tl-grid { display: flex; flex-direction: column; min-width: 760px; position: relative; }
+  .tl-dep-bar { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-bottom: 1px solid var(--border); background: var(--bg-side); }
+  .dep-warn { font-size: .82em; font-weight: 600; color: var(--red); padding: 1px 7px; border-radius: 99px; background: color-mix(in srgb, var(--red) 12%, transparent); }
+  .dep-svg { position: absolute; left: 180px; top: 0; width: calc(100% - 180px); pointer-events: none; z-index: 2; overflow: visible; }
+  .dep-path { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-opacity: .7; }
+  .dep-path.conflict { stroke: var(--red); stroke-width: 2; stroke-opacity: .95; }
+  .tl-item.conflict { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }
   .tl-grid.zoom-year { min-width: 880px; }
   .tl-ruler, .tl-lane { display: flex; border-bottom: 1px solid var(--border); }
   .tl-lane.collapsed { height: 34px; min-height: 34px; }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { parse as parseYaml } from "yaml";
   import { errText } from "../lib/text";
   import { listVault } from "../lib/vault";
   import { reloadOnChange } from "../lib/reload-on-change";
@@ -13,10 +14,9 @@
   import { api, ApiError } from "../lib/api";
   import { closePanel, open, openPath, type PaneProps } from "../lib/dock";
   import { openHome } from "../lib/actions";
-  import { allBlocks, getBlock, mountBlock, optionFields } from "../lib/blocks";
+  import { getBlock, mountBlock, optionFields } from "../lib/blocks";
   import BlockOptions from "../components/BlockOptions.svelte";
-  import { rowViewTypes } from "../lib/views";
-  import { pick, type PickItem } from "../lib/palette.svelte";
+  import { pick } from "../lib/palette.svelte";
   import { app, toast } from "../lib/state.svelte";
   import { isNotionShell } from "../lib/shell-mode.svelte";
   import { isFileStarred, toggleFileStar } from "../lib/bookmarks.svelte";
@@ -27,6 +27,7 @@
   } from "../lib/page-doc";
   import ContextMenu from "../components/ContextMenu.svelte";
   import NoteHero from "../components/NoteHero.svelte";
+  import PageBlockPicker from "../components/PageBlockPicker.svelte";
   import { pluginMenu } from "../lib/plugin-menus";
   import Icon from "../components/Icon.svelte";
   import { openPageHistory } from "../lib/page-history.svelte";
@@ -49,6 +50,7 @@
   let titleDraft = $state("");
   let newPropKey = $state("");
   let newPropVal = $state("");
+  let pickerDrop = $state<((b: PageBlock) => void) | null>(null);
 
   function show(src: string): void {
     const p = parsePage(src);
@@ -107,33 +109,30 @@
   // two columns keep the proportions of the old Today screen unless the file says otherwise
   const cols = (r: PageModel["rows"][number]) => (r.widths ?? (r.columns.length === 2 ? [1.25, 1] : r.columns.map(() => 1))).map((w) => `minmax(0, ${w}fr)`).join(" ");
 
-  // --- arranging: add ---------------------------------------------------------------------------------
-  const SECTIONS: [string, (type: string) => boolean][] = [
-    ["Today", (t) => ["greeting", "capture", "focus", "log", "tasks", "activity"].includes(t)],
-    ["Widgets", (t) => ["chart", "progress", "countdown", "pomodoro", "habits", "clock", "weather", "button"].includes(t)],
-    ["Content", (t) => ["note", "text", "base", "editor", "pdf", "image", "file-table", "excalidraw", "canvas", "web"].includes(t)],
-    ["From plugins", (t) => t.includes(".")],
-  ];
-  const sectionOf = (type: string) => SECTIONS.find(([, has]) => has(type))?.[0] ?? "Tools";
-  const HIDDEN = new Set(["commit", "diff", "plugin", "today", "page"]); // need ids a person does not type
+  function openVisualPicker(placeFn: (b: PageBlock) => void): void {
+    pickerDrop = placeFn;
+  }
 
-  /** Ask which block (and which file, when it shows one), then hand it to `place`. */
-  function addBlock(place: (b: PageBlock) => void): void {
-    const items: PickItem[] = [
-      ...rowViewTypes().map((t) => ({ value: t, title: `${t[0].toUpperCase()}${t.slice(1)} of tasks`, detail: "open tasks, by date", icon: "today" as const, section: "Views" })),
-      ...allBlocks().filter((b) => !HIDDEN.has(b.type)).map((b) => ({ value: b.type, title: b.title, detail: b.type, icon: b.icon ?? ("chart" as const), section: sectionOf(b.type) })),
-    ].sort((a, b) => a.section.localeCompare(b.section));
-    pick({
-      placeholder: "Add a block…", tag: "Block", icon: "plus", items,
-      onpick: (type) => {
-        const b = getBlock(type);
-        const done = (options: Record<string, unknown> = {}) => { place(newBlock(type, options)); void save(); };
-        if (b?.file) setTimeout(() => pickFile(b.file!, (p) => done({ path: p })), 0); // after this palette closes
-        else if (type === "text") done({ text: "Write here." });
-        else if (type === "web") setTimeout(() => pick({ placeholder: "Address (https://…)", tag: "Web page", icon: "globe", items: [], typed: (t) => `Show ${t}`, typedAs: { section: "", icon: "globe" }, onpick: (url) => done({ url }) }), 0);
-        else done(b ? {} : { from: "tasks" });
-      },
-    });
+  function applyPickerYaml(yamlSrc: string): void {
+    const placeFn = pickerDrop;
+    pickerDrop = null;
+    if (!placeFn) return;
+    let parsed: unknown;
+    try {
+      parsed = parseYaml(yamlSrc);
+    } catch {
+      return;
+    }
+    const obj = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+    const { view: rawView, ...opts } = obj;
+    const viewType = typeof rawView === "string" && rawView.trim() ? rawView.trim() : "text";
+    const blkDef = getBlock(viewType);
+    if (blkDef?.file && !opts.path) {
+      setTimeout(() => pickFile(blkDef.file!, (p) => { placeFn(newBlock(viewType, { ...opts, path: p })); void save(); }), 0);
+    } else {
+      placeFn(newBlock(viewType, opts));
+      void save();
+    }
   }
   function pickFile(match: RegExp | true, then: (path: string) => void): void {
     pick({
@@ -360,7 +359,7 @@
         { label: arranging ? "Finish arranging" : "Arrange blocks", icon: arranging ? "check" : "edit", run: () => { arranging = !arranging; } },
         { label: "Version history & restore…", icon: "clock", run: showPageHistory },
         { label: "Open Git repository pane", icon: "git", run: () => open({ kind: "git" }) },
-        { label: "Edit YAML as text", icon: "file-code", run: () => open({ kind: "editor", path }) },
+        { label: "Edit page source", icon: "file-code", run: () => open({ kind: "editor", path }) },
         { label: "Copy file path", icon: "file-text", run: () => void copyPath(path) },
         "sep",
         { label: "Move page to Trash", icon: "trash", danger: true, run: () => void trashThisPage() },
@@ -399,7 +398,7 @@
 {#snippet slot(to: Drop, key: string, kind: "between" | "row" | "column")}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="drop {kind}" data-slot={key} class:over={over === key} ondragover={(e) => slotOver(e, key)} ondragleave={() => { if (over === key) over = ""; }} ondrop={(e) => drop(e, to)}>
-    <button class="add" onclick={() => addBlock(place(to))} aria-label={kind === "column" ? "Add a block in a new column" : kind === "row" ? "Add a block in a new row" : "Add a block here"}
+      <button type="button" class="add" onclick={() => openVisualPicker(place(to))} aria-label={kind === "column" ? "Add a block in a new column" : kind === "row" ? "Add a block in a new row" : "Add a block here"}
       title={kind === "column" ? "Add a column" : "Add a block"}><Icon name="plus" size={13} /></button>
   </div>
 {/snippet}
@@ -449,20 +448,17 @@
         <button type="button" class="tool" onclick={undoLast} disabled={!undo.length} title="Undo the last change (Ctrl+Z)"><Icon name="undo" size={13} /> Undo</button>
         <button type="button" class="tool primary" onclick={() => (arranging = false)} title="Finish arranging (Esc)"><Icon name="check" size={13} /> Done</button>
       {:else}
-        <button type="button" class="tool" onclick={() => (arranging = true)} title="Move, add, resize and remove blocks by hand"><Icon name="edit" size={13} /> Arrange</button>
-        <button type="button" class="tool edit-txt-btn" onclick={() => open({ kind: "editor", path })} title="This screen is the file {path}: edit it as text"><Icon name="file-code" size={13} /> Edit as text</button>
+        <button type="button" class="tool" onclick={() => openVisualPicker((b) => insertRow(page, page.rows.length, b))} title="Add a dashboard block"><Icon name="plus" size={13} /> Add block</button>
+        <button type="button" class="tool" onclick={() => (arranging = true)} title="Rearrange blocks and columns"><Icon name="sliders" size={13} /> Layout</button>
       {/if}
-      <button type="button" class="top-pill star-pill" class:starred={starred}
-        onclick={() => toggleFileStar(path, pageTitle)}
-        title={starred ? "Remove from Favorites" : "Add to Favorites"}>
-        {starred ? "★ Starred" : "★ Star"}
+      <button type="button" class="icon-btn star-icon" class:starred={starred}
+        aria-label={starred ? "Remove from Favorites" : "Add to Favorites"}
+        title={starred ? "Remove from Favorites" : "Add to Favorites"}
+        onclick={() => toggleFileStar(path, pageTitle)}>
+        {starred ? "★" : "☆"}
       </button>
-      <button type="button" class="top-link" data-testid="page-history-btn" onclick={showPageHistory} title="Per-page version history, diff & restore">History</button>
-      <button type="button" class="top-more" aria-label="Page actions" title="Page actions" onclick={openPageActions}>···</button>
       <button type="button" class="top-pill" onclick={openShareMenu} title="Copy or export page">Share</button>
-      <button type="button" class="icon-btn trash-btn" title="Move to Trash" aria-label="Move to Trash" onclick={() => void trashThisPage()}>
-        <Icon name="trash" size={14} />
-      </button>
+      <button type="button" class="top-more" aria-label="Page actions" title="Page actions" onclick={openPageActions}>···</button>
     </div>
   </header>
 
@@ -553,13 +549,18 @@
         {/each}
         {#if arranging}{@render slot({ kind: "row", row: page.rows.length }, "rend", "row")}{/if}
         {#if !page.rows.length && !arranging}
-          <section class="pb card empty"><strong>This page is empty.</strong>
-            <button class="link" onclick={() => { arranging = true; }}>Arrange it</button> to add blocks: tasks, a calendar, a note, a PDF, the Library…</section>
+          <section class="pb card empty">
+            <strong>This dashboard is ready.</strong>
+            <button class="link" onclick={() => openVisualPicker((b) => insertRow(page, 0, b))}>+ Add your first block</button>
+          </section>
         {/if}
       {/if}
     </div>
   </div>
 </div>
+{#if pickerDrop}
+  <PageBlockPicker onpick={applyPickerYaml} onclose={() => (pickerDrop = null)} />
+{/if}
 {#if menu}<ContextMenu x={menu.x} y={menu.y} items={menu.items} onclose={() => (menu = null)} />{/if}
 {#if editing}
   {@const { block: b, at } = editing}

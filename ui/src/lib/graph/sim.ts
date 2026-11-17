@@ -24,8 +24,8 @@ export class Sim {
   private strength: Float64Array = new Float64Array(0);
   alpha = 1;
   alphaTarget = 0;
-  readonly alphaMin = 0.001;
-  readonly alphaDecay = 1 - Math.pow(0.001, 1 / 300); // from 1 to rest in about 300 steps
+  readonly alphaMin = 0.005;
+  readonly alphaDecay = 1 - Math.pow(0.001, 1 / 300); // original cooling curve; stops cleanly at alphaMin
   readonly velocityDecay = 0.4;
   forces: Forces;
 
@@ -83,6 +83,10 @@ export class Sim {
       p.vx -= p.x * c; p.vy -= p.y * c;
       p.vx *= 1 - this.velocityDecay; p.vy *= 1 - this.velocityDecay;
       p.x += p.vx; p.y += p.vy;
+    }
+    if (this.alpha < this.alphaMin && this.alphaTarget <= 0) {
+      this.alpha = 0;
+      for (const p of ns) { p.vx = 0; p.vy = 0; }
     }
   }
 

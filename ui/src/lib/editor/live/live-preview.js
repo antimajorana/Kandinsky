@@ -1062,7 +1062,7 @@ export function buildDecorations(state, ranges, options = {}) {
       // Notion document sheet: collapse frontmatter + blank gap above the leading `# H1` page title,
       // and place the compact property rows directly underneath `# H1`.
       fmHiddenTo = topH1.prevEnd;
-      const spec = opts.noteProperties(state.doc.sliceString(0, fmEnd));
+      const spec = opts.noteProperties(state.doc.sliceString(0, fmEnd), state);
       add(
         0,
         topH1.prevEnd,
@@ -1084,7 +1084,7 @@ export function buildDecorations(state, ranges, options = {}) {
         })
       );
     } else {
-      const spec = opts.noteProperties(state.doc.sliceString(0, fmEnd));
+      const spec = opts.noteProperties(state.doc.sliceString(0, fmEnd), state);
       add(
         0,
         fmEnd,
@@ -1098,6 +1098,21 @@ export function buildDecorations(state, ranges, options = {}) {
   } else {
     const bareH1 = !title ? leadingH1(state.doc, 0) : null;
     if (bareH1) add(bareH1.line.from, bareH1.line.from, Decoration.line({ class: "cm-page-title-h1" }));
+    const emptySpec = opts.noteProperties("", state);
+    if (emptySpec) {
+      const pos = bareH1 ? bareH1.line.to : 0;
+      const side = bareH1 ? 1 : -1;
+      add(
+        pos,
+        pos,
+        Decoration.widget({
+          widget: new PropertiesWidget("properties:" + emptySpec.key, emptySpec.render),
+          block: true,
+          side,
+          skipEntry: true,
+        })
+      );
+    }
   }
 
   // Set by the Blockquote branch when a callout's `> [!type]` marker is being

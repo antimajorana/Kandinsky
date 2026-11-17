@@ -148,7 +148,7 @@ async fn files_get(State(st): S, Query(q): Query<FilesQuery>) -> Result<Json<Vec
 /// way, not read and answered 404 (a line in the browser's log) nor found by listing every parent folder.
 async fn exists_get(State(st): S, Query(q): Query<PathQuery>) -> Result<Json<bool>> {
     let rel = required_path(q)?;
-    Ok(Json(with_ws(&st, move |ws| Ok(ws.resolve_readable(&rel).is_ok_and(|p| p.exists()))).await?))
+    Ok(Json(with_ws(&st, move |ws| Ok(ws.resolve_readable(&rel)?.exists())).await?))
 }
 
 fn required_path(q: PathQuery) -> Result<String> {
@@ -183,6 +183,7 @@ async fn file_put(State(st): S, Json(req): Json<FileWrite>) -> Result<Json<FileW
                         Err(e) => eprintln!("kandinsky: back-relation sync for {} failed: {e}", req.path),
                     }
                 }
+                extra.extend(crate::bases::automations::on_note_written(&ws, &req.path, before.is_none()));
             }
         }
         // a drawing's companion note follows each save (drawing_note.rs); a failure there never fails the save
@@ -634,6 +635,148 @@ async fn today_log_post(State(st): S) -> Result<Json<crate::api::TodayLog>> {
 }
 
 #[derive(serde::Deserialize)]
+struct DayLogQuery {
+    #[serde(alias = "date")]
+    day: String,
+}
+
+async fn day_log_get(State(st): S, Query(q): Query<DayLogQuery>) -> Result<Json<capture::DayLogInfo>> {
+    let day = chrono::NaiveDate::parse_from_str(q.day.trim(), "%Y-%m-%d")
+        .map_err(|_| Error::BadRequest(format!("invalid day `{}` (expected YYYY-MM-DD)", q.day)))?;
+    Ok(Json(with_ws(&st, move |ws| capture::day_log_info(ws.root(), &ws.config()?, day)).await?))
+}
+
+async fn day_log_post(State(st): S, Json(q): Json<DayLogQuery>) -> Result<Json<capture::DayLogInfo>> {
+    let day = chrono::NaiveDate::parse_from_str(q.day.trim(), "%Y-%m-%d")
+        .map_err(|_| Error::BadRequest(format!("invalid day `{}` (expected YYYY-MM-DD)", q.day)))?;
+    let (created, info) = with_ws(&st, move |ws| {
+        let cfg = ws.config()?;
+        let r = capture::ensure_day_log(ws.root(), &cfg, day, chrono::Local::now().naive_local())?;
+        let info = capture::day_log_info(ws.root(), &cfg, day)?;
+        Ok((r.created, info))
+    })
+    .await?;
+    if created {
+        st.bus.publish(Event::Fs { paths: vec![info.path.clone()] });
+        crate::capture_hooks::log_made(st.ws.clone(), st.helpers.clone(), info.path.clone());
+    }
+    Ok(Json(info))
+}
+
+#[derive(serde::Deserialize)]
+struct CalendarRangeQuery {
+    from: Option<String>,
+    to: Option<String>,
+}
+
+async fn calendar_get(State(st): S, Query(q): Query<CalendarRangeQuery>) -> Result<Json<crate::calendar::CalendarRangeResponse>> {
+    let today = chrono::Local::now().date_naive();
+    let from = q
+        .from
+        .as_deref()
+        .and_then(|s| chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").ok())
+        .unwrap_or_else(|| today - chrono::Duration::days(14));
+    let to = q
+        .to
+        .as_deref()
+        .and_then(|s| chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").ok())
+        .unwrap_or_else(|| today + chrono::Duration::days(42));
+    let (mut resp, has_dav) = with_ws(&st, move |ws| {
+        let cfg = ws.config()?;
+        let res = crate::calendar::query_range(ws.root(), &cfg, from, to)?;
+        let list = crate::plugins::list(ws.root());
+        let dav_active = list.iter().any(|p| p.id == "dav" && p.has_helper)
+            && crate::plugins::blocked(&list, &cfg.plugins.off, "dav").is_none();
+        Ok((res, dav_active))
+    })
+    .await?;
+    if has_dav {
+        let args = serde_json::json!({ "from": resp.from, "to": resp.to });
+        if let Ok(Ok(val)) = tokio::time::timeout(
+            std::time::Duration::from_millis(350),
+            st.helpers.call("dav", "events", args, std::time::Duration::from_millis(350)),
+        )
+        .await
+        {
+            if let Some(arr) = val.as_array() {
+                for (i, item) in arr.iter().enumerate() {
+                    let Some(title) = item.get("title").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()) else {
+                        continue;
+                    };
+                    let Some(date) = item.get("date").or_else(|| item.get("start")).and_then(|v| v.as_str()).and_then(|s| s.get(..10)) else {
+                        continue;
+                    };
+                    resp.events.push(crate::calendar::CalendarEvent {
+                        id: format!("dav:{i}"),
+                        occurrence_id: format!("dav:{i}@{date}"),
+                        title: title.to_string(),
+                        date: date.to_string(),
+                        end_date: item.get("end_date").and_then(|v| v.as_str()).unwrap_or(date).to_string(),
+                        start: item.get("start_time").and_then(|v| v.as_str()).map(str::to_string),
+                        end: item.get("end_time").and_then(|v| v.as_str()).map(str::to_string),
+                        all_day: item.get("all_day").and_then(|v| v.as_bool()).unwrap_or(true),
+                        color: "purple".into(),
+                        location: item.get("location").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                        repeat: crate::calendar::CalendarRecurrence::None,
+                        links: Vec::new(),
+                        source: crate::calendar::CalendarSource::Dav,
+                        path: None,
+                        line: None,
+                        completed: false,
+                        editable: false,
+                    });
+                }
+            }
+        }
+    }
+    Ok(Json(resp))
+}
+
+async fn calendar_event_post(State(st): S, Json(req): Json<crate::calendar::CalendarEventUpsert>) -> Result<Json<crate::calendar::CalendarEvent>> {
+    let ev = with_ws(&st, move |ws| crate::calendar::upsert_event(ws.root(), &ws.config()?, &req)).await?;
+    if let Some(p) = &ev.path {
+        st.bus.publish(Event::Fs { paths: vec![p.clone()] });
+    }
+    Ok(Json(ev))
+}
+
+#[derive(serde::Deserialize)]
+struct CalendarDeleteQuery {
+    id: String,
+}
+
+async fn calendar_event_delete(State(st): S, Query(q): Query<CalendarDeleteQuery>) -> Result<StatusCode> {
+    let paths = with_ws(&st, move |ws| crate::calendar::delete_event(ws.root(), &q.id)).await?;
+    if !paths.is_empty() {
+        st.bus.publish(Event::Fs { paths });
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn calendar_promote_post(State(st): S, Json(req): Json<crate::calendar::CalendarPromoteRequest>) -> Result<Json<crate::calendar::CalendarPromoteResult>> {
+    let res = with_ws(&st, move |ws| crate::calendar::promote_inline_to_page(ws.root(), &ws.config()?, &req.id)).await?;
+    st.bus.publish(Event::Fs { paths: vec![res.path.clone()] });
+    Ok(Json(res))
+}
+
+async fn calendar_ics_import_post(State(st): S, Json(req): Json<crate::calendar::IcsImportRequest>) -> Result<Json<crate::calendar::IcsImportResult>> {
+    let res = with_ws(&st, move |ws| crate::calendar::import_ics(ws.root(), &ws.config()?, &req)).await?;
+    if !res.paths.is_empty() {
+        st.bus.publish(Event::Fs { paths: res.paths.clone() });
+    }
+    Ok(Json(res))
+}
+
+async fn calendar_ics_export_get(State(st): S) -> Result<Response> {
+    let body = with_ws(&st, |ws| Ok(crate::calendar::export_ics(ws.root(), &ws.config()?))).await?;
+    Ok((
+        [(header::CONTENT_TYPE, "text/calendar; charset=utf-8")],
+        body,
+    )
+        .into_response())
+}
+
+#[derive(serde::Deserialize)]
 struct DescribeRequest {
     text: String,
     /// The vault the capture goes to, when it is not this one (the capture window's choice, as `POST /api/capture`).
@@ -710,9 +853,74 @@ async fn captures_triage(State(st): S, Json(req): Json<crate::api::TriageRequest
 
 async fn note_new(State(st): S, Json(mut req): Json<NewNote>) -> Result<Json<NewNoteResult>> {
     crate::template_values::add_provided(&st.ws, &st.helpers, &mut req).await;
-    let r = with_ws(&st, move |ws| crate::notes::new_note(ws.root(), &ws.config()?, &req)).await?;
-    st.bus.publish(Event::Fs { paths: vec![r.path.clone()] });
+    let (r, extra) = with_ws(&st, move |ws| {
+        let r = crate::notes::new_note(ws.root(), &ws.config()?, &req)?;
+        let extra = crate::bases::automations::on_note_written(&ws, &r.path, true);
+        Ok((r, extra))
+    })
+    .await?;
+    st.bus.publish(Event::Fs { paths: std::iter::once(r.path.clone()).chain(extra).collect() });
     Ok(Json(r))
+}
+
+async fn synced_block_post(State(st): S, Json(req): Json<crate::notes::SyncedBlockWrite>) -> Result<Json<crate::notes::SyncedBlockResult>> {
+    let res = with_ws(&st, move |ws| crate::notes::update_synced_block(&ws, &req)).await?;
+    st.bus.publish(Event::Fs { paths: vec![res.path.clone()] });
+    Ok(Json(res))
+}
+
+async fn comments_get(State(st): S, Query(q): Query<PathQuery>) -> Result<Json<Vec<crate::comments::CommentThread>>> {
+    let rel = required_path(q)?;
+    Ok(Json(with_ws(&st, move |ws| crate::comments::list(ws.root(), &rel)).await?))
+}
+
+async fn comments_post(State(st): S, Json(req): Json<crate::comments::CommentMutation>) -> Result<Json<Vec<crate::comments::CommentThread>>> {
+    let path = req.path.clone();
+    let threads = with_ws(&st, move |ws| crate::comments::mutate(ws.root(), &req)).await?;
+    st.bus.publish(Event::Fs { paths: vec![path] });
+    Ok(Json(threads))
+}
+
+async fn obsidian_themes_get(State(st): S) -> Result<Json<Vec<crate::obsidian_themes::ObsidianThemeInfo>>> {
+    Ok(Json(with_ws(&st, |ws| Ok(crate::obsidian_themes::list(ws.root()))).await?))
+}
+
+#[derive(serde::Deserialize)]
+struct ThemeCssQuery {
+    id: String,
+}
+
+async fn obsidian_theme_css_get(State(st): S, Query(q): Query<ThemeCssQuery>) -> Result<Response> {
+    let css = with_ws(&st, move |ws| crate::obsidian_themes::read_css(ws.root(), &q.id)).await?;
+    Ok(([(header::CONTENT_TYPE, "text/css; charset=utf-8")], css).into_response())
+}
+
+#[derive(serde::Serialize)]
+struct SecurityBinariesResponse {
+    pending: Vec<PendingBinaryApproval>,
+    trusted: Vec<TrustedBinary>,
+}
+
+async fn security_binaries_get() -> Json<SecurityBinariesResponse> {
+    Json(SecurityBinariesResponse {
+        pending: crate::binary_trust::list_pending(),
+        trusted: crate::binary_trust::list_trusted(),
+    })
+}
+
+async fn security_binaries_decide_post(Json(dec): Json<BinaryDecision>) -> Result<StatusCode> {
+    crate::binary_trust::decide(&dec)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(serde::Deserialize)]
+struct RevokeBinaryQuery {
+    command: String,
+    sha256: Option<String>,
+}
+
+async fn security_binaries_delete(Query(q): Query<RevokeBinaryQuery>) -> Result<Json<Vec<TrustedBinary>>> {
+    Ok(Json(crate::binary_trust::revoke(&q.command, q.sha256.as_deref())?))
 }
 
 async fn note_templates(State(st): S) -> Result<Json<Vec<crate::notes::TemplateInfo>>> {
@@ -953,6 +1161,7 @@ async fn property_put(State(st): S, Json(e): Json<PropertyEdit>) -> Result<Statu
                     paths.extend(synced);
                 }
             }
+            paths.extend(crate::bases::automations::on_note_written(&ws, &e.path, false));
         }
         Ok(paths)
     })
@@ -1400,12 +1609,14 @@ async fn base_query_post(State(st): S, Json(q): Json<BaseInline>) -> Result<Json
 }
 
 async fn base_row_post(State(st): S, Json(q): Json<BaseNewRow>) -> Result<Json<BaseRowCreated>> {
-    let r = with_ws(&st, move |ws| {
+    let (r, extra) = with_ws(&st, move |ws| {
         let src = files::read_text(&ws, &q.path)?.text;
-        crate::bases::new_row(ws.root(), &ws.config()?, &q.path, &src, q.view.as_deref())
+        let r = crate::bases::new_row(ws.root(), &ws.config()?, &q.path, &src, q.view.as_deref())?;
+        let extra = crate::bases::automations::on_note_written(&ws, &r.path, true);
+        Ok((r, extra))
     })
     .await?;
-    st.bus.publish(Event::Fs { paths: vec![r.path.clone()] });
+    st.bus.publish(Event::Fs { paths: std::iter::once(r.path.clone()).chain(extra).collect() });
     Ok(Json(r))
 }
 
@@ -1422,13 +1633,34 @@ async fn base_view_post(State(st): S, Json(q): Json<BaseViewEdit>) -> Result<Sta
 }
 
 async fn base_get(State(st): S, Query(q): Query<BaseQuery>) -> Result<Json<BaseResult>> {
-    Ok(Json(
-        with_ws(&st, move |ws| {
-            let src = std::fs::read_to_string(ws.resolve(&q.path)?)?;
-            Ok(crate::bases::evaluate(ws.root(), &ws.config()?, &src, q.this.as_deref()))
-        })
-        .await?,
-    ))
+    let (res, spawned) = with_ws(&st, move |ws| {
+        let spawned = crate::bases::automations::run_due_passive(&ws, &q.path);
+        let src = std::fs::read_to_string(ws.resolve(&q.path)?)?;
+        Ok((crate::bases::evaluate(ws.root(), &ws.config()?, &src, q.this.as_deref()), spawned))
+    })
+    .await?;
+    if !spawned.is_empty() {
+        st.bus.publish(Event::Fs { paths: spawned });
+    }
+    Ok(Json(res))
+}
+
+async fn base_formula_preview_post(State(st): S, Json(req): Json<FormulaPreviewRequest>) -> Result<Json<FormulaPreviewResponse>> {
+    Ok(Json(with_ws(&st, move |ws| crate::bases::formula_preview(ws.root(), &ws.config()?, &req)).await?))
+}
+
+#[derive(serde::Deserialize)]
+struct RunRecurringBody {
+    #[serde(default)]
+    path: Option<String>,
+}
+
+async fn base_run_recurring_post(State(st): S, Json(body): Json<RunRecurringBody>) -> Result<Json<Vec<String>>> {
+    let paths = with_ws(&st, move |ws| crate::bases::automations::run_recurring(&ws, body.path.as_deref())).await?;
+    if !paths.is_empty() {
+        st.bus.publish(Event::Fs { paths: paths.clone() });
+    }
+    Ok(Json(paths))
 }
 
 async fn snippets_get(State(st): S) -> Result<Json<Snippets>> {
@@ -2401,6 +2633,7 @@ async fn server_signout_all(State(st): S) -> Result<Json<serde_json::Value>> {
 }
 
 fn router(state: Arc<AppState>) -> Router {
+    crate::binary_trust::register_bus(state.bus.clone());
     Router::new()
         .route("/api/workspace", get(workspace))
         .route("/api/tree", get(tree))
@@ -2447,7 +2680,19 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/captures", get(captures_get))
         .route("/api/captures/triage", post(captures_triage))
         .route("/api/log/today", post(today_log_post))
+        .route("/api/log/day", get(day_log_get).post(day_log_post))
+        .route("/api/calendar", get(calendar_get))
+        .route("/api/calendar/event", post(calendar_event_post).delete(calendar_event_delete))
+        .route("/api/calendar/promote", post(calendar_promote_post))
+        .route("/api/calendar/ics/import", post(calendar_ics_import_post))
+        .route("/api/calendar/ics/export", get(calendar_ics_export_get))
         .route("/api/note/new", post(note_new))
+        .route("/api/note/synced-block", post(synced_block_post))
+        .route("/api/comments", get(comments_get).post(comments_post))
+        .route("/api/obsidian-themes", get(obsidian_themes_get))
+        .route("/api/obsidian-themes/css", get(obsidian_theme_css_get))
+        .route("/api/security/binaries", get(security_binaries_get).delete(security_binaries_delete))
+        .route("/api/security/binaries/decide", post(security_binaries_decide_post))
         .route("/api/note/templates", get(note_templates))
         .route("/api/search", get(search_get))
         .route("/api/replace", post(replace_post))
@@ -2490,6 +2735,8 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/base", get(base_get))
         .route("/api/base/row", post(base_row_post))
         .route("/api/base/query", post(base_query_post))
+        .route("/api/base/formula-preview", post(base_formula_preview_post))
+        .route("/api/base/run-recurring", post(base_run_recurring_post))
         .route("/api/view", post(view_post))
         .route("/api/css-snippets", get(css_snippets_get))
         .route("/api/home", get(home_get))

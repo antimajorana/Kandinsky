@@ -2,8 +2,9 @@
 import type { FocusPane } from "./FocusPane";
 import type { Needed } from "./Needed";
 import type { Notice } from "./Notice";
+import type { PendingBinaryApproval } from "./PendingBinaryApproval";
 
 /**
  * Server → client messages on `WS /api/events`.
  */
-export type Event = { "type": "fs", paths: Array<string>, } | { "type": "gone", paths: Array<string>, } | { "type": "open", path: string, line?: number, } | { "type": "notify" } & Notice | { "type": "focus", pane: FocusPane, } | { "type": "signin", url: string, } | { "type": "signinneeded", plugin: string, signin: Needed, } | { "type": "signedin", host: string, } | { "type": "plugin", plugin: string, event: string, data: unknown, };
+export type Event = { "type": "fs", paths: Array<string>, } | { "type": "gone", paths: Array<string>, } | { "type": "open", path: string, line?: number, } | { "type": "notify" } & Notice | { "type": "focus", pane: FocusPane, } | { "type": "signin", url: string, } | { "type": "signinneeded", plugin: string, signin: Needed, } | { "type": "signedin", host: string, } | { "type": "plugin", plugin: string, event: string, data: unknown, } | { "type": "binaryapproval" } & PendingBinaryApproval;

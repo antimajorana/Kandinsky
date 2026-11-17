@@ -113,11 +113,11 @@ mod tests {
         let (new, old) = (d.path().join("autostart/kandinsky.desktop"), d.path().join("autostart/atlas.desktop"));
         std::fs::create_dir_all(old.parent().unwrap()).unwrap();
         std::fs::write(&old, "old").unwrap();
-        super::sync_entry(true, &new, &[old.clone()], "entry").unwrap();
+        super::sync_entry(true, &new, std::slice::from_ref(&old), "entry").unwrap();
         assert_eq!(std::fs::read_to_string(&new).unwrap(), "entry");
         assert!(!old.exists(), "never started twice");
         std::fs::write(&old, "old").unwrap();
-        super::sync_entry(false, &new, &[old.clone()], "entry").unwrap();
+        super::sync_entry(false, &new, std::slice::from_ref(&old), "entry").unwrap();
         assert!(!new.exists() && !old.exists(), "off is off");
         super::sync_entry(false, &new, &[old], "entry").unwrap();
     }

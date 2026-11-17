@@ -12,14 +12,21 @@ import { openSlashMenuAtLine } from "./slash-menu";
 interface LogicalSpan {
   from: number;
   to: number;
-  kind: "fence" | "math" | "table" | "quote" | "line";
+  kind: "fence" | "math" | "table" | "quote" | "list" | "line";
 }
 
 const FENCE_OPEN = /^\s*(`{3,}|~{3,})/;
 const TABLE_ROW = /^\s*\|/;
 const QUOTE_ROW = /^\s*>/;
+const LIST_ITEM_ROW = /^(\s*)(?:[-*+]|\d+[.)])\s/;
 const TRAILING_BLOCK_ID = /(?:^|\s)\^([A-Za-z0-9-]+)\s*$/;
 const LABEL_IN_MATH = /\\label\{([A-Za-z0-9:_-]+)\}/;
+
+function indentCols(s: string): number {
+  let n = 0;
+  for (const ch of s) n += ch === "\t" ? 2 : 1;
+  return n;
+}
 
 /** Resolves a hovered visual line/widget into its full Markdown block (fence, `$$` math, callout, table, or line). */
 function resolveLogicalSpan(state: EditorState, from: number, to: number): LogicalSpan {
@@ -85,6 +92,28 @@ function resolveLogicalSpan(state: EditorState, from: number, to: number): Logic
     return { from: doc.line(startLine).from, to: doc.line(endLine).to, kind: "quote" };
   }
 
+  const listMatch = LIST_ITEM_ROW.exec(firstText);
+  if (listMatch) {
+    const baseIndent = indentCols(listMatch[1]);
+    let l = startLine + 1;
+    while (l <= doc.lines) {
+      const txt = doc.line(l).text;
+      if (txt.trim() === "") {
+        // Keep blank line only if a deeper-indented list line follows immediately
+        if (l + 1 <= doc.lines) {
+          const next = doc.line(l + 1).text;
+          const nm = /^(\s*)\S/.exec(next);
+          if (nm && indentCols(nm[1]) > baseIndent) { endLine = l; l++; continue; }
+        }
+        break;
+      }
+      const lm = /^(\s*)/.exec(txt);
+      if (lm && indentCols(lm[1]) > baseIndent) { endLine = l; l++; continue; }
+      break;
+    }
+    return { from: doc.line(startLine).from, to: doc.line(endLine).to, kind: "list" };
+  }
+
   return { from: doc.line(startLine).from, to: doc.line(endLine).to, kind: "line" };
 }
 
@@ -135,7 +164,7 @@ function duplicateBlock(view: EditorView, span: LogicalSpan): void {
   });
 }
 
-function copyBlockReference(view: EditorView, span: LogicalSpan): void {
+function ensureBlockId(view: EditorView, span: LogicalSpan): string {
   const doc = view.state.doc;
   const raw = view.state.sliceDoc(span.from, span.to);
   const endLine = doc.lineAt(span.to);
@@ -159,14 +188,19 @@ function copyBlockReference(view: EditorView, span: LogicalSpan): void {
         userEvent: "input",
       });
     } else {
-      const spacer = endLine.text.endsWith(" ") || endLine.text.length === 0 ? "" : " ";
+      const targetLine = span.kind === "list" ? doc.lineAt(span.from) : endLine;
+      const spacer = targetLine.text.endsWith(" ") || targetLine.text.length === 0 ? "" : " ";
       view.dispatch({
-        changes: { from: endLine.to, insert: `${spacer}^${id}` },
+        changes: { from: targetLine.to, insert: `${spacer}^${id}` },
         userEvent: "input",
       });
     }
   }
+  return id;
+}
 
+function copyBlockReference(view: EditorView, span: LogicalSpan): void {
+  const id = ensureBlockId(view, span);
   const notePath = view.dom.dataset.note ?? "";
   const noteName = notePath ? shownName(notePath) : "";
   const ref = noteName ? `[[${noteName}#^${id}]]` : `#^${id}`;
@@ -174,6 +208,45 @@ function copyBlockReference(view: EditorView, span: LogicalSpan): void {
     .writeText(ref)
     .then(() => toast("Copied block reference", ref))
     .catch(() => toast("Block ID added", `^${id}`));
+}
+
+function copySyncedBlock(view: EditorView, span: LogicalSpan): void {
+  const id = ensureBlockId(view, span);
+  const notePath = view.dom.dataset.note ?? "";
+  const blockYaml = notePath
+    ? `\`\`\`view\ntype: synced\npath: ${JSON.stringify(notePath)}\nblock: ${JSON.stringify(id)}\n\`\`\``
+    : `\`\`\`view\ntype: synced\nsource: ${JSON.stringify(`#^${id}`)}\n\`\`\``;
+  void navigator.clipboard
+    .writeText(blockYaml)
+    .then(() => toast("Copied synced block", notePath ? `${shownName(notePath)}#^${id}` : `#^${id}`))
+    .catch(() => toast("Synced block ID added", `^${id}`));
+}
+
+function moveBlockToLine(view: EditorView, span: LogicalSpan, insertBeforeLine: number): void {
+  const doc = view.state.doc;
+  const srcStart = doc.lineAt(span.from).number;
+  const srcEnd = doc.lineAt(span.to).number;
+  if (insertBeforeLine >= srcStart && insertBeforeLine <= srcEnd + 1) return;
+
+  const text = view.state.sliceDoc(span.from, span.to);
+  let delFrom = span.from;
+  let delTo = span.to;
+  if (srcEnd < doc.lines) {
+    delTo = doc.line(srcEnd + 1).from;
+  } else if (srcStart > 1) {
+    delFrom = doc.line(srcStart - 1).to;
+  } else {
+    return;
+  }
+
+  const insChange = insertBeforeLine <= doc.lines
+    ? { from: doc.line(insertBeforeLine).from, to: doc.line(insertBeforeLine).from, insert: `${text}\n` }
+    : { from: doc.length, to: doc.length, insert: `\n${text}` };
+  const delChange = { from: delFrom, to: delTo, insert: "" };
+  const changes = insChange.from <= delChange.from ? [insChange, delChange] : [delChange, insChange];
+
+  view.focus();
+  view.dispatch({ changes, userEvent: "move.block" });
 }
 
 function deleteBlock(view: EditorView, span: LogicalSpan): void {
@@ -195,20 +268,29 @@ function deleteBlock(view: EditorView, span: LogicalSpan): void {
 
 class BlockGutterOverlay {
   wrapEl: HTMLDivElement;
+  dropLineEl: HTMLDivElement;
   plusBtn: HTMLButtonElement;
   dragBtn: HTMLButtonElement;
   hoveredBlock: BlockInfo | null = null;
   menuOpen = false;
+  dragging = false;
+  suppressNextClick = false;
 
   private onMouseMove: (e: MouseEvent) => void;
   private onMouseLeave: () => void;
   private onScroll: () => void;
+  private dragCleanup: (() => void) | null = null;
 
   constructor(readonly view: EditorView) {
     this.wrapEl = document.createElement("div");
     this.wrapEl.className = "cm-block-gutter";
     this.wrapEl.dataset.testid = "block-gutter";
     this.wrapEl.setAttribute("aria-hidden", "false");
+
+    this.dropLineEl = document.createElement("div");
+    this.dropLineEl.className = "cm-block-drop-indicator";
+    this.dropLineEl.hidden = true;
+    this.view.dom.appendChild(this.dropLineEl);
 
     this.plusBtn = document.createElement("button");
     this.plusBtn.type = "button";
@@ -238,14 +320,22 @@ class BlockGutterOverlay {
       e.stopPropagation();
     });
 
+    this.dragBtn.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !this.hoveredBlock) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.startDrag(e, resolveLogicalSpan(this.view.state, this.hoveredBlock.from, this.hoveredBlock.to));
+    });
+
     this.dragBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (this.suppressNextClick) { this.suppressNextClick = false; return; }
       this.onHandleClick();
     });
 
     this.onMouseMove = (e: MouseEvent) => {
-      if (this.menuOpen) return;
+      if (this.menuOpen || this.dragging) return;
       if (window.innerWidth < 640 || document.documentElement.classList.contains("phone")) {
         this.hide();
         return;
@@ -354,6 +444,7 @@ class BlockGutterOverlay {
       "sep",
       { label: "Duplicate block", icon: "copy", run: () => duplicateBlock(this.view, span) },
       { label: "Copy #^block reference", icon: "link", run: () => copyBlockReference(this.view, span) },
+      { label: "Copy as synced block", icon: "copy", run: () => copySyncedBlock(this.view, span) },
       "sep",
       { label: "Delete block", icon: "trash", danger: true, run: () => deleteBlock(this.view, span) },
     ];
@@ -366,10 +457,75 @@ class BlockGutterOverlay {
     });
   }
 
+  private startDrag(downEv: PointerEvent, span: LogicalSpan): void {
+    this.dragCleanup?.();
+    const startX = downEv.clientX;
+    const startY = downEv.clientY;
+    let targetLine: number | null = null;
+    const doc = this.view.state.doc;
+    const minLine = frontmatterClose(doc) + 1;
+
+    const updateTarget = (clientY: number) => {
+      const editorRect = this.view.dom.getBoundingClientRect();
+      const contentRect = this.view.contentDOM.getBoundingClientRect();
+      const padLeft = parseFloat(getComputedStyle(this.view.contentDOM).paddingLeft) || 0;
+      const docY = Math.max(0, clientY - this.view.documentTop);
+      const blk = this.view.lineBlockAtHeight(docY);
+      const tSpan = resolveLogicalSpan(this.view.state, blk.from, blk.to);
+      const before = docY < (blk.top + blk.bottom) / 2;
+      const rawLine = before ? doc.lineAt(tSpan.from).number : doc.lineAt(tSpan.to).number + 1;
+      targetLine = Math.max(minLine, Math.min(doc.lines + 1, rawLine));
+
+      const indY = targetLine <= doc.lines
+        ? this.view.lineBlockAt(doc.line(targetLine).from).top
+        : this.view.lineBlockAt(doc.line(doc.lines).from).bottom;
+      const left = Math.max(8, Math.round(contentRect.left + padLeft - editorRect.left));
+      const width = Math.max(120, Math.round(contentRect.width - padLeft * 2));
+      this.dropLineEl.style.left = `${left}px`;
+      this.dropLineEl.style.width = `${width}px`;
+      this.dropLineEl.style.top = `${Math.round(this.view.documentTop + indY - editorRect.top)}px`;
+      this.dropLineEl.hidden = false;
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      if (!this.dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
+      if (!this.dragging) {
+        this.dragging = true;
+        this.dragBtn.classList.add("is-dragging");
+      }
+      updateTarget(ev.clientY);
+    };
+
+    const finish = (commit: boolean) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      this.dragCleanup = null;
+      this.dropLineEl.hidden = true;
+      this.dragBtn.classList.remove("is-dragging");
+      const wasDragging = this.dragging;
+      this.dragging = false;
+      if (wasDragging) {
+        this.suppressNextClick = true;
+        setTimeout(() => { this.suppressNextClick = false; }, 50);
+        if (commit && targetLine !== null) moveBlockToLine(this.view, span, targetLine);
+      }
+    };
+
+    const onUp = () => finish(true);
+    const onCancel = () => finish(false);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    this.dragCleanup = () => finish(false);
+  }
+
   destroy(): void {
+    this.dragCleanup?.();
     this.view.dom.removeEventListener("mousemove", this.onMouseMove);
     this.view.dom.removeEventListener("mouseleave", this.onMouseLeave);
     this.view.scrollDOM.removeEventListener("scroll", this.onScroll);
+    this.dropLineEl.remove();
     this.wrapEl.remove();
   }
 }
@@ -420,6 +576,19 @@ const blockGutterTheme = EditorView.baseTheme({
   },
   ".cm-block-gutter-btn.cm-block-handle": {
     cursor: "grab",
+  },
+  ".cm-block-gutter-btn.cm-block-handle.is-dragging": {
+    cursor: "grabbing",
+    color: "var(--accent)",
+    background: "var(--accent-soft)",
+  },
+  ".cm-block-drop-indicator": {
+    position: "absolute",
+    height: "2px",
+    background: "var(--accent)",
+    borderRadius: "2px",
+    pointerEvents: "none",
+    zIndex: "8",
   },
   "@media (max-width: 639px)": {
     ".cm-block-gutter": {

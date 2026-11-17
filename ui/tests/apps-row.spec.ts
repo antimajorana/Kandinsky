@@ -9,6 +9,8 @@ const cfg = async (request: APIRequestContext) => (await (await request.get("/ap
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ request }) => {
+  await put(request, ".kandinsky/plugins/appfirst/plugin.toml", 'title = "App first"\nrail = true\nicon = "circle"\n');
+  await put(request, ".kandinsky/plugins/appfirst/view.js", 'export default function mount(host) { host.innerHTML = "<p class=appfirst>first</p>"; }\n');
   await put(request, ".kandinsky/plugins/appdemo/plugin.toml", 'title = "App demo"\nrail = true\nicon = "chart"\n');
   await put(request, ".kandinsky/plugins/appdemo/view.js", 'export default function mount(host) { host.innerHTML = "<p class=appdemo>demo</p>"; }\n');
 });
@@ -16,9 +18,11 @@ test.beforeAll(async ({ request }) => {
 // the config is shared by every spec of the run: leave the two lists as they were
 test.afterAll(async ({ request }) => {
   const c = await cfg(request);
-  c.ui.apps_hidden = c.ui.apps_hidden.filter((k: string) => k !== "appdemo");
+  c.ui.apps_hidden = c.ui.apps_hidden.filter((k: string) => k !== "appdemo" && k !== "appfirst");
   c.ui.apps_order = [];
   await request.put("/api/config", { headers: H, data: c });
+  await request.post("/api/plugins/appfirst/remove", { headers: H }).catch(() => {});
+  await request.post("/api/plugins/appdemo/remove", { headers: H }).catch(() => {});
 });
 
 test("a tile is moved and hidden from its right-click, and shown again from Settings", async ({ page, request }) => {
@@ -44,9 +48,10 @@ test("a tile is moved and hidden from its right-click, and shown again from Sett
   await expect(tile).toHaveCount(0);
   await expect.poll(async () => (await cfg(request)).ui.apps_hidden).toContain("appdemo");
 
-  // Settings → Appearance lists it, switched off; switching it on brings the tile back
+  // Settings → Extensions → Advanced & Server settings lists it, switched off; switching it on brings the tile back
   await page.keyboard.press("Meta+,");
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: "Appearance" }).click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByTestId("settings-advanced").locator("summary").click();
   const show = page.getByRole("checkbox", { name: "Show App demo" });
   await expect(show).not.toBeChecked();
   await show.check();

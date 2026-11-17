@@ -43,7 +43,7 @@ export function fieldType(id: string, res: BaseResult | null, spec: PropertySpec
   if (file) return file.type;
   const k = kindOf(id, res, spec);
   const by: Record<PropertyKind, FieldType> = {
-    text: "text", enum: "text", link: "text", number: "number", bool: "bool", date: "date", datetime: "date",
+    text: "text", enum: "text", status: "text", auto_id: "text", link: "text", number: "number", rating: "number", bool: "bool", date: "date", datetime: "date",
     list: "list", tags: "list", links: "list",
   };
   return by[k];

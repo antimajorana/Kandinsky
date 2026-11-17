@@ -92,7 +92,7 @@ impl Run {
         let wayland = winit::platform::wayland::ActiveEventLoopExtWayland::is_wayland(el);
         #[cfg(not(target_os = "linux"))]
         let wayland = false;
-        self.cap.floating = wayland && kandinsky_core::env::var("CAPTURE_FLOAT").map_or(true, |v| v != "0");
+        self.cap.floating = wayland && kandinsky_core::env::var("CAPTURE_FLOAT").is_none_or(|v| v != "0");
         if self.cap.floating {
             self.cap.asked = FLOAT_HEIGHT;
         }

@@ -129,4 +129,8 @@ apps_order: Array<string>,
 /**
  * Apps not shown at the top of the left bar (same keys); they still open from the palette and their keys.
  */
-apps_hidden: Array<string>, };
+apps_hidden: Array<string>, 
+/**
+ * Folder name inside `.obsidian/themes/` whose `theme.css` overrides Kandinsky tokens; empty = built-in only.
+ */
+obsidian_theme: string, };

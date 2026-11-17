@@ -3,6 +3,7 @@
 //! engine (`expr`, `value`, `dates`) is lifted verbatim from obsidian-web (DECISION doc);
 //! this module feeds it Kandinsky's link index and returns typed cells for the UI.
 pub(crate) use kandinsky_template::dates;
+pub mod automations;
 mod edit;
 mod expr;
 mod relations;
@@ -31,6 +32,10 @@ struct BaseFile {
     properties: BTreeMap<String, PropMeta>,
     #[serde(default)]
     views: Vec<View>,
+    #[serde(default)]
+    automations: Vec<crate::api::BaseAutomation>,
+    #[serde(default)]
+    recurring: Vec<crate::api::BaseRecurringTemplate>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -77,6 +82,15 @@ struct View {
     /// A calendar or timeline view's chosen date field (`dateProperty: due`).
     #[serde(rename = "dateProperty", alias = "date_property", default)]
     date_property: Option<String>,
+    /// Multi-day span / timeline end date (`endDateProperty: end`).
+    #[serde(rename = "endDateProperty", alias = "end_date_property", default)]
+    end_date_property: Option<String>,
+    /// Relation property linking child items to parent rows (`subItemsBy: parent`).
+    #[serde(rename = "subItemsBy", alias = "sub_items_by", default)]
+    sub_items_by: Option<String>,
+    /// Blocking dependency relation (`blockedBy: blocked_by`).
+    #[serde(rename = "blockedBy", alias = "blocked_by", default)]
+    blocked_by: Option<String>,
 }
 
 impl View {
@@ -560,6 +574,9 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
                 filters: None,
                 formulas: Vec::new(),
                 kinds: BTreeMap::new(),
+                formula_exprs: BTreeMap::new(),
+                automations: Vec::new(),
+                recurring: Vec::new(),
             }
         }
     };
@@ -649,14 +666,31 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
             rows.truncate(view.limit.unwrap_or(usize::MAX));
             let group_by = view.group_by.as_ref().map(|g| g.property().to_string());
             let mut order = if view.order.is_empty() { vec!["file.name".to_string()] } else { view.order.clone() };
+            let has_col = |cols: &[String], cand: &str| {
+                let bare = cand.strip_prefix("note.").unwrap_or(cand);
+                cols.iter().any(|c| c == cand || c.strip_prefix("note.").unwrap_or(c) == bare)
+            };
+            if let Some(sub) = view.sub_items_by.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                if !has_col(&order, sub) {
+                    order.push(sub.to_string());
+                }
+            }
             if matches!(view.kind.as_str(), "calendar" | "timeline") {
-                let has_col = |cols: &[String], cand: &str| {
-                    let bare = cand.strip_prefix("note.").unwrap_or(cand);
-                    cols.iter().any(|c| c == cand || c.strip_prefix("note.").unwrap_or(c) == bare)
-                };
                 if let Some(dp) = view.date_property.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
                     if !has_col(&order, dp) {
                         order.insert(order.len().min(1), dp.to_string());
+                    }
+                }
+                if let Some(edp) = view.end_date_property.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                    if !has_col(&order, edp) {
+                        order.insert(order.len().min(2), edp.to_string());
+                    }
+                }
+                if view.kind == "timeline" {
+                    if let Some(dep) = view.blocked_by.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                        if !has_col(&order, dep) {
+                            order.push(dep.to_string());
+                        }
                     }
                 }
                 for cand in ["date", "due", "updated", "start", "end", "created"] {
@@ -742,16 +776,141 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
                 filters: view.filters.as_ref().and_then(crate::api::Filter::from_yaml),
                 sort: view.sort.iter().map(SortSpec::key).collect(),
                 image: view.image.clone(),
+                date_property: view.date_property.clone(),
+                end_date_property: view.end_date_property.clone(),
+                sub_items_by: view.sub_items_by.clone(),
+                blocked_by: view.blocked_by.clone(),
             }
         })
         .collect();
+    let mut kinds_map = kinds(&notes);
+    for (k, spec) in crate::property_spec::load(root, &cfg.editor.properties_spec).properties {
+        kinds_map.insert(k, spec.kind);
+    }
     BaseResult {
         views,
         error: None,
         filters: base.filters.as_ref().and_then(crate::api::Filter::from_yaml),
         formulas: base.formulas.keys().cloned().collect(),
-        kinds: kinds(&notes),
+        kinds: kinds_map,
+        formula_exprs: base.formulas,
+        automations: base.automations,
+        recurring: base.recurring,
     }
+}
+
+/// Evaluates a candidate formula expression live against a sample note for the Guided Formula Editor.
+pub fn formula_preview(
+    root: &Path,
+    cfg: &Config,
+    req: &crate::api::FormulaPreviewRequest,
+) -> crate::Result<crate::api::FormulaPreviewResponse> {
+    let parsed_expr = match expr::parse(&req.expr) {
+        Ok(e) => e,
+        Err(e) => {
+            return Ok(crate::api::FormulaPreviewResponse {
+                ok: false,
+                sample_title: String::new(),
+                value: None,
+                kind: None,
+                error: Some(e),
+            });
+        }
+    };
+    let abs = crate::paths::safe_join(root, &req.path)?;
+    let base_src = std::fs::read_to_string(&abs).unwrap_or_default();
+    let base: BaseFile = serde_yaml::from_str(&base_src).unwrap_or_default();
+    let _names = dates::names(cfg.editor.date_names == crate::config::DateNames::Spanish);
+    let vault = links::vault(root, cfg);
+    let none: Vec<String> = Vec::new();
+    let notes: Vec<Note> = vault
+        .notes
+        .iter()
+        .map(|(path, data, out)| Note {
+            path,
+            name: stem(path),
+            data,
+            out,
+            incoming: vault.incoming.get(path.as_str()).map_or(none.as_slice(), Vec::as_slice),
+            upstream: std::cell::OnceCell::new(),
+        })
+        .collect();
+    let notes_by_path: HashMap<&str, &Note> = notes.iter().map(|n| (n.path, n)).collect();
+    let sample_path = req.sample_note.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let target_note = sample_path
+        .and_then(|p| notes_by_path.get(p).copied())
+        .or_else(|| notes.iter().find(|n| {
+            let ctx = Ctx {
+                note: n,
+                this: None,
+                notes_by_path: &notes_by_path,
+                vault: &vault,
+                base_props: &base.properties,
+                props: n.props(),
+                formulas: BTreeMap::new(),
+            };
+            base.filters.as_ref().is_none_or(|f| passes(f, &ctx))
+        }))
+        .or_else(|| notes.first());
+    let Some(note) = target_note else {
+        struct EmptyCtx;
+        impl expr::Context for EmptyCtx {
+            fn file_field(&self, _: &str) -> Val { Val::Null }
+            fn property(&self, _: &str) -> Val { Val::Null }
+            fn has_property(&self, _: &str) -> bool { false }
+            fn formula(&self, _: &str) -> Val { Val::Null }
+            fn this_field(&self, _: &str) -> Val { Val::Null }
+        }
+        let val = expr::eval(&parsed_expr, &EmptyCtx);
+        let c = cell(&val, &|_| None);
+        return Ok(crate::api::FormulaPreviewResponse {
+            ok: true,
+            sample_title: "Sample".into(),
+            kind: Some(val_kind(&val)),
+            value: Some(c),
+            error: None,
+        });
+    };
+    let formulas: Vec<(String, Option<expr::Expr>)> =
+        base.formulas.iter().map(|(n, s)| (n.clone(), expr::parse(s).ok())).collect();
+    let mut ctx = Ctx {
+        note,
+        this: None,
+        notes_by_path: &notes_by_path,
+        vault: &vault,
+        base_props: &base.properties,
+        props: note.props(),
+        formulas: BTreeMap::new(),
+    };
+    for _ in 0..formulas.len().clamp(1, 4) {
+        for (name, e) in &formulas {
+            let v = e.as_ref().map_or(Val::Null, |e| expr::eval(e, &ctx));
+            ctx.formulas.insert(name.clone(), v);
+        }
+    }
+    let val = expr::eval(&parsed_expr, &ctx);
+    let c = cell(&val, &|t| vault.resolve(t, note.path));
+    Ok(crate::api::FormulaPreviewResponse {
+        ok: true,
+        sample_title: note.name.clone(),
+        kind: Some(val_kind(&val)),
+        value: Some(c),
+        error: None,
+    })
+}
+
+fn val_kind(v: &Val) -> String {
+    match v {
+        Val::Null => "empty",
+        Val::Bool(_) => "boolean",
+        Val::Num(_) => "number",
+        Val::Str(_) => "text",
+        Val::Link(_) => "link",
+        Val::Date(_) => "date",
+        Val::List(_) => "list",
+        Val::Map(_) => "duration",
+    }
+    .to_string()
 }
 
 #[cfg(test)]
