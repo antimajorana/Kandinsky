@@ -73,11 +73,6 @@
 		const end = frontMatterEnd(text);
 		return blank(text.slice(0, end)) + withoutLongRuns(text.slice(end), true).replace(/^(```|~~~)[\s\S]*?^\1[^\n]*$/gm, blank).replace(/\$\$[\s\S]*?\$\$/g, blank).replace(/\$[^$\n]+\$/g, blank).replace(/`[^`\n]+`/g, blank).replace(/!?\[\[[^\]\n]*\]\]/g, blank).replace(/\]\([^)\n]*\)/g, blank).replace(/<[^>\n]+>/g, blank).replace(/https?:\/\/\S+/g, blank).replace(/(^|\s)#[\p{L}\p{N}_/-]+/gu, (m) => blank(m)).replace(/%%[\s\S]*?%%/g, blank);
 	}
-	/** Is a note the vault owner's own writing, to learn from: not a kept mail (its `message_id` property), whose text is
-	*  mostly others' and quoted HTML. Agent files are left out before, by the core's index filter. */
-	function ownWriting(text) {
-		return !/^message_id:/m.test(text.slice(0, frontMatterEnd(text)));
-	}
 	//#endregion
 	//#region ui/src/lib/editor/dictionaries.ts
 	/** The vault's folder of dictionaries (synced with the vault, unlike the machine's). */
@@ -156,12 +151,6 @@
 		}
 		return found;
 	}
-	/** One dictionary's file (`aff` or `dic`), as text. */
-	async function dictionaryFile(vault, machine, own, name, ext) {
-		const at = (await installedDictionaries(vault, machine, own)).get(name);
-		if (!at) throw new Error(`no Hunspell dictionary named ${name}`);
-		return at.files.read(`${at.dir}/${name}.${ext}`);
-	}
 	/** The dictionaries a language uses when the setting names none: of each group, the first installed. English takes
 	*  both the American and the British one, so either spelling (centered, centred) is right. */
 	const PREFERRED = {
@@ -188,15 +177,6 @@
 		}
 		return chosen;
 	}
-	/** A `.dic` file's words without their affix flags, lower-case words only (names are the vault's to teach), sorted. */
-	function dicStems(dic) {
-		const out = /* @__PURE__ */ new Set();
-		for (const line of dic.split("\n").slice(1)) {
-			const w = line.split("/")[0].split(/\s/)[0];
-			if (/^\p{Ll}[\p{Ll}\p{M}'’-]*$/u.test(w)) out.add(w);
-		}
-		return [...out].sort();
-	}
 	//#endregion
 	//#region plugins/beta/predictor/ui/src/model.ts
 	/** A text's sentences as lists of words (a sentence ends at . ! ? ; : a line break or a blank). */
@@ -210,6 +190,49 @@
 	const exec = (cmd, args, opts) => kandinsky.exec(cmd, args, opts);
 	const vault = vaultFiles(kandinsky);
 	const machine = machineFiles(exec);
+	const ASCII_LOWER_WORD = /^[a-z][a-z'-]*$/;
+	const UNICODE_LOWER_WORD = /^\p{Ll}[\p{Ll}\p{M}'’-]*$/u;
+	const NON_ASCII = /[^\x20-\x7e]/;
+	const dicStemCache = /* @__PURE__ */ new Map();
+	/** Parse and cache a `.dic` file's lower-case stems (ASCII fast-path before Unicode `\p{Ll}`). */
+	function cachedDicStems(name, dic) {
+		const key = `${name}:${dic.length}:${dic.slice(0, 64)}`;
+		const cached = dicStemCache.get(key);
+		if (cached) return cached;
+		const out = /* @__PURE__ */ new Set();
+		const firstNl = dic.indexOf("\n");
+		if (firstNl >= 0) {
+			const len = dic.length;
+			let pos = firstNl + 1;
+			while (pos < len) {
+				let nl = dic.indexOf("\n", pos);
+				if (nl < 0) nl = len;
+				let end = nl;
+				if (end > pos && dic.charCodeAt(end - 1) === 13) end--;
+				const slash = dic.indexOf("/", pos);
+				if (slash >= pos && slash < end) end = slash;
+				for (let i = pos; i < end; i++) {
+					const c = dic.charCodeAt(i);
+					if (c <= 32 || c === 160) {
+						end = i;
+						break;
+					}
+				}
+				if (end > pos) {
+					const raw = dic.slice(pos, end);
+					if (ASCII_LOWER_WORD.test(raw)) out.add(raw);
+					else if (NON_ASCII.test(raw)) {
+						const w = raw.split(/\s/)[0];
+						if (UNICODE_LOWER_WORD.test(w)) out.add(w);
+					}
+				}
+				pos = nl + 1;
+			}
+		}
+		const stems = [...out].sort();
+		dicStemCache.set(key, stems);
+		return stems;
+	}
 	/** The notes to count, in order (the page asks for them in chunks). */
 	async function notes() {
 		return (await kandinsky.files(true)).filter((p) => /\.md$/i.test(p) && !p.startsWith(".kandinsky/"));
@@ -226,9 +249,12 @@
 			} catch {
 				continue;
 			}
-			if (!ownWriting(text)) continue;
+			const fmEnd = frontMatterEnd(text);
+			const fm = fmEnd ? text.slice(0, fmEnd) : "";
+			if (fm && /^message_id:/m.test(fm)) continue;
+			const langProp = fm ? /^lang:\s*([\w-]+)/m.exec(fm)?.[1] : void 0;
 			out[path] = {
-				lang: guessLanguage(text, langs, fallback, /^---[\s\S]*?^lang:\s*([\w-]+)/m.exec(text)?.[1]),
+				lang: guessLanguage(text, langs, fallback, langProp),
 				text: packSentences(sentences(plainProse(text), wordsOf))
 			};
 		}
@@ -236,9 +262,19 @@
 	}
 	/** A language's dictionary words (lower case, without affixes), one per line; "" when none is installed. */
 	async function lexicon(p) {
-		const names = chooseDictionaries([...(await installedDictionaries(vault, machine, p.folder)).keys()], p.dictionaries).get(String(p.lang ?? "en")) ?? [];
+		const found = await installedDictionaries(vault, machine, p.folder);
+		const names = chooseDictionaries([...found.keys()], p.dictionaries).get(String(p.lang ?? "en")) ?? [];
+		if (names.length === 1) {
+			const at = found.get(names[0]);
+			if (!at) return "";
+			return cachedDicStems(names[0], await at.files.read(`${at.dir}/${names[0]}.dic`)).join("\n");
+		}
 		const words = /* @__PURE__ */ new Set();
-		for (const name of names) for (const w of dicStems(await dictionaryFile(vault, machine, p.folder, name, "dic"))) words.add(w);
+		for (const name of names) {
+			const at = found.get(name);
+			if (!at) continue;
+			for (const w of cachedDicStems(name, await at.files.read(`${at.dir}/${name}.dic`))) words.add(w);
+		}
 		return [...words].join("\n");
 	}
 	kandinsky.methods({

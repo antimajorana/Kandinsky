@@ -13,7 +13,7 @@ import { tickTaskLine } from "./task-tick";
 import { settings } from "../settings.svelte";
 import type { WorkspaceConfig } from "../types";
 import { Compartment, Prec, StateField, type EditorState, type Extension } from "@codemirror/state";
-import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from "@codemirror/view";
+import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type DecorationSet } from "@codemirror/view";
 import { extractFrontmatterIcon } from "../folder-colors.svelte";
 import { isNotionShell } from "../shell-mode.svelte";
 import { foldGutter, foldNodeProp, foldKeymap } from "@codemirror/language";
@@ -193,6 +193,7 @@ export function noteExtensions(
     }
   };
   const unmount = new WeakMap<HTMLElement, () => void>(); // a rendered block's views, per widget host
+  const titleCleanups = new Set<() => void>();
   const [liveField, liveKeys] = livePreview({
     renderMath: renderNoteMath,
     mathReady: () => Boolean(katexNow()),
@@ -205,7 +206,7 @@ export function noteExtensions(
       const name = shownName(path);
       if (headingRepeats(state, name)) return null; // "titles are duplicated usually": the note's own `# ...` is the title
       const glyph = resolveNoteEmblem(state);
-      return { key: `${name}\u0000${glyph}`, render: () => titleInput(path, name, glyph, viewRef) };
+      return { key: `${name}\u0000${glyph}`, render: () => titleInput(path, name, glyph, viewRef, titleCleanups) };
     },
     inlineHtml: (source: string) => inlineHtml(source, dir) || null,
     toggleTask: tickTaskLine, // a box ticks as on Home: done date, next occurrence
@@ -262,6 +263,12 @@ export function noteExtensions(
     figureCaptions(equationsOf),
     taskChips(() => settings.config?.editor.task_chips ?? true),
     logLines(isLog),
+    ViewPlugin.define(() => ({
+      destroy() {
+        for (const clean of [...titleCleanups]) clean();
+        titleCleanups.clear();
+      },
+    })),
   ];
   return {
     head: liveKeys,
@@ -396,15 +403,88 @@ export function headingRepeats(state: EditorState, name: string): boolean {
 /** The inline title as a field: the note's name, renamed in place — Enter (or leaving the field) renames the file,
  *  Esc puts the name back. A textarea grown to its text, so a long name wraps (an input cut it off on a phone). The editor ignores the widget's events (live-preview's InlineTitleWidget), so the field's
  *  keys and clicks are its own. */
-function titleInput(path: string, name: string, glyph = "", viewRef?: { view: EditorView | null }): HTMLElement {
+function titleInput(
+  path: string,
+  name: string,
+  glyph = "",
+  viewRef?: { view: EditorView | null },
+  titleCleanups?: Set<() => void>,
+): HTMLElement {
   const h = document.createElement("textarea");
   h.className = "inline-title";
   h.dir = "auto";
   h.value = name;
   h.rows = 1;
-  const fit = () => { h.style.height = "auto"; h.style.height = `${h.scrollHeight}px`; };
-  h.addEventListener("input", () => { h.value = h.value.replace(/[\r\n]+/g, " "); fit(); }); // a name has no line breaks (a paste)
-  new ResizeObserver(fit).observe(h); // attached, and at each new width
+  let raf = 0;
+  let lastH = "";
+  let cleaned = false;
+  let contentDom: Element | null = null;
+  let mo: MutationObserver | null = null;
+  let ro: ResizeObserver | null = null;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    if (raf) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
+    ro?.disconnect();
+    ro = null;
+    mo?.disconnect();
+    mo = null;
+    titleCleanups?.delete(cleanup);
+  };
+  const fitNow = () => {
+    if (cleaned || !h.isConnected) return;
+    const prev = h.style.height;
+    h.style.height = "auto";
+    const sh = h.scrollHeight;
+    if (sh <= 0) {
+      h.style.height = prev;
+      return;
+    }
+    const next = `${sh}px`;
+    if (next !== lastH) {
+      lastH = next;
+      h.style.height = next;
+    } else {
+      h.style.height = prev;
+    }
+  };
+  const scheduleFit = () => {
+    if (cleaned || raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      if (contentDom && !contentDom.contains(h)) {
+        cleanup();
+        return;
+      }
+      fitNow();
+    });
+  };
+  h.addEventListener("input", () => {
+    h.value = h.value.replace(/[\r\n]+/g, " ");
+    fitNow();
+  }); // a name has no line breaks (a paste)
+  if (typeof ResizeObserver !== "undefined") {
+    ro = new ResizeObserver(scheduleFit);
+    ro.observe(h); // attached, and at each new width
+  }
+  titleCleanups?.add(cleanup);
+  queueMicrotask(() => {
+    if (cleaned) return;
+    contentDom = viewRef?.view?.contentDOM ?? h.closest(".cm-content");
+    if (contentDom && !contentDom.contains(h)) {
+      cleanup();
+      return;
+    }
+    if (contentDom && typeof MutationObserver !== "undefined") {
+      mo = new MutationObserver(() => {
+        if (contentDom && !contentDom.contains(h)) cleanup();
+      });
+      mo.observe(contentDom, { childList: true });
+    }
+  });
   h.spellcheck = false;
   h.setAttribute("aria-label", "The note's name: type to rename it");
   h.title = "The note's name: type here and press Enter to rename it";

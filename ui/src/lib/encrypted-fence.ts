@@ -163,6 +163,15 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
   return node;
 }
 
+const activeCards = new Set<{ getSource: () => string; refresh: () => void }>();
+
+function refreshCardsForSource(source: string): void {
+  const key = source.replace(/\r\n/g, "\n").trim();
+  for (const c of [...activeCards]) {
+    if (c.getSource().replace(/\r\n/g, "\n").trim() === key) c.refresh();
+  }
+}
+
 registerFence("kandinsky", "encrypted", (host, fence) => {
   ensureStyles();
   let disposed = false;
@@ -170,6 +179,17 @@ registerFence("kandinsky", "encrypted", (host, fence) => {
 
   const card = el("div", { class: "enc-card", "data-testid": "encrypted-block" });
   for (const ev of ["click", "pointerdown", "mousedown"]) card.addEventListener(ev, (e) => e.stopPropagation());
+  card.addEventListener("keydown", (e) => {
+    const target = e.target as HTMLElement | null;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      target.blur();
+      return;
+    }
+    e.stopPropagation();
+  });
   host.appendChild(card);
 
   const render = (unlockErr = "", focusEditor = false): void => {
@@ -206,9 +226,9 @@ registerFence("kandinsky", "encrypted", (host, fence) => {
         try {
           const prev = currentSource;
           const envelope = await encryptBlockText(plainInput.value, pass, hintInput.value);
+          await writeFenceSource(host, fence.path, prev, envelope);
           lockInMemory(envelope);
           currentSource = envelope;
-          await writeFenceSource(host, fence.path, prev, envelope);
           render();
         } catch (e) {
           errEl.textContent = errText(e);
@@ -219,7 +239,7 @@ registerFence("kandinsky", "encrypted", (host, fence) => {
       };
 
       saveLockBtn.addEventListener("click", () => void submitNew());
-      confirmInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); void submitNew(); } });
+      confirmInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); void submitNew(); } });
       row.append(passInput, confirmInput, hintInput, saveLockBtn);
       body.append(plainInput, row, errEl);
       card.append(head, body);
@@ -263,13 +283,17 @@ registerFence("kandinsky", "encrypted", (host, fence) => {
           const nextText = editor.value;
           const hint = session.hint ?? parsed.hint;
           const nextEnvelope = await encryptBlockText(nextText, session.passphrase, hint);
+          await writeFenceSource(host, fence.path, prev, nextEnvelope);
           lockInMemory(prev);
           if (andLock) lockInMemory(nextEnvelope);
           else rememberUnlockedInMemory(nextEnvelope, { plaintext: nextText, passphrase: session.passphrase, hint });
           currentSource = nextEnvelope;
-          await writeFenceSource(host, fence.path, prev, nextEnvelope);
-          statusSpan.textContent = andLock ? "" : "Saved";
-          render();
+          if (!disposed) {
+            statusSpan.textContent = andLock ? "" : "Saved";
+            render();
+          } else if (!andLock) {
+            refreshCardsForSource(nextEnvelope);
+          }
         } catch (e) {
           errEl.textContent = errText(e);
           errEl.hidden = false;
@@ -282,7 +306,7 @@ registerFence("kandinsky", "encrypted", (host, fence) => {
       saveBtn.addEventListener("click", () => void persistUnlocked(false));
       saveLockBtn.addEventListener("click", () => void persistUnlocked(true));
       editor.addEventListener("keydown", (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); void persistUnlocked(false); }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); e.stopPropagation(); void persistUnlocked(false); }
       });
 
       body.append(editor, errEl);
@@ -332,12 +356,14 @@ registerFence("kandinsky", "encrypted", (host, fence) => {
     };
 
     unlockBtn.addEventListener("click", () => void doUnlock());
-    passInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); void doUnlock(); } });
+    passInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); void doUnlock(); } });
     row.append(passInput, unlockBtn);
     body.append(row, errEl);
     card.append(head, body);
   };
 
+  const handle = { getSource: () => currentSource, refresh: () => render() };
+  activeCards.add(handle);
   render();
-  return () => { disposed = true; card.remove(); };
+  return () => { disposed = true; activeCards.delete(handle); card.remove(); };
 });

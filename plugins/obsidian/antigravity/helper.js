@@ -264,7 +264,22 @@ async function liveStatus() {
     const fs = require("node:fs");
     const path = require("node:path");
     const os = require("node:os");
-    const { DatabaseSync } = require("node:sqlite");
+
+    let sqliteMod = undefined;
+    function getSqlite() {
+      if (sqliteMod !== undefined) return sqliteMod;
+      try {
+        const mod = require("node:sqlite");
+        if (mod && typeof mod.DatabaseSync === "function") {
+          sqliteMod = { available: true, DatabaseSync: mod.DatabaseSync };
+        } else {
+          sqliteMod = { available: false, reason: "node:sqlite DatabaseSync unavailable" };
+        }
+      } catch (err) {
+        sqliteMod = { available: false, reason: String((err && err.message) || err || "node:sqlite unavailable") };
+      }
+      return sqliteMod;
+    }
 
     const base = path.join(os.homedir(), ".gemini", "antigravity-cli");
     const dbPath = path.join(base, "conversation_summaries.db");
@@ -329,15 +344,33 @@ async function liveStatus() {
 
     let rows = [];
     if (fs.existsSync(dbPath)) {
-      const db = new DatabaseSync(dbPath, { open: true, readOnly: true });
-      rows = db.prepare(\`
-        SELECT conversation_id, title, step_count, last_modified_time, status,
-               agent_name, parent_conversation_id, nesting_depth, not_fully_idle, killed
-        FROM conversation_summaries
-        ORDER BY last_modified_time DESC
-        LIMIT 50
-      \`).all();
-      db.close();
+      const sqlite = getSqlite();
+      if (!sqlite.available) {
+        process.stdout.write(JSON.stringify({
+          ok: false,
+          available: false,
+          reason: sqlite.reason,
+          error: sqlite.reason,
+          liveRootCount: 0,
+          liveSubagentCount: 0,
+          totalSubagentCount: 0,
+          roots: [],
+          subagents: [],
+        }));
+        process.exit(0);
+      }
+      const db = new sqlite.DatabaseSync(dbPath, { open: true, readOnly: true });
+      try {
+        rows = db.prepare(\`
+          SELECT conversation_id, title, step_count, last_modified_time, status,
+                 agent_name, parent_conversation_id, nesting_depth, not_fully_idle, killed
+          FROM conversation_summaries
+          ORDER BY last_modified_time DESC
+          LIMIT 50
+        \`).all();
+      } finally {
+        db.close();
+      }
     }
 
     const childCounts = {};

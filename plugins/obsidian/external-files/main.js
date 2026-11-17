@@ -3,8 +3,8 @@
 
 const DEFAULT_EXTERNAL_ROOT = "~/kDrive";
 
-let detectedHomeDir = "";
-let homeDetectPromise = null;
+let cachedHomeDir = "";
+let homeDirPromise = null;
 
 function inferHomeFromVaultPath(rawPath) {
   const norm = String(rawPath ?? "").replace(/\\/g, "/");
@@ -12,10 +12,11 @@ function inferHomeFromVaultPath(rawPath) {
   return m ? m[1] : "";
 }
 
-async function detectHomeDir() {
-  if (detectedHomeDir) return detectedHomeDir;
-  if (!homeDetectPromise && typeof fetch === "function") {
-    homeDetectPromise = (async () => {
+function detectHomeDir() {
+  if (cachedHomeDir) return Promise.resolve(cachedHomeDir);
+  if (!homeDirPromise) {
+    homeDirPromise = (async () => {
+      if (typeof fetch !== "function") return "";
       try {
         const res = await fetch("/api/vaults", { headers: { "x-kandinsky": "1" } });
         if (!res.ok) return "";
@@ -28,7 +29,7 @@ async function detectHomeDir() {
         for (const v of currentFirst) {
           const h = inferHomeFromVaultPath(v.path);
           if (h) {
-            detectedHomeDir = h;
+            cachedHomeDir = h;
             return h;
           }
         }
@@ -38,10 +39,10 @@ async function detectHomeDir() {
       return "";
     })();
   }
-  return homeDetectPromise ? homeDetectPromise : "";
+  return homeDirPromise;
 }
 
-export function expandTildePath(p, homeDir = detectedHomeDir) {
+export function expandTildePath(p, homeDir = cachedHomeDir) {
   const s = String(p ?? "");
   if (!homeDir) return s;
   const h = String(homeDir).replace(/\\/g, "/").replace(/\/+$/, "");
@@ -87,7 +88,7 @@ function safeDecodeUri(raw) {
 }
 
 /** Convert a file:/// URL, absolute path, or external_root-relative path into a clean target path. */
-export function resolveExternalPath(rawInput, externalRoot = DEFAULT_EXTERNAL_ROOT, homeDir = detectedHomeDir) {
+export function resolveExternalPath(rawInput, externalRoot = DEFAULT_EXTERNAL_ROOT, homeDir = cachedHomeDir) {
   let s = String(rawInput ?? "").trim();
   if (!s) return "";
   if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
@@ -277,150 +278,174 @@ export function register(kandinsky) {
   }
 
   const renderExternalFence = (embedMode) => (host, fence) => {
-    const root = getRoot();
-    const normRoot = root.replace(/\\/g, "/").replace(/\/+$/, "");
-    const rootName = basenameOf(normRoot) || "External";
-    const entries = parseExternalEntries(fence.source, fence.info, root);
+    let rerenderQueued = false;
 
-    const wrap = el("div", "display: grid; gap: 8px; margin: 6px 0;");
-    if (!entries.length) {
-      const empty = el(
-        "div",
-        "border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 10px 12px; color: var(--text-faint); font-size: 0.9em;",
-        `Empty ${embedMode ? "external-embed" : "external"} block — add a path relative to ${root}, an absolute path, or a file:/// URL.`
-      );
-      wrap.append(empty);
-      host.replaceChildren(wrap);
-      return;
-    }
+    const render = () => {
+      const rawRoot = getRoot();
+      const root = expandTildePath(rawRoot);
+      const normRoot = root.replace(/\\/g, "/").replace(/\/+$/, "");
+      const rootName = basenameOf(normRoot) || "External";
+      const entries = parseExternalEntries(fence.source, fence.info, root);
 
-    for (const item of entries) {
-      const info = classifyExternalTarget(item.resolved);
-      const titleText = item.label || basenameOf(item.resolved);
-      const underRoot = normRoot && item.resolved.toLowerCase().startsWith(`${normRoot.toLowerCase()}/`);
-
-      const card = el(
-        "div",
-        "border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-elev); padding: 10px 12px; display: grid; gap: 8px;"
-      );
-
-      const row = el("div", "display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0;");
-
-      // File type badge + icon
-      const badge = el(
-        "span",
-        `display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: var(--radius-sm); font-size: 0.74em; font-weight: 650; letter-spacing: 0.04em; color: ${info.color}; background: color-mix(in srgb, ${info.color} 14%, transparent); border: 1px solid color-mix(in srgb, ${info.color} 30%, transparent); flex: none;`
-      );
-      badge.append(svgEl(info.icon, 13), el("span", "", info.badge));
-
-      // Title + resolved path column
-      const meta = el("div", "flex: 1 1 200px; min-width: 0; display: grid; gap: 2px;");
-      const titleRow = el("div", "display: flex; align-items: center; gap: 6px; min-width: 0;");
-      const titleEl = el(
-        "span",
-        "font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
-        titleText
-      );
-      titleRow.append(titleEl);
-      if (underRoot) {
-        titleRow.append(
-          el(
-            "span",
-            "font-size: 0.72em; padding: 1px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); flex: none;",
-            rootName
-          )
-        );
-      }
-      const pathEl = el(
-        "div",
-        "font-family: var(--font-mono); font-size: 0.78em; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
-        item.resolved
-      );
-      pathEl.title = item.resolved;
-      meta.append(titleRow, pathEl);
-      if (item.note) {
-        meta.append(el("div", "font-size: 0.84em; color: var(--text-muted); margin-top: 2px;", item.note));
-      }
-
-      // Action buttons
-      const actions = el("div", "display: inline-flex; align-items: center; gap: 6px; flex: none; margin-left: auto;");
-
-      const copyBtn = el(
-        "button",
-        "display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: transparent; color: var(--text-muted); font-size: 0.82em; cursor: pointer;"
-      );
-      copyBtn.type = "button";
-      copyBtn.title = "Copy resolved path";
-      copyBtn.append(svgEl("copy", 13));
-      copyBtn.onclick = async (e) => {
-        e.stopPropagation();
-        try {
-          await navigator.clipboard.writeText(item.resolved);
-          kandinsky.toast("External Files", "Copied path to clipboard", "info", { timeout: 2200 });
-        } catch {
-          kandinsky.toast("External Files", item.resolved, "info");
-        }
-      };
-
-      const openBtn = el(
-        "button",
-        "display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: var(--radius-sm); border: 1px solid transparent; background: var(--accent); color: var(--accent-fg); font-size: 0.82em; font-weight: 600; cursor: pointer;"
-      );
-      openBtn.type = "button";
-      openBtn.title = `Open ${item.resolved} in default system application`;
-      openBtn.append(svgEl("external-link", 13), el("span", "", "Open in System App"));
-      openBtn.onclick = (e) => {
-        e.stopPropagation();
-        openInSystemApp(kandinsky, item.resolved);
-      };
-
-      actions.append(copyBtn, openBtn);
-      row.append(badge, meta, actions);
-      card.append(row);
-
-      // Optional inline media preview when ```external-embed is used
-      if (embedMode && info.preview !== "none") {
-        const previewWrap = el(
+      const wrap = el("div", "display: grid; gap: 8px; margin: 6px 0;");
+      if (!entries.length) {
+        const empty = el(
           "div",
-          "border-top: 1px solid var(--border); padding-top: 8px; display: none;"
+          "border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 10px 12px; color: var(--text-faint); font-size: 0.9em;",
+          `Empty ${embedMode ? "external-embed" : "external"} block — add a path relative to ${rawRoot}, an absolute path, or a file:/// URL.`
         );
-        const srcUrl = toFileUrl(item.resolved);
-        if (info.preview === "image") {
-          const img = document.createElement("img");
-          img.alt = titleText;
-          img.style.cssText = "max-width: 100%; max-height: 340px; border-radius: var(--radius-sm); display: block; object-fit: contain;";
-          img.onload = () => { previewWrap.style.display = "block"; };
-          img.onerror = () => { previewWrap.remove(); };
-          img.src = srcUrl;
-          previewWrap.append(img);
-          card.append(previewWrap);
-        } else if (info.preview === "audio") {
-          const audio = document.createElement("audio");
-          audio.controls = true;
-          audio.preload = "metadata";
-          audio.style.cssText = "width: 100%; height: 34px;";
-          audio.onloadedmetadata = () => { previewWrap.style.display = "block"; };
-          audio.onerror = () => { previewWrap.remove(); };
-          audio.src = srcUrl;
-          previewWrap.append(audio);
-          card.append(previewWrap);
-        } else if (info.preview === "video") {
-          const video = document.createElement("video");
-          video.controls = true;
-          video.preload = "metadata";
-          video.style.cssText = "max-width: 100%; max-height: 360px; border-radius: var(--radius-sm); display: block;";
-          video.onloadedmetadata = () => { previewWrap.style.display = "block"; };
-          video.onerror = () => { previewWrap.remove(); };
-          video.src = srcUrl;
-          previewWrap.append(video);
-          card.append(previewWrap);
-        }
+        wrap.append(empty);
+        host.replaceChildren(wrap);
+        return;
       }
 
-      wrap.append(card);
-    }
+      const needsHome =
+        rawRoot === "~" ||
+        rawRoot.startsWith("~/") ||
+        entries.some((it) => it.resolved === "~" || it.resolved.startsWith("~/"));
+      if (!cachedHomeDir && needsHome && !rerenderQueued) {
+        rerenderQueued = true;
+        void detectHomeDir().then((home) => {
+          if (home && host.isConnected) render();
+        });
+      }
 
-    host.replaceChildren(wrap);
+      for (const item of entries) {
+        const info = classifyExternalTarget(item.resolved);
+        const titleText = item.label || basenameOf(item.resolved);
+        const normResolvedLower = item.resolved.toLowerCase();
+        const normRootLower = normRoot.toLowerCase();
+        const underRoot = Boolean(
+          normRootLower &&
+            (normResolvedLower === normRootLower || normResolvedLower.startsWith(`${normRootLower}/`))
+        );
+
+        const card = el(
+          "div",
+          "border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-elev); padding: 10px 12px; display: grid; gap: 8px;"
+        );
+
+        const row = el("div", "display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0;");
+
+        // File type badge + icon
+        const badge = el(
+          "span",
+          `display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: var(--radius-sm); font-size: 0.74em; font-weight: 650; letter-spacing: 0.04em; color: ${info.color}; background: color-mix(in srgb, ${info.color} 14%, transparent); border: 1px solid color-mix(in srgb, ${info.color} 30%, transparent); flex: none;`
+        );
+        badge.append(svgEl(info.icon, 13), el("span", "", info.badge));
+
+        // Title + resolved path column
+        const meta = el("div", "flex: 1 1 200px; min-width: 0; display: grid; gap: 2px;");
+        const titleRow = el("div", "display: flex; align-items: center; gap: 6px; min-width: 0;");
+        const titleEl = el(
+          "span",
+          "font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+          titleText
+        );
+        titleRow.append(titleEl);
+        if (underRoot) {
+          titleRow.append(
+            el(
+              "span",
+              "font-size: 0.72em; padding: 1px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); flex: none;",
+              rootName
+            )
+          );
+        }
+        const pathEl = el(
+          "div",
+          "font-family: var(--font-mono); font-size: 0.78em; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+          item.resolved
+        );
+        pathEl.title = item.resolved;
+        meta.append(titleRow, pathEl);
+        if (item.note) {
+          meta.append(el("div", "font-size: 0.84em; color: var(--text-muted); margin-top: 2px;", item.note));
+        }
+
+        // Action buttons
+        const actions = el("div", "display: inline-flex; align-items: center; gap: 6px; flex: none; margin-left: auto;");
+
+        const copyBtn = el(
+          "button",
+          "display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: transparent; color: var(--text-muted); font-size: 0.82em; cursor: pointer;"
+        );
+        copyBtn.type = "button";
+        copyBtn.title = "Copy resolved path";
+        copyBtn.append(svgEl("copy", 13));
+        copyBtn.onclick = async (e) => {
+          e.stopPropagation();
+          try {
+            await navigator.clipboard.writeText(item.resolved);
+            kandinsky.toast("External Files", "Copied path to clipboard", "info", { timeout: 2200 });
+          } catch {
+            kandinsky.toast("External Files", item.resolved, "info");
+          }
+        };
+
+        const openBtn = el(
+          "button",
+          "display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: var(--radius-sm); border: 1px solid transparent; background: var(--accent); color: var(--accent-fg); font-size: 0.82em; font-weight: 600; cursor: pointer;"
+        );
+        openBtn.type = "button";
+        openBtn.title = `Open ${item.resolved} in default system application`;
+        openBtn.append(svgEl("external-link", 13), el("span", "", "Open in System App"));
+        openBtn.onclick = (e) => {
+          e.stopPropagation();
+          openInSystemApp(kandinsky, item.resolved);
+        };
+
+        actions.append(copyBtn, openBtn);
+        row.append(badge, meta, actions);
+        card.append(row);
+
+        // Optional inline media preview when ```external-embed is used (skip unresolved ~ paths until homeDir resolves)
+        const unresolvedTilde = item.resolved === "~" || item.resolved.startsWith("~/");
+        if (embedMode && info.preview !== "none" && !unresolvedTilde) {
+          const previewWrap = el(
+            "div",
+            "border-top: 1px solid var(--border); padding-top: 8px; display: none;"
+          );
+          const srcUrl = toFileUrl(item.resolved);
+          if (info.preview === "image") {
+            const img = document.createElement("img");
+            img.alt = titleText;
+            img.style.cssText = "max-width: 100%; max-height: 340px; border-radius: var(--radius-sm); display: block; object-fit: contain;";
+            img.onload = () => { previewWrap.style.display = "block"; };
+            img.onerror = () => { previewWrap.remove(); };
+            img.src = srcUrl;
+            previewWrap.append(img);
+            card.append(previewWrap);
+          } else if (info.preview === "audio") {
+            const audio = document.createElement("audio");
+            audio.controls = true;
+            audio.preload = "metadata";
+            audio.style.cssText = "width: 100%; height: 34px;";
+            audio.onloadedmetadata = () => { previewWrap.style.display = "block"; };
+            audio.onerror = () => { previewWrap.remove(); };
+            audio.src = srcUrl;
+            previewWrap.append(audio);
+            card.append(previewWrap);
+          } else if (info.preview === "video") {
+            const video = document.createElement("video");
+            video.controls = true;
+            video.preload = "metadata";
+            video.style.cssText = "max-width: 100%; max-height: 360px; border-radius: var(--radius-sm); display: block;";
+            video.onloadedmetadata = () => { previewWrap.style.display = "block"; };
+            video.onerror = () => { previewWrap.remove(); };
+            video.src = srcUrl;
+            previewWrap.append(video);
+            card.append(previewWrap);
+          }
+        }
+
+        wrap.append(card);
+      }
+
+      host.replaceChildren(wrap);
+    };
+
+    render();
   };
 
   kandinsky.editor.registerFence("external", renderExternalFence(false));

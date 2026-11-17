@@ -47,7 +47,7 @@
   let remoteHits = $state<RemoteHit[]>([]), remoteSearched = $state(false), addingHitUid = $state("");
   let addedHitKeys = $state<Record<string, string>>({});
 
-  let inboxLoading = $state(false), inboxOrganizing = $state(false);
+  let inboxLoading = $state(false), inboxOrganizing = $state(false), inboxConfigured = $state(false);
   let watchInbox = $state(""), renameFormat = $state("{Author}{Year} - {Title}.pdf"), externalRoot = $state("../Papers");
   let subfolderPresets = $state<string[]>([]), inboxSubfolder = $state("");
   let inboxItems = $state<InboxItem[]>([]), inboxSelected = $state<Record<string, boolean>>({});
@@ -152,28 +152,45 @@
     try {
       const raw = await api.pluginHelper("catalog-papers", "scan_inbox", {}, 60);
       const o = asRecord(raw);
-      watchInbox = str(o.watch_inbox);
+      const rawDir = str(o.inbox_dir ?? o.watch_inbox);
+      const isConfigured = typeof o.configured === "boolean" ? o.configured : Boolean(rawDir);
+      inboxConfigured = isConfigured;
+      watchInbox = isConfigured ? rawDir : "";
       renameFormat = str(o.rename_format) || "{Author}{Year} - {Title}.pdf";
       const roots = Array.isArray(o.external_pdf_roots) ? o.external_pdf_roots : [];
       externalRoot = str(o.external_root) || str(roots[0]) || "../Papers";
       subfolderPresets = Array.isArray(o.subfolder_presets) ? o.subfolder_presets.map((x) => str(x)).filter(Boolean) : [];
-      const arr = Array.isArray(o.files) ? o.files : Array.isArray(o.items) ? o.items : Array.isArray(raw) ? raw : [];
+      const arr = Array.isArray(o.items) ? o.items : Array.isArray(o.files) ? o.files : Array.isArray(raw) ? raw : [];
       const sel: Record<string, boolean> = {};
+      const rootBase = externalRoot.replace(/\/+$/, "");
       inboxItems = arr.map((entry, i) => {
         const r = asRecord(entry), name = str(r.name ?? r.file ?? r.filename) || `paper-${i + 1}.pdf`;
         const id = str(r.path ?? r.file ?? r.name) || name;
         const dup = str(r.duplicate_key ?? r.existing_key) || (r.duplicate ? "existing" : "");
         sel[id] = !dup;
+        const subClean = str(r.suggested_subfolder).replace(/^\/+|\/+$/g, "");
+        const suggestedFile = str(r.suggested_filename) || name;
+        const constructedTarget = [rootBase, subClean, suggestedFile].filter(Boolean).join("/");
         return {
           id, name, title: str(r.title) || name.replace(/\.pdf$/i, ""),
           authors: joinArr(r.authors ?? r.author), year: str(r.year ?? r.date).slice(0, 4),
           doi: str(r.doi), arxiv: str(r.arxiv),
-          targetPath: str(r.target_path ?? r.renamed_path ?? r.preview_path) || `${externalRoot}/${name}`,
+          targetPath: str(r.target_path ?? r.renamed_path ?? r.preview_path) || constructedTarget,
           duplicateKey: dup,
         };
       });
       inboxSelected = sel;
-    } catch (err) { errorMsg = errReason(err); }
+    } catch (err) {
+      const msg = errReason(err);
+      if (/watch_inbox is not configured/i.test(msg)) {
+        inboxConfigured = false;
+        watchInbox = "";
+        inboxItems = [];
+        inboxSelected = {};
+      } else {
+        errorMsg = msg;
+      }
+    }
     finally { inboxLoading = false; }
   }
 
@@ -218,9 +235,9 @@
       const prim: Record<string, string> = {};
       dupGroups = arr.map((g, idx) => {
         const o = asRecord(g);
-        const sigRaw = Array.isArray(o.signals) ? o.signals : Array.isArray(o.reasons) ? o.reasons : o.signal ? [o.signal] : [];
-        const signals = sigRaw.map((s) => signalLabel(str(s))).filter(Boolean);
-        const list = Array.isArray(o.papers) ? o.papers : Array.isArray(o.entries) ? o.entries : Array.isArray(o.items) ? o.items : [];
+        const sigRaw = Array.isArray(o.reasons) ? o.reasons : Array.isArray(o.signals) ? o.signals : o.reason ? [o.reason] : o.signal ? [o.signal] : [];
+        const signals = Array.from(new Set(sigRaw.map((s) => signalLabel(str(s))).filter(Boolean)));
+        const list = Array.isArray(o.members) ? o.members : Array.isArray(o.papers) ? o.papers : Array.isArray(o.entries) ? o.entries : Array.isArray(o.items) ? o.items : [];
         const entries: DupEntry[] = list.map((p) => {
           const r = asRecord(p);
           return {
@@ -431,7 +448,7 @@
 
   $effect(() => {
     if (paperWorkflowModal.open && !wasOpen) {
-      wasOpen = true; loadedTab = ""; errorMsg = ""; addedSummary = null; scanResult = null; scanProgress = null;
+      wasOpen = true; loadedTab = ""; errorMsg = ""; addedSummary = null; inboxDoneCount = null; scanResult = null; scanProgress = null;
       if (paperWorkflowModal.initialQuery) { addInput = paperWorkflowModal.initialQuery; remoteQuery = paperWorkflowModal.initialQuery; }
     } else if (!paperWorkflowModal.open) {
       wasOpen = false; loadedTab = "";
@@ -559,8 +576,8 @@
               </button>
             </div>
 
-            {#if !watchInbox && !inboxLoading}
-              <div class="kandinsky-notice">
+            {#if !inboxConfigured && !inboxLoading}
+              <div class="kandinsky-notice" data-testid="inbox-unconfigured-notice">
                 <strong>No drop inbox folder configured yet</strong>
                 <span>Set <strong>Shared PDF pool &amp; inbox</strong> (e.g. <code>../Papers</code> and <code>../Papers/Sort</code>) in Settings → Plugins → Catalog · Science.</span>
               </div>
@@ -574,7 +591,7 @@
 
             <div class="sub-row">
               <label class="field-label" for="pw-inbox-subfolder">Destination subfolder</label>
-              <input id="pw-inbox-subfolder" type="text" list="pw-subfolder-presets" data-testid="inbox-subfolder-input" placeholder="Optional subfolder inside ../Papers" bind:value={inboxSubfolder} />
+              <input id="pw-inbox-subfolder" type="text" list="pw-subfolder-presets" data-testid="inbox-subfolder-input" placeholder="Optional subfolder inside {externalRoot}" bind:value={inboxSubfolder} />
               <datalist id="pw-subfolder-presets">{#each subfolderPresets as preset (preset)}<option value={preset}></option>{/each}</datalist>
             </div>
 
@@ -604,7 +621,7 @@
                   {inboxOrganizing ? "Organizing…" : "Organize selected PDFs"}
                 </button>
               </div>
-            {:else if watchInbox && !inboxLoading}
+            {:else if inboxConfigured && !inboxLoading}
               <p class="kandinsky-empty">Drop inbox <code>{watchInbox}</code> is clean — no unfiled PDFs waiting</p>
             {/if}
           </div>

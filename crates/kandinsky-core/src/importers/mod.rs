@@ -13,6 +13,54 @@ pub(crate) const MS_ONE_MAGIC: [u8; 16] = [
     0xE4, 0x52, 0x5C, 0x7B, 0x8C, 0xD8, 0xA7, 0x4D, 0xAE, 0xB1, 0x53, 0x78, 0xD0, 0x29, 0x96, 0xD3,
 ];
 const MAX_ENTRY_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_TOTAL_BYTES: u64 = 1024 * 1024 * 1024;
+const MAX_ZIP_ENTRIES: usize = 20_000;
+
+struct ZipBudget {
+    max_entries: usize,
+    max_entry_bytes: u64,
+    max_total_bytes: u64,
+    entries_left: usize,
+    bytes_left: u64,
+}
+
+impl Default for ZipBudget {
+    fn default() -> Self {
+        Self::new(MAX_ZIP_ENTRIES, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES)
+    }
+}
+
+impl ZipBudget {
+    fn new(max_entries: usize, max_entry_bytes: u64, max_total_bytes: u64) -> Self {
+        Self { max_entries, max_entry_bytes, max_total_bytes, entries_left: max_entries, bytes_left: max_total_bytes }
+    }
+
+    fn take_entries(&mut self, count: usize) -> Result<()> {
+        if count > self.entries_left {
+            return Err(Error::TooLarge(format!("zip archive exceeds maximum of {} entries", self.max_entries)));
+        }
+        self.entries_left -= count;
+        Ok(())
+    }
+
+    fn read_entry<R: Read>(&mut self, entry: R, name: &str) -> Result<Vec<u8>> {
+        let cap = self.max_entry_bytes.min(self.bytes_left);
+        let mut buf = Vec::new();
+        entry.take(cap.saturating_add(1)).read_to_end(&mut buf)?;
+        let n = buf.len() as u64;
+        if n > self.max_entry_bytes {
+            return Err(Error::TooLarge(format!("zip entry `{name}` exceeds {} bytes", self.max_entry_bytes)));
+        }
+        if n > self.bytes_left {
+            return Err(Error::TooLarge(format!(
+                "zip archive exceeds maximum decompressed size of {} bytes",
+                self.max_total_bytes
+            )));
+        }
+        self.bytes_left -= n;
+        Ok(buf)
+    }
+}
 
 pub(crate) struct TempCacheDir(PathBuf);
 
@@ -173,8 +221,9 @@ pub(crate) fn write_vault_doc(
     unreachable!()
 }
 
-fn extract_zip_bytes(bytes: &[u8], into: &Path, depth: u8) -> Result<()> {
+fn extract_zip_bytes(bytes: &[u8], into: &Path, depth: u8, budget: &mut ZipBudget) -> Result<()> {
     let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| Error::BadRequest(format!("invalid zip: {e}")))?;
+    budget.take_entries(z.len())?;
     for i in 0..z.len() {
         let entry = z.by_index(i).map_err(|e| Error::BadRequest(format!("zip entry: {e}")))?;
         let Some(rel) = enclosed_rel(entry.name()) else { continue };
@@ -183,13 +232,13 @@ fn extract_zip_bytes(bytes: &[u8], into: &Path, depth: u8) -> Result<()> {
             vault_write::cache::mkdir(&dest)?;
             continue;
         }
-        let mut buf = Vec::new();
-        entry.take(MAX_ENTRY_BYTES).read_to_end(&mut buf)?;
+        let name = entry.name().to_string();
+        let buf = budget.read_entry(entry, &name)?;
         let nested = depth < 2 && rel.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("zip")) && buf.starts_with(b"PK\x03\x04");
         if nested {
             let parent = dest.parent().unwrap_or(into);
             vault_write::cache::mkdir(parent)?;
-            extract_zip_bytes(&buf, parent, depth + 1)?;
+            extract_zip_bytes(&buf, parent, depth + 1, budget)?;
         } else {
             vault_write::cache::write(&dest, &buf)?;
         }
@@ -251,7 +300,7 @@ pub fn import_archive_bytes(
 ) -> Result<ImportReport> {
     let tmp = TempCacheDir::new(ws, "import-tmp")?;
     if bytes.starts_with(b"PK\x03\x04") || bytes.starts_with(b"PK\x05\x06") || filename.is_some_and(|f| f.to_ascii_lowercase().ends_with(".zip")) {
-        extract_zip_bytes(bytes, tmp.path(), 0)?;
+        extract_zip_bytes(bytes, tmp.path(), 0, &mut ZipBudget::default())?;
     } else {
         let fallback = if bytes.starts_with(&MS_ONE_MAGIC) {
             "Imported.one"
@@ -276,7 +325,7 @@ pub fn import_bundle(ws: &Workspace, req: &ImportBundleRequest) -> Result<Import
             .decode(f.data_base64.trim())
             .map_err(|e| Error::BadRequest(format!("invalid base64 for {}: {e}", f.rel_path)))?;
         if req.files.len() == 1 && (bytes.starts_with(b"PK\x03\x04") || rel.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("zip"))) {
-            extract_zip_bytes(&bytes, tmp.path(), 0)?;
+            extract_zip_bytes(&bytes, tmp.path(), 0, &mut ZipBudget::default())?;
         } else {
             vault_write::cache::write(&tmp.path().join(rel), &bytes)?;
         }
@@ -293,5 +342,56 @@ pub fn import_local_path(ws: &Workspace, req: &ImportPathRequest) -> Result<Impo
         run_folder_import(ws, src, req.format, &req.target_dir)
     } else {
         import_archive_bytes(ws, &std::fs::read(src)?, req.format, &req.target_dir, src.file_name().and_then(|n| n.to_str()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn make_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut buf = Vec::new();
+        let mut z = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        for (name, data) in entries {
+            z.start_file(*name, opts).unwrap();
+            z.write_all(data).unwrap();
+        }
+        z.finish().unwrap();
+        buf
+    }
+
+    #[test]
+    fn zip_budget_rejects_excess_entries_and_bytes_across_nested_zips() {
+        let d = tempfile::tempdir().unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+
+        // Entry count cap through public import_archive_bytes (> MAX_ZIP_ENTRIES).
+        let names: Vec<String> = (0..=MAX_ZIP_ENTRIES).map(|i| format!("n{i}.md")).collect();
+        let entries: Vec<(&str, &[u8])> = names.iter().map(|n| (n.as_str(), &b""[..])).collect();
+        let too_many = make_zip(&entries);
+        let err = import_archive_bytes(&ws, &too_many, ImportFormat::Auto, "Imported", Some("many.zip")).unwrap_err();
+        assert!(matches!(err, Error::TooLarge(_)) && err.to_string().contains("entries"), "{err}");
+
+        // Cumulative byte budget across multiple entries & nested zips.
+        let out = TempCacheDir::new(&ws, "zip-budget-test").unwrap();
+        let inner = make_zip(&[("a.md", &[b'x'; 60]), ("b.md", &[b'y'; 60])]);
+        let outer = make_zip(&[("inner.zip", &inner)]);
+        // inner.zip itself + inner entries must stay under budget.
+        let mut small_budget = ZipBudget::new(10, 512, inner.len() as u64 + 100);
+        let err = extract_zip_bytes(&outer, out.path(), 0, &mut small_budget).unwrap_err();
+        assert!(matches!(err, Error::TooLarge(_)) && err.to_string().contains("decompressed size"), "{err}");
+
+        // Single-entry byte cap.
+        let single = make_zip(&[("big.md", &[b'a'; 64])]);
+        let mut entry_cap = ZipBudget::new(10, 32, 1024);
+        let err = extract_zip_bytes(&single, out.path(), 0, &mut entry_cap).unwrap_err();
+        assert!(matches!(err, Error::TooLarge(_)) && err.to_string().contains("big.md"), "{err}");
+
+        // Nested entry count cap.
+        let mut nested_count = ZipBudget::new(2, 1024, 4096);
+        let err = extract_zip_bytes(&outer, out.path(), 0, &mut nested_count).unwrap_err();
+        assert!(matches!(err, Error::TooLarge(_)) && err.to_string().contains("entries"), "{err}");
     }
 }

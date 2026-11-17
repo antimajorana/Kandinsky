@@ -789,6 +789,24 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+pub(crate) struct HelpersGuard(pub(crate) kandinsky_core::helper::Helpers);
+
+impl Drop for HelpersGuard {
+    fn drop(&mut self) {
+        self.0.shutdown();
+    }
+}
+
+/// Local helper manager wired to an in-process vault router so offline plugin callbacks work,
+/// guaranteed to stop all helpers and break the router cycle when dropped.
+pub(crate) fn standalone_helpers(ws: &Workspace) -> (kandinsky_core::helper::Helpers, HelpersGuard) {
+    let bus = kandinsky_core::events::EventBus::default();
+    let local = kandinsky_core::helper::Helpers::new(ws.root(), bus.clone());
+    local.answer_with(kandinsky_core::server::standalone_helper_router(ws.clone(), bus, local.clone()));
+    let guard = HelpersGuard(local.clone());
+    (local, guard)
+}
+
 /// Calls a plugin helper method through the running Kandinsky server when open, else in a local helper process.
 async fn call_plugin_method(ws: &Workspace, id: &str, method: &str, params: Value) -> Result<Value> {
     if let Some(s) = Server::find(ws).await {
@@ -797,10 +815,8 @@ async fn call_plugin_method(ws: &Workspace, id: &str, method: &str, params: Valu
     let cfg = ws.config()?;
     let store = kandinsky_core::secrets::Store::for_vault(ws.root());
     let full = kandinsky_core::plugin_tools::page_call_params(ws.root(), &cfg, &store, id, params)?;
-    let local = kandinsky_core::helper::Helpers::new(ws.root(), kandinsky_core::events::EventBus::default());
-    let out = local.call(id, method, full, Duration::from_secs(3600)).await?;
-    local.stop_all();
-    Ok(out)
+    let (local, _guard) = standalone_helpers(ws);
+    Ok(local.call(id, method, full, Duration::from_secs(3600)).await?)
 }
 
 /// Parses either a `kandinsky://capture-paper?url=...&doi=...&title=...` bookmarklet URI or a plain DOI/arXiv/URL string.

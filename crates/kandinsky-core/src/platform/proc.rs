@@ -83,6 +83,9 @@ pub enum Stop {
 
 /// Ends the group started by [`own_group`] whose leader is `pid`, children included.
 pub fn stop_group(pid: u32, how: Stop) {
+    if pid == 0 {
+        return;
+    }
     #[cfg(unix)]
     {
         let sig = match how {

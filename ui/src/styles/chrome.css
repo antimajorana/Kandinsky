@@ -1,13 +1,16 @@
 /* Shell chrome of the vertical-tabs layout (docs/design/VERTICAL-TABS.md; calm, SilverBullet-inspired):
    no tab strips, a quiet title bar on each editor, soft group cards whose focus shows only when
    the window is split. Chrome only: note rendering is not touched here. */
-.vtabs .dockview-theme-kandinsky .dv-groupview { box-shadow: none; transition: border-color .15s; }
-.vtabs.split .dockview-theme-kandinsky .dv-groupview.dv-active-group { border-color: color-mix(in srgb, var(--accent) 38%, var(--border-strong)); }
-.vtabs:not(.split) .dockview-theme-kandinsky .dv-groupview.dv-active-group { border-color: var(--border); }
+.shell:is(.vtabs, .notion) .dockview-theme-kandinsky .dv-groupview { position: relative; box-shadow: none; transition: border-color .15s; }
+.shell:is(.vtabs, .notion).split .dockview-theme-kandinsky .dv-groupview.dv-active-group {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-strong));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+.shell:is(.vtabs, .notion):not(.split) .dockview-theme-kandinsky .dv-groupview.dv-active-group { border-color: var(--border); box-shadow: none; }
 
 /* the editor's path bar is the page's title bar now (SilverBullet's page name): roomier, no rule */
-.vtabs .editor-pane .crumbs { min-height: 36px; padding: 6px 16px; border-bottom-color: transparent; }
-.vtabs .editor-pane .crumbs .seg.file { font-weight: 600; color: var(--heading); }
+.shell:is(.vtabs, .notion) .editor-pane .crumbs { min-height: 36px; padding: 6px 16px; border-bottom-color: transparent; }
+.shell:is(.vtabs, .notion) .editor-pane .crumbs .seg.file { font-weight: 600; color: var(--heading); }
 
 /* blocks (lib/blocks.ts): anything drawn inside a note or a page */
 .kandinsky-block { position: relative; min-width: 0; }
@@ -128,7 +131,7 @@
 .dockview-theme-kandinsky .kandinsky-side-group .dv-content-container .side-pane > .side-head { display: none; }
 
 /* a split's halves: each one's × in its corner, shown on hover (lib/tabs.svelte.ts halfCloses) */
-.vtabs .dockview-theme-kandinsky .dv-groupview { position: relative; }
+.shell:is(.vtabs, .notion) .dockview-theme-kandinsky .dv-groupview { position: relative; }
 .half-close { position: absolute; top: 6px; right: 6px; z-index: 6; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%;
   color: var(--text-muted); background: var(--bg-elev); border: 1px solid var(--border-strong); opacity: 0; transition: opacity .12s; cursor: pointer; }
 .dv-groupview:hover > .half-close, .half-close:focus-visible { opacity: 1; }

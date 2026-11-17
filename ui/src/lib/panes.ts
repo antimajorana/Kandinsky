@@ -190,7 +190,7 @@ export function paneIcon(s: PaneSpec): IconName {
 export const TABLE_RE = /\.(tsv|csv|tab|xlsx)$/i;
 const CODE_RE = /\.(rs|py|ts|js|mjs|cjs|tsx|jsx|svelte|c|h|cc|cpp|hpp|go|java|kt|jl|f90|f|sh|zsh|bash|toml|ya?ml|json|lua|rb|css|scss|html|tex|bib|nix|cmake|sql)$/i;
 
-export const NOTEBOOK_RE = /\.ipynb$/i;
+export const NOTEBOOK_RE = /\.(?:ipynb|wln)$/i;
 
 export function fileIcon(path: string): IconName {
   if (/\.canvas$/i.test(path)) return "grid";

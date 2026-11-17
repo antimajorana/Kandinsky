@@ -220,13 +220,22 @@ fn is_valid_iso_datetime(s: &str) -> bool {
         return true;
     }
     let b = s.as_bytes();
-    if b.len() < 16 || !is_valid_iso_date(&s[..10]) || !matches!(b[10], b' ' | b'T') {
+    if b.len() < 16
+        || !s.is_char_boundary(10)
+        || !s.is_char_boundary(11)
+        || !is_valid_iso_date(&s[..10])
+        || !matches!(b[10], b' ' | b'T')
+    {
         return false;
     }
     let rest = &s[11..];
     let time_part = if let Some(stripped) = rest.strip_suffix(['Z', 'z']) {
         stripped
-    } else if rest.len() > 6 && matches!(rest.as_bytes()[rest.len() - 6], b'+' | b'-') {
+    } else if rest.len() > 6
+        && rest.is_char_boundary(rest.len() - 6)
+        && rest.is_char_boundary(rest.len() - 5)
+        && matches!(rest.as_bytes()[rest.len() - 6], b'+' | b'-')
+    {
         if !valid_time_token(&rest[rest.len() - 5..], false) {
             return false;
         }
@@ -402,5 +411,22 @@ mod tests {
         assert!(validate_property_value(&specs.properties["status"], &Value::String("[[accepted]]".into())).is_ok());
         assert!(validate_property_value(&specs.properties["confidence"], &Value::String("3.5".into())).is_ok());
         assert!(validate_property_value(&specs.properties["created"], &Value::Null).is_ok());
+    }
+
+    #[test]
+    fn rejects_multibyte_utf8_datetimes_without_panicking() {
+        for bad in [
+            "2026年01月01日 12:00",
+            "2026-01-0€ 12:00",
+            "2026-01-01€12:00",
+            "2026-01-01 12:00+0€:00",
+            "2026-01-01 12:00+€00",
+            "2026-01-01 12:00+00€",
+            "2026-01-01 12:00-0€",
+        ] {
+            assert!(!is_valid_iso_datetime(bad), "should reject {bad:?}");
+        }
+        assert!(is_valid_iso_datetime("2026-01-01 12:00+02:00"));
+        assert!(is_valid_iso_datetime("2026-01-01T12:00:05Z"));
     }
 }

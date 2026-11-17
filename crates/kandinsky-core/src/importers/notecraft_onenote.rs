@@ -289,11 +289,12 @@ pub(crate) fn import_onenote_dir(
 
 fn try_notecraft_cli(ws: &Workspace, one_path: &Path, dest_dir: &str, report: &mut ImportReport) -> Result<bool> {
     let tmp = TempCacheDir::new(ws, "notecraft-cli")?;
-    let status = std::process::Command::new("notecraft-cli")
-        .args(["import", "onenote"])
+    let mut cmd = std::process::Command::new("notecraft-cli");
+    cmd.args(["import", "onenote"])
         .arg(one_path)
-        .arg(tmp.path())
-        .output();
+        .arg(tmp.path());
+    crate::platform::proc::no_window(&mut cmd);
+    let status = cmd.output();
     let Ok(out) = status else { return Ok(false) };
     if !out.status.success() {
         return Ok(false);

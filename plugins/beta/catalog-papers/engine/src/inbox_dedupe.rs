@@ -13,7 +13,8 @@ use serde_json::{json, Value as Json};
 use serde_yaml::{Mapping, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InboxItem {
@@ -23,7 +24,14 @@ pub struct InboxItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct InboxScan { pub inbox_dir: String, pub items: Vec<InboxItem>, pub subfolder_presets: Vec<String> }
+pub struct InboxScan {
+    pub configured: bool,
+    pub inbox_dir: String,
+    pub external_root: String,
+    pub rename_format: String,
+    pub items: Vec<InboxItem>,
+    pub subfolder_presets: Vec<String>,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -121,6 +129,20 @@ fn fallback_stem_entry(fname: &str) -> Mapping {
 }
 
 pub fn scan_inbox(lib: &Lib) -> Res<InboxScan> {
+    let external_root = lib.cfg.external_pdf_roots.first().cloned().unwrap_or_else(|| "../Papers".into());
+    let rename_format = lib.cfg.rename_format.clone();
+    let subfolder_presets = lib.cfg.subfolder_presets.clone();
+    let watch_inbox = lib.cfg.watch_inbox.trim();
+    if watch_inbox.is_empty() {
+        return Ok(InboxScan {
+            configured: false,
+            inbox_dir: String::new(),
+            external_root,
+            rename_format,
+            items: Vec::new(),
+            subfolder_presets,
+        });
+    }
     let inbox_dir = resolve_inbox_dir(lib.root, lib.cfg)?;
     let existing = lib.list().unwrap_or_default();
     let mut items = Vec::new();
@@ -140,7 +162,14 @@ pub fn scan_inbox(lib: &Lib) -> Res<InboxScan> {
             isbn: info.isbn, title, authors, year, suggested_filename, suggested_subfolder, existing_key: info.existing_key,
         });
     }
-    Ok(InboxScan { inbox_dir: lib.cfg.watch_inbox.clone(), items, subfolder_presets: lib.cfg.subfolder_presets.clone() })
+    Ok(InboxScan {
+        configured: true,
+        inbox_dir: watch_inbox.to_string(),
+        external_root,
+        rename_format,
+        items,
+        subfolder_presets,
+    })
 }
 
 pub fn organize_inbox(lib: &Lib, req: &OrganizeInboxReq) -> Res<OrganizeInboxResult> {
@@ -231,14 +260,63 @@ pub fn organize_inbox(lib: &Lib, req: &OrganizeInboxReq) -> Res<OrganizeInboxRes
     Ok(res)
 }
 
-pub fn start_inbox_watcher(plugin: String, root: PathBuf) {
+/// Background handle for the `watch_inbox` poller; wakes and exits cleanly when dropped or stopped.
+pub struct InboxWatcher {
+    stop: Arc<(Mutex<bool>, Condvar)>,
+}
+
+impl InboxWatcher {
+    pub fn start(plugin: String, root: PathBuf) -> Self {
+        let stop = Arc::new((Mutex::new(false), Condvar::new()));
+        spawn_inbox_watcher(plugin, root, stop.clone());
+        Self { stop }
+    }
+
+    pub fn stop(&self) {
+        let (lock, cv) = &*self.stop;
+        *lock.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        cv.notify_all();
+    }
+}
+
+impl Drop for InboxWatcher {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+fn wait_or_stop(stop: &(Mutex<bool>, Condvar), dur: Duration) -> bool {
+    let (lock, cv) = stop;
+    let mut stopped = lock.lock().unwrap_or_else(|e| e.into_inner());
+    let deadline = Instant::now() + dur;
+    while !*stopped {
+        let rem = deadline.saturating_duration_since(Instant::now());
+        if rem.is_zero() {
+            return false;
+        }
+        let (guard, _) = cv.wait_timeout(stopped, rem).unwrap_or_else(|e| e.into_inner());
+        stopped = guard;
+    }
+    true
+}
+
+fn spawn_inbox_watcher(plugin: String, root: PathBuf, stop: Arc<(Mutex<bool>, Condvar)>) {
     std::thread::spawn(move || {
         let core = CoreApi::new(plugin, root.clone());
         let mut last: Option<Vec<String>> = None;
-        loop {
-            std::thread::sleep(Duration::from_secs(5));
-            let cfg = core.settings(&Json::Null);
-            if cfg.watch_inbox.trim().is_empty() { continue; }
+        while !wait_or_stop(&stop, Duration::from_secs(5)) {
+            let cfg = match core.kandinsky.get("/api/plugins") {
+                Ok(all) => {
+                    let mine = all.as_array().into_iter().flatten().find(|p| p["id"].as_str() == Some(core.plugin.as_str()));
+                    Settings::from_value(mine.map_or(&Json::Null, |p| &p["settings"]))
+                }
+                Err(e) if e.status.is_none() => break,
+                Err(_) => continue,
+            };
+            if cfg.watch_inbox.trim().is_empty() {
+                last = None;
+                continue;
+            }
             let Ok(paths) = resolve_inbox_dir(&root, &cfg).and_then(|d| list_inbox_pdfs(&d)) else { continue };
             let names: Vec<String> = paths.iter().filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from)).collect();
             if last.as_ref() != Some(&names) {
@@ -249,6 +327,11 @@ pub fn start_inbox_watcher(plugin: String, root: PathBuf) {
             }
         }
     });
+}
+
+pub fn start_inbox_watcher(plugin: String, root: PathBuf) {
+    let stop = Arc::new((Mutex::new(false), Condvar::new()));
+    spawn_inbox_watcher(plugin, root, stop);
 }
 
 fn norm_ascii_word(s: &str) -> String {
@@ -509,7 +592,8 @@ mod tests {
 
         std::fs::write(sort_dir.join("Quantum_lecture_notes.pdf"), b"%PDF-1.4 inbox-one").unwrap();
         let scan = scan_inbox(&v.lib()).unwrap();
-        assert_eq!((scan.items.len(), scan.items[0].suggested_subfolder.as_str()), (1, "Quantum"));
+        assert!(scan.configured);
+        assert_eq!((scan.external_root.as_str(), scan.items.len(), scan.items[0].suggested_subfolder.as_str()), ("../Papers", 1, "Quantum"));
         let org = organize_inbox(&v.lib(), &OrganizeInboxReq::default()).unwrap();
         assert_eq!(org.organized.len(), 1);
         assert!(!sort_dir.join("Quantum_lecture_notes.pdf").exists() && pool_dir.join("Quantum").read_dir().unwrap().count() == 1);
@@ -531,5 +615,28 @@ mod tests {
         assert!(ch1.contains("[[anderson1972more]]") && ch1.contains("\\cite{anderson1972more, kitaev2006}"));
         let final_note = std::fs::read_to_string(pubd.join("anderson1972more.md")).unwrap();
         assert!(final_note.contains("aliases:\n  - anderson1972pre") && final_note.contains("Preprint derivation notes.") && final_note.contains("m-11111111 highlight p1"));
+    }
+
+    #[test]
+    fn scan_inbox_returns_unconfigured_state_when_watch_inbox_is_empty() {
+        let mut v = Vault::new();
+        let def_scan = scan_inbox(&v.lib()).unwrap();
+        assert!(!def_scan.configured);
+        assert!(def_scan.inbox_dir.is_empty());
+        assert!(def_scan.items.is_empty());
+        assert_eq!(def_scan.external_root, "../Papers");
+        assert_eq!(def_scan.rename_format, "{Author}{Year} - {Title}.pdf");
+
+        v.cfg.watch_inbox = "   ".into();
+        v.cfg.external_pdf_roots = vec!["../Library/Papers".into()];
+        v.cfg.rename_format = "{Citekey}.pdf".into();
+        v.cfg.subfolder_presets = vec!["Condensed".into()];
+        let custom_scan = scan_inbox(&v.lib()).unwrap();
+        assert!(!custom_scan.configured);
+        assert!(custom_scan.inbox_dir.is_empty());
+        assert!(custom_scan.items.is_empty());
+        assert_eq!(custom_scan.external_root, "../Library/Papers");
+        assert_eq!(custom_scan.rename_format, "{Citekey}.pdf");
+        assert_eq!(custom_scan.subfolder_presets, vec!["Condensed".to_string()]);
     }
 }

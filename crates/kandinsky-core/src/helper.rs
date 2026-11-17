@@ -19,8 +19,8 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::oneshot;
@@ -34,12 +34,26 @@ const CRASH_WINDOW: Duration = Duration::from_secs(600);
 const IDLE_FLOOR: Duration = Duration::from_secs(60);
 /// How often an idle helper is looked at, at the most.
 const IDLE_TICK: Duration = Duration::from_millis(if cfg!(test) { 20 } else { 15_000 });
+/// How long a stopping process helper gets after stdin EOF before falling back to process-group kill.
+const STOP_GRACE: Duration = Duration::from_millis(250);
+const STOP_POLL: Duration = Duration::from_millis(10);
 
 type Reply = oneshot::Sender<std::result::Result<Value, String>>;
 
+struct PipeExit {
+    child: Mutex<Option<tokio::process::Child>>,
+    status: Mutex<Option<String>>,
+    done: AtomicBool,
+}
+
 /// Where the core's lines to a helper go: a process's stdin, or a JS helper's context (js_helper.rs).
 enum Input {
-    Pipe { stdin: tokio::sync::Mutex<tokio::process::ChildStdin>, pid: Option<u32> },
+    Pipe {
+        stdin: tokio::sync::Mutex<Option<tokio::process::ChildStdin>>,
+        closed: AtomicBool,
+        pid: Option<u32>,
+        exit: Arc<PipeExit>,
+    },
     Js(crate::js_helper::Handle),
 }
 
@@ -51,6 +65,7 @@ struct Running {
     stamp: Option<std::time::SystemTime>,
     /// when a call last went to it or an answer came back (`[helper] idle`)
     used: Mutex<Instant>,
+    stopped: AtomicBool,
 }
 
 impl Running {
@@ -61,19 +76,105 @@ impl Running {
         }
     }
 
-    fn kill(&self) {
-        match &self.input {
-            // the whole group: a helper started through `sh -c` is the shell's child
-            Input::Pipe { pid: Some(pid), .. } => crate::platform::proc::stop_group(*pid, crate::platform::proc::Stop::Ask),
-            Input::Pipe { pid: None, .. } => {}
-            Input::Js(h) => h.stop(),
+    fn close_stdin(&self) {
+        if let Input::Pipe { stdin, closed, .. } = &self.input {
+            closed.store(true, Ordering::Release);
+            if let Ok(mut guard) = stdin.try_lock() {
+                guard.take();
+            }
         }
+    }
+
+    fn begin_stop(&self) -> Option<(Option<u32>, &Arc<PipeExit>)> {
+        if self.stopped.swap(true, Ordering::AcqRel) {
+            return None;
+        }
+        match &self.input {
+            Input::Pipe { pid, exit, .. } => {
+                self.close_stdin();
+                Some((*pid, exit))
+            }
+            Input::Js(h) => {
+                h.stop();
+                None
+            }
+        }
+    }
+
+    fn pipe_exited(pid: Option<u32>, exit: &PipeExit) -> bool {
+        if exit.done.load(Ordering::Acquire) {
+            return true;
+        }
+        let mut child_guard = exit.child.lock().unwrap_or_else(|e| e.into_inner());
+        match child_guard.as_mut() {
+            Some(child) => match child.try_wait() {
+                Ok(Some(st)) => {
+                    *exit.status.lock().unwrap_or_else(|e| e.into_inner()) = Some(st.to_string());
+                    *child_guard = None;
+                    exit.done.store(true, Ordering::Release);
+                    true
+                }
+                Ok(None) => false,
+                Err(e) => {
+                    *exit.status.lock().unwrap_or_else(|e| e.into_inner()) = Some(e.to_string());
+                    *child_guard = None;
+                    exit.done.store(true, Ordering::Release);
+                    true
+                }
+            },
+            None => exit.done.load(Ordering::Acquire) || pid.is_none_or(|p| !crate::platform::proc::pid_alive(p)),
+        }
+    }
+
+    fn finish_stop(pid: Option<u32>, exit: &PipeExit) {
+        if !Self::pipe_exited(pid, exit) {
+            if let Some(pid) = pid {
+                // the whole group: a helper started through `sh -c` is the shell's child
+                crate::platform::proc::stop_group(pid, crate::platform::proc::Stop::Ask);
+            }
+        }
+    }
+
+    fn kill(&self) {
+        let Some((pid, exit)) = self.begin_stop() else { return };
+        let deadline = Instant::now() + STOP_GRACE;
+        while !Self::pipe_exited(pid, exit) {
+            let Some(left) = deadline.checked_duration_since(Instant::now()) else { break };
+            std::thread::sleep(left.min(STOP_POLL));
+            self.close_stdin();
+        }
+        Self::finish_stop(pid, exit);
+    }
+
+    async fn kill_async(&self) {
+        let Some((pid, exit)) = self.begin_stop() else { return };
+        let deadline = Instant::now() + STOP_GRACE;
+        while !Self::pipe_exited(pid, exit) {
+            let Some(left) = deadline.checked_duration_since(Instant::now()) else { break };
+            tokio::time::sleep(left.min(STOP_POLL)).await;
+            self.close_stdin();
+        }
+        Self::finish_stop(pid, exit);
     }
 
     /// One protocol line to the helper.
     async fn send(&self, line: &str) -> std::io::Result<()> {
         match &self.input {
-            Input::Pipe { stdin, .. } => stdin.lock().await.write_all(format!("{line}\n").as_bytes()).await,
+            Input::Pipe { stdin, closed, .. } => {
+                let mut guard = stdin.lock().await;
+                if closed.load(Ordering::Acquire) {
+                    guard.take();
+                    return Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "the helper was stopped"));
+                }
+                let Some(pipe) = guard.as_mut() else {
+                    return Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "the helper was stopped"));
+                };
+                let res = pipe.write_all(format!("{line}\n").as_bytes()).await;
+                if closed.load(Ordering::Acquire) {
+                    guard.take();
+                }
+                res
+            }
             Input::Js(h) => h.send(line),
         }
     }
@@ -95,8 +196,8 @@ pub struct Helpers {
     /// every other plugin's calls go through `slots`); kept apart from the slots, which `stop` removes
     starting: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
     /// the vault's routes, answering the helpers' calls back in-process (helper_api.rs); unset where nothing serves the
-    /// vault (`kandinsky mcp` running a helper itself), and a call is then answered 503
-    routes: Arc<std::sync::OnceLock<axum::Router>>,
+    /// vault, and a call is then answered 503
+    routes: Arc<RwLock<Option<axum::Router>>>,
 }
 
 fn manifest_stamp(root: &Path, id: &str) -> Option<std::time::SystemTime> {
@@ -139,7 +240,13 @@ impl Helpers {
 
     /// The routes the helpers' calls go through (the server, once the vault's router exists).
     pub fn answer_with(&self, routes: axum::Router) {
-        let _ = self.routes.set(routes);
+        *self.routes.write().unwrap_or_else(|e| e.into_inner()) = Some(routes);
+    }
+
+    /// Stops all running helpers and clears the router reference so server state can drop without a cycle.
+    pub fn shutdown(&self) {
+        self.stop_all();
+        *self.routes.write().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     /// `stopped`, `running`, or `crashed` (died too often; `restart` clears it).
@@ -248,8 +355,26 @@ impl Helpers {
         let (Some(stdin), Some(stdout), Some(stderr)) = (stdin, stdout, stderr) else {
             return Err(Error::CommandFailed(format!("plugin {id}: helper: no pipes")));
         };
-        let input = Input::Pipe { stdin: tokio::sync::Mutex::new(stdin), pid: child.id() };
-        let r = Arc::new(Running { input, waiting: Mutex::default(), next: AtomicU64::new(1), stamp, used: Mutex::new(now) });
+        let pid = child.id();
+        let exit = Arc::new(PipeExit {
+            child: Mutex::new(Some(child)),
+            status: Mutex::new(None),
+            done: AtomicBool::new(false),
+        });
+        let input = Input::Pipe {
+            stdin: tokio::sync::Mutex::new(Some(stdin)),
+            closed: AtomicBool::new(false),
+            pid,
+            exit: exit.clone(),
+        };
+        let r = Arc::new(Running {
+            input,
+            waiting: Mutex::default(),
+            next: AtomicU64::new(1),
+            stamp,
+            used: Mutex::new(now),
+            stopped: AtomicBool::new(false),
+        });
         log(&self.root, id, &format!("[kandinsky] helper started: {run}"));
 
         // stderr → the plugin's log
@@ -267,7 +392,17 @@ impl Helpers {
             while let Ok(Some(l)) = lines.next_line().await {
                 me.incoming(&pid, &mine, &l);
             }
-            let status = child.wait().await.map(|s| s.to_string()).unwrap_or_else(|e| e.to_string());
+            let taken = exit.child.lock().unwrap_or_else(|e| e.into_inner()).take();
+            let status = match taken {
+                Some(mut child) => child.wait().await.map(|s| s.to_string()).unwrap_or_else(|e| e.to_string()),
+                None => exit
+                    .status
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone()
+                    .unwrap_or_else(|| "stopped".to_string()),
+            };
+            exit.done.store(true, Ordering::Release);
             let _ = tokio::time::timeout(Duration::from_secs(1), errs).await; // its last words logged first
             me.ended(&pid, &mine, &status);
         });
@@ -280,7 +415,14 @@ impl Helpers {
         // the programs it may run (`[permissions] exec`); an unreadable manifest gives it none
         let exec = plugins::tool_parts(&self.root, id).map(|(_, p, _)| p.exec).unwrap_or_default();
         let (handle, mut outs) = crate::js_helper::start(&self.root, id, file, crate::js_helper::LIMITS, exec).map_err(|e| Error::CommandFailed(format!("plugin {id}: helper: {e}")))?;
-        let r = Arc::new(Running { input: Input::Js(handle), waiting: Mutex::default(), next: AtomicU64::new(1), stamp, used: Mutex::new(now) });
+        let r = Arc::new(Running {
+            input: Input::Js(handle),
+            waiting: Mutex::default(),
+            next: AtomicU64::new(1),
+            stamp,
+            used: Mutex::new(now),
+            stopped: AtomicBool::new(false),
+        });
         log(&self.root, id, &format!("[kandinsky] helper started: {name} (JavaScript, in the core)"));
         let (me, pid, mine) = (self.clone(), id.to_string(), r.clone());
         tokio::spawn(async move {
@@ -322,15 +464,17 @@ impl Helpers {
                 if !r.waiting.lock().unwrap().is_empty() || r.used.lock().unwrap().elapsed() < idle {
                     continue;
                 }
-                let mut slots = me.slots.lock().unwrap();
-                let current = slots.get(&id).and_then(|s| s.running.as_ref()).is_some_and(|cur| Arc::ptr_eq(cur, &r));
-                if current {
-                    slots.remove(&id); // not a crash: its starts are forgotten with the slot
-                }
-                drop(slots);
+                let current = {
+                    let mut slots = me.slots.lock().unwrap();
+                    let current = slots.get(&id).and_then(|s| s.running.as_ref()).is_some_and(|cur| Arc::ptr_eq(cur, &r));
+                    if current {
+                        slots.remove(&id); // not a crash: its starts are forgotten with the slot
+                    }
+                    current
+                };
                 if current {
                     log(&me.root, &id, &format!("[kandinsky] helper stopped: no call for {}s ([helper] idle)", idle.as_secs()));
-                    r.kill();
+                    r.kill_async().await;
                 }
                 return;
             }
@@ -344,7 +488,7 @@ impl Helpers {
             return;
         };
         if let Some(call) = crate::helper_api::Call::parse(&msg) {
-            let (routes, id, r) = (self.routes.get().cloned(), id.to_string(), r.clone());
+            let (routes, id, r) = (self.routes.read().unwrap_or_else(|e| e.into_inner()).clone(), id.to_string(), r.clone());
             tokio::spawn(async move {
                 let (n, status, body) = match call {
                     Err((n, why)) => (n, 400, json!({ "error": why })),
@@ -712,5 +856,52 @@ fn main() {
         assert_eq!(h.state("h"), "crashed");
         h.stop("h"); // "restart": the count is forgotten
         assert_eq!(h.state("h"), "stopped");
+    }
+
+    #[tokio::test]
+    async fn graceful_stop_closes_stdin_so_helper_exits_cleanly_before_kill_fallback() {
+        let t = tempfile::tempdir().unwrap();
+        let d = t.path().join(".kandinsky/plugins/g");
+        std::fs::create_dir_all(&d).unwrap();
+        let out = d.join("bin").join(crate::plugins::target());
+        std::fs::create_dir_all(&out).unwrap();
+        let src = d.join("helper.rs");
+        std::fs::write(
+            &src,
+            r#"use std::io::BufRead;
+fn main() {
+    for l in std::io::stdin().lock().lines() {
+        let l = l.unwrap();
+        let id: String = l.split("\"id\":").nth(1).unwrap().chars().take_while(|c| c.is_ascii_digit()).collect();
+        println!("{{\"id\":{id},\"result\":true}}");
+    }
+    eprintln!("graceful-eof");
+}"#,
+        )
+        .unwrap();
+        let built = std::process::Command::new(std::env::var("RUSTC").unwrap_or("rustc".into()))
+            .arg("-o")
+            .arg(out.join(format!("helper{}", std::env::consts::EXE_SUFFIX)))
+            .arg(&src)
+            .status()
+            .unwrap();
+        assert!(built.success(), "rustc");
+        std::fs::write(d.join("plugin.toml"), "title = \"G\"\n[helper]\nrun = \"\\\"$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET/helper\\\"\"\n").unwrap();
+        let bus = EventBus::default();
+        let mut events = bus.subscribe();
+        let h = Helpers::new(t.path(), bus);
+        assert_eq!(h.call("g", "ping", Value::Null, CALL_TIMEOUT).await.unwrap(), json!(true));
+        h.stop("g");
+        loop {
+            if let Event::Plugin { event, data, .. } = events.recv().await.unwrap() {
+                if event == "helper:exit" {
+                    let status = data["status"].as_str().unwrap_or("");
+                    assert!(status.ends_with(" 0"), "expected clean exit 0, got {status}");
+                    break;
+                }
+            }
+        }
+        let log = std::fs::read_to_string(t.path().join(".kandinsky/cache/plugins/g.log")).unwrap();
+        assert!(log.contains("graceful-eof"), "helper did not observe stdin EOF before kill: {log}");
     }
 }

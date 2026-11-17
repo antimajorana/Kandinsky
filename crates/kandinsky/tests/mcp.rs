@@ -441,3 +441,140 @@ fn catalog_papers_scan_external_roots_and_search_item_type() {
     let bib_single = rescan_replies[2]["result"]["content"][0]["text"].as_str().unwrap();
     assert!(bib_single.contains(&format!("@book{{{book_key},")), "{bib_single}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn set_property_with_live_server_syncs_back_relations_without_double_history_write() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path();
+    std::fs::create_dir_all(root.join(".kandinsky")).unwrap();
+    std::fs::create_dir_all(root.join("templates")).unwrap();
+    std::fs::create_dir_all(root.join("tasks")).unwrap();
+    std::fs::create_dir_all(root.join("projects")).unwrap();
+    std::fs::write(
+        root.join("templates/properties.yaml"),
+        "properties:\n  status:\n    kind: enum\n    values: [todo, done]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("Tasks.base"),
+        "properties:\n  note.project:\n    back_relation: tasks\nviews:\n  - type: table\n    name: All\n    order: [file.name, project]\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("tasks/Fix.md"), "---\nstatus: todo\n---\n# Fix\n").unwrap();
+    std::fs::write(root.join("projects/Alpha.md"), "---\ntype: project\n---\n# Alpha\n").unwrap();
+
+    let handle = kandinsky_core::server::serve_on(
+        root.to_path_buf(),
+        kandinsky_core::server::Listen::Local(0, kandinsky_core::local_lock::Lock::Open),
+    )
+    .await
+    .unwrap();
+
+    let root_owned = root.to_path_buf();
+    let replies = tokio::task::spawn_blocking(move || {
+        session(
+            &root_owned,
+            &[
+                call(1, "kandinsky_set_property", json!({"path": "tasks/Fix.md", "key": "status", "value": "bogus"})),
+                call(2, "kandinsky_set_property", json!({"path": "tasks/Fix.md", "key": "project", "value": "[[Alpha]]"})),
+            ],
+        )
+    })
+    .await
+    .unwrap();
+
+    assert_eq!(replies[0]["result"]["isError"], true, "schema rejection via server: {}", replies[0]);
+    assert!(replies[1]["result"]["isError"].is_null(), "{}", replies[1]);
+    let res: Value = serde_json::from_str(replies[1]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(res["changed"], true);
+    assert_eq!(res["synced_back_relations"], json!(["projects/Alpha.md"]));
+
+    let alpha = std::fs::read_to_string(root.join("projects/Alpha.md")).unwrap();
+    assert!(alpha.contains("tasks:") && alpha.contains("[[Fix]]"), "{alpha}");
+    let ws = kandinsky_core::Workspace::open(root).unwrap();
+    let hist = kandinsky_core::history::list(&ws, "tasks/Fix.md").unwrap();
+    let snaps = hist.entries.iter().filter(|e| e.source == kandinsky_core::api::HistorySource::Snapshot).count();
+    assert_eq!(snaps, 2, "single server-side edit writes Before edit + Auto-saved only: {hist:?}");
+
+    handle.shutdown().await.unwrap();
+}
+
+#[test]
+fn offline_mcp_helper_callbacks_succeed_and_stop_on_exit() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path();
+    let plug = root.join(".kandinsky/plugins/echo");
+    let out = plug.join("bin").join(kandinsky_core::plugins::target());
+    std::fs::create_dir_all(&out).unwrap();
+    let src = plug.join("helper.rs");
+    std::fs::write(
+        &src,
+        r#"use std::io::{BufRead, Write};
+fn count_body_objects(resp: &str) -> usize {
+    let Some(after) = resp.split("\"body\":[").nth(1) else { return 0; };
+    let (mut depth, mut in_str, mut esc, mut count) = (0usize, false, false, 0usize);
+    for ch in after.chars() {
+        if esc { esc = false; continue; }
+        if in_str {
+            if ch == '\\' { esc = true; } else if ch == '"' { in_str = false; }
+            continue;
+        }
+        match ch {
+            '"' => in_str = true,
+            '{' => { if depth == 0 { count += 1; } depth += 1; }
+            '}' => depth = depth.saturating_sub(1),
+            ']' if depth == 0 => break,
+            _ => {}
+        }
+    }
+    count
+}
+fn main() {
+    let pid_file = std::path::Path::new(&std::env::var("KANDINSKY_ROOT").unwrap()).join("helper.pid");
+    std::fs::write(pid_file, std::process::id().to_string()).unwrap();
+    let stdin = std::io::stdin();
+    let mut lines = stdin.lock().lines();
+    let mut stdout = std::io::stdout().lock();
+    while let Some(Ok(l)) = lines.next() {
+        let id: String = l.split("\"id\":").nth(1).unwrap_or("").chars().take_while(|c| c.is_ascii_digit()).collect();
+        if l.contains("\"method\":\"probe\"") {
+            writeln!(stdout, "{{\"call\":1,\"verb\":\"GET\",\"path\":\"/api/plugins\"}}").unwrap();
+            stdout.flush().unwrap();
+            let resp = lines.next().unwrap().unwrap();
+            let status: u16 = resp.split("\"status\":").nth(1).unwrap_or("0").chars().take_while(|c| c.is_ascii_digit()).collect::<String>().parse().unwrap_or(0);
+            let count = count_body_objects(&resp);
+            writeln!(stdout, "{{\"id\":{id},\"result\":{{\"status\":{status},\"count\":{count}}}}}").unwrap();
+            stdout.flush().unwrap();
+        }
+    }
+}"#,
+    )
+    .unwrap();
+    let built = Command::new(std::env::var("RUSTC").unwrap_or("rustc".into()))
+        .arg("-o")
+        .arg(out.join(format!("helper{}", std::env::consts::EXE_SUFFIX)))
+        .arg(&src)
+        .status()
+        .unwrap();
+    assert!(built.success(), "rustc");
+    std::fs::write(
+        plug.join("plugin.toml"),
+        "title = \"Echo\"\n[helper]\nrun = \"\\\"$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET/helper\\\"\"\n[[tool]]\nname = \"probe\"\ndescription = \"calls /api/plugins back\"\n",
+    )
+    .unwrap();
+
+    let replies = session(root, &[call(1, "echo_probe", json!({}))]);
+    assert!(replies[0]["result"]["isError"].is_null(), "{}", replies[0]);
+    let res: Value = serde_json::from_str(replies[0]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(res["status"], 200, "{res}");
+    assert_eq!(res["count"], 1, "{res}");
+
+    let pid: u32 = std::fs::read_to_string(root.join("helper.pid")).unwrap().trim().parse().unwrap();
+    for _ in 0..50 {
+        if !kandinsky_core::platform::proc::pid_alive(pid) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(!kandinsky_core::platform::proc::pid_alive(pid), "standalone helper {pid} leaked after mcp exit");
+}

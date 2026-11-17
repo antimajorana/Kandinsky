@@ -95,9 +95,10 @@ export function referencesSource(): LibrarySource {
           ...(p.arxiv ? [{
             label: "arXiv LaTeX", title: "Download and unpack the arXiv e-print LaTeX (.tex / .bib) source",
             run: async () => {
-              const r = (await api.pluginHelper("catalog-papers", "fetch_arxiv_source", { key: p.key }, 120)) as { dir?: string; main_tex?: string; files?: string[] };
-              toast(`Fetched arXiv source for ${p.key}`, r?.main_tex ?? r?.dir ?? `${r?.files?.length ?? 0} files`, "success", 7000,
-                r?.main_tex && !r.main_tex.startsWith(".kandinsky/cache/") ? [{ label: "Open .tex", run: () => openPath(r.main_tex!) }] : undefined);
+              const r = (await api.pluginHelper("catalog-papers", "fetch_arxiv_source", { key: p.key }, 120)) as { dir?: string; main_tex?: string; files?: string[]; tex_files?: string[] };
+              const mainTex = r?.main_tex ?? r?.tex_files?.[0];
+              toast(`Fetched arXiv source for ${p.key}`, mainTex ?? r?.dir ?? `${r?.files?.length ?? 0} files`, "success", 7000,
+                mainTex && !mainTex.startsWith(".kandinsky/cache/") ? [{ label: "Open .tex", run: () => openPath(mainTex) }] : undefined);
             },
           }] : []),
           ...(p.pdf && (p.pdf.startsWith("../") || p.pdf.startsWith("@ext/")) ? [
@@ -178,8 +179,8 @@ export function referencesSource(): LibrarySource {
     async tools() {
       let inboxLabel = "Drop inbox…";
       try {
-        const inbox = (await api.pluginHelper("catalog-papers", "scan_inbox", {}, 15)) as { items?: unknown[]; files?: unknown[] } | null;
-        const n = inbox?.items?.length ?? inbox?.files?.length ?? 0;
+        const inbox = (await api.pluginHelper("catalog-papers", "scan_inbox", {}, 15)) as { configured?: boolean; items?: unknown[]; files?: unknown[] } | null;
+        const n = inbox?.configured === false ? 0 : (inbox?.items?.length ?? inbox?.files?.length ?? 0);
         if (n > 0) inboxLabel = `Drop inbox (${n})…`;
       } catch { /* helper optional until configured */ }
       const baseTools = [

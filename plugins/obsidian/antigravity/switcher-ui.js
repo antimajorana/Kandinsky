@@ -85,16 +85,18 @@ export function readStoredAgyState() {
   try {
     const storedModel = localStorage.getItem(AGY_STORAGE_MODEL) || "";
     const storedSlug = localStorage.getItem(AGY_STORAGE_SLUG) || "";
-    const storedSpec = localStorage.getItem(AGY_STORAGE_SPECIALIST) || "";
+    const rawSpec = localStorage.getItem(AGY_STORAGE_SPECIALIST);
+    const hasStoredSpecialist = rawSpec !== null;
     const pill = resolveModelPill(storedModel || storedSlug);
     const modelSlug = storedSlug ? resolveCliSlug(storedSlug) : pill.slug;
     return {
       pillId: pill.id,
       model: modelSlug,
-      specialist: normalizeSpecialist(storedSpec),
+      specialist: normalizeSpecialist(rawSpec || ""),
+      hasStoredSpecialist,
     };
   } catch {
-    return { pillId: "gemini-4-carbon", model: "gemini-4-carbon-high", specialist: "" };
+    return { pillId: "gemini-4-carbon", model: "gemini-4-carbon-high", specialist: "", hasStoredSpecialist: false };
   }
 }
 
@@ -127,7 +129,8 @@ export function getActiveConfig(kandinsky) {
     model = mm ? mm[1] : stored.model || "gemini-4-carbon-high";
   }
   const pill = resolveModelPill(model);
-  const specialist = stored.specialist || normalizeSpecialist(s.specialist || "");
+  const hasStoredSpec = Boolean(stored.hasStoredSpecialist) && typeof stored.specialist === "string";
+  const specialist = hasStoredSpec ? stored.specialist : normalizeSpecialist(s.specialist || "");
   const mode = String(s.default_mode || "interactive").trim();
   const effort = String(s.default_effort || "default").trim();
   return { pillId: pill.id, model: resolveCliSlug(model), specialist, mode, effort, rawCmd };

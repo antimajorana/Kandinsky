@@ -4,7 +4,7 @@ use kandinsky_papers::catalog;
 use kandinsky_papers::connector::{self, Connector, Listener};
 use kandinsky_papers::core_api::{ConnectorHost, CoreApi};
 use kandinsky_papers::enrich;
-use kandinsky_papers::inbox_dedupe::{self, MergeOpts, OrganizeInboxReq};
+use kandinsky_papers::inbox_dedupe::{self, InboxWatcher, MergeOpts, OrganizeInboxReq};
 use kandinsky_papers::refs::{ImportOpts, Lib, PaperEdit, Res};
 use kandinsky_papers::scan_roots::{self, ScanRootsOpts};
 use kandinsky_papers::settings::Settings;
@@ -60,10 +60,10 @@ fn sync_connector(slot: &RefCell<Option<Listener>>, cfg: &Settings, plugin: &str
     json!({ "on": cfg.connector, "port": l.as_ref().map(|l| l.port), "listening": l.as_ref().is_some_and(|l| l.listening()) })
 }
 
-fn ensure_inbox_watcher(started: &RefCell<bool>, cfg: &Settings, plugin: &str, root: &Path) {
-    if !*started.borrow() && !cfg.watch_inbox.trim().is_empty() {
-        *started.borrow_mut() = true;
-        inbox_dedupe::start_inbox_watcher(plugin.to_string(), root.to_path_buf());
+fn ensure_inbox_watcher(slot: &RefCell<Option<InboxWatcher>>, cfg: &Settings, plugin: &str, root: &Path) {
+    let mut watcher = slot.borrow_mut();
+    if watcher.is_none() && !cfg.watch_inbox.trim().is_empty() {
+        *watcher = Some(InboxWatcher::start(plugin.to_string(), root.to_path_buf()));
     }
 }
 
@@ -72,7 +72,7 @@ fn main() {
     let root = vault();
     let core = Rc::new(CoreApi::new(plugin.clone(), root.clone()));
     let listener = Rc::new(RefCell::new(None));
-    let inbox_watching = Rc::new(RefCell::new(false));
+    let inbox_watching = Rc::new(RefCell::new(None));
     let initial_cfg = core.settings(&Value::Null);
     sync_connector(&listener, &initial_cfg, &plugin, &root);
     ensure_inbox_watcher(&inbox_watching, &initial_cfg, &plugin, &root);
