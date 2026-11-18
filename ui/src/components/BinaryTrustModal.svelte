@@ -133,6 +133,10 @@
     background: color-mix(in srgb, var(--bg) 58%, transparent);
     backdrop-filter: blur(4px);
   }
+  /* a long command line scrolls inside the details, so the buttons below never leave the window */
+  .trust-card { max-height: calc(100dvh - 32px); min-height: 0; }
+  .trust-head, .trust-actions { flex: none; }
+  .trust-details { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .trust-card { width: 100%; display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: var(--radius); background: var(--bg-elev); border: 1px solid var(--border-strong); box-shadow: var(--shadow-pop); }
   .trust-head { display: flex; align-items: flex-start; gap: 12px; }
   .trust-icon { flex: none; width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; background: var(--yellow-soft, color-mix(in srgb, var(--yellow) 16%, transparent)); color: var(--yellow); }

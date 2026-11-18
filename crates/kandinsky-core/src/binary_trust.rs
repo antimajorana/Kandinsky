@@ -25,6 +25,9 @@ static BUSES: LazyLock<RwLock<HashMap<PathBuf, EventBus>>> = LazyLock::new(|| Rw
 static PENDING: LazyLock<Mutex<HashMap<String, PendingEntry>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 static RECENT: LazyLock<Mutex<VecDeque<PendingBinaryApproval>>> = LazyLock::new(|| Mutex::new(VecDeque::new()));
 static SESSION_ALLOW: LazyLock<Mutex<HashSet<(String, String)>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
+/// What the user refused in this session, per plugin: (plugin, program, sha256). A plugin that polls would otherwise
+/// raise the same prompt again every few seconds; an Allow for the program, or a restart, clears it.
+static SESSION_DENY: LazyLock<Mutex<HashSet<(String, String, String)>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 fn clean_path(p: PathBuf) -> PathBuf {
@@ -184,11 +187,13 @@ fn decide_with_file(dec: &BinaryDecision, trust_file: &Path) -> Result<bool> {
     let clean_cmd = clean_cmd_str(&info.command).to_string();
     match dec.choice {
         BinaryApprovalChoice::AllowOnce => {
+            forget_denied(&clean_cmd, &info.sha256);
             if let Ok(mut s) = SESSION_ALLOW.lock() {
                 s.insert((clean_cmd, info.sha256.clone()));
             }
         }
         BinaryApprovalChoice::AlwaysAllow => {
+            forget_denied(&clean_cmd, &info.sha256);
             vault_write::outside::locked(trust_file, || {
                 let mut list = load_trusted_from(trust_file);
                 list.retain(|t| !(clean_cmd_str(&t.command) == clean_cmd && t.sha256 == info.sha256));
@@ -205,6 +210,9 @@ fn decide_with_file(dec: &BinaryDecision, trust_file: &Path) -> Result<bool> {
             if let Ok(mut s) = SESSION_ALLOW.lock() {
                 s.retain(|(c, h)| !(clean_cmd_str(c) == clean_cmd && h == &info.sha256));
             }
+            if let Ok(mut d) = SESSION_DENY.lock() {
+                d.insert((info.plugin.clone(), clean_cmd, info.sha256.clone()));
+            }
         }
     }
     for waiter in waiters {
@@ -218,6 +226,22 @@ fn decide_with_file(dec: &BinaryDecision, trust_file: &Path) -> Result<bool> {
         }
     }
     Ok(true)
+}
+
+fn forget_denied(cmd: &str, sha256: &str) {
+    if let Ok(mut d) = SESSION_DENY.lock() {
+        d.retain(|(_, c, h)| !(c == cmd && h == sha256));
+    }
+}
+
+/// The refusal for a program this plugin was already denied in this session, without asking again.
+fn denied_before(info: &PendingBinaryApproval) -> Option<Error> {
+    let cmd = clean_cmd_str(&info.command);
+    let hit = SESSION_DENY.lock().is_ok_and(|d| d.iter().any(|(p, c, h)| p == &info.plugin && c == cmd && h == &info.sha256));
+    hit.then(|| Error::BadRequest(format!(
+        "execution denied for `{}` (sha256 {}): refused earlier in this session; restart Kandinsky to be asked again",
+        info.command, info.sha256
+    )))
 }
 
 pub fn revoke(command: &str, sha256: Option<&str>) -> Result<Vec<TrustedBinary>> {
@@ -442,6 +466,9 @@ pub async fn authorize_async(
     if is_already_allowed(&info.command, &info.sha256, &trust_file_path()) {
         return Ok(());
     }
+    if let Some(refused) = denied_before(&info) {
+        return Err(refused);
+    }
     let Some(bus) = active_bus(root, bus) else {
         return Err(no_window(&info));
     };
@@ -501,6 +528,9 @@ fn authorize_blocking_inner(
     let (id, info) = build_request(plugin, &exe, args)?;
     if is_already_allowed(&info.command, &info.sha256, trust_file) {
         return Ok(());
+    }
+    if let Some(refused) = denied_before(&info) {
+        return Err(refused);
     }
     let Some(bus) = active_bus(root, bus) else {
         return Err(no_window(&info));
@@ -663,6 +693,34 @@ mod tests {
         assert!(Path::new(&req.command).is_absolute(), "{}", req.command);
         decide(&BinaryDecision { id: req.id, choice: BinaryApprovalChoice::Deny }).unwrap();
         assert!(asked.join().unwrap().is_err());
+    }
+
+    #[test]
+    fn a_denied_program_is_not_asked_about_again_until_it_is_allowed() {
+        let dir = tempfile::tempdir().unwrap();
+        let trust = dir.path().join("trusted.json");
+        let exe = dir.path().join("poller.exe");
+        std::fs::write(&exe, b"polls its status").unwrap();
+        let bus = EventBus::default();
+        let mut rx = bus.subscribe();
+        let ask = |plugin: &'static str| {
+            let (root, trust, bus, exe) = (dir.path().to_path_buf(), trust.clone(), bus.clone(), exe.clone());
+            std::thread::spawn(move || authorize_blocking_inner(&root, plugin, &exe, &[], Some(&bus), &trust, true))
+        };
+        let first = ask("deny-once-plugin");
+        let Event::BinaryApproval(req) = rx.blocking_recv().unwrap() else { panic!("expected BinaryApproval") };
+        decide(&BinaryDecision { id: req.id, choice: BinaryApprovalChoice::Deny }).unwrap();
+        assert!(first.join().unwrap().is_err());
+        // the plugin's next call is refused at once, with no second prompt
+        let again = ask("deny-once-plugin").join().unwrap();
+        assert!(matches!(&again, Err(Error::BadRequest(m)) if m.contains("refused earlier")), "{again:?}");
+        assert!(rx.try_recv().is_err(), "no second prompt");
+        // another plugin asking for the same program is still asked, and its Allow lifts the refusal
+        let other = ask("another-plugin");
+        let Event::BinaryApproval(req2) = rx.blocking_recv().unwrap() else { panic!("expected BinaryApproval") };
+        decide(&BinaryDecision { id: req2.id, choice: BinaryApprovalChoice::AllowOnce }).unwrap();
+        assert!(other.join().unwrap().is_ok());
+        assert!(ask("deny-once-plugin").join().unwrap().is_ok());
     }
 
     #[test]
