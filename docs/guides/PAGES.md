@@ -18,6 +18,8 @@ rows:
 
 A block is a bare name (`tasks`) or `{view: <type>, …options, title: …}`. Any block of the registry works (the page's "add a block" chooser lists them). Older shorthands still read: `{note: x.md}`, `{base: x.base}`, `{text: "markdown"}`; the first hand edit rewrites them as `{view: note, path: x.md}` and so on.
 
+Two calendar blocks differ: `{view: calendar, …}` (as above) is the row view of dated tasks, and `calendar-pane` is the whole Calendar pane (month, week, agenda, day), the block a Calendar tab is embedded as. The block picker's Calendar inserts `calendar-pane`. Its option `mode: month|week|agenda|day` picks the view it opens on (an older `view: month` in a note's block still reads). An older `calendar` block with no row-view option (`from`, `filters`, `columns`…) is still drawn as the pane: in a page a bare `{view: calendar}` is, and in a note one with a pane option (`mode`, its older `view`, or a `date: YYYY-MM-DD`).
+
 Three content blocks exist for pages: `note` (a note rendered; "open as a tab" edits it), `text` (markdown written in the page file itself), `base` (a database table; as a tab it is the Base pane).
 
 ## Arranging
