@@ -15,7 +15,7 @@ const NON_ASCII = /[^\x20-\x7e]/;
 const dicStemCache = new Map<string, string[]>();
 
 /** Parse and cache a `.dic` file's lower-case stems (ASCII fast-path before Unicode `\p{Ll}`). */
-function cachedDicStems(name: string, dic: string): string[] {
+export function cachedDicStems(name: string, dic: string): string[] {
   const key = `${name}:${dic.length}:${dic.slice(0, 64)}`;
   const cached = dicStemCache.get(key);
   if (cached) return cached;
@@ -30,11 +30,10 @@ function cachedDicStems(name: string, dic: string): string[] {
       if (nl < 0) nl = len;
       let end = nl;
       if (end > pos && dic.charCodeAt(end - 1) === 13) end--;
-      const slash = dic.indexOf("/", pos);
-      if (slash >= pos && slash < end) end = slash;
+      // the stem ends at the flags' '/' or a space, looked for within this line only (a file-wide search is quadratic)
       for (let i = pos; i < end; i++) {
         const c = dic.charCodeAt(i);
-        if (c <= 32 || c === 160) { end = i; break; }
+        if (c <= 32 || c === 160 || c === 47) { end = i; break; }
       }
       if (end > pos) {
         const raw = dic.slice(pos, end);

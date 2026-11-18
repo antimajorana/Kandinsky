@@ -4,6 +4,8 @@
 export const AGY_STORAGE_MODEL = "kandinsky.agy.model";
 export const AGY_STORAGE_SLUG = "kandinsky.agy.modelSlug";
 export const AGY_STORAGE_SPECIALIST = "kandinsky.agy.specialist";
+// the plugin setting the stored specialist was last synced from: tells a changed setting from a local pick
+export const AGY_STORAGE_SPECIALIST_SETTING = "kandinsky.agy.specialistSetting";
 export const AGY_CONFIG_EVENT = "kandinsky:agy-config";
 
 export const PRIMARY_MODEL_PILLS = [
@@ -86,18 +88,31 @@ export function readStoredAgyState() {
     const storedModel = localStorage.getItem(AGY_STORAGE_MODEL) || "";
     const storedSlug = localStorage.getItem(AGY_STORAGE_SLUG) || "";
     const rawSpec = localStorage.getItem(AGY_STORAGE_SPECIALIST);
-    const hasStoredSpecialist = rawSpec !== null;
     const pill = resolveModelPill(storedModel || storedSlug);
     const modelSlug = storedSlug ? resolveCliSlug(storedSlug) : pill.slug;
     return {
       pillId: pill.id,
       model: modelSlug,
       specialist: normalizeSpecialist(rawSpec || ""),
-      hasStoredSpecialist,
+      hasStoredSpecialist: rawSpec !== null,
     };
   } catch {
     return { pillId: "gemini-4-carbon", model: "gemini-4-carbon-high", specialist: "", hasStoredSpecialist: false };
   }
+}
+
+/** The saved @specialist setting is the source of truth, localStorage its cache: a setting changed since the last sync
+ *  replaces it, else the cache is a local pick (Coordinator "" too) whose save is pending or failed, and is kept. */
+export function reconcileStoredSpecialist(settings) {
+  const fromSetting = normalizeSpecialist((settings && settings.specialist) || "");
+  try {
+    const cached = localStorage.getItem(AGY_STORAGE_SPECIALIST);
+    const synced = localStorage.getItem(AGY_STORAGE_SPECIALIST_SETTING);
+    if (cached !== null && synced !== null && normalizeSpecialist(synced) === fromSetting) return normalizeSpecialist(cached);
+    localStorage.setItem(AGY_STORAGE_SPECIALIST, fromSetting);
+    localStorage.setItem(AGY_STORAGE_SPECIALIST_SETTING, fromSetting);
+  } catch {}
+  return fromSetting;
 }
 
 export function persistAndBroadcastAgyState(next, source = "plugin") {
@@ -129,8 +144,9 @@ export function getActiveConfig(kandinsky) {
     model = mm ? mm[1] : stored.model || "gemini-4-carbon-high";
   }
   const pill = resolveModelPill(model);
-  const hasStoredSpec = Boolean(stored.hasStoredSpecialist) && typeof stored.specialist === "string";
-  const specialist = hasStoredSpec ? stored.specialist : normalizeSpecialist(s.specialist || "");
+  // the cache, reconciled with the setting on every plugin load, wins: a pane's settings copy can be older than it;
+  // a stored "" is an explicit Coordinator, and only a missing value falls back to the setting
+  const specialist = stored.hasStoredSpecialist ? stored.specialist : normalizeSpecialist(s.specialist || "");
   const mode = String(s.default_mode || "interactive").trim();
   const effort = String(s.default_effort || "default").trim();
   return { pillId: pill.id, model: resolveCliSlug(model), specialist, mode, effort, rawCmd };

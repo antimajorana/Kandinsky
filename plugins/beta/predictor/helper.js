@@ -1,5 +1,6 @@
 // Built from helper/helper.ts by scripts/dev/plugin-ui.mjs: edit the sources, not this file.
-(function() {
+(function(exports) {
+	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 	//#region ui/src/lib/editor/prose.ts
 	/** The end of a YAML front matter at the start of `text`, or 0. */
 	function frontMatterEnd(text) {
@@ -209,11 +210,9 @@
 				if (nl < 0) nl = len;
 				let end = nl;
 				if (end > pos && dic.charCodeAt(end - 1) === 13) end--;
-				const slash = dic.indexOf("/", pos);
-				if (slash >= pos && slash < end) end = slash;
 				for (let i = pos; i < end; i++) {
 					const c = dic.charCodeAt(i);
-					if (c <= 32 || c === 160) {
+					if (c <= 32 || c === 160 || c === 47) {
 						end = i;
 						break;
 					}
@@ -283,4 +282,6 @@
 		lexicon
 	});
 	//#endregion
-})();
+	exports.cachedDicStems = cachedDicStems;
+	return exports;
+})({});

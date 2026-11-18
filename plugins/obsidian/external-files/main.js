@@ -7,9 +7,25 @@ let cachedHomeDir = "";
 let homeDirPromise = null;
 
 function inferHomeFromVaultPath(rawPath) {
-  const norm = String(rawPath ?? "").replace(/\\/g, "/");
+  // a canonical Windows path (\\?\C:\...) reads as its plain drive path
+  const norm = String(rawPath ?? "").replace(/\\/g, "/").replace(/^\/\/\?\//, "");
   const m = /^([A-Za-z]:\/Users\/[^/]+|\/Users\/[^/]+|\/home\/[^/]+)(?:\/|$)/.exec(norm);
   return m ? m[1] : "";
+}
+
+/** The home folder from `/api/vaults`: the open vault's own path first (`current` is a path), then the others. */
+export function homeFromVaults(data) {
+  const fromCurrent = inferHomeFromVaultPath(data?.current);
+  if (fromCurrent) return fromCurrent;
+  const key = (p) => String(p ?? "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  const vaults = Array.isArray(data?.vaults) ? data.vaults.filter(Boolean) : [];
+  const cur = key(data?.current);
+  const currentFirst = [...vaults.filter((v) => key(v.path) === cur), ...vaults.filter((v) => key(v.path) !== cur)];
+  for (const v of currentFirst) {
+    const h = inferHomeFromVaultPath(v.path);
+    if (h) return h;
+  }
+  return "";
 }
 
 function detectHomeDir() {
@@ -20,18 +36,10 @@ function detectHomeDir() {
       try {
         const res = await fetch("/api/vaults", { headers: { "x-kandinsky": "1" } });
         if (!res.ok) return "";
-        const data = await res.json();
-        const vaults = Array.isArray(data?.vaults) ? data.vaults : [];
-        const currentFirst = [
-          ...vaults.filter((v) => v && v.name === data.current),
-          ...vaults.filter((v) => v && v.name !== data.current),
-        ];
-        for (const v of currentFirst) {
-          const h = inferHomeFromVaultPath(v.path);
-          if (h) {
-            cachedHomeDir = h;
-            return h;
-          }
+        const h = homeFromVaults(await res.json());
+        if (h) {
+          cachedHomeDir = h;
+          return h;
         }
       } catch {
         // Offline / Android / mocked test environments without /api/vaults continue cleanly

@@ -11,6 +11,7 @@ import {
   normalizeSpecialist,
   openAgyTerminal,
   persistAndBroadcastAgyState,
+  reconcileStoredSpecialist,
   resolveCliSlug,
   shortModelName,
 } from "./switcher-ui.js";
@@ -28,7 +29,8 @@ export function register(kandinsky) {
   let pollTimer = null;
   let disposed = false;
 
-  // Ensure initial localStorage & plugin settings stay synchronized
+  // Ensure initial localStorage & plugin settings stay synchronized: a changed @specialist setting replaces the cache
+  reconcileStoredSpecialist(s);
   const initial = getActiveConfig(kandinsky);
   persistAndBroadcastAgyState(
     { pillId: initial.pillId, model: initial.model, specialist: initial.specialist },
@@ -39,7 +41,8 @@ export function register(kandinsky) {
   const onConfigEvent = (ev) => {
     if (disposed) return;
     const d = ev && ev.detail;
-    if (!d || d.source === "plugin" || d.source === "main-init") return;
+    // the pane (source "switcher-…") saves its own picks, as the palette commands do
+    if (!d || d.source === "plugin" || d.source === "main-init" || String(d.source || "").startsWith("switcher-")) return;
     const cur = getActiveConfig(kandinsky);
     const nextModel = resolveCliSlug(d.modelSlug || d.model || cur.model);
     const nextSpec = normalizeSpecialist(d.specialist !== undefined ? d.specialist : cur.specialist);
@@ -53,7 +56,8 @@ export function register(kandinsky) {
           default_effort: cur.effort,
           command: nextCmd,
         })
-        .catch(() => {});
+        // the pick stays in localStorage (it outranks the unchanged setting), so only the save is reported
+        .catch((e) => kandinsky.toast("Could not save Antigravity config", String((e && e.message) || e), "error"));
     }
   };
   if (typeof window !== "undefined") {
@@ -99,7 +103,13 @@ export function register(kandinsky) {
           }));
         },
         onpick: async (val) => {
-          const next = await applyModelSwitch(kandinsky, { model: val }, "plugin");
+          let next;
+          try {
+            next = await applyModelSwitch(kandinsky, { model: val }, "plugin");
+          } catch (e) {
+            kandinsky.toast("Could not save Antigravity config", String((e && e.message) || e), "error");
+            return;
+          }
           kandinsky.toast("Switched Antigravity model", `Now using ${shortModelName(next.model)} (${next.command})`, "success");
         },
       });
@@ -137,7 +147,13 @@ export function register(kandinsky) {
           ];
         },
         onpick: async (val) => {
-          const next = await applyModelSwitch(kandinsky, { specialist: val }, "plugin");
+          let next;
+          try {
+            next = await applyModelSwitch(kandinsky, { specialist: val }, "plugin");
+          } catch (e) {
+            kandinsky.toast("Could not save Antigravity config", String((e && e.message) || e), "error");
+            return;
+          }
           kandinsky.toast(
             "Updated Antigravity specialist",
             next.specialist ? `Active specialist: ${next.specialist}` : "Coordinator (no @specialist)",
