@@ -1016,6 +1016,11 @@ export default function mountSolver(host, kandinsky) {
       statusChecked = true;
       errorMsg = String((e && e.message) || e);
       statusDetail = "Could not reach the Solver helper.";
+      // a refused approval prompt is not a fault: say what to do instead of showing the raw refusal
+      if (/execution denied|blocked untrusted binary/i.test(errorMsg)) {
+        errorMsg = "";
+        statusDetail = "Solver was not allowed to run its status check. Restart Kandinsky and choose Allow when it asks.";
+      }
       syncUi();
       if (pendingPrefill && !pendingPrefill.acked && !showComposer) {
         openComposerFallback(pendingPrefill, false);
