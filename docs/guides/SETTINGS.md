@@ -88,7 +88,7 @@ grouped by page, include matching **features** (with Try), and the box is focuse
 - `[ui] accent = "#rrggbb"`: derives `--accent`, `--accent-strong`, `--accent-soft`, `--accent-sel`, `--link`,
   `--tag-*` with `color-mix`. Clearing it removes Kandinsky's override: the colour scheme's own accent comes back.
 - `[ui] palette`: the colour scheme, built in, light and dark alike — `kandinsky`, `ink`, `clay`, `sage`, `sea`, `dusk`,
-  `graphite`, `phosphor`, `rose`, `honey`, `slate`, `forest`, `coffee`, `ember`, `glacier`, `sand`, `midnight`
+  `graphite`, `phosphor`, `rose`, `honey`, `slate`, `forest`, `coffee`, `ember`, `glacier`, `sand`, `midnight`, `plain`
   (`ui/src/styles/palettes.css`; `phosphor` is black on white / white on black at full strength with its green, and
   a saved `contrast` — the scheme it replaced — reads as it; the last nine generated with every text colour and accent checked for contrast: text ≥ 7:1,
   muted ≥ 4.5:1, faint ≥ 4:1, links ≥ 4.6:1 on the page). VS Code theme files are no longer read: a scheme is one of

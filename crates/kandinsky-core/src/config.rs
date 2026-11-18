@@ -491,6 +491,8 @@ pub enum Palette {
     Sand,
     /// Navy, gold.
     Midnight,
+    /// A white or near-black page, grey side column and selection, one blue for what is primary.
+    Plain,
 }
 
 /// How panes and controls are drawn (shape-paper.css).

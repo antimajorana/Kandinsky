@@ -1,7 +1,7 @@
 /* Palettes (Settings → Appearance → Palette, `ui.palette`; lib/settings.svelte.ts sets <html data-palette>): colour
    families over tokens.css, in light and dark. Default `kandinsky` (also matching legacy `"atlas"`) implements
    Velvet Circles (Dark) and Bauhaus Paper (Light) inspired by Wassily Kandinsky's Several Circles (1926).
-   Other optional palettes (`ink`, `clay`, `sage`, `sea`, `dusk`, `graphite`, `phosphor`, `rose` … `midnight`) remain
+   Other optional palettes (`ink`, `clay`, `sage`, `sea`, `dusk`, `graphite`, `phosphor`, `rose` … `midnight`, `plain`) remain
    intact. All blocks keep specificity ≤ (0,4,0) so contrast.css (`[data-contrast="high"]`) still wins when enabled. */
 
 /* Kandinsky default — Velvet Circles (Dark) */
@@ -610,3 +610,33 @@
   --accent-soft: rgba(236, 205, 121, .12); --accent-sel: rgba(236, 205, 121, .24); --link: #eccd79;
   --tag-bg: rgba(236, 205, 121, .13); --tag-color: #f2dea6;
 }
+
+/* `plain`: a white (or near-black) page, a grey side column, grey for what is selected and one blue for what is
+   primary. Nothing is tinted with the accent, so the page reads as a document, not as an app with a colour scheme. */
+:root:not(.eink)[data-theme="light"][data-palette="plain"], .pal-sample[data-theme="light"][data-palette="plain"] {
+  --bg-app: #f7f7f5; --bg: #ffffff; --bg-alt: #f7f7f5; --card-bg: #f9f9f8; --bg-elev: #ffffff;
+  --bg-hover: rgba(55, 53, 47, .06); --bg-active: rgba(55, 53, 47, .09); --border: rgba(55, 53, 47, .09); --border-strong: rgba(55, 53, 47, .16);
+  --text: #37352f; --text-muted: #6f6e69; --text-faint: #8f8e89; --heading: #2f2e2a;
+  --code-bg: #f7f6f3; --inline-code: #c4443f; --scrim: rgba(15, 15, 15, .4);
+  --term-bg: #ffffff; --pdf-bg: #edece9; --paper-line: #e3e2de;
+  --accent: #2383e2; --accent-fg: #ffffff; --accent-hover: #0f74d6; --accent-strong: #0b6bcb;
+  --accent-dim: rgba(35, 131, 226, .12); --accent-soft: rgba(35, 131, 226, .1); --accent-sel: rgba(35, 131, 226, .22); --link: #0b6bcb;
+  --tag-bg: rgba(55, 53, 47, .07); --tag-color: #50504a;
+}
+:root:not(.eink):not([data-theme="light"])[data-palette="plain"], .pal-sample[data-theme="dark"][data-palette="plain"] {
+  --bg-app: #202020; --bg: #191919; --bg-alt: #202020; --card-bg: #1f1f1f; --bg-elev: #252525;
+  --bg-hover: rgba(255, 255, 255, .055); --bg-active: rgba(255, 255, 255, .085); --border: rgba(255, 255, 255, .08); --border-strong: rgba(255, 255, 255, .14);
+  --text: #d4d4d4; --text-muted: #9b9b9b; --text-faint: #878787; --heading: #e9e9e9;
+  --code-bg: #242424; --inline-code: #f0706d; --scrim: rgba(0, 0, 0, .6);
+  --term-bg: #191919; --term-black: #2f2f2f; --ansi-black: #2f2f2f; --pdf-bg: #141414; --paper-line: #373737;
+  --accent: #2383e2; --accent-fg: #ffffff; --accent-hover: #3b92e8; --accent-strong: #5aa5ec;
+  --accent-dim: rgba(35, 131, 226, .2); --accent-soft: rgba(35, 131, 226, .16); --accent-sel: rgba(35, 131, 226, .32); --link: #5aa5ec;
+  --tag-bg: rgba(255, 255, 255, .08); --tag-color: #c8c8c8;
+}
+/* the side column under `plain`: the open row is grey, not accent-tinted, and section labels are quiet words, not
+   small capitals */
+:root[data-palette="plain"] .notion-sidebar :is(.nav-row.active, .pane-row.active, .pin-row:has(.pin.active)) { background: var(--bg-active); }
+:root[data-palette="plain"] .notion-sidebar .pin.active { color: var(--heading); }
+:root[data-palette="plain"] .notion-sidebar .pane-mini-btn.active { background: var(--bg-active); color: var(--heading); }
+:root[data-palette="plain"] .notion-sidebar .sec-label { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: calc(11.5px * var(--ui-scale, 1)); }
+:root[data-palette="plain"] .notion-sidebar .nav-badge { background: var(--bg-active); color: var(--text-muted); }

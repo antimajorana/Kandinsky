@@ -3,4 +3,4 @@
 /**
  * The interface's colour family (tokens.css, palettes.css); light or dark comes from the theme.
  */
-export type Palette = "kandinsky" | "ink" | "clay" | "sage" | "sea" | "dusk" | "graphite" | "phosphor" | "rose" | "honey" | "slate" | "forest" | "coffee" | "ember" | "glacier" | "sand" | "midnight";
+export type Palette = "kandinsky" | "ink" | "clay" | "sage" | "sea" | "dusk" | "graphite" | "phosphor" | "rose" | "honey" | "slate" | "forest" | "coffee" | "ember" | "glacier" | "sand" | "midnight" | "plain";
