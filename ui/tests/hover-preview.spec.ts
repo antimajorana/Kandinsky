@@ -1,4 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
+import { WS } from "../playwright.config";
 import { shownName } from "../src/lib/paths";
 
 // "I also would like previews in links and in the left panel list of tabs" / "also no previews on
@@ -13,6 +16,9 @@ async function openNote(page: Page, name: string) {
   await expect(page.getByTestId("palette").getByText(shownName(name), { exact: true }).first()).toBeVisible();
   await page.keyboard.press("Enter");
 }
+
+// peek.md links hubbard and related: left in the shared vault, it changes their graph (side-graph.spec.ts)
+test.afterEach(() => rmSync(join(WS, "notes/peek.md"), { force: true }));
 
 test("links and left-bar tabs preview what they lead to", async ({ page, request }) => {
   await request.put("/api/file", { headers: H, data: { path: "notes/peek.md", text: "# Peek\n\nSee [[hubbard]] and [the related](sub/related.md) and [the web](https://example.org/x).\n\nLast line.\n" } });
@@ -38,16 +44,17 @@ test("links and left-bar tabs preview what they lead to", async ({ page, request
   await expect(card).toContainText("example.org");
   await page.mouse.move(5, 880);
 
-  // a tab in the left bar
+  // a tab in the left bar: a row of the sidebar's Open section (two notes are open, so it is listed)
   await openNote(page, "hubbard.md");
   await expect(page.locator(".cm-content:visible").first()).toContainText("Energy");
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "peek" }).hover();
+  const peekTab = page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "peek" }).locator(".pane-main");
+  await peekTab.hover();
   await expect(card).toBeVisible();
   await expect(card).toContainText("Last line.");
   // a note's tab reads as its text, never its pane shrunk past reading
   await expect(card.locator(".preview-body.markdown")).toBeVisible();
   await expect(card.locator(".preview-mini")).toHaveCount(0);
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "peek" }).click();
+  await peekTab.click();
   await expect(card).toBeHidden();
 });
 

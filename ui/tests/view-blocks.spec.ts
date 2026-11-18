@@ -12,15 +12,15 @@ test("a view block shows its section's dated tasks as a calendar, and ticks them
   await openFile(page, "week.md");
   const cal = page.locator(".cm-content .kandinsky-view-calendar");
   await expect(cal).toContainText("October 2026", { ignoreCase: true });
-  await expect(cal.locator(".item")).toHaveCount(2); // the section's dated tasks only
+  await expect(cal.locator(".pill")).toHaveCount(2); // the section's dated tasks only, not the vault's other events
   await expect(cal.locator(".undated")).toContainText("someday");
   await expect(cal).not.toContainText("not mine");
   await cal.getByRole("checkbox", { name: "Done: read Georges" }).check();
   await expect.poll(text).toContain("- [x] read Georges 📅 2026-10-12");
-  await expect(cal.locator(".item.done")).toHaveCount(1);
+  await expect(cal.locator(".pill.done")).toHaveCount(1);
   // the note changes elsewhere → the block follows
   await request.put("/api/file", { headers: H, data: { path: "notes/week.md", text: (await text()).replace("- [ ] someday", "- [ ] someday 📅 2026-10-15") } });
-  await expect(cal.locator(".item")).toHaveCount(3);
+  await expect(cal.locator(".pill")).toHaveCount(3);
 });
 
 // A view block must not come back blank after its tab was hidden: a hidden tab's DOM is
@@ -38,5 +38,5 @@ test("a view block is still drawn after its tab was hidden a while", async ({ pa
     await expect(page.locator(".dv-tab.dv-active-tab")).toContainText(name);
     await expect(page.locator(".dv-active-group .cm-editor.cm-focused")).toBeVisible(); // else the next Ctrl+P races the focus
   }
-  await expect(page.locator(".cm-content .kandinsky-view-calendar .item")).toHaveCount(1);
+  await expect(page.locator(".cm-content .kandinsky-view-calendar .pill")).toHaveCount(1);
 });

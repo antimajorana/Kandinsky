@@ -112,6 +112,8 @@ if (!process.env.TEST_WORKER_INDEX) {
   }
   // history with one commit of each class: yours, Claude's work, Claude's housekeeping
   git("init", "-q"); git("config", "user.name", "Tester"); git("config", "user.email", "t@example.org");
+  // a global core.autocrlf would make git write CRLF on checkout and break byte-for-byte comparisons
+  git("config", "core.autocrlf", "false");
   commitAll("My own hubbard note");
   writeFileSync(join(WS, "notes/claude.md"), "# By Claude\n");
   commitAll("Claude adds a note\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>");

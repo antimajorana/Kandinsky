@@ -37,6 +37,12 @@ test("a tab outside the split shows alone; the split row brings the pair back", 
   await expect.poll(visible).toBe(2);
 });
 
+// The sidebar's Open section lists the open tabs; in a split each row says its half ("Split 1", "Split 2"), and
+// the pair on screen is the active row and the other half's shown one.
+const openTabs = (page: Page) => page.getByTestId("sidebar").getByTestId("open-tabs");
+const splitBadges = (page: Page) => openTabs(page).locator(".split-badge");
+const pairRows = (page: Page) => openTabs(page).locator(".pane-row.active, .pane-row.split-shown");
+
 // An × on each half closes that half and ends the split: the half's × in the split row, and the one in
 // the corner of each half on screen, close that half's tab; the tabs behind it join the other half, one editor again.
 async function splitThree(page: Page, names: string[]): Promise<void> {
@@ -44,9 +50,10 @@ async function splitThree(page: Page, names: string[]): Promise<void> {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   for (const n of names) await openNote(page, n);
-  await page.getByTestId("sidebar").locator(".tab", { hasText: names[2] }).first().click({ button: "right" });
+  await openTabs(page).locator(".pane-row", { hasText: names[2] }).first().click({ button: "right" });
   await page.getByRole("menuitem", { name: "Split right" }).click();
-  await expect(page.getByTestId("split-row").locator(".tab")).toHaveCount(2);
+  await expect(splitBadges(page).filter({ hasText: "Split 2" })).toHaveCount(1);
+  await expect(pairRows(page)).toHaveCount(2);
 }
 const shown = (page: Page) => page.locator(".editor-pane").filter({ visible: true }).count();
 
@@ -70,10 +77,11 @@ test("the × in a half's corner closes that half and ends the split", async ({ p
   const right = page.locator(".dv-groupview", { has: page.locator(".cm-content", { hasText: "Body of corner-c" }) });
   await right.hover();
   await right.locator("> .half-close").click();
-  await expect(page.getByTestId("split-row")).toHaveCount(0);
+  await expect(splitBadges(page)).toHaveCount(0); // one editor again: no row names a half
   await expect.poll(() => shown(page)).toBe(1);
   await expect(closes).toHaveCount(0);
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: "corner-c" })).toHaveCount(0);
+  await expect(openTabs(page).locator(".pane-row", { hasText: "corner-a" })).toHaveCount(1); // the list is there…
+  await expect(openTabs(page).locator(".pane-row", { hasText: "corner-c" })).toHaveCount(0); // …without the closed half
 });
 
 // The focus inside a split: a click in a half makes it the active tab (marked in the split row), the keys go there,

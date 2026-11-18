@@ -51,14 +51,14 @@ test("dropping a PDF on the Library adds an entry with the file", async ({ page,
   // Read: the PDF alone ("it opens both pdf and the note … in the pdf editor there should be an button to do that",
   // 2026-10-15); the PDF's "Note" puts the paper's note in a split beside it
   await lib.locator(".detail").getByRole("button", { name: "Read" }).click();
-  const side = page.getByTestId("sidebar");
-  await expect(side.locator(".group-head")).toHaveText(["Terminal", "Tabs"]);
+  const open = page.getByTestId("sidebar").getByTestId("open-tabs");
+  await expect(page.locator(".pdf-pane").last()).toBeVisible(); // the PDF alone (the Open list may not show for one tab)
   await page.locator(".pdf-pane, .dv-active-group").getByRole("button", { name: "Paper's note", exact: true }).first().click();
-  // one Editor section; the two halves of the split are one row (Zen's split view), the note's half active
-  await expect(side.locator(".group-head")).toHaveText(["Terminal", "Tabs"]);
-  const split = side.getByTestId("split-row");
-  await expect(split.locator(".tab").first()).toContainText(".pdf");
-  await expect(split.locator(".tab.active")).toHaveText(/^\s*dropped\s*$/); // the note is named after the citekey
+  // the sidebar's Open list shows both halves of the split, each with its badge, the note's half active
+  const pdfRow = open.locator(".pane-row").filter({ has: page.locator(".pane-title", { hasText: ".pdf" }) });
+  await expect(pdfRow.locator(".split-badge")).toHaveText(/Split \d/);
+  await expect(open.locator(".pane-row.active .pane-title")).toHaveText(/^\s*dropped\s*$/); // the note is named after the citekey
+  await expect(open.locator(".pane-row.active .split-badge")).toHaveText(/Split \d/);
 });
 
 test("Library: sort by year / title; delete an entry (asks, goes to the Trash, refs.bib updated)", async ({ page, request }) => {

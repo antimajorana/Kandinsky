@@ -5,12 +5,13 @@ test("power panels (Files, Search, Terminal) toggle cleanly as dock drawers with
   await page.getByText("Finish the GW notes.").waitFor();
   const sidebar = page.getByTestId("sidebar");
 
-  // Meta+b collapses NotionSidebar, and Meta+Shift+f expands it back cleanly without "Open panes"
+  // Meta+b collapses NotionSidebar, and Meta+Shift+f expands it back cleanly; with no page behind another,
+  // there is no "Open" tab list
   await page.keyboard.press("Meta+b");
   await expect(sidebar).not.toHaveClass(/wide/);
   await page.keyboard.press("Meta+Shift+f");
   await expect(sidebar).toHaveClass(/wide/);
-  await expect(sidebar.getByText("Open panes")).toHaveCount(0);
+  await expect(sidebar.getByTestId("open-tabs")).toHaveCount(0);
 
   // Control+Shift+F opens Search side pane in the dock and focuses the search box
   await page.keyboard.press("Control+Shift+F");

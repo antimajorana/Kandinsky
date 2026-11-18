@@ -12,7 +12,8 @@ test("a block's options are edited in a form and land in the page file", async (
   await openFile(page, "Opt.page");
   const pane = page.locator(".kandinsky-pane-page .page");
   await expect(pane.locator('[data-block="list"]')).toContainText("check the sign of t");
-  await pane.getByRole("button", { name: "Arrange" }).click();
+  // the arrange toggle is "Layout" in the page's header, outside the `.page` scroll area (as in page-arrange.spec.ts)
+  await page.locator(".kandinsky-pane-page").getByRole("button", { name: "Layout" }).click();
 
   // a row view: text, a list and a switch
   await pane.getByRole("button", { name: "Block menu: Tasks" }).click();

@@ -25,8 +25,11 @@ test("blame shows who changed each line, opens the commit, and goes away again",
   }
   await expect(gutter.locator(".cm-blame:not(.cm-blame-new)").first()).toHaveAttribute("title", /My own hubbard note/);
   await gutter.locator(".cm-blame:not(.cm-blame-new)").first().click();
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: "My own hubbard note" })).toHaveCount(1);
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "hubbard" }).first().click();
+  // the sidebar's Open section lists the tabs: the commit's tab beside the note's, a click goes back to the note
+  const open = page.getByTestId("sidebar").getByTestId("open-tabs");
+  const row = (title: string | RegExp) => open.locator(".pane-row").filter({ has: page.locator(".pane-title", { hasText: title }) });
+  await expect(row("My own hubbard note")).toHaveCount(1);
+  await row(/^\s*hubbard\s*$/).locator(".pane-main").click();
   const content = page.locator(".cm-content").filter({ hasText: "An uncommitted line." });
   await content.click();
   await expect(content).toBeFocused();

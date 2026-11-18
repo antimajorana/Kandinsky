@@ -72,7 +72,9 @@ test("a copyparty server in the explorer: browse, open and save back, make, rena
   await expect.poll(() => readFileSync(join(ROOT, "hdd1/Physics/readme.md"), "utf8")).toContain("Edited in Kandinsky. Again.");
 
   // a new folder, a rename (copyparty's move names the target from its own root), an upload from the computer
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "(nas)" }).click();
+  // back to the explorer's tab ("Physics (nas)") through the sidebar's Open section
+  await page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row")
+    .filter({ has: page.locator(".pane-title", { hasText: "(nas)" }) }).locator(".pane-main").click();
   await pane.getByRole("button", { name: "New folder" }).click();
   await pane.getByRole("textbox", { name: "New folder name" }).fill("Notes");
   await page.keyboard.press("Enter");
