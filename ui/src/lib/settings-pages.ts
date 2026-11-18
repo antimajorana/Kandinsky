@@ -207,6 +207,29 @@ export function placeFields(leaves: string[], host: SettingsHost = "app"): Place
 }
 
 export const pageDef = (id: string) => PAGES.find((p) => p.id === id);
+
+/** Earlier page ids, mapped to the page that now holds their fields, so saved links and blocks still open. */
+export const PAGE_ALIASES: Record<string, PageId> = {
+  overview: "appearance",
+  today: "calendar",
+  editor: "writing",
+  code: "writing",
+  shortcuts: "keyboard",
+  web: "files",
+  draw: "papers",
+  drawing: "papers",
+  latex: "papers",
+  extensions: "plugins",
+  terminal: "plugins",
+  desktop: "plugins",
+  automation: "plugins",
+  server: "plugins",
+  agents: "plugins",
+  // its fields are split now; the settings-file panel it was known for is on Extensions
+  advanced: "plugins",
+};
+/** The current page for `id`; ids that are not aliases (current pages, `plugin:…`, `accounts`) pass through. */
+export const canonicalPage = (id: string): string => PAGE_ALIASES[id] ?? id;
 export type StringKind = "colour" | "folder" | "file" | "plain";
 export function stringKind(path: string): StringKind {
   const key = path.split(".").pop() ?? "";

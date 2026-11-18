@@ -17,13 +17,14 @@
   import { allApps, appLaunchers, ordered, setAppHidden, type AppTile } from "../lib/apps.svelte";
   import { change } from "../lib/settings.svelte";
   import { paneIcon } from "../lib/panes";
-  import { tabs, activate, closeTab, unpin, pinId, setSidebarWidth, toggleSidebar } from "../lib/tabs.svelte";
+  import { tabs, activate, closeTab, canSplit, splitRight, unsplit, pin, unpin, isPinned, pinId, setSidebarWidth, toggleSidebar } from "../lib/tabs.svelte";
   import { fullscreen } from "../lib/fullscreen.svelte";
   import { notificationsInbox, openNotificationsModal, closeNotificationsModal, requestNotificationsSync } from "../lib/notifications-inbox.svelte";
   import { bookmarks, bookmarkTitle, bookmarkIcon, bookmarkDetail, openBookmark, removeBookmark, isFileStarred, toggleFileStar, type Bookmark } from "../lib/bookmarks.svelte";
   import { FOLDER_COLOR_PALETTE, getCustomFolderColor, setCustomFolderColor, getNoteIcon } from "../lib/folder-colors.svelte";
   import { toggleShowAll, treeView } from "../lib/tree-view.svelte";
   import { revealPath } from "../lib/file-tree.svelte";
+  import { trashFile } from "../lib/sidebar.svelte";
   import { onFilesAddedOrRemoved } from "../lib/vault";
   import { onGitWorthyChange, refreshGitTree } from "../lib/gitstatus.svelte";
   import { VAULT_DRAG, dragRow } from "../lib/explorer/drag";
@@ -48,6 +49,7 @@
   const wide = $derived(!collapsed || peek);
   let wsMenuOpen = $state(false);
   let favOpen = $state(true);
+  let panesOpen = $state(true);
   let trashOpen = $state(false);
   let homePath = $state<string | null>(null);
 
@@ -136,6 +138,33 @@
       { label: "Unpin", icon: "pin", hint: keysOf("ui.tabs.pin"), run: () => unpin(p.id) },
     ];
     if (p.open) items.push("sep", { label: "Close", icon: "close", hint: keysOf("ui.close"), run: () => closeTab(p.id) });
+    menu = atPointer(e, items);
+  }
+
+  // The editor zone has no tab strip in this shell, so open tabs are listed here: whenever more than one is open or one
+  // sits behind another view (always with vertical tabs). Apps with their own nav row and pins are not repeated.
+  const navAppIds = $derived(new Set(extraApps.flatMap((a) => a.ids)));
+  const mainGroups = $derived(tabs.groups.filter((g) => g.zone === "main"));
+  const openPanes = $derived([
+    ...tabs.apps
+      .filter((t) => !navAppIds.has(t.id) && !isPinned(t.id) && !homeTile?.ids.includes(t.id) && t.kind !== "today" && (!homePath || t.path !== homePath))
+      .map((t) => ({ ...t, split: 0 })),
+    ...mainGroups.flatMap((g, gi) => g.tabs.map((t) => ({ ...t, split: mainGroups.length > 1 ? gi + 1 : 0 }))),
+  ]);
+  const showPanes = $derived(openPanes.length > 1 || openPanes.some((t) => !t.shown) || (tabs.layout === "vertical" && openPanes.length > 0));
+
+  function onPaneMenu(e: MouseEvent, t: { id: string; path?: string }) {
+    e.preventDefault();
+    e.stopPropagation();
+    const pinned = isPinned(t.id);
+    const items: MenuItem[] = [
+      { label: pinned ? "Unpin" : "Pin", icon: "pin", hint: keysOf("ui.tabs.pin"), run: () => (pinned ? unpin(t.id) : pin(t.id)) },
+    ];
+    if (canSplit(t.id)) items.push({ label: "Split right", icon: "panel-right", run: () => splitRight(t.id) });
+    if (t.path) items.push({ label: "Reveal in Vault Pages", icon: "files", run: () => revealPath(t.path!) });
+    // the classic bar's tab menu offered this; keep it reachable from the Open section too
+    if (t.path) items.push("sep", { label: "Move to Trash…", icon: "close", danger: true, run: () => trashFile(t.path!) });
+    items.push("sep", { label: "Close", icon: "close", hint: keysOf("ui.close"), run: () => closeTab(t.id) });
     menu = atPointer(e, items);
   }
 
@@ -464,6 +493,63 @@
       </section>
     {/if}
 
+    {#if showPanes}
+      <section class="panes-sec" aria-label="Open tabs" data-testid="open-tabs">
+        {#if wide}
+          <div class="sec-row panes-head">
+            <button type="button" class="panes-toggle" onclick={() => (panesOpen = !panesOpen)} aria-expanded={panesOpen}>
+              <span class="sec-label">Open</span>
+              <span class="panes-count">{openPanes.length}</span>
+              <span class="sec-chev" class:open={panesOpen}><Icon name="chevron" size={11} /></span>
+            </button>
+            <span class="panes-head-actions">
+              {#if mainGroups.length > 1}
+                <button type="button" class="sec-btn" title="Unsplit" aria-label="Unsplit" onclick={() => unsplit("main")}><Icon name="maximize" size={11} /></button>
+              {/if}
+              <button type="button" class="kbd panes-kbd" title={searchKey ? `Find an open tab (${searchKey}, then %)` : "Find an open tab (%)"}
+                onclick={() => openPalette("all", "%")}>%</button>
+            </span>
+          </div>
+          {#if panesOpen}
+            <div class="panes-list">
+              {#each openPanes as t (t.id)}
+                {@const customIcon = t.path ? getNoteIcon(t.path) : null}
+                {@const paneActive = t.id === tabs.active}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="pane-row" class:active={paneActive} class:split-shown={t.shown && !paneActive}
+                  onmousedown={(e) => { if (e.button === 1) e.preventDefault(); }}
+                  onauxclick={(e) => { if (e.button === 1) { e.preventDefault(); closeTab(t.id); } }}
+                  oncontextmenu={(e) => onPaneMenu(e, t)}>
+                  <button type="button" class="pane-main" data-tab-id={t.id} aria-current={paneActive ? "page" : undefined}
+                    onclick={() => activate(t.id)} title={t.tip}>
+                    <span class="nav-left">
+                      {#if customIcon}<span class="fav-glyph">{customIcon}</span>{:else}<Icon name={t.icon} size={13} />{/if}
+                      <span class="trunc pane-title">{t.title}</span>
+                    </span>
+                    {#if t.split > 0}<span class="split-badge">Split {t.split}</span>{/if}
+                  </button>
+                  <button type="button" class="pane-close" aria-label="Close {t.title}" title="Close tab"
+                    onclick={(e) => { e.stopPropagation(); closeTab(t.id); }}>
+                    <Icon name="close" size={11} />
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {:else}
+          <div class="panes-mini" role="group" aria-label="Open tabs">
+            {#each openPanes as t (t.id)}
+              {@const customIcon = t.path ? getNoteIcon(t.path) : null}
+              <button type="button" class="pane-mini-btn" class:active={t.id === tabs.active} data-tab-id={t.id}
+                title={t.tip} aria-label={t.title} onclick={() => activate(t.id)} oncontextmenu={(e) => onPaneMenu(e, t)}>
+                {#if customIcon}<span class="fav-glyph">{customIcon}</span>{:else}<Icon name={t.icon} size={14} />{/if}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </section>
+    {/if}
+
     {#if bookmarks.list.length > 0}
       <section class="fav-sec wide-only" aria-label="Favorites">
         <button class="sec-toggle" onclick={() => (favOpen = !favOpen)} aria-expanded={favOpen}>
@@ -561,8 +647,8 @@
   .trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .kbd { flex: none; font-size: calc(10.5px * var(--ui-scale, 1)); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-faint); font-family: var(--font-mono); }
   .nav-badge { flex: none; font-size: calc(10.5px * var(--ui-scale, 1)); font-weight: 600; padding: 0 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-variant-numeric: tabular-nums; }
-  .pins-sec, .fav-sec { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; flex: none; }
-  .notion-sidebar:not(.wide) .pins-sec { align-items: center; width: 100%; border-top: 1px solid var(--border); padding-top: 6px; margin-bottom: 6px; }
+  .pins-sec, .panes-sec, .fav-sec { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; flex: none; }
+  .notion-sidebar:not(.wide) :is(.pins-sec, .panes-sec) { align-items: center; width: 100%; border-top: 1px solid var(--border); padding-top: 6px; margin-bottom: 6px; }
   .pins-list { max-height: 112px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 1px; }
   .notion-sidebar:not(.wide) .pins-list { align-items: center; width: 100%; max-height: none; }
   .pin-row { display: flex; align-items: center; gap: 2px; width: 100%; padding: 1px 4px 1px 8px; border-radius: 6px; color: var(--text-muted); transition: background .1s, color .1s; }
@@ -574,7 +660,26 @@
   .pin-row:has(.pin.active) { background: var(--accent-soft, var(--bg-active)); }
   .pin.resting { opacity: .65; }
   .pin.resting:hover { opacity: 1; }
-  .pin-row:hover .pane-close { opacity: 1; }
+  .pin-row:hover .pane-close, .pane-row:hover .pane-close { opacity: 1; }
+  .panes-head { gap: 4px; }
+  .panes-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 0; color: var(--text-faint); }
+  .panes-toggle:hover .sec-chev { opacity: 1; }
+  .panes-head-actions { display: inline-flex; align-items: center; gap: 4px; }
+  .panes-count { font-size: calc(10px * var(--ui-scale, 1)); font-weight: 600; padding: 0 5px; border-radius: 999px; background: var(--bg-hover); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .panes-kbd { opacity: 0.72; transition: opacity .12s, color .12s; }
+  .panes-kbd:hover { opacity: 1; color: var(--text); background: var(--bg-hover); }
+  .panes-mini { display: flex; flex-direction: column; align-items: center; gap: 2px; max-height: 150px; overflow-y: auto; scrollbar-width: none; width: 100%; }
+  .pane-mini-btn { width: 32px; height: 28px; border-radius: 6px; display: grid; place-items: center; color: var(--text-muted); flex: none; }
+  .pane-mini-btn:hover { background: var(--bg-hover); color: var(--text); }
+  .pane-mini-btn.active { background: var(--accent-soft); color: var(--accent); }
+  .pane-row { display: flex; align-items: center; gap: 2px; width: 100%; padding: 1px 4px 1px 8px; border-radius: 6px; color: var(--text-muted); transition: background .1s, color .1s; }
+  .pane-row:hover { background: var(--bg-hover); color: var(--text); }
+  .pane-row.active { background: var(--accent-soft, var(--bg-active)); color: var(--heading); font-weight: 500; }
+  .pane-row.split-shown { background: var(--bg-hover); color: var(--text); }
+  .pane-main { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 0; font-size: calc(12.5px * var(--ui-scale, 1)); color: inherit; text-align: left; }
+  .pane-row:hover .nav-left :global(.icon), .pane-row.active .nav-left :global(.icon) { color: currentColor; }
+  .split-badge { flex: none; font-size: calc(9.5px * var(--ui-scale, 1)); font-weight: 600; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-faint); font-family: var(--font-mono); }
+  .panes-list { max-height: 160px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 1px; }
   .fav-list { max-height: 136px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 1px; }
   .pane-close { flex: none; width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; color: var(--text-faint); opacity: 0; transition: opacity .1s, background .1s, color .1s; }
   .pane-close:focus-visible { opacity: 1; }

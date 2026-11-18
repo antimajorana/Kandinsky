@@ -1,7 +1,7 @@
 <script lang="ts">
   // Monthly grid for the native Calendar: shows Daily Note dots, multi-day event spans, timed/all-day pills, open tasks & .base overlays, with drag-and-drop rescheduling.
   import type { CalendarDaySummary, CalendarEvent, WeekStart } from "../../lib/types";
-  import { colorSpec, monthGridDays, todayIso, weekdayNames } from "./calendar-dates";
+  import { addDays, colorSpec, daysBetween, monthGridDays, todayIso, weekdayNames } from "./calendar-dates";
 
   let {
     year,
@@ -14,6 +14,8 @@
     onselectday,
     oneditevent,
     onmoveevent,
+    ontoggle,
+    cantoggle,
   }: {
     year: number;
     month0: number;
@@ -25,6 +27,10 @@
     onselectday: (iso: string) => void;
     oneditevent?: (ev: CalendarEvent) => void;
     onmoveevent?: (ev: CalendarEvent, newDate: string) => void;
+    /** When set, an open task gets a checkbox that calls this (a view block ticks its rows). */
+    ontoggle?: (ev: CalendarEvent) => void;
+    /** Which items get that checkbox (default: open tasks). */
+    cantoggle?: (ev: CalendarEvent) => boolean;
   } = $props();
 
   const today = todayIso();
@@ -53,7 +59,10 @@
     draggingOcc = null;
     dragOverDate = null;
     const ev = events.find((x) => x.occurrence_id === occId);
-    if (ev && ev.editable && (fromDate ?? ev.date) !== iso) onmoveevent?.(ev, iso);
+    if (!ev || !ev.editable) return;
+    // a multi-day event grabbed by a later day moves by as many days as it was dragged, not to the drop day
+    const delta = daysBetween(fromDate ?? ev.date, iso);
+    if (delta !== 0) onmoveevent?.(ev, addDays(ev.date, delta));
   }
 </script>
 
@@ -98,23 +107,33 @@
             {#each list.slice(0, maxShow) as ev (ev.occurrence_id)}
               {@const col = colorSpec(ev.color)}
               {@const isSpan = ev.end_date > ev.date}
-              <button
-                type="button"
-                class="pill"
-                class:span={isSpan}
-                class:done={ev.completed}
-                draggable={ev.editable}
-                ondragstart={(e) => onDragStart(e, ev, c.iso)}
-                ondragend={() => { draggingOcc = null; dragOverDate = null; }}
-                onclick={(e) => { e.stopPropagation(); oneditevent?.(ev); }}
-                style:background={col.bg}
-                style:color={col.fg}
-                title={`${ev.start ? ev.start + " · " : ""}${ev.title}`}
-              >
-                <span class="dot" style:background={col.dot}></span>
-                {#if ev.start && ev.date === c.iso}<span class="tm">{ev.start}</span>{/if}
-                <span class="t">{ev.title}</span>
-              </button>
+              {@const tickable = !!ontoggle && (cantoggle ? cantoggle(ev) : ev.source === "task" && !ev.completed)}
+              <div class="pill-row">
+                {#if tickable}
+                  <!-- a checkbox beside the pill (not in it): a button cannot hold another control -->
+                  <input type="checkbox" class="tick" aria-label="Done: {ev.title}"
+                    onclick={(e) => e.stopPropagation()}
+                    onkeydown={(e) => e.stopPropagation()}
+                    onchange={() => ontoggle?.(ev)} />
+                {/if}
+                <button
+                  type="button"
+                  class="pill"
+                  class:span={isSpan}
+                  class:done={ev.completed}
+                  draggable={ev.editable}
+                  ondragstart={(e) => onDragStart(e, ev, c.iso)}
+                  ondragend={() => { draggingOcc = null; dragOverDate = null; }}
+                  onclick={(e) => { e.stopPropagation(); oneditevent?.(ev); }}
+                  style:background={col.bg}
+                  style:color={col.fg}
+                  title={`${ev.start ? ev.start + " · " : ""}${ev.title}`}
+                >
+                  <span class="dot" style:background={col.dot}></span>
+                  {#if ev.start && ev.date === c.iso}<span class="tm">{ev.start}</span>{/if}
+                  <span class="t">{ev.title}</span>
+                </button>
+              </div>
             {/each}
             {#if list.length > maxShow}
               <span class="more">+{list.length - maxShow} more</span>
@@ -152,6 +171,8 @@
   .note-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: none; }
   .note-dot.faint { background: var(--border-strong); }
   .items { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .pill-row { display: flex; align-items: center; gap: 3px; min-width: 0; }
+  .pill-row .tick { margin: 0; width: 11px; height: 11px; flex: none; accent-color: var(--accent); }
   .pill { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; padding: 2px 5px; border-radius: 4px; font-size: 11px; line-height: 1.3; text-align: left; }
   .pill.span { border-left: 2px solid currentColor; }
   .pill.done .t { text-decoration: line-through; opacity: .65; }

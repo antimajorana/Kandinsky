@@ -1,9 +1,16 @@
+<script module lang="ts">
+  // unsaved drafts by note path, kept across workspaces: one closed during a conflict comes back with it next time.
+  // `owner`: the workspace that kept or took it up; only it drops the draft, so another one's save never loses it
+  const savedDrafts = new Map<string, { text: string; mtime: number | undefined; conflict?: boolean; owner: symbol }>();
+</script>
+
 <script lang="ts">
   // Unified Day Workspace: pairs chronological Day Events & Tasks with that day's lazy Daily Note editor (`@container` responsive).
   import { onDestroy, onMount } from "svelte";
   import Icon from "../Icon.svelte";
   import EventPopover from "./EventPopover.svelte";
   import { api, ApiError } from "../../lib/api";
+  import { diff } from "../../lib/frontmatter-edit";
   import { openPath } from "../../lib/dock";
   import { createEditor, type KandinskyEditor } from "../../lib/editor/create";
   import { phone } from "../../lib/phone.svelte";
@@ -32,6 +39,8 @@
   let loadingNote = $state(false);
   let saving = $state(false);
   let dirty = $state(false);
+  // the note changed on disk under unsaved edits (a 409, or created elsewhere): autosave stops until the user chooses
+  let conflict = $state(false);
   let noteError = $state("");
   let scheduleOpen = $state(true);
   let pickerOpen = $state(false);
@@ -46,7 +55,13 @@
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   let inFlightSave: Promise<void> | null = null;
   let draftSnapshot: { path: string; text: string; mtime: number | undefined } | null = null;
-  const savedDrafts = new Map<string, { text: string; mtime: number | undefined }>();
+  const me = Symbol("day-workspace");
+  const dropDraft = (path: string) => { if (savedDrafts.get(path)?.owner === me) savedDrafts.delete(path); };
+  /** A draft this closing workspace could not save: kept for when the day is opened again (another's left alone). */
+  const keepDraft = (path: string, text: string, mtime: number | undefined, conflicted: boolean) => {
+    const held = savedDrafts.get(path);
+    if (!held || held.owner === me) savedDrafts.set(path, { text, mtime, conflict: conflicted, owner: me });
+  };
 
   // Mini-month picker state follows selected date when opened.
   let pickYear = $state(parseIso(today).getFullYear());
@@ -65,43 +80,53 @@
   ): Promise<void> {
     clearTimeout(saveTimer);
     saveTimer = undefined;
-    if (!dirty || !path) return;
+    if (!dirty || !path || conflict) return;
     if (keepalive) {
       const seqAtStart = dirtySeq;
       const mtimeAtStart = dirtyMtime;
+      const live = () => dirtyPath === path && dirtySeq === seqAtStart;
       void api.putFile(path, text, mtimeAtStart, false, true, mtimeAtStart === undefined).then((r) => {
-        if (dirtyPath === path && dirtySeq === seqAtStart) {
+        if (r.written === false) {
+          keepDraft(path, text, mtimeAtStart, true); // created elsewhere: the typed text comes back with a conflict
+          if (live()) conflict = true; // its mtime is not adopted, or the next save would overwrite it
+        } else if (live()) {
           dirtyMtime = r.mtime;
-          if (r.written !== false) {
-            dirty = false;
-            if (draftSnapshot?.path === path) draftSnapshot = null;
-            savedDrafts.delete(path);
-          }
+          dirty = false;
+          if (draftSnapshot?.path === path) draftSnapshot = null;
+          dropDraft(path);
         }
-      }).catch(() => {});
+      }).catch((err) => {
+        // not saved: the text is kept, a 409 as a conflict (another write is not overwritten when it comes back)
+        const clash = err instanceof ApiError && err.status === 409;
+        keepDraft(path, text, mtimeAtStart, clash);
+        if (clash && live()) conflict = true;
+      });
       return;
     }
     while (inFlightSave) {
       await inFlightSave;
     }
-    if (!dirty || !path) return;
+    if (!dirty || !path || conflict) return;
     const run = (async () => {
-      while (dirty) {
+      while (dirty && !conflict) {
         const seqAtStart = dirtySeq;
         const savePath = dirtyPath || path;
-        const saveText = editor && loadedFor.endsWith(`:${savePath}`)
+        // the editor holds the note: it takes a template's or an automation's edits itself (apply_here), as the Editor pane
+        const held = !!editor && loadedFor.endsWith(`:${savePath}`);
+        const saveText = held && editor
           ? editor.view.state.doc.toString()
           : (draftSnapshot?.path === savePath ? draftSnapshot.text : text);
         const saveMtime = dirtyMtime;
         saving = true;
         try {
-          const r = await api.putFile(savePath, saveText, saveMtime, false, false, saveMtime === undefined);
-          dirtyMtime = r.mtime;
+          const r = await api.putFile(savePath, saveText, saveMtime, held, false, saveMtime === undefined);
           if (r.written === false) {
-            toast("Could not save Daily Note", "Daily Note was created elsewhere — save again to keep your edits or switch days to reload.", "error");
+            conflict = true;
+            toast("Daily Note not saved", `${savePath} was created elsewhere: load it, or keep your version.`, "error");
             break;
           }
-          savedDrafts.delete(savePath);
+          dirtyMtime = r.mtime;
+          dropDraft(savePath);
           if (draftSnapshot && draftSnapshot.path === savePath && dirtySeq === seqAtStart) {
             draftSnapshot = null;
           }
@@ -109,12 +134,12 @@
             dayInfo = { ...dayInfo, exists: true, mtime: r.mtime, text: saveText };
           }
           if (dirtySeq === seqAtStart) dirty = false;
+          if (held && r.template?.text !== undefined) await applyTemplate(savePath, r.template.template, r.template.added, lf(r.template.text), saveText, r.template.automation ?? false);
           onrefresh();
         } catch (err) {
-          if (err instanceof ApiError && err.status === 409 && err.diskMtime !== undefined) {
-            dirtyMtime = err.diskMtime;
-          }
-          toast("Could not save Daily Note", errText(err), "error");
+          // the disk's mtime is not adopted here: that would let the next save silently overwrite the other change
+          if (err instanceof ApiError && err.status === 409) conflict = true;
+          else toast("Could not save Daily Note", errText(err), "error");
           break;
         } finally {
           saving = false;
@@ -129,6 +154,64 @@
     }
   }
 
+  const lf = (t: string) => t.replace(/\r\n/g, "\n");
+
+  /** A template's or automation's edit this save brought (apply_here), merged in as one edit of the editor's own, as the
+   *  Editor pane does: the next save writes it on the mtime just adopted, so the rewrite is no conflict. */
+  async function applyTemplate(path: string, name: string, added: string[], merged: string, base: string, automation = false): Promise<void> {
+    const now = () => (editor && loadedFor.endsWith(`:${path}`) ? editor.view.state.doc.toString() : null);
+    const cur = now();
+    if (cur === null) return;
+    // an automation's property edits are named "<rule> (<file>.base)" (core automations.rs), a template by its stem
+    const auto = name === "" || /\.base\)$/.test(name);
+    if (cur !== base) {
+      // an automation's edit is already on disk, also when a template ran with it: merging the template again would drop it
+      if (auto || automation) {
+        const typed = diff(base, cur), edit = diff(base, merged);
+        if (!typed || !edit) return;
+        const shift = typed.insert.length - (typed.to - typed.from);
+        const at = edit.to <= typed.from ? edit : edit.from >= typed.to ? { from: edit.from + shift, to: edit.to + shift, insert: edit.insert } : null;
+        // overlapping what was typed: the conflict bar, else the loop's next save drops the edit already on disk
+        if (!at) { conflict = true; return; }
+        merged = cur.slice(0, at.from) + at.insert + cur.slice(at.to);
+      } else {
+        const again = await api.mergeTemplate(path, name, cur).catch(() => null);
+        if (!again?.text || now() !== cur) return;
+        merged = lf(again.text);
+      }
+      base = cur;
+    }
+    const change = diff(base, merged);
+    if (!change || !editor) return;
+    editor.view.dispatch({ changes: change, userEvent: "input.template" });
+    const rule = name.match(/^(.+?) \(.+\.base\)$/)?.[1] ?? name;
+    toast(!auto ? `Template “${name}” applied` : rule ? `Automation “${rule}” updated this note` : "An automation updated this note", `${auto ? "Set" : "Added"} ${added.join(", ")}`, "info");
+  }
+
+  /** Drops the unsaved edits and shows the note as it is on disk. */
+  async function loadDiskVersion(): Promise<void> {
+    if (dirtyPath) dropDraft(dirtyPath);
+    dirty = false;
+    conflict = false;
+    draftSnapshot = null;
+    loadedFor = "";
+    await loadDay(date);
+  }
+
+  /** Writes the unsaved edits over what is on disk now, as the user chose. */
+  async function keepMine(): Promise<void> {
+    const path = dirtyPath;
+    if (!path) return;
+    try {
+      dirtyMtime = (await api.file(path)).mtime;
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 404)) { toast("Could not save Daily Note", errText(err), "error"); return; }
+      dirtyMtime = undefined; // gone meanwhile: written as a new file
+    }
+    conflict = false;
+    await flushSave(path);
+  }
+
   function scheduleSave(path: string): void {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => { void flushSave(path); }, 450);
@@ -140,6 +223,9 @@
       const info = await api.dayLog(targetDate);
       if (targetDate !== date) return;
       if (dirty || inFlightSave) {
+        // changed on disk under unsaved edits: say so now rather than at the next save
+        // (only a newer mtime: an answer sent before our own last save carries an older one)
+        if (dirty && !inFlightSave && info.path === dirtyPath && info.exists && (dirtyMtime === undefined || (info.mtime ?? 0) > dirtyMtime)) conflict = true;
         return;
       }
       dayInfo = info;
@@ -157,7 +243,7 @@
     if (dirty && dirtyPath) {
       const unsaved = editor?.view.state.doc.toString() ?? draftSnapshot?.text;
       if (unsaved !== undefined) {
-        savedDrafts.set(dirtyPath, { text: unsaved, mtime: dirtyMtime });
+        savedDrafts.set(dirtyPath, { text: unsaved, mtime: dirtyMtime, conflict, owner: me });
       }
       toast("Kept unsaved draft", `${dirtyPath} could not be saved yet.`, "error");
     }
@@ -168,17 +254,21 @@
       if (targetDate !== date) return;
       const pending = savedDrafts.get(info.path);
       if (pending) {
+        pending.owner = me; // taken up here: this workspace's save or "Load disk version" now drops it
         dayInfo = { ...info, text: pending.text };
         dirty = true;
         dirtySeq += 1;
-        draftSnapshot = { path: info.path, text: pending.text, mtime: pending.mtime ?? info.mtime };
+        draftSnapshot = { path: info.path, text: pending.text, mtime: pending.mtime };
         dirtyPath = info.path;
-        dirtyMtime = pending.mtime ?? info.mtime;
+        // the draft keeps the mtime it was based on: a note written (or created) meanwhile is a conflict, not overwritten
+        dirtyMtime = pending.mtime;
+        conflict = !!pending.conflict || (pending.mtime === undefined ? info.exists : pending.mtime !== info.mtime);
         loadedFor = `${info.day}:${info.path}`;
         mountEditor(dayInfo);
       } else {
         dayInfo = info;
         dirty = false;
+        conflict = false;
         draftSnapshot = null;
         dirtyPath = info.path;
         dirtyMtime = info.mtime;
@@ -261,7 +351,9 @@
     clearTimeout(saveTimer);
     if (dirty && dirtyPath) {
       const text = editor?.view.state.doc.toString() ?? draftSnapshot?.text ?? "";
-      void flushSave(dirtyPath, text, true);
+      // a conflict is not saved over: its draft is kept for when this day is opened again
+      if (conflict) savedDrafts.set(dirtyPath, { text, mtime: dirtyMtime, conflict: true, owner: me });
+      else void flushSave(dirtyPath, text, true);
     }
     editor?.destroy();
     editor = null;
@@ -383,9 +475,18 @@
       <div class="note-status">
         <span class="note-path">{dayInfo?.path ?? `Daily Note · ${date}`}</span>
         <span class="draft-pill" class:saved={dayInfo?.exists && !dirty}>
-          {#if saving}Saving…{:else if dirty}Unsaved changes{:else if dayInfo?.exists}Saved{:else}Draft — created when you start writing{/if}
+          {#if saving}Saving…{:else if conflict}Not saved{:else if dirty}Unsaved changes{:else if dayInfo?.exists}Saved{:else}Draft — created when you start writing{/if}
         </span>
       </div>
+      {#if conflict}
+        <div class="conflict-bar" role="alert" data-testid="day-note-conflict">
+          <span>The Daily Note changed on disk while you were editing.</span>
+          <span class="conflict-actions">
+            <button type="button" class="ghost-btn" onclick={() => void loadDiskVersion()}>Load disk version</button>
+            <button type="button" class="new-ev-btn" onclick={() => void keepMine()}>Keep mine (overwrite)</button>
+          </span>
+        </div>
+      {/if}
       {#if noteError}
         <p class="err">{noteError}</p>
       {:else if loadingNote && !dayInfo}
@@ -448,6 +549,8 @@
   .note-path { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .draft-pill { padding: 1px 8px; border-radius: 999px; background: var(--bg-alt); color: var(--text-muted); flex: none; }
   .draft-pill.saved { color: var(--green); background: var(--green-soft); }
+  .conflict-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 18px; font-size: 12.5px; color: var(--text); background: color-mix(in srgb, var(--yellow) 14%, var(--bg)); border-bottom: 1px solid var(--border); }
+  .conflict-actions { display: inline-flex; gap: 8px; }
   .editor-host { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 18px 24px; }
   .loading, .err { padding: 14px 18px; margin: 0; font-size: 12.5px; color: var(--text-faint); }
   .err { color: var(--red); }

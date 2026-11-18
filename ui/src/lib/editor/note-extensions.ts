@@ -52,7 +52,7 @@ import { slashMenuExtension } from "./slash-menu";
 import { blockGutterExtension } from "./block-gutter";
 import { bidiExtension } from "./bidi";
 import { headingFoldsExtension } from "./heading-folds";
-import { zenScrollExtension } from "./zen-scroll";
+import { typewriter, zenScrollExtension } from "./zen-scroll";
 import { codeFenceChromeExtension } from "../code-fence-chrome";
 import { richBlocksExtension } from "./rich-blocks";
 
@@ -236,7 +236,9 @@ export function noteExtensions(
       if (isNotionShell()) {
         const docText = state?.doc.toString() ?? fm;
         return {
-          key: `notion-inline:${propertySpec.version}:${fm}`,
+          // no frontmatter text in the key: a new key re-parents the shared host and blurs the field being edited;
+          // the ViewPlugin below already pushes each new text into the host
+          key: `notion-inline:${propertySpec.version}`,
           render: () => {
             if (!inlinePropsHost) inlinePropsHost = createInlinePropsHost(docText, getInlineView, onOpenLink);
             else inlinePropsHost.update(docText, getInlineView, onOpenLink);
@@ -414,26 +416,9 @@ async function dropAt(view: EditorView, notePath: string, files: File[], at: num
 export function mdOptions(c: WorkspaceConfig | null): Extension {
   return [
     (c?.editor.fold_headings ?? true) ? [foldGutter({ openText: "▾", closedText: "▸" }), keymap.of(foldKeymap)] : [],
-    c?.editor.typewriter ? typewriter : [],
+    c?.editor.typewriter ? typewriter : [], // zen-scroll.ts; the page menu's toggle uses the same extension
   ];
 }
-
-/** Typewriter scrolling: the caret's line stays at mid-height. Done with scroll margins, so CodeMirror's
- *  own scroll-into-view keeps the caret in a one-line band at the middle — one scroll per keystroke, in
- *  the same frame (a second, centring scroll a frame later made the text rattle). A click does not
- *  scroll; the padding lets the last lines reach the middle. */
-const typewriter = [
-  EditorView.scrollMargins.of((view) => {
-    // a selection being made (a drag, Shift+arrows) keeps its end where it is: only a caret is held at mid-height
-    if (!view.state.selection.main.empty) return null;
-    // CodeMirror shows a tooltip only inside the editor less these margins: with a list open (completions, snippets,
-    // a hover) the one-line band hid every list under the caret; while one is up the caret is not held mid-height
-    if (view.dom.querySelector(".cm-tooltip")) return null;
-    const m = Math.max(0, view.scrollDOM.clientHeight / 2 - view.defaultLineHeight);
-    return { top: m, bottom: m };
-  }),
-  EditorView.theme({ ".cm-content": { paddingBottom: "50vh" } }),
-];
 
 /** Whether the note's first line of text (after the frontmatter) is a `# heading` that serves as the single Notion page
  *  title — when frontmatter is present with a leading `# H1`, or when the `# H1` repeats / expands the file's name

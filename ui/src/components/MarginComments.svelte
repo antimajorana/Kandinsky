@@ -1,3 +1,25 @@
+<script lang="ts" module>
+  /** How long a stored quote may be: the editor keeps the selection's trimmed text cut to this many characters. */
+  const QUOTE_MAX = 140;
+
+  /** Where a thread's quote is in `doc` now. Its stored offsets are from when it was made, so text added or removed
+   *  above moves it: they count only while they still hold the quote, else the occurrence nearest them does.
+   *  A page note (no quote) keeps its offsets; null when the quote is gone. */
+  export function commentAnchor(doc: string, from: number, to: number, quote: string): { from: number; to: number; line: number } | null {
+    const lineAt = (pos: number) => doc.slice(0, pos).split("\n").length;
+    if (!quote) return { from, to, line: lineAt(Math.max(0, Math.min(from, doc.length))) };
+    if (from >= 0 && from <= to && to <= doc.length) {
+      const here = doc.slice(from, to).trim();
+      if (here === quote || (quote.length >= QUOTE_MAX && here.startsWith(quote))) return { from, to, line: lineAt(from) };
+    }
+    let best = -1;
+    for (let i = doc.indexOf(quote); i >= 0; i = doc.indexOf(quote, i + 1)) {
+      if (best < 0 || Math.abs(i - from) < Math.abs(best - from)) best = i;
+    }
+    return best < 0 ? null : { from: best, to: best + quote.length, line: lineAt(best) };
+  }
+</script>
+
 <script lang="ts">
   // Notion-style anchored margin comments drawer for Markdown notes, persisted via `.kandinsky/comments` sidecars.
   import { onMount, onDestroy } from "svelte";
@@ -11,12 +33,15 @@
   let {
     path,
     selection = null,
+    doctext,
     onjump,
     onclose,
     oncount,
   }: {
     path: string;
     selection?: { from: number; to: number; quote: string; anchor_line: number } | null;
+    /** The note's text as the editor has it now (unsaved edits included); without it, the text on disk. */
+    doctext?: () => string;
     onjump?: (from: number, to: number, anchorLine: number) => void;
     onclose?: () => void;
     oncount?: (unresolved: number) => void;
@@ -129,6 +154,20 @@
     }
   }
 
+  /** Jumps to where the thread's quote is now; a quote no longer in the note puts the caret on its old line. */
+  async function jump(t: CommentThread): Promise<void> {
+    if (!onjump) return;
+    let doc: string;
+    try {
+      doc = doctext ? doctext() : (await api.file(path)).text.replace(/\r\n/g, "\n");
+    } catch {
+      return onjump(t.from, t.to, t.anchor_line);
+    }
+    const at = commentAnchor(doc, t.from, t.to, t.quote);
+    if (at) onjump(at.from, at.to, at.line);
+    else onjump(-1, -1, t.anchor_line);
+  }
+
   $effect(() => { void path; void load(); });
   let offVault: (() => void) | undefined;
   onMount(() => {
@@ -176,7 +215,7 @@
         <article class="thread" class:resolved={t.resolved} data-testid="comment-thread">
           <div class="th-top">
             <span class="author">{t.author}</span>
-            <button type="button" class="line-jump" onclick={() => onjump?.(t.from, t.to, t.anchor_line)} title="Jump to anchor">
+            <button type="button" class="line-jump" onclick={() => void jump(t)} title="Jump to anchor">
               L{t.anchor_line}
             </button>
             <span class="grow"></span>
@@ -188,7 +227,7 @@
             </button>
           </div>
           {#if t.quote}
-            <button type="button" class="th-quote" onclick={() => onjump?.(t.from, t.to, t.anchor_line)}>“{t.quote}”</button>
+            <button type="button" class="th-quote" onclick={() => void jump(t)}>“{t.quote}”</button>
           {/if}
           <p class="th-body">{t.text}</p>
 

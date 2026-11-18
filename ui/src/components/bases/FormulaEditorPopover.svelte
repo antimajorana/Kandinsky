@@ -39,8 +39,8 @@
     { label: 'dateBetween(prop("due"), today(), "days")', sig: 'dateBetween(a, b, "days"|"weeks"|"months") — Date delta' },
     { label: 'round(prop("hours"), 1)', sig: "round(num, digits) — Round number" },
     { label: 'concat(prop("code"), "-", prop("title"))', sig: "concat(a, b, ...) — Join strings" },
-    { label: '.filter(x > 0)', sig: ".filter(predicate) — Filter list items" },
-    { label: '.map(x * 2)', sig: ".map(transform) — Map list items" },
+    { label: '.filter(value > 0)', sig: ".filter(predicate) — Keep list items; `value` is the current item" },
+    { label: '.map(value * 2)', sig: ".map(transform) — Map list items; `value` is the current item" },
     { label: '.sum()', sig: ".sum() / .avg() — Numeric list aggregate" },
   ];
 

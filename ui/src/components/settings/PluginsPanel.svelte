@@ -441,7 +441,7 @@
       <h3>Trusted External Binaries <span class="n">{trustedBins.length}</span></h3>
     </div>
     <ul>
-      {#each trustedBins as tb (tb.sha256)}
+      {#each trustedBins as tb (`${tb.command}\u0000${tb.sha256}`)}
         <li>
           <div class="main">
             <b>{tb.command}</b>

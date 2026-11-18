@@ -39,6 +39,11 @@ export function addDays(iso: string, delta: number): string {
   return formatIso(d);
 }
 
+/** Whole days from `from` to `to` (negative when `to` is earlier). */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((parseIso(to).getTime() - parseIso(from).getTime()) / 86_400_000);
+}
+
 export function addMonths(iso: string, delta: number): string {
   const d = parseIso(iso);
   const day = d.getDate();

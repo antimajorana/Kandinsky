@@ -14,6 +14,8 @@ import { iconSvg } from "./icons";
 import { embedFor, onEmbedsChanged, type Embed } from "./embed-registry";
 import { logPlugin } from "./plugin-log.svelte";
 import { errText } from "./text";
+import { api } from "./api";
+import { noteEquations } from "./equations";
 import "./builtin-embeds";
 import "./embed-open"; // the ↗ over an embed, Ctrl+click: the original
 
@@ -259,14 +261,28 @@ async function mountEmbed(el: HTMLElement, notePath: string, compact: boolean): 
     el.replaceChildren();
     return keep(el, mountBlock(el, notePath, src));
   }
-  el.replaceChildren();
   const page = /^page=(\d+)/.exec(section)?.[1];
+  const synced = !pdf && !compact && section.startsWith("^") && await syncedBlockId(path, section.slice(1));
+  if (released.has(el)) return;
+  el.replaceChildren();
   const src = pdf
     ? `type: pdf\npath: ${JSON.stringify(path)}\nheight: ${PDF_HEIGHT}${page ? `\npage: ${page}` : ""}`
-    : !file && !compact && section.startsWith("^")
+    : synced
       ? `type: synced\npath: ${JSON.stringify(path)}\nblock: ${JSON.stringify(section.slice(1))}`
       : `type: note\npath: ${JSON.stringify(path)}${section ? `\nsection: ${JSON.stringify(section)}` : ""}`;
   keep(el, mountBlock(el, notePath, src));
+}
+
+/** Whether `![[note#^id]]` is an editable synced block: an id the core can write back (letters, digits, `-`, `_`) that
+ *  is no equation or figure label, which the note view shows numbered or captioned. Unreadable note: the note view. */
+async function syncedBlockId(path: string, id: string): Promise<boolean> {
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) return false;
+  try {
+    // CRLF normalised first: the label patterns end in `[ \t]*$` and a trailing `\r` would hide them
+    return !noteEquations((await api.file(path)).text.replace(/\r\n/g, "\n")).spanOf.has(id);
+  } catch {
+    return false;
+  }
 }
 
 /** A registered embed into `el`: its failure is said in place and logged as its owner's. */

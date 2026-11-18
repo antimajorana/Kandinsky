@@ -460,7 +460,7 @@ export const api = {
   formulaPreview: (req: import("./gen/FormulaPreviewRequest").FormulaPreviewRequest) =>
     request<import("./gen/FormulaPreviewResponse").FormulaPreviewResponse>("POST", "/api/base/formula-preview", { body: req }),
   runBaseRecurring: (path: string) =>
-    request<{ created: string[] }>("POST", "/api/base/run-recurring", { body: { path } }),
+    request<string[]>("POST", "/api/base/run-recurring", { body: { path } }),
   /** Synced block source edits. */
   updateSyncedBlock: (req: import("./gen/SyncedBlockWrite").SyncedBlockWrite, keepalive = false) =>
     request<import("./gen/SyncedBlockResult").SyncedBlockResult>("POST", "/api/note/synced-block", { body: req, keepalive }),

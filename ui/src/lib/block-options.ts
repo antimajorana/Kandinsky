@@ -65,8 +65,10 @@ export const TASK_FIELDS: OptionField[] = [
 /** Fields of the built-in blocks, by type. A plugin gives its own to `registerBlock`. */
 export const BUILTIN_FIELDS: Record<string, OptionField[]> = {
   "task-list": TASK_FIELDS,
-  calendar: [
-    { key: "view", label: "Default view", kind: "choice", choices: ["month", "week", "agenda", "day"] },
+  // the Calendar pane as a block; the `calendar` row view of dated tasks has no entry, so it gets ROW_VIEW_FIELDS.
+  // `mode`, not `view`: a .page block and a bookmark name their type with `view:` (lib/blocks.ts still reads an old `view`)
+  "calendar-pane": [
+    { key: "mode", label: "Default view", kind: "choice", choices: ["month", "week", "agenda", "day"] },
     { key: "date", label: "Focus date", kind: "text", hint: "YYYY-MM-DD (optional)" },
   ],
   chart: [

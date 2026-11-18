@@ -180,11 +180,20 @@ function duplicateBlock(view: EditorView, span: LogicalSpan): void {
 function ensureBlockId(view: EditorView, span: LogicalSpan): string {
   const doc = view.state.doc;
   const endLine = doc.lineAt(span.to);
+  // a list item's ID sits on its own first line and covers its nested children, so read it where it is written
+  const idLine = span.kind === "list" ? doc.lineAt(span.from) : endLine;
 
-  let id = TRAILING_BLOCK_ID.exec(endLine.text)?.[1];
+  let id = TRAILING_BLOCK_ID.exec(idLine.text)?.[1];
+  // an item whose text wraps onto continuation lines may carry its ID at their end (as Obsidian writes it); a nested
+  // item or a blank line ends the item's own text, so a child's ID is never read as the parent's
+  for (let n = idLine.number + 1; !id && span.kind === "list" && n <= endLine.number; n++) {
+    const text = doc.line(n).text;
+    if (text.trim() === "" || LIST_ITEM_ROW.test(text)) break;
+    id = TRAILING_BLOCK_ID.exec(text)?.[1];
+  }
 
   // Check if a standalone `^blk-...` already sits on the line immediately below a table/fence/callout/math block
-  if (!id && endLine.number < doc.lines) {
+  if (!id && span.kind !== "list" && endLine.number < doc.lines) {
     const nextLine = doc.line(endLine.number + 1).text.trim();
     const standalone = /^\^([A-Za-z0-9-]+)$/.exec(nextLine);
     if (standalone) id = standalone[1];
@@ -198,10 +207,9 @@ function ensureBlockId(view: EditorView, span: LogicalSpan): string {
         userEvent: "input",
       });
     } else {
-      const targetLine = span.kind === "list" ? doc.lineAt(span.from) : endLine;
-      const spacer = targetLine.text.endsWith(" ") || targetLine.text.length === 0 ? "" : " ";
+      const spacer = idLine.text.endsWith(" ") || idLine.text.length === 0 ? "" : " ";
       view.dispatch({
-        changes: { from: targetLine.to, insert: `${spacer}^${id}` },
+        changes: { from: idLine.to, insert: `${spacer}^${id}` },
         userEvent: "input",
       });
     }

@@ -1,12 +1,14 @@
 <script lang="ts">
   // Visual block picker for .page dashboards: click a friendly card to insert any block without editing YAML.
+  // "More blocks…" opens the full list (text, PDF, image, web page, Library, row views, plugin blocks…).
+  import { onMount } from "svelte";
   import Icon from "./Icon.svelte";
   import type { IconName } from "../lib/panes";
 
-  let { onpick, onclose }: { onpick: (yaml: string) => void; onclose: () => void } = $props();
+  let { onpick, onmore, onclose }: { onpick: (yaml: string) => void; onmore?: () => void; onclose: () => void } = $props();
 
   const CHOICES: { id: string; title: string; desc: string; icon: IconName; yaml: string }[] = [
-    { id: "calendar", title: "Calendar", desc: "Interactive monthly events, Daily Notes & tasks", icon: "calendar", yaml: "view: calendar" },
+    { id: "calendar", title: "Calendar", desc: "Interactive monthly events, Daily Notes & tasks", icon: "calendar", yaml: "view: calendar-pane" },
     { id: "tasks", title: "Open Tasks", desc: "Checkboxes across your workspace", icon: "check", yaml: "view: tasks" },
     { id: "base", title: "Database (.base)", desc: "Table, Board, Cards or Timeline", icon: "table", yaml: "view: base\npath: " },
     { id: "note", title: "Note Embed", desc: "Live summary or section from a note", icon: "file-text", yaml: "view: note\npath: " },
@@ -15,10 +17,15 @@
     { id: "countdown", title: "Countdown", desc: "Days remaining until a target date", icon: "clock", yaml: "view: countdown\nlabel: Milestone\ntarget_date: 2026-12-31" },
     { id: "capture", title: "Quick Capture", desc: "Drop notes straight into Today's log", icon: "edit", yaml: "view: capture" },
   ];
+
+  let backdrop: HTMLDivElement | undefined = $state();
+  // the dialog takes the focus so Escape reaches it (it is drawn outside the page, whose keys it would not get)
+  onMount(() => backdrop?.querySelector<HTMLButtonElement>(".choice")?.focus());
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions a11y_interactive_supports_focus -->
-<div class="picker-backdrop" role="dialog" aria-modal="true" tabindex="-1" aria-label="Add page block"
+<div class="picker-backdrop" role="dialog" aria-modal="true" tabindex="-1" aria-label="Add page block" bind:this={backdrop}
+  onkeydown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onclose(); } }}
   onclick={(e) => { if (e.target === e.currentTarget) onclose(); }}>
   <div class="picker-card" data-testid="page-block-picker">
     <header class="head">
@@ -32,6 +39,12 @@
           <span class="meta"><strong>{ch.title}</strong><span>{ch.desc}</span></span>
         </button>
       {/each}
+      {#if onmore}
+        <button type="button" class="choice more" onclick={onmore} data-testid="page-block-more">
+          <span class="ico"><Icon name="plus" size={16} /></span>
+          <span class="meta"><strong>More blocks…</strong><span>Text, PDF, image, web page, Library, views, plugin blocks</span></span>
+        </button>
+      {/if}
     </div>
   </div>
 </div>
@@ -45,6 +58,7 @@
   .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .choice { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--card-bg); text-align: left; }
   .choice:hover { border-color: var(--accent); background: var(--bg-hover); }
+  .choice.more { grid-column: 1 / -1; border-style: dashed; }
   .ico { width: 32px; height: 32px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; flex: none; }
   .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .meta strong { font-size: 13px; color: var(--heading); }

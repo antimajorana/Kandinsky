@@ -4,6 +4,7 @@ import type { EditorView } from "@codemirror/view";
 import { api } from "./api";
 import { activeEditorId, lastEditorId } from "./dock";
 import { editors } from "./registry";
+import { toast } from "./state.svelte";
 
 export interface VoiceRecordEventDetail {
   view?: EditorView | null;
@@ -26,8 +27,10 @@ async function appendToNoteOnDisk(notePath: string, embed: string): Promise<void
     const f = await api.file(notePath);
     const sep = f.text.endsWith("\n") || !f.text ? "" : "\n";
     await api.putFile(notePath, `${f.text}${sep}${embed}\n`, f.mtime);
+    toast("Recording linked", `Added at the end of ${notePath}`, "success", 3000);
   } catch (e) {
     console.warn("[kandinsky] voice note fallback append failed", notePath, e);
+    toast("Recording saved but not linked", `Paste ${embed} into ${notePath} by hand.`, "error");
   }
 }
 
@@ -37,7 +40,8 @@ function fallbackEditorInsert(embed: string, notePath?: string): void {
   const targetEd =
     (activeEd && (!notePath || activeEd.path === notePath) ? activeEd : undefined) ??
     (notePath ? [...editors.values()].find((e) => e.path === notePath) : undefined) ??
-    activeEd;
+    // A known note with no open editor is appended on disk, never written into an unrelated note.
+    (notePath ? undefined : activeEd);
   if (targetEd) {
     targetEd.insertBlock(embed);
     targetEd.focus();

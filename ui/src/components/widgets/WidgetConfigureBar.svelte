@@ -3,9 +3,8 @@
   import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
   import { EditorView } from "@codemirror/view";
   import Icon from "../Icon.svelte";
-  import { optionFields } from "../../lib/blocks";
+  import { drawnType, optionFields } from "../../lib/blocks";
   import type { OptionField } from "../../lib/block-options";
-  import { blockType } from "../../lib/panes";
 
   let {
     blockEl,
@@ -20,8 +19,11 @@
   let open = $state(false);
   let draft = $state<Record<string, string | boolean>>({});
   let error = $state("");
+  // the source this bar last wrote, still its block if the editor kept the rendered DOM (and so the old `src`)
+  let written = "";
 
-  const type = $derived(blockType(src));
+  // as drawn: an older `type: calendar` Calendar block gets the pane's fields, and Apply writes it as `calendar-pane`
+  const type = $derived(drawnType(src));
   const fields: OptionField[] = $derived(optionFields(type));
 
   function loadDraft(): void {
@@ -30,7 +32,8 @@
       const parsed = (parseYaml(src) as Record<string, unknown>) ?? {};
       const next: Record<string, string | boolean> = {};
       for (const f of fields) {
-        const v = parsed[f.key];
+        // the Calendar's start view, written as `view:` before it was `mode:`
+        const v = parsed[f.key] ?? (type === "calendar-pane" && f.key === "mode" ? parsed.view : undefined);
         if (f.kind === "toggle") next[f.key] = v === true;
         else if (Array.isArray(v)) next[f.key] = v.join(", ");
         else next[f.key] = v == null ? "" : String(v);
@@ -94,13 +97,21 @@
     const view = editorViewForBlock();
     if (!view) { error = "Open editor to update block"; return; }
     const range = findFenceRange(view);
-    if (!range) { error = "Could not locate block in document"; return; }
+    // the fence found near the rendered block must hold this block's source, else Apply would rewrite another block;
+    // an opener indented 1-3 spaces has that much taken off each content line, as markdown-it does for `src`
+    const indent = range ? /^ {0,3}/.exec(view.state.doc.lineAt(range.from).text)![0].length : 0;
+    const lead = new RegExp(`^ {0,${indent}}`);
+    const inner = range
+      ? view.state.doc.sliceString(range.innerFrom, Math.max(range.innerFrom, range.innerTo)).split("\n").map((l) => l.replace(lead, "")).join("\n").trim()
+      : "";
+    if (!range || (inner !== src.trim() && inner !== written)) { error = "Could not locate block in document"; return; }
     let existing: Record<string, unknown> = {};
     try {
       const p = parseYaml(src);
       if (p && typeof p === "object" && !Array.isArray(p)) existing = { ...(p as Record<string, unknown>) };
     } catch { /* fallback */ }
     existing.type = type;
+    if (type === "calendar-pane") delete existing.view; // now its `mode`, shown in the form
     for (const f of fields) {
       const val = draft[f.key];
       if (f.kind === "toggle") {
@@ -121,10 +132,13 @@
       }
     }
     const newYaml = stringifyYaml(existing).trimEnd();
+    // indented as the opener is: a column-0 line would end a fence inside a list item, and the rest of the note with it
+    const prefix = " ".repeat(indent);
     view.dispatch({
-      changes: { from: range.innerFrom, to: Math.max(range.innerFrom, range.innerTo - 1), insert: newYaml },
+      changes: { from: range.innerFrom, to: Math.max(range.innerFrom, range.innerTo - 1), insert: newYaml.split("\n").map((l) => (l ? prefix + l : l)).join("\n") },
       userEvent: "input.configure",
     });
+    written = newYaml.trim();
     open = false;
     onupdated?.(newYaml);
   }

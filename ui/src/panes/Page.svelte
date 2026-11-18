@@ -14,9 +14,10 @@
   import { api, ApiError } from "../lib/api";
   import { closePanel, open, openPath, type PaneProps } from "../lib/dock";
   import { openHome } from "../lib/actions";
-  import { getBlock, mountBlock, optionFields } from "../lib/blocks";
+  import { allBlocks, drawnType, getBlock, mountBlock, optionFields } from "../lib/blocks";
   import BlockOptions from "../components/BlockOptions.svelte";
-  import { pick } from "../lib/palette.svelte";
+  import { rowViewTypes } from "../lib/views";
+  import { pick, type PickItem } from "../lib/palette.svelte";
   import { app, toast } from "../lib/state.svelte";
   import { isNotionShell } from "../lib/shell-mode.svelte";
   import { isFileStarred, toggleFileStar } from "../lib/bookmarks.svelte";
@@ -106,6 +107,8 @@
   }
   const carded = (b: PageBlock) => !!b.title || !!getBlock(b.type)?.card;
   const label = (b: PageBlock) => b.title ?? getBlock(b.type)?.title ?? b.type;
+  // the fields of the block as drawn: an older bare `{view: calendar}` here is the Calendar pane
+  const fieldsOf = (b: PageBlock) => optionFields(drawnType(blockSrc(b), path));
   // two columns keep the proportions of the old Today screen unless the file says otherwise
   const cols = (r: PageModel["rows"][number]) => (r.widths ?? (r.columns.length === 2 ? [1.25, 1] : r.columns.map(() => 1))).map((w) => `minmax(0, ${w}fr)`).join(" ");
 
@@ -133,6 +136,41 @@
       placeFn(newBlock(viewType, opts));
       void save();
     }
+  }
+
+  // --- arranging: add any block (the picker's "More blocks…") --------------------------------------
+  const SECTIONS: [string, (type: string) => boolean][] = [
+    ["Today", (t) => ["greeting", "capture", "focus", "log", "tasks", "activity"].includes(t)],
+    ["Widgets", (t) => ["chart", "progress", "countdown", "pomodoro", "habits", "clock", "weather", "button"].includes(t)],
+    ["Content", (t) => ["note", "text", "base", "editor", "pdf", "image", "file-table", "excalidraw", "canvas", "web"].includes(t)],
+    ["From plugins", (t) => t.includes(".")],
+  ];
+  const sectionOf = (type: string) => SECTIONS.find(([, has]) => has(type))?.[0] ?? "Tools";
+  const HIDDEN = new Set(["commit", "diff", "plugin", "today", "page"]); // need ids a person does not type
+
+  /** Ask which block of every registered one (and which file, when it shows one), then hand it to `place`. */
+  function addBlock(place: (b: PageBlock) => void): void {
+    const items: PickItem[] = [
+      ...rowViewTypes().map((t) => ({ value: t, title: `${t[0].toUpperCase()}${t.slice(1)} of tasks`, detail: "open tasks, by date", icon: "today" as const, section: "Views" })),
+      ...allBlocks().filter((b) => !HIDDEN.has(b.type)).map((b) => ({ value: b.type, title: b.title, detail: b.type, icon: b.icon ?? ("chart" as const), section: sectionOf(b.type) })),
+    ].sort((a, b) => a.section.localeCompare(b.section));
+    pick({
+      placeholder: "Add a block…", tag: "Block", icon: "plus", items,
+      onpick: (type) => {
+        const b = getBlock(type);
+        const done = (options: Record<string, unknown> = {}) => { place(newBlock(type, options)); void save(); };
+        if (b?.file) setTimeout(() => pickFile(b.file!, (p) => done({ path: p })), 0); // after this palette closes
+        else if (type === "text") done({ text: "Write here." });
+        else if (type === "web") setTimeout(() => pick({ placeholder: "Address (https://…)", tag: "Web page", icon: "globe", items: [], typed: (t) => `Show ${t}`, typedAs: { section: "", icon: "globe" }, onpick: (url) => done({ url }) }), 0);
+        else done(b ? {} : { from: "tasks" });
+      },
+    });
+  }
+  /** From the picker: close it, then open the full list (one overlay at a time). */
+  function morePickerBlocks(): void {
+    const placeFn = pickerDrop;
+    pickerDrop = null;
+    if (placeFn) setTimeout(() => addBlock(placeFn), 0);
   }
   function pickFile(match: RegExp | true, then: (path: string) => void): void {
     pick({
@@ -190,7 +228,7 @@
     const edit = (f: () => void) => () => { f(); void save(); };
     menu = below(e, [
       { label: "Title…", icon: "edit" as const, run: () => ask("Title of this block", "Title", (v) => { b.title = v.trim() || undefined; void save(); }, "No title") },
-      ...(optionFields(b.type).length ? [{ label: "Options…", icon: "settings" as const, run: () => { editing = { block: b, at }; } }] : []),
+      ...(fieldsOf(b).length ? [{ label: "Options…", icon: "settings" as const, run: () => { editing = { block: b, at }; } }] : []),
       ...(getBlock(b.type)?.height ? [{ label: "Height…", run: () => ask("Height in pixels (e.g. 360)", "Height", (v) => { const n = Number(v); if (n >= 120) b.options.height = Math.round(n); else delete b.options.height; void save(); }, "Default height") }] : []),
       "sep",
       ...(at.index > 0 ? [{ label: "Move up", icon: "arrow-up" as const, run: edit(() => moveBlock(page, b.id, { kind: "at", at: { ...at, index: at.index - 1 } })) }] : []),
@@ -205,6 +243,7 @@
   }
 
   // --- arranging: column widths ---------------------------------------------------------------------------
+  let endResize: (() => void) | null = null; // the column drag in progress, ended on close
   function resizeColumns(e: PointerEvent, row: number, col: number): void {
     e.preventDefault();
     const r = page.rows[row];
@@ -218,14 +257,24 @@
       const d = Math.min(Math.max((ev.clientX - x0) * perPx, 0.25 - start[col]), start[col + 1] - 0.25);
       setWidths(page, row, start.map((w, i) => (i === col ? w + d : i === col + 1 ? w - d : w)));
     };
-    const up = () => {
+    // a cancelled pointer (touch taken by the system) or the pane closing mid-drag must not leave the listeners or
+    // the no-selection class behind
+    const stop = () => {
       document.body.classList.remove("kandinsky-resizing");
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      if (endResize === stop) endResize = null;
+    };
+    const up = () => {
+      stop();
       void save();
     };
+    endResize?.();
+    endResize = stop;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }
 
   const starred = $derived(isFileStarred(path));
@@ -391,6 +440,7 @@
     return () => {
       clearInterval(tickInterval);
       offReload();
+      endResize?.();
     };
   });
 </script>
@@ -559,12 +609,12 @@
   </div>
 </div>
 {#if pickerDrop}
-  <PageBlockPicker onpick={applyPickerYaml} onclose={() => (pickerDrop = null)} />
+  <PageBlockPicker onpick={applyPickerYaml} onmore={morePickerBlocks} onclose={() => (pickerDrop = null)} />
 {/if}
 {#if menu}<ContextMenu x={menu.x} y={menu.y} items={menu.items} onclose={() => (menu = null)} />{/if}
 {#if editing}
   {@const { block: b, at } = editing}
-  <BlockOptions title={label(b)} fields={optionFields(b.type)} options={$state.snapshot(b.options)} oncancel={() => (editing = null)}
+  <BlockOptions title={label(b)} fields={fieldsOf(b)} options={$state.snapshot(b.options)} oncancel={() => (editing = null)}
     onsave={(o) => { const cur = current(b, at); editing = null; if (!cur) return toast("The block moved meanwhile", "Its options were not saved.", "error"); cur.options = o; void save(); }} />
 {/if}
 

@@ -15,7 +15,3 @@ export function setShellMode(_mode: ShellMode): void {
   shellMode.value = "notion";
   save(SHELL_MODE_KEY, "notion");
 }
-
-export function toggleShellMode(): void {
-  setShellMode("notion");
-}

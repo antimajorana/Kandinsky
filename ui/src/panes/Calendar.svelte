@@ -7,7 +7,8 @@
   import EventPopover from "../components/calendar/EventPopover.svelte";
   import MonthGrid from "../components/calendar/MonthGrid.svelte";
   import WeekGrid from "../components/calendar/WeekGrid.svelte";
-  import { addDays, addMonths, formatMonthHeading, monthGridDays, parseIso, todayIso, weekDays } from "../components/calendar/calendar-dates";
+  import { addDays, addMonths, daysBetween, formatMonthHeading, monthGridDays, parseIso, todayIso, weekDays } from "../components/calendar/calendar-dates";
+  import { confirmMoveSeries } from "../components/calendar/series";
   import { api } from "../lib/api";
   import type { PaneProps } from "../lib/dock";
   import { openPath } from "../lib/dock";
@@ -66,16 +67,20 @@
     return { from: addDays(selectedDate, -7), to: addDays(selectedDate, 7) };
   });
 
+  // only the latest request is shown: an older period's answer arriving late must not replace the current one
+  let loadSeq = 0;
   async function loadCalendar(): Promise<void> {
+    const seq = ++loadSeq;
     loading = true;
     error = "";
     try {
       const bases = basesCustomized || calCfg?.bases !== undefined ? selectedBases : undefined;
-      rangeData = await api.calendar(queryWindow.from, queryWindow.to, bases);
+      const r = await api.calendar(queryWindow.from, queryWindow.to, bases);
+      if (seq === loadSeq) rangeData = r;
     } catch (err) {
-      error = errText(err);
+      if (seq === loadSeq) error = errText(err);
     } finally {
-      loading = false;
+      if (seq === loadSeq) loading = false;
     }
   }
 
@@ -108,6 +113,7 @@
       host: () => host,
     });
     return () => {
+      loadSeq += 1; // drop an answer that arrives after the pane is gone
       offChange();
       calendarGo.delete(panel.id);
     };
@@ -131,12 +137,16 @@
   }
 
   async function reschedule(ev: CalendarEvent, date: string, start?: string, end?: string): Promise<void> {
+    const repeats = ev.repeat !== "none";
+    // there is no per-occurrence exception: moving one day of a repeating event moves the series, so ask first
+    if (repeats && date !== ev.date && !(await confirmMoveSeries(ev))) return;
     try {
       await api.upsertCalendarEvent({
-        id: ev.id,
+        // an occurrence id lets the core shift the series start by this occurrence's move (0 for a time change)
+        id: repeats ? ev.occurrence_id : ev.id,
         title: ev.title,
         date,
-        end_date: ev.end_date !== ev.date ? addDays(date, Math.max(0, Math.round((parseIso(ev.end_date).getTime() - parseIso(ev.date).getTime()) / 86_400_000))) : undefined,
+        end_date: ev.end_date !== ev.date ? addDays(date, Math.max(0, daysBetween(ev.date, ev.end_date))) : undefined,
         start: start ?? ev.start ?? undefined,
         end: end ?? ev.end ?? undefined,
         all_day: start ? false : ev.all_day,

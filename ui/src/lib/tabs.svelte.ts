@@ -128,12 +128,12 @@ function refresh(): void {
 let frame = 0;
 const schedule = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; refresh(); }); };
 
-/** With vertical tabs the groups have no tab strips, and in Notion shell main document groups have no IDE tab strip
- *  (while bottom terminal groups keep their tab controls). */
+/** With vertical tabs the groups have no tab strips. In the Notion shell only the main document groups lose theirs
+ *  (NotionSidebar lists those tabs); terminal groups keep their strip, since no sidebar list stands in for it. */
 function applyHeaders(d: DockviewApi): void {
   for (const g of d.groups) {
     const zone = groupZone(g), side = zone === "side";
-    const hide = (vertical() && !side) || (isNotionShell() && zone === "main");
+    const hide = isNotionShell() ? zone === "main" : vertical() && !side;
     if (g.header.hidden !== hide) g.header.hidden = hide;
     for (const c of ["kandinsky-side-group", "atlas-side-group"]) g.element.classList.toggle(c, side && vertical()); // the old name: user CSS
   }

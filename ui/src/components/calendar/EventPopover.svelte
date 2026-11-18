@@ -7,6 +7,7 @@
   import { errText } from "../../lib/text";
   import type { CalendarEvent, CalendarEventUpsert, CalendarRecurrence } from "../../lib/types";
   import { EVENT_COLORS, isVideoMeetingUrl } from "./calendar-dates";
+  import { confirmMoveSeries } from "./series";
 
   let {
     initial,
@@ -55,6 +56,8 @@
   const dateOnlySource = $derived(initial?.source === "task" || initial?.source === "base");
   const isEventPage = $derived(initial?.source === "event_page" && !!initial.path);
   const joinUrl = $derived(isVideoMeetingUrl(location) ? location.trim() : null);
+  // one occurrence of a stored repeating event: an edit applies to the whole series (there are no exceptions)
+  const inSeries = $derived(!!initial?.id && initial.repeat !== "none");
 
   function parsedLinks(): string[] {
     return linksText
@@ -67,11 +70,14 @@
   async function save(e: SubmitEvent): Promise<void> {
     e.preventDefault();
     if (!title.trim() || busy) return;
+    if (inSeries && initial && date !== initial.date && !(await confirmMoveSeries(initial))) return;
     busy = true;
     error = "";
     try {
       const payload: CalendarEventUpsert = {
-        id: initial?.id,
+        // the occurrence id lets the core move the series start by as much as this day moved (not at all when only
+        // the title or time changed), instead of restarting the series on the day it was opened from
+        id: inSeries ? initial?.occurrence_id : initial?.id,
         storage,
         title: title.trim(),
         date,
@@ -191,6 +197,9 @@
       </div>
 
       <label class="fld"><span>Linked notes (comma-separated)</span><input placeholder="[[Project]], [[Paper]]" bind:value={linksText} /></label>
+      {#if inSeries}
+        <p class="readonly-hint" data-testid="cal-series-hint">Repeats {initial?.repeat}: changes apply to every occurrence, a new date moves the whole series, and “Does not repeat” keeps only its first occurrence.</p>
+      {/if}
     {:else if initial?.path}
       <p class="readonly-hint">Scheduled date updates in {initial.path}. Open note to edit task/page details.</p>
     {/if}
@@ -210,7 +219,7 @@
 
     <footer class="card-foot">
       {#if canDelete}
-        <button type="button" class="danger" disabled={busy} onclick={() => void remove()}>Delete</button>
+        <button type="button" class="danger" disabled={busy} onclick={() => void remove()}>{inSeries ? "Delete series" : "Delete"}</button>
       {:else if dateOnlySource && initial?.path}
         <button type="button" class="link-btn" onclick={() => { openPath(initial.path!, initial.line ?? undefined); onclose(); }}>Open note</button>
       {:else}<span></span>{/if}

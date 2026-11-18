@@ -30,7 +30,6 @@ import { applyWorkspacePreset, askManageWorkspaces, askSaveWorkspace } from "./w
 import type { IconName, PaneSpec } from "./panes";
 import { openSettingsAt } from "./settings-nav.svelte";
 import { setHomeSpec } from "./apps.svelte";
-import { toggleShellMode } from "./shell-mode.svelte";
 
 export interface Action {
   id: string;
@@ -346,7 +345,6 @@ export const actions: Action[] = [
   { id: "ui.papers.scan", title: "References: scan external folders…", icon: "folder-open", run: () => void import("./paper-modals.svelte").then((m) => m.openPaperWorkflowModal("scan")) },
   { id: "ui.sidePanel", title: "Show / hide the side panel (files, search, outline, git)", icon: "folder-tree", label: "Side panel (show / hide)", keys: "Super+B", run: () => toggleSidePanel() },
   { id: "ui.sidePanel.move", title: "Move side panel (beside the editors ↔ in the left bar)", run: () => placeSidePanel(sideInBar() ? "dock" : "sidebar") },
-  { id: "ui.shell.toggle", title: "Workspace shell: switch between Notion Unified Sidebar and Classic Rail", icon: "panel-left", run: () => toggleShellMode() },
   { id: "ui.calendar", title: "Calendar: open monthly, weekly, agenda & Daily Note schedule", icon: "calendar", label: "Calendar", keys: "Alt+C", run: () => { open({ kind: "calendar" }); } },
   { id: "ui.panel", title: "Show / hide terminal panel", icon: "terminal", label: "Terminal (show / hide)", keys: "Super+J", run: () => toggleTerminalPanel() },
   { id: "ui.panel.move", title: "Move terminal panel (bottom ↔ right)", run: () => setTerminalPosition(settings.config?.terminal.position === "right" ? "bottom" : "right") },

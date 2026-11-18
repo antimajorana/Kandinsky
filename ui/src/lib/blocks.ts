@@ -137,9 +137,10 @@ registerBlock(lazyBlock("suggestions", "Drafted for you", () => import("../compo
 
 // --- every pane is a block ------------------------------------------------------------------------
 
-// Three pane kinds share a name with an older, lighter block (a saved search's results, one settings
-// page, a table of rows): the block keeps the name that files already use, the pane gets its own.
-const PANE_BLOCK_TYPE: Partial<Record<PaneKind, string>> = { search: "search-pane", settings: "settings-pane", table: "file-table" };
+// Four pane kinds share a name with an older, lighter block (a saved search's results, one settings
+// page, a table of rows, the `calendar` row view of dated tasks): the block keeps the name that files
+// already use, the pane gets its own.
+const PANE_BLOCK_TYPE: Partial<Record<PaneKind, string>> = { search: "search-pane", settings: "settings-pane", table: "file-table", calendar: "calendar-pane" };
 /** The block type a pane kind is embedded (and bookmarked) as. */
 export const paneBlockType = (kind: PaneKind) => PANE_BLOCK_TYPE[kind] ?? kind;
 // pane kinds that show a file, and which files (asked for when the block is added by hand)
@@ -190,7 +191,24 @@ function paneBlock(kind: PaneKind, specOf = (ctx: BlockCtx): PaneSpec | string =
     },
   };
 }
-for (const k of PANE_KINDS) if (k !== "block") registerBlock(paneBlock(k));
+// the Calendar's start view is `mode:` (`view:` is a .page block's type); a fence's `view: month…` from before still reads
+const calendarSpec = (c: BlockCtx) => specFromOptions("calendar", { ...c.options, view: c.options.mode ?? c.options.view });
+for (const k of PANE_KINDS) if (k !== "block") registerBlock(k === "calendar" ? paneBlock(k, calendarSpec) : paneBlock(k));
+
+// `calendar` named the Calendar pane for a while (now `calendar-pane`), so such blocks still open the pane: one with
+// no row-view option and either a pane option (a start view, a day as `date`) or no note around it (a .page, a bookmark)
+const ROW_VIEW_KEYS = ["from", "filters", "dated", "by", "columns", "args", "show", "tag", "path", "priority", "due", "completed", "started", "sort", "group", "limit"];
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** The block type `src` is drawn as, in document `doc` when it is known. */
+export function drawnType(src: string, doc?: string): string {
+  const type = blockType(src);
+  if (type !== "calendar") return type;
+  const o = parseOptions(src);
+  const date = o.date === undefined ? undefined : String(o.date);
+  if (ROW_VIEW_KEYS.some((k) => k in o) || (date !== undefined && !ISO_DAY.test(date))) return type; // `date:` a property
+  const paneKey = ["month", "week", "agenda", "day"].includes(String(o.mode ?? o.view)) || date !== undefined;
+  return paneKey || (doc !== undefined && !/\.(md|markdown)$/i.test(doc)) ? "calendar-pane" : type;
+}
 
 // --- content blocks: a note, some text, a database table — light, read in place ---------------------
 const str = (v: unknown) => (typeof v === "string" ? v : "");
@@ -411,7 +429,7 @@ function mountRows(body: HTMLElement, doc: string, src: string): () => void {
 export function mountBlock(el: HTMLElement, doc: string, src: string, host: BlockHost = "note"): () => void {
   for (const ev of ["keydown", "keyup", "keypress", "beforeinput", "input", "mousedown", "paste", "cut", "copy"]) el.addEventListener(ev, (e) => e.stopPropagation());
   el.classList.add("kandinsky-block");
-  const type = blockType(src);
+  const type = drawnType(src, doc);
   const body = document.createElement("div");
   body.className = "block-body";
   let title = "";
@@ -426,7 +444,10 @@ export function mountBlock(el: HTMLElement, doc: string, src: string, host: Bloc
   el.replaceChildren(body, ...(cfgSlot ? [cfgSlot] : []), ...(pop ? [pop] : []));
   if (cfgSlot) {
     queueMicrotask(() => {
-      if (cfgSlot && el.closest(".cm-editor")) {
+      // only a ```view fence that is itself the editor's rendered block: the bar rewrites the fence at that block's
+      // place, so a block nested in an embed, a note block, columns or a callout would overwrite a different fence
+      const own = el.matches(".view-block") && !!el.parentElement?.matches(".cm-rendered-block") && !!el.closest(".cm-editor");
+      if (cfgSlot && own) {
         cfgBar = mount(WidgetConfigureBar, { target: cfgSlot, props: { blockEl: el, src } });
       } else {
         cfgSlot?.remove();
@@ -466,7 +487,7 @@ export function mountBlock(el: HTMLElement, doc: string, src: string, host: Bloc
 /** The tab a block opens as: its own pane when it has one (a PDF block → the PDF pane), else the
  *  block alone in a tab. */
 export function blockTab(src: string, doc: string, title?: string): PaneSpec {
-  const type = blockType(src);
+  const type = drawnType(src, doc);
   const b = registry.get(type);
   return b?.tab?.({ src, options: parseOptions(src), doc, host: "tab", setTitle() {}, props: () => docProps(doc, src) }) ?? { kind: "block", src, doc, title: title || b?.title || type };
 }

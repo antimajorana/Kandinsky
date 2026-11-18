@@ -2,7 +2,7 @@
   // Hourly Week time-grid: all-day strip, 24h grid, live current-time line, drag-across-days/hours rescheduling & bottom-edge duration resize.
   import { onMount } from "svelte";
   import type { CalendarDaySummary, CalendarEvent, WeekStart } from "../../lib/types";
-  import { colorSpec, formatHm, minutesOf, parseIso, todayIso, weekDays } from "./calendar-dates";
+  import { addDays, colorSpec, daysBetween, formatHm, minutesOf, parseIso, todayIso, weekDays } from "./calendar-dates";
 
   let {
     anchorDate,
@@ -31,6 +31,7 @@
   let nowMins = $state(new Date().getHours() * 60 + new Date().getMinutes());
   let resizing = $state<{ occId: string; startMins: number; endMins: number } | null>(null);
   let dragOccId = $state<string | null>(null);
+  let dragFromIso: string | null = null;
   let scroller = $state<HTMLElement>();
 
   onMount(() => {
@@ -107,9 +108,18 @@
   function dropOnColumn(e: DragEvent, iso: string): void {
     e.preventDefault();
     const occId = dragOccId || e.dataTransfer?.getData("text/plain") || "";
+    const fromIso = dragFromIso;
     dragOccId = null;
+    dragFromIso = null;
     const ev = events.find((x) => x.occurrence_id === occId);
     if (!ev || !ev.editable) return;
+    // grabbed by a later day of a multi-day event: shift by the days dragged and keep its times (that
+    // day's block starts at 00:00, so the drop height says nothing about the event's own start)
+    if (fromIso && fromIso !== ev.date) {
+      const delta = daysBetween(fromIso, iso);
+      if (delta !== 0) onreschedule(ev, addDays(ev.date, delta), ev.start ?? undefined, ev.end ?? undefined);
+      return;
+    }
     const colEl = e.currentTarget as HTMLElement;
     const y = e.clientY - colEl.getBoundingClientRect().top;
     const mins = Math.max(0, Math.min(23 * 60, Math.round(((y / HOUR_PX) * 60) / 15) * 15));
@@ -186,8 +196,8 @@
               style:background={c.bg}
               style:border-left="3px solid {c.dot}"
               draggable={ev.editable}
-              ondragstart={(e) => { dragOccId = ev.occurrence_id; e.dataTransfer?.setData("text/plain", ev.occurrence_id); }}
-              ondragend={() => (dragOccId = null)}
+              ondragstart={(e) => { dragOccId = ev.occurrence_id; dragFromIso = iso; e.dataTransfer?.setData("text/plain", ev.occurrence_id); }}
+              ondragend={() => { dragOccId = null; dragFromIso = null; }}
               onclick={(e) => { e.stopPropagation(); oneditevent(ev); }}
               role="button"
               tabindex="0"

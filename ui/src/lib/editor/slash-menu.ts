@@ -120,7 +120,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     title: "Calendar & Schedule",
     hint: "calendar",
     keywords: ["calendar", "schedule", "events", "month", "week", "agenda", "widget", "view"],
-    template: "```view\ntype: calendar\nview: month\n```\n\0",
+    template: "```view\ntype: calendar-pane\nmode: month\n```\n\0",
   },
   {
     id: "widget-embed",

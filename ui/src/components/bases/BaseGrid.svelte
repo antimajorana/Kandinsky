@@ -73,15 +73,20 @@
     const handle = e.currentTarget as HTMLElement;
     handle.setPointerCapture(e.pointerId);
     const moveTo = (ev: PointerEvent) => { live = { ...live, [id]: Math.max(MIN, Math.round(from + ev.clientX - start)) }; };
+    // a cancelled or lost capture (touch scroll, the header re-rendered) ends the drag too, so no listener is left behind
+    const ends = ["pointerup", "pointercancel", "lostpointercapture"] as const;
+    let ended = false;
     const up = () => {
+      if (ended) return;
+      ended = true;
       handle.removeEventListener("pointermove", moveTo);
-      handle.removeEventListener("pointerup", up);
+      for (const t of ends) handle.removeEventListener(t, up);
       const w = live[id];
       if (w !== undefined && Math.abs(w - from) >= 2) onedit({ op: "width", column: id, width: w });
       else { const { [id]: _, ...rest } = live; live = rest; }
     };
     handle.addEventListener("pointermove", moveTo);
-    handle.addEventListener("pointerup", up);
+    for (const t of ends) handle.addEventListener(t, up);
   }
   // a saved width replaces the dragged one once the view comes back with it
   $effect(() => { for (const c of view.columns) if (live[c.id] !== undefined && c.width === live[c.id]) { const { [c.id]: _, ...rest } = live; live = rest; } });

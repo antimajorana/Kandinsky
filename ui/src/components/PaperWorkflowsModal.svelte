@@ -28,7 +28,7 @@
 
   interface AddedSummary { key: string; title: string; pdf: string | null; count: number }
   interface RemoteHit { uid: string; addId: string; title: string; authors: string; year: string; venue: string; doi: string; arxiv: string }
-  interface InboxItem { id: string; name: string; title: string; authors: string; year: string; doi: string; arxiv: string; targetPath: string; duplicateKey: string }
+  interface InboxItem { id: string; name: string; title: string; authors: string; year: string; doi: string; arxiv: string; targetPath: string; suggestedSubfolder: string; duplicateKey: string }
   interface DupEntry { key: string; title: string; authors: string; year: string; venue: string; doi: string; arxiv: string; pdf: string; collections: string; tags: string }
   interface DupGroup { id: string; signals: string[]; entries: DupEntry[] }
   interface ScanProgress { current: number; total: number; pdf_ref: string; dry_run: boolean }
@@ -48,7 +48,9 @@
   let addedHitKeys = $state<Record<string, string>>({});
 
   let inboxLoading = $state(false), inboxOrganizing = $state(false), inboxConfigured = $state(false);
-  let watchInbox = $state(""), renameFormat = $state("{Author}{Year} - {Title}.pdf"), externalRoot = $state("../Papers");
+  let watchInbox = $state(""), renameFormat = $state("{Author}{Year} - {Title}.pdf"), externalRoot = $state("");
+  // no shared PDF folder: organize files each PDF into its entry's folder in the vault and ignores a subfolder
+  let filesIntoVault = $state(false);
   let subfolderPresets = $state<string[]>([]), inboxSubfolder = $state("");
   let inboxItems = $state<InboxItem[]>([]), inboxSelected = $state<Record<string, boolean>>({});
   let inboxDoneCount = $state<number | null>(null);
@@ -158,7 +160,8 @@
       watchInbox = isConfigured ? rawDir : "";
       renameFormat = str(o.rename_format) || "{Author}{Year} - {Title}.pdf";
       const roots = Array.isArray(o.external_pdf_roots) ? o.external_pdf_roots : [];
-      externalRoot = str(o.external_root) || str(roots[0]) || "../Papers";
+      externalRoot = str(o.external_root) || str(roots[0]);
+      filesIntoVault = o.files_into_vault === true || !externalRoot;
       subfolderPresets = Array.isArray(o.subfolder_presets) ? o.subfolder_presets.map((x) => str(x)).filter(Boolean) : [];
       const arr = Array.isArray(o.items) ? o.items : Array.isArray(o.files) ? o.files : Array.isArray(raw) ? raw : [];
       const sel: Record<string, boolean> = {};
@@ -170,12 +173,13 @@
         sel[id] = !dup;
         const subClean = str(r.suggested_subfolder).replace(/^\/+|\/+$/g, "");
         const suggestedFile = str(r.suggested_filename) || name;
-        const constructedTarget = [rootBase, subClean, suggestedFile].filter(Boolean).join("/");
+        const constructedTarget = filesIntoVault ? suggestedFile : [rootBase, subClean, suggestedFile].filter(Boolean).join("/");
         return {
           id, name, title: str(r.title) || name.replace(/\.pdf$/i, ""),
           authors: joinArr(r.authors ?? r.author), year: str(r.year ?? r.date).slice(0, 4),
           doi: str(r.doi), arxiv: str(r.arxiv),
           targetPath: str(r.target_path ?? r.renamed_path ?? r.preview_path) || constructedTarget,
+          suggestedSubfolder: subClean,
           duplicateKey: dup,
         };
       });
@@ -196,16 +200,21 @@
 
   function previewDest(item: InboxItem): string {
     const sub = inboxSubfolder.trim().replace(/^\/+|\/+$/g, "");
-    if (!sub) return item.targetPath;
+    if (filesIntoVault || !sub) return item.targetPath;
     return `${externalRoot.replace(/\/+$/, "")}/${sub}/${item.targetPath.split("/").pop() || item.name}`;
   }
 
   async function organizeSelected(): Promise<void> {
-    const files = inboxItems.filter((it) => inboxSelected[it.id]).map((it) => it.id);
+    const chosen = inboxItems.filter((it) => inboxSelected[it.id]);
+    const files = chosen.map((it) => it.id);
     if (!files.length || inboxOrganizing) return;
     inboxOrganizing = true; errorMsg = "";
+    // each PDF goes to the subfolder its preview shows (the typed one, else the scan's suggestion), not one
+    // organize would re-guess from the title alone
+    const typed = inboxSubfolder.trim();
+    const items = filesIntoVault ? [] : chosen.map((it) => ({ file: it.id, subfolder: typed || it.suggestedSubfolder }));
     try {
-      const o = asRecord(await api.pluginHelper("catalog-papers", "organize_inbox", { files, subfolder: inboxSubfolder.trim() || undefined }, 300));
+      const o = asRecord(await api.pluginHelper("catalog-papers", "organize_inbox", { files, items, subfolder: filesIntoVault ? undefined : typed || undefined }, 300));
       const n = typeof o.organized === "number" ? o.organized : Array.isArray(o.organized) ? o.organized.length : typeof o.count === "number" ? o.count : files.length;
       notifyChanged();
       toast(`Organized ${n} PDF${n === 1 ? "" : "s"}`, undefined, "success");
@@ -591,9 +600,12 @@
 
             <div class="sub-row">
               <label class="field-label" for="pw-inbox-subfolder">Destination subfolder</label>
-              <input id="pw-inbox-subfolder" type="text" list="pw-subfolder-presets" data-testid="inbox-subfolder-input" placeholder="Optional subfolder inside {externalRoot}" bind:value={inboxSubfolder} />
+              <input id="pw-inbox-subfolder" type="text" list="pw-subfolder-presets" data-testid="inbox-subfolder-input" disabled={filesIntoVault} placeholder={filesIntoVault ? "Not used: no shared PDF folder" : externalRoot ? `Optional subfolder inside ${externalRoot}` : "Optional subfolder"} bind:value={inboxSubfolder} />
               <datalist id="pw-subfolder-presets">{#each subfolderPresets as preset (preset)}<option value={preset}></option>{/each}</datalist>
             </div>
+            {#if filesIntoVault}
+              <span class="hint" data-testid="inbox-subfolder-hint">PDFs go into each paper's own folder in the vault. Subfolders apply only when a shared PDF folder is set in Settings → Plugins → Catalog · Science.</span>
+            {/if}
 
             {#if inboxItems.length > 0}
               <div class="inbox-list">
@@ -609,7 +621,7 @@
                       <div class="chip-row">
                         {#if item.doi}<span class="chip">doi:{item.doi}</span>{/if}
                         {#if item.arxiv}<span class="chip">arXiv:{item.arxiv}</span>{/if}
-                        <code class="dest-preview">→ {previewDest(item)}</code>
+                        <code class="dest-preview" title="The file name can still change once the paper's metadata is looked up">→ {previewDest(item)}</code>
                       </div>
                     </div>
                   </label>

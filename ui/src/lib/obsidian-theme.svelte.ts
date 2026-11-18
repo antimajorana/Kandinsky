@@ -23,6 +23,8 @@ function removeThemeStyle(): void {
 export async function applyObsidianTheme(force = false): Promise<void> {
   const id = (settings.config?.ui.obsidian_theme ?? "").trim();
   if (!id) {
+    // Discard any theme fetch still in flight so it cannot re-apply after the theme was cleared.
+    applySeq++;
     removeThemeStyle();
     return;
   }

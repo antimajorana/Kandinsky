@@ -7,7 +7,7 @@
   import { settings, loadSuggestions } from "../lib/settings.svelte";
   import { load, save } from "../lib/prefs";
   import { leaves, sectionDescription, isModified, fieldTitle, shownOn } from "../lib/settings-schema";
-  import { placeFields, GROUPS, hostOf, pageDef } from "../lib/settings-pages";
+  import { placeFields, GROUPS, hostOf, pageDef, canonicalPage } from "../lib/settings-pages";
   import { nativeShell } from "../lib/native-shell.svelte";
   import { apiBase } from "../lib/api";
   import { me, loadMe } from "../lib/me.svelte";
@@ -32,8 +32,8 @@
 
   const PAGE_KEY = "kandinsky.settings.page";
   const ACCOUNTS = "accounts";
-  const normalizePage = (id: string) =>
-    id === "overview" ? "appearance" : id === "today" ? "calendar" : ["automation", "server", "agents", "terminal", "desktop", "code", "web", "drawing", "advanced"].includes(id) ? "plugins" : id;
+  // the same old-id table as `.page` settings blocks (plugin:… and accounts pass through)
+  const normalizePage = canonicalPage;
   let current = $state(normalizePage(load<string>(PAGE_KEY, "appearance")));
   let filter = $state("");
   let body = $state<HTMLElement>();

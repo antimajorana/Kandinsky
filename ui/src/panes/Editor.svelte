@@ -76,6 +76,9 @@
   let docText = $state(""); // what the properties panel reads; set on every change of the text
   let smallText = $state(false);
   let typewriterOn = $state(false);
+  /** The page menu's typewriter, held in the editor's state (zen-scroll.ts): set again once an editor exists, as one
+   *  switched on while the note was loading had none to go to. */
+  const applyTypewriter = () => window.dispatchEvent(new CustomEvent("kandinsky:toggle-typewriter", { detail: { view: ed?.view ?? null, enabled: typewriterOn } }));
   let showBacklinks = $state(true);
   let showComments = $state(false);
   let commentCount = $state(0);
@@ -187,13 +190,14 @@
         const res = await api.putFile(path, toDisk(text), force || isNew ? undefined : mtime, true);
         mtime = res.mtime;
         saved = text;
-        if (res.template?.text !== undefined) void applyTemplate(res.template.template, res.template.added, lf(res.template.text), text);
         if (!autosave()) keepRecovery(true);
         else if (rescued) { rescued = false; void api.putFile(RECOVERY, "").catch(() => {}); }
         if (ed) void refreshGitGutter(ed.view, path); // what differs from git changed with this save
         isNew = false;
         conflict = false;
         behindTries = 0;
+        // after the reset above: an automation edit that cannot be merged raises the conflict bar again
+        if (res.template?.text !== undefined) void applyTemplate(res.template.template, res.template.added, lf(res.template.text), text, res.template.automation ?? false);
       } catch (err) {
         // the room's writer, whose copy is not the last version yet (the writer before it saved, Syncthing has not brought
         // it): the shared text goes on top once it has — asked again each second, a while (core mirror_guard.rs)
@@ -220,19 +224,37 @@
 
   /** A template this save brought (a property set to a value a template applies to, core template_apply.rs), merged
    *  in as one change of the editor's own — undo and the autosave as typing. Typed in meanwhile: merged again into
-   *  what is there now, and given up when typing goes on. */
-  async function applyTemplate(name: string, added: string[], merged: string, base: string): Promise<void> {
+   *  what is there now, and given up when typing goes on (an automation's edit, already on disk, raises the conflict bar). */
+  async function applyTemplate(name: string, added: string[], merged: string, base: string, automation = false): Promise<void> {
     if (!ed) return;
+    // a base automation's property edits come in the same answer, named "<rule> (<file>.base)" (core automations.rs);
+    // a template is named by its file's stem
+    const auto = name === "" || /\.base\)$/.test(name);
     if (current() !== base) {
-      base = current();
-      const again = await api.mergeTemplate(path, name, base).catch(() => null);
-      if (!again?.text || !ed || current() !== base) return;
-      merged = lf(again.text);
+      // an automation's edit is already on disk (the server says so, also when a template ran with it), its mtime ours:
+      // dropped here, the next save would undo it unseen. A template alone is only offered, so the server can merge it again.
+      if (auto || automation) {
+        // its edit is moved past what was typed when the two do not meet; else the conflict bar, as a stale mtime gave
+        const now = current(), typed = diff(base, now), edit = diff(base, merged);
+        if (!edit) return;
+        const shift = typed ? typed.insert.length - (typed.to - typed.from) : 0;
+        const at = !typed || edit.to <= typed.from ? edit : edit.from >= typed.to ? { from: edit.from + shift, to: edit.to + shift, insert: edit.insert } : null;
+        if (!at) { conflict = true; return; }
+        base = now;
+        merged = now.slice(0, at.from) + at.insert + now.slice(at.to);
+      } else {
+        base = current();
+        const again = await api.mergeTemplate(path, name, base).catch(() => null);
+        if (!again?.text || !ed || current() !== base) return;
+        merged = lf(again.text);
+      }
     }
     const change = diff(base, merged);
     if (!change) return;
     ed.view.dispatch({ changes: change, userEvent: "input.template" });
-    toast(`Template “${name}” applied`, `Added ${added.join(", ")}`, "info", 9000, { label: "Undo", run: () => {
+    const rule = name.match(/^(.+?) \(.+\.base\)$/)?.[1] ?? name;
+    const title = !auto ? `Template “${name}” applied` : rule ? `Automation “${rule}” updated this note` : "An automation updated this note";
+    toast(title, `${auto ? "Set" : "Added"} ${added.join(", ")}`, "info", 9000, { label: "Undo", run: () => {
       if (!ed || current() !== merged) return;
       const back = diff(merged, base);
       if (back) ed.view.dispatch({ changes: back, userEvent: "input.template" });
@@ -456,7 +478,7 @@
           ? [
               { label: smallText ? "Standard text size" : "Small text", icon: "text" as const, run: () => { smallText = !smallText; } },
               { label: isFullWidth ? "Standard reading width (740px)" : "Full width page", icon: "maximize" as const, run: () => void toggleFullWidth() },
-              { label: typewriterOn ? "Typewriter mode: On" : "Typewriter mode", icon: "rows" as const, run: () => { typewriterOn = !typewriterOn; window.dispatchEvent(new CustomEvent("kandinsky:toggle-typewriter", { detail: { view: ed?.view ?? null, enabled: typewriterOn } })); } },
+              { label: typewriterOn ? "Typewriter mode: On" : "Typewriter mode", icon: "rows" as const, run: () => { typewriterOn = !typewriterOn; applyTypewriter(); } },
               { label: rawSource ? "Live preview mode" : "Raw Markdown (Ctrl+E)", hint: "Ctrl+E", icon: "code" as const, run: toggleSource },
               { label: "Properties drawer", icon: "table" as const, run: handleToggleProperties },
               { label: showBacklinks ? "Hide backlinks" : "Show backlinks", icon: "link" as const, run: () => { showBacklinks = !showBacklinks; } },
@@ -568,6 +590,7 @@
         onQuit: () => void closePanel(panel),
         onOpenLink: openLink,
       });
+      if (typewriterOn) applyTypewriter();
       if (isMarkdown(path)) {
         heroSlot = document.createElement("div");
         heroSlot.className = "cm-note-hero-slot";
@@ -843,6 +866,7 @@
           <MarginComments
             {path}
             selection={commentSel}
+            doctext={current}
             onjump={(from, to, anchorLine) => {
               if (!ed) return;
               const doc = ed.view.state.doc;

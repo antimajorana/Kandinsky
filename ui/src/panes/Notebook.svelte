@@ -67,12 +67,16 @@
     }
   }
 
+  // The raw text last read from or written to disk; the watcher's echo of our own save matches it and is ignored.
+  let lastWritten: string | null = null;
+
   async function loadNotebook() {
     loading = true;
     loadErr = "";
     try {
       const doc = await api.file(spec.path);
       mtime = doc.mtime;
+      lastWritten = doc.text;
       const parsed = parseNotebook(spec.path, doc.text);
       nb = parsed;
       activeCellId = parsed.cells[0]?.id ?? null;
@@ -83,6 +87,54 @@
     } finally {
       loading = false;
     }
+  }
+
+  // Reload after an outside change without the loading screen, keeping the active cell and open editors.
+  async function refreshFromDisk() {
+    const path = spec.path;
+    let doc: Awaited<ReturnType<typeof api.file>>;
+    try {
+      doc = await api.file(path);
+    } catch {
+      return;
+    }
+    if (disposed || loading || path !== spec.path || saving || inflight) return;
+    if (doc.text === lastWritten) {
+      mtime = doc.mtime;
+      return;
+    }
+    if (dirty) return;
+    const prev = nb?.cells ?? [];
+    const activeIdx = prev.findIndex((c) => c.id === activeCellId);
+    let parsed: NotebookDoc;
+    try {
+      parsed = parseNotebook(path, doc.text);
+    } catch (e) {
+      // as a failed first load: the parse error until a valid version arrives, and no stale cells a Save could write
+      // over the file with its new mtime
+      mtime = doc.mtime;
+      lastWritten = doc.text;
+      loadErr = errText(e);
+      nb = null;
+      return;
+    }
+    const hasId = (id: string | null) => !!id && parsed.cells.some((c) => c.id === id);
+    const keepId = (id: string, i: number) => (hasId(id) ? id : parsed.cells[i]?.id);
+    const nextEditing: Record<string, boolean> = {};
+    prev.forEach((c, i) => {
+      const id = editingMd[c.id] ? keepId(c.id, i) : undefined;
+      if (id) nextEditing[id] = true;
+    });
+    mtime = doc.mtime;
+    lastWritten = doc.text;
+    loadErr = "";
+    nb = parsed;
+    activeCellId =
+      (activeCellId && hasId(activeCellId) ? activeCellId : parsed.cells[activeIdx]?.id) ??
+      parsed.cells[0]?.id ??
+      null;
+    editingMd = nextEditing;
+    markDirty(false);
   }
 
   let loadedPath = "";
@@ -102,7 +154,7 @@
     });
     const offFs = on("fs", (e) => {
       if (!dirty && !saving && !inflight && touches(e.paths, (p) => p === spec.path)) {
-        void loadNotebook();
+        void refreshFromDisk();
       }
     });
     const onWinClick = () => {
@@ -135,6 +187,7 @@
       try {
         const res = await api.putFile(spec.path, raw, mtime);
         mtime = res.mtime;
+        lastWritten = raw;
         if (closingRaw === undefined) {
           if (editRev === savedRev) {
             dirty = false;

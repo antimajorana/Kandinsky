@@ -1,11 +1,13 @@
 <script lang="ts">
-  // Interactive `calendar` view widget: shows tasks/notes (when passed via /api/view) AND local calendar events, and clicking any day opens the native Calendar Day Workspace.
+  // The `calendar` row view: a month grid of the block's own dated rows (a checkbox ticks a task), its undated rows
+  // listed under it, and the day-note dots; clicking a day opens the native Calendar Day Workspace.
   import { onMount } from "svelte";
   import MonthGrid from "../calendar/MonthGrid.svelte";
   import { addMonths, monthGridDays, parseIso, todayIso } from "../calendar/calendar-dates";
   import { api } from "../../lib/api";
   import { open, openPath } from "../../lib/dock";
   import type { ViewRow } from "../../lib/gen/ViewRow";
+  import ListView from "./ListView.svelte";
   import { reloadOnChange } from "../../lib/reload-on-change";
   import { settings } from "../../lib/settings.svelte";
   import type { CalendarEvent, CalendarRangeResponse, WeekStart } from "../../lib/types";
@@ -37,11 +39,14 @@
   const month0 = $derived(d.getMonth());
   const title = $derived(d.toLocaleDateString(undefined, { month: "long", year: "numeric" }));
 
+  // only for the day-note dots: the events shown are the block's rows, never the whole vault's calendar
+  let loadSeq = 0;
   function refreshCalendar(): void {
     const cells = monthGridDays(year, month0, weekStart);
     const from = cells[0].iso;
     const to = cells[cells.length - 1].iso;
-    void api.calendar(from, to).then((r) => { rangeData = r; }, () => {});
+    const seq = ++loadSeq;
+    void api.calendar(from, to).then((r) => { if (seq === loadSeq) rangeData = r; }, () => {});
   }
 
   $effect(() => {
@@ -51,14 +56,18 @@
     refreshCalendar();
   });
 
-  const combinedEvents = $derived.by<CalendarEvent[]>(() => {
-    const base = [...(rangeData?.events ?? [])];
-    const seen = new Set(base.map((e) => `${e.date}:${e.title}`));
-    for (const r of rows) {
-      if (!r.date || seen.has(`${r.date}:${r.title}`)) continue;
+  /** The block's dated rows as calendar items, each with the row it came from (to tick it). */
+  const rowEvents = $derived.by(() => {
+    const byOcc = new Map<string, ViewRow>();
+    const base: CalendarEvent[] = [];
+    rows.forEach((r, i) => {
+      if (!r.date) return;
+      // the index keeps keys unique when two rows share a file and line (or have neither)
+      const occ = `view:${r.path ?? ""}:${r.line ?? 0}:${i}@${r.date}`;
+      byOcc.set(occ, r);
       base.push({
-        id: `view:${r.path ?? ""}:${r.line ?? 0}`,
-        occurrence_id: `view:${r.path ?? ""}:${r.line ?? 0}@${r.date}`,
+        id: `view:${r.path ?? ""}:${r.line ?? 0}:${i}`,
+        occurrence_id: occ,
         title: r.title,
         date: r.date,
         end_date: r.date,
@@ -73,8 +82,8 @@
         completed: r.done === true,
         editable: false,
       });
-    }
-    return base;
+    });
+    return { events: base, byOcc };
   });
 
   const undated = $derived(rows.filter((r) => !r.date));
@@ -112,23 +121,18 @@
     selectedDate={today}
     {weekStart}
     days={rangeData?.days ?? []}
-    events={combinedEvents}
+    events={rowEvents.events}
     {compact}
     onselectday={openDay}
     oneditevent={clickEvent}
+    ontoggle={ontick ? (ev) => { const r = rowEvents.byOcc.get(ev.occurrence_id); if (r?.done === false) ontick(r); } : undefined}
+    cantoggle={(ev) => rowEvents.byOcc.get(ev.occurrence_id)?.done === false}
   />
 
   {#if undated.length > 0}
     <div class="undated">
-      <span class="uh">Undated tasks ({undated.length})</span>
-      <div class="ulist">
-        {#each undated.slice(0, 6) as r (`${r.path}:${r.line}:${r.title}`)}
-          <div class="uitem">
-            {#if r.done === false && ontick}<input type="checkbox" aria-label="Done: {r.title}" onchange={() => ontick(r)} />{/if}
-            <button type="button" onclick={() => r.path && openPath(r.path, r.line ?? undefined)}>{r.title}</button>
-          </div>
-        {/each}
-      </div>
+      <span class="uh">No date ({undated.length})</span>
+      <ListView rows={undated} ontick={ontick ?? (() => {})} />
     </div>
   {/if}
 </div>
@@ -142,8 +146,4 @@
   .cal-top .today { border: 1px solid var(--border); font-size: 11px; }
   .undated { border-top: 1px solid var(--border); padding-top: 6px; }
   .uh { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); }
-  .ulist { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
-  .uitem { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-  .uitem button { color: var(--text); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .uitem button:hover { color: var(--accent); text-decoration: underline; }
 </style>

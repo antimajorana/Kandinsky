@@ -99,8 +99,9 @@
     if (!basePath) return;
     running = true;
     try {
-      const out = await api.runBaseRecurring(basePath);
-      toast("Recurring templates checked", out.created.length ? `Created ${out.created.length} note(s)` : "No templates due yet");
+      // The reply also lists .base files whose last_run was stamped; only the new notes are counted.
+      const created = (await api.runBaseRecurring(basePath)).filter((p) => !p.endsWith(".base"));
+      toast("Recurring templates checked", created.length ? `Created ${created.length} note(s)` : "No templates due yet");
     } catch (e) {
       toast("Could not run recurring templates", errText(e));
     } finally {

@@ -5,11 +5,13 @@
   import { onMount, onDestroy } from "svelte";
   import Icon from "../Icon.svelte";
   import { openPath } from "../../lib/dock";
-  import { api } from "../../lib/api";
+  import { api, ApiError } from "../../lib/api";
   import { resolveWikilink } from "../../lib/links";
   import { shownName } from "../../lib/paths";
   import { errText } from "../../lib/text";
   import { onVaultChange } from "../../lib/vault";
+  import { reloadOnChange } from "../../lib/reload-on-change";
+  import { keepRecovery, recoveryPath } from "../../lib/recovery";
   import type { Mtime } from "../../lib/gen/Mtime";
 
   let { options, doc }: { options: Record<string, unknown>; doc: string } = $props();
@@ -30,6 +32,19 @@
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   let dirtySeq = 0;
   let inFlightSave: Promise<void> | null = null;
+  let disposed = false;
+  /** The block changed in its note while this card had unsaved text: saving waits for Reload or Keep mine. */
+  let conflict = $state<{ disk: string; mtime: Mtime } | null>(null);
+
+  /** The block as the note's reader gives it back after this card's last load or save, when known: for some shapes
+   *  (a leading heading, an item added to a list item) the server writes text that reads back differently. */
+  let savedOnDisk: string | null = null;
+
+  /** The server stores a block without trailing line breaks: compare texts as it writes them. */
+  const stored = (s: string) => s.replace(/\r\n/g, "\n").trimEnd();
+  /** Whether `block`, read from the note, is still what this card last loaded or saved there. */
+  const unchanged = (block: string) =>
+    stored(block) === stored(lastSavedText) || (savedOnDisk !== null && stored(block) === stored(savedOnDisk));
 
   const syncKey = $derived(resolvedPath && blockId ? `${resolvedPath}#^${blockId}` : "");
 
@@ -162,19 +177,36 @@
       }
       cycleDetected = false;
       const file = await api.file(target.path);
-      mtime = file.mtime;
       const found = extractSyncedBlock(file.text, target.id);
       if (found === null) {
         loadError = `Synced block could not be found in ${shownName(target.path)}.`;
       } else if (!focused && !dirty && !inFlightSave) {
+        mtime = file.mtime;
         text = found;
         lastSavedText = found;
+        savedOnDisk = found;
+      } else if (unchanged(found)) {
+        // only another part of the note changed: a later save of the edited text may go over it
+        mtime = file.mtime;
       }
     } catch (e) {
       loadError = errText(e);
     } finally {
       loading = false;
     }
+  }
+
+  /** The note's block on disk now, and whether it is still what this card last saved (so only other text changed). */
+  async function diskState(): Promise<{ block: string | null; mtime: Mtime; same: boolean }> {
+    const file = await api.file(resolvedPath);
+    const block = extractSyncedBlock(file.text, blockId);
+    return { block, mtime: file.mtime, same: block !== null && unchanged(block) };
+  }
+
+  /** Unsaved card text that cannot be written goes to its own recovery copy, never over the note's. */
+  function rescue(body: string): Promise<boolean> {
+    const keepAs = `${resolvedPath.replace(/\.md$/i, "")}.synced-${blockId}.md`;
+    return keepRecovery(keepAs, body, `The synced block's text is kept in ${recoveryPath(keepAs)}.`);
   }
 
   async function commitSave(keepalive = false): Promise<void> {
@@ -185,23 +217,34 @@
     if (keepalive) {
       const seqAtStart = dirtySeq;
       const body = text;
-      void api.updateSyncedBlock({
-        path: resolvedPath,
-        block_id: blockId,
-        text: body,
-        base_mtime: mtime,
-      }, true).then((res) => {
-        if (dirtySeq === seqAtStart) {
-          mtime = res.mtime;
-          lastSavedText = res.text;
-          dirty = false;
+      const send = (base: Mtime | undefined) =>
+        api.updateSyncedBlock({ path: resolvedPath, block_id: blockId, text: body, base_mtime: base }, true);
+      void (async () => {
+        try {
+          let res;
+          try {
+            res = await send(mtime);
+          } catch (e) {
+            if (!(e instanceof ApiError && e.status === 409)) throw e;
+            const d = await diskState();
+            if (!d.same) throw e;
+            res = await send(d.mtime);
+          }
+          if (dirtySeq === seqAtStart) {
+            mtime = res.mtime;
+            lastSavedText = body;
+            dirty = false;
+          }
+        } catch {
+          void rescue(body);
         }
-      }).catch(() => {});
+      })();
       return;
     }
     while (inFlightSave) await inFlightSave;
     const run = (async () => {
-      while (dirty || text !== lastSavedText) {
+      let rebased = false;
+      while (!disposed && !conflict && (dirty || text !== lastSavedText)) {
         const seqAtStart = dirtySeq;
         const body = text;
         saving = true;
@@ -214,9 +257,35 @@
             base_mtime: mtime,
           });
           mtime = res.mtime;
-          lastSavedText = res.text;
+          // what was sent, not the server's copy without trailing line breaks: those would never compare equal
+          lastSavedText = body;
+          savedOnDisk = null;
           if (dirtySeq === seqAtStart) dirty = false;
+          try {
+            // read back only while no other write followed: the note's own reading of what was just written
+            const back = await api.file(resolvedPath);
+            if (back.mtime === res.mtime) savedOnDisk = extractSyncedBlock(back.text, blockId);
+          } catch {
+            // unknown: compare with the text sent
+          }
         } catch (e) {
+          if (e instanceof ApiError && e.status === 409 && !rebased) {
+            rebased = true;
+            try {
+              const d = await diskState();
+              if (d.same) {
+                mtime = d.mtime;
+                continue;
+              }
+              if (d.block !== null) conflict = { disk: d.block, mtime: d.mtime };
+              saveError = d.block === null
+                ? `The synced block is no longer in ${shownName(resolvedPath)}.`
+                : `This block was changed in ${shownName(resolvedPath)} meanwhile.`;
+            } catch (e2) {
+              saveError = errText(e2);
+            }
+            break;
+          }
           saveError = errText(e);
           break;
         } finally {
@@ -239,18 +308,80 @@
     saveTimer = setTimeout(() => { void commitSave(); }, 500);
   }
 
+  /** Takes the block as it is on disk now: it may have changed again since the conflict was found. */
+  async function reloadFromDisk(): Promise<void> {
+    const open = conflict;
+    if (!open) return;
+    clearTimeout(saveTimer);
+    let disk = open.disk;
+    let at = open.mtime;
+    try {
+      const d = await diskState();
+      if (disposed || conflict !== open) return;
+      if (d.block === null) {
+        saveError = `The synced block is no longer in ${shownName(resolvedPath)}.`;
+        return;
+      }
+      disk = d.block;
+      at = d.mtime;
+    } catch {
+      if (disposed || conflict !== open) return; // unreadable now: the text seen when the conflict was found
+    }
+    text = disk;
+    lastSavedText = disk;
+    savedOnDisk = disk;
+    mtime = at;
+    dirty = false;
+    conflict = null;
+    saveError = "";
+  }
+
+  function keepMine(): void {
+    if (!conflict) return;
+    mtime = conflict.mtime;
+    conflict = null;
+    saveError = "";
+    dirty = true;
+    void commitSave();
+  }
+
+  /** The source note was rewritten (vault.ts only reports files added or removed): show it when nothing is being
+   *  edited; else load() takes only its mtime, and only when this block is unchanged there. */
+  function onSourceWritten(): void {
+    if (!resolvedPath || !blockId || disposed || inFlightSave) return;
+    if (conflict) {
+      // keep the conflict's copy of the block current, so Reload and Keep mine act on what is there now; updated in place,
+      // since a Reload already reading checks that the conflict it started on is still the open one
+      const open = conflict;
+      return void diskState().then((d) => { if (conflict === open && d.block !== null) { open.disk = d.block; open.mtime = d.mtime; } }, () => {});
+    }
+    if (!focused && !dirty) return void load();
+    void diskState().then((d) => { if (d.same && !inFlightSave) mtime = d.mtime; }, () => {});
+  }
+
   let offVault: (() => void) | undefined;
+  let offFs: (() => void) | undefined;
   onMount(() => {
     void load();
     offVault = onVaultChange(() => {
       if (resolvedPath && !focused && !dirty && !inFlightSave) void load();
     });
+    offFs = reloadOnChange(onSourceWritten, { wait: 0, wants: (p) => p === resolvedPath });
   });
 
   onDestroy(() => {
+    disposed = true;
     clearTimeout(saveTimer);
-    if (dirty || text !== lastSavedText) void commitSave(true);
     offVault?.();
+    offFs?.();
+    const flush = () => {
+      if (!dirty && text === lastSavedText) return;
+      if (conflict) void rescue(text);
+      else void commitSave(true);
+    };
+    // a save still running stops after its request: what it did not send goes once it is done
+    if (inFlightSave) void inFlightSave.then(flush);
+    else flush();
   });
 </script>
 
@@ -260,7 +391,7 @@
     {#if resolvedPath}
       <button type="button" class="src-link" onclick={() => void openPath(resolvedPath)}>{shownName(resolvedPath)}</button>
     {/if}
-    <span class="status">{saving ? "Saving…" : dirty || text !== lastSavedText ? "Unsaved" : resolvedPath ? "In sync" : ""}</span>
+    <span class="status">{saving ? "Saving…" : conflict ? "Conflict" : dirty || text !== lastSavedText ? "Unsaved" : resolvedPath ? "In sync" : ""}</span>
     {#if !cycleDetected && !loadError && !(loading && !text)}
       <button
         type="button"
@@ -292,6 +423,13 @@
   {:else}
     {#if saveError}
       <p class="msg err">{saveError}</p>
+    {/if}
+    {#if conflict}
+      <div class="conflict" role="group" aria-label="Synced block conflict">
+        <!-- mousedown keeps the textarea's focus, so its blur does not hide these buttons before the click -->
+        <button type="button" class="edit-btn" onmousedown={(e) => e.preventDefault()} onclick={() => void reloadFromDisk()}>Reload</button>
+        <button type="button" class="edit-btn" onmousedown={(e) => e.preventDefault()} onclick={keepMine}>Keep mine</button>
+      </div>
     {/if}
     {#if focused}
       <textarea
@@ -348,6 +486,7 @@
   .synced-input:focus { outline: none; border-color: var(--accent); }
   .msg { margin: 0; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-muted); }
   .msg.err { color: var(--red); }
+  .conflict { display: flex; gap: 6px; }
   .edit-btn {
     border: 0;
     background: transparent;

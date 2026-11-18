@@ -62,13 +62,17 @@
     try { await api.setProperty({ path: note, key, text: "", list: Array.isArray(value), value }); await load(); }
     catch (e) { fail(`Could not change ${key}`)(e); }
   }
+  // a note being made: a second click (a double click on New) meanwhile does not make another
+  let creating = false;
   async function newRow() {
-    if (!view) return;
+    if (!view || creating) return;
+    creating = true;
     try {
       const r = await api.baseRow(path, view.name);
       openPath(r.path);
       if (!r.matches) toast("Created " + shownPath(r.path), "It does not show in this view yet: fill the properties its filters ask for.");
     } catch (e) { fail("Could not create the note")(e); }
+    finally { creating = false; }
   }
 
   onMount(() => {

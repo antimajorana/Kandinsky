@@ -31,7 +31,8 @@
   let root = $state<HTMLElement>();
   let done = false;
 
-  $effect(() => { root?.querySelector<HTMLInputElement>("input")?.focus(); });
+  // The rating editor has no input, so its root takes focus: Escape and click-away then reach it.
+  $effect(() => { (root?.querySelector<HTMLElement>("input") ?? (isRating ? root : null))?.focus(); });
 
   const shape = (s: string) => (kind === "links" ? asLink(s) : kind === "tags" ? asTag(s) : s.trim());
   function scalar(): unknown {
@@ -81,7 +82,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="cell-editor" class:list class:status-pop={isStatus} bind:this={root} {onkeydown} {onfocusout} onclick={(e) => e.stopPropagation()}>
+<div class="cell-editor" class:list class:status-pop={isStatus} tabindex={isRating ? -1 : undefined} bind:this={root} {onkeydown} {onfocusout} onclick={(e) => e.stopPropagation()}>
   {#if list}
     {#each items as it, i (it)}
       <span class="chip"><span class="t">{linkLabel(it)}</span><button type="button" class="x" aria-label="Remove {it}" onmousedown={(e) => e.preventDefault()} onclick={() => remove(i)}><Icon name="close" size={10} /></button></span>
@@ -110,7 +111,7 @@
     <div class="rating-row" role="radiogroup" aria-label={label}>
       {#each [1, 2, 3, 4, 5] as star (star)}
         <button type="button" class="star-btn" class:lit={cur >= star} onmousedown={(e) => e.preventDefault()}
-          onclick={() => { oncommit(cur === star ? null : star); done = true; onclose(); }}>★</button>
+          onclick={() => { if (done) return; done = true; oncommit(cur === star ? null : star); onclose(); }}>★</button>
       {/each}
     </div>
   {:else if isDate}
@@ -146,7 +147,7 @@
   .list .cell-edit { border: 0; background: transparent; padding: 0 2px; }
   .status-pop .cell-edit { flex: none; border-color: var(--border-strong); }
   .status-pop .cell-edit:focus { border-color: var(--accent); }
-  .cell-edit:focus { outline: none; }
+  .cell-edit:focus, .cell-editor:focus { outline: none; }
   .num { font-variant-numeric: tabular-nums; text-align: right; }
   input[type="date"], input[type="datetime-local"] { color-scheme: light dark; font-variant-numeric: tabular-nums; }
   .chip { display: inline-flex; align-items: center; max-width: 200px; border-radius: 999px; background: var(--accent-soft); font-size: .92em; line-height: 20px; }

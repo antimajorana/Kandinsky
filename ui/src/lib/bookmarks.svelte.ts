@@ -53,12 +53,15 @@ const pinWatchers = new Set<(pins: Pin[]) => void>();
 // --- the file's entries <-> bookmarks -------------------------------------------------------------
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+const CALENDAR_MODES = ["month", "week", "agenda", "day"];
 
 function readEntry(v: unknown): Bookmark | null {
   if (typeof v === "string") return v ? { target: { kind: "file", path: v } } : null;
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
   const { title, path, heading, view, search, command, url, ...rest } = v as Record<string, unknown>;
   const t = str(title);
+  // the Calendar pane's start view once overwrote its type (`{view: day}`): such an entry is that pane
+  if (CALENDAR_MODES.includes(str(view) ?? "")) return { title: t, target: { kind: "view", view: paneBlockType("calendar"), options: { ...rest, mode: view } } };
   if (str(view)) return { title: t, target: { kind: "view", view: str(view)!, options: { ...(path === undefined ? {} : { path }), ...rest } } };
   if (str(path)) return { title: t, target: { kind: "file", path: str(path)!, heading: str(heading) } };
   if (str(search)) return { title: t, target: { kind: "search", q: str(search)! } };
@@ -72,7 +75,10 @@ function writeEntry(b: Bookmark): unknown {
   const t = b.target;
   switch (t.kind) {
     case "file": return !b.title && !t.heading ? t.path : { path: t.path, ...(t.heading ? { heading: t.heading } : {}), ...title };
-    case "view": return { view: t.view, ...t.options, ...title };
+    case "view": {
+      const { view: _, ...options } = t.options; // `view:` is the entry's type: an option of that name would replace it
+      return { view: t.view, ...options, ...title };
+    }
     case "search": return { search: t.q, ...title };
     case "command": return { command: t.id, ...title };
     case "url": return { url: t.url, ...title };
@@ -108,6 +114,10 @@ export function bookmarkOf(spec: PaneSpec, title?: string): Bookmark {
   }
   const { kind, ...options } = spec;
   const { title: own, ...rest } = options as Record<string, unknown>;
+  if (kind === "calendar") { // its start view is the block's `mode:` (`view:` names the entry's type)
+    const { view, ...cal } = rest;
+    return { title: str(own) ?? named, target: { kind: "view", view: paneBlockType(kind), options: view === undefined ? cal : { ...cal, mode: view } } };
+  }
   return { title: str(own) ?? named, target: { kind: "view", view: paneBlockType(kind), options: rest } };
 }
 

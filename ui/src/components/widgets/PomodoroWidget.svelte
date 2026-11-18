@@ -1,7 +1,4 @@
-<script lang="ts">
-  // Nootion Pomodoro widget: Focus / Short break / Long break tabs, Bauhaus SVG progress ring,
-  // tabular MM:SS countdown, Start/Pause/Reset/Skip controls, session dots, and gentle WebAudio chime.
-  import { onMount, untrack } from "svelte";
+<script lang="ts" module>
   import * as prefs from "../../lib/prefs";
 
   type Phase = "focus" | "short" | "long";
@@ -12,24 +9,37 @@
     endAt: number | null;
     completedSessions: number;
   }
+  type PeerListener = (key: string) => void;
 
   const STORAGE_KEY = "kandinsky.pomodoro.v1";
+  // Shared by every widget in the window, so two blocks with the same key show one timer instead of
+  // overwriting each other; a write notifies the other instances, which re-read the record. localStorage stays
+  // the record other windows see, so this copy is read only when storage is unavailable and is dropped once no
+  // widget is mounted.
   const pomodoroStates = new Map<string, PersistedPomodoro>();
+  const peers = new Set<PeerListener>();
 
   function loadStoredMap(): Record<string, PersistedPomodoro> {
     return prefs.load<Record<string, PersistedPomodoro>>(STORAGE_KEY, {});
   }
 
   function readStoredState(key: string): PersistedPomodoro | undefined {
-    return pomodoroStates.get(key) ?? loadStoredMap()[key];
+    return loadStoredMap()[key] ?? pomodoroStates.get(key);
   }
 
-  function writeStoredState(key: string, next: PersistedPomodoro): void {
+  function writeStoredState(key: string, next: PersistedPomodoro, from?: PeerListener): void {
     pomodoroStates.set(key, next);
     const all = loadStoredMap();
     all[key] = next;
     prefs.save(STORAGE_KEY, all);
+    for (const peer of [...peers]) if (peer !== from) peer(key);
   }
+</script>
+
+<script lang="ts">
+  // Nootion Pomodoro widget: Focus / Short break / Long break tabs, Bauhaus SVG progress ring,
+  // tabular MM:SS countdown, Start/Pause/Reset/Skip controls, session dots, and gentle WebAudio chime.
+  import { onMount, untrack } from "svelte";
 
   let { options = {}, doc = "" }: { options?: Record<string, unknown>; doc?: string } = $props();
 
@@ -62,6 +72,10 @@
   const dashOffset = $derived(CIRC * (1 - (totalSec > 0 ? remaining / totalSec : 1)));
   const dotTotal = $derived(Math.min(12, Math.max(goalSessions, completedSessions)));
 
+  const onPeerWrite: PeerListener = (key) => {
+    if (key === stateKey) restoreState(key);
+  };
+
   function persistState(): void {
     writeStoredState(stateKey, {
       mode: phase,
@@ -69,7 +83,7 @@
       remaining: leftSec,
       endAt,
       completedSessions,
-    });
+    }, onPeerWrite);
   }
 
   function restoreState(key: string): void {
@@ -104,7 +118,7 @@
           remaining: null,
           endAt: null,
           completedSessions,
-        });
+        }, onPeerWrite);
       } else {
         running = true;
         endAt = saved.endAt;
@@ -196,14 +210,17 @@
     persistState();
   }
 
+  // The tick only redraws: endAt alone rebuilds the countdown, so writing every second would undo
+  // a pause or reset made in another instance with the same key.
   function syncFromClock(): void {
     if (!running || endAt === null) return;
     const rem = Math.ceil((endAt - Date.now()) / 1000);
     if (rem <= 0) {
-      advancePhase(true);
+      const saved = readStoredState(stateKey);
+      if (saved && !(saved.running && saved.endAt === endAt)) restoreState(stateKey);
+      else advancePhase(true);
     } else if (rem !== leftSec) {
       leftSec = rem;
-      persistState();
     }
   }
 
@@ -211,9 +228,20 @@
     syncFromClock();
     const id = setInterval(syncFromClock, 500);
     document.addEventListener("visibilitychange", syncFromClock);
+    peers.add(onPeerWrite);
+    // Another window wrote the record: drop the cached copy and adopt the stored one.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== STORAGE_KEY) return;
+      pomodoroStates.delete(stateKey);
+      restoreState(stateKey);
+    };
+    window.addEventListener("storage", onStorage);
     return () => {
       clearInterval(id);
       document.removeEventListener("visibilitychange", syncFromClock);
+      peers.delete(onPeerWrite);
+      if (peers.size === 0) pomodoroStates.clear();
+      window.removeEventListener("storage", onStorage);
     };
   });
 

@@ -1,5 +1,4 @@
 // Dynamic Mermaid diagram fence renderer (`type: mermaid` / ```mermaid): imports `mermaid` lazily on first diagram so main bundle stays tiny.
-import DOMPurify from "dompurify";
 import { registerFence } from "./fences";
 import { errText } from "./text";
 
@@ -21,6 +20,7 @@ registerFence("kandinsky-mermaid", "mermaid", (host, fence) => {
   const draw = async () => {
     const dark = isDarkTheme();
     lastDark = dark;
+    const id = `kdy-mmd-${++mermaidSeq}`;
     try {
       const { default: mermaid } = await import("mermaid");
       if (gone) return;
@@ -28,15 +28,19 @@ registerFence("kandinsky-mermaid", "mermaid", (host, fence) => {
         startOnLoad: false,
         securityLevel: "strict",
         theme: dark ? "dark" : "default",
+        // the fence shows its own error box; mermaid's error diagram would stay in a temp div on <body>
+        suppressErrorRendering: true,
       });
-      const id = `kdy-mmd-${++mermaidSeq}`;
       const { svg, bindFunctions } = await mermaid.render(id, fence.source);
       if (gone) return;
       box.dataset.state = "done";
-      box.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
+      // "strict" already runs DOMPurify with foreignObject as an HTML integration point; an SVG-only
+      // second pass removed every foreignObject and with it the node and edge labels
+      box.innerHTML = svg;
       bindFunctions?.(box);
       for (const el of box.querySelectorAll("svg")) el.setAttribute("role", "img");
     } catch (e) {
+      document.getElementById(`d${id}`)?.remove(); // a temp div left by a failed render
       if (gone) return;
       box.dataset.state = "error";
       const title = Object.assign(document.createElement("div"), {
