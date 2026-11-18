@@ -5,4 +5,16 @@ export type CalendarEventUpsert = { id?: string,
 /**
  * `"inline"` (default: Daily Note `events:` frontmatter) or `"page"` (`<events_dir>/YYYY-MM-DD <Title>.md`).
  */
-storage?: string, title: string, date: string, end_date?: string, start?: string, end?: string, all_day: boolean, color: string, location: string, repeat: CalendarRecurrence, links: Array<string>, notes?: string, };
+storage?: string, title: string, date: string, end_date?: string, start?: string, end?: string, all_day: boolean, color: string, location: string, repeat: CalendarRecurrence, 
+/**
+ * Every `interval`-th day, week, month or year of `repeat` (1 when unset). Left out of an edit, the stored one stays.
+ */
+interval?: number, 
+/**
+ * The last day a repeating event can fall on (`YYYY-MM-DD`, empty for none). Left out of an edit, the stored one stays.
+ */
+until?: string, 
+/**
+ * Days (`YYYY-MM-DD`) a repeating event skips. Left out of an edit, the stored ones stay.
+ */
+except?: Array<string>, links: Array<string>, notes?: string, };

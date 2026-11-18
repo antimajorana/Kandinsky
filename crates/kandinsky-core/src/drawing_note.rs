@@ -165,6 +165,8 @@ pub fn moved(ws: &crate::Workspace, from: &str, to: &str) -> crate::Result<Optio
         return Ok(None);
     }
     crate::vault_write::remove_file(&a)?;
+    // the note's margin comments go with it; a failure there never undoes the move
+    let _ = crate::comments::moved(ws.root(), &old, &new);
     Ok(Some(new))
 }
 
@@ -224,6 +226,21 @@ mod tests {
         std::fs::write(d.path().join("notes/c.md"), "# my own c\n").unwrap();
         crate::files::move_path(&ws, "notes/c.excalidraw", "notes/e.excalidraw").unwrap();
         assert!(d.path().join("notes/c.md").exists() && !d.path().join("notes/e.md").exists());
+    }
+
+    #[test]
+    fn a_renamed_drawings_note_keeps_its_comments() {
+        use crate::comments::{list, mutate, CommentAction, CommentMutation};
+        let d = tempfile::tempdir().unwrap();
+        let ws = crate::Workspace::open(d.path()).unwrap();
+        std::fs::create_dir_all(d.path().join("notes")).unwrap();
+        std::fs::write(d.path().join("notes/a.excalidraw"), "{}").unwrap();
+        std::fs::write(d.path().join("notes/a.md"), "---\ndrawing: '[[a.excalidraw]]'\n---\nmine\n").unwrap();
+        let action = CommentAction::Add { from: 0, to: 4, quote: "mine".into(), anchor_line: 4, text: "why".into(), author: "".into() };
+        mutate(d.path(), &CommentMutation { path: "notes/a.md".into(), action }).unwrap();
+        crate::files::move_path(&ws, "notes/a.excalidraw", "notes/b.excalidraw").unwrap();
+        assert!(list(d.path(), "notes/a.md").unwrap().is_empty());
+        assert_eq!(list(d.path(), "notes/b.md").unwrap()[0].path, "notes/b.md");
     }
 
     fn scene() -> Value {

@@ -2,9 +2,10 @@
 use super::{passes, BaseFile, Ctx, Note};
 use crate::api::{AutomationAction, AutomationTrigger, BaseRecurringTemplate, RecurringCadence};
 use crate::config::Config;
+use crate::note_props::Props;
 use crate::{env, links, notes, paths, vault_write, Workspace};
 use chrono::{Datelike, NaiveDate, NaiveDateTime};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 
@@ -22,6 +23,26 @@ impl Drop for FlightGuard {
 fn acquire_flight(key: String) -> Option<FlightGuard> {
     let mut set = IN_FLIGHT.lock().ok()?;
     set.insert(key.clone()).then_some(FlightGuard(key))
+}
+
+/// The last readable properties seen here per note (root::path), the `before` of a save over a half-typed line. A change
+/// made by another program, or a writer that never calls `on_note_saved`, is never an edge: it fires nothing.
+static LAST_SEEN: LazyLock<Mutex<HashMap<String, Props>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn last_seen(key: &str) -> Option<Props> {
+    LAST_SEEN.lock().ok()?.get(key).cloned()
+}
+
+fn remember(key: &str, props: Props) {
+    if let Ok(mut map) = LAST_SEEN.lock() {
+        map.insert(key.to_string(), props);
+    }
+}
+
+/// A frontmatter that is there but does not read as a mapping (a half-typed line, a fence not yet closed).
+fn unreadable(text: &str) -> bool {
+    kandinsky_text::frontmatter::yaml_head(text)
+        .is_some_and(|y| !y.trim().is_empty() && serde_yaml::from_str::<serde_yaml::Mapping>(y).is_err())
 }
 
 fn collect_bases(root: &Path, cfg: &Config) -> Vec<String> {
@@ -57,30 +78,60 @@ fn scalar_text(v: Option<&serde_yaml::Value>) -> Option<String> {
     }
 }
 
-fn trigger_matches(trigger: &AutomationTrigger, props: &crate::note_props::Props, created: bool) -> bool {
+/// `before`: the note's properties before this write (`None`: a new note, or unknown). A property change fires only on
+/// the write that changes the value, so later saves of a note already at `to` repeat nothing.
+fn trigger_matches(trigger: &AutomationTrigger, before: Option<&Props>, after: &Props, created: bool) -> bool {
     match trigger {
         AutomationTrigger::NoteCreated => created,
         AutomationTrigger::PropertyChanged { property, to } => {
-            let val = scalar_text(props.get(property.as_str()));
-            match (val, to.as_deref().map(str::trim).filter(|s| !s.is_empty())) {
-                (Some(actual), Some(want)) => actual.eq_ignore_ascii_case(want),
-                (Some(actual), None) => !actual.is_empty(),
-                _ => false,
+            let Some(actual) = scalar_text(after.get(property.as_str())) else { return false };
+            let was = before.and_then(|b| scalar_text(b.get(property.as_str())));
+            if was.is_some_and(|w| w.eq_ignore_ascii_case(&actual)) {
+                return false;
+            }
+            match to.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                Some(want) => actual.eq_ignore_ascii_case(want),
+                None => !actual.is_empty(),
             }
         }
     }
 }
 
-/// Runs enabled `.base` automations matching `rel_path` after it is written or created.
-/// Returns additional workspace-relative paths modified by actions (such as today's log).
+/// What the automations of one write did.
+#[derive(Debug, Default)]
+pub struct Ran {
+    /// Workspace-relative paths the actions wrote (the note itself, today's log).
+    pub touched: Vec<String>,
+    /// The caller's own copy of the note (`held`) with the property edits made to the note, when there were any.
+    pub held: Option<String>,
+    /// The properties set on the note, and the rule that set the first one (for a notice).
+    pub set: Vec<String>,
+    pub rule: Option<String>,
+    /// An action other than a property edit (a log line) wrote the note itself: `held` lacks that write.
+    pub unheld: bool,
+}
+
+/// Runs enabled `.base` automations matching `rel_path` after it is created (`created`), or written with its previous
+/// text unknown (every property then counts as just set). Returns the paths the actions wrote (the note, today's log).
 pub fn on_note_written(ws: &Workspace, rel_path: &str, created: bool) -> Vec<String> {
-    let Ok(cfg) = ws.config() else { return Vec::new() };
+    run(ws, rel_path, created, None, None).touched
+}
+
+/// Runs enabled `.base` automations after `rel_path` was written over `before` (`None`: it did not exist). `held`: the
+/// note as a caller that applies the edits itself holds it (an editor); the property edits are made to it as well.
+pub fn on_note_saved(ws: &Workspace, rel_path: &str, before: Option<&str>, held: Option<&str>) -> Ran {
+    run(ws, rel_path, before.is_none(), before, held)
+}
+
+fn run(ws: &Workspace, rel_path: &str, created: bool, before: Option<&str>, held: Option<&str>) -> Ran {
+    let mut ran = Ran::default();
+    let Ok(cfg) = ws.config() else { return ran };
     if !rel_path.ends_with(".md") || cfg.index_excluded(rel_path) {
-        return Vec::new();
+        return ran;
     }
     let bases = collect_bases(ws.root(), &cfg);
     if bases.is_empty() {
-        return Vec::new();
+        return ran;
     }
     let mut parsed_bases = Vec::new();
     for base_rel in bases {
@@ -96,8 +147,26 @@ pub fn on_note_written(ws: &Workspace, rel_path: &str, created: bool) -> Vec<Str
         }
     }
     if parsed_bases.is_empty() {
-        return Vec::new();
+        return ran;
     }
+    let Ok(abs) = ws.resolve(rel_path) else { return ran };
+    // the note as written now, not the index's copy, which may not have seen this write yet
+    let Ok(mut text) = std::fs::read_to_string(&abs) else { return ran };
+    let mut after = Props::from_markdown(&text);
+    // a save made over a half-typed property line has no readable old values: the last ones seen here stand in (taking
+    // them as absent would fire again a rule whose value never changed); none seen, every property counts as just set
+    let seen_key = format!("{}::{rel_path}", ws.root().display());
+    let before = match before {
+        Some(b) if unreadable(b) => last_seen(&seen_key),
+        b => b.map(Props::from_markdown),
+    };
+    // this write's values when readable, else the old ones: the next save, over this unreadable text, compares to them
+    match (unreadable(&text), &before) {
+        (false, _) => remember(&seen_key, after.clone()),
+        (true, Some(b)) => remember(&seen_key, b.clone()),
+        (true, None) => {}
+    }
+    let mut own = held.map(str::to_string);
     let vault = links::vault(ws.root(), &cfg);
     let none: Vec<String> = Vec::new();
     let notes_vec: Vec<Note> = vault
@@ -114,9 +183,9 @@ pub fn on_note_written(ws: &Workspace, rel_path: &str, created: bool) -> Vec<Str
         .collect();
     let by_path: std::collections::HashMap<&str, &Note> = notes_vec.iter().map(|n| (n.path, n)).collect();
     let Some(target) = by_path.get(rel_path).copied() else {
-        return Vec::new();
+        return ran;
     };
-    let mut touched = Vec::new();
+    let touched = &mut ran.touched;
     for (base_rel, base) in parsed_bases {
         let ctx = Ctx {
             note: target,
@@ -132,7 +201,7 @@ pub fn on_note_written(ws: &Workspace, rel_path: &str, created: bool) -> Vec<Str
         }
         let Some(_guard) = acquire_flight(format!("{}::{base_rel}::{rel_path}", ws.root().display())) else { continue };
         for auto in &base.automations {
-            if !auto.enabled || !trigger_matches(&auto.trigger, &target.data.props, created) {
+            if !auto.enabled || !trigger_matches(&auto.trigger, before.as_ref(), &after, created) {
                 continue;
             }
             match &auto.action {
@@ -142,34 +211,65 @@ pub fn on_note_written(ws: &Workspace, rel_path: &str, created: bool) -> Vec<Str
                         .replace("{{title}}", &target.name)
                         .replace("{{path}}", rel_path)
                         .replace("{{date}}", &today_s);
-                    let current = scalar_text(target.data.props.get(property.as_str()));
+                    let current = scalar_text(Props::from_markdown(&text).get(property.as_str()));
                     if current.as_deref() == Some(rendered.trim()) {
                         continue;
                     }
-                    let Ok(abs) = ws.resolve(rel_path) else { continue };
-                    let yval = serde_yaml::from_str::<serde_yaml::Value>(&rendered)
-                        .unwrap_or_else(|_| serde_yaml::Value::String(rendered.clone()));
-                    if vault_write::modify(&abs, |raw| Ok(crate::frontmatter::set_property(raw, property, &yval))).is_ok() {
+                    // a literal value is typed (`true`, `3`); a filled-in title or path stays text, even `a: b` or `2026`
+                    let yval = if value.contains("{{") {
+                        serde_yaml::Value::String(rendered.clone())
+                    } else {
+                        serde_yaml::from_str::<serde_yaml::Value>(&rendered)
+                            .unwrap_or_else(|_| serde_yaml::Value::String(rendered.clone()))
+                    };
+                    let mut next = None;
+                    let wrote = vault_write::modify(&abs, |raw| {
+                        let n = crate::frontmatter::set_property(raw, property, &yval);
+                        next = Some(n.clone());
+                        Ok(n)
+                    });
+                    if wrote.is_ok() {
+                        if let Some(n) = next {
+                            text = n;
+                            // the rules after this one see the value set here as changed by this write
+                            after = Props::from_markdown(&text);
+                        }
+                        if let Some(h) = own.as_mut() {
+                            *h = crate::frontmatter::set_property(h, property, &yval);
+                        }
                         touched.push(rel_path.to_string());
+                        ran.set.push(property.clone());
+                        ran.rule.get_or_insert_with(|| format!("{} ({base_rel})", auto.name));
                     }
                 }
-                AutomationAction::AppendLog { text } => {
+                AutomationAction::AppendLog { text: line } => {
                     let now = chrono::Local::now().naive_local();
                     let today_s = now.date().format("%Y-%m-%d").to_string();
-                    let msg = text
+                    let msg = line
                         .replace("{{title}}", &target.name)
                         .replace("{{path}}", rel_path)
                         .replace("{{date}}", &today_s);
                     if let Ok(cap) = crate::capture::capture_at(ws.root(), &cfg, &msg, now) {
+                        // the note is today's log: the caller's copy lacks the line, so it must not take the new mtime
+                        if cap.path == rel_path {
+                            ran.unheld = true;
+                            if let Ok(t) = std::fs::read_to_string(&abs) {
+                                text = t;
+                            }
+                        }
                         touched.push(cap.path);
                     }
                 }
             }
         }
     }
+    if !unreadable(&text) {
+        remember(&seen_key, after);
+    }
     touched.sort();
     touched.dedup();
-    touched
+    ran.held = own.filter(|h| Some(h.as_str()) != held);
+    ran
 }
 
 fn is_due(t: &BaseRecurringTemplate, today: NaiveDate) -> bool {
@@ -462,10 +562,181 @@ views:
         std::fs::write(d.path().join("Tasks.base"), base).unwrap();
         std::fs::write(d.path().join("T1.md"), "---\ntype: task\nstatus: Done\n---\nbody\n").unwrap();
         let ws = Workspace::open(d.path()).unwrap();
-        let touched = on_note_written(&ws, "T1.md", false);
+        let open = "---\ntype: task\nstatus: open\n---\nbody\n";
+        let touched = on_note_saved(&ws, "T1.md", Some(open), None).touched;
         assert_eq!(touched, vec!["T1.md"]);
         let text = std::fs::read_to_string(d.path().join("T1.md")).unwrap();
         assert!(text.contains("closed: true"), "{text}");
+    }
+
+    const LOG_DONE: &str = r#"filters: 'type == "task"'
+automations:
+  - name: Log done
+    enabled: true
+    trigger:
+      kind: property_changed
+      property: status
+      to: Done
+    action:
+      kind: append_log
+      text: "Finished {{title}}"
+views:
+  - type: table
+"#;
+
+    fn log_lines(d: &Path, touched: &[String]) -> usize {
+        let Some(log) = touched.first() else { return 0 };
+        std::fs::read_to_string(d.join(log)).unwrap().matches("Finished T1").count()
+    }
+
+    #[test]
+    fn property_changed_fires_on_the_change_only_not_on_later_saves() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("Tasks.base"), LOG_DONE).unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        let open = "---\ntype: task\nstatus: open\n---\nbody\n";
+        let done = "---\ntype: task\nstatus: Done\n---\nbody\n";
+        std::fs::write(d.path().join("T1.md"), done).unwrap();
+        let first = on_note_saved(&ws, "T1.md", Some(open), None).touched;
+        assert_eq!(log_lines(d.path(), &first), 1, "{first:?}");
+
+        // a body edit of a note already done, and an edit of another property, repeat nothing
+        let typed = "---\ntype: task\nstatus: Done\n---\nbody and more\n";
+        std::fs::write(d.path().join("T1.md"), typed).unwrap();
+        assert!(on_note_saved(&ws, "T1.md", Some(done), None).touched.is_empty());
+        let tagged = "---\ntype: task\nstatus: done\ntags: [x]\n---\nbody and more\n";
+        std::fs::write(d.path().join("T1.md"), tagged).unwrap();
+        assert!(on_note_saved(&ws, "T1.md", Some(typed), None).touched.is_empty(), "the case of the value is no change");
+        let half_typed = "---\ntype: task\nstatus: Done\nprio\n---\nbody and more\n";
+        assert!(on_note_saved(&ws, "T1.md", Some(half_typed), None).touched.is_empty(), "an unreadable before is no change");
+        assert_eq!(log_lines(d.path(), &first), 1);
+
+        // a note created already done fires once
+        assert_eq!(on_note_saved(&ws, "T1.md", None, None).touched, first);
+        assert_eq!(log_lines(d.path(), &first), 2);
+    }
+
+    #[test]
+    fn a_rule_sees_the_value_an_earlier_rule_set_in_the_same_write() {
+        let d = tempfile::tempdir().unwrap();
+        let base = r#"automations:
+  - name: Close done
+    enabled: true
+    trigger:
+      kind: property_changed
+      property: status
+      to: Done
+    action:
+      kind: set_property
+      property: closed
+      value: "true"
+  - name: Log closed
+    enabled: true
+    trigger:
+      kind: property_changed
+      property: closed
+      to: "true"
+    action:
+      kind: append_log
+      text: "Finished {{title}}"
+views:
+  - type: table
+"#;
+        std::fs::write(d.path().join("Tasks.base"), base).unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        std::fs::write(d.path().join("T1.md"), "---\nstatus: Done\n---\nbody\n").unwrap();
+        let ran = on_note_saved(&ws, "T1.md", Some("---\nstatus: open\n---\nbody\n"), None);
+        let log: Vec<String> = ran.touched.iter().filter(|p| *p != "T1.md").cloned().collect();
+        assert_eq!(log_lines(d.path(), &log), 1, "{ran:?}");
+        // the next save, over the text the rules left, repeats neither
+        let now = std::fs::read_to_string(d.path().join("T1.md")).unwrap();
+        assert!(on_note_saved(&ws, "T1.md", Some(&now), None).touched.is_empty());
+        assert_eq!(log_lines(d.path(), &log), 1);
+    }
+
+    #[test]
+    fn a_change_saved_over_a_half_typed_line_fires_once() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("Tasks.base"), LOG_DONE).unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        let open = "---\ntype: task\nstatus: open\n---\nbody\n";
+        let half = "---\ntype: task\nstatus: Done\nprio\n---\nbody\n";
+        let typed = "---\ntype: task\nstatus: Done\nprio: high\n---\nbody\n";
+        std::fs::write(d.path().join("T1.md"), half).unwrap();
+        assert!(on_note_saved(&ws, "T1.md", Some(open), None).touched.is_empty(), "nothing readable to fire on");
+        std::fs::write(d.path().join("T1.md"), typed).unwrap();
+        let ran = on_note_saved(&ws, "T1.md", Some(half), None).touched;
+        assert_eq!(log_lines(d.path(), &ran), 1, "compared to the last readable values (open): {ran:?}");
+        assert!(on_note_saved(&ws, "T1.md", Some(typed), None).touched.is_empty());
+        assert!(on_note_saved(&ws, "T1.md", Some(half), None).touched.is_empty(), "the last values seen are Done now");
+        assert_eq!(log_lines(d.path(), &ran), 1);
+
+        // nothing seen of a note before (a new process): its value counts as just set
+        std::fs::write(d.path().join("T2.md"), typed).unwrap();
+        let other = on_note_saved(&ws, "T2.md", Some(half), None).touched;
+        assert_eq!(other.len(), 1, "{other:?}");
+        assert_eq!(std::fs::read_to_string(d.path().join(&other[0])).unwrap().matches("Finished T2").count(), 1);
+    }
+
+    #[test]
+    fn a_log_line_written_into_the_note_itself_is_not_held() {
+        let d = tempfile::tempdir().unwrap();
+        let base = r#"automations:
+  - name: Mood
+    enabled: true
+    trigger:
+      kind: property_changed
+      property: mood
+    action:
+      kind: append_log
+      text: "Mood noted"
+views:
+  - type: table
+"#;
+        std::fs::write(d.path().join("Daily.base"), base).unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        let rel = crate::capture::day_log(&ws.config().unwrap(), chrono::Local::now().date_naive());
+        let abs = d.path().join(&rel);
+        std::fs::create_dir_all(abs.parent().unwrap()).unwrap();
+        let text = "---\nmood: good\n---\n# Today\n";
+        std::fs::write(&abs, text).unwrap();
+        let ran = on_note_saved(&ws, &rel, Some("---\nmood: meh\n---\n# Today\n"), Some(text));
+        assert_eq!(ran.touched, vec![rel.clone()]);
+        assert!(std::fs::read_to_string(&abs).unwrap().contains("Mood noted"));
+        assert!(ran.unheld && ran.held.is_none(), "the editor's copy lacks the line: {ran:?}");
+    }
+
+    #[test]
+    fn a_filled_in_title_stays_text_and_a_held_copy_gets_the_edit() {
+        let d = tempfile::tempdir().unwrap();
+        let base = r#"automations:
+  - name: Source
+    enabled: true
+    trigger:
+      kind: property_changed
+      property: status
+      to: Done
+    action:
+      kind: set_property
+      property: source
+      value: "{{title}}"
+views:
+  - type: table
+"#;
+        std::fs::write(d.path().join("Tasks.base"), base).unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        for stem in ["- draft", "2026", "null"] {
+            let rel = format!("{stem}.md");
+            let done = "---\nstatus: Done\n---\nbody\n";
+            std::fs::write(d.path().join(&rel), done).unwrap();
+            let ran = on_note_saved(&ws, &rel, Some("---\nstatus: open\n---\nbody\n"), Some(done));
+            assert_eq!(ran.touched, vec![rel.clone()]);
+            assert_eq!(ran.set, ["source"]);
+            let text = std::fs::read_to_string(d.path().join(&rel)).unwrap();
+            let props = Props::from_markdown(&text);
+            assert_eq!(props.get("source"), Some(&serde_yaml::Value::String(stem.into())), "{text}");
+            assert_eq!(ran.held.as_deref(), Some(text.as_str()), "the editor's copy gets the same edit");
+        }
     }
 
     #[test]

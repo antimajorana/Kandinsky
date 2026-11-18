@@ -61,6 +61,10 @@ struct T {
 
 impl T {
     async fn start() -> Self {
+        // the vault's `sum` command runs python3: no window is here to approve it, so this test binary trusts the
+        // programs it runs (the same opt-in as tests/mcp.rs; the app itself never sets it)
+        static TRUST: std::sync::Once = std::sync::Once::new();
+        TRUST.call_once(|| std::env::set_var("KANDINSKY_TRUST_TEST_BINARIES", "1"));
         let dir = tempfile::tempdir().unwrap();
         seed(dir.path());
         let handle = kandinsky_core::serve(dir.path().to_path_buf(), 0).await.unwrap();
@@ -639,5 +643,124 @@ async fn a_switched_off_builtin_plugin_has_no_routes() {
     let r = t.http.get(format!("{}/api/snippets", t.base)).header("x-kandinsky", "1").send().await.unwrap();
     assert_eq!(r.status(), StatusCode::NOT_FOUND);
     assert!(r.text().await.unwrap().contains("LaTeX plugin is switched off"));
+    t.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_base_automation_fires_once_on_the_editors_save_and_keeps_its_mtime() {
+    let t = T::start().await;
+    let base = "automations:\n  - name: Close done\n    enabled: true\n    trigger:\n      kind: property_changed\n      property: status\n      to: Done\n    action:\n      kind: set_property\n      property: closed\n      value: \"true\"\nviews:\n  - type: table\n";
+    std::fs::write(t.root().join("notes/Tasks.base"), base).unwrap();
+    let rel = "notes/task.md";
+    std::fs::write(t.root().join(rel), "---\nstatus: open\n---\nbody\n").unwrap();
+    let on_disk = || Mtime::of(&std::fs::metadata(t.root().join(rel)).unwrap()).unwrap().0;
+    let read = || std::fs::read_to_string(t.root().join(rel)).unwrap();
+    // the editor's save (`apply_here`): the rule writes the note, and the answer carries that write's mtime and text
+    let done = "---\nstatus: Done\n---\nbody\n";
+    let save = |text: String, mtime: u64| t.send(reqwest::Method::PUT, "/api/file", json!({"path": rel, "text": text, "base_mtime": mtime, "apply_here": true}));
+    let (s, v) = save(done.into(), on_disk()).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert!(read().contains("closed: true"), "{}", read());
+    assert_eq!(v["mtime"].as_u64(), Some(on_disk()), "the rewritten file's mtime, so the next save is no conflict");
+    let held = v["template"]["text"].as_str().expect("the editor's copy with the rule's edit").to_string();
+    assert!(held.contains("closed: true") && held.contains("status: Done"), "{held}");
+    assert_eq!(v["template"]["automation"], true, "the answer says the file holds a rule's edit: {v}");
+    // the next save, on the answer's mtime, with the status still Done and `closed` unticked by hand: no conflict, and
+    // the rule does not fire again (it would set `closed` back)
+    let mtime = v["mtime"].as_u64().unwrap();
+    let (s, v) = save(held.replace("closed: true", "closed: false"), mtime).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert!(read().contains("closed: false"), "{}", read());
+    assert!(v.get("template").is_none_or(Value::is_null), "nothing merged: {v}");
+    assert_eq!(v["mtime"].as_u64(), Some(on_disk()));
+    t.stop().await;
+}
+
+/// A template and a rule on one save: the editor's copy gets both, and the answer says a rule's edit is in it (the file
+/// then holds the rule's edit but not the template's), which a plain template answer does not say.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_template_answer_says_when_a_rules_edit_is_merged_into_it() {
+    let t = T::start().await;
+    let base = "automations:\n  - name: Seen\n    enabled: true\n    trigger:\n      kind: property_changed\n      property: type\n      to: movie\n    action:\n      kind: set_property\n      property: seen\n      value: \"true\"\nviews:\n  - type: table\n";
+    std::fs::write(t.root().join("notes/Media.base"), base).unwrap();
+    std::fs::create_dir_all(t.root().join("templates")).unwrap();
+    std::fs::write(t.root().join("templates/movie.md"), "---\napply_when:\n  - property: { type: movie }\ntype: movie\ndirector:\n---\n").unwrap();
+    std::fs::write(t.root().join("templates/book.md"), "---\napply_when:\n  - property: { type: book }\ntype: book\nauthor:\n---\n").unwrap();
+    let on_disk = |rel: &str| Mtime::of(&std::fs::metadata(t.root().join(rel)).unwrap()).unwrap().0;
+    let save = |rel: &'static str, ty: &str| {
+        std::fs::write(t.root().join(rel), "---\ntype: idea\n---\nbody\n").unwrap();
+        t.send(reqwest::Method::PUT, "/api/file", json!({"path": rel, "text": format!("---\ntype: {ty}\n---\nbody\n"), "base_mtime": on_disk(rel), "apply_here": true}))
+    };
+    let (s, v) = save("notes/heat.md", "movie").await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!((v["template"]["template"].as_str(), v["template"]["automation"].as_bool()), (Some("movie"), Some(true)), "{v}");
+    let text = v["template"]["text"].as_str().unwrap();
+    assert!(text.contains("director:") && text.contains("seen: true"), "{text}");
+    let disk = std::fs::read_to_string(t.root().join("notes/heat.md")).unwrap();
+    assert!(disk.contains("seen: true") && !disk.contains("director:"), "{disk}");
+    assert_eq!(v["mtime"].as_u64(), Some(on_disk("notes/heat.md")));
+    // no rule fires for a book: the answer is the template alone
+    let (s, v) = save("notes/dune.md", "book").await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["template"]["template"], "book", "{v}");
+    assert!(v["template"].get("automation").is_none(), "{v}");
+    t.stop().await;
+}
+
+/// A plugin's `kandinsky.fetch` is a request from this machine, which an unlocked core believes when it carries the guard
+/// header: it never reaches the vault's own core, so a plugin cannot approve its own programs that way.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_plugin_fetch_never_reaches_its_own_core() {
+    let t = T::start().await;
+    let d = t.root().join(".kandinsky/plugins/net");
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(d.join("plugin.toml"), "title = \"Net\"\n[permissions]\nnet = [\"*\"]\n").unwrap();
+    let decide = json!({"id": "bin-1", "choice": "always_allow"}).to_string();
+    for (url, headers) in [
+        (format!("http://127.0.0.1:{}/api/security/binaries", t.port()), json!({"x-kandinsky": "1"})),
+        (format!("http://localhost:{}/api/security/binaries/decide", t.port()), json!({})),
+        (format!("http://127.0.0.1:{}/api/security/binaries/decide", t.port()), json!({"Upgrade": "websocket"})),
+    ] {
+        let (s, v) = t.send(reqwest::Method::POST, "/api/plugins/net/fetch", json!({"url": url, "method": "POST", "headers": headers, "body": decide})).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "{url}: {v}");
+        assert!(v.get("status").is_none(), "the core answered the plugin: {v}");
+    }
+    t.stop().await;
+}
+
+/// A rule's log line written into the saved note itself (today's log) is not in the editor's copy: the answer keeps the
+/// old mtime and sends no merged text, so the editor reloads or conflicts instead of saving over the line.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_log_line_an_automation_writes_into_the_saved_note_is_not_saved_over() {
+    let t = T::start().await;
+    let base = "automations:\n  - name: Mood\n    enabled: true\n    trigger:\n      kind: property_changed\n      property: mood\n    action:\n      kind: append_log\n      text: \"Mood noted\"\nviews:\n  - type: table\n";
+    std::fs::write(t.root().join("notes/Daily.base"), base).unwrap();
+    // another note fires the rule once, which makes today's log
+    let (s, v) = t.send(reqwest::Method::PUT, "/api/file", json!({"path": "notes/other.md", "text": "---\nmood: fine\n---\n"})).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    let log = walkdir::WalkDir::new(t.root().join("notes/log"))
+        .into_iter()
+        .flatten()
+        .find(|e| e.file_type().is_file() && std::fs::read_to_string(e.path()).is_ok_and(|s| s.contains("Mood noted")))
+        .expect("today's log")
+        .into_path();
+    let rel = log.strip_prefix(t.root()).unwrap().to_string_lossy().replace('\\', "/");
+    let on_disk = || Mtime::of(&std::fs::metadata(&log).unwrap()).unwrap().0;
+    // the answer's mtime never matches the file's, even when the save and the line fell in one tick of the file's
+    // clock: the editor's next save, on that mtime, is a conflict every time
+    for mood in ["good", "great", "fine again", "calm", "tired"] {
+        let text = format!("---\nmood: {mood}\n---\n# Today\n");
+        let (s, v) = t.send(reqwest::Method::PUT, "/api/file", json!({"path": rel, "text": text, "base_mtime": on_disk(), "apply_here": true})).await;
+        assert_eq!(s, StatusCode::OK, "{v}");
+        let now = std::fs::read_to_string(&log).unwrap();
+        assert!(now.contains(&format!("mood: {mood}")) && now.contains("Mood noted"), "{now}");
+        assert!(v["template"]["text"].is_null(), "no merged copy without the line: {v}");
+        let mtime = v["mtime"].as_u64().unwrap();
+        assert_ne!(mtime, on_disk(), "{mood}: the answer's mtime is the file's");
+        let lines = now.matches("Mood noted").count();
+        let (s, v) = t.send(reqwest::Method::PUT, "/api/file", json!({"path": rel, "text": text, "base_mtime": mtime, "apply_here": true})).await;
+        assert_eq!(s, StatusCode::CONFLICT, "{mood}: {v}");
+        assert_eq!(std::fs::read_to_string(&log).unwrap().matches("Mood noted").count(), lines, "{mood}: a line was saved over");
+    }
     t.stop().await;
 }

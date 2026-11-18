@@ -107,6 +107,92 @@ pub fn stop_group(pid: u32, how: Stop) {
     }
 }
 
+/// What a helper process started and left running, ended with it once it has exited itself (a worker, a `sh -c`
+/// child). Unix: its process group ([`own_group`]). Windows keeps no group once the leader is gone, so the process is put
+/// in a job object, which also ends what is left in it when the job is dropped; a program that must outlive it (a
+/// viewer it opens) can still leave the job (`CREATE_BREAKAWAY_FROM_JOB`).
+pub struct Job {
+    #[cfg(unix)]
+    group: Option<i32>,
+    #[cfg(windows)]
+    handle: windows_sys::Win32::Foundation::HANDLE,
+}
+
+// SAFETY: a job object handle may be used and closed from any thread
+#[cfg(windows)]
+unsafe impl Send for Job {}
+#[cfg(windows)]
+unsafe impl Sync for Job {}
+
+impl Job {
+    /// The job of `child`, just spawned in a group of its own. Where none can be made, ending it does nothing.
+    pub fn of(child: &tokio::process::Child) -> Self {
+        #[cfg(unix)]
+        {
+            Self { group: child.id().and_then(|p| i32::try_from(p).ok()).filter(|g| *g > 1) }
+        }
+        #[cfg(windows)]
+        {
+            use windows_sys::Win32::Foundation::CloseHandle;
+            use windows_sys::Win32::System::JobObjects::{
+                AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_BREAKAWAY_OK,
+                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            };
+            let none = Self { handle: std::ptr::null_mut() };
+            let Some(process) = child.raw_handle() else { return none };
+            // SAFETY: an unnamed job with default security; its handle is closed here on failure, or by Drop
+            unsafe {
+                let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+                if job.is_null() {
+                    return none;
+                }
+                let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+                info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+                let set = SetInformationJobObject(job, JobObjectExtendedLimitInformation, (&info as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(), std::mem::size_of_val(&info) as u32);
+                if set == 0 || AssignProcessToJobObject(job, process as _) == 0 {
+                    CloseHandle(job);
+                    return none;
+                }
+                Self { handle: job }
+            }
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = child;
+            Self {}
+        }
+    }
+
+    /// Ends what is left of the job, its leader having exited. Unix: only while the group still has a member, as its
+    /// number cannot be given to another process until the last is gone.
+    pub fn end(&self) {
+        #[cfg(unix)]
+        if let Some(group) = self.group {
+            // SAFETY: plain signal calls on a process group id; signal 0 only checks that the group has a member
+            unsafe {
+                if libc::kill(-group, 0) == 0 {
+                    libc::kill(-group, libc::SIGTERM);
+                }
+            }
+        }
+        #[cfg(windows)]
+        if !self.handle.is_null() {
+            // SAFETY: a job handle this value owns; exit code 1, never STILL_ACTIVE (259), which `pid_alive` reads as running
+            unsafe { windows_sys::Win32::System::JobObjects::TerminateJobObject(self.handle, 1) };
+        }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for Job {
+    fn drop(&mut self) {
+        if !self.handle.is_null() {
+            // SAFETY: the handle is this value's own, closed once; the job's last handle closing ends what is left in it
+            unsafe { windows_sys::Win32::Foundation::CloseHandle(self.handle) };
+        }
+    }
+}
+
 /// The program outlives the one starting it: not in its group (Unix), not on its console (Windows).
 pub fn detach(cmd: &mut std::process::Command) {
     #[cfg(unix)]

@@ -23,6 +23,10 @@ pub fn may(id: &str, path: &str) -> bool {
     if path.starts_with("/api/signin") {
         return false;
     }
+    // the user's binary approvals (pending prompts, decisions, trusted list): a helper must never approve its own run
+    if path.starts_with("/api/security") {
+        return false;
+    }
     const OWN: [&str; 6] = ["secrets", "oauth", "fetch", "settings", "update", "remove"];
     match path.strip_prefix("/api/plugins/").and_then(|r| r.split_once('/')) {
         Some((other, rest)) if OWN.iter().any(|o| rest.split('/').next() == Some(*o)) => other == id,
@@ -158,6 +162,13 @@ mod tests {
         assert!(!may("demo-a", "/api/plugins/demo-b/oauth/start") && may("demo-a", "/api/plugins/demo-a/fetch"));
         assert!(may("demo-a", "/api/plugins/demo-b/tools/find") && may("demo-a", "/api/plugins/demo-b/helper"), "its code, its rules");
         assert!(!may("demo-a", "/api/signin/door") && !may("demo-a", "/api/signin"), "a helper never plants or reads a sign-in");
+    }
+
+    #[test]
+    fn a_helper_never_reaches_the_binary_approvals() {
+        assert!(!may("demo-a", "/api/security/binaries"), "neither the pending ids nor a revoke (GET and DELETE share the path)");
+        assert!(!may("demo-a", "/api/security/binaries/decide"), "never approves its own run");
+        assert!(!may("demo-a", "/api/security"));
     }
 
     #[test]

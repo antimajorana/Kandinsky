@@ -620,10 +620,29 @@ fn fence_run(line: &str) -> Option<(char, usize)> {
     (count >= 3).then_some((first, count))
 }
 
-fn is_closing_fence(line: &str) -> Option<(char, usize)> {
-    let (ch, count) = fence_run(line)?;
-    let rest = line.trim_start()[count..].trim();
-    rest.is_empty().then_some((ch, count))
+/// Per line, whether it is fenced code (its delimiter lines included), and for each closing fence the line that opened
+/// it: the same reading as the synced-block embed, so the range written back is the range the user saw.
+fn fence_map(lines: &[&str]) -> (Vec<bool>, std::collections::HashMap<usize, usize>) {
+    let open_now = |f: kandinsky_text::fence::Fences| {
+        let mut probe = f;
+        probe.code("x")
+    };
+    let mut fences = kandinsky_text::fence::Fences::default();
+    let (mut fenced, mut spans, mut opened) = (Vec::with_capacity(lines.len()), std::collections::HashMap::new(), None);
+    for (i, line) in lines.iter().enumerate() {
+        let was_open = open_now(fences);
+        let code = fences.code(line);
+        if code && !was_open {
+            opened = Some(i);
+        }
+        if was_open && !open_now(fences) {
+            if let Some(o) = opened.take() {
+                spans.insert(i, o);
+            }
+        }
+        fenced.push(code);
+    }
+    (fenced, spans)
 }
 
 fn has_blank_line_outside_fences(text: &str) -> bool {
@@ -646,43 +665,27 @@ fn ends_with_fence(text: &str) -> bool {
 fn replace_synced_block(src: &str, bid: &str, tag: &str, replacement: &str, attach_line: Option<u32>) -> Result<String> {
     let eol = if src.contains("\r\n") { "\r\n" } else { "\n" };
     let lines: Vec<&str> = src.lines().collect();
-    let mut fences = kandinsky_text::fence::Fences::default();
-    let mut anchor_idx: Option<usize> = None;
-    for (i, line) in lines.iter().enumerate() {
-        if fences.code(line) {
-            continue;
-        }
-        let trimmed = line.trim_end();
-        if trimmed == tag || trimmed.ends_with(&format!(" {tag}")) {
-            anchor_idx = Some(i);
-            break;
-        }
-    }
+    let (fenced, fence_spans) = fence_map(&lines);
+    let anchor_idx = (0..lines.len()).find(|&i| {
+        let trimmed = lines[i].trim_end();
+        !fenced[i] && (trimmed == tag || trimmed.ends_with(&format!(" {tag}")))
+    });
     let trailing_nl = if src.ends_with('\n') { eol } else { "" };
     if let Some(idx) = anchor_idx {
         let start_marker = format!("<!-- synced:{bid} -->");
-        let marker_above = (0..idx).rev().find(|&i| lines[i].trim() == start_marker);
+        let marker_above = (0..idx).find(|&i| !fenced[i] && lines[i].trim() == start_marker);
         let trimmed = lines[idx].trim_end();
         let (start, end, standalone) = if let Some(m_idx) = marker_above {
             (m_idx, idx + 1, trimmed == tag)
         } else if trimmed == tag {
             if idx == 0 || lines[idx - 1].trim().is_empty() {
                 (idx, idx + 1, true)
+            } else if let Some(&open) = fence_spans.get(&(idx - 1)) {
+                (open, idx + 1, true)
             } else {
                 let mut s = idx - 1;
-                if let Some((f_ch, f_len)) = is_closing_fence(lines[s]) {
-                    while s > 0 {
-                        s -= 1;
-                        if let Some((o_ch, o_len)) = fence_run(lines[s]) {
-                            if o_ch == f_ch && o_len >= f_len {
-                                break;
-                            }
-                        }
-                    }
-                } else {
-                    while s > 0 && !lines[s - 1].trim().is_empty() && !lines[s - 1].trim_start().starts_with('#') {
-                        s -= 1;
-                    }
+                while s > 0 && !fenced[s - 1] && !lines[s - 1].trim().is_empty() && !lines[s - 1].trim_start().starts_with('#') {
+                    s -= 1;
                 }
                 (s, idx + 1, true)
             }
@@ -695,7 +698,7 @@ fn replace_synced_block(src: &str, bid: &str, tag: &str, replacement: &str, atta
             (idx, e, false)
         } else {
             let mut s = idx;
-            while s > 0 && !lines[s - 1].trim().is_empty() && !lines[s - 1].trim_start().starts_with('#') && !is_list_line(lines[s - 1]) {
+            while s > 0 && !fenced[s - 1] && !lines[s - 1].trim().is_empty() && !lines[s - 1].trim_start().starts_with('#') && !is_list_line(lines[s - 1]) {
                 s -= 1;
             }
             (s, idx + 1, false)
@@ -742,9 +745,20 @@ fn replace_synced_block(src: &str, bid: &str, tag: &str, replacement: &str, atta
     Err(Error::NotFound(format!("block anchor {tag} not found")))
 }
 
+/// `- `, `* `, `+ `, `1. ` or `1) ` (any whitespace after the marker), as the synced-block embed reads a list item.
 fn is_list_line(line: &str) -> bool {
     let t = line.trim_start();
-    t.starts_with("- ") || t.starts_with("* ") || t.starts_with("+ ") || t.split_once(". ").is_some_and(|(n, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+    let rest = match t.strip_prefix(['-', '*', '+']) {
+        Some(r) => r,
+        None => {
+            let digits = t.len() - t.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+            match t[digits..].strip_prefix(['.', ')']) {
+                Some(r) if digits > 0 => r,
+                _ => return false,
+            }
+        }
+    };
+    rest.starts_with(char::is_whitespace)
 }
 
 fn leading_spaces(line: &str) -> usize {
@@ -1152,5 +1166,19 @@ mod tests {
         .unwrap();
         let t_saved = std::fs::read_to_string(d.path().join("Tilde.md")).unwrap();
         assert_eq!(t_saved, "# Code\n\n~~~py\nprint(2)\n~~~\n^til1\n\nTail.\n");
+    }
+    #[test]
+    fn synced_block_write_back_keeps_neighbouring_code_and_list_items() {
+        let put = |src: &str, text: &str| replace_synced_block(src, "abc", "^abc", text, None).unwrap();
+        // a paragraph right after a fence is its own block: the code above stays
+        assert_eq!(put("```py\nprint(1)\n```\nSummary line ^abc\n", "Summary v2"), "```py\nprint(1)\n```\nSummary v2 ^abc\n");
+        // a standalone tag under a paragraph that follows a fence
+        assert_eq!(put("```\ncode\n```\npara\n^abc\n", "para v2"), "```\ncode\n```\npara v2\n^abc\n");
+        // a fence closed by a longer run than opened it is one block, and nothing above it is taken
+        assert_eq!(put("Intro\n\n```\nold\n`````\n^abc\n", "```\nnew\n```"), "Intro\n\n```\nnew\n```\n^abc\n");
+        // `N)` items and a tab after the marker are list items, as the embed reads them
+        assert_eq!(put("1) First step\n2) Second step ^abc\n", "2) Second step v2"), "1) First step\n2) Second step v2 ^abc\n");
+        assert_eq!(put("-\tone\nTwo ^abc\n", "Two v2"), "-\tone\nTwo v2 ^abc\n");
+        assert!(is_list_line("  3.\tthree") && is_list_line("+ x") && !is_list_line("2026.") && !is_list_line("-x") && !is_list_line(") x"));
     }
 }

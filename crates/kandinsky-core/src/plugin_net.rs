@@ -147,6 +147,66 @@ pub(crate) fn checked_url(perm: &Permissions, id: &str, url: &str) -> Result<req
     Ok(u)
 }
 
+/// A header a plugin's request may not carry: the core believes these from a caller on this machine (its guard header
+/// and token, `x-kandinsky…` or the older `x-atlas…`; a trusted proxy's user header; a websocket upgrade, which the
+/// guard checks by Origin instead), so a plugin sending them to a core would act as the user.
+fn header_refused(name: &str, remote_user: &str) -> bool {
+    let n = name.trim().to_ascii_lowercase();
+    // the name itself or a dash after it: another service's header that merely starts so (`X-Atlassian-Token`) is not ours
+    let ours = |p: &str| n.strip_prefix(p).is_some_and(|rest| rest.is_empty() || rest.starts_with('-'));
+    ours("x-kandinsky") || ours(crate::legacy::HEADER) || n == "remote-user" || n.eq_ignore_ascii_case(remote_user.trim()) || n == "upgrade"
+}
+
+/// The port of the core serving this vault (`cache/server.json`), when one does.
+fn core_port(root: &Path) -> Option<u16> {
+    let raw = std::fs::read_to_string(crate::state_dir::dir(root).join("cache/server.json")).ok()?;
+    serde_json::from_str::<crate::api::ServerFile>(&raw).ok().map(|f| f.port)
+}
+
+/// An address of this machine: loopback, unspecified (it connects here), or one of its own interfaces (it can be bound).
+fn this_machine(ip: std::net::IpAddr) -> bool {
+    let ip = ip.to_canonical();
+    ip.is_loopback() || ip.is_unspecified() || std::net::UdpSocket::bind((ip, 0)).is_ok()
+}
+
+/// A host name on the core's port, found elsewhere: the spellings the request's lookups may use (as written, and
+/// without a final dot), each held to the addresses found.
+type Pin = (Vec<String>, Vec<std::net::SocketAddr>);
+
+/// Where `url` goes, when it is the vault's own core (its port on this machine): `Err` names why it is refused, `Ok`
+/// the addresses a host name was found at, which the request is then held to (a second lookup cannot answer otherwise).
+fn own_core(url: &reqwest::Url, core: Option<u16>) -> std::result::Result<Option<Pin>, String> {
+    use std::net::ToSocketAddrs;
+    own_core_by(url, core, &|host, port| (host, port).to_socket_addrs().map(Iterator::collect))
+}
+
+fn own_core_by(url: &reqwest::Url, core: Option<u16>, lookup: &dyn Fn(&str, u16) -> std::io::Result<Vec<std::net::SocketAddr>>) -> std::result::Result<Option<Pin>, String> {
+    let (Some(core), Some(port)) = (core, url.port_or_known_default()) else { return Ok(None) };
+    if port != core {
+        return Ok(None);
+    }
+    let exact = url.host_str().unwrap_or_default();
+    let host = exact.trim_end_matches('.').to_ascii_lowercase();
+    let refused = || Err(format!("fetch: {host}:{port} is this vault's Kandinsky itself, which a plugin never calls through fetch"));
+    if let Ok(ip) = host.trim_start_matches('[').trim_end_matches(']').parse::<std::net::IpAddr>() {
+        return if this_machine(ip) { refused() } else { Ok(None) };
+    }
+    if host == "localhost" || host.ends_with(".localhost") {
+        return refused();
+    }
+    // a name not found now could be found later at this machine: on the core's port, nothing unpinned goes out
+    let addrs = lookup(&host, port).unwrap_or_default();
+    if addrs.is_empty() {
+        return Err(format!("fetch: {host}:{port} could not be looked up, and its port is this vault's Kandinsky's"));
+    }
+    if addrs.iter().any(|a| this_machine(a.ip())) {
+        return refused();
+    }
+    let mut names = vec![exact.to_string(), host];
+    names.dedup();
+    Ok(Some((names, addrs)))
+}
+
 /// Where `save_to` lands: inside the plugin's own cache or remote-copies folder, nowhere else.
 fn save_path(root: &Path, id: &str, save_to: &str, into: SaveIn) -> Result<(std::path::PathBuf, String)> {
     let clean = save_to.trim().trim_start_matches('/');
@@ -205,25 +265,36 @@ pub fn fetch(root: &Path, secrets: &Store, id: &str, req: &FetchRequest) -> Resu
     let url = checked_url(&perm, id, &req.url)?;
     let method = reqwest::Method::from_bytes(req.method.as_deref().unwrap_or("GET").to_ascii_uppercase().as_bytes())
         .map_err(|_| Error::BadRequest(format!("fetch: method {:?}", req.method)))?;
+    let remote_user = crate::auth::load_settings().map(|s| s.remote_user_header().to_string()).unwrap_or_default();
+    if let Some(name) = req.headers.keys().find(|n| header_refused(n, &remote_user)) {
+        return Err(Error::BadRequest(format!("fetch: plugin {id} may not send the header {name:?}: Kandinsky's own")));
+    }
+    let core = core_port(root);
+    let pinned = own_core(&url, core).map_err(Error::BadRequest)?;
     let allowed = perm.net.clone();
     // a secret in a header of the plugin's naming or in the form is not one reqwest drops on a redirect to another host
     // (it drops only Authorization and Cookie): then a redirect may not leave the host asked
     let carries_secret = req.headers.values().chain(req.form.iter().flat_map(|f| f.values())).any(|v| !matches!(v, HeaderValue::Text(_)));
     let first_host = url.host_str().unwrap_or_default().to_ascii_lowercase();
-    let client = reqwest::blocking::Client::builder().use_preconfigured_tls(crate::tls_chain::config())
+    let mut client = reqwest::blocking::Client::builder().use_preconfigured_tls(crate::tls_chain::config())
         .timeout(Duration::from_secs(req.timeout_secs.unwrap_or(DEFAULT_TIMEOUT).clamp(1, MAX_TIMEOUT)))
         .user_agent(concat!("Kandinsky/", env!("CARGO_PKG_VERSION"), " (plugin)"))
-        // a redirect is followed only to a host the plugin may reach: an allowed host cannot hand it on to another
+        // a redirect is followed only to a host the plugin may reach (an allowed host cannot hand it on to another), and
+        // never to the vault's own core — nor to any host name on its port, as its next lookup cannot be pinned here
         .redirect(reqwest::redirect::Policy::custom(move |a| {
             let host = a.url().host_str().unwrap_or_default();
-            if a.previous().len() >= 8 || !host_allowed(&allowed, host) || (carries_secret && !host.eq_ignore_ascii_case(&first_host)) {
+            if a.previous().len() >= 8 || !host_allowed(&allowed, host) || (carries_secret && !host.eq_ignore_ascii_case(&first_host)) || !matches!(own_core(a.url(), core), Ok(None)) {
                 a.stop()
             } else {
                 a.follow()
             }
-        }))
-        .build()
-        .map_err(|e| Error::Other(e.into()))?;
+        }));
+    if let Some((names, addrs)) = &pinned {
+        for name in names {
+            client = client.resolve_to_addrs(name, addrs);
+        }
+    }
+    let client = client.build().map_err(|e| Error::Other(e.into()))?;
     let asked = url.clone();
     // the OpenID sign-in a header asks for (`{ oauth: name }`): made silently when it can be, else said before anything is sent
     let oauth = req.headers.values().find_map(|v| match v {
@@ -411,6 +482,94 @@ mod tests {
         let sent = server.join().unwrap();
         assert!(sent.to_ascii_lowercase().contains("content-type: application/x-www-form-urlencoded"), "{sent}");
         assert!(sent.ends_with("api_key=tok-123&q=a+b%26c"), "{sent}");
+    }
+
+    /// The core believes a caller on this machine that sends its guard header (or a proxy's user header): a plugin's
+    /// fetch never carries those, and never goes to the vault's own core at all, not even through a redirect.
+    #[test]
+    fn a_plugin_never_reaches_its_own_core_nor_sends_the_cores_headers() {
+        let (vault, sdir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let secrets = Store::in_dir(sdir.path(), vault.path());
+        plugin(vault.path(), "title = \"Net\"\n[permissions]\nnet = [\"*\"]\n");
+        let req = |url: String, headers: &[(&str, &str)]| FetchRequest {
+            url,
+            method: Some("POST".into()),
+            quiet: None,
+            headers: headers.iter().map(|(n, v)| (n.to_string(), HeaderValue::Text(v.to_string()))).collect(),
+            body: Some("{\"id\":\"bin-1\",\"choice\":\"always_allow\"}".into()),
+            timeout_secs: Some(5),
+            save_to: None,
+            save_in: None,
+            body_file: None,
+            form: None,
+        };
+        // the stand-in core: this vault's server.json names its port, and it must never be asked anything
+        let core = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        core.set_nonblocking(true).unwrap();
+        let port = core.local_addr().unwrap().port();
+        let cache = vault.path().join(".kandinsky/cache");
+        std::fs::create_dir_all(&cache).unwrap();
+        std::fs::write(cache.join("server.json"), format!("{{\"port\":{port},\"pid\":1,\"root\":\"\"}}")).unwrap();
+
+        for name in ["x-kandinsky", "X-Kandinsky-Token", "x-atlas", "Remote-User", "Upgrade"] {
+            let e = fetch(vault.path(), &secrets, "net", &req("http://127.0.0.1:9/x".into(), &[(name, "1")])).unwrap_err().to_string();
+            assert!(e.contains("may not send the header"), "{name}: {e}");
+        }
+        for url in [format!("http://127.0.0.1:{port}/api/security/binaries/decide"), format!("http://localhost:{port}/api/x"), format!("http://[::1]:{port}/"), format!("http://0.0.0.0:{port}/")] {
+            let e = fetch(vault.path(), &secrets, "net", &req(url.clone(), &[])).unwrap_err().to_string();
+            assert!(e.contains("Kandinsky itself"), "{url}: {e}");
+        }
+        // an allowed host handing the request on to the core: the redirect is not followed
+        let location = format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{port}/api/security/binaries/decide\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        let (other, server) = serve_once(Box::leak(location.into_boxed_str()));
+        let r = fetch(vault.path(), &secrets, "net", &req(format!("http://127.0.0.1:{other}/go"), &[])).unwrap();
+        server.join().unwrap();
+        assert_eq!(r.status, 307, "the redirect is the answer");
+        assert!(matches!(core.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock), "the core was reached");
+
+        // nor to a host name on the core's port, whose next lookup could answer this machine
+        let location = format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: http://pin.invalid:{port}/api/x\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        let (other, server) = serve_once(Box::leak(location.into_boxed_str()));
+        assert_eq!(fetch(vault.path(), &secrets, "net", &req(format!("http://127.0.0.1:{other}/go"), &[])).unwrap().status, 307);
+        server.join().unwrap();
+        // a name on the core's port that is not found is refused, not left to a later lookup
+        assert!(fetch(vault.path(), &secrets, "net", &req(format!("http://pin.invalid.:{port}/"), &[])).is_err());
+        assert!(matches!(core.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock), "the core was reached");
+
+        // any other port of this machine is still the plugin's to reach (its own local service), and another service's
+        // header that merely starts like the core's goes out
+        let (other, server) = serve_once("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+        assert_eq!(fetch(vault.path(), &secrets, "net", &req(format!("http://localhost:{other}/"), &[("x-plain", "1"), ("X-Atlassian-Token", "no-check")])).unwrap().text, "ok");
+        assert!(server.join().unwrap().to_ascii_lowercase().contains("x-atlassian-token: no-check"));
+    }
+
+    #[test]
+    fn only_the_cores_own_headers_are_refused() {
+        for name in ["x-kandinsky", "X-Kandinsky-Token", "x-kandinsky-client", "x-atlas", "X-Atlas-Token", " x-atlas-client ", "Remote-User", "Upgrade"] {
+            assert!(header_refused(name, "Remote-User"), "{name}");
+        }
+        for name in ["X-Atlassian-Token", "x-atlasx", "x-kandinskyish", "x-plain", "authorization"] {
+            assert!(!header_refused(name, "Remote-User"), "{name}");
+        }
+        assert!(header_refused("X-Forwarded-User", "x-forwarded-user"), "the proxy's user header as configured");
+    }
+
+    /// A host name on the core's port is held to the addresses found, under the spelling the request will look up
+    /// (a final dot kept) as well as without it; one not found, or found at this machine, is refused.
+    #[test]
+    fn a_host_name_on_the_cores_port_is_pinned_under_every_spelling_or_refused() {
+        let elsewhere: std::net::SocketAddr = "203.0.113.7:4000".parse().unwrap();
+        let url = |u: &str| reqwest::Url::parse(u).unwrap();
+        let found = |_: &str, _: u16| Ok(vec![elsewhere]);
+        let (names, addrs) = own_core_by(&url("http://rebind.example.:4000/"), Some(4000), &found).unwrap().expect("pinned");
+        assert_eq!((names, addrs), (vec!["rebind.example.".to_string(), "rebind.example".to_string()], vec![elsewhere]));
+        let (names, _) = own_core_by(&url("http://rebind.example:4000/"), Some(4000), &found).unwrap().expect("pinned");
+        assert_eq!(names, ["rebind.example"]);
+        assert!(own_core_by(&url("http://rebind.example:4000/"), Some(4000), &|_, _| Err(std::io::ErrorKind::NotFound.into())).is_err(), "a failed lookup");
+        assert!(own_core_by(&url("http://rebind.example:4000/"), Some(4000), &|_, _| Ok(vec![])).is_err(), "an empty answer");
+        assert!(own_core_by(&url("http://rebind.example:4000/"), Some(4000), &|_, _| Ok(vec!["127.0.0.1:4000".parse().unwrap()])).is_err(), "this machine");
+        // another port is not the core's: no lookup, nothing pinned
+        assert_eq!(own_core_by(&url("http://rebind.example:4001/"), Some(4000), &|_, _| unreachable!()).unwrap(), None);
     }
 
     #[test]

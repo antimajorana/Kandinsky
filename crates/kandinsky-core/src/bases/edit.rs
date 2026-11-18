@@ -104,6 +104,11 @@ pub fn new_row(root: &Path, cfg: &Config, base_rel: &str, base_src: &str, view: 
             }
         }
     }
+    // one new row per vault at a time from reading the highest auto-ID to creating the note, so two quick "+ New"
+    // never take the same ID (the next one's scan sees the note this one created)
+    static NEW_ROW: crate::key_lock::KeyLocks = crate::key_lock::KeyLocks::new();
+    let one = NEW_ROW.get(root);
+    let turn = one.lock().unwrap_or_else(|e| e.into_inner());
     assign_auto_ids(root, cfg, &mut keys);
     let mut fm = String::new();
     for (k, v) in &keys {
@@ -130,6 +135,7 @@ pub fn new_row(root: &Path, cfg: &Config, base_rel: &str, base_src: &str, view: 
         }
     }
     let rel = made.ok_or_else(|| Error::BadRequest("too many Untitled notes".into()))?;
+    drop(turn);
     let r = evaluate(root, cfg, base_src, None);
     let v = view.and_then(|n| r.views.iter().find(|v| v.name == n)).or(r.views.first());
     let matches = v.is_some_and(|v| v.rows.iter().any(|row| row.path == rel));
@@ -570,6 +576,37 @@ mod tests {
         assert!(d.path().join("db/items/Untitled 1.md").exists(), "never overwrites");
         let out = "filters: 'file.inFolder(\"../out\")'\nviews: [{type: table}]\n";
         assert!(new_row(d.path(), &Config::default(), "db/items.base", out, None).is_err(), "a folder out of the vault is refused");
+    }
+
+    #[test]
+    fn rows_added_at_once_take_distinct_auto_ids() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(d.path().join("templates")).unwrap();
+        std::fs::create_dir_all(d.path().join("db")).unwrap();
+        std::fs::write(d.path().join("templates/properties.yaml"), "properties:\n  code: {kind: auto_id, prefix: \"PRJ-\", padding: 3}\n").unwrap();
+        std::fs::write(d.path().join("db/First.md"), "---\ncode: PRJ-004\n---\n").unwrap();
+        let base = "filters: 'file.inFolder(\"db\")'\nviews:\n  - type: table\n    order: [file.name, note.code]\n";
+        let start = std::sync::Barrier::new(4);
+        let made: Vec<String> = std::thread::scope(|s| {
+            let hs: Vec<_> = (0..4)
+                .map(|_| {
+                    s.spawn(|| {
+                        start.wait();
+                        new_row(d.path(), &Config::default(), "db.base", base, None).unwrap().path
+                    })
+                })
+                .collect();
+            hs.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        let mut codes: Vec<String> = made
+            .iter()
+            .map(|p| {
+                let text = std::fs::read_to_string(d.path().join(p)).unwrap();
+                text.lines().find_map(|l| l.strip_prefix("code: ")).unwrap().to_string()
+            })
+            .collect();
+        codes.sort();
+        assert_eq!(codes, ["PRJ-005", "PRJ-006", "PRJ-007", "PRJ-008"]);
     }
 
     #[test]

@@ -37,6 +37,12 @@ const IDLE_TICK: Duration = Duration::from_millis(if cfg!(test) { 20 } else { 15
 /// How long a stopping process helper gets after stdin EOF before falling back to process-group kill.
 const STOP_GRACE: Duration = Duration::from_millis(250);
 const STOP_POLL: Duration = Duration::from_millis(10);
+/// A refusal of a helper's program that took about this long was its approval prompt running out unanswered (binary_trust
+/// waits 30 s), not the user's Deny.
+const APPROVAL_WAIT: Duration = Duration::from_secs(29);
+/// After a prompt ran out, a late "Allow" there still starts the helper: looked for this often, for this long.
+const LATE_ALLOW_EVERY: Duration = Duration::from_secs(5);
+const LATE_ALLOW_FOR: Duration = Duration::from_secs(600);
 
 type Reply = oneshot::Sender<std::result::Result<Value, String>>;
 
@@ -44,6 +50,8 @@ struct PipeExit {
     child: Mutex<Option<tokio::process::Child>>,
     status: Mutex<Option<String>>,
     done: AtomicBool,
+    /// what the helper started, ended with it when it exits on stdin EOF and leaves them running
+    job: crate::platform::proc::Job,
 }
 
 /// Where the core's lines to a helper go: a process's stdin, or a JS helper's context (js_helper.rs).
@@ -127,11 +135,12 @@ impl Running {
     }
 
     fn finish_stop(pid: Option<u32>, exit: &PipeExit) {
-        if !Self::pipe_exited(pid, exit) {
-            if let Some(pid) = pid {
-                // the whole group: a helper started through `sh -c` is the shell's child
-                crate::platform::proc::stop_group(pid, crate::platform::proc::Stop::Ask);
-            }
+        if Self::pipe_exited(pid, exit) {
+            // it ended on stdin EOF, but what it started (a worker, a `sh -c` child) may still run
+            exit.job.end();
+        } else if let Some(pid) = pid {
+            // the whole group: a helper started through `sh -c` is the shell's child
+            crate::platform::proc::stop_group(pid, crate::platform::proc::Stop::Ask);
         }
     }
 
@@ -198,6 +207,10 @@ pub struct Helpers {
     /// the vault's routes, answering the helpers' calls back in-process (helper_api.rs); unset where nothing serves the
     /// vault, and a call is then answered 503
     routes: Arc<RwLock<Option<axum::Router>>>,
+    /// helpers to start with the vault that could not start before a window was there (one may need the user's
+    /// approval of its program): tried again when a window connects ([`Helpers::window_seen`]), until one starts or the
+    /// user denies it
+    deferred: Arc<Mutex<Vec<String>>>,
 }
 
 fn manifest_stamp(root: &Path, id: &str) -> Option<std::time::SystemTime> {
@@ -235,7 +248,7 @@ fn log(root: &Path, id: &str, line: &str) {
 
 impl Helpers {
     pub fn new(root: &Path, bus: EventBus) -> Self {
-        Self { root: root.to_path_buf(), bus, slots: Arc::default(), starting: Arc::default(), routes: Arc::default() }
+        Self { root: root.to_path_buf(), bus, slots: Arc::default(), starting: Arc::default(), routes: Arc::default(), deferred: Arc::default() }
     }
 
     /// The routes the helpers' calls go through (the server, once the vault's router exists).
@@ -280,6 +293,98 @@ impl Helpers {
     /// Starts the helper of `id` if it is not running (`[helper] start = "open"`).
     pub fn start(&self, id: &str) -> Result<()> {
         self.running(id).map(|_| ())
+    }
+
+    /// Starts the helpers `ids` as the vault opens. One that does not start yet (its program awaits the user's
+    /// approval, and no window is there to ask) is tried again when the first window connects, never refused for good.
+    /// Never waits: a start here cannot ask anyone, so it fails at once.
+    pub fn start_with_vault(&self, ids: Vec<String>) {
+        for id in ids {
+            if let Err(e) = self.start(&id) {
+                eprintln!("kandinsky: plugin {id}: its helper did not start with the vault (tried again when a window opens): {e}");
+                log(&self.root, &id, &format!("[kandinsky] not started with the vault, tried again when a window opens: {e}"));
+                self.deferred.lock().unwrap().push(id);
+            }
+        }
+    }
+
+    /// A window connected (its events socket): the helpers [`Self::start_with_vault`] could not start are started now,
+    /// so an approval prompt reaches that window. In the background: a start may wait for the user's answer.
+    pub fn window_seen(&self) {
+        let ids = std::mem::take(&mut *self.deferred.lock().unwrap());
+        if ids.is_empty() {
+            return;
+        }
+        let me = self.clone();
+        tokio::spawn(async move {
+            for id in ids {
+                let one = me.clone();
+                let _ = tokio::task::spawn_blocking(move || one.retry(&id)).await;
+            }
+        });
+    }
+
+    /// One helper [`Self::window_seen`] took up: started if it still starts with the vault (switched on, not blocked,
+    /// `start = "open"`), and kept for the next window when it did not start for any reason but the user's own Deny.
+    fn retry(&self, id: &str) {
+        let still = crate::config::Config::load(&self.root).map(|c| plugins::helpers_started_with_vault(&self.root, &c.plugins.off));
+        if !still.is_ok_and(|ids| ids.iter().any(|i| i == id)) {
+            log(&self.root, id, "[kandinsky] no longer started with the vault (switched off, blocked or changed): not started");
+            return;
+        }
+        let asked = Instant::now();
+        let Err(e) = self.start(id) else { return };
+        eprintln!("kandinsky: plugin {id}: its helper did not start with the vault: {e}");
+        log(&self.root, id, &format!("[kandinsky] did not start with the vault: {e}"));
+        // binary_trust says no the same way to a Deny and to a prompt that ran out: only the time taken tells them apart
+        let denied = e.to_string().contains("execution denied");
+        if denied && asked.elapsed() < APPROVAL_WAIT {
+            return; // the user's answer: not asked again this session
+        }
+        {
+            let mut deferred = self.deferred.lock().unwrap();
+            if !deferred.iter().any(|d| d == id) {
+                deferred.push(id.to_string());
+            }
+        }
+        if denied {
+            self.start_when_allowed(id);
+        }
+    }
+
+    /// The approval prompt for `id`'s helper ran out unanswered: an "Allow" given there later still counts, so the
+    /// helper starts once its program is allowed, without waiting for the next window.
+    fn start_when_allowed(&self, id: &str) {
+        let (me, id) = (self.clone(), id.to_string());
+        tokio::spawn(async move {
+            let until = Instant::now() + LATE_ALLOW_FOR;
+            while Instant::now() < until {
+                tokio::time::sleep(LATE_ALLOW_EVERY).await;
+                if !me.deferred.lock().unwrap().contains(&id) {
+                    return; // a window took it up meanwhile
+                }
+                let (one, i) = (me.clone(), id.clone());
+                if tokio::task::spawn_blocking(move || one.approved_now(&i)).await.unwrap_or(false) {
+                    me.deferred.lock().unwrap().retain(|d| *d != id);
+                    let _ = tokio::task::spawn_blocking(move || me.retry(&id)).await;
+                    return;
+                }
+            }
+        });
+    }
+
+    /// Whether `id`'s helper program may run now without asking anyone: allowed earlier, or needing no approval. Asked
+    /// on a bus no window listens to, so an unapproved program is refused at once and nobody is prompted.
+    fn approved_now(&self, id: &str) -> bool {
+        match plugins::helper_program(&self.root, id) {
+            Ok(plugins::HelperProgram::Js(_)) => true,
+            Ok(plugins::HelperProgram::Command(run)) => {
+                let Ok(env) = self.process_env(id) else { return false };
+                let Ok(plan) = crate::platform::run_line::plan(&run, &self.root, &crate::env::with_legacy(&env)) else { return false };
+                crate::binary_trust::authorize_blocking(&self.root, id, &plan.program, &plan.args, Some(&EventBus::default())).is_ok()
+            }
+            Err(_) => false,
+        }
     }
 
     /// The running helper of `id`, started now if it is not.
@@ -336,21 +441,14 @@ impl Helpers {
 
     /// `[helper] run`: the program, its stdout read for answers, its stderr into the log.
     fn start_process(&self, id: &str, run: &str, stamp: Option<std::time::SystemTime>, now: Instant) -> Result<Arc<Running>> {
-        let dir = crate::state_dir::join(&self.root, plugins::PLUGINS_DIR).join(id);
-        let cache = crate::state_dir::dir(&self.root).join("cache/plugins").join(id);
-        crate::vault_write::cache::mkdir(&cache)?;
-        let mut env = vec![
-            ("KANDINSKY_ROOT".to_string(), self.root.clone().into_os_string()),
-            ("KANDINSKY_PLUGIN_DIR".to_string(), dir.into_os_string()),
-            ("KANDINSKY_PLUGIN_TARGET".to_string(), plugins::target().into()),
-            ("KANDINSKY_PLUGIN_CACHE".to_string(), cache.into_os_string()),
-        ];
-        // the core's address and the plugin's key: helper_api.rs
-        env.extend(crate::helper_api::env(&self.root, id).into_iter().map(|(k, v)| (k.to_string(), std::ffi::OsString::from(v))));
+        let env = self.process_env(id)?;
         let plan_env = crate::env::with_legacy(&env);
         if let Ok(plan) = crate::platform::run_line::plan(run, &self.root, &plan_env) {
-            crate::binary_trust::authorize_blocking(&self.root, id, &plan.program, &plan.args, Some(&self.bus))
-                .map_err(|e| Error::CommandFailed(format!("plugin {id}: helper: {e}")))?;
+            crate::binary_trust::authorize_blocking(&self.root, id, &plan.program, &plan.args, Some(&self.bus)).map_err(|e| match e {
+                // a plugin without its build for this computer says so, as when the spawn itself finds nothing
+                Error::NotFound(_) => Error::CommandFailed(format!("plugin {id}: helper: {}", spawn_failed(run, &std::io::ErrorKind::NotFound.into()))),
+                e => Error::CommandFailed(format!("plugin {id}: helper: {e}")),
+            })?;
         }
         let mut cmd = crate::platform::run_line::command(run, &self.root, &env).map_err(|e| Error::CommandFailed(format!("plugin {id}: helper: {e}")))?;
         cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
@@ -361,10 +459,12 @@ impl Helpers {
             return Err(Error::CommandFailed(format!("plugin {id}: helper: no pipes")));
         };
         let pid = child.id();
+        let job = crate::platform::proc::Job::of(&child);
         let exit = Arc::new(PipeExit {
             child: Mutex::new(Some(child)),
             status: Mutex::new(None),
             done: AtomicBool::new(false),
+            job,
         });
         let input = Input::Pipe {
             stdin: tokio::sync::Mutex::new(Some(stdin)),
@@ -412,6 +512,22 @@ impl Helpers {
             me.ended(&pid, &mine, &status);
         });
         Ok(r)
+    }
+
+    /// The environment `id`'s helper process starts with (its cache folder made).
+    fn process_env(&self, id: &str) -> Result<Vec<(String, std::ffi::OsString)>> {
+        let dir = crate::state_dir::join(&self.root, plugins::PLUGINS_DIR).join(id);
+        let cache = crate::state_dir::dir(&self.root).join("cache/plugins").join(id);
+        crate::vault_write::cache::mkdir(&cache)?;
+        let mut env = vec![
+            ("KANDINSKY_ROOT".to_string(), self.root.clone().into_os_string()),
+            ("KANDINSKY_PLUGIN_DIR".to_string(), dir.into_os_string()),
+            ("KANDINSKY_PLUGIN_TARGET".to_string(), plugins::target().into()),
+            ("KANDINSKY_PLUGIN_CACHE".to_string(), cache.into_os_string()),
+        ];
+        // the core's address and the plugin's key: helper_api.rs
+        env.extend(crate::helper_api::env(&self.root, id).into_iter().map(|(k, v)| (k.to_string(), std::ffi::OsString::from(v))));
+        Ok(env)
     }
 
     /// `[helper] js`: the script in a QuickJS context of its own; its lines read as a process's stdout would be.
@@ -908,5 +1024,127 @@ fn main() {
         }
         let log = std::fs::read_to_string(t.path().join(".kandinsky/cache/plugins/g.log")).unwrap();
         assert!(log.contains("graceful-eof"), "helper did not observe stdin EOF before kill: {log}");
+    }
+
+    /// Compiles `code` into plugin `id`'s helper in vault `root` (`bin/<target>/helper`), its manifest pointing at it.
+    fn compiled_helper(root: &Path, id: &str, code: &str) {
+        let d = root.join(".kandinsky/plugins").join(id);
+        let out = d.join("bin").join(crate::plugins::target());
+        std::fs::create_dir_all(&out).unwrap();
+        let src = d.join("helper.rs");
+        std::fs::write(&src, code).unwrap();
+        let built = std::process::Command::new(std::env::var("RUSTC").unwrap_or("rustc".into()))
+            .arg("-o")
+            .arg(out.join(format!("helper{}", std::env::consts::EXE_SUFFIX)))
+            .arg(&src)
+            .status()
+            .unwrap();
+        assert!(built.success(), "rustc");
+        std::fs::write(d.join("plugin.toml"), "title = \"G\"\n[helper]\nrun = \"\\\"$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET/helper\\\"\"\nstart = \"open\"\n").unwrap();
+    }
+
+    const ANSWERS: &str = r#"use std::io::BufRead;
+fn main() {
+    for l in std::io::stdin().lock().lines() {
+        let l = l.unwrap();
+        let id: String = l.split("\"id\":").nth(1).unwrap().chars().take_while(|c| c.is_ascii_digit()).collect();
+        println!("{{\"id\":{id},\"result\":true}}");
+    }
+}"#;
+
+    async fn state_soon(h: &Helpers, id: &str, want: &str) -> &'static str {
+        for _ in 0..500 {
+            if h.state(id) == want {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        h.state(id)
+    }
+
+    /// A helper started with the vault that cannot start before a window is there (its program awaits approval) is
+    /// not given up: it is tried again as windows connect, until it starts, and only while it still starts with the vault.
+    #[tokio::test]
+    async fn a_helper_that_could_not_start_with_the_vault_starts_when_a_window_connects() {
+        let t = tempfile::tempdir().unwrap();
+        compiled_helper(t.path(), "g", ANSWERS);
+        let bin = t.path().join(".kandinsky/plugins/g/bin");
+        let away = t.path().join("bin-away");
+        std::fs::rename(&bin, &away).unwrap(); // its starts fail
+        let h = Helpers::new(t.path(), EventBus::default());
+        h.start_with_vault(vec!["g".into()]);
+        assert_eq!(h.state("g"), "stopped");
+        h.window_seen(); // fails again (not the user's Deny): kept for the next window
+        for _ in 0..500 {
+            if !h.deferred.lock().unwrap().is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(h.deferred.lock().unwrap().as_slice(), ["g"], "kept after a failed retry");
+        std::fs::rename(&away, &bin).unwrap();
+        h.window_seen();
+        assert_eq!(state_soon(&h, "g", "running").await, "running", "started once a window connected");
+        assert!(h.deferred.lock().unwrap().is_empty());
+        h.stop("g");
+        h.window_seen(); // another window: nothing left to start
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(h.state("g"), "stopped", "started once, not at every window");
+
+        // switched off before any window came: never started by one
+        std::fs::rename(&bin, &away).unwrap();
+        h.start_with_vault(vec!["g".into()]);
+        std::fs::rename(&away, &bin).unwrap();
+        std::fs::write(t.path().join(".kandinsky/config.toml"), "[plugins]\noff = [\"g\"]\n").unwrap();
+        h.window_seen();
+        let log = || std::fs::read_to_string(t.path().join(".kandinsky/cache/plugins/g.log")).unwrap_or_default();
+        for _ in 0..500 {
+            if log().contains("no longer started with the vault") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(log().contains("no longer started with the vault"), "{}", log());
+        assert_eq!(h.state("g"), "stopped", "a switched-off plugin's helper started");
+        assert!(h.deferred.lock().unwrap().is_empty(), "dropped, not kept for later");
+    }
+
+    /// A helper that exits on stdin EOF but left a process of its own running: the stop still ends that process (a
+    /// process group on Unix, a job object on Windows).
+    #[tokio::test]
+    async fn a_stopped_helper_takes_the_processes_it_left_behind_with_it() {
+        let t = tempfile::tempdir().unwrap();
+        compiled_helper(
+            t.path(),
+            "g",
+            r#"use std::io::BufRead;
+fn main() {
+    if std::env::args().nth(1).as_deref() == Some("linger") {
+        std::thread::sleep(std::time::Duration::from_secs(120));
+        return;
+    }
+    // started at the first call, as a worker would be
+    let mut child = None;
+    for l in std::io::stdin().lock().lines() {
+        let child = child.get_or_insert_with(|| std::process::Command::new(std::env::current_exe().unwrap()).arg("linger")
+            .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null())
+            .spawn().unwrap());
+        let l = l.unwrap();
+        let id: String = l.split("\"id\":").nth(1).unwrap().chars().take_while(|c| c.is_ascii_digit()).collect();
+        println!("{{\"id\":{id},\"result\":{}}}", child.id());
+    }
+}"#,
+        );
+        let h = Helpers::new(t.path(), EventBus::default());
+        let child = h.call("g", "pid", Value::Null, CALL_TIMEOUT).await.unwrap().as_u64().unwrap() as u32;
+        assert!(crate::platform::proc::pid_alive(child));
+        h.stop("g");
+        for _ in 0..500 {
+            if !crate::platform::proc::pid_alive(child) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(!crate::platform::proc::pid_alive(child), "the helper's own child outlived its stop");
     }
 }

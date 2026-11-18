@@ -234,29 +234,80 @@ pub fn revoke(command: &str, sha256: Option<&str>) -> Result<Vec<TrustedBinary>>
     })
 }
 
-pub fn file_sha256(exe: &Path) -> String {
+/// The SHA-256 of the file's bytes; a file that cannot be read whole is an error, never a partial or stand-in hash.
+pub fn file_sha256(exe: &Path) -> std::io::Result<String> {
+    sha256_of(std::fs::File::open(exe)?)
+}
+
+fn sha256_of(mut f: std::fs::File) -> std::io::Result<String> {
+    use std::io::Read;
     let mut h = Sha256::new();
-    match std::fs::File::open(exe) {
-        Ok(mut f) => {
-            use std::io::Read;
-            let mut buf = [0u8; 64 * 1024];
-            loop {
-                match f.read(&mut buf) {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => h.update(&buf[..n]),
-                }
-            }
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        match f.read(&mut buf)? {
+            0 => break,
+            n => h.update(&buf[..n]),
         }
-        Err(_) => h.update(exe.to_string_lossy().as_bytes()),
     }
-    format!("{:x}", h.finalize())
+    Ok(format!("{:x}", h.finalize()))
+}
+
+/// What identifies the program that will run: its bytes' SHA-256. In a Flatpak the program runs on the host
+/// (`flatpak-spawn --host`), so the host's file is hashed there, not the sandbox's file at the same path.
+fn fingerprint(exe: &Path) -> std::io::Result<String> {
+    if crate::platform::host::sandboxed() {
+        return host_sha256(exe);
+    }
+    match std::fs::File::open(exe) {
+        Ok(f) => sha256_of(f),
+        // only a file that is there but refuses to open: a read failing part way is an error
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound && exe.is_file() => unreadable_fingerprint(exe),
+        Err(e) => Err(e),
+    }
+}
+
+/// A program that exists but cannot be opened for reading (a Windows app execution alias, an execute-only file):
+/// known by its path and file identity, so replacing the file still asks again.
+fn unreadable_fingerprint(exe: &Path) -> std::io::Result<String> {
+    let meta = std::fs::symlink_metadata(exe)?;
+    let modified = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos());
+    let mut h = Sha256::new();
+    h.update(b"unreadable\0");
+    h.update(exe.to_string_lossy().as_bytes());
+    h.update(format!("\0{}\0{modified}\0{}", meta.len(), crate::platform::proc::file_id(&meta)).as_bytes());
+    Ok(format!("{:x}", h.finalize()))
+}
+
+/// The host's own `sha256sum` of `exe` (Flatpak).
+fn host_sha256(exe: &Path) -> std::io::Result<String> {
+    let out = std::process::Command::new("flatpak-spawn")
+        .args(["--host", "sha256sum", "--"])
+        .arg(exe)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    match out.status.success().then(|| parse_sha256sum(&text)).flatten() {
+        Some(sha) => Ok(sha),
+        None => Err(std::io::Error::new(std::io::ErrorKind::NotFound, "the host has no such program, or cannot read it")),
+    }
+}
+
+/// The hash from a `sha256sum` line (`<64 hex>  <path>`; a leading `\` marks an escaped file name).
+fn parse_sha256sum(out: &str) -> Option<String> {
+    let sha = out.split_whitespace().next()?.trim_start_matches('\\');
+    (sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit())).then(|| sha.to_ascii_lowercase())
 }
 
 fn resolve_exe(program: &Path, cwd: &Path) -> PathBuf {
+    let sandboxed = crate::platform::host::sandboxed();
     let cand = if program.is_absolute() {
         program.to_path_buf()
     } else if program.components().count() > 1 {
         cwd.join(program)
+    } else if sandboxed {
+        // a bare name runs from the host's PATH, not the sandbox's
+        crate::platform::host::find(&program.to_string_lossy()).unwrap_or_else(|| program.to_path_buf())
     } else {
         std::env::var_os("PATH")
             .and_then(|p| {
@@ -265,6 +316,10 @@ fn resolve_exe(program: &Path, cwd: &Path) -> PathBuf {
             })
             .unwrap_or_else(|| program.to_path_buf())
     };
+    // the sandbox's links are not the host's: a host path is kept as given, and the host resolves it
+    if sandboxed {
+        return cand;
+    }
     clean_path(cand.canonicalize().unwrap_or(cand))
 }
 
@@ -276,7 +331,7 @@ fn dir_contains_matching_sha(dir: &Path, file_name: &std::ffi::OsStr, target_sha
             if dir_contains_matching_sha(&p, file_name, target_sha) {
                 return true;
             }
-        } else if p.is_file() && p.file_name() == Some(file_name) && file_sha256(&p) == target_sha {
+        } else if p.is_file() && p.file_name() == Some(file_name) && file_sha256(&p).is_ok_and(|s| s == target_sha) {
             return true;
         }
     }
@@ -309,7 +364,7 @@ fn is_trusted_bundled_binary_in(root: &Path, plugin: &str, exe: &Path, bdir: &Pa
         return false;
     }
     let Some(name) = canon_exe.file_name() else { return false };
-    let target_sha = file_sha256(&canon_exe);
+    let Ok(target_sha) = file_sha256(&canon_exe) else { return false };
     dir_contains_matching_sha(&bundled_plugin, name, &target_sha)
 }
 
@@ -345,9 +400,12 @@ fn is_already_allowed(command: &str, sha256: &str, trust_file: &Path) -> bool {
         .any(|t| clean_cmd_str(&t.command) == cmd && t.sha256 == sha256)
 }
 
-fn build_request(plugin: &str, exe: &Path, args: &[String]) -> (String, PendingBinaryApproval) {
+fn build_request(plugin: &str, exe: &Path, args: &[String]) -> Result<(String, PendingBinaryApproval)> {
     let cmd_str = clean_path(exe.to_path_buf()).to_string_lossy().to_string();
-    let sha256 = file_sha256(exe);
+    let sha256 = fingerprint(exe).map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => Error::NotFound(format!("cannot run `{cmd_str}`: no such program was found")),
+        _ => Error::BadRequest(format!("cannot run `{cmd_str}`: it cannot be read to verify it ({e})")),
+    })?;
     let id = format!("bin-{}", SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
     let info = PendingBinaryApproval {
         id: id.clone(),
@@ -357,7 +415,16 @@ fn build_request(plugin: &str, exe: &Path, args: &[String]) -> (String, PendingB
         sha256,
         reason: "External OS executable requested by a workspace or community plugin".into(),
     };
-    (id, info)
+    Ok((id, info))
+}
+
+/// Refused for want of anyone to ask (an offline CLI command, `kandinsky mcp`, no window open): fails closed, and says
+/// how to get the program approved.
+fn no_window(info: &PendingBinaryApproval) -> Error {
+    Error::BadRequest(format!(
+        "blocked untrusted binary `{}` (sha256 {}): it needs your approval and no Kandinsky window is open to ask. Open Kandinsky on this vault and run this again: choose \"Always allow\" in the prompt, and later runs need no window (Settings → Plugins lists the trusted binaries)",
+        info.command, info.sha256
+    ))
 }
 
 pub async fn authorize_async(
@@ -371,15 +438,12 @@ pub async fn authorize_async(
     if should_bypass(root, plugin, &exe, false) {
         return Ok(());
     }
-    let (id, info) = build_request(plugin, &exe, args);
+    let (id, info) = build_request(plugin, &exe, args)?;
     if is_already_allowed(&info.command, &info.sha256, &trust_file_path()) {
         return Ok(());
     }
     let Some(bus) = active_bus(root, bus) else {
-        return Err(Error::BadRequest(format!(
-            "blocked untrusted binary `{}` (sha256 {}): no active UI approval channel",
-            info.command, info.sha256
-        )));
+        return Err(no_window(&info));
     };
     let (tx, rx) = tokio::sync::oneshot::channel();
     {
@@ -390,10 +454,7 @@ pub async fn authorize_async(
         if let Ok(mut p) = PENDING.lock() {
             p.remove(&id);
         }
-        return Err(Error::BadRequest(format!(
-            "blocked untrusted binary `{}` (sha256 {}): no active UI approval channel",
-            info.command, info.sha256
-        )));
+        return Err(no_window(&info));
     }
     let decision = match tokio::time::timeout(APPROVAL_TIMEOUT, rx).await {
         Ok(Ok(choice)) => choice,
@@ -437,15 +498,12 @@ fn authorize_blocking_inner(
     if should_bypass(root, plugin, &exe, force_prompt) {
         return Ok(());
     }
-    let (id, info) = build_request(plugin, &exe, args);
+    let (id, info) = build_request(plugin, &exe, args)?;
     if is_already_allowed(&info.command, &info.sha256, trust_file) {
         return Ok(());
     }
     let Some(bus) = active_bus(root, bus) else {
-        return Err(Error::BadRequest(format!(
-            "blocked untrusted binary `{}` (sha256 {}): no active UI approval channel",
-            info.command, info.sha256
-        )));
+        return Err(no_window(&info));
     };
     let (tx, rx) = std::sync::mpsc::channel();
     {
@@ -456,10 +514,7 @@ fn authorize_blocking_inner(
         if let Ok(mut p) = PENDING.lock() {
             p.remove(&id);
         }
-        return Err(Error::BadRequest(format!(
-            "blocked untrusted binary `{}` (sha256 {}): no active UI approval channel",
-            info.command, info.sha256
-        )));
+        return Err(no_window(&info));
     }
     let decision = match rx.recv_timeout(APPROVAL_TIMEOUT) {
         Ok(choice) => choice,
@@ -503,7 +558,7 @@ mod tests {
         let ev = rx.blocking_recv().unwrap();
         let Event::BinaryApproval(req) = ev else { panic!("expected BinaryApproval") };
         assert_eq!(req.plugin, "community-plugin");
-        assert_eq!(req.sha256, file_sha256(&exe));
+        assert_eq!(req.sha256, file_sha256(&exe).unwrap());
         decide(&BinaryDecision { id: req.id, choice: BinaryApprovalChoice::AllowOnce }).unwrap();
         assert!(rx_done.recv().unwrap().is_ok());
 
@@ -573,8 +628,50 @@ mod tests {
         let bus = EventBus::default();
         let start = std::time::Instant::now();
         let res = authorize_blocking_inner(dir.path(), "community-plugin", &exe, &[], Some(&bus), &trust, true);
-        assert!(res.is_err());
+        let said = res.unwrap_err().to_string();
         assert!(start.elapsed() < Duration::from_secs(2), "headless bus blocked for {:?}", start.elapsed());
+        // fails closed, and says which program and how to approve it
+        assert!(said.contains("tool.sh") && said.contains("Always allow") && said.contains("no Kandinsky window is open"), "{said}");
+    }
+
+    #[test]
+    fn a_program_that_cannot_be_read_is_never_hashed_as_its_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let trust = dir.path().join("trusted.json");
+        let gone = dir.path().join("not-there");
+        assert!(file_sha256(&gone).is_err() && fingerprint(&gone).is_err());
+        let res = authorize_blocking_inner(dir.path(), "community-plugin", &gone, &[], Some(&EventBus::default()), &trust, true);
+        assert!(matches!(res, Err(Error::NotFound(_))), "a missing program is refused, not approved by its name: {res:?}");
+        // the stand-in for an unopenable file follows the file, not only its name
+        let exe = dir.path().join("tool.sh");
+        std::fs::write(&exe, b"one").unwrap();
+        let a = unreadable_fingerprint(&exe).unwrap();
+        std::fs::remove_file(&exe).unwrap();
+        std::fs::write(&exe, b"other bytes").unwrap();
+        assert_ne!(a, unreadable_fingerprint(&exe).unwrap(), "replaced: asked again");
+    }
+
+    #[test]
+    fn a_bare_program_name_on_the_path_is_found_and_asked_about() {
+        let dir = tempfile::tempdir().unwrap();
+        let trust = dir.path().join("trusted.json");
+        let bus = EventBus::default();
+        let mut rx = bus.subscribe();
+        let (root_c, trust_c, bus_c) = (dir.path().to_path_buf(), trust.clone(), bus.clone());
+        let asked = std::thread::spawn(move || authorize_blocking_inner(&root_c, "community-plugin", Path::new("rustc"), &[], Some(&bus_c), &trust_c, true));
+        let Event::BinaryApproval(req) = rx.blocking_recv().unwrap() else { panic!("expected BinaryApproval") };
+        assert!(Path::new(&req.command).is_absolute(), "{}", req.command);
+        decide(&BinaryDecision { id: req.id, choice: BinaryApprovalChoice::Deny }).unwrap();
+        assert!(asked.join().unwrap().is_err());
+    }
+
+    #[test]
+    fn the_hosts_sha256sum_is_read() {
+        let sha = "9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08";
+        assert_eq!(parse_sha256sum(&format!("{sha}  /usr/bin/python3\n")).as_deref(), Some(sha.to_ascii_lowercase().as_str()));
+        assert_eq!(parse_sha256sum(&format!("\\{sha}  /tmp/a\\nb\n")).as_deref(), Some(sha.to_ascii_lowercase().as_str()), "an escaped name");
+        assert_eq!(parse_sha256sum(""), None);
+        assert_eq!(parse_sha256sum("sha256sum: /x: No such file or directory"), None);
     }
 
     #[test]
@@ -584,7 +681,7 @@ mod tests {
         std::fs::write(&exe, b"binary-bytes").unwrap();
         let trust = dir.path().join("trusted.json");
         let clean_exe = resolve_exe(&exe, dir.path());
-        let (id, info) = build_request("catalog", &clean_exe, &[]);
+        let (id, info) = build_request("catalog", &clean_exe, &[]).unwrap();
         remember_expired(info);
 
         let decided = decide_with_file(&BinaryDecision { id, choice: BinaryApprovalChoice::AlwaysAllow }, &trust).unwrap();

@@ -183,7 +183,31 @@ async fn file_put(State(st): S, Json(req): Json<FileWrite>) -> Result<Json<FileW
                         Err(e) => eprintln!("kandinsky: back-relation sync for {} failed: {e}", req.path),
                     }
                 }
-                extra.extend(crate::bases::automations::on_note_written(&ws, &req.path, before.is_none()));
+                // an editor holds the note: it gets the property edits to merge and the rewritten mtime (no conflict next);
+                // a log line written into the note is not in its copy, so the old mtime stays and the editor reloads
+                let held = req.apply_here.then(|| written.template.as_ref().and_then(|t| t.text.clone()).unwrap_or_else(|| req.text.clone()));
+                let ran = crate::bases::automations::on_note_saved(&ws, &req.path, before.as_deref(), held.as_deref());
+                let rewritten = (req.apply_here && !ran.unheld && ran.touched.contains(&req.path))
+                    .then(|| ws.resolve(&req.path).ok().and_then(|p| std::fs::metadata(p).ok()).and_then(|m| Mtime::of(&m).ok()))
+                    .flatten();
+                if let Some(mtime) = rewritten {
+                    written.mtime = mtime;
+                    if let Some(text) = ran.held {
+                        let merged = match written.template.take() {
+                            Some(t) => TemplateMerged { added: t.added.into_iter().chain(ran.set).collect(), text: Some(text), automation: true, ..t },
+                            None => TemplateMerged { template: ran.rule.unwrap_or_default(), added: ran.set, text: Some(text), body: None, automation: true },
+                        };
+                        written.template = Some(merged);
+                    }
+                } else if ran.touched.contains(&req.path) {
+                    // the rule's write can fall in the save's own tick of the file clock: the answer's mtime must then
+                    // still differ from the file's, or the writer's next guarded save would drop that write
+                    let now = ws.resolve(&req.path).ok().and_then(|p| std::fs::metadata(p).ok()).and_then(|m| Mtime::of(&m).ok());
+                    if now == Some(written.mtime) {
+                        written.mtime = Mtime(written.mtime.0.saturating_sub(1));
+                    }
+                }
+                extra.extend(ran.touched);
             }
         }
         // a drawing's companion note follows each save (drawing_note.rs); a failure there never fails the save
@@ -207,10 +231,10 @@ fn apply_template(ws: &Workspace, req: &FileWrite, before: Option<&str>, written
     let now = chrono::Local::now().naive_local();
     let Some(a) = crate::template_apply::on_save(ws.root(), &cfg, &req.path, before, &req.text, now) else { return Ok(written) };
     if req.apply_here {
-        return Ok(FileWritten { template: Some(TemplateMerged { template: a.template, added: a.added, text: Some(a.text), body: None }), ..written });
+        return Ok(FileWritten { template: Some(TemplateMerged { template: a.template, added: a.added, text: Some(a.text), body: None, automation: false }), ..written });
     }
     let merged = files::write_text(ws, &FileWrite { path: req.path.clone(), text: a.text, base_mtime: Some(written.mtime), only_new: false, apply_here: false })?;
-    Ok(FileWritten { template: Some(TemplateMerged { template: a.template, added: a.added, text: None, body: None }), ..merged })
+    Ok(FileWritten { template: Some(TemplateMerged { template: a.template, added: a.added, text: None, body: None, automation: false }), ..merged })
 }
 
 /// `POST /api/note/merge-template`: a template merged into a note's text as an editor holds it (its retry when it
@@ -218,7 +242,7 @@ fn apply_template(ws: &Workspace, req: &FileWrite, before: Option<&str>, written
 async fn merge_template_post(State(st): S, Json(r): Json<MergeTemplate>) -> Result<Json<TemplateMerged>> {
     Ok(Json(with_ws(&st, move |ws| {
         let a = crate::template_apply::merge_into(ws.root(), &ws.config()?, &r.path, &r.template, &r.text, r.at_cursor, chrono::Local::now().naive_local())?;
-        Ok(TemplateMerged { template: a.template, added: a.added, text: Some(a.text), body: a.body })
+        Ok(TemplateMerged { template: a.template, added: a.added, text: Some(a.text), body: a.body, automation: false })
     })
     .await?))
 }
@@ -927,16 +951,31 @@ struct SecurityBinariesResponse {
     trusted: Vec<TrustedBinary>,
 }
 
-async fn security_binaries_get() -> Json<SecurityBinariesResponse> {
+/// The binary approvals are the user's alone: a plugin's helper (`helper_api::Caller`) never lists, decides or revokes
+/// them, even if a router were ever mounted without `guard`.
+fn helper_refused(helper: &Option<axum::Extension<crate::helper_api::Caller>>) -> Option<Response> {
+    helper.as_ref().map(|h| forbidden(&format!("plugin {} may not reach the binary approvals: they are the user's", h.0 .0)))
+}
+
+async fn security_binaries_get(helper: Option<axum::Extension<crate::helper_api::Caller>>) -> Response {
+    if let Some(refused) = helper_refused(&helper) {
+        return refused;
+    }
     Json(SecurityBinariesResponse {
         pending: crate::binary_trust::list_pending(),
         trusted: crate::binary_trust::list_trusted(),
     })
+    .into_response()
 }
 
-async fn security_binaries_decide_post(Json(dec): Json<BinaryDecision>) -> Result<StatusCode> {
-    crate::binary_trust::decide(&dec)?;
-    Ok(StatusCode::NO_CONTENT)
+async fn security_binaries_decide_post(helper: Option<axum::Extension<crate::helper_api::Caller>>, Json(dec): Json<BinaryDecision>) -> Response {
+    if let Some(refused) = helper_refused(&helper) {
+        return refused;
+    }
+    match crate::binary_trust::decide(&dec) {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => e.into_response(),
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -945,8 +984,14 @@ struct RevokeBinaryQuery {
     sha256: Option<String>,
 }
 
-async fn security_binaries_delete(Query(q): Query<RevokeBinaryQuery>) -> Result<Json<Vec<TrustedBinary>>> {
-    Ok(Json(crate::binary_trust::revoke(&q.command, q.sha256.as_deref())?))
+async fn security_binaries_delete(helper: Option<axum::Extension<crate::helper_api::Caller>>, Query(q): Query<RevokeBinaryQuery>) -> Response {
+    if let Some(refused) = helper_refused(&helper) {
+        return refused;
+    }
+    match crate::binary_trust::revoke(&q.command, q.sha256.as_deref()) {
+        Ok(list) => Json(list).into_response(),
+        Err(e) => e.into_response(),
+    }
 }
 
 async fn note_templates(State(st): S) -> Result<Json<Vec<crate::notes::TemplateInfo>>> {
@@ -1166,7 +1211,7 @@ fn apply_note_property(
     rel_path: &str,
     abs: &std::path::Path,
     transform: impl FnOnce(&str) -> Result<String>,
-) -> Result<(bool, Vec<String>)> {
+) -> Result<(bool, Vec<String>, String)> {
     let mut before_buf = String::new();
     let mut after_buf = String::new();
     vault_write::modify(abs, |text| {
@@ -1193,7 +1238,7 @@ fn apply_note_property(
             }
         }
     }
-    Ok((changed, synced))
+    Ok((changed, synced, before_buf))
 }
 
 async fn property_put(State(st): S, Json(e): Json<PropertyEdit>) -> Result<StatusCode> {
@@ -1208,13 +1253,13 @@ async fn property_put(State(st): S, Json(e): Json<PropertyEdit>) -> Result<Statu
             None => crate::frontmatter::parse_cell(&e.text, e.list),
         };
         let key = e.key.trim().to_string();
-        let (changed, synced) = apply_note_property(&ws, None, &e.path, &path, |text| Ok(crate::frontmatter::set_property(text, &key, &value)))?;
+        let (changed, synced, before) = apply_note_property(&ws, None, &e.path, &path, |text| Ok(crate::frontmatter::set_property(text, &key, &value)))?;
         if !changed {
             return Ok(Vec::new());
         }
         let mut paths = vec![e.path.clone()];
         paths.extend(synced);
-        paths.extend(crate::bases::automations::on_note_written(&ws, &e.path, false));
+        paths.extend(crate::bases::automations::on_note_saved(&ws, &e.path, Some(&before), None).touched);
         Ok(paths)
     })
     .await?;
@@ -1262,8 +1307,8 @@ async fn property_set_post(State(st): S, Json(req): Json<PropertySetRequest>) ->
         } else {
             FrontmatterEdit::Set { key: key.clone(), value: req.value }
         };
-        let (changed, synced) = apply_note_property(&ws, Some(&cfg), &req.path, &abs, |text| crate::frontmatter::apply(text, &edit))?;
-        let auto_paths = if changed { crate::bases::automations::on_note_written(&ws, &req.path, false) } else { Vec::new() };
+        let (changed, synced, before) = apply_note_property(&ws, Some(&cfg), &req.path, &abs, |text| crate::frontmatter::apply(text, &edit))?;
+        let auto_paths = if changed { crate::bases::automations::on_note_saved(&ws, &req.path, Some(&before), None).touched } else { Vec::new() };
         Ok((req.path, key, changed, synced, auto_paths))
     })
     .await?;
@@ -2079,7 +2124,11 @@ async fn live_ws(State(st): S, Query(mut q): Query<LiveQuery>, upgrade: WebSocke
 async fn events_ws(State(st): S, upgrade: WebSocketUpgrade) -> Response {
     let rx = st.bus.subscribe();
     let root = st.ws.root().to_path_buf();
-    upgrade.on_upgrade(move |socket| forward_events(socket, rx, root))
+    upgrade.on_upgrade(move |socket| {
+        // a window listens now: the helpers that waited for one to ask its approval start (once)
+        st.helpers.window_seen();
+        forward_events(socket, rx, root)
+    })
 }
 
 /// `ev` as the page is told it: changed paths in the state folder with its current spelling (`state_dir::told_rel`),
@@ -2284,7 +2333,7 @@ async fn guard(State(st): S, mut req: Request, next: Next) -> Response {
     // a plugin's helper, over its pipe (helper_api.rs): no network request carries this extension
     if let Some(crate::helper_api::Caller(id)) = req.extensions().get::<crate::helper_api::Caller>().cloned() {
         if !crate::helper_api::may(&id, req.uri().path()) {
-            return forbidden(&format!("plugin {id} may not act as another plugin (its secrets, sign-ins, fetch, settings) nor reach the sign-ins"));
+            return forbidden(&format!("plugin {id} may not act as another plugin (its secrets, sign-ins, fetch, settings) nor reach the sign-ins or the binary approvals"));
         }
         if st.auth.is_some() {
             req.extensions_mut().insert(crate::auth::Who::Device { name: format!("plugin {id}"), scope: crate::auth::Scope::Full });
@@ -3306,11 +3355,8 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
     // a merged plugin copied in by hand takes over the settings of the plugins it replaces (plugin_install.rs)
     crate::plugin_install::adopt_all_replaced(state.ws.root());
     crate::plugins::hide_legacy_rails(state.ws.root());
-    for id in crate::plugins::helpers_started_with_vault(state.ws.root(), &off) {
-        if let Err(e) = state.helpers.start(&id) {
-            eprintln!("kandinsky: plugin {id}: its helper did not start with the vault: {e}");
-        }
-    }
+    // no window is connected yet: a helper whose program awaits approval starts when the first one is (events_ws)
+    state.helpers.start_with_vault(crate::plugins::helpers_started_with_vault(state.ws.root(), &off));
     Ok((routes, VaultRun { server_file, _watcher: watcher, helpers, scheduler, hooks, merges, notices, pdf_refresh, keep_alive }, state))
 }
 

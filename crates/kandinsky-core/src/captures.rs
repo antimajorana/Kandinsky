@@ -384,7 +384,10 @@ fn triage_note(root: &Path, cfg: &Config, abs: &Path, rel: &str, action: &Triage
             if !abs.exists() {
                 return Err(Error::NotFound(rel.to_string()));
             }
-            crate::files::to_vault_trash(root, rel).map(|_| ())
+            let to = crate::files::to_vault_trash(root, rel)?;
+            // its margin comments go into the trash with it: the Trash's restore is a move back, which brings them along
+            let _ = crate::comments::moved(root, rel, &to);
+            Ok(())
         }
         TriageAction::Reopen => vault_write::modify(abs, |text| Ok(frontmatter::remove_property(&frontmatter::remove_property(text, "filed"), "review"))),
         TriageAction::File { note } => {
@@ -536,6 +539,23 @@ mod tests {
         ask(d.path(), &cfg, "inbox/A thought.md", 0, TriageAction::Delete).unwrap();
         assert!(!d.path().join("inbox/A thought.md").exists());
         assert_eq!(walkdir(d.path().join(".kandinsky/trash")).len(), 2);
+    }
+
+    #[test]
+    fn a_triaged_away_note_keeps_its_comments_through_the_trash() {
+        use crate::comments::{list, mutate, CommentAction, CommentMutation};
+        let (d, cfg) = vault();
+        let ws = crate::workspace::Workspace::open(d.path()).unwrap();
+        let p = "inbox/A thought.md";
+        let action = CommentAction::Add { from: 0, to: 1, quote: "A".into(), anchor_line: 5, text: "why".into(), author: "".into() };
+        mutate(d.path(), &CommentMutation { path: p.into(), action }).unwrap();
+        ask(d.path(), &cfg, p, 0, TriageAction::Delete).unwrap();
+        assert!(list(d.path(), p).unwrap().is_empty(), "no comments left on a path with no note");
+        let kept = walkdir(d.path().join(".kandinsky/trash"));
+        let trashed = kept[0].strip_prefix(d.path()).unwrap().to_string_lossy().replace('\\', "/");
+        assert_eq!(list(d.path(), &trashed).unwrap().len(), 1, "they went into the trash with it");
+        crate::files::move_path(&ws, &trashed, p).unwrap();
+        assert_eq!(list(d.path(), p).unwrap().len(), 1, "and came back with the restore");
     }
 
     fn walkdir(dir: std::path::PathBuf) -> Vec<std::path::PathBuf> {

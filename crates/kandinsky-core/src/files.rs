@@ -455,8 +455,23 @@ pub fn move_path(ws: &Workspace, from: &str, to: &str) -> Result<()> {
     if let Err(e) = crate::drawing_note::moved(ws, from, to) {
         eprintln!("kandinsky: the note of {from} did not follow it to {to}: {e}");
     }
-    let _ = crate::comments::moved(ws.root(), from, to);
+    let _ = comments_follow(ws, b.is_dir(), from, to);
     Ok(())
+}
+
+/// A note's margin comments go where the note went; a folder's notes each keep theirs.
+fn comments_follow(ws: &Workspace, dir: bool, from: &str, to: &str) -> Result<()> {
+    if dir {
+        crate::comments::moved_tree(ws.root(), from, to)
+    } else {
+        crate::comments::moved(ws.root(), from, to)
+    }
+}
+
+/// A note or folder sent to the system Trash: its comments go, since a restore from there happens outside the app and
+/// cannot bring them back; kept, they would turn up on the next note made at that path.
+fn comments_dropped(ws: &Workspace, dir: bool, rel: &str) {
+    let _ = if dir { crate::comments::removed_tree(ws.root(), rel) } else { crate::comments::removed(ws.root(), rel) };
 }
 
 /// `Note.md` → `note.md` on a case-insensitive file system (Windows, macOS): `to` "exists" because it is `from` itself.
@@ -474,9 +489,10 @@ pub fn trash(ws: &Workspace, rel: &str) -> Result<String> {
     if !p.exists() || p == ws.root() {
         return Err(Error::NotFound(rel.into()));
     }
+    let dir = p.is_dir();
     // tests never touch the user's desktop Trash (KANDINSKY_VAULT_TRASH: the e2e server, whose vault may sit on the home disk)
     if !cfg!(test) && crate::env::var_os("VAULT_TRASH").is_none() {
-        let kind = if p.is_dir() { vault_write::WriteKind::RemoveDir } else { vault_write::WriteKind::Remove };
+        let kind = if dir { vault_write::WriteKind::RemoveDir } else { vault_write::WriteKind::Remove };
         // no system Trash, or one that refused, is an error, not a success: the guard then hands the mirror's lease back
         // with the file as it is, instead of telling the server it is gone (the vault's trash below would then be
         // refused, and the path stay unwritable)
@@ -489,7 +505,7 @@ pub fn trash(ws: &Workspace, rel: &str) -> Result<String> {
         };
         match vault_write::guarded(&p, kind, system) {
             Ok(()) => {
-                let _ = crate::comments::removed(ws.root(), rel.trim_matches('/'));
+                comments_dropped(ws, dir, rel.trim_matches('/'));
                 return Ok("the Trash".into());
             }
             Err(_) if failed.get() => {}
@@ -497,7 +513,8 @@ pub fn trash(ws: &Workspace, rel: &str) -> Result<String> {
         }
     }
     let to = to_vault_trash(ws.root(), rel.trim_matches('/'))?;
-    let _ = crate::comments::removed(ws.root(), rel.trim_matches('/'));
+    // the comments go into the trash with the note: the Trash's restore is a move back, which brings them along
+    let _ = comments_follow(ws, dir, rel.trim_matches('/'), &to);
     Ok(to.rsplit_once(&format!("/{}", rel.trim_matches('/'))).map_or(to.clone(), |(stamp, _)| stamp.to_string()))
 }
 
@@ -565,6 +582,58 @@ mod manage_tests {
         let twice: Vec<String> = ["one", "two"].iter().map(|t| { std::fs::write(d.path().join("c.md"), t).unwrap(); to_vault_trash(d.path(), "c.md").unwrap() }).collect();
         assert_ne!(twice[0], twice[1]);
         assert_eq!([0, 1].map(|i| std::fs::read_to_string(d.path().join(&twice[i])).unwrap()), ["one", "two"]);
+    }
+
+    #[test]
+    fn comments_follow_folder_moves_and_come_back_from_the_trash() {
+        use crate::comments::{list, mutate, CommentAction, CommentMutation};
+        let d = tempfile::tempdir().unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        std::fs::create_dir_all(d.path().join("notes/Proj")).unwrap();
+        for p in ["notes/Proj/A.md", "notes/B.md"] {
+            std::fs::write(d.path().join(p), "text").unwrap();
+            let action = CommentAction::Add { from: 0, to: 4, quote: "text".into(), anchor_line: 1, text: "why".into(), author: "".into() };
+            mutate(d.path(), &CommentMutation { path: p.into(), action }).unwrap();
+        }
+        let count = |p: &str| list(d.path(), p).unwrap().len();
+        move_path(&ws, "notes/Proj", "notes/Project").unwrap();
+        assert_eq!((count("notes/Proj/A.md"), count("notes/Project/A.md")), (0, 1), "a folder rename");
+
+        // a file trashed and restored from the vault's trash
+        let stamp = trash(&ws, "notes/B.md").unwrap();
+        assert_eq!(count("notes/B.md"), 0);
+        move_path(&ws, &format!("{stamp}/notes/B.md"), "notes/B.md").unwrap();
+        assert_eq!(count("notes/B.md"), 1, "restored with its comments");
+
+        // a folder trashed, then one note restored out of it
+        let stamp = trash(&ws, "notes/Project").unwrap();
+        move_path(&ws, &format!("{stamp}/notes/Project/A.md"), "notes/A.md").unwrap();
+        assert_eq!(count("notes/A.md"), 1, "restored out of a trashed folder");
+
+        // a whole folder trashed and restored
+        std::fs::create_dir_all(d.path().join("notes/Proj")).unwrap();
+        move_path(&ws, "notes/A.md", "notes/Proj/A.md").unwrap();
+        let stamp = trash(&ws, "notes/Proj").unwrap();
+        assert_eq!(count("notes/Proj/A.md"), 0);
+        move_path(&ws, &format!("{stamp}/notes/Proj"), "notes/Proj").unwrap();
+        assert_eq!(count("notes/Proj/A.md"), 1, "a folder restored with its notes' comments");
+    }
+
+    #[test]
+    fn a_note_sent_to_the_system_trash_leaves_no_comments_for_the_next_one_at_its_path() {
+        use crate::comments::{list, mutate, CommentAction, CommentMutation};
+        let d = tempfile::tempdir().unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        for p in ["notes/Meeting.md", "notes/Proj/A.md", "notes/Project.md"] {
+            let action = CommentAction::Add { from: 0, to: 4, quote: "text".into(), anchor_line: 1, text: "why".into(), author: "".into() };
+            mutate(d.path(), &CommentMutation { path: p.into(), action }).unwrap();
+        }
+        let count = |p: &str| list(d.path(), p).unwrap().len();
+        // what the system-Trash branch of `trash` does after the move (tests never reach the user's Trash)
+        comments_dropped(&ws, false, "notes/Meeting.md");
+        comments_dropped(&ws, true, "notes/Proj");
+        assert_eq!((count("notes/Meeting.md"), count("notes/Proj/A.md")), (0, 0));
+        assert_eq!(count("notes/Project.md"), 1, "a sibling folder's note keeps its comments");
     }
 
     #[test]

@@ -11,6 +11,9 @@
     "windows": [],
     "security": { "csp": null }
   },
+  "plugins": {
+    "deep-link": { "desktop": { "schemes": ["kandinsky"] } }
+  },
   "bundle": {
     "active": false,
     "publisher": "alneb",

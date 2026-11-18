@@ -429,16 +429,31 @@ fn leave_appimage_interpreters() {
     }
 }
 
+/// Whether a program argument is a `kandinsky:` link (any page can launch the app with one), never a folder.
+fn is_deep_link(arg: &str) -> bool {
+    arg.get(..10).is_some_and(|s| s.eq_ignore_ascii_case("kandinsky:"))
+}
+
+/// A paper-capture link (`kandinsky://capture-paper?url=…&title=…`, the bookmarklet's), else None: only its own
+/// fields, a web address as its `url`, and something to know the paper by.
 fn parse_paper_deep_link(uri: &str) -> Option<serde_json::Map<String, serde_json::Value>> {
-    if !(uri.starts_with("kandinsky://capture-paper") || uri.starts_with("kandinsky://paper")) {
+    const FIELDS: [&str; 5] = ["doi", "arxiv", "url", "id", "title"];
+    if !is_deep_link(uri) || uri.len() > 8192 {
         return None;
     }
     let u = uri.parse::<tauri::Url>().ok()?;
+    if !matches!(u.host_str(), Some("capture-paper" | "paper")) || !matches!(u.path(), "" | "/") {
+        return None;
+    }
     let mut params = serde_json::Map::new();
     for (k, v) in u.query_pairs() {
-        if !v.trim().is_empty() {
-            params.insert(k.into_owned(), serde_json::Value::String(v.into_owned()));
+        if !FIELDS.contains(&k.as_ref()) || v.trim().is_empty() || v.chars().any(char::is_control) {
+            continue;
         }
+        if k == "url" && !v.parse::<tauri::Url>().is_ok_and(|w| matches!(w.scheme(), "http" | "https")) {
+            continue;
+        }
+        params.insert(k.into_owned(), serde_json::Value::String(v.into_owned()));
     }
     if let Some(best) = params
         .get("doi")
@@ -450,7 +465,7 @@ fn parse_paper_deep_link(uri: &str) -> Option<serde_json::Map<String, serde_json
     {
         params.entry("id").or_insert(best);
     }
-    Some(params)
+    params.contains_key("id").then_some(params)
 }
 
 fn capture_paper_note_path(raw: &str) -> Option<String> {
@@ -508,10 +523,12 @@ fn main() -> anyhow::Result<()> {
     }
     let mut folder = args.iter().find(|a| !a.to_string_lossy().starts_with("--")).map(PathBuf::from);
     let mut pending_paper: Option<serde_json::Map<String, serde_json::Value>> = None;
-    if let Some(uri) = folder.as_ref().map(|f| f.to_string_lossy().into_owned()).filter(|s| s.starts_with("kandinsky://capture-paper") || s.starts_with("kandinsky://paper")) {
+    // a link is acted on only as a paper capture: any other (a page's `kandinsky://anything`) does nothing at all, never
+    // reaching the folder, one-instance and port code below
+    if let Some(uri) = folder.as_ref().map(|f| f.to_string_lossy().into_owned()).filter(|s| is_deep_link(s)) {
         folder = None;
         let Some(params) = parse_paper_deep_link(&uri) else {
-            eprintln!("kandinsky-app: invalid paper URI: {uri}");
+            eprintln!("kandinsky-app: ignored link: {uri}");
             return Ok(());
         };
         let root = vault_to_open(None)?;
@@ -586,6 +603,9 @@ fn main() -> anyhow::Result<()> {
     watch_for_update(server.url());
     let url: tauri::Url = url.parse()?;
     let core = server.url();
+    // macOS hands a kandinsky:// link to the running app as an Apple Event, not as an argument
+    #[cfg(target_os = "macos")]
+    let opened_core = core.clone();
     let server = Some(server);
     let vault = root.clone();
 
@@ -665,6 +685,14 @@ fn main() -> anyhow::Result<()> {
             tauri::RunEvent::Reopen { has_visible_windows: false, .. } => {
                 if let Some(s) = SHELL.get() {
                     s.show(None);
+                }
+            }
+            // macOS: a kandinsky://capture-paper link (the scheme tauri.conf.json registers), on a cold start too
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Opened { urls } => {
+                for params in urls.iter().filter_map(|u| parse_paper_deep_link(u.as_str())) {
+                    let core = opened_core.clone();
+                    tauri::async_runtime::spawn(async move { add_and_open_paper(&core, params, true).await });
                 }
             }
             tauri::RunEvent::Exit => {
@@ -1230,6 +1258,37 @@ mod tests {
         assert_eq!(with_doi.get("id").and_then(|v| v.as_str()), Some("10.1126/science.177"));
 
         assert!(parse_paper_deep_link("https://example.org").is_none());
+
+        // any page can launch the app with a link: only a well-formed paper capture is acted on, the rest is ignored
+        // (never taken for a folder to open)
+        for arg in ["kandinsky://foo", "KANDINSKY://capture-paper?doi=1", "kandinsky:capture-paper"] {
+            assert!(is_deep_link(arg), "{arg}");
+        }
+        assert!(!is_deep_link("C:/notes") && !is_deep_link("kandinsky") && !is_deep_link("./kandinsky:x"));
+        for bad in [
+            "kandinsky://foo",
+            "kandinsky://capture-paper",
+            "kandinsky://capture-paper?x=1",
+            "kandinsky://capture-paper.example.org?doi=10.1/x",
+            "kandinsky://paperwork?doi=10.1/x",
+            "kandinsky://capture-paper/../x?doi=10.1/x",
+            "kandinsky://capture-paper?url=file:///etc/passwd",
+            "kandinsky://capture-paper?title=%0Aline",
+        ] {
+            assert!(parse_paper_deep_link(bad).is_none(), "{bad}");
+        }
+        let only_known = parse_paper_deep_link("kandinsky://capture-paper?url=https://example.org/p&title=T&path=/etc/passwd").unwrap();
+        let mut keys: Vec<&str> = only_known.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["id", "title", "url"]);
+        assert_eq!(parse_paper_deep_link("KANDINSKY://capture-paper?doi=10.1/x").unwrap()["id"], "10.1/x");
+
+        // the installers register this scheme with the system (the bundler reads plugins.deep-link.desktop), so the
+        // bookmarklet's link starts this program; without it the browser finds no app for the link
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let schemes = conf["plugins"]["deep-link"]["desktop"]["schemes"].as_array().expect("deep-link schemes in tauri.conf.json");
+        assert!(schemes.iter().any(|s| s == "kandinsky"), "{schemes:?}");
+        assert!(parse_paper_deep_link("kandinsky://capture-paper?doi=10.1000/xyz123").is_some());
 
         assert_eq!(
             capture_paper_note_path(r#"{"paper":{"dir":"refs/papers/anderson1972more","key":"anderson1972more"},"created":true}"#).as_deref(),

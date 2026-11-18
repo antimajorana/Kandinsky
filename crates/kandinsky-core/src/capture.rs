@@ -385,7 +385,9 @@ pub fn ensure_day_log(root: &Path, cfg: &Config, day: chrono::NaiveDate, now: Na
     if path.exists() {
         return Ok(crate::api::TodayLog { path: rel, created: false });
     }
-    let text = crate::notes::daily_log_start(root, cfg, &day.format("%Y-%m-%d").to_string(), now);
+    // the template's `{{date}}`, heading and rule are rendered for the log's own day, not for today
+    let at = if day == now.date() { now } else { day.and_time(now.time()) };
+    let text = crate::notes::daily_log_start(root, cfg, &day.format("%Y-%m-%d").to_string(), at);
     let created = vault_write::create(&path, text.as_bytes())? == vault_write::Created::New;
     Ok(crate::api::TodayLog { path: rel, created })
 }
@@ -512,6 +514,18 @@ mod tests {
         std::fs::write(d.path().join(&made.path), "mine\n").unwrap();
         assert!(!today_log(d.path(), &Config::default(), at(9, 0)).unwrap().created);
         assert_eq!(std::fs::read_to_string(d.path().join(&made.path)).unwrap(), "mine\n", "never rewritten");
+    }
+
+    #[test]
+    fn another_days_log_carries_that_days_date() {
+        let d = tempfile::tempdir().unwrap();
+        let day = NaiveDate::from_ymd_opt(2026, 10, 8).unwrap();
+        let draft = day_log_info(d.path(), &Config::default(), day).unwrap();
+        let made = ensure_day_log(d.path(), &Config::default(), day, at(8, 0)).unwrap();
+        assert_eq!((made.path.as_str(), made.created), ("notes/log/2026-10-08.md", true));
+        let text = std::fs::read_to_string(d.path().join(&made.path)).unwrap();
+        assert!(text.starts_with("---\ndate: 2026-10-08\ntype: log\n---\n# Thursday, 8 October 2026"), "{text}");
+        assert_eq!(text, draft.text, "the preview and the created file agree");
     }
 
     #[test]

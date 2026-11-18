@@ -13,4 +13,9 @@ added: Array<string>, text?: string,
  * "Insert template": the template's body, filled in, for the editor to put at the cursor (only its properties
  * were merged into `text`).
  */
-body?: string, };
+body?: string, 
+/**
+ * A save's answer whose `text` carries a .base automation's property edits, which the core also wrote into the
+ * file (`mtime` is that write's): the file then differs from what was sent, so a copy typed into since must merge it.
+ */
+automation?: boolean, };

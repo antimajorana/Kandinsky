@@ -100,6 +100,15 @@ fn target_links_to_source(raw_link: &str, target_rel: &str, source_rel: &str, va
     clean_no_md.eq_ignore_ascii_case(src_no_md) || clean_no_md.eq_ignore_ascii_case(&super::stem(source_rel))
 }
 
+/// Each `[[...]]` of `s`: its text between the brackets, and the note it names (no `|alias`, no `#heading`).
+fn raw_links(s: &str) -> impl Iterator<Item = (&str, &str)> {
+    s.split("[[").skip(1).filter_map(|part| {
+        let inner = part.split_once("]]")?.0;
+        let target = inner.split('|').next().unwrap_or(inner).split('#').next().unwrap_or(inner).trim();
+        (!target.is_empty()).then_some((inner, target))
+    })
+}
+
 fn wikilink_for_source(source_rel: &str, from_target_rel: &str, vault: &links::Vault) -> String {
     let s = super::stem(source_rel);
     if vault.resolve(&s, from_target_rel).as_deref() == Some(source_rel) {
@@ -212,11 +221,11 @@ pub fn sync_back_relations(
                             .collect();
                         if kept.is_empty() { Value::Null } else { Value::Sequence(kept) }
                     }
-                    Some(Value::String(_)) => {
-                        let kept: Vec<Value> = existing
-                            .into_iter()
-                            .filter(|t| !target_links_to_source(t, removed_rel, note_rel, &vault))
-                            .map(|t| Value::String(format!("[[{t}]]")))
+                    Some(Value::String(s)) => {
+                        // the other links as written: their `|alias` and `#heading` stay
+                        let kept: Vec<Value> = raw_links(s)
+                            .filter(|(_, t)| !target_links_to_source(t, removed_rel, note_rel, &vault))
+                            .map(|(inner, _)| Value::String(format!("[[{inner}]]")))
                             .collect();
                         if kept.is_empty() { Value::Null } else { Value::Sequence(kept) }
                     }
@@ -285,5 +294,20 @@ mod tests {
         let beta_linked = std::fs::read_to_string(r.join("projects/Beta.md")).unwrap();
         assert!(!alpha_clean.contains("Fix Bug"), "{alpha_clean}");
         assert!(beta_linked.contains("[[Fix Bug]]"), "{beta_linked}");
+    }
+
+    #[test]
+    fn removing_from_a_text_value_keeps_the_other_links_as_written() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        std::fs::write(r.join("Tasks.base"), "properties:\n  project:\n    back_relation: tasks\nviews:\n  - type: table\n").unwrap();
+        std::fs::write(r.join("Other.md"), "# Other\n").unwrap();
+        std::fs::write(r.join("Alpha.md"), "---\ntasks: \"[[Other#Plan|the plan]] [[Fix Bug]]\"\n---\n").unwrap();
+        let linked = "---\nproject: '[[Alpha]]'\n---\n";
+        std::fs::write(r.join("Fix Bug.md"), "---\n---\n").unwrap();
+        let touched = sync_back_relations(r, &Config::default(), "Fix Bug.md", linked, "---\n---\n").unwrap();
+        assert_eq!(touched, vec!["Alpha.md"]);
+        let alpha = std::fs::read_to_string(r.join("Alpha.md")).unwrap();
+        assert!(alpha.contains("[[Other#Plan|the plan]]") && !alpha.contains("Fix Bug"), "{alpha}");
     }
 }

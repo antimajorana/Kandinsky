@@ -2,7 +2,7 @@
 //! open tasks, `.base` date views, optional `.ics` feeds, and optional `dav` plugin caches.
 use crate::config::Config;
 use crate::{capture, frontmatter, paths, vault_write, Error, Result};
-use chrono::{Duration, Months, NaiveDate, NaiveDateTime};
+use chrono::{Datelike, Days, Duration, Months, NaiveDate, NaiveDateTime, TimeZone};
 use kandinsky_text::ical::{self, Line};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
@@ -134,6 +134,18 @@ pub struct CalendarEventUpsert {
     pub location: String,
     #[serde(default)]
     pub repeat: CalendarRecurrence,
+    /// Every `interval`-th day, week, month or year of `repeat` (1 when unset). Left out of an edit, the stored one stays.
+    #[serde(default)]
+    #[ts(optional)]
+    pub interval: Option<u32>,
+    /// The last day a repeating event can fall on (`YYYY-MM-DD`, empty for none). Left out of an edit, the stored one stays.
+    #[serde(default)]
+    #[ts(optional)]
+    pub until: Option<String>,
+    /// Days (`YYYY-MM-DD`) a repeating event skips. Left out of an edit, the stored ones stay.
+    #[serde(default)]
+    #[ts(optional)]
+    pub except: Option<Vec<String>>,
     #[serde(default)]
     pub links: Vec<String>,
     #[serde(default)]
@@ -182,12 +194,64 @@ struct RawEvent {
     color: String,
     location: String,
     repeat: CalendarRecurrence,
+    series: Series,
     links: Vec<String>,
     source: CalendarSource,
     path: Option<String>,
     line: Option<u32>,
     completed: bool,
     editable: bool,
+}
+
+/// What a repeat says beyond its frequency: every `interval`-th period, nothing after `until`, nothing on `except`.
+#[derive(Debug, Clone, PartialEq)]
+struct Series {
+    interval: u32,
+    until: Option<NaiveDate>,
+    except: Vec<NaiveDate>,
+}
+
+impl Default for Series {
+    fn default() -> Self {
+        Series { interval: 1, until: None, except: Vec::new() }
+    }
+}
+
+fn parse_day(s: &str) -> Option<NaiveDate> {
+    s.trim().get(..10).and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
+}
+
+impl Series {
+    /// From the `interval`, `until` and `except` properties of a stored event.
+    fn from_props<'a>(g: impl Fn(&str) -> Option<&'a Value>) -> Self {
+        let interval = match g("interval") {
+            Some(Value::Number(n)) => n.as_u64().and_then(|n| u32::try_from(n).ok()),
+            Some(Value::String(s)) => s.trim().parse().ok(),
+            _ => None,
+        };
+        let mut except: Vec<NaiveDate> = strings_val(g("except")).iter().filter_map(|s| parse_day(s)).collect();
+        except.sort_unstable();
+        except.dedup();
+        Series { interval: interval.filter(|&i| i > 0).unwrap_or(1), until: parse_day(&str_val(g("until"))), except }
+    }
+
+    fn from_req(req: &CalendarEventUpsert) -> Self {
+        let mut except: Vec<NaiveDate> = req.except.iter().flatten().filter_map(|s| parse_day(s)).collect();
+        except.sort_unstable();
+        except.dedup();
+        Series { interval: req.interval.filter(|&i| i > 0).unwrap_or(1), until: req.until.as_deref().and_then(parse_day), except }
+    }
+
+    /// The properties to store; none for an event that does not repeat or a series that is every period, endless and whole.
+    fn props(&self, repeat: CalendarRecurrence) -> [(&'static str, Option<Value>); 3] {
+        let on = repeat != CalendarRecurrence::None;
+        let day = |d: &NaiveDate| Value::String(d.format("%Y-%m-%d").to_string());
+        [
+            ("interval", (on && self.interval > 1).then(|| Value::Number(self.interval.into()))),
+            ("until", self.until.as_ref().filter(|_| on).map(day)),
+            ("except", (on && !self.except.is_empty()).then(|| Value::Sequence(self.except.iter().map(day).collect()))),
+        ]
+    }
 }
 
 pub fn query_range(root: &Path, cfg: &Config, from: NaiveDate, to: NaiveDate) -> Result<CalendarRangeResponse> {
@@ -288,6 +352,7 @@ fn collect_raw_events_with_bases(root: &Path, cfg: &Config, bases_filter: Option
                     color: if done { "default".into() } else { "amber".into() },
                     location: String::new(),
                     repeat: CalendarRecurrence::None,
+                    series: Series::default(),
                     links: Vec::new(),
                     source: CalendarSource::Task,
                     path: Some(rel.clone()),
@@ -349,6 +414,7 @@ fn collect_base_events(root: &Path, cfg: &Config, bases_filter: Option<&[String]
                 color: "purple".into(),
                 location: String::new(),
                 repeat: CalendarRecurrence::None,
+                series: Series::default(),
                 links: vec![format!("[[{title}]]")],
                 source: CalendarSource::Base,
                 path: Some(row.path.clone()),
@@ -458,6 +524,7 @@ fn parse_event_page(rel: &str, props: &crate::note_props::Props) -> Option<RawEv
         color: if color.is_empty() { "blue".into() } else { color },
         location,
         repeat,
+        series: Series::from_props(|k| props.get(k)),
         links,
         source: CalendarSource::EventPage,
         path: Some(rel.to_string()),
@@ -504,6 +571,7 @@ fn parse_daily_frontmatter_events(rel: &str, day: NaiveDate, props: &crate::note
             color: if color.is_empty() { "blue".into() } else { color },
             location,
             repeat,
+            series: Series::from_props(g),
             links,
             source: CalendarSource::DailyFrontmatter,
             path: Some(rel.to_string()),
@@ -542,6 +610,7 @@ fn parse_daily_schedule_lines(rel: &str, day: NaiveDate, txt: &str) -> Vec<RawEv
             color: "green".into(),
             location: String::new(),
             repeat: CalendarRecurrence::None,
+            series: Series::default(),
             links: Vec::new(),
             source: CalendarSource::DailySchedule,
             path: Some(rel.to_string()),
@@ -597,25 +666,65 @@ fn expand_event(ev: &RawEvent, from: NaiveDate, to: NaiveDate, out: &mut Vec<Cal
         push_inst(ev.date);
         return;
     }
-    let mut cur = ev.date;
-    let mut count = 0usize;
-    while cur <= to && count < 400 {
-        if cur + Duration::days(span) >= from {
+    let s = &ev.series;
+    let nth = |k: u64| nth_occurrence(ev.date, ev.repeat, s.interval, k);
+    // skip straight to the last occurrence before the window (a long-running series is not walked from its start)
+    let mut k = occurrence_index(ev.date, ev.repeat, s.interval, from - Duration::days(span)).unwrap_or(0);
+    let Some(mut cur) = nth(k) else { return };
+    let mut shown = 0usize;
+    while cur <= to && shown < 400 && s.until.is_none_or(|u| cur <= u) {
+        if cur + Duration::days(span) >= from && !s.except.contains(&cur) {
             push_inst(cur);
+            shown += 1;
         }
-        count += 1;
-        let next = match ev.repeat {
-            CalendarRecurrence::Daily => cur + Duration::days(1),
-            CalendarRecurrence::Weekly => cur + Duration::days(7),
-            CalendarRecurrence::Monthly => ev.date.checked_add_months(Months::new(count as u32)).unwrap_or(to + Duration::days(1)),
-            CalendarRecurrence::Yearly => ev.date.checked_add_months(Months::new((count * 12) as u32)).unwrap_or(to + Duration::days(1)),
-            CalendarRecurrence::None => break,
-        };
-        if next <= cur {
-            break;
+        k += 1;
+        match nth(k) {
+            Some(next) if next > cur => cur = next,
+            _ => break,
         }
-        cur = next;
     }
+}
+
+fn month_index(d: NaiveDate) -> i64 {
+    i64::from(d.year()) * 12 + i64::from(d.month0())
+}
+
+fn from_month_index(m: i64, day: u32) -> Option<NaiveDate> {
+    NaiveDate::from_ymd_opt(i32::try_from(m.div_euclid(12)).ok()?, u32::try_from(m.rem_euclid(12)).ok()? + 1, day)
+}
+
+/// The `k`-th occurrence of a series from `start`; months are counted from the start, so the 31st stays the 31st where
+/// the month has one (and is the month's last day where it has not).
+fn nth_occurrence(start: NaiveDate, repeat: CalendarRecurrence, interval: u32, k: u64) -> Option<NaiveDate> {
+    let n = k.checked_mul(u64::from(interval.max(1)))?;
+    match repeat {
+        CalendarRecurrence::Daily => start.checked_add_days(Days::new(n)),
+        CalendarRecurrence::Weekly => start.checked_add_days(Days::new(n.checked_mul(7)?)),
+        CalendarRecurrence::Monthly => start.checked_add_months(Months::new(u32::try_from(n).ok()?)),
+        CalendarRecurrence::Yearly => start.checked_add_months(Months::new(u32::try_from(n.checked_mul(12)?).ok()?)),
+        CalendarRecurrence::None => (k == 0).then_some(start),
+    }
+}
+
+/// The index of the series' last occurrence on or before `d`; none before its start.
+fn occurrence_index(start: NaiveDate, repeat: CalendarRecurrence, interval: u32, d: NaiveDate) -> Option<u64> {
+    if d < start {
+        return None;
+    }
+    let step = u64::from(interval.max(1));
+    let days = (d - start).num_days() as u64;
+    let months = (month_index(d) - month_index(start)) as u64;
+    let mut k = match repeat {
+        CalendarRecurrence::Daily => days / step,
+        CalendarRecurrence::Weekly => days / (7 * step),
+        CalendarRecurrence::Monthly => months / step,
+        CalendarRecurrence::Yearly => months / (12 * step),
+        CalendarRecurrence::None => 0,
+    };
+    while k > 0 && nth_occurrence(start, repeat, interval, k).is_none_or(|x| x > d) {
+        k -= 1;
+    }
+    Some(k)
 }
 
 pub fn upsert_event(root: &Path, cfg: &Config, req: &CalendarEventUpsert) -> Result<CalendarEvent> {
@@ -633,6 +742,27 @@ pub fn upsert_event(root: &Path, cfg: &Config, req: &CalendarEventUpsert) -> Res
     };
 
     if let Some(id) = req.id.as_deref().filter(|s| !s.is_empty()) {
+        let (id, occ) = split_occurrence(id);
+        let stored = stored_event(root, id).filter(|ev| ev.repeat != CalendarRecurrence::None);
+        let asked = date;
+        // an occurrence id (`<id>@YYYY-MM-DD`) edits a repeating series from one of its later days: the series start
+        // moves by as much as that day was moved (not at all for a title or time change), and keeps its length
+        let (date, end_date) = match (occ, &stored) {
+            (Some(occ), Some(ev)) => {
+                let start = shift_series_start(ev.date, occ, date, ev.repeat, ev.series.interval);
+                (start, start + (end_date - date))
+            }
+            _ => (date, end_date),
+        };
+        // the editor does not send the series' interval, end or skipped days: keep the stored ones, moved with the start
+        let mut kept = req.clone();
+        if let Some(ev) = stored.filter(|ev| ev.repeat == req.repeat) {
+            let moved = |d: NaiveDate| move_with_series(&ev, occ.unwrap_or(ev.date), asked, date, d).format("%Y-%m-%d").to_string();
+            kept.interval = kept.interval.or(Some(ev.series.interval));
+            kept.until = kept.until.or_else(|| ev.series.until.map(moved));
+            kept.except = kept.except.or_else(|| Some(ev.series.except.iter().copied().map(moved).collect()));
+        }
+        let req = &kept;
         if let Some(rest) = id.strip_prefix("task:") {
             return reschedule_task(root, rest, date, title);
         }
@@ -655,6 +785,77 @@ pub fn upsert_event(root: &Path, cfg: &Config, req: &CalendarEventUpsert) -> Res
     } else {
         insert_inline_fm_event(root, cfg, date, end_date, req)
     }
+}
+
+/// `dm:…:0@2026-12-02` → (`dm:…:0`, that day); an id without a day suffix is returned as it is.
+fn split_occurrence(id: &str) -> (&str, Option<NaiveDate>) {
+    match id.rsplit_once('@') {
+        Some((base, day)) if day.len() == 10 => match NaiveDate::parse_from_str(day, "%Y-%m-%d") {
+            Ok(d) => (base, Some(d)),
+            Err(_) => (id, None),
+        },
+        _ => (id, None),
+    }
+}
+
+/// The stored inline event or event page `id`.
+fn stored_event(root: &Path, id: &str) -> Option<RawEvent> {
+    let rel = match id.strip_prefix("dm:") {
+        Some(rest) => rest.rsplit_once(':')?.0,
+        None => id.strip_prefix("page:")?,
+    };
+    let txt = std::fs::read_to_string(paths::safe_join(root, rel).ok()?).ok()?;
+    let props = crate::note_props::Props::from_markdown(&txt);
+    if id.starts_with("dm:") {
+        parse_daily_frontmatter_events(rel, date_from_filename(rel)?, &props).into_iter().find(|e| e.id == id)
+    } else {
+        parse_event_page(rel, &props)
+    }
+}
+
+/// The series start after its occurrence `occ` was moved to `to`. A daily or weekly series moves by the days moved; a
+/// monthly or yearly one by the months moved, onto the day of the month it was dropped on, so that occurrence lands
+/// exactly on `to` (the first month after that has the day, when the start's month has not).
+fn shift_series_start(start: NaiveDate, occ: NaiveDate, to: NaiveDate, repeat: CalendarRecurrence, interval: u32) -> NaiveDate {
+    if to == occ {
+        return start;
+    }
+    let step = match repeat {
+        CalendarRecurrence::Monthly => 1,
+        CalendarRecurrence::Yearly => 12,
+        _ => return start + (to - occ),
+    } * i64::from(interval.max(1));
+    let mut m = month_index(start) + month_index(to) - month_index(occ);
+    for _ in 0..8 {
+        if let Some(d) = from_month_index(m, to.day()) {
+            return d;
+        }
+        m += step;
+    }
+    start + (to - occ)
+}
+
+/// Where the day `d` of the stored series `ev` goes once an occurrence moved from `occ` to `to` and the series starts on
+/// `start`: a daily or weekly day by as many days; in a monthly or yearly series, the occurrence on or before `d` moves
+/// as many months, onto the moved series' occurrence in that month.
+fn move_with_series(ev: &RawEvent, occ: NaiveDate, to: NaiveDate, start: NaiveDate, d: NaiveDate) -> NaiveDate {
+    if start == ev.date {
+        return d;
+    }
+    let (repeat, iv) = (ev.repeat, ev.series.interval);
+    let step = i64::from(iv.max(1))
+        * match repeat {
+            CalendarRecurrence::Monthly => 1,
+            CalendarRecurrence::Yearly => 12,
+            _ => return d + (start - ev.date),
+        };
+    let by_months = || {
+        let old = nth_occurrence(ev.date, repeat, iv, occurrence_index(ev.date, repeat, iv, d)?)?;
+        let m = month_index(old) + month_index(to) - month_index(occ) - month_index(start);
+        (m >= 0 && m % step == 0).then_some(())?;
+        nth_occurrence(start, repeat, iv, u64::try_from(m / step).ok()?)
+    };
+    by_months().unwrap_or(d + (start - ev.date))
 }
 
 fn event_to_yaml(date: NaiveDate, end_date: NaiveDate, req: &CalendarEventUpsert) -> Value {
@@ -681,6 +882,11 @@ fn event_to_yaml(date: NaiveDate, end_date: NaiveDate, req: &CalendarEventUpsert
     }
     if req.repeat != CalendarRecurrence::None {
         m.insert("repeat".into(), req.repeat.as_str().into());
+    }
+    for (k, v) in Series::from_req(req).props(req.repeat) {
+        if let Some(v) = v {
+            m.insert(k.into(), v);
+        }
     }
     if !req.links.is_empty() {
         m.insert("links".into(), Value::Sequence(req.links.iter().map(|s| Value::String(s.clone())).collect()));
@@ -879,6 +1085,12 @@ fn build_event_page_markdown(initial: &str, date: NaiveDate, end_date: NaiveDate
     } else {
         text = frontmatter::remove_property(&text, "repeat");
     }
+    for (k, v) in Series::from_req(req).props(req.repeat) {
+        text = match v {
+            Some(v) => frontmatter::set_property(&text, k, &v),
+            None => frontmatter::remove_property(&text, k),
+        };
+    }
     if !req.links.is_empty() {
         text = frontmatter::set_property(&text, "links", &Value::Sequence(req.links.iter().map(|s| Value::String(s.clone())).collect()));
     } else {
@@ -1010,6 +1222,33 @@ fn update_schedule_line(root: &Path, cfg: &Config, rest: &str, date: NaiveDate, 
     })
 }
 
+/// Where the date the calendar shows a task on (`Task::date`) is written: the date on the line whose swap for a probe
+/// changes only that field, so a created or done date, or a date in the title, is never taken for it.
+fn task_date_range(line: &str) -> Option<std::ops::Range<usize>> {
+    let parse = |l: &str| crate::today::task_lines(std::iter::once(l)).next().map(|(_, body, _)| crate::tasks::parse(body));
+    let old = parse(line)?;
+    let probe = NaiveDate::from_ymd_opt(1000, 1, 1)?;
+    let mut want = old.clone();
+    if old.due.is_some() {
+        want.due = Some(probe);
+    } else if old.scheduled.is_some() {
+        want.scheduled = Some(probe);
+    } else if old.start.is_some() {
+        want.start = Some(probe);
+    } else {
+        return None;
+    }
+    let mut from = 0;
+    while let Some((_, i)) = crate::tasks::first_date(&line[from..]) {
+        let at = from + i;
+        if parse(&format!("{}{probe}{}", &line[..at], &line[at + 10..])).as_ref() == Some(&want) {
+            return Some(at..at + 10);
+        }
+        from = at + 10;
+    }
+    None
+}
+
 fn reschedule_task(root: &Path, rest: &str, date: NaiveDate, title: &str) -> Result<CalendarEvent> {
     let (rel, line_s) = rest.rsplit_once(':').ok_or_else(|| Error::BadRequest("bad task id".into()))?;
     let line_no: usize = line_s.parse().map_err(|_| Error::BadRequest("bad line".into()))?;
@@ -1024,8 +1263,8 @@ fn reschedule_task(root: &Path, rest: &str, date: NaiveDate, title: &str) -> Res
         }
         let updated = {
             let line = &lines[idx];
-            if let Some((_, i)) = crate::tasks::first_date(line) {
-                format!("{}{new_d}{}", &line[..i], &line[i + 10..])
+            if let Some(r) = task_date_range(line) {
+                format!("{}{new_d}{}", &line[..r.start], &line[r.end..])
             } else {
                 format!("{} 📅 {new_d}", line.trim_end())
             }
@@ -1158,6 +1397,9 @@ pub fn promote_inline_to_page(root: &Path, cfg: &Config, id: &str) -> Result<Cal
         color: raw.color.clone(),
         location: raw.location.clone(),
         repeat: raw.repeat,
+        interval: Some(raw.series.interval),
+        until: raw.series.until.map(|d| d.format("%Y-%m-%d").to_string()),
+        except: Some(raw.series.except.iter().map(|d| d.format("%Y-%m-%d").to_string()).collect()),
         links: raw.links.clone(),
         notes: None,
     };
@@ -1174,72 +1416,150 @@ pub fn promote_inline_to_page(root: &Path, cfg: &Config, id: &str) -> Result<Cal
     Ok(CalendarPromoteResult { path, event: ev })
 }
 
-fn parse_ics_dt(val: &str) -> (Option<NaiveDate>, Option<String>, bool) {
-    let clean = val.trim().trim_end_matches('Z');
+/// A UTC time (`…T130000Z`) is shown in `tz`; a time without the `Z` is floating and read as written (`export_ics`
+/// writes those). A `TZID` time is read as floating too.
+fn parse_ics_dt_in<Tz: TimeZone>(val: &str, tz: &Tz) -> (Option<NaiveDate>, Option<String>, bool) {
+    let val = val.trim();
+    let (clean, utc) = match val.strip_suffix(['Z', 'z']) {
+        Some(c) => (c, true),
+        None => (val, false),
+    };
     if clean.len() == 8 {
         let d = NaiveDate::parse_from_str(clean, "%Y%m%d").ok();
         return (d, None, true);
     }
     if let Ok(dt) = NaiveDateTime::parse_from_str(clean, "%Y%m%dT%H%M%S") {
+        let dt = if utc { tz.from_utc_datetime(&dt).naive_local() } else { dt };
         return (Some(dt.date()), Some(dt.format("%H:%M").to_string()), false);
     }
     (None, None, false)
 }
 
+/// How many periods of a rule are walked at most to find the day its `COUNT` ends on.
+const ICS_RULE_PERIODS: u64 = 100_000;
+
+const ICS_WEEKDAYS: [&str; 7] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+
+/// The days an RRULE makes from `start`, in order, in the frame `start` is written in: every `interval`-th period, on
+/// the weekdays `days` (Monday = 0) of a weekly rule, and never on a day of the month that a month or year lacks.
+fn ics_rule_dates(start: NaiveDate, freq: CalendarRecurrence, interval: u32, days: &[u32], wkst: u32) -> impl Iterator<Item = NaiveDate> {
+    let week0 = start - Duration::days(i64::from((start.weekday().num_days_from_monday() + 7 - wkst) % 7));
+    let mut offsets: Vec<u64> = days.iter().map(|d| u64::from((d + 7 - wkst) % 7)).collect();
+    offsets.sort_unstable();
+    offsets.dedup();
+    (0..ICS_RULE_PERIODS)
+        .flat_map(move |k| {
+            let n = k * u64::from(interval);
+            match freq {
+                CalendarRecurrence::Weekly => offsets.iter().filter_map(|o| week0.checked_add_days(Days::new(n * 7 + o))).collect(),
+                _ => nth_occurrence(start, freq, 1, n).filter(|d| d.day() == start.day() || freq == CalendarRecurrence::Daily).into_iter().collect::<Vec<_>>(),
+            }
+        })
+        .filter(move |d| *d >= start)
+}
+
+/// An `RRULE` as repeating events in the frame `start` is written in (`day` reads an UNTIL in it): (first day, repeat,
+/// series), one per weekday of a weekly rule (`BYDAY=MO,WE` gives two), a `COUNT` as the day of the last occurrence, and
+/// the `EXDATE`s it skips. A part the model cannot say (`BYDAY=2TU`, `BYSETPOS`) is dropped, so such a rule repeats at
+/// its plain frequency.
+fn ics_series(
+    rule: Option<&str>,
+    exdates: &[NaiveDate],
+    start: NaiveDate,
+    day: impl Fn(&str) -> Option<NaiveDate>,
+) -> Vec<(NaiveDate, CalendarRecurrence, Series)> {
+    let once = vec![(start, CalendarRecurrence::None, Series::default())];
+    let Some(rule) = rule else { return once };
+    let parts: BTreeMap<String, String> = rule
+        .split(';')
+        .filter_map(|p| p.split_once('='))
+        .map(|(k, v)| (k.trim().to_ascii_uppercase(), v.trim().to_ascii_uppercase()))
+        .collect();
+    let freq = match parts.get("FREQ").map(String::as_str) {
+        Some("DAILY") => CalendarRecurrence::Daily,
+        Some("WEEKLY") => CalendarRecurrence::Weekly,
+        Some("MONTHLY") => CalendarRecurrence::Monthly,
+        Some("YEARLY") => CalendarRecurrence::Yearly,
+        _ => return once,
+    };
+    let interval = parts.get("INTERVAL").and_then(|v| v.parse::<u32>().ok()).filter(|&i| i > 0).unwrap_or(1);
+    let weekday = |s: &str| ICS_WEEKDAYS.iter().position(|w| *w == s.trim()).map(|i| i as u32);
+    let wkst = parts.get("WKST").and_then(|v| weekday(v)).unwrap_or(0);
+    // plain weekdays only; `FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR` is weekly on those days
+    let byday = parts.get("BYDAY").and_then(|v| v.split(',').map(weekday).collect::<Option<Vec<u32>>>());
+    let (freq, days) = match byday {
+        Some(d) if freq == CalendarRecurrence::Weekly || (freq == CalendarRecurrence::Daily && interval == 1) => (CalendarRecurrence::Weekly, d),
+        _ => (freq, vec![start.weekday().num_days_from_monday()]),
+    };
+    let until = parts.get("UNTIL").and_then(|v| day(v));
+    let last = match parts.get("COUNT").and_then(|v| v.parse::<usize>().ok()) {
+        Some(n) => match ics_rule_dates(start, freq, interval, &days, wkst).take_while(|d| until.is_none_or(|u| *d <= u)).take(n).last() {
+            Some(l) => Some(l),
+            None => return once,
+        },
+        None => until,
+    };
+    let out: Vec<_> = days
+        .iter()
+        .filter_map(|&day| {
+            let first = ics_rule_dates(start, freq, interval, &[day], wkst).next()?;
+            if last.is_some_and(|l| first > l) {
+                return None;
+            }
+            let except = exdates
+                .iter()
+                .copied()
+                .filter(|&e| e >= first && last.is_none_or(|l| e <= l) && (freq != CalendarRecurrence::Weekly || e.weekday() == first.weekday()))
+                .collect();
+            Some((first, freq, Series { interval, until: last, except }))
+        })
+        .collect();
+    if out.is_empty() {
+        once
+    } else {
+        out
+    }
+}
+
 fn parse_ics_events(src: &str) -> Vec<RawEvent> {
+    parse_ics_events_in(src, &chrono::Local)
+}
+
+fn parse_ics_events_in<Tz: TimeZone>(src: &str, tz: &Tz) -> Vec<RawEvent> {
     let unfolded = ical::unfold(src);
     let mut out = Vec::new();
     let mut in_event = false;
+    // inside a component nested in the event (a VALARM): its SUMMARY or DESCRIPTION is not the event's
+    let mut nested = 0usize;
     let mut map: BTreeMap<String, String> = BTreeMap::new();
     for raw in unfolded.lines() {
         let Some(line) = Line::parse(raw.trim()) else { continue };
         match line.name.as_str() {
             "BEGIN" if line.value.eq_ignore_ascii_case("VEVENT") => {
                 in_event = true;
+                nested = 0;
                 map.clear();
             }
+            "BEGIN" if in_event => nested += 1,
+            // before the nested END: a sub-component left open still ends with its event
             "END" if line.value.eq_ignore_ascii_case("VEVENT") => {
                 if in_event {
-                    let (sd, st, all_day) = map.get("DTSTART").map_or((None, None, true), |v| parse_ics_dt(v));
-                    let (ed, et, _) = map.get("DTEND").map_or((None, None, true), |v| parse_ics_dt(v));
-                    let title = map.get("SUMMARY").map(|s| ical::unescape(s)).unwrap_or_default();
-                    if let Some(d) = sd {
-                        if !title.is_empty() {
-                            let end_date = ed.map(|x| if all_day && x > d { x - Duration::days(1) } else { x }).unwrap_or(d).max(d);
-                            out.push(RawEvent {
-                                id: String::new(),
-                                title,
-                                date: d,
-                                end_date,
-                                start: if all_day { None } else { st },
-                                end: if all_day { None } else { et },
-                                all_day,
-                                color: "blue".into(),
-                                location: map.get("LOCATION").map(|s| ical::unescape(s)).unwrap_or_default(),
-                                repeat: map
-                                    .get("RRULE")
-                                    .map(|r| {
-                                        if r.contains("FREQ=DAILY") { CalendarRecurrence::Daily }
-                                        else if r.contains("FREQ=WEEKLY") { CalendarRecurrence::Weekly }
-                                        else if r.contains("FREQ=MONTHLY") { CalendarRecurrence::Monthly }
-                                        else if r.contains("FREQ=YEARLY") { CalendarRecurrence::Yearly }
-                                        else { CalendarRecurrence::None }
-                                    })
-                                    .unwrap_or(CalendarRecurrence::None),
-                                links: Vec::new(),
-                                source: CalendarSource::Ics,
-                                path: None,
-                                line: None,
-                                completed: false,
-                                editable: false,
-                            });
-                        }
-                    }
+                    out.extend(ics_vevent(&map, tz));
                 }
                 in_event = false;
+                nested = 0;
                 map.clear();
             }
-            key if in_event => {
+            "END" if in_event && nested > 0 => nested -= 1,
+            // every EXDATE line counts, and each may list several dates
+            "EXDATE" if in_event && nested == 0 => {
+                let v = map.entry("EXDATE".into()).or_default();
+                if !v.is_empty() {
+                    v.push(',');
+                }
+                v.push_str(&line.value);
+            }
+            key if in_event && nested == 0 => {
                 map.insert(key.to_string(), line.value);
             }
             _ => {}
@@ -1248,23 +1568,71 @@ fn parse_ics_events(src: &str) -> Vec<RawEvent> {
     out
 }
 
+/// The events of one VEVENT's properties: one, or one per weekday of a weekly rule.
+fn ics_vevent<Tz: TimeZone>(map: &BTreeMap<String, String>, tz: &Tz) -> Vec<RawEvent> {
+    let (sd, st, all_day) = map.get("DTSTART").map_or((None, None, true), |v| parse_ics_dt_in(v, tz));
+    let (ed, et, _) = map.get("DTEND").map_or((None, None, true), |v| parse_ics_dt_in(v, tz));
+    let title = map.get("SUMMARY").map(|s| ical::unescape(s)).unwrap_or_default();
+    let Some(d) = sd.filter(|_| !title.is_empty()) else { return Vec::new() };
+    let end_date = ed.map(|x| if all_day && x > d { x - Duration::days(1) } else { x }).unwrap_or(d).max(d);
+    // the rule's days, UNTIL and EXDATEs are read in DTSTART's own frame: UTC for a `Z` time, then all moved to the
+    // shown day together; for a floating or TZID time the shown frame itself, where a `Z` UNTIL is converted
+    let dtstart_utc = map.get("DTSTART").is_some_and(|v| v.trim().ends_with(['Z', 'z']));
+    let read = |v: &str| if dtstart_utc { parse_ics_dt_in(v, &chrono::Utc).0 } else { parse_ics_dt_in(v, tz).0 };
+    let written = if dtstart_utc { map.get("DTSTART").and_then(|v| read(v)).unwrap_or(d) } else { d };
+    let shift = d - written;
+    let exdates: Vec<NaiveDate> = map.get("EXDATE").into_iter().flat_map(|v| v.split(',')).filter_map(read).collect();
+    let ev = RawEvent {
+        id: String::new(),
+        title,
+        date: d,
+        end_date,
+        start: if all_day { None } else { st },
+        end: if all_day { None } else { et },
+        all_day,
+        color: "blue".into(),
+        location: map.get("LOCATION").map(|s| ical::unescape(s)).unwrap_or_default(),
+        repeat: CalendarRecurrence::None,
+        series: Series::default(),
+        links: Vec::new(),
+        source: CalendarSource::Ics,
+        path: None,
+        line: None,
+        completed: false,
+        editable: false,
+    };
+    ics_series(map.get("RRULE").map(String::as_str), &exdates, written, read)
+        .into_iter()
+        .map(|(first, repeat, s)| {
+            let at = first + shift;
+            let series = Series { until: s.until.map(|u| u + shift), except: s.except.iter().map(|&e| e + shift).collect(), ..s };
+            RawEvent { date: at, end_date: at + (end_date - d), repeat, series, ..ev.clone() }
+        })
+        .collect()
+}
+
 pub fn import_ics(root: &Path, cfg: &Config, req: &IcsImportRequest) -> Result<IcsImportResult> {
     let as_pages = req.as_pages.unwrap_or(true);
     let parsed = parse_ics_events(&req.ics);
     let mut paths = Vec::new();
+    let day = |d: NaiveDate| d.format("%Y-%m-%d").to_string();
     for ev in parsed {
+        // a whole series is one event with its interval, end and skipped days, never a page per occurrence
         let up = CalendarEventUpsert {
             id: None,
             storage: Some(if as_pages { "page" } else { "inline" }.into()),
             title: ev.title,
-            date: ev.date.format("%Y-%m-%d").to_string(),
-            end_date: (ev.end_date != ev.date).then(|| ev.end_date.format("%Y-%m-%d").to_string()),
+            date: day(ev.date),
+            end_date: (ev.end_date != ev.date).then(|| day(ev.end_date)),
             start: ev.start,
             end: ev.end,
             all_day: ev.all_day,
             color: ev.color,
             location: ev.location,
             repeat: ev.repeat,
+            interval: Some(ev.series.interval),
+            until: ev.series.until.map(day),
+            except: Some(ev.series.except.into_iter().map(day).collect()),
             links: Vec::new(),
             notes: None,
         };
@@ -1302,7 +1670,24 @@ pub fn export_ics(root: &Path, cfg: &Config) -> String {
             lines.push(ical::fold(&format!("LOCATION:{}", ical::escape(&ev.location))));
         }
         if ev.repeat != CalendarRecurrence::None {
-            lines.push(format!("RRULE:FREQ={}", ev.repeat.as_str().to_ascii_uppercase()));
+            let s = &ev.series;
+            // UNTIL and EXDATE take the form of DTSTART: a date, or a floating time
+            let at = |d: &NaiveDate| match ev.all_day {
+                true => d.format("%Y%m%d").to_string(),
+                false => format!("{}T{}00", d.format("%Y%m%d"), ev.start.as_deref().unwrap_or("09:00").replace(':', "")),
+            };
+            let mut rule = format!("RRULE:FREQ={}", ev.repeat.as_str().to_ascii_uppercase());
+            if s.interval > 1 {
+                rule.push_str(&format!(";INTERVAL={}", s.interval));
+            }
+            if let Some(u) = s.until {
+                rule.push_str(&format!(";UNTIL={}", if ev.all_day { at(&u) } else { format!("{}T235959", u.format("%Y%m%d")) }));
+            }
+            lines.push(rule);
+            if !s.except.is_empty() {
+                let days = s.except.iter().map(at).collect::<Vec<_>>().join(",");
+                lines.push(ical::fold(&format!("EXDATE{}:{days}", if ev.all_day { ";VALUE=DATE" } else { "" })));
+            }
         }
         lines.push("END:VEVENT".into());
     }
@@ -1330,6 +1715,9 @@ mod tests {
             color: "blue".into(),
             location: "Room 301".into(),
             repeat: CalendarRecurrence::Weekly,
+            interval: None,
+            until: None,
+            except: None,
             links: vec!["[[Lab]]".into()],
             notes: None,
         };
@@ -1385,6 +1773,9 @@ mod tests {
                 color: "green".into(),
                 location: String::new(),
                 repeat: CalendarRecurrence::None,
+                interval: None,
+                until: None,
+                except: None,
                 links: Vec::new(),
                 notes: None,
             },
@@ -1428,6 +1819,9 @@ mod tests {
                 color: "blue".into(),
                 location: String::new(),
                 repeat: CalendarRecurrence::None,
+                interval: None,
+                until: None,
+                except: None,
                 links: Vec::new(),
                 notes: None,
             },
@@ -1451,6 +1845,9 @@ mod tests {
                 color: "amber".into(),
                 location: String::new(),
                 repeat: CalendarRecurrence::None,
+                interval: None,
+                until: None,
+                except: None,
                 links: Vec::new(),
                 notes: None,
             },
@@ -1475,11 +1872,325 @@ mod tests {
                 color: "purple".into(),
                 location: String::new(),
                 repeat: CalendarRecurrence::None,
+                interval: None,
+                until: None,
+                except: None,
                 links: Vec::new(),
                 notes: None,
             },
         )
         .unwrap();
         assert_eq!(moved_base.title, "Real Note");
+    }
+
+    fn day(s: &str) -> NaiveDate {
+        NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap()
+    }
+
+    fn event_req(id: &str, title: &str, date: &str, repeat: CalendarRecurrence) -> CalendarEventUpsert {
+        CalendarEventUpsert {
+            id: Some(id.into()).filter(|s: &String| !s.is_empty()),
+            storage: Some("inline".into()),
+            title: title.into(),
+            date: date.into(),
+            end_date: None,
+            start: Some("14:00".into()),
+            end: Some("15:00".into()),
+            all_day: false,
+            color: "blue".into(),
+            location: String::new(),
+            repeat,
+            interval: None,
+            until: None,
+            except: None,
+            links: Vec::new(),
+            notes: None,
+        }
+    }
+
+    #[test]
+    fn rescheduling_a_task_moves_the_date_the_calendar_shows() {
+        let moved = |line: &str| {
+            let r = task_date_range(line).expect("a date");
+            format!("{}2026-11-22{}", &line[..r.start], &line[r.end..])
+        };
+        // the created, scheduled or a title date before the due date stays as it is
+        assert_eq!(moved("- [ ] Write report ➕ 2026-11-01 📅 2026-11-20"), "- [ ] Write report ➕ 2026-11-01 📅 2026-11-22");
+        assert_eq!(moved("- [ ] Plan ⏳ 2026-11-10 📅 2026-11-20"), "- [ ] Plan ⏳ 2026-11-10 📅 2026-11-22");
+        assert_eq!(moved("- [ ] Call ➕ 2026-11-01 @2026-11-20"), "- [ ] Call ➕ 2026-11-01 @2026-11-22");
+        assert_eq!(moved("- [ ] Review 2026-10-01 minutes 📅 2026-11-20"), "- [ ] Review 2026-10-01 minutes 📅 2026-11-22");
+        // no due date: the scheduled one, then the start one
+        assert_eq!(moved("- [ ] Read ➕ 2026-11-01 🛫 2026-11-05 ⏳ 2026-11-20"), "- [ ] Read ➕ 2026-11-01 🛫 2026-11-05 ⏳ 2026-11-22");
+        assert_eq!(moved("- [x] Read ➕ 2026-11-01 🛫 2026-11-20 ✅ 2026-11-21"), "- [x] Read ➕ 2026-11-01 🛫 2026-11-22 ✅ 2026-11-21");
+        for line in ["- [ ] Write report ➕ 2026-11-01 📅 2026-11-20", "- [ ] Plan ⏳ 2026-11-10 📅 2026-11-20"] {
+            let body = crate::today::task_lines(std::iter::once(moved(line).as_str())).next().unwrap().1.to_string();
+            assert_eq!(crate::tasks::parse(&body).date(), Some(day("2026-11-22")), "{line}");
+        }
+        // only a created date: no date the calendar shows, so one is added
+        assert_eq!(task_date_range("- [ ] Idea ➕ 2026-11-01"), None);
+
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("todo.md"), "- [ ] Write report ➕ 2026-11-01 📅 2026-11-20\n").unwrap();
+        let mut req = event_req("task:todo.md:1", "Write report", "2026-11-22", CalendarRecurrence::None);
+        req.storage = None;
+        upsert_event(d.path(), &Config::default(), &req).unwrap();
+        assert_eq!(std::fs::read_to_string(d.path().join("todo.md")).unwrap(), "- [ ] Write report ➕ 2026-11-01 📅 2026-11-22\n");
+    }
+
+    fn raw(date: &str, end: &str, repeat: CalendarRecurrence) -> RawEvent {
+        RawEvent {
+            id: "page:e.md".into(),
+            title: "E".into(),
+            date: day(date),
+            end_date: day(end),
+            start: None,
+            end: None,
+            all_day: true,
+            color: "blue".into(),
+            location: String::new(),
+            repeat,
+            series: Series::default(),
+            links: Vec::new(),
+            source: CalendarSource::EventPage,
+            path: None,
+            line: None,
+            completed: false,
+            editable: true,
+        }
+    }
+
+    fn shown(ev: &RawEvent, from: &str, to: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        expand_event(ev, day(from), day(to), &mut out);
+        out.into_iter().map(|e| e.date).collect()
+    }
+
+    #[test]
+    fn a_long_running_series_still_shows_in_a_late_window() {
+        let daily = shown(&raw("2025-09-01", "2025-09-01", CalendarRecurrence::Daily), "2026-10-26", "2026-12-06");
+        assert_eq!((daily.len(), daily[0].as_str(), daily[41].as_str()), (42, "2026-10-26", "2026-12-06"));
+        // a weekly series keeps its weekday (2016-11-02 is a Wednesday)
+        let weekly = shown(&raw("2016-11-02", "2016-11-02", CalendarRecurrence::Weekly), "2026-11-01", "2026-11-30");
+        assert_eq!(weekly, ["2026-11-04", "2026-11-11", "2026-11-18", "2026-11-25"]);
+        // the 31st stays the 31st where the month has one
+        let monthly = shown(&raw("2020-01-31", "2020-01-31", CalendarRecurrence::Monthly), "2026-10-01", "2026-12-31");
+        assert_eq!(monthly, ["2026-10-31", "2026-11-30", "2026-12-31"]);
+        let yearly = shown(&raw("1990-03-10", "1990-03-10", CalendarRecurrence::Yearly), "2026-01-01", "2027-12-31");
+        assert_eq!(yearly, ["2026-03-10", "2027-03-10"]);
+        // a three-day occurrence that began before the window still shows
+        let multi = shown(&raw("2020-01-05", "2020-01-07", CalendarRecurrence::Weekly), "2026-11-03", "2026-11-03");
+        assert_eq!(multi, ["2026-11-01"]);
+    }
+
+    #[test]
+    fn editing_a_later_occurrence_keeps_or_moves_the_whole_series() {
+        let d = tempfile::tempdir().unwrap();
+        let cfg = Config::default();
+        let made = upsert_event(d.path(), &cfg, &event_req("", "Colloquium", "2026-11-18", CalendarRecurrence::Weekly)).unwrap();
+        let log18 = made.path.clone().unwrap();
+        // a title change from the 12-02 occurrence leaves the series where it was
+        let occ = format!("{}@2026-12-02", made.id);
+        let edited = upsert_event(d.path(), &cfg, &event_req(&occ, "Colloquium (room 3)", "2026-12-02", CalendarRecurrence::Weekly)).unwrap();
+        assert_eq!((edited.id.as_str(), edited.date.as_str()), (made.id.as_str(), "2026-11-18"));
+        let titles = |from: &str, to: &str| {
+            query_range(d.path(), &cfg, day(from), day(to)).unwrap().events.into_iter().map(|e| (e.date, e.title)).collect::<Vec<_>>()
+        };
+        assert_eq!(titles("2026-11-16", "2026-11-29"), [("2026-11-18".into(), "Colloquium (room 3)".into()), ("2026-11-25".into(), "Colloquium (room 3)".into())]);
+        // dragging the 12-02 occurrence one day later moves every occurrence one day later
+        let occ = format!("{}@2026-12-02", edited.id);
+        let moved = upsert_event(d.path(), &cfg, &event_req(&occ, "Colloquium (room 3)", "2026-12-03", CalendarRecurrence::Weekly)).unwrap();
+        assert_eq!(moved.date, "2026-11-19");
+        assert!(!std::fs::read_to_string(d.path().join(&log18)).unwrap().contains("Colloquium"));
+        assert_eq!(titles("2026-11-16", "2026-11-29").into_iter().map(|e| e.0).collect::<Vec<_>>(), ["2026-11-19", "2026-11-26"]);
+        // an event page keeps its `date:` (and its file) when a later occurrence is retitled
+        let mut req = event_req("", "Seminar", "2026-11-18", CalendarRecurrence::Weekly);
+        req.storage = Some("page".into());
+        let page = upsert_event(d.path(), &cfg, &req).unwrap();
+        req.id = Some(format!("{}@2026-12-02", page.id));
+        req.title = "Seminar (moved room)".into();
+        req.date = "2026-12-02".into();
+        let edited = upsert_event(d.path(), &cfg, &req).unwrap();
+        assert_eq!((edited.id.as_str(), edited.date.as_str()), (page.id.as_str(), "2026-11-18"));
+        let text = std::fs::read_to_string(d.path().join(page.path.unwrap())).unwrap();
+        assert!(text.contains("date: 2026-11-18") && text.contains("Seminar (moved room)"), "{text}");
+        // a monthly series moved by a month keeps its day of the month
+        assert_eq!(shift_series_start(day("2026-01-31"), day("2026-03-31"), day("2026-05-31"), CalendarRecurrence::Monthly, 1), day("2026-03-31"));
+        assert_eq!(shift_series_start(day("2026-01-15"), day("2026-03-15"), day("2026-04-15"), CalendarRecurrence::Monthly, 1), day("2026-02-15"));
+        assert_eq!(split_occurrence("page:events/a@b.md"), ("page:events/a@b.md", None));
+    }
+
+    #[test]
+    fn ics_utc_times_alarms_and_ending_rules() {
+        let cet = chrono::FixedOffset::east_opt(3600).unwrap();
+        assert_eq!(parse_ics_dt_in("20261118T130000Z", &cet), (Some(day("2026-11-18")), Some("14:00".into()), false));
+        assert_eq!(parse_ics_dt_in("20261118T233000Z", &cet), (Some(day("2026-11-19")), Some("00:30".into()), false));
+        assert_eq!(parse_ics_dt_in("20261118T130000", &cet), (Some(day("2026-11-18")), Some("13:00".into()), false), "floating stays");
+
+        let ics = |rule: &str, extra: &str| {
+            format!(
+                "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20261104\r\nSUMMARY:Seminar\r\n{rule}{extra}BEGIN:VALARM\r\nACTION:EMAIL\r\nSUMMARY:Alarm notification\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+            )
+        };
+        let evs = parse_ics_events(&ics("RRULE:FREQ=WEEKLY;BYDAY=WE\r\n", ""));
+        assert_eq!(evs.len(), 1);
+        assert_eq!((evs[0].title.as_str(), evs[0].repeat), ("Seminar", CalendarRecurrence::Weekly));
+        let utc = chrono::Utc;
+        // one event per rule, its end and skipped days kept on it, never a separate event per occurrence
+        let one = |rule: &str, extra: &str| {
+            let evs = parse_ics_events_in(&ics(rule, extra), &utc);
+            assert_eq!(evs.len(), 1, "{rule}");
+            let e = &evs[0];
+            (e.date, e.repeat, e.series.interval, e.series.until, e.series.except.clone())
+        };
+        let wk = CalendarRecurrence::Weekly;
+        assert_eq!(one("RRULE:FREQ=WEEKLY;COUNT=3\r\n", ""), (day("2026-11-04"), wk, 1, Some(day("2026-11-18")), vec![]));
+        assert_eq!(
+            one("RRULE:FREQ=WEEKLY;INTERVAL=2;UNTIL=20261202T235959Z\r\n", "EXDATE;VALUE=DATE:20261118\r\n"),
+            (day("2026-11-04"), wk, 2, Some(day("2026-12-02")), vec![day("2026-11-18")])
+        );
+        assert_eq!(one("RRULE:FREQ=WEEKLY;INTERVAL=2\r\n", ""), (day("2026-11-04"), wk, 2, None, vec![]));
+        assert_eq!(one("RRULE:FREQ=WEEKLY\r\n", "EXDATE;VALUE=DATE:20261118\r\n"), (day("2026-11-04"), wk, 1, None, vec![day("2026-11-18")]));
+        // a part the model cannot say repeats at the plain frequency rather than showing once
+        assert_eq!(one("RRULE:FREQ=MONTHLY;BYDAY=1WE\r\n", "").1, CalendarRecurrence::Monthly);
+
+        let occ = |src: String, from: &str, to: &str| {
+            let mut out: Vec<String> = parse_ics_events_in(&src, &utc).iter().flat_map(|e| shown(e, from, to)).collect();
+            out.sort();
+            out
+        };
+        assert_eq!(occ(ics("RRULE:FREQ=WEEKLY;COUNT=3\r\n", ""), "2026-11-01", "2026-12-31"), ["2026-11-04", "2026-11-11", "2026-11-18"]);
+        assert_eq!(
+            occ(ics("RRULE:FREQ=WEEKLY;INTERVAL=2;UNTIL=20261202T235959Z\r\n", "EXDATE;VALUE=DATE:20261118\r\n"), "2026-11-01", "2026-12-31"),
+            ["2026-11-04", "2026-12-02"]
+        );
+        assert_eq!(occ(ics("RRULE:FREQ=WEEKLY;INTERVAL=2\r\n", ""), "2027-01-01", "2027-01-31"), ["2027-01-13", "2027-01-27"]);
+        assert_eq!(occ(ics("RRULE:FREQ=WEEKLY\r\n", "EXDATE;VALUE=DATE:20261118\r\n"), "2026-11-01", "2026-11-30"), ["2026-11-04", "2026-11-11", "2026-11-25"]);
+        // several weekdays: one series per day, a COUNT ending all of them on the same last day
+        assert_eq!(occ(ics("RRULE:FREQ=WEEKLY;BYDAY=MO,WE\r\n", ""), "2026-11-01", "2026-11-15"), ["2026-11-04", "2026-11-09", "2026-11-11"]);
+        assert_eq!(occ(ics("RRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=3\r\n", ""), "2026-11-01", "2026-12-31"), ["2026-11-04", "2026-11-09", "2026-11-11"]);
+        assert_eq!(occ(ics("RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE\r\n", ""), "2026-11-01", "2026-11-30"), ["2026-11-04", "2026-11-16", "2026-11-18", "2026-11-30"]);
+        assert_eq!(parse_ics_events_in(&ics("RRULE:FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR\r\n", ""), &utc).len(), 5);
+        // COUNT skips the months without the 31st, as RFC 5545 does
+        let jan31 = ics("RRULE:FREQ=MONTHLY;COUNT=3\r\n", "").replace("20261104", "20260131");
+        assert_eq!(parse_ics_events_in(&jan31, &utc)[0].series.until, Some(day("2026-05-31")));
+    }
+
+    #[test]
+    fn ics_rule_days_are_read_in_the_frame_dtstart_is_written_in() {
+        let ics = |start: &str, rule: &str| {
+            format!("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART:{start}\r\nSUMMARY:Meeting\r\n{rule}END:VEVENT\r\nEND:VCALENDAR\r\n")
+        };
+        let occ = |src: String, tz: chrono::FixedOffset, from: &str, to: &str| {
+            parse_ics_events_in(&src, &tz)
+                .iter()
+                .flat_map(|e| shown(e, from, to).into_iter().map(|d| (d, e.start.clone().unwrap_or_default())))
+                .collect::<Vec<_>>()
+        };
+        let at = |d: &str, t: &str| (d.to_string(), t.to_string());
+        // Tuesday 02:00 UTC is Monday 18:00 eight hours west: BYDAY=TU names the written day, so the series stays weekly
+        let west = chrono::FixedOffset::west_opt(8 * 3600).unwrap();
+        assert_eq!(
+            occ(ics("20261117T020000Z", "RRULE:FREQ=WEEKLY;BYDAY=TU\r\n"), west, "2026-11-16", "2026-11-29"),
+            [at("2026-11-16", "18:00"), at("2026-11-23", "18:00")]
+        );
+        // Tuesday 23:00 UTC is Wednesday 07:00 eight hours east; UNTIL and EXDATE move to the shown day with it
+        let east = chrono::FixedOffset::east_opt(8 * 3600).unwrap();
+        let src = ics("20261117T230000Z", "RRULE:FREQ=WEEKLY;BYDAY=TU;UNTIL=20261201T230000Z\r\nEXDATE:20261124T230000Z\r\n");
+        assert_eq!(occ(src, east, "2026-11-01", "2026-12-31"), [at("2026-11-18", "07:00"), at("2026-12-02", "07:00")]);
+        let cet = chrono::FixedOffset::east_opt(3600).unwrap();
+        let evs = parse_ics_events_in(&ics("20261118T233000Z", "RRULE:FREQ=WEEKLY;BYDAY=WE\r\n"), &cet);
+        assert_eq!((evs[0].date, evs[0].repeat), (day("2026-11-19"), CalendarRecurrence::Weekly));
+        // a floating or TZID start is read as written, and a `Z` UNTIL is converted to the shown day
+        let tokyo = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
+        let src = ics("20261118T070000", "RRULE:FREQ=WEEKLY;UNTIL=20261201T220000Z\r\n").replace("DTSTART:", "DTSTART;TZID=Asia/Tokyo:");
+        let days = |src: String, tz| occ(src, tz, "2026-11-01", "2026-12-31").into_iter().map(|o| o.0).collect::<Vec<_>>();
+        assert_eq!(days(src, tokyo), ["2026-11-18", "2026-11-25", "2026-12-02"]);
+        assert_eq!(days(ics("20261118T090000", "RRULE:FREQ=DAILY;UNTIL=20261121T075959Z\r\n"), west), ["2026-11-18", "2026-11-19", "2026-11-20"]);
+    }
+
+    #[test]
+    fn an_unclosed_component_ends_with_its_event() {
+        let src = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20261104\r\nSUMMARY:First\r\nBEGIN:VALARM\r\nSUMMARY:Alarm\r\nEND:VEVENT\r\n\
+                   BEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20261105\r\nSUMMARY:Second\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        let titles: Vec<_> = parse_ics_events_in(src, &chrono::Utc).into_iter().map(|e| (e.title, e.date)).collect();
+        assert_eq!(titles, [("First".to_string(), day("2026-11-04")), ("Second".to_string(), day("2026-11-05"))]);
+    }
+
+    #[test]
+    fn an_imported_series_is_one_event_that_keeps_its_end_when_edited() {
+        let cfg = Config::default();
+        let ics = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20261104\r\nSUMMARY:Seminar\r\n\
+                   RRULE:FREQ=WEEKLY;INTERVAL=2;COUNT=40\r\nEXDATE;VALUE=DATE:20261118\r\nEND:VEVENT\r\n\
+                   BEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20261102\r\nSUMMARY:Standup\r\nRRULE:FREQ=DAILY;UNTIL=20271231\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        for as_pages in [true, false] {
+            let d = tempfile::tempdir().unwrap();
+            let imp = import_ics(d.path(), &cfg, &IcsImportRequest { ics: ics.into(), as_pages: Some(as_pages) }).unwrap();
+            assert_eq!(imp.imported, 2, "{imp:?}");
+            let mut files = imp.paths.clone();
+            files.sort();
+            files.dedup();
+            assert_eq!(files.len(), 2, "one page or day-log entry per series, not one per occurrence: {files:?}");
+            let seminar = |from: &str, to: &str| {
+                let evs = query_range(d.path(), &cfg, day(from), day(to)).unwrap().events;
+                evs.into_iter().filter(|e| e.title.starts_with("Seminar")).collect::<Vec<_>>()
+            };
+            let dates = |from: &str, to: &str| seminar(from, to).into_iter().map(|e| e.date).collect::<Vec<_>>();
+            // 40 occurrences two weeks apart end on 2028-05-03; 2026-11-18 is skipped
+            assert_eq!(dates("2026-11-01", "2026-12-06"), ["2026-11-04", "2026-12-02"]);
+            assert_eq!(dates("2028-04-20", "2028-06-30"), ["2028-05-03"]);
+            // retitling from a later occurrence (the editor sends no interval, end or skipped days) keeps them
+            let occ = seminar("2026-12-01", "2026-12-06").remove(0);
+            let mut req = event_req(&occ.occurrence_id, "Seminar (room 3)", "2026-12-02", CalendarRecurrence::Weekly);
+            (req.start, req.end, req.all_day) = (None, None, true);
+            let edited = upsert_event(d.path(), &cfg, &req).unwrap();
+            assert_eq!(edited.date, "2026-11-04");
+            assert_eq!(dates("2026-11-01", "2026-12-06"), ["2026-11-04", "2026-12-02"]);
+            assert_eq!(dates("2028-04-20", "2028-06-30"), ["2028-05-03"]);
+            // dragging it a day later moves the end and the skipped day with it
+            let occ = seminar("2026-12-01", "2026-12-06").remove(0);
+            req.id = Some(occ.occurrence_id);
+            req.date = "2026-12-03".into();
+            upsert_event(d.path(), &cfg, &req).unwrap();
+            assert_eq!(dates("2026-11-01", "2026-12-06"), ["2026-11-05", "2026-12-03"]);
+            assert_eq!(dates("2028-04-21", "2028-06-30"), ["2028-05-04"]);
+            // the export says the same rule
+            let out = export_ics(d.path(), &cfg);
+            assert!(out.contains("RRULE:FREQ=WEEKLY;INTERVAL=2;UNTIL=20280504") && out.contains("EXDATE;VALUE=DATE:20261119"), "{out}");
+        }
+    }
+
+    #[test]
+    fn moving_an_occurrence_lands_it_where_it_was_dropped() {
+        let lands = |start: &str, occ: &str, to: &str, repeat: CalendarRecurrence| {
+            let s = shift_series_start(day(start), day(occ), day(to), repeat, 1);
+            (s, shown(&raw(&s.to_string(), &s.to_string(), repeat), to, to))
+        };
+        let m = CalendarRecurrence::Monthly;
+        // 07-31 dropped on 08-31: February has no 31st, so the series starts on 03-31 and keeps the 31st
+        assert_eq!(lands("2026-01-31", "2026-07-31", "2026-08-31", m), (day("2026-03-31"), vec!["2026-08-31".to_string()]));
+        // a new day of the month is kept
+        assert_eq!(lands("2026-01-15", "2026-03-15", "2026-03-20", m), (day("2026-01-20"), vec!["2026-03-20".to_string()]));
+        // the clamped 11-30 occurrence of a 31st series moved to 12-02
+        assert_eq!(lands("2026-01-31", "2026-11-30", "2026-12-02", m), (day("2026-02-02"), vec!["2026-12-02".to_string()]));
+        assert_eq!(lands("2024-02-29", "2026-02-28", "2026-03-01", CalendarRecurrence::Yearly).1, ["2026-03-01"]);
+        assert_eq!(lands("2026-11-04", "2026-12-02", "2026-12-05", CalendarRecurrence::Weekly), (day("2026-11-07"), vec!["2026-12-05".to_string()]));
+        // not moved (a title change opened from a clamped occurrence) leaves the start alone
+        assert_eq!(shift_series_start(day("2026-01-31"), day("2026-11-30"), day("2026-11-30"), m, 1), day("2026-01-31"));
+        // a skipped day or end moves a month with the occurrences, even when the start had to skip February
+        let ev = raw("2026-01-31", "2026-01-31", m);
+        let carried = |d: &str| move_with_series(&ev, day("2026-07-31"), day("2026-08-31"), day("2026-03-31"), day(d));
+        assert_eq!((carried("2026-10-31"), carried("2026-12-31")), (day("2026-11-30"), day("2027-01-31")));
+        let weekly = raw("2026-11-04", "2026-11-04", CalendarRecurrence::Weekly);
+        assert_eq!(move_with_series(&weekly, day("2026-12-02"), day("2026-12-05"), day("2026-11-07"), day("2026-12-16")), day("2026-12-19"));
+    }
+
+    #[test]
+    fn a_series_keeps_its_interval_end_and_skipped_days() {
+        let mut ev = raw("2025-01-08", "2025-01-08", CalendarRecurrence::Weekly);
+        ev.series.interval = 2;
+        assert_eq!(shown(&ev, "2026-11-01", "2026-11-30"), ["2026-11-11", "2026-11-25"]);
+        ev.series.until = Some(day("2026-11-20"));
+        ev.series.except = vec![day("2026-10-28")];
+        assert_eq!(shown(&ev, "2026-10-20", "2026-11-30"), ["2026-11-11"]);
     }
 }

@@ -125,6 +125,11 @@ pub struct TemplateMerged {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub body: Option<String>,
+    /// A save's answer whose `text` carries a .base automation's property edits, which the core also wrote into the
+    /// file (`mtime` is that write's): the file then differs from what was sent, so a copy typed into since must merge it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[ts(as = "Option<bool>", optional)]
+    pub automation: bool,
 }
 
 /// `POST /api/note/merge-template`: `template` merged into `text`, the note at `path` as it is in an editor now;
