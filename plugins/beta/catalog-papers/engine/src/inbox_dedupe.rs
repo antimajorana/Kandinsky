@@ -21,13 +21,18 @@ pub struct InboxItem {
     pub file: String, pub size: u64, pub doi: Option<String>, pub arxiv: Option<String>, pub arxiv_version: Option<String>,
     pub isbn: Option<String>, pub title: String, pub authors: Vec<String>, pub year: Option<String>,
     pub suggested_filename: String, pub suggested_subfolder: String, pub existing_key: Option<String>,
+    /// Where organizing files it with the suggested name and subfolder, as `organize_inbox`'s preview gives it.
+    pub target_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InboxScan {
     pub configured: bool,
     pub inbox_dir: String,
+    /// The shared folder PDFs are filed into; empty when none is set.
     pub external_root: String,
+    /// No shared folder: PDFs go into the entry's own folder in the vault, and a subfolder is not used.
+    pub files_into_vault: bool,
     pub rename_format: String,
     pub items: Vec<InboxItem>,
     pub subfolder_presets: Vec<String>,
@@ -128,8 +133,20 @@ fn fallback_stem_entry(fname: &str) -> Mapping {
     m
 }
 
+/// Where a PDF named `name` is filed for entry `key`: the shared folder (and `sub`) when one is set, else the entry's folder.
+fn filed_path(cfg: &Settings, key: &str, sub: &str, name: &str) -> String {
+    match cfg.external_pdf_roots.first() {
+        Some(root) => {
+            let (pfx, sub) = (root.trim_end_matches('/'), sub.trim().trim_matches('/'));
+            if sub.is_empty() { format!("{pfx}/{name}") } else { format!("{pfx}/{sub}/{name}") }
+        }
+        None => format!("{}/{key}/{name}", cfg.dir),
+    }
+}
+
 pub fn scan_inbox(lib: &Lib) -> Res<InboxScan> {
-    let external_root = lib.cfg.external_pdf_roots.first().cloned().unwrap_or_else(|| "../Papers".into());
+    let external_root = lib.cfg.external_pdf_roots.first().cloned().unwrap_or_default();
+    let files_into_vault = lib.cfg.external_pdf_roots.is_empty();
     let rename_format = lib.cfg.rename_format.clone();
     let subfolder_presets = lib.cfg.subfolder_presets.clone();
     let watch_inbox = lib.cfg.watch_inbox.trim();
@@ -138,6 +155,7 @@ pub fn scan_inbox(lib: &Lib) -> Res<InboxScan> {
             configured: false,
             inbox_dir: String::new(),
             external_root,
+            files_into_vault,
             rename_format,
             items: Vec::new(),
             subfolder_presets,
@@ -157,15 +175,17 @@ pub fn scan_inbox(lib: &Lib) -> Res<InboxScan> {
         let key_hint = info.existing_key.clone().unwrap_or_else(|| citekey(&authors, year.as_deref(), &title, &|_| false));
         let suggested_filename = format_pdf_filename(&lib.cfg.rename_format, &m, &key_hint);
         let suggested_subfolder = suggest_subfolder(&lib.cfg.subfolder_presets, &format!("{title} {}", info.text.chars().take(600).collect::<String>()));
+        let target_path = filed_path(lib.cfg, &key_hint, &suggested_subfolder, &suggested_filename);
         items.push(InboxItem {
             file: fname, size: bytes.len() as u64, doi: info.doi, arxiv: info.arxiv, arxiv_version: info.arxiv_ver,
-            isbn: info.isbn, title, authors, year, suggested_filename, suggested_subfolder, existing_key: info.existing_key,
+            isbn: info.isbn, title, authors, year, suggested_filename, suggested_subfolder, existing_key: info.existing_key, target_path,
         });
     }
     Ok(InboxScan {
         configured: true,
         inbox_dir: watch_inbox.to_string(),
         external_root,
+        files_into_vault,
         rename_format,
         items,
         subfolder_presets,
@@ -216,10 +236,7 @@ pub fn organize_inbox(lib: &Lib, req: &OrganizeInboxReq) -> Res<OrganizeInboxRes
         let sub = item_opt.and_then(|o| o.subfolder.clone()).or_else(|| req.subfolder.clone()).unwrap_or_else(|| suggest_subfolder(&lib.cfg.subfolder_presets, &ys(&m, "title").unwrap_or_default()));
         let target_name = item_opt.and_then(|o| o.filename.as_deref()).map(|n| sanitize_pdf_filename(n, &key)).unwrap_or_else(|| format_pdf_filename(&lib.cfg.rename_format, &m, &key));
         if req.dry_run {
-            let preview_ref = if !lib.cfg.external_pdf_roots.is_empty() {
-                let pfx = lib.cfg.external_pdf_roots[0].trim_end_matches('/');
-                if sub.trim().is_empty() { format!("{pfx}/{target_name}") } else { format!("{pfx}/{}/{target_name}", sub.trim_matches('/')) }
-            } else { format!("{}/{key}/{target_name}", lib.cfg.dir) };
+            let preview_ref = filed_path(lib.cfg, &key, &sub, &target_name);
             res.organized.push(OrganizeInboxMoved { source_file: fname, key, pdf_ref: preview_ref, created });
             continue;
         }
@@ -593,7 +610,8 @@ mod tests {
         std::fs::write(sort_dir.join("Quantum_lecture_notes.pdf"), b"%PDF-1.4 inbox-one").unwrap();
         let scan = scan_inbox(&v.lib()).unwrap();
         assert!(scan.configured);
-        assert_eq!((scan.external_root.as_str(), scan.items.len(), scan.items[0].suggested_subfolder.as_str()), ("../Papers", 1, "Quantum"));
+        assert_eq!((scan.external_root.as_str(), scan.files_into_vault, scan.items.len(), scan.items[0].suggested_subfolder.as_str()), ("../Papers", false, 1, "Quantum"));
+        assert!(scan.items[0].target_path.starts_with("../Papers/Quantum/"), "{}", scan.items[0].target_path);
         let org = organize_inbox(&v.lib(), &OrganizeInboxReq::default()).unwrap();
         assert_eq!(org.organized.len(), 1);
         assert!(!sort_dir.join("Quantum_lecture_notes.pdf").exists() && pool_dir.join("Quantum").read_dir().unwrap().count() == 1);
@@ -624,7 +642,7 @@ mod tests {
         assert!(!def_scan.configured);
         assert!(def_scan.inbox_dir.is_empty());
         assert!(def_scan.items.is_empty());
-        assert_eq!(def_scan.external_root, "../Papers");
+        assert_eq!((def_scan.external_root.as_str(), def_scan.files_into_vault), ("", true));
         assert_eq!(def_scan.rename_format, "{Author}{Year} - {Title}.pdf");
 
         v.cfg.watch_inbox = "   ".into();
@@ -635,8 +653,29 @@ mod tests {
         assert!(!custom_scan.configured);
         assert!(custom_scan.inbox_dir.is_empty());
         assert!(custom_scan.items.is_empty());
-        assert_eq!(custom_scan.external_root, "../Library/Papers");
+        assert_eq!((custom_scan.external_root.as_str(), custom_scan.files_into_vault), ("../Library/Papers", false));
         assert_eq!(custom_scan.rename_format, "{Citekey}.pdf");
         assert_eq!(custom_scan.subfolder_presets, vec!["Condensed".to_string()]);
+    }
+
+    #[test]
+    fn scan_inbox_without_a_shared_folder_previews_the_entry_folder() {
+        let (mut v, ws) = (Vault::new(), tempfile::tempdir().unwrap());
+        let ws_real = real(ws.path()).unwrap();
+        let (vault_dir, sort_dir) = (ws_real.join("vault"), ws_real.join("Sort"));
+        std::fs::create_dir_all(&vault_dir).unwrap();
+        std::fs::create_dir_all(&sort_dir).unwrap();
+        v.root = vault_dir;
+        v.trash = TempTrash(v.root.clone());
+        v.cfg.watch_inbox = "../Sort".into();
+        v.cfg.subfolder_presets = vec!["Quantum".into()];
+        std::fs::write(sort_dir.join("Quantum_lecture_notes.pdf"), b"%PDF-1.4 inbox-one").unwrap();
+
+        let scan = scan_inbox(&v.lib()).unwrap();
+        assert_eq!((scan.external_root.as_str(), scan.files_into_vault, scan.items.len()), ("", true, 1));
+        let target = scan.items[0].target_path.clone();
+        assert!(target.starts_with("refs/papers/") && !target.contains("Quantum/"), "{target}");
+        let dry = organize_inbox(&v.lib(), &OrganizeInboxReq { dry_run: true, ..Default::default() }).unwrap();
+        assert_eq!(dry.organized[0].pdf_ref, target);
     }
 }

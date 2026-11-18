@@ -295,7 +295,63 @@ struct ExistingEntry {
     doi: Option<String>,
     arxiv_base: Option<String>,
     isbn_core: Option<String>,
+    title: Option<String>,
+    first_author: Option<String>,
     claimed: bool,
+}
+
+/// Text as compared for identity: Zotero's rich-text tags (`<i>`, `<sub>`, `<span class="nocase">`) and HTML entities
+/// dropped, accents folded, lowercase letters and digits only, so a note written from a cleaned-up title still agrees.
+fn ident_fold(t: &str) -> String {
+    let (mut out, mut rest) = (String::with_capacity(t.len()), t);
+    while let Some(c) = rest.chars().next() {
+        let tail = &rest[c.len_utf8()..];
+        // a tag opens with a letter or "/" ("a < b" stays text); an entity is a short name between "&" and ";"
+        let tag = (c == '<' && tail.starts_with(|n: char| n == '/' || n.is_ascii_alphabetic())).then(|| tail.find('>')).flatten();
+        let entity = (c == '&').then(|| tail.find(';')).flatten().filter(|&n| (1..=8).contains(&n) && tail[..n].chars().all(|x| x.is_ascii_alphanumeric() || x == '#'));
+        if let Some(n) = tag.or(entity) {
+            rest = &tail[n + 1..];
+            continue;
+        }
+        rest = tail;
+        for l in c.to_lowercase() {
+            match l {
+                'á' | 'à' | 'ä' | 'â' | 'ã' | 'å' | 'ā' | 'ă' | 'ą' => out.push('a'),
+                'é' | 'è' | 'ë' | 'ê' | 'ē' | 'ė' | 'ę' | 'ě' => out.push('e'),
+                'í' | 'ì' | 'ï' | 'î' | 'ī' | 'ı' => out.push('i'),
+                'ó' | 'ò' | 'ö' | 'ô' | 'õ' | 'ø' | 'ō' | 'ő' => out.push('o'),
+                'ú' | 'ù' | 'ü' | 'û' | 'ū' | 'ů' | 'ű' => out.push('u'),
+                'ý' | 'ÿ' => out.push('y'),
+                'ñ' | 'ń' | 'ň' => out.push('n'),
+                'ç' | 'ć' | 'č' => out.push('c'),
+                'ś' | 'š' | 'ş' => out.push('s'),
+                'ź' | 'ż' | 'ž' => out.push('z'),
+                'ł' => out.push('l'),
+                'ř' => out.push('r'),
+                'ď' => out.push('d'),
+                'ť' => out.push('t'),
+                'ß' => out.push_str("ss"),
+                'æ' => out.push_str("ae"),
+                'œ' => out.push_str("oe"),
+                // ligatures a title read off a PDF's first page carries
+                'ﬀ' => out.push_str("ff"),
+                'ﬁ' => out.push_str("fi"),
+                'ﬂ' => out.push_str("fl"),
+                'ﬃ' => out.push_str("ffi"),
+                'ﬄ' => out.push_str("ffl"),
+                // combining accents (a decomposed "é") are not alphanumeric and drop out here
+                l if l.is_alphanumeric() => out.push(l),
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
+/// The first author's last name ("Witten, Edward" or "Edward Witten") as the citekey takes it, folded like a title.
+fn first_author_last(authors: &[String]) -> Option<String> {
+    let a = authors.first()?;
+    a.split(',').next().unwrap_or(a).split_whitespace().last().map(ident_fold).filter(|l| !l.is_empty())
 }
 
 fn entry_live_paths(lib: &Lib, dir: &Path, m: &serde_yaml::Mapping) -> Vec<PathBuf> {
@@ -356,6 +412,8 @@ fn load_existing_entries(lib: &Lib, refs_base: &Path) -> Vec<ExistingEntry> {
             doi: s(&m, "DOI").map(|d| norm_doi(&d)).filter(|d| !d.is_empty()),
             arxiv_base: arxiv_of(&m).map(|a| a.to_ascii_lowercase()),
             isbn_core: s(&m, "ISBN").or_else(|| s(&m, "isbn")).and_then(|x| isbn_core(&x)),
+            title: s(&m, "title").map(|t| ident_fold(&t)).filter(|t| !t.is_empty()),
+            first_author: first_author_last(&list(&m, "author")),
             claimed: false,
         });
     }
@@ -464,6 +522,7 @@ pub fn import_zotero(lib: &Lib, opts: &ZoteroImportOpts) -> Res<ZoteroImportRepo
     let refs_base = safe_join(lib.root, &lib.cfg.dir)?;
     let mut existing = load_existing_entries(lib, &refs_base);
     let (mut assigned, mut zkey_to_ck, mut iid_to_ck) = (HashSet::new(), HashMap::new(), HashMap::new());
+    let live_zkeys: HashSet<&str> = bib_items.iter().map(|(_, k, _, _)| k.as_str()).collect();
     for (iid, zkey, _, _) in &bib_items {
         let f = item_fields.get(iid);
         let z_live_paths: Vec<PathBuf> = item_atts
@@ -484,6 +543,21 @@ pub fn import_zotero(lib: &Lib, opts: &ZoteroImportOpts) -> Res<ZoteroImportRepo
         let year = f.and_then(|m| m.get("date")).and_then(|d| year_of(d));
         let title = f.and_then(|m| m.get("title")).map(String::as_str).unwrap_or("");
         let base_ck = citekey(&authors, year.as_deref(), title, &|_| false);
+        let (z_title, z_first) = (ident_fold(title), first_author_last(&authors));
+
+        // an entry owned by another item of this library stays that item's, even when they share a PDF or an id
+        let free = |e: &ExistingEntry| !e.claimed && e.zotero_key.as_deref().is_none_or(|k| k == zkey.as_str() || !live_zkeys.contains(k));
+        // a citekey alone is shared by different papers (same author, year and first word): the titles must agree;
+        // a note with no title has only its first author left to confirm the key
+        let same_paper = |e: &ExistingEntry| {
+            base_ck != "ref"
+                && e.key == base_ck
+                && match e.title.as_deref() {
+                    Some(t) => t == z_title && (e.first_author.is_none() || z_first.is_none() || e.first_author == z_first),
+                    None => z_first.is_some() && e.first_author == z_first,
+                }
+        };
+        let pinned_here = |e: &ExistingEntry| pinned.as_deref() == Some(e.key.as_str()) && e.title.as_ref().is_none_or(|t| z_title.is_empty() || *t == z_title);
 
         let no_id_conflict = |e: &ExistingEntry| {
             z_doi.as_ref().is_none_or(|zd| e.doi.as_ref().is_none_or(|ed| ed == zd))
@@ -493,15 +567,15 @@ pub fn import_zotero(lib: &Lib, opts: &ZoteroImportOpts) -> Res<ZoteroImportRepo
         let matched_idx = existing
             .iter()
             .position(|e| !e.claimed && e.zotero_key.as_deref() == Some(zkey.as_str()))
-            .or_else(|| (!z_live_paths.is_empty()).then(|| existing.iter().position(|e| !e.claimed && e.live_paths.iter().any(|lp| z_live_paths.contains(lp)))).flatten())
-            .or_else(|| z_doi.is_some().then(|| existing.iter().position(|e| !e.claimed && e.doi == z_doi)).flatten())
-            .or_else(|| z_arxiv_base.is_some().then(|| existing.iter().position(|e| !e.claimed && e.arxiv_base == z_arxiv_base)).flatten())
-            .or_else(|| z_isbn_core.is_some().then(|| existing.iter().position(|e| !e.claimed && e.isbn_core == z_isbn_core)).flatten())
+            .or_else(|| (!z_live_paths.is_empty()).then(|| existing.iter().position(|e| free(e) && e.live_paths.iter().any(|lp| z_live_paths.contains(lp)))).flatten())
+            .or_else(|| z_doi.is_some().then(|| existing.iter().position(|e| free(e) && e.doi == z_doi)).flatten())
+            .or_else(|| z_arxiv_base.is_some().then(|| existing.iter().position(|e| free(e) && e.arxiv_base == z_arxiv_base)).flatten())
+            .or_else(|| z_isbn_core.is_some().then(|| existing.iter().position(|e| free(e) && e.isbn_core == z_isbn_core)).flatten())
             .or_else(|| {
                 existing.iter().position(|e| {
                     !e.claimed
                         && e.zotero_key.is_none()
-                        && (pinned.as_deref() == Some(e.key.as_str()) || e.key == base_ck)
+                        && (pinned_here(e) || same_paper(e))
                         && no_id_conflict(e)
                 })
             });
@@ -785,5 +859,124 @@ mod tests {
         assert!(!simon_md.contains("files:"), "no duplicate files: when external_pdf matches canonical path: {simon_md}");
         assert!(simon_md.contains("<!-- zotero:note ZNOTE1 -->") && simon_md.contains("Chapter 1 notes"));
         assert!(!v.root.join("refs/papers/customdoia").exists() && !v.root.join("refs/papers/customarxiva").exists());
+    }
+
+    /// A vault with the given entry notes and a Zotero data folder made from `sql`; returns the apply options.
+    fn zotero_fixture(entries: &[(&str, &str)], sql: &str) -> (Vault, tempfile::TempDir, ZoteroImportOpts) {
+        let (mut v, ws) = (Vault::new(), tempfile::tempdir().unwrap());
+        let ws_real = real(ws.path()).unwrap();
+        let (vault_dir, zot_dir) = (ws_real.join("vault"), ws_real.join("ZoteroData"));
+        for d in [&vault_dir, &zot_dir] { std::fs::create_dir_all(d).unwrap(); }
+        v.root = vault_dir;
+        v.trash = crate::refs::tests::TempTrash(v.root.clone());
+        for (ck, front) in entries {
+            let dir = v.root.join("refs/papers").join(ck);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join(format!("{ck}.md")), format!("---\n{front}---\n# {ck}\n")).unwrap();
+        }
+        let zconn = Connection::open(zot_dir.join("zotero.sqlite")).unwrap();
+        zconn.execute_batch(&format!(
+            "CREATE TABLE itemTypes(itemTypeID INT PRIMARY KEY, typeName TEXT); INSERT INTO itemTypes VALUES(1,'journalArticle');
+             CREATE TABLE items(itemID INT PRIMARY KEY, itemTypeID INT, key TEXT, dateAdded TEXT);
+             CREATE TABLE fields(fieldID INT PRIMARY KEY, fieldName TEXT); INSERT INTO fields VALUES(1,'title'),(2,'date'),(3,'DOI');
+             CREATE TABLE itemDataValues(valueID INT PRIMARY KEY, value TEXT);
+             CREATE TABLE itemData(itemID INT, fieldID INT, valueID INT);
+             CREATE TABLE creatorTypes(creatorTypeID INT PRIMARY KEY, creatorType TEXT); INSERT INTO creatorTypes VALUES(1,'author');
+             CREATE TABLE creators(creatorID INT PRIMARY KEY, firstName TEXT, lastName TEXT, fieldMode INT);
+             CREATE TABLE itemCreators(itemID INT, creatorID INT, creatorTypeID INT, orderIndex INT);
+             {sql}"
+        )).unwrap();
+        drop(zconn);
+        let opts = serde_json::from_value(json!({ "data_dir": zot_dir.to_str().unwrap(), "apply": true })).unwrap();
+        (v, ws, opts)
+    }
+
+    #[test]
+    fn citekey_fallback_claims_an_existing_note_only_when_the_title_agrees() {
+        let (v, _ws, apply) = zotero_fixture(
+            &[
+                ("witten1988topological", "type: literature\ncitekey: witten1988topological\nitemType: journalArticle\ntitle: Topological sigma models\nauthors:\n  - Witten, Edward\npublished: 1988\n"),
+                ("kitaev2003fault", "type: literature\ncitekey: kitaev2003fault\nitemType: journalArticle\ntitle: Fault-tolerant quantum computation by anyons\nauthors:\n  - Kitaev, A.\npublished: 2003\n"),
+            ],
+            "INSERT INTO items VALUES(1,1,'ZTQFT','2026-01-01'),(2,1,'ZKITAEV','2026-01-02');
+             INSERT INTO itemDataValues VALUES(1,'Topological quantum field theory'),(2,'1988'),(3,'10.1007/BF01223371'),(4,'Fault-tolerant Quantum Computation by Anyons'),(5,'2003');
+             INSERT INTO itemData VALUES(1,1,1),(1,2,2),(1,3,3),(2,1,4),(2,2,5);
+             INSERT INTO creators VALUES(1,'Edward','Witten',0),(2,'A.','Kitaev',0);
+             INSERT INTO itemCreators VALUES(1,1,1,0),(2,2,1,0);",
+        );
+        let r = import_zotero(&v.lib(), &apply).unwrap();
+        assert_eq!((r.imported, r.updated), (1, 1));
+        assert_eq!(r.citekeys, vec!["witten1988topologicala", "kitaev2003fault"]);
+        let sigma = std::fs::read_to_string(v.root.join("refs/papers/witten1988topological/witten1988topological.md")).unwrap();
+        assert!(sigma.contains("Topological sigma models") && !sigma.contains("zoteroKey") && !sigma.contains("BF01223371"), "{sigma}");
+        let tqft = std::fs::read_to_string(v.root.join("refs/papers/witten1988topologicala/witten1988topologicala.md")).unwrap();
+        assert!(tqft.contains("zoteroKey: ZTQFT") && tqft.contains("Topological quantum field theory"), "{tqft}");
+        let kitaev = std::fs::read_to_string(v.root.join("refs/papers/kitaev2003fault/kitaev2003fault.md")).unwrap();
+        assert!(kitaev.contains("zoteroKey: ZKITAEV"), "{kitaev}");
+    }
+
+    #[test]
+    fn an_identifier_match_never_takes_an_entry_owned_by_another_live_item() {
+        // B (lower itemID) and C share a DOI; the vault entry already belongs to C. An entry whose item is gone
+        // from the library is still adopted by its DOI.
+        let (v, _ws, apply) = zotero_fixture(
+            &[
+                ("smith2020shared", "type: literature\ncitekey: smith2020shared\nitemType: journalArticle\ntitle: Shared DOI paper\nauthors:\n  - Smith, Alice\npublished: 2020\nDOI: 10.1000/shared\nzoteroKey: ZC\n"),
+                ("orphaned", "type: literature\ncitekey: orphaned\nitemType: journalArticle\ntitle: Re-added paper\nDOI: 10.1000/readded\nzoteroKey: ZGONE\n"),
+            ],
+            "INSERT INTO items VALUES(5,1,'ZB','2026-01-01'),(9,1,'ZC','2026-01-02'),(12,1,'ZNEW','2026-01-03');
+             INSERT INTO itemDataValues VALUES(1,'Shared DOI paper'),(2,'2020'),(3,'10.1000/shared'),(4,'Re-added paper'),(5,'10.1000/readded');
+             INSERT INTO itemData VALUES(5,1,1),(5,2,2),(5,3,3),(9,1,1),(9,2,2),(9,3,3),(12,1,4),(12,3,5);
+             INSERT INTO creators VALUES(1,'Alice','Smith',0);
+             INSERT INTO itemCreators VALUES(5,1,1,0),(9,1,1,0);",
+        );
+        let r = import_zotero(&v.lib(), &apply).unwrap();
+        assert_eq!((r.imported, r.updated), (1, 2));
+        let orphaned = std::fs::read_to_string(v.root.join("refs/papers/orphaned/orphaned.md")).unwrap();
+        assert!(orphaned.contains("zoteroKey: ZNEW"), "{orphaned}");
+        let owned = std::fs::read_to_string(v.root.join("refs/papers/smith2020shared/smith2020shared.md")).unwrap();
+        assert!(owned.contains("zoteroKey: ZC") && !owned.contains("zoteroKey: ZB"), "{owned}");
+        let b = std::fs::read_to_string(v.root.join("refs/papers/smith2020shareda/smith2020shareda.md")).unwrap();
+        assert!(b.contains("zoteroKey: ZB"), "{b}");
+    }
+
+    #[test]
+    fn identity_fold_drops_rich_text_markup_entities_and_accents() {
+        assert_eq!(ident_fold("Superconductivity in MgB<sub>2</sub>"), ident_fold("Superconductivity in MgB2"));
+        assert_eq!(ident_fold("<i>Ab initio</i> &amp; <span class=\"nocase\">DFT</span>"), "abinitiodft");
+        assert_eq!(ident_fold("Théorie des quanta"), ident_fold("The\u{301}orie  des quanta"));
+        assert_eq!(ident_fold("Théorie"), "theorie");
+        assert_eq!(ident_fold("a < b, c > d"), "abcd");
+        assert_eq!(ident_fold("Eﬃcient classical simulation"), ident_fold("Efficient classical simulation"));
+        assert_eq!(first_author_last(&["Schrödinger, Erwin".into()]), first_author_last(&["Erwin Schrodinger".into()]));
+    }
+
+    #[test]
+    fn citekey_fallback_sees_through_markup_accents_and_a_missing_title() {
+        let (v, _ws, apply) = zotero_fixture(
+            &[
+                ("nagamatsu2001superconductivity", "type: literature\ncitekey: nagamatsu2001superconductivity\ntitle: Superconductivity at 39 K in magnesium diboride MgB2\nauthors:\n  - Nagamatsu, Jun\npublished: 2001\n"),
+                ("broglie1924recherches", "type: literature\ncitekey: broglie1924recherches\ntitle: Recherches sur la théorie des quanta\nauthors:\n  - de Broglie, Louis\npublished: 1924\n"),
+                ("schrodinger1926quantisierung", "type: literature\ncitekey: schrodinger1926quantisierung\ntitle: Quantisierung als Eigenwertproblem\nauthors:\n  - Schrödinger, E.\npublished: 1926\n"),
+                ("anderson1972more", "type: literature\ncitekey: anderson1972more\nauthors:\n  - Anderson, P. W.\npublished: 1972\n"),
+                ("smith2020graph", "type: literature\ncitekey: smith2020graph\nauthors:\n  - Jones, Bob\npublished: 2020\n"),
+            ],
+            "INSERT INTO items VALUES(1,1,'ZMGB2','2026-01-01'),(2,1,'ZBROGLIE','2026-01-02'),(3,1,'ZSCHR','2026-01-03'),(4,1,'ZMORE','2026-01-04'),(5,1,'ZGRAPH','2026-01-05');
+             INSERT INTO itemDataValues VALUES(1,'Superconductivity at 39 K in magnesium diboride MgB<sub>2</sub>'),(2,'2001'),
+               (3,'Recherches sur la the\u{301}orie des quanta'),(4,'1924'),(5,'Quantisierung als Eigenwertproblem'),(6,'1926'),
+               (7,'More is different'),(8,'1972'),(9,'Graph colourings'),(10,'2020');
+             INSERT INTO itemData VALUES(1,1,1),(1,2,2),(2,1,3),(2,2,4),(3,1,5),(3,2,6),(4,1,7),(4,2,8),(5,1,9),(5,2,10);
+             INSERT INTO creators VALUES(1,'Jun','Nagamatsu',0),(2,'Louis','de Broglie',0),(3,'Erwin','Schrodinger',0),(4,'P. W.','Anderson',0),(5,'Alice','Smith',0);
+             INSERT INTO itemCreators VALUES(1,1,1,0),(2,2,1,0),(3,3,1,0),(4,4,1,0),(5,5,1,0);",
+        );
+        let r = import_zotero(&v.lib(), &apply).unwrap();
+        assert_eq!(
+            r.citekeys,
+            vec!["nagamatsu2001superconductivity", "broglie1924recherches", "schrodinger1926quantisierung", "anderson1972more", "smith2020grapha"]
+        );
+        assert_eq!((r.imported, r.updated), (1, 4));
+        // an untitled note whose author disagrees keeps its own paper
+        let jones = std::fs::read_to_string(v.root.join("refs/papers/smith2020graph/smith2020graph.md")).unwrap();
+        assert!(!jones.contains("zoteroKey"), "{jones}");
     }
 }
