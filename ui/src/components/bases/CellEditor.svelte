@@ -81,7 +81,7 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_no_static_element_interactions, a11y_no_noninteractive_tabindex -->
 <div class="cell-editor" class:list class:status-pop={isStatus} tabindex={isRating ? -1 : undefined} bind:this={root} {onkeydown} {onfocusout} onclick={(e) => e.stopPropagation()}>
   {#if list}
     {#each items as it, i (it)}
