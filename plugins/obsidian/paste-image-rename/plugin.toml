@@ -1,5 +1,5 @@
 title = "Paste Image Rename"
-description = "Saves pasted or dropped images into zAttachments (or your chosen folder) named cleanly after the active note"
+description = "Saves pasted or dropped images into attachments (or your chosen folder) named cleanly after the active note"
 icon = "image"
 version = "0.1.0"
 api = 28
@@ -9,7 +9,7 @@ phone = true
 key = "attachment_folder"
 label = "Attachment folder"
 kind = "text"
-default = "zAttachments"
+default = "attachments"
 hint = "Vault folder for pasted images (auto-reads .obsidian/plugins/obsidian-paste-image-rename if present)"
 
 [[setting]]

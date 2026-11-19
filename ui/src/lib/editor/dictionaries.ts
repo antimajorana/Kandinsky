@@ -21,24 +21,62 @@ export const vaultFiles = (kandinsky: { tree(dir: string): Promise<{ name: strin
   read: (path) => kandinsky.read(path),
 });
 
-/** The machine, through `ls` and `cat` (none on the phone: nothing found there). */
-export const machineFiles = (exec: Exec): Files => ({
-  list: async (dir) => {
-    try { const r = await exec("ls", [dir]); return r.status === 0 ? r.stdout.split("\n") : null; } catch { return null; }
-  },
-  read: async (path) => {
-    const r = await exec("cat", [path], { timeout: 30 });
-    if (r.status !== 0) throw new Error(r.stderr || `could not read ${path}`);
-    if (!r.stdout.includes("\uFFFD")) return r.stdout;
-    // not UTF-8: older dictionaries (en_GB on some systems) are ISO-8859-1, which `exec`'s text output mangles. The
-    // bytes again, through base64 (GNU's -w0, else BSD's unwrapped default), each byte its Latin-1 character.
-    for (const args of [["-w0", path], [path]]) {
-      const b = await exec("base64", args, { timeout: 30 }).catch(() => null);
-      if (b?.status === 0) return latin1(b.stdout.replace(/\s+/g, ""));
-    }
-    return r.stdout;
-  },
-});
+/** Native dictionary reader exposed on `kandinsky.dictionaries` in the core helper runtime. */
+type NativeDictionaries = {
+  list(folder?: string): string[];
+  read(code: string, folder?: string): { code: string; aff: string; dic: string } | null;
+};
+
+const SYSTEM_DICTIONARY_DIRS = new Set(["/usr/share/hunspell", "/usr/share/myspell", "/usr/share/myspell/dicts"]);
+
+function nativeDictionaries(): NativeDictionaries | undefined {
+  return (globalThis as { kandinsky?: { dictionaries?: NativeDictionaries } }).kandinsky?.dictionaries;
+}
+
+/** The machine's dictionaries, via native `kandinsky.dictionaries` when available (or injected `exec` in unit tests). */
+export const machineFiles = (exec?: Exec): Files => {
+  let cached: { key: string; res: { code: string; aff: string; dic: string } | null } | null = null;
+  return {
+    list: async (dir) => {
+      const native = nativeDictionaries();
+      if (native) {
+        // Native dict.list already scans all standard system paths alongside the custom folder.
+        if (dir === "/usr/share/myspell" || dir === "/usr/share/myspell/dicts") return null;
+        const folder = SYSTEM_DICTIONARY_DIRS.has(dir) ? "" : dir;
+        const codes = native.list(folder);
+        return codes.length ? codes.flatMap((c) => [`${c}.aff`, `${c}.dic`]) : null;
+      }
+      if (!exec) return null;
+      try { const r = await exec("ls", [dir]); return r.status === 0 ? r.stdout.split("\n") : null; } catch { return null; }
+    },
+    read: async (path) => {
+      const native = nativeDictionaries();
+      if (native) {
+        const slash = path.lastIndexOf("/");
+        const dir = slash >= 0 ? path.slice(0, slash) : "";
+        const file = slash >= 0 ? path.slice(slash + 1) : path;
+        const m = /^(.+)\.(aff|dic)$/.exec(file);
+        if (!m) throw new Error(`no Hunspell dictionary file ${path}`);
+        const folder = SYSTEM_DICTIONARY_DIRS.has(dir) ? "" : dir;
+        const key = `${folder}\0${m[1]}`;
+        if (!cached || cached.key !== key) cached = { key, res: native.read(m[1], folder) };
+        if (!cached.res) throw new Error(`could not read ${path}`);
+        return cached.res[m[2] as "aff" | "dic"];
+      }
+      if (!exec) throw new Error(`could not read ${path}`);
+      const r = await exec("cat", [path], { timeout: 30 });
+      if (r.status !== 0) throw new Error(r.stderr || `could not read ${path}`);
+      if (!r.stdout.includes("\uFFFD")) return r.stdout;
+      // not UTF-8: older dictionaries (en_GB on some systems) are ISO-8859-1, which `exec`'s text output mangles. The
+      // bytes again, through base64 (GNU's -w0, else BSD's unwrapped default), each byte its Latin-1 character.
+      for (const args of [["-w0", path], [path]]) {
+        const b = await exec("base64", args, { timeout: 30 }).catch(() => null);
+        if (b?.status === 0) return latin1(b.stdout.replace(/\s+/g, ""));
+      }
+      return r.stdout;
+    },
+  };
+};
 
 /** Base64 → a string whose characters are the bytes (Latin-1); no atob in every helper runtime. */
 export function latin1(b64: string): string {

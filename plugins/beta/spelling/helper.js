@@ -87,27 +87,63 @@
 		list: (dir) => kandinsky.tree(dir).then((t) => t.filter((e) => e.kind === "file").map((e) => e.name), () => null),
 		read: (path) => kandinsky.read(path)
 	});
-	/** The machine, through `ls` and `cat` (none on the phone: nothing found there). */
-	const machineFiles = (exec) => ({
-		list: async (dir) => {
-			try {
-				const r = await exec("ls", [dir]);
-				return r.status === 0 ? r.stdout.split("\n") : null;
-			} catch {
-				return null;
+	const SYSTEM_DICTIONARY_DIRS = /* @__PURE__ */ new Set([
+		"/usr/share/hunspell",
+		"/usr/share/myspell",
+		"/usr/share/myspell/dicts"
+	]);
+	function nativeDictionaries() {
+		return globalThis.kandinsky?.dictionaries;
+	}
+	/** The machine's dictionaries, via native `kandinsky.dictionaries` when available (or injected `exec` in unit tests). */
+	const machineFiles = (exec) => {
+		let cached = null;
+		return {
+			list: async (dir) => {
+				const native = nativeDictionaries();
+				if (native) {
+					if (dir === "/usr/share/myspell" || dir === "/usr/share/myspell/dicts") return null;
+					const folder = SYSTEM_DICTIONARY_DIRS.has(dir) ? "" : dir;
+					const codes = native.list(folder);
+					return codes.length ? codes.flatMap((c) => [`${c}.aff`, `${c}.dic`]) : null;
+				}
+				if (!exec) return null;
+				try {
+					const r = await exec("ls", [dir]);
+					return r.status === 0 ? r.stdout.split("\n") : null;
+				} catch {
+					return null;
+				}
+			},
+			read: async (path) => {
+				const native = nativeDictionaries();
+				if (native) {
+					const slash = path.lastIndexOf("/");
+					const dir = slash >= 0 ? path.slice(0, slash) : "";
+					const file = slash >= 0 ? path.slice(slash + 1) : path;
+					const m = /^(.+)\.(aff|dic)$/.exec(file);
+					if (!m) throw new Error(`no Hunspell dictionary file ${path}`);
+					const folder = SYSTEM_DICTIONARY_DIRS.has(dir) ? "" : dir;
+					const key = `${folder}\0${m[1]}`;
+					if (!cached || cached.key !== key) cached = {
+						key,
+						res: native.read(m[1], folder)
+					};
+					if (!cached.res) throw new Error(`could not read ${path}`);
+					return cached.res[m[2]];
+				}
+				if (!exec) throw new Error(`could not read ${path}`);
+				const r = await exec("cat", [path], { timeout: 30 });
+				if (r.status !== 0) throw new Error(r.stderr || `could not read ${path}`);
+				if (!r.stdout.includes("�")) return r.stdout;
+				for (const args of [["-w0", path], [path]]) {
+					const b = await exec("base64", args, { timeout: 30 }).catch(() => null);
+					if (b?.status === 0) return latin1(b.stdout.replace(/\s+/g, ""));
+				}
+				return r.stdout;
 			}
-		},
-		read: async (path) => {
-			const r = await exec("cat", [path], { timeout: 30 });
-			if (r.status !== 0) throw new Error(r.stderr || `could not read ${path}`);
-			if (!r.stdout.includes("�")) return r.stdout;
-			for (const args of [["-w0", path], [path]]) {
-				const b = await exec("base64", args, { timeout: 30 }).catch(() => null);
-				if (b?.status === 0) return latin1(b.stdout.replace(/\s+/g, ""));
-			}
-			return r.stdout;
-		}
-	});
+		};
+	};
 	/** Base64 → a string whose characters are the bytes (Latin-1); no atob in every helper runtime. */
 	function latin1(b64) {
 		const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

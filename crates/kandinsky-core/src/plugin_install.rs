@@ -468,6 +468,7 @@ pub fn available(root: &Path, index: &str) -> Result<Vec<Available>> {
     if index.trim().is_empty() {
         return Ok(Vec::new());
     }
+    let cfg = crate::config::Config::load(root)?;
     let work = vault_write::cache::unique(&crate::state_dir::dir(root).join(format!("cache/plugin-index-{}", stamp()))).with_extension("json");
     let got = download(index, &work).and_then(|_| Ok(std::fs::read_to_string(&work)?));
     let _ = vault_write::cache::remove_file(&work);
@@ -477,6 +478,10 @@ pub fn available(root: &Path, index: &str) -> Result<Vec<Available>> {
     let have = plugins::list(root);
     Ok(entries
         .into_iter()
+        .filter(|e| {
+            !crate::config::Config::is_example_plugin(&e.id)
+                && (cfg.developer_mode || !crate::config::Config::is_dev_gated_plugin(&e.id))
+        })
         .map(|e| Available {
             runs_here: match &e.platforms {
                 Platforms::Any(_) => true,
@@ -523,11 +528,20 @@ fn manifest_tier(dir: &Path) -> String {
 fn manifest_runs_here(path: &Path) -> bool {
     let Ok(text) = std::fs::read_to_string(path) else { return false };
     let Ok(t) = toml::from_str::<toml::Table>(&text) else { return false };
-    if cfg!(target_os = "windows") {
-        if let Some(w) = t.get("platforms").and_then(|v| v.as_table()).and_then(|p| p.get("windows")) {
-            if w.as_str() == Some("no") || w.as_table().and_then(|x| x.get("support")).and_then(|s| s.as_str()) == Some("no") {
-                return false;
-            }
+    let os_key = if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "android") {
+        "android"
+    } else {
+        "linux"
+    };
+    if let Some(entry) = t.get("platforms").and_then(|v| v.as_table()).and_then(|p| p.get(os_key)) {
+        if entry.as_str() == Some("no")
+            || entry.as_table().and_then(|x| x.get("support")).and_then(|s| s.as_str()) == Some("no")
+        {
+            return false;
         }
     }
     true
@@ -536,13 +550,18 @@ fn manifest_runs_here(path: &Path) -> bool {
 /// Instant catalog combining local `bundled-plugins/` folders (Obsidian-bridge + official pure-JS plugins)
 /// with `bundled-plugins/remote-index.json` (or live `index` fallback) for compiled multi-platform engines.
 pub fn catalog(root: &Path, index: &str) -> Result<Vec<Available>> {
+    catalog_in(root, index, bundled_dir().as_deref())
+}
+
+fn catalog_in(root: &Path, index: &str, bundled: Option<&Path>) -> Result<Vec<Available>> {
+    let cfg = crate::config::Config::load(root)?;
     let have = plugins::list(root);
     let here = plugins::target();
     let mut out: Vec<Available> = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
-    if let Some(bdir) = bundled_dir() {
-        let mut dirs: Vec<PathBuf> = std::fs::read_dir(&bdir)
+    if let Some(bdir) = bundled {
+        let mut dirs: Vec<PathBuf> = std::fs::read_dir(bdir)
             .into_iter()
             .flatten()
             .flatten()
@@ -552,6 +571,11 @@ pub fn catalog(root: &Path, index: &str) -> Result<Vec<Available>> {
         dirs.sort();
         for dir in dirs {
             let Some(id) = dir.file_name().map(|n| n.to_string_lossy().into_owned()).filter(|id| plugins::valid_id(id)) else { continue };
+            if crate::config::Config::is_example_plugin(&id)
+                || (!cfg.developer_mode && crate::config::Config::is_dev_gated_plugin(&id))
+            {
+                continue;
+            }
             let toml_path = dir.join("plugin.toml");
             let Ok(text) = std::fs::read_to_string(&toml_path) else { continue };
             let Ok(sum) = plugins::summary_of(&text) else { continue };
@@ -585,12 +609,32 @@ pub fn catalog(root: &Path, index: &str) -> Result<Vec<Available>> {
             }
             if let Ok(entries) = serde_json::from_str::<Vec<CachedRemote>>(&raw) {
                 for e in entries {
+                    if crate::config::Config::is_example_plugin(&e.id)
+                        || (!cfg.developer_mode && crate::config::Config::is_dev_gated_plugin(&e.id))
+                    {
+                        continue;
+                    }
                     if seen.insert(e.id.clone()) {
+                        let mut runs_here = match &e.platforms {
+                            Platforms::Any(_) => true,
+                            Platforms::Built(list) => list.contains(&here),
+                        };
+                        let mut permissions = None;
+                        let mut has_helper = false;
+                        let toml_path = bdir.join(&e.id).join("plugin.toml");
+                        if toml_path.is_file() {
+                            if !manifest_runs_here(&toml_path) {
+                                runs_here = false;
+                            }
+                            if let Ok(text) = std::fs::read_to_string(&toml_path) {
+                                if let Ok(sum) = plugins::summary_of(&text) {
+                                    permissions = Some(sum.permissions);
+                                    has_helper = sum.has_helper;
+                                }
+                            }
+                        }
                         out.push(Available {
-                            runs_here: match &e.platforms {
-                                Platforms::Any(_) => true,
-                                Platforms::Built(list) => list.contains(&here),
-                            },
+                            runs_here,
                             installed: have.iter().find(|p| p.id == e.id).map(|p| p.version.clone().unwrap_or_default()),
                             url: e.url,
                             id: e.id,
@@ -598,8 +642,8 @@ pub fn catalog(root: &Path, index: &str) -> Result<Vec<Available>> {
                             version: e.version,
                             tier: e.tier,
                             description: e.description,
-                            permissions: None,
-                            has_helper: false,
+                            permissions,
+                            has_helper,
                         });
                     }
                 }
@@ -1037,5 +1081,68 @@ mod tests {
         if bundled_dir().is_none() {
             assert!(got_dead.is_empty());
         }
+    }
+
+    #[test]
+    fn catalog_excludes_example_plugins_and_respects_developer_mode_for_dev_gated_plugins() {
+        let vault = tempfile::tempdir().unwrap();
+        let bdir = tempfile::tempdir().unwrap();
+        let write_bundle = |id: &str, extra: &str| {
+            let d = bdir.path().join(id);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join("plugin.toml"), format!("title = \"{id}\"\n{extra}")).unwrap();
+        };
+        for ex in ["wordcount", "ttrpg", "helper-js", "freshrss", "immich", "jellyfin", "paperless"] {
+            write_bundle(ex, "");
+        }
+        for dev in ["solver", "antigravity", "oracle-runner", "claude", "ssh"] {
+            write_bundle(dev, "");
+        }
+        write_bundle("spelling", "");
+
+        let remote = serde_json::json!([
+            {"id": "ttrpg", "title": "TTRPG", "version": "0.1.0", "tier": "beta", "file": "ttrpg.tar.gz", "url": "https://example.org/ttrpg.tar.gz", "platforms": "any"},
+            {"id": "zstd", "title": "Zstd", "version": "0.1.0", "tier": "beta", "file": "zstd.tar.gz", "url": "https://example.org/zstd.tar.gz", "platforms": "any"},
+            {"id": "email", "title": "Email", "version": "1.0.0", "tier": "stable", "file": "email.tar.gz", "url": "https://example.org/email.tar.gz", "platforms": "any"}
+        ]);
+        std::fs::write(bdir.path().join("remote-index.json"), remote.to_string()).unwrap();
+
+        let off_ids: Vec<String> = catalog_in(vault.path(), "", Some(bdir.path())).unwrap().into_iter().map(|a| a.id).collect();
+        assert_eq!(off_ids, ["spelling", "email"]);
+
+        std::fs::create_dir_all(vault.path().join(".kandinsky")).unwrap();
+        std::fs::write(vault.path().join(".kandinsky/config.toml"), "developer_mode = true\n").unwrap();
+        let on_ids: Vec<String> = catalog_in(vault.path(), "", Some(bdir.path())).unwrap().into_iter().map(|a| a.id).collect();
+        for ex in ["wordcount", "ttrpg", "helper-js", "freshrss", "immich", "jellyfin", "paperless"] {
+            assert!(!on_ids.contains(&ex.to_string()), "example plugin {ex} should stay excluded");
+        }
+        for dev in ["solver", "antigravity", "oracle-runner", "claude", "ssh", "zstd"] {
+            assert!(on_ids.contains(&dev.to_string()), "dev-gated plugin {dev} should appear when developer_mode = true");
+        }
+        assert!(on_ids.contains(&"spelling".to_string()));
+        assert!(on_ids.contains(&"email".to_string()));
+    }
+
+    #[test]
+    fn manifest_runs_here_checks_current_os_platform_support() {
+        let dir = tempfile::tempdir().unwrap();
+        let os_key = if cfg!(target_os = "windows") {
+            "windows"
+        } else if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "linux"
+        };
+        let blocked_toml = dir.path().join("blocked.toml");
+        std::fs::write(&blocked_toml, format!("title = \"Print\"\n[platforms]\n{os_key} = {{ support = \"no\", why = \"needs CUPS\" }}\n")).unwrap();
+        assert!(!manifest_runs_here(&blocked_toml));
+
+        let bare_no = dir.path().join("bare-no.toml");
+        std::fs::write(&bare_no, format!("title = \"Print\"\n[platforms]\n{os_key} = \"no\"\n")).unwrap();
+        assert!(!manifest_runs_here(&bare_no));
+
+        let works_toml = dir.path().join("works.toml");
+        std::fs::write(&works_toml, format!("title = \"Print\"\n[platforms]\n{os_key} = \"works\"\n")).unwrap();
+        assert!(manifest_runs_here(&works_toml));
     }
 }

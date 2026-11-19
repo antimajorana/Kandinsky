@@ -299,7 +299,12 @@ impl Helpers {
     /// approval, and no window is there to ask) is tried again when the first window connects, never refused for good.
     /// Never waits: a start here cannot ask anyone, so it fails at once.
     pub fn start_with_vault(&self, ids: Vec<String>) {
+        let cfg = crate::config::Config::load(&self.root).ok();
         for id in ids {
+            if cfg.as_ref().is_some_and(|c| c.is_plugin_effectively_off(&id)) {
+                log(&self.root, &id, "[kandinsky] switched off or requires Developer mode: not started with the vault");
+                continue;
+            }
             if let Err(e) = self.start(&id) {
                 eprintln!("kandinsky: plugin {id}: its helper did not start with the vault (tried again when a window opens): {e}");
                 log(&self.root, &id, &format!("[kandinsky] not started with the vault, tried again when a window opens: {e}"));
@@ -327,7 +332,13 @@ impl Helpers {
     /// One helper [`Self::window_seen`] took up: started if it still starts with the vault (switched on, not blocked,
     /// `start = "open"`), and kept for the next window when it did not start for any reason but the user's own Deny.
     fn retry(&self, id: &str) {
-        let still = crate::config::Config::load(&self.root).map(|c| plugins::helpers_started_with_vault(&self.root, &c.plugins.off));
+        let still = crate::config::Config::load(&self.root).map(|c| {
+            if c.is_plugin_effectively_off(id) {
+                Vec::new()
+            } else {
+                plugins::helpers_started_with_vault(&self.root, &c.effective_plugins_off())
+            }
+        });
         if !still.is_ok_and(|ids| ids.iter().any(|i| i == id)) {
             log(&self.root, id, "[kandinsky] no longer started with the vault (switched off, blocked or changed): not started");
             return;
@@ -389,6 +400,9 @@ impl Helpers {
 
     /// The running helper of `id`, started now if it is not.
     fn running(&self, id: &str) -> Result<Arc<Running>> {
+        if crate::config::Config::load(&self.root).is_ok_and(|c| c.is_plugin_effectively_off(id)) {
+            return Err(Error::BadRequest(format!("plugin {id} is switched off or requires Developer mode")));
+        }
         let stamp = manifest_stamp(&self.root, id);
         if let Some(r) = self.current(id, stamp) {
             return Ok(r);

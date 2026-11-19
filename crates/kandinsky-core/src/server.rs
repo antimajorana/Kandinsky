@@ -19,6 +19,8 @@ use tokio::sync::oneshot;
 
 #[path = "server_desktop.rs"]
 mod desktop;
+#[path = "notebook_run.rs"]
+mod notebook_run;
 
 /// The built UI (placeholder page until `ui/` is built; see build.rs).
 #[derive(RustEmbed)]
@@ -326,8 +328,14 @@ async fn plugins_get(State(st): S, Query(q): Query<PluginsQuery>) -> Result<Json
     Ok(Json(
         with_ws(&st, move |ws| {
             // `blocked` always filled: the core's rule is the only one (the page and the phone read it, never redo it)
+            let cfg = ws.config()?;
+            let off = cfg.effective_plugins_off();
             let list = crate::plugins::list(ws.root());
-            Ok(crate::plugins::as_seen_from(list, &ws.config()?.plugins.off, q.platform.unwrap_or_else(crate::platform::Platform::current)))
+            let mut seen = crate::plugins::as_seen_from(list, &off, q.platform.unwrap_or_else(crate::platform::Platform::current));
+            if !cfg.developer_mode {
+                seen.retain(|p| !crate::config::Config::is_dev_gated_plugin(&p.id));
+            }
+            Ok(seen)
         })
         .await?,
     ))
@@ -335,7 +343,7 @@ async fn plugins_get(State(st): S, Query(q): Query<PluginsQuery>) -> Result<Json
 
 /// What the plugins that can run contribute to plugin `id` (`[contributes.<id>]`), by contributing plugin.
 async fn plugin_contributions_get(State(st): S, UrlPath(id): UrlPath<String>) -> Result<Json<serde_json::Map<String, serde_json::Value>>> {
-    Ok(Json(with_ws(&st, move |ws| crate::plugins::contributions(ws.root(), &ws.config()?.plugins.off, &id)).await?))
+    Ok(Json(with_ws(&st, move |ws| crate::plugins::contributions(ws.root(), &ws.config()?.effective_plugins_off(), &id)).await?))
 }
 
 /// A plugin's data script; the body (any JSON, or empty) is passed as `args`.
@@ -345,6 +353,14 @@ async fn plugin_data_post(State(st): S, UrlPath(id): UrlPath<String>, body: Byte
     } else {
         serde_json::from_slice(&body).map_err(|e| Error::BadRequest(format!("body: {e}")))?
     };
+    let check_id = id.clone();
+    with_ws(&st, move |ws| {
+        if ws.config()?.is_plugin_effectively_off(&check_id) {
+            return Err(Error::BadRequest(format!("plugin {check_id} is switched off or requires Developer mode")));
+        }
+        Ok(())
+    })
+    .await?;
     Ok(Json(crate::plugins::data(st.ws.root(), &id, args).await?))
 }
 
@@ -483,9 +499,16 @@ async fn plugins_obsidian_get(State(st): S) -> Result<Json<Vec<crate::plugin_ins
 }
 
 /// Moves unnecessary `.obsidian/plugins/<id>` folders into `.kandinsky/trash/` (never deleted).
-async fn plugins_obsidian_remove_post(State(st): S, Json(req): Json<ObsidianRemoveReq>) -> Result<Json<serde_json::Value>> {
-    let moved = with_ws(&st, move |ws| crate::plugin_install::remove_obsidian_plugins(ws.root(), &req.ids)).await?;
-    Ok(Json(serde_json::json!({ "moved": moved })))
+async fn plugins_obsidian_remove_post(State(st): S, Json(req): Json<ObsidianRemoveReq>) -> Response {
+    match with_ws(&st, |ws| Ok(ws.config()?.developer_mode)).await {
+        Ok(true) => {}
+        Ok(false) => return forbidden("Obsidian plugin inspection is read-only unless Developer mode is enabled (Settings → Plugins)"),
+        Err(e) => return e.into_response(),
+    }
+    match with_ws(&st, move |ws| crate::plugin_install::remove_obsidian_plugins(ws.root(), &req.ids)).await {
+        Ok(moved) => Json(serde_json::json!({ "moved": moved })).into_response(),
+        Err(e) => e.into_response(),
+    }
 }
 
 /// Copies a plugin into the vault (a folder, a git address or an archive); it arrives switched off.
@@ -521,7 +544,7 @@ struct HelperCall {
 /// `kandinsky.helper.call`: asks the plugin's helper (started now if it is not running) and waits.
 /// `{id}` of a plugin route that acts: an id, or `@role` (plugins::resolve).
 async fn plugin_named(st: &AppState, named: String) -> Result<String> {
-    with_ws(st, move |ws| crate::plugins::resolve(ws.root(), &ws.config()?.plugins.off, &named)).await
+    with_ws(st, move |ws| crate::plugins::resolve(ws.root(), &ws.config()?.effective_plugins_off(), &named)).await
 }
 
 async fn plugin_helper_post(State(st): S, UrlPath(id): UrlPath<String>, Json(c): Json<HelperCall>) -> Result<Json<serde_json::Value>> {
@@ -718,7 +741,7 @@ async fn calendar_get(State(st): S, Query(q): Query<CalendarRangeQuery>) -> Resu
         let res = crate::calendar::query_range_with_bases(ws.root(), &cfg, from, to, bases_filter.as_deref())?;
         let list = crate::plugins::list(ws.root());
         let dav_active = list.iter().any(|p| p.id == "dav" && p.has_helper)
-            && crate::plugins::blocked(&list, &cfg.plugins.off, "dav").is_none();
+            && crate::plugins::blocked(&list, &cfg.effective_plugins_off(), "dav").is_none();
         Ok((res, dav_active))
     })
     .await?;
@@ -1848,12 +1871,23 @@ async fn config_put(State(st): S, Json(body): Json<serde_json::Value>) -> Result
         return Err(Error::BadRequest("send the config itself, not the {config, schema} answer of GET /api/config".into()));
     }
     let cfg: crate::config::Config = serde_json::from_value(body).map_err(|e| Error::BadRequest(format!("not a config: {e}")))?;
-    with_ws(&st, move |ws| {
-        crate::config::Config::save(ws.root(), &cfg).map_err(|e| Error::BadRequest(format!("{e:#}")))?;
-        crate::shell::config_saved(ws.root(), &cfg); // the desktop shell applies [desktop] at once
-        Ok(())
+    let cfg_save = cfg.clone();
+    let was_dev = with_ws(&st, move |ws| {
+        let prev = ws.config().map(|c| c.developer_mode).unwrap_or(false);
+        crate::config::Config::save(ws.root(), &cfg_save).map_err(|e| Error::BadRequest(format!("{e:#}")))?;
+        crate::shell::config_saved(ws.root(), &cfg_save); // the desktop shell applies [desktop] at once
+        Ok(prev)
     })
     .await?;
+    if was_dev && !cfg.developer_mode {
+        let helpers = st.helpers.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            for &id in crate::config::DEV_GATED_PLUGINS {
+                helpers.stop(id);
+            }
+        })
+        .await;
+    }
     st.bus.publish(Event::Fs { paths: vec![crate::config::CONFIG_FILE.into()] });
     Ok(StatusCode::NO_CONTENT)
 }
@@ -2225,7 +2259,17 @@ async fn tasks_suggest(Query(q): Query<TaskSuggestQuery>) -> Json<Option<crate::
     Json(crate::task_suggest::suggest(&q.before, chrono::Local::now().date_naive(), ask))
 }
 
+async fn notebook_run_post(State(st): S, Json(req): Json<notebook_run::NotebookRunRequest>) -> Result<Json<notebook_run::JupyterNotebookRunResponse>> {
+    let bus = st.bus.clone();
+    Ok(Json(with_ws(&st, move |ws| notebook_run::run(ws.root(), &req, Some(&bus))).await?))
+}
+
 async fn pty_ws(State(st): S, Query(q): Query<PtyQuery>, upgrade: WebSocketUpgrade) -> Response {
+    match with_ws(&st, |ws| Ok(ws.config()?.developer_mode)).await {
+        Ok(true) => {}
+        Ok(false) => return forbidden("Terminal requires Developer mode (Settings → Plugins)"),
+        Err(e) => return e.into_response(),
+    }
     let ws = st.ws.clone();
     let ptys = st.ptys.clone();
     upgrade.on_upgrade(move |socket| pty::session(socket, ws, q, ptys))
@@ -2868,6 +2912,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/web/frameable", get(web_frameable_get))
         .route("/remote/{host}/{*rest}", axum::routing::any(remote_any))
         .route("/api/pty", get(pty_ws))
+        .route("/api/notebook/run", post(notebook_run_post))
         .route("/api/lsp", get(lsp_get))
         .route("/api/lsp/peek", get(lsp_peek))
         .route("/api/python-envs", get(python_envs_get))
@@ -3275,7 +3320,7 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
     crate::state_dir::migrate_logged(root); // `.atlas` → `.kandinsky` before anything reads or writes the folder
     let ws = Workspace::open(root)?;
     let cfg = ws.config()?; // fail loudly on a malformed config instead of serving defaults
-    let off = cfg.plugins.off.clone();
+    let off = cfg.effective_plugins_off();
     let bus = EventBus::default();
     let watcher = match spawn_watcher(ws.root(), cfg, bus.clone()) {
         Ok(w) => Some(w),
@@ -3760,5 +3805,60 @@ fn main() {
         let list = dir.path().join("vaults.toml");
         let handle = serve_vaults(Vaults::Desktop { first: root.clone(), list }, Listen::Local(0, crate::local_lock::Lock::Open)).await.unwrap();
         assert_shutdown_stops_helper(&root, handle, "desktop").await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn default_mode_gates_pty_dev_plugins_and_obsidian_remove() {
+        use tower::ServiceExt;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("vault");
+        for (id, title) in [("solver", "Solver"), ("hello", "Hello")] {
+            let p = root.join(".kandinsky/plugins").join(id);
+            std::fs::create_dir_all(&p).unwrap();
+            std::fs::write(p.join("plugin.toml"), format!("title = \"{title}\"\n")).unwrap();
+        }
+        let obs = root.join(".obsidian/plugins/demo");
+        std::fs::create_dir_all(&obs).unwrap();
+        std::fs::write(obs.join("manifest.json"), r#"{"id":"demo","name":"Demo"}"#).unwrap();
+
+        let (routes, _run, state) = start_vault(&root, 0, None, None, None, "").unwrap();
+        let req = |method: &str, uri: &str, body: Option<serde_json::Value>| {
+            let has_body = body.is_some();
+            let b = match body {
+                Some(v) => axum::body::Body::from(v.to_string()),
+                None => axum::body::Body::empty(),
+            };
+            let mut r = Request::builder().method(method).uri(uri).header("x-kandinsky", "1");
+            if has_body {
+                r = r.header("content-type", "application/json");
+            }
+            let app = routes.clone();
+            async move { app.oneshot(r.body(b).unwrap()).await.unwrap() }
+        };
+
+        let pty_res = req("GET", "/api/pty?preset=shell", None).await;
+        assert_eq!(pty_res.status(), StatusCode::FORBIDDEN);
+
+        let obs_res = req("POST", "/api/plugins/obsidian/remove", Some(serde_json::json!({ "ids": ["demo"] }))).await;
+        assert_eq!(obs_res.status(), StatusCode::FORBIDDEN);
+        assert!(obs.is_dir(), ".obsidian/plugins/demo stays untouched in default mode");
+
+        let list_res = req("GET", "/api/plugins", None).await;
+        assert_eq!(list_res.status(), StatusCode::OK);
+        let list_bytes = axum::body::to_bytes(list_res.into_body(), 65536).await.unwrap();
+        let list_json: serde_json::Value = serde_json::from_slice(&list_bytes).unwrap();
+        let ids: Vec<&str> = list_json.as_array().unwrap().iter().filter_map(|p| p["id"].as_str()).collect();
+        assert!(!ids.contains(&"solver") && ids.contains(&"hello"), "{ids:?}");
+
+        let mut dev_cfg = state.ws.config().unwrap();
+        dev_cfg.developer_mode = true;
+        let put_res = req("PUT", "/api/config", Some(serde_json::to_value(&dev_cfg).unwrap())).await;
+        assert_eq!(put_res.status(), StatusCode::NO_CONTENT);
+
+        let list_dev = req("GET", "/api/plugins", None).await;
+        let dev_bytes = axum::body::to_bytes(list_dev.into_body(), 65536).await.unwrap();
+        let dev_json: serde_json::Value = serde_json::from_slice(&dev_bytes).unwrap();
+        let dev_ids: Vec<&str> = dev_json.as_array().unwrap().iter().filter_map(|p| p["id"].as_str()).collect();
+        assert!(dev_ids.contains(&"solver") && dev_ids.contains(&"hello"), "{dev_ids:?}");
     }
 }

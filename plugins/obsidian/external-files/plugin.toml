@@ -1,5 +1,5 @@
 title = "External Attachments & Embeds"
-description = "Link, preview, and open external files and cloud folders (such as kDrive) from inside notes"
+description = "Link, preview, and open external files and cloud folders (such as Dropbox, iCloud Drive, OneDrive, Google Drive, or kDrive) from inside notes"
 icon = "external-link"
 main = "main.js"
 version = "0.1.0"
@@ -10,8 +10,8 @@ phone = true
 key = "external_root"
 label = "External attachments root"
 kind = "text"
-default = "~/kDrive"
-hint = "Default external folder for relative external paths (for example ~/kDrive)"
+default = "~/CloudDrive"
+hint = "Default external folder for relative external paths (for example ~/CloudDrive — Dropbox, iCloud Drive, OneDrive, Google Drive, or kDrive)"
 
 [platforms]
 windows = "works"

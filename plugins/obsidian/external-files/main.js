@@ -1,7 +1,7 @@
 // External Attachments & Embeds — Kandinsky workspace plugin (API v28).
-// Links, previews, and opens external files and cloud folders (such as kDrive) from inside notes.
+// Links, previews, and opens external files and cloud folders (such as Dropbox, iCloud Drive, OneDrive, Google Drive, or kDrive) from inside notes.
 
-const DEFAULT_EXTERNAL_ROOT = "~/kDrive";
+const DEFAULT_EXTERNAL_ROOT = "~/CloudDrive";
 
 let cachedHomeDir = "";
 let homeDirPromise = null;

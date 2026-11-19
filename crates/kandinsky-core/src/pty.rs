@@ -25,14 +25,15 @@ fn command(ws: &Workspace, q: &PtyQuery) -> anyhow::Result<CommandBuilder> {
         // an agent tab is always a plugin's agent (agent_terminals.rs): `agent` names it; a tab of the old "claude"
         // preset (a saved layout, Super+K) takes the `claude` agent, else the first one a plugin declares
         PtyPreset::Claude => {
-            let off = ws.config().map(|c| c.plugins.off).unwrap_or_default();
+            let off = ws.config().map(|c| c.effective_plugins_off()).unwrap_or_default();
             let found = match q.agent.as_deref() {
                 Some(name) => crate::agent_terminals::find(ws.root(), &off, name),
                 None => crate::agent_terminals::find(ws.root(), &off, "claude")
                     .or_else(|| crate::agent_terminals::declared(ws.root(), &off).into_iter().next().map(|(_, a, s)| (a, s))),
             };
             let (decl, settings) = found.ok_or_else(|| {
-                anyhow::anyhow!("no AI agent here: switch on a plugin that declares one (Settings → Plugins: Antigravity or Claude)")
+                let agent_id = q.agent.as_deref().unwrap_or("claude");
+                anyhow::anyhow!("agent terminal {agent_id} is unavailable (enable Developer mode and the agent plugin in Settings → Plugins)")
             })?;
             let (program, args, env) = crate::agent_terminals::command(
                 &decl,

@@ -185,14 +185,20 @@ pub(crate) fn save_attachment(ws: &Workspace, filename: &str, bytes: &[u8], repo
         Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
         _ => (clean.clone(), String::new()),
     };
-    let z_dir = ws.resolve("zAttachments")?;
+    let attach_rel = crate::config::Config::load(ws.root())
+        .ok()
+        .map(|c| c.editor.attachment_folder.trim().replace('\\', "/"))
+        .map(|s| s.trim_matches('/').to_string())
+        .filter(|s| !s.is_empty() && !state_dir::is_state_rel(s))
+        .unwrap_or_else(|| "attachments".to_string());
+    let attach_dir = ws.resolve(&attach_rel)?;
     let want_hash = Sha256::digest(bytes);
     for n in 0usize.. {
         let cand = if n == 0 { clean.clone() } else { format!("{stem} {n}{ext}") };
-        let abs = z_dir.join(&cand);
+        let abs = attach_dir.join(&cand);
         if vault_write::create(&abs, bytes)? == vault_write::Created::New {
             report.attachments_saved += 1;
-            report.created_paths.push(format!("zAttachments/{cand}"));
+            report.created_paths.push(join_rel(&attach_rel, &cand));
             return Ok(cand);
         }
         if std::fs::read(&abs).is_ok_and(|existing| Sha256::digest(&existing) == want_hash) {
@@ -393,5 +399,24 @@ mod tests {
         let mut nested_count = ZipBudget::new(2, 1024, 4096);
         let err = extract_zip_bytes(&outer, out.path(), 0, &mut nested_count).unwrap_err();
         assert!(matches!(err, Error::TooLarge(_)) && err.to_string().contains("entries"), "{err}");
+    }
+
+    #[test]
+    fn save_attachment_uses_config_attachment_folder_with_neutral_default() {
+        let d = tempfile::tempdir().unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        let mut rep = ImportReport::default();
+        let saved = save_attachment(&ws, "fig.png", b"png-bytes", &mut rep).unwrap();
+        assert_eq!(saved, "fig.png");
+        assert!(d.path().join("attachments/fig.png").is_file());
+        assert_eq!(rep.created_paths, vec!["attachments/fig.png".to_string()]);
+
+        std::fs::create_dir_all(d.path().join(".kandinsky")).unwrap();
+        std::fs::write(d.path().join(".kandinsky/config.toml"), "[editor]\nattachment_folder = \"assets\"\n").unwrap();
+        let mut rep2 = ImportReport::default();
+        let saved2 = save_attachment(&ws, "plot.png", b"plot-bytes", &mut rep2).unwrap();
+        assert_eq!(saved2, "plot.png");
+        assert!(d.path().join("assets/plot.png").is_file());
+        assert_eq!(rep2.created_paths, vec!["assets/plot.png".to_string()]);
     }
 }
