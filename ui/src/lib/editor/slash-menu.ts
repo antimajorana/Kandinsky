@@ -38,7 +38,6 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "#",
     keywords: ["h1", "heading1", "heading 1", "title", "header"],
     template: "# \0",
-    isCallout: true,
   },
   {
     id: "heading-2",
@@ -48,7 +47,6 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "##",
     keywords: ["h2", "heading2", "heading 2", "section", "subtitle"],
     template: "## \0",
-    isCallout: true,
   },
   {
     id: "heading-3",
@@ -58,7 +56,6 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "###",
     keywords: ["h3", "heading3", "heading 3", "subsection"],
     template: "### \0",
-    isCallout: true,
   },
   {
     id: "bullet-list",
@@ -68,7 +65,6 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "-",
     keywords: ["bullet", "bulleted", "list", "ul", "unordered", "item"],
     template: "- \0",
-    isCallout: true,
   },
   {
     id: "numbered-list",
@@ -78,7 +74,6 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "1.",
     keywords: ["number", "numbered", "list", "ol", "ordered", "item"],
     template: "1. \0",
-    isCallout: true,
   },
   {
     id: "todo",
@@ -88,7 +83,6 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "- [ ]",
     keywords: ["todo", "to-do", "task", "checkbox", "action"],
     template: "- [ ] \0",
-    isCallout: true,
   },
   {
     id: "quote",
@@ -465,6 +459,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "color",
     keywords: ["color", "cobalt", "blue", "text", "pigment"],
     template: '<span data-color="cobalt">\0</span>',
+    developerOnly: true,
   },
   {
     id: "color-ochre",
@@ -474,6 +469,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "wash",
     keywords: ["color", "ochre", "gold", "wash", "pigment"],
     template: '<mark data-bg="ochre">\0</mark>',
+    developerOnly: true,
   },
   {
     id: "color-viridian",
@@ -483,6 +479,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "wash",
     keywords: ["color", "viridian", "green", "teal", "wash", "pigment"],
     template: '<mark data-bg="viridian">\0</mark>',
+    developerOnly: true,
   },
   {
     id: "tag-important",
@@ -492,6 +489,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "[!]",
     keywords: ["important", "bang", "alert", "priority", "tag"],
     template: "[!] \0",
+    developerOnly: true,
   },
   {
     id: "tag-question",
@@ -501,6 +499,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "[?]",
     keywords: ["question", "ask", "unknown", "doubt", "tag"],
     template: "[?] \0",
+    developerOnly: true,
   },
   {
     id: "tag-idea",
@@ -510,6 +509,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "[*]",
     keywords: ["idea", "star", "spark", "insight", "tag"],
     template: "[*] \0",
+    developerOnly: true,
   },
   {
     id: "tag-remember",
@@ -519,14 +519,15 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "[i]",
     keywords: ["remember", "info", "def", "definition", "tag"],
     template: "[i] \0",
+    developerOnly: true,
   },
 ];
 
 const forceOpenEffect = StateEffect.define<{ slashPos: number; autoSlash: boolean }>();
 
-function filterBlocks(query: string): SlashBlock[] {
+function filterBlocks(query: string, hasFrontmatter = false): SlashBlock[] {
   const dev = Boolean(settings.config?.developer_mode);
-  const available = dev ? SLASH_BLOCKS : SLASH_BLOCKS.filter((b) => !b.developerOnly);
+  const available = SLASH_BLOCKS.filter((b) => (dev || !b.developerOnly) && (!hasFrontmatter || b.id !== "frontmatter"));
   const q = query.trim().toLowerCase();
   if (!q) return available;
   const scored: { block: SlashBlock; rank: number }[] = [];
@@ -731,7 +732,7 @@ class SlashMenuController {
     const prevQuery = this.active?.query;
     this.active = match;
     if (prevQuery !== match.query || this.menuEl.hidden) {
-      this.items = filterBlocks(match.query);
+      this.items = filterBlocks(match.query, frontmatterClose(u.state.doc) > 0);
       this.selectedIndex = 0;
       this.renderList();
     }
@@ -862,11 +863,35 @@ class SlashMenuController {
     const from = replaceQuotePrefix ? cur.lineFrom + (/^\s*/.exec(cur.prefix)?.[0].length ?? 0) : cur.slashPos;
     const lineIndent = replaceQuotePrefix ? (/^\s*/.exec(cur.prefix)?.[0] ?? "") : cur.prefix;
 
+    if (block.id === "frontmatter") {
+      this.view.focus();
+      const fm = "---\n\n---\n";
+      const changes = from === 0
+        ? { from: 0, to: cur.to, insert: fm }
+        : [{ from: 0, to: 0, insert: fm }, { from, to: cur.to, insert: "" }];
+      this.view.dispatch({
+        changes,
+        selection: { anchor: 4 },
+        scrollIntoView: true,
+        userEvent: "input.complete",
+      });
+      return;
+    }
+
     if (block.id === "divider") {
       const line = this.view.state.doc.lineAt(from);
       const prevNonEmpty = line.number > 1 && this.view.state.doc.line(line.number - 1).text.trim().length > 0;
-      const blankBeforeFrom = this.view.state.sliceDoc(line.from, from).trim().length === 0;
-      const insert = prevNonEmpty && blankBeforeFrom ? "\n---\n\n" : "---\n\n";
+      const beforeText = this.view.state.sliceDoc(line.from, from);
+      const quotePrefix = /^(\s*>\s*)$/.exec(beforeText)?.[1] ?? "";
+      const blankBeforeFrom = beforeText.replace(/^\s*(?:>\s*)?/, "").trim().length === 0;
+      let insert: string;
+      if (line.number === 1 && blankBeforeFrom && !quotePrefix) {
+        insert = "***\n\n"; // safe horizontal rule on line 1 that never opens YAML frontmatter
+      } else if (prevNonEmpty && blankBeforeFrom) {
+        insert = quotePrefix ? `\n${quotePrefix}---\n${quotePrefix}` : "\n---\n\n";
+      } else {
+        insert = quotePrefix ? `---\n${quotePrefix}` : "---\n\n";
+      }
       this.view.focus();
       this.view.dispatch({
         changes: { from, to: cur.to, insert },

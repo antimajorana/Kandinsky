@@ -218,7 +218,10 @@ export function wrapSelectionLink(view: EditorView, rawTarget: string): boolean 
       insert = !label || note === label ? `[[${note}]]` : `[[${note}|${label}]]`;
     } else if (/^(?:https?:\/\/|mailto:|tel:|\/|#|\.\.?\/)/i.test(target)) {
       insert = `[${label}](${target})`;
-    } else if (/^www\./i.test(target) || /^[a-z0-9-]+(\.[a-z0-9-]+)+([/?#].*)?$/i.test(target)) {
+    } else if (
+      /^www\./i.test(target) ||
+      (/^[a-z0-9-]+(\.[a-z0-9-]+)+([/?#].*)?$/i.test(target) && !/\.(?:md|base|pdf|canvas|ipynb|tex|csv|tsv|txt|page|excalidraw)$/i.test(target))
+    ) {
       insert = `[${label}](https://${target})`;
     } else {
       insert = !label || target === label ? `[[${target}]]` : `[[${target}|${label}]]`;

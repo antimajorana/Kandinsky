@@ -141,15 +141,15 @@ export async function installFrom(
       const found = avail.find((a) => a.url === src || a.id === src);
       if (found) info = { id: found.id, title: found.title, permissions: found.permissions, has_helper: found.has_helper };
     }
-    if (info && hasSensitivePermissions(info.permissions, info.has_helper)) {
+    if (info?.permissions !== undefined && hasSensitivePermissions(info.permissions, info.has_helper)) {
       const ok = await confirmPluginPermissions(info.title ?? info.id ?? src, info.permissions, info.has_helper, "Install");
       if (!ok) return false;
     }
     const r = await api.installPlugin(src);
-    if (!info && hasSensitivePermissions(r.permissions, r.has_helper)) {
+    if ((!info || info.permissions === undefined) && hasSensitivePermissions(r.permissions, r.has_helper)) {
       const ok = await confirmPluginPermissions(r.title, r.permissions, r.has_helper, "Enable");
       if (!ok) {
-        await setPluginOn(r.id, false).catch(() => {});
+        await api.removePlugin(r.id).catch(() => setPluginOn(r.id, false).catch(() => {}));
         await loadPlugins();
         return false;
       }

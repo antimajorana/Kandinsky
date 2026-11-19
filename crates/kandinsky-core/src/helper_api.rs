@@ -27,6 +27,10 @@ pub fn may(id: &str, path: &str) -> bool {
     if path.starts_with("/api/security") {
         return false;
     }
+    // notebook Python execution belongs strictly to the user's UI, never to a plugin helper without exec permission
+    if path.starts_with("/api/notebook") {
+        return false;
+    }
     const OWN: [&str; 6] = ["secrets", "oauth", "fetch", "settings", "update", "remove"];
     match path.strip_prefix("/api/plugins/").and_then(|r| r.split_once('/')) {
         Some((other, rest)) if OWN.iter().any(|o| rest.split('/').next() == Some(*o)) => other == id,

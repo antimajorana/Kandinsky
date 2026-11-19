@@ -94,6 +94,7 @@
         <div>
           <h2 id="trust-title">{pluginTitle} wants to use a helper program on your computer</h2>
           <p class="trust-sub">{current.reason || "Only allow programs you recognize and trust."}</p>
+          <p class="trust-prog"><span class="prog-k">Program:</span> <code>{current.command}</code></p>
         </div>
       </header>
 
@@ -154,6 +155,8 @@
   /* a long command line scrolls inside the details, so the buttons below never leave the window */
   .trust-card { max-height: calc(100dvh - 32px); min-height: 0; }
   .trust-head, .trust-actions { flex: none; }
+  .trust-prog { margin: 4px 0 0; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-muted); word-break: break-all; }
+  .trust-prog .prog-k { font-weight: 600; color: var(--text); }
   .trust-tech { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
   .tech-toggle { align-self: flex-start; padding: 3px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); font-size: calc(12px * var(--ui-scale, 1)); font-weight: 500; cursor: pointer; }
   .tech-toggle:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg-hover); }

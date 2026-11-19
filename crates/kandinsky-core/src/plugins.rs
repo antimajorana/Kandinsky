@@ -1119,8 +1119,8 @@ pub async fn data(root: &Path, id: &str, args: Value) -> Result<Value> {
     if !valid_id(id) {
         return Err(Error::BadRequest(format!("bad plugin id {id:?}")));
     }
-    // like its tools and helper: a plugin switched off (a new one, not yet looked at) runs nothing
-    let off = crate::config::Config::load(root).map(|c| c.plugins.off).unwrap_or_default();
+    // like its tools and helper: a plugin switched off (a new one, not yet looked at, or dev-gated) runs nothing
+    let off = crate::config::Config::load(root).map(|c| c.effective_plugins_off()).unwrap_or_default();
     if let Some(why) = blocked(&list(root), &off, id) {
         return Err(Error::BadRequest(format!("plugin {id} cannot run: {why}")));
     }

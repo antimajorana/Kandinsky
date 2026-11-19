@@ -198,7 +198,7 @@ pub fn run(root: &Path, req: &NotebookRunRequest, bus: Option<&EventBus>) -> Res
         });
     };
     let exe_str = exe.to_string_lossy().into_owned();
-    let py_args = vec!["-X".to_string(), "utf8".to_string(), "-u".to_string()];
+    let py_args = ["-X".to_string(), "utf8".to_string(), "-u".to_string()];
     crate::binary_trust::authorize_blocking(root, "notebook", &exe, &py_args, bus)?;
 
     let payload_path = vault_write::cache::unique(&crate::state_dir::dir(root).join("cache/notebook-run")).with_extension("json");

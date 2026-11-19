@@ -505,9 +505,9 @@
       <Icon name="error" size={12} />{app.problems.errors}<Icon name="warning" size={12} />{app.problems.warnings}
     </button>
   {/if}
-  {#if app.vimEnabled}
-    <button class="vim" data-mode={app.vimMode} onclick={toggleVim} title="Toggle vim mode" data-testid="vim-mode">
-      {app.vimMode || "VIM"}
+  {#if devMode || app.vimEnabled}
+    <button class="vim" class:off={!app.vimEnabled} data-mode={app.vimMode} onclick={toggleVim} title="Toggle vim mode" data-testid="vim-mode">
+      {#if app.vimEnabled}{app.vimMode || "VIM"}{:else}vim off{/if}
     </button>
   {/if}
   <span class="conn" title={connLabel} data-state={app.conn} data-testid="conn"><span class="dot"></span>{connLabel}</span>

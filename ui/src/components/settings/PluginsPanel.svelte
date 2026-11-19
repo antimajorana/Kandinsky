@@ -130,12 +130,8 @@
         const existing = installedById.get(id);
         if (existing) {
           if (isOff(id)) {
-            if (hasSensitivePermissions(existing.permissions, existing.has_helper)) {
-              const ok = await confirmPluginPermissions(existing.title, existing.permissions, existing.has_helper, "Enable");
-              if (!ok) continue;
-            }
             await switchPlugin(id, true);
-            count++;
+            if (!isOff(id)) count++;
           }
           continue;
         }

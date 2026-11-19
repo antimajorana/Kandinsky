@@ -245,7 +245,7 @@ fn plugin_action(ws: &Workspace, action: PluginAction) -> Result<()> {
         PluginAction::Remove { id } => println!("removed {id}: its folder is in {}", inst::remove(root, &id)?),
         PluginAction::Call { .. } => unreachable!("answered by the running Kandinsky, before"),
         PluginAction::List => {
-            let off = ws.config()?.plugins.off;
+            let off = ws.config()?.effective_plugins_off();
             for p in kandinsky_core::plugins::list(root) {
                 let state = if p.error.is_some() { "broken" } else if off.contains(&p.id) { "off" } else { "on" };
                 println!("{:<8}{} — {}{}", state, p.id, p.title, p.version.as_deref().map(|v| format!(" v{v}")).unwrap_or_default());

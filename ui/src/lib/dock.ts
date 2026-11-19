@@ -395,7 +395,7 @@ function giveKeys(id: string): void {
 export function open(spec: PaneSpec, opts: { activate?: boolean; beside?: boolean } = {}): DockviewPanelApi | null {
   const dock = getDock();
   if (!dock) return null;
-  if (spec.kind === "terminal" && !settings.config?.developer_mode) return null;
+  if (spec.kind === "terminal" && settings.config && !settings.config.developer_mode) return null;
   if (spec.kind === "files" && isNotionShell() && !phone.on) {
     window.dispatchEvent(new Event("kandinsky-expand-sidebar"));
     return null;

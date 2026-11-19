@@ -143,13 +143,13 @@ test.describe("Notion-style editor UX", () => {
     await page.keyboard.type("pomodoro");
     await expect(menu).not.toContainText("Pomodoro");
 
-    // Clear line and test Divider on line 1 (no leading newline)
+    // Clear line and test Divider on line 1 (safe horizontal rule that cannot open YAML frontmatter)
     await page.keyboard.press("Control+a");
     await page.keyboard.press("Backspace");
     await page.keyboard.type("/divider");
     await expect(menu).toContainText("Divider");
     await page.keyboard.press("Enter");
-    await expect.poll(() => editorText(page)).toBe("---\n\n");
+    await expect.poll(() => editorText(page)).toBe("***\n\n");
 
     // Divider right below a non-empty paragraph must prepend \n so paragraph is not a Setext H2
     await page.keyboard.type("Paragraph above\n/divider");

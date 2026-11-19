@@ -64,7 +64,7 @@ pub fn search_with(root: &Path, cfg: &Config, q: &str, o: Opts) -> SearchResults
     // trigram candidate filter + exact ripgrep verification, PDFs' text at the same time; then ranked
     let (found, pdf) = std::thread::scope(|s| {
         let pdf = s.spawn(|| pdf_lines(root, cfg, q, o, &walked));
-        let candidates = trigram::vault_candidates(root, cfg, q, o, &walked);
+        let candidates = trigram::vault_candidates(root, cfg, q, o, &walked, true);
         (file_lines(q, o, candidates.into_iter(), false), pdf.join().unwrap_or_default())
     });
     let named: std::collections::HashSet<&str> = names.iter().map(String::as_str).collect();
@@ -171,7 +171,7 @@ fn match_names<'p>(root: &Path, paths: impl Iterator<Item = String>, q: &str, pr
 /// [`LINES_PER_FILE`], in the files' order.
 pub fn rg_lines(root: &Path, cfg: &Config, q: &str, o: Opts) -> Vec<LineHit> {
     let walked = trigram::walk_vault(root, cfg);
-    let candidates = trigram::vault_candidates(root, cfg, q, o, &walked);
+    let candidates = trigram::vault_candidates(root, cfg, q, o, &walked, true);
     file_lines(q, o, candidates.into_iter(), false).into_iter().flat_map(|f| f.lines).collect()
 }
 
@@ -360,7 +360,7 @@ pub fn replace(ws: &Workspace, q: &str, o: Opts, with: &str, only: Option<&[Stri
     let m = grep_matcher(q, o)?;
     let mut searcher = searcher();
     let walked = trigram::walk_vault(ws.root(), &cfg);
-    let found: Vec<String> = trigram::vault_candidates(ws.root(), &cfg, q, o, &walked)
+    let found: Vec<String> = trigram::vault_candidates(ws.root(), &cfg, q, o, &walked, false)
         .into_iter()
         .filter(|(_, rel)| only.is_none_or(|o| o.iter().any(|p| p == rel)))
         .filter(|(abs, _)| {

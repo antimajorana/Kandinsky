@@ -75,10 +75,9 @@
   });
   const vaultKey = $derived(keysOf("ui.vault") ?? keysOf("ui.vault.next"));
   const devMode = $derived(Boolean(settings.config?.developer_mode));
-  const optedApps = $derived(new Set(settings.config?.ui.apps_order ?? []));
   const homeTile = $derived(appLaunchers().find((a) => a.key === "home"));
   const extraApps = $derived(appLaunchers().filter((a) => !["home", "calendar", "graph", "bases"].includes(a.key)));
-  const visibleExtraApps = $derived(devMode ? extraApps : extraApps.filter((a) => optedApps.has(a.key)));
+  const visibleExtraApps = $derived(devMode ? extraApps : []);
   const openAppId = (a: AppTile): string | null =>
     (a.ids.includes(tabs.active ?? "") ? tabs.active : a.ids.find((id) => tabs.apps.some((t) => t.id === id))) ?? null;
   const isAppActive = (a: AppTile): boolean => a.ids.includes(tabs.active ?? "");
@@ -422,7 +421,7 @@
         <span class="nav-left"><Icon name="search" size={14} />{#if wide}<span>Search</span>{/if}</span>
         {#if wide && searchKey}<span class="kbd">{chordLabel(searchKey).join(" ")}</span>{/if}
       </button>
-      {#if devMode || optedApps.has("capture")}
+      {#if devMode}
         <button class="nav-row" aria-label="Quick capture" title={captureKey ? `Quick capture · ${captureKey}` : "Quick capture"} onclick={() => openQuickCapture()}>
           <span class="nav-left"><Icon name="edit" size={14} />{#if wide}<span>Quick capture</span>{/if}</span>
           {#if wide && captureKey}<span class="kbd">{chordLabel(captureKey).join(" ")}</span>{/if}
@@ -433,23 +432,17 @@
           aria-label="Home" title={tipFor("Home", "ui.today")} data-app-id="today" onclick={() => void openHome()}>
           <span class="nav-left"><Icon name="home" size={14} />{#if wide}<span>Home</span>{/if}</span>
         </button>
-        {#if devMode || optedApps.has("calendar")}
+        {#if devMode}
           <button class="nav-row" class:active={tabs.active === "calendar"} aria-label="Calendar" title="Calendar" onclick={() => open({ kind: "calendar" })} data-testid="nav-calendar">
             <span class="nav-left"><Icon name="calendar" size={14} />{#if wide}<span>Calendar</span>{/if}</span>
           </button>
-        {/if}
-        {#if devMode || optedApps.has("notifications")}
           <button class="nav-row" class:active={notificationsInbox.modalOpen} aria-label="Notifications" title="Notifications" onclick={() => openNotificationsModal()} oncontextmenu={onNotificationsMenu}>
             <span class="nav-left"><Icon name="bell" size={14} />{#if wide}<span>Notifications</span>{/if}</span>
             {#if wide && notificationsInbox.totalBadgeCount > 0}<span class="nav-badge">{notificationsInbox.totalBadgeCount}</span>{/if}
           </button>
-        {/if}
-        {#if devMode || optedApps.has("all-pages") || optedApps.has("files")}
           <button class="nav-row" class:active={context.active?.kind === "explorer"} aria-label="All pages" title="All pages" onclick={() => open({ kind: "explorer", source: "vault", place: "" })}>
             <span class="nav-left"><Icon name="pages" size={14} />{#if wide}<span>All pages</span>{/if}</span>
           </button>
-        {/if}
-        {#if devMode || optedApps.has("graph")}
           <button class="nav-row" class:active={tabs.active === "graph"} aria-label="Graph" title={tipFor("Graph", "ui.graph")} onclick={() => open({ kind: "graph" })}>
             <span class="nav-left"><Icon name="graph" size={14} />{#if wide}<span>Graph</span>{/if}</span>
           </button>

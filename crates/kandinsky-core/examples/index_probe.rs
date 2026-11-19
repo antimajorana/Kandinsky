@@ -298,22 +298,16 @@ fn search_bench(root: &Path, cfg: &Config, out: &Path) {
     }
     pdf_warm.sort_by(f64::total_cmp);
 
-    // 1-file edit freshness & re-query latency
-    let all_md = search::match_files(root, cfg, ".md", false);
-    let (edit_ms, edit_found) = if let Some(rel) = all_md.first() {
-        let target = root.join(rel);
-        let orig = std::fs::read(&target).unwrap_or_default();
-        let token = "zxqvfreshprobe991";
-        #[allow(clippy::disallowed_methods)]
-        std::fs::write(&target, format!("{}\n{token}\n", String::from_utf8_lossy(&orig))).unwrap();
-        let (ms, _, _, after) = once(|| search::search_with(root, cfg, token, Opts::default()));
-        let found = after.lines.iter().any(|l| l.path == *rel);
-        #[allow(clippy::disallowed_methods)]
-        std::fs::write(&target, orig).unwrap();
-        (ms, found)
-    } else {
-        (0.0, false)
-    };
+    // 1-file edit freshness & re-query latency (uses a temporary scratch note, removed right after)
+    let probe_rel = "_index_probe_fresh_check.md";
+    let probe_abs = root.join(probe_rel);
+    let token = "zxqvfreshprobe991";
+    #[allow(clippy::disallowed_methods)]
+    std::fs::write(&probe_abs, format!("# Probe\n{token}\n")).unwrap();
+    let (edit_ms, _, _, after) = once(|| search::search_with(root, cfg, token, Opts::default()));
+    let edit_found = after.lines.iter().any(|l| l.path == probe_rel);
+    #[allow(clippy::disallowed_methods)]
+    let _ = std::fs::remove_file(&probe_abs);
 
     let report = serde_json::json!({
         "vault": root.display().to_string(),
@@ -342,6 +336,7 @@ fn search_bench(root: &Path, cfg: &Config, out: &Path) {
         "live_heap_end_bytes": LIVE.load(Relaxed).max(0),
     });
     if let Some(parent) = out.parent() {
+        #[allow(clippy::disallowed_methods)]
         let _ = std::fs::create_dir_all(parent);
     }
     #[allow(clippy::disallowed_methods)]

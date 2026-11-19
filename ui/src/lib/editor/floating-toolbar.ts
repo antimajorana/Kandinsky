@@ -131,8 +131,10 @@ class FloatingToolbarPlugin {
 
     this.onEditorKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || !this.visible) return;
-      e.preventDefault();
-      e.stopPropagation();
+      if (!app.vimEnabled) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       if (!this.instance.closeActivePopover()) this.dismiss();
     };
 
@@ -141,6 +143,7 @@ class FloatingToolbarPlugin {
     window.addEventListener("pointerup", this.onPointerUp);
     window.addEventListener("pointercancel", this.onPointerUp);
     this.view.scrollDOM.addEventListener("scroll", this.onScrollOrResize, { passive: true });
+    window.addEventListener("scroll", this.onScrollOrResize, { capture: true, passive: true });
     window.addEventListener("resize", this.onScrollOrResize);
   }
 
@@ -278,6 +281,7 @@ class FloatingToolbarPlugin {
     window.removeEventListener("pointerup", this.onPointerUp);
     window.removeEventListener("pointercancel", this.onPointerUp);
     this.view.scrollDOM.removeEventListener("scroll", this.onScrollOrResize);
+    window.removeEventListener("scroll", this.onScrollOrResize, true);
     window.removeEventListener("resize", this.onScrollOrResize);
     void unmount(this.instance);
     this.host.remove();

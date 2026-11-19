@@ -31,7 +31,6 @@ list_actions = [{ label = "Sync now", command = "sync-now" }]
 account = { kind = "Calendar", summary = "{user} · {url}", status = "account_status", test = "test_account", presets = [
   { label = "iCloud", hint = "with an app-specific password from appleid.apple.com", values = { server = "caldav", url = "https://caldav.icloud.com/" } },
   { label = "Fastmail", hint = "with an app password from Settings → Privacy & Security", values = { server = "caldav", url = "https://caldav.fastmail.com/dav/" } },
-  { label = "Google Calendar", hint = "CalDAV endpoint (or subscribe via secret .ics address below)", values = { server = "caldav", url = "https://apidata.googleusercontent.com/caldav/v2/" } },
   { label = "Outlook / Microsoft 365", hint = "your work or university Exchange calendar, signed in through the Email plugin's Outlook account of the same address", values = { server = "exchange" } },
   { label = "Nextcloud", hint = "an app password from Settings → Security → Devices & sessions", values = { url = "https://cloud.example.org/remote.php/dav/" } },
   { label = "RustiCal", hint = "an app token from its web page → App tokens", values = { url = "https://cal.example.org/caldav/" } },
@@ -57,7 +56,7 @@ key = "subscriptions"
 label = "Subscriptions"
 kind = "records"
 add = "Subscribe to a calendar"
-hint = "public calendars by address (https:// or webcal://): holidays, a seminar series. Read-only; fetched again only when they changed"
+hint = "public or secret .ics addresses (https:// or webcal://): Google Calendar (Settings → Integrate calendar → Secret address in iCal format), holidays, a seminar series. Read-only; fetched again only when they changed"
 actions = [{ label = "Test", command = "test-subscription" }]
 fields = [
   { key = "name", label = "Name", kind = "text", hint = "short: holidays, seminars (letters, digits, spaces, . @ - _)" },

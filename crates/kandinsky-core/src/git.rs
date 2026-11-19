@@ -87,7 +87,7 @@ fn is_meta(path: &str) -> bool {
 /// The agents whose commits are recognised, with their marks (agent_terminals.rs `commit_marks`): only what the agent
 /// plugins that are on declare — a vault without one sees every commit as the user's.
 pub(crate) fn agent_marks(root: &Path) -> Vec<(String, Vec<String>)> {
-    let off = crate::Workspace::open(root).and_then(|w| w.config()).map(|c| c.plugins.off).unwrap_or_default();
+    let off = crate::Workspace::open(root).and_then(|w| w.config()).map(|c| c.effective_plugins_off()).unwrap_or_default();
     crate::agent_terminals::declared(root, &off)
         .into_iter()
         .filter(|(_, a, _)| !a.commit_marks.is_empty())

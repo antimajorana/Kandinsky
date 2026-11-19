@@ -121,7 +121,7 @@ fn cache_head(root: &Path, id: &str, name: &str, n: u64) -> Result<Value, String
 fn dictionary_dirs(root: &Path, folder: &str) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     let custom = folder.trim();
-    if !custom.is_empty() {
+    if !custom.is_empty() && !custom.starts_with("\\\\") && !custom.starts_with("//") {
         let p = crate::platform::dirs::expand_tilde(custom);
         dirs.push(if p.is_absolute() { p } else { root.join(p) });
     }
@@ -170,7 +170,7 @@ fn dict_list(root: &Path, folder: &str) -> Value {
             let name = entry.file_name();
             let Some(name_str) = name.to_str() else { continue };
             let Some(code) = name_str.strip_suffix(".dic") else { continue };
-            if code.is_empty() || code == "." || code == ".." || code.contains(['/', '\\', '\0']) {
+            if code.is_empty() || code == "." || code == ".." || code.contains(['/', '\\', ':', '\0']) {
                 continue;
             }
             if entry.path().is_file() && dir.join(format!("{code}.aff")).is_file() {
@@ -199,14 +199,18 @@ fn aff_is_iso8859_1(aff: &str) -> bool {
 }
 
 fn dict_read(root: &Path, code: &str, folder: &str) -> Result<Value, String> {
+    const MAX_DICT: u64 = 32 << 20;
     let code = code.trim();
-    if code.is_empty() || code == "." || code == ".." || code.contains(['/', '\\', '\0']) || code.contains("..") {
+    if code.is_empty() || code == "." || code == ".." || code.contains(['/', '\\', ':', '\0']) || code.contains("..") {
         return Err(format!("dict.read: invalid dictionary code {code:?}"));
     }
     for dir in dictionary_dirs(root, folder) {
         let aff_path = dir.join(format!("{code}.aff"));
         let dic_path = dir.join(format!("{code}.dic"));
         if aff_path.is_file() && dic_path.is_file() {
+            if std::fs::metadata(&aff_path).is_ok_and(|m| m.len() > MAX_DICT) || std::fs::metadata(&dic_path).is_ok_and(|m| m.len() > MAX_DICT) {
+                return Err(format!("dict.read: {code}: dictionary exceeds 32 MB limit"));
+            }
             let aff_bytes = std::fs::read(&aff_path).map_err(|e| format!("dict.read: {}: {e}", aff_path.display()))?;
             let dic_bytes = std::fs::read(&dic_path).map_err(|e| format!("dict.read: {}: {e}", dic_path.display()))?;
             let aff_probe = decode_dict_bytes(&aff_bytes, false);

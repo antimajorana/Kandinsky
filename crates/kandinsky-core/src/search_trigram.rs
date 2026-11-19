@@ -12,13 +12,14 @@ use std::time::{Duration, Instant, SystemTime};
 use walkdir::WalkDir;
 
 const MAGIC: &[u8; 4] = b"KDTG";
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 const SEARCH_IDX: &str = ".kandinsky/cache/search.idx";
 const PDF_IDX: &str = ".kandinsky/cache/search-pdf.idx";
 const WARM_SLOTS: usize = 6;
 const IDLE: Duration = Duration::from_secs(30 * 60);
-/// Files modified within this window may share a filesystem mtime tick across rapid writes; always re-read them.
-const RACY_WINDOW: Duration = Duration::from_millis(100);
+/// Files modified within this window may share a filesystem mtime tick across rapid writes (up to 2 s on FAT/SMB); always re-read them.
+const RACY_WINDOW: Duration = Duration::from_secs(2);
+const RACY_SENTINEL: i64 = i64::MIN;
 const COMPACT_MIN_TOMBSTONES: usize = 256;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -27,7 +28,7 @@ enum IndexKind { Vault, Pdf }
 pub(super) struct WalkedFile { pub abs: PathBuf, pub rel: String, pub len: u64, pub modified: Option<SystemTime> }
 
 #[derive(Clone)]
-struct DocEntry { rel: String, len: u64, mtime_secs: i64, mtime_nanos: u32, content_hash: u64, worth_reading: bool, alive: bool }
+struct DocEntry { rel: String, len: u64, mtime_secs: i64, mtime_nanos: u32, content_hash: u64, is_text: bool, worth_reading: bool, alive: bool }
 
 #[derive(Clone, Copy)]
 struct TrigramMeta { trigram: u32, offset: u32, byte_len: u32, count: u32, last_doc: u32 }
@@ -71,11 +72,19 @@ fn collect_walked(root: &Path, iter: impl Iterator<Item = walkdir::Result<walkdi
 }
 
 /// Candidate `(abs, rel)` pairs for vault content search (`q`, `o`).
-pub(super) fn vault_candidates(root: &Path, cfg: &Config, q: &str, o: super::Opts, walked: &[WalkedFile]) -> Vec<(PathBuf, String)> {
-    let slot = ensure_index(root, IndexKind::Vault, &crate::state_dir::join(root, SEARCH_IDX), walked, true, |r| !cfg.is_ignored(r));
+pub(super) fn vault_candidates(root: &Path, cfg: &Config, q: &str, o: super::Opts, walked: &[WalkedFile], require_worth: bool) -> Vec<(PathBuf, String)> {
     let required = required_trigrams(q, o);
-    slot.read().unwrap_or_else(|e| e.into_inner())
-        .candidates(root, walked, &required, |rel| !cfg.is_ignored(rel) && (o.agent || !cfg.is_agent_file(rel)))
+    query_index(
+        root,
+        IndexKind::Vault,
+        &crate::state_dir::join(root, SEARCH_IDX),
+        walked,
+        true,
+        require_worth,
+        &required,
+        |r| !cfg.is_ignored(r),
+        |rel| !cfg.is_ignored(rel) && (o.agent || !cfg.is_agent_file(rel)),
+    )
 }
 
 /// Candidate `(abs, rel)` pairs inside `.kandinsky/cache/pdftext` using `.kandinsky/cache/search-pdf.idx`.
@@ -84,12 +93,22 @@ pub(super) fn pdf_candidates(root: &Path, q: &str, o: super::Opts) -> Vec<(PathB
     if !cache_dir.is_dir() { return Vec::new(); }
     let walked = collect_walked(root, WalkDir::new(&cache_dir).follow_links(false).into_iter(), |r| r.ends_with(".txt"));
     if walked.is_empty() { return Vec::new(); }
-    let slot = ensure_index(root, IndexKind::Pdf, &crate::state_dir::join(root, PDF_IDX), &walked, false, |_| true);
     let required = required_trigrams(q, o);
-    slot.read().unwrap_or_else(|e| e.into_inner()).candidates(root, &walked, &required, |_| true)
+    query_index(root, IndexKind::Pdf, &crate::state_dir::join(root, PDF_IDX), &walked, false, true, &required, |_| true, |_| true)
 }
 
-fn ensure_index(root: &Path, kind: IndexKind, idx_path: &Path, walked: &[WalkedFile], sniff_non_md: bool, prune_when: impl Fn(&str) -> bool) -> Arc<RwLock<TrigramIndex>> {
+#[allow(clippy::too_many_arguments)]
+fn query_index(
+    root: &Path,
+    kind: IndexKind,
+    idx_path: &Path,
+    walked: &[WalkedFile],
+    sniff_non_md: bool,
+    require_worth: bool,
+    required: &[u32],
+    prune_when: impl Fn(&str) -> bool,
+    allow: impl Fn(&str) -> bool,
+) -> Vec<(PathBuf, String)> {
     let canon_root = crate::paths::real(root).unwrap_or_else(|_| root.to_path_buf());
     let now_sys = SystemTime::now();
     let (stamp, has_racy) = aggregate_stamp(walked, now_sys);
@@ -104,11 +123,15 @@ fn ensure_index(root: &Path, kind: IndexKind, idx_path: &Path, walked: &[WalkedF
         })
     };
     let slot = match existing {
-        Some((true, hit)) => return hit,
+        Some((true, hit)) => {
+            let idx = hit.read().unwrap_or_else(|e| e.into_inner());
+            return idx.candidates(root, walked, required, require_worth, allow);
+        }
         Some((false, s)) => s,
         None => Arc::new(RwLock::new(TrigramIndex::default())),
     };
     let mut persisted = false;
+    let mut out = Vec::new();
     let _ = vault_write::locked(idx_path, || {
         let disk_meta = file_disk_stamp(idx_path);
         let mut idx = slot.write().unwrap_or_else(|e| e.into_inner());
@@ -124,15 +147,16 @@ fn ensure_index(root: &Path, kind: IndexKind, idx_path: &Path, walked: &[WalkedF
         } else {
             persisted = true;
         }
+        out = idx.candidates(root, walked, required, require_worth, &allow);
         Ok(())
     });
     let final_disk = persisted.then(|| file_disk_stamp(idx_path)).flatten();
     let mut cache = MEM_CACHE.lock().unwrap_or_else(|e| e.into_inner());
     let now = Instant::now();
-    cache.retain(|w| !(w.canon_root == canon_root && w.kind == kind) && now.saturating_duration_since(w.used) < IDLE);
-    cache.insert(0, VaultCache { canon_root, kind, used: now, agg_stamp: (!has_racy).then_some(stamp), disk_stamp: final_disk, index: slot.clone() });
+    cache.retain(|w| (w.canon_root != canon_root || w.kind != kind) && now.saturating_duration_since(w.used) < IDLE);
+    cache.insert(0, VaultCache { canon_root, kind, used: now, agg_stamp: (!has_racy).then_some(stamp), disk_stamp: final_disk, index: slot });
     cache.truncate(WARM_SLOTS);
-    slot
+    out
 }
 
 fn file_disk_stamp(path: &Path) -> Option<(u64, Option<SystemTime>)> {
@@ -147,7 +171,9 @@ fn aggregate_stamp(walked: &[WalkedFile], now: SystemTime) -> ((usize, u64), boo
     }
     ((walked.len(), h), has_racy)
 }
-fn is_racy(modified: Option<SystemTime>, now: SystemTime) -> bool { modified.is_none_or(|m| now.duration_since(m).is_err_or(|age| age < RACY_WINDOW)) }
+fn is_racy(modified: Option<SystemTime>, now: SystemTime) -> bool {
+    modified.is_none_or(|m| !now.duration_since(m).is_ok_and(|age| age >= RACY_WINDOW))
+}
 fn system_time_parts(t: Option<SystemTime>) -> (i64, u32) {
     match t.map(|t| t.duration_since(SystemTime::UNIX_EPOCH)) {
         Some(Ok(d)) => (d.as_secs() as i64, d.subsec_nanos()),
@@ -157,10 +183,10 @@ fn system_time_parts(t: Option<SystemTime>) -> (i64, u32) {
 }
 #[inline]
 fn fnv_mix(mut h: u64, bytes: &[u8]) -> u64 { for &b in bytes { h = (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3); } h }
-struct ReadEntry { walked_idx: usize, old_doc_id: Option<u32>, len: u64, mtime_secs: i64, mtime_nanos: u32, content_hash: u64, worth_reading: bool, trigrams: Vec<u32> }
+struct ReadEntry { walked_idx: usize, old_doc_id: Option<u32>, len: u64, mtime_secs: i64, mtime_nanos: u32, content_hash: u64, is_text: bool, worth_reading: bool, trigrams: Vec<u32> }
 impl ReadEntry {
-    fn skipped(walked_idx: usize, old_doc_id: Option<u32>, len: u64, mtime_secs: i64, mtime_nanos: u32) -> Self {
-        Self { walked_idx, old_doc_id, len, mtime_secs, mtime_nanos, content_hash: 0, worth_reading: false, trigrams: Vec::new() }
+    fn binary_or_huge(walked_idx: usize, old_doc_id: Option<u32>, len: u64, mtime_secs: i64, mtime_nanos: u32) -> Self {
+        Self { walked_idx, old_doc_id, len, mtime_secs, mtime_nanos, content_hash: 0, is_text: false, worth_reading: false, trigrams: Vec::new() }
     }
 }
 
@@ -183,11 +209,11 @@ impl TrigramIndex {
             if d.alive && !seen[id] && prune_when(&d.rel) { d.alive = false; self.by_rel.remove(&d.rel); self.tombstones += 1; changed = true; }
         }
         if to_read.is_empty() { return changed; }
-        for item in read_batch_parallel(walked, &to_read, sniff_non_md) {
+        for item in read_batch_parallel(walked, &to_read, sniff_non_md, now_sys) {
             let f = &walked[item.walked_idx];
             if let Some(old_id) = item.old_doc_id {
                 let old = &mut self.docs[old_id as usize];
-                if old.alive && old.content_hash == item.content_hash && old.worth_reading == item.worth_reading && old.len == item.len {
+                if old.alive && old.content_hash == item.content_hash && old.is_text == item.is_text && old.worth_reading == item.worth_reading && old.len == item.len {
                     if old.mtime_secs != item.mtime_secs || old.mtime_nanos != item.mtime_nanos {
                         (old.mtime_secs, old.mtime_nanos) = (item.mtime_secs, item.mtime_nanos);
                         changed = true;
@@ -197,7 +223,7 @@ impl TrigramIndex {
                 if old.alive { old.alive = false; self.tombstones += 1; }
             }
             let new_id = self.docs.len() as u32;
-            self.docs.push(DocEntry { rel: f.rel.clone(), len: item.len, mtime_secs: item.mtime_secs, mtime_nanos: item.mtime_nanos, content_hash: item.content_hash, worth_reading: item.worth_reading, alive: true });
+            self.docs.push(DocEntry { rel: f.rel.clone(), len: item.len, mtime_secs: item.mtime_secs, mtime_nanos: item.mtime_nanos, content_hash: item.content_hash, is_text: item.is_text, worth_reading: item.worth_reading, alive: true });
             self.by_rel.insert(f.rel.clone(), new_id);
             for t in item.trigrams { self.overlay.entry(t).or_default().push(new_id); self.overlay_postings += 1; }
             changed = true;
@@ -259,27 +285,34 @@ impl TrigramIndex {
         self.table.binary_search_by_key(&trigram, |m| m.trigram).map_or(0, |i| self.table[i].count as usize) + self.overlay.get(&trigram).map_or(0, Vec::len)
     }
 
-    fn candidates(&self, root: &Path, walked: &[WalkedFile], required: &[u32], allow: impl Fn(&str) -> bool) -> Vec<(PathBuf, String)> {
+    fn candidates(&self, root: &Path, walked: &[WalkedFile], required: &[u32], require_worth: bool, allow: impl Fn(&str) -> bool) -> Vec<(PathBuf, String)> {
+        let doc_ok = |d: &DocEntry| d.alive && d.is_text && (!require_worth || d.worth_reading) && d.len <= super::MAX_FILE && allow(&d.rel);
         if required.is_empty() {
             return walked.iter()
-                .filter(|f| f.len <= super::MAX_FILE && allow(&f.rel) && self.by_rel.get(&f.rel).is_none_or(|&id| self.docs[id as usize].worth_reading))
+                .filter(|f| f.len <= super::MAX_FILE && allow(&f.rel) && self.by_rel.get(&f.rel).is_none_or(|&id| doc_ok(&self.docs[id as usize])))
                 .map(|f| (f.abs.clone(), f.rel.clone())).collect();
         }
+        let mut out: Vec<(PathBuf, String)> = walked.iter()
+            .filter(|f| f.len <= super::MAX_FILE && !self.by_rel.contains_key(&f.rel) && allow(&f.rel))
+            .map(|f| (f.abs.clone(), f.rel.clone()))
+            .collect();
         let mut ranked: Vec<(usize, u32)> = required.iter().map(|&t| (self.posting_count(t), t)).collect();
-        if ranked.iter().any(|&(c, _)| c == 0) { return Vec::new(); }
-        ranked.sort_unstable_by_key(|&(c, _)| c);
-        let mut matched: Vec<u32> = self.postings(ranked[0].1).filter(|&id| {
-            self.docs.get(id as usize).is_some_and(|d| d.alive && d.worth_reading && d.len <= super::MAX_FILE && allow(&d.rel))
-        }).collect();
-        for &(_, t) in &ranked[1..] {
-            if matched.is_empty() { break; }
-            let mut stream = self.postings(t).peekable();
-            matched.retain(|&target| {
-                while stream.peek().is_some_and(|&x| x < target) { stream.next(); }
-                stream.peek() == Some(&target)
-            });
+        if ranked.iter().all(|&(c, _)| c > 0) {
+            ranked.sort_unstable_by_key(|&(c, _)| c);
+            let mut matched: Vec<u32> = self.postings(ranked[0].1).filter(|&id| {
+                self.docs.get(id as usize).is_some_and(doc_ok)
+            }).collect();
+            for &(_, t) in &ranked[1..] {
+                if matched.is_empty() { break; }
+                let mut stream = self.postings(t).peekable();
+                matched.retain(|&target| {
+                    while stream.peek().is_some_and(|&x| x < target) { stream.next(); }
+                    stream.peek() == Some(&target)
+                });
+            }
+            out.extend(matched.into_iter().map(|id| (root.join(&self.docs[id as usize].rel), self.docs[id as usize].rel.clone())));
         }
-        matched.into_iter().map(|id| (root.join(&self.docs[id as usize].rel), self.docs[id as usize].rel.clone())).collect()
+        out
     }
 
     fn serialize(&self) -> Vec<u8> {
@@ -295,7 +328,7 @@ impl TrigramIndex {
             out.extend_from_slice(&d.mtime_secs.to_le_bytes());
             out.extend_from_slice(&d.mtime_nanos.to_le_bytes());
             out.extend_from_slice(&d.content_hash.to_le_bytes());
-            out.push(u8::from(d.worth_reading) | (u8::from(d.alive) << 1));
+            out.push(u8::from(d.worth_reading) | (u8::from(d.alive) << 1) | (u8::from(d.is_text) << 2));
         }
         out.extend_from_slice(&(all.len() as u32).to_le_bytes());
         let table_start = out.len();
@@ -334,9 +367,9 @@ impl TrigramIndex {
             let mtime_nanos = u32::from_le_bytes(take(bytes, &mut p)?);
             let content_hash = u64::from_le_bytes(take(bytes, &mut p)?);
             let flags = take::<1>(bytes, &mut p)?[0];
-            let (worth_reading, alive) = ((flags & 1) != 0, (flags & 2) != 0);
+            let (worth_reading, alive, is_text) = ((flags & 1) != 0, (flags & 2) != 0, (flags & 4) != 0);
             if alive { by_rel.insert(rel.clone(), id as u32); } else { tombstones += 1; }
-            docs.push(DocEntry { rel, len, mtime_secs, mtime_nanos, content_hash, worth_reading, alive });
+            docs.push(DocEntry { rel, len, mtime_secs, mtime_nanos, content_hash, is_text, worth_reading, alive });
         }
         let tri_count = u32::from_le_bytes(take(bytes, &mut p)?) as usize;
         let blob_base = p.checked_add(tri_count.checked_mul(16)?)?;
@@ -355,43 +388,57 @@ impl TrigramIndex {
     }
 }
 
-fn read_batch_parallel(walked: &[WalkedFile], to_read: &[(usize, Option<u32>)], sniff_non_md: bool) -> Vec<ReadEntry> {
-    use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
-    let (next, results) = (AtomicUsize::new(0), Mutex::new(Vec::with_capacity(to_read.len())));
-    let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 8).min(to_read.len().max(1));
-    let (next, results) = (&next, &results);
-    std::thread::scope(|s| for _ in 0..workers {
-        s.spawn(move || loop {
-            let pos = next.fetch_add(1, Relaxed);
-            let Some(&(wi, old_id)) = to_read.get(pos) else { break };
-            results.lock().unwrap_or_else(|e| e.into_inner()).push((pos, read_one_file(wi, old_id, &walked[wi], sniff_non_md)));
-        });
-    });
-    let mut out = results.into_inner().unwrap_or_else(|e| e.into_inner());
-    out.sort_unstable_by_key(|(pos, _)| *pos);
-    out.into_iter().map(|(_, e)| e).collect()
+fn read_batch_parallel(walked: &[WalkedFile], to_read: &[(usize, Option<u32>)], sniff_non_md: bool, now_sys: SystemTime) -> Vec<ReadEntry> {
+    use rayon::prelude::*;
+    to_read.par_iter().filter_map(|&(wi, old_id)| read_one_file(wi, old_id, &walked[wi], sniff_non_md, now_sys)).collect()
 }
 
-fn read_one_file(walked_idx: usize, old_doc_id: Option<u32>, f: &WalkedFile, sniff_non_md: bool) -> ReadEntry {
-    let (mtime_secs, mtime_nanos) = system_time_parts(f.modified);
-    if f.len > super::MAX_FILE { return ReadEntry::skipped(walked_idx, old_doc_id, f.len, mtime_secs, mtime_nanos); }
-    let Ok(mut file) = std::fs::File::open(&f.abs) else { return ReadEntry::skipped(walked_idx, old_doc_id, f.len, mtime_secs, mtime_nanos); };
-    let mut buf = Vec::new();
-    if sniff_non_md && !f.rel.ends_with(".md") {
-        let _ = file.by_ref().take(4096).read_to_end(&mut buf);
-        if !super::worth_reading_head(&buf, &f.rel) { return ReadEntry::skipped(walked_idx, old_doc_id, f.len, mtime_secs, mtime_nanos); }
+fn read_one_file(walked_idx: usize, old_doc_id: Option<u32>, f: &WalkedFile, sniff_non_md: bool, now_sys: SystemTime) -> Option<ReadEntry> {
+    let (raw_secs, mtime_nanos) = system_time_parts(f.modified);
+    let mtime_secs = if is_racy(f.modified, now_sys) { RACY_SENTINEL } else { raw_secs };
+    if f.len > super::MAX_FILE { return Some(ReadEntry::binary_or_huge(walked_idx, old_doc_id, f.len, mtime_secs, mtime_nanos)); }
+    let mut file = std::fs::File::open(&f.abs).ok()?;
+    let mut buf = Vec::with_capacity((f.len as usize).min(4096));
+    file.by_ref().take(4096).read_to_end(&mut buf).ok()?;
+    if buf.contains(&0) { return Some(ReadEntry::binary_or_huge(walked_idx, old_doc_id, f.len, mtime_secs, mtime_nanos)); }
+    let worth_reading = !sniff_non_md || f.rel.ends_with(".md") || super::worth_reading_head(&buf, &f.rel);
+    file.read_to_end(&mut buf).ok()?;
+    if buf.len() as u64 > super::MAX_FILE || buf.contains(&0) {
+        return Some(ReadEntry::binary_or_huge(walked_idx, old_doc_id, buf.len() as u64, mtime_secs, mtime_nanos));
     }
-    let _ = file.read_to_end(&mut buf);
-    if buf.len() as u64 > super::MAX_FILE { return ReadEntry::skipped(walked_idx, old_doc_id, buf.len() as u64, mtime_secs, mtime_nanos); }
-    ReadEntry { walked_idx, old_doc_id, len: buf.len() as u64, mtime_secs, mtime_nanos, content_hash: fnv_mix(0xcbf2_9ce4_8422_2325u64, &buf), worth_reading: true, trigrams: extract_unique_trigrams(&buf) }
+    Some(ReadEntry {
+        walked_idx,
+        old_doc_id,
+        len: buf.len() as u64,
+        mtime_secs,
+        mtime_nanos,
+        content_hash: fnv_mix(0xcbf2_9ce4_8422_2325u64, &buf),
+        is_text: true,
+        worth_reading,
+        trigrams: extract_unique_trigrams(&buf),
+    })
 }
 
 fn extract_unique_trigrams(bytes: &[u8]) -> Vec<u32> {
-    let mut out = Vec::with_capacity(bytes.len().min(4096));
-    for_each_trigram(bytes, |t| { out.push(t); if out.len() >= 262_144 { out.sort_unstable(); out.dedup(); } });
-    out.sort_unstable();
-    out.dedup();
-    out.shrink_to_fit();
+    if bytes.len() <= 65_536 {
+        let mut out = Vec::with_capacity(bytes.len().min(4096));
+        for_each_trigram(bytes, |t| out.push(t));
+        out.sort_unstable();
+        out.dedup();
+        out.shrink_to_fit();
+        return out;
+    }
+    let mut bits = vec![0u64; 1 << 18]; // 2^24 bits = 2 MB bitset for large files
+    for_each_trigram(bytes, |t| bits[(t >> 6) as usize] |= 1u64 << (t & 63));
+    let mut out = Vec::new();
+    for (wi, &word) in bits.iter().enumerate() {
+        let mut w = word;
+        while w != 0 {
+            let bit = w.trailing_zeros();
+            out.push(((wi as u32) << 6) | bit);
+            w &= w - 1;
+        }
+    }
     out
 }
 
@@ -405,7 +452,7 @@ fn for_each_trigram(bytes: &[u8], mut emit: impl FnMut(u32)) {
             if b == 0 || b == b'\n' || b == b'\r' { run = 0; continue; }
             Some(b.to_ascii_lowercase())
         } else if b == 0xC5 && bytes.get(i + 1) == Some(&0xBF) { i += 2; Some(b's') }
-        else if b == 0xE2 && bytes.get(i + 1..i + 3) == Some(&[0x84, 0xAA]) { i += 3; Some(b'k') }
+        else if b == 0xE2 && bytes.get(i + 1..i + 3) == Some(&[0x84, 0xAA][..]) { i += 3; Some(b'k') }
         else { i += 1; None };
         if let Some(c) = folded {
             if run >= 2 { emit(((w0 as u32) << 16) | ((w1 as u32) << 8) | (c as u32)); } else { run += 1; }
@@ -414,47 +461,12 @@ fn for_each_trigram(bytes: &[u8], mut emit: impl FnMut(u32)) {
     }
 }
 
-/// Required folded ASCII trigrams for `q` under `o` (empty = cannot pre-filter; search all `worth_reading` files).
+/// Required folded ASCII trigrams for `q` under `o` (empty = cannot pre-filter; search all `worth_reading` text files).
 fn required_trigrams(q: &str, o: super::Opts) -> Vec<u32> {
-    if !o.regex { return extract_unique_trigrams(q.as_bytes()); }
-    if q.contains('|') || q.contains('(') || q.contains(')') || q.contains(r"\Q") { return Vec::new(); }
-    let (mut out, mut run) = (Vec::new(), Vec::new());
-    let flush = |run: &mut Vec<u8>, out: &mut Vec<u32>| { if run.len() >= 3 { for_each_trigram(run, |t| out.push(t)); } run.clear(); };
-    let mut chars = q.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            '\\' => {
-                let Some(e) = chars.next() else { flush(&mut run, &mut out); break };
-                if !e.is_ascii_alphanumeric() && e.is_ascii() {
-                    if matches!(chars.peek(), Some('?' | '*' | '{')) { flush(&mut run, &mut out); } else { run.push(e as u8); }
-                } else {
-                    flush(&mut run, &mut out);
-                    if matches!(e, 'p' | 'P') && chars.peek() == Some(&'{') { for ch in chars.by_ref() { if ch == '}' { break; } } }
-                }
-            }
-            '[' => {
-                flush(&mut run, &mut out);
-                let (mut ci, mut neg) = (0usize, false);
-                while let Some(ch) = chars.next() {
-                    if ci == 0 && ch == '^' { neg = true; } else if ch == '\\' { let _ = chars.next(); } else if ch == ']' && ci > usize::from(neg) { break; }
-                    ci += 1;
-                }
-            }
-            '{' => { flush(&mut run, &mut out); for ch in chars.by_ref() { if ch == '}' { break; } } }
-            '?' | '*' | '.' | '^' | '$' | '+' => flush(&mut run, &mut out),
-            _ if matches!(chars.peek(), Some('?' | '*' | '{')) => flush(&mut run, &mut out),
-            _ if c.is_ascii() => run.push(c as u8),
-            _ => match c.encode_utf8(&mut [0u8; 4]).as_bytes() {
-                [0xC5, 0xBF] => run.push(b's'),
-                [0xE2, 0x84, 0xAA] => run.push(b'k'),
-                _ => flush(&mut run, &mut out),
-            },
-        }
+    if o.regex {
+        return Vec::new();
     }
-    flush(&mut run, &mut out);
-    out.sort_unstable();
-    out.dedup();
-    out
+    extract_unique_trigrams(q.as_bytes())
 }
 
 struct VarintIter<'a> { bytes: &'a [u8], pos: usize, prev: u32, first: bool, rem: u32 }

@@ -38,13 +38,17 @@ export function shouldBypassRichPaste(
   if (fmClose > 0 && state.doc.lineAt(from).number <= fmClose) return true;
 
   const tree = syntaxTree(state);
-  if (hasBypassNode(tree.resolveInner(from, 1)) || hasBypassNode(tree.resolveInner(to, -1))) return true;
+  if (from === to) {
+    if (hasBypassNode(tree.resolveInner(from, 0))) return true;
+  } else if (hasBypassNode(tree.resolveInner(from, 1)) || hasBypassNode(tree.resolveInner(to, -1))) {
+    return true;
+  }
   if (notePlaceAt(state, from).kind !== "text") return true;
   if (to > from && notePlaceAt(state, to - 1).kind !== "text") return true;
   return false;
 }
 
-/** True when clipboard HTML is only a single image wrapper (e.g. screenshot copy) around attached files. */
+/** True when clipboard HTML is only a single image wrapper (e.g. screenshot or browser "Copy image") around attached files. */
 export function isImageOnlyClipboardHtml(html: string): boolean {
   const trimmed = html.trim();
   if (!trimmed) return true;
@@ -52,9 +56,7 @@ export function isImageOnlyClipboardHtml(html: string): boolean {
   const doc = new DOMParser().parseFromString(clean, "text/html");
   if ((doc.body.textContent ?? "").trim().length > 0) return false;
   const imgs = doc.body.querySelectorAll("img");
-  if (imgs.length !== 1) return false;
-  const src = (imgs[0].getAttribute("src") ?? "").trim();
-  return /^(?:blob:|file:|data:image\/)/i.test(src);
+  return imgs.length === 1;
 }
 
 function isSafeUrl(raw: string): boolean {
@@ -203,6 +205,11 @@ function convertInline(node: Node): string {
     return `![${alt}](${src})`;
   }
 
+  // Google Docs wraps entire documents in `<b style="font-weight:normal">` containing block children.
+  if (el.querySelector("h1,h2,h3,h4,h5,h6,p,div,ul,ol,blockquote,pre,table,hr,section,article")) {
+    return convertBlocks(el);
+  }
+
   let text = inlineChildren(el);
   if (!text) return "";
   if (isHighlight(el)) text = wrapInline("==", text);
@@ -237,7 +244,7 @@ function convertMsoListParagraph(el: Element): string {
   }
   const ordered = /^\d+[.)]?$|^[a-zA-Z][.)]$/.test(markerText.trim());
   const prefix = ordered ? "1. " : "- ";
-  return `${"  ".repeat(depth)}${prefix}${body}\n`;
+  return `${"    ".repeat(depth)}${prefix}${body}\n`;
 }
 
 function convertList(listEl: Element, depth: number): string {
@@ -247,7 +254,12 @@ function convertList(listEl: Element, depth: number): string {
   let out = "";
 
   for (const child of listEl.children) {
-    if (child.tagName.toLowerCase() !== "li") continue;
+    const cTag = child.tagName.toLowerCase();
+    if (cTag === "ul" || cTag === "ol") {
+      out += convertList(child, depth + 1);
+      continue;
+    }
+    if (cTag !== "li") continue;
     const checkbox = child.querySelector('input[type="checkbox"]');
     const isTask = checkbox !== null && checkbox.closest("li") === child;
     const marker = isTask
@@ -274,7 +286,7 @@ function convertList(listEl: Element, depth: number): string {
       inlinePart += convertInline(liChild);
     }
     const cleanLine = inlinePart.replace(/[ \t]*\n[ \t]*/g, " ").trim();
-    out += `${"  ".repeat(depth)}${marker}${cleanLine}\n`;
+    out += `${"    ".repeat(depth)}${marker}${cleanLine}\n`;
     if (nestedPart) out += nestedPart;
   }
   return out;
@@ -398,6 +410,7 @@ export function htmlToMarkdown(html: string): string | null {
   const rawMd = convertBlocks(doc.body);
   const normalized = rawMd
     .replace(/\r\n?/g, "\n")
+    .replace(/(\*\*|~~|==)\1/g, "")
     .split("\n")
     .map((line) => line.replace(/[ \t]+$/g, ""))
     .join("\n")

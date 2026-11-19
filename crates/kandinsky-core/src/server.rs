@@ -2234,7 +2234,20 @@ async fn lsp_peek(Query(q): Query<PeekQuery>) -> Result<Json<crate::api::LspPeek
     Ok(Json(blocking(move || crate::lsp::peek(&q.uri, q.line)).await?))
 }
 
-async fn lsp_ws(State(st): S, UrlPath(lang): UrlPath<crate::lsp::LspLang>, upgrade: WebSocketUpgrade) -> Response {
+async fn lsp_ws(
+    State(st): S,
+    UrlPath(lang): UrlPath<crate::lsp::LspLang>,
+    upgrade: std::result::Result<WebSocketUpgrade, axum::extract::ws::rejection::WebSocketUpgradeRejection>,
+) -> Response {
+    match with_ws(&st, |ws| Ok(ws.config()?.developer_mode)).await {
+        Ok(true) => {}
+        Ok(false) => return forbidden("Language servers require Developer mode (Settings → Plugins)"),
+        Err(e) => return e.into_response(),
+    }
+    let upgrade = match upgrade {
+        Ok(u) => u,
+        Err(rej) => return rej.into_response(),
+    };
     let ws = st.ws.clone();
     upgrade.on_upgrade(move |socket| crate::lsp::session(socket, ws, lang))
 }
@@ -2264,12 +2277,20 @@ async fn notebook_run_post(State(st): S, Json(req): Json<notebook_run::NotebookR
     Ok(Json(with_ws(&st, move |ws| notebook_run::run(ws.root(), &req, Some(&bus))).await?))
 }
 
-async fn pty_ws(State(st): S, Query(q): Query<PtyQuery>, upgrade: WebSocketUpgrade) -> Response {
+async fn pty_ws(
+    State(st): S,
+    Query(q): Query<PtyQuery>,
+    upgrade: std::result::Result<WebSocketUpgrade, axum::extract::ws::rejection::WebSocketUpgradeRejection>,
+) -> Response {
     match with_ws(&st, |ws| Ok(ws.config()?.developer_mode)).await {
         Ok(true) => {}
         Ok(false) => return forbidden("Terminal requires Developer mode (Settings → Plugins)"),
         Err(e) => return e.into_response(),
     }
+    let upgrade = match upgrade {
+        Ok(u) => u,
+        Err(rej) => return rej.into_response(),
+    };
     let ws = st.ws.clone();
     let ptys = st.ptys.clone();
     upgrade.on_upgrade(move |socket| pty::session(socket, ws, q, ptys))

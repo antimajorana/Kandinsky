@@ -120,6 +120,12 @@ async function callRunner<T>(method: string, params: unknown, timeoutSecs = 120)
   return (await api.pluginHelper(PLUGIN_ID, method, params, timeoutSecs)) as T;
 }
 
+function useDirectNotebookRunner(): boolean {
+  if (!settings.config?.developer_mode) return true;
+  const runner = plugins.list.find((p) => p.id === PLUGIN_ID);
+  return !runner || !pluginOn(runner);
+}
+
 export function runJupyterNotebook(opts: {
   path?: string;
   cells: Array<{ index: number; source: string }>;
@@ -127,7 +133,7 @@ export function runJupyterNotebook(opts: {
   timeout?: number;
 }): Promise<JupyterNotebookRunResponse> {
   const timeout = opts.timeout ?? 180;
-  if (!settings.config?.developer_mode) {
+  if (useDirectNotebookRunner()) {
     return api.notebookRun({ path: opts.path, cells: opts.cells, timeout }) as Promise<JupyterNotebookRunResponse>;
   }
   return callRunner<JupyterNotebookRunResponse>("runJupyterNotebook", opts, timeout);
@@ -141,7 +147,7 @@ export function runJupyterCell(opts: {
   timeout?: number;
 }): Promise<JupyterNotebookRunResponse> {
   const timeout = opts.timeout ?? 120;
-  if (!settings.config?.developer_mode) {
+  if (useDirectNotebookRunner()) {
     return api.notebookRun({
       path: opts.path,
       cells: [{ index: opts.index, source: opts.source }],
