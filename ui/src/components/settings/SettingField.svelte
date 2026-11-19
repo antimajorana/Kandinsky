@@ -40,29 +40,33 @@
   let lastSerializedRules = "";
   const listId = $derived(`dl-${path.replace(/\W/g, "-")}`);
 
+  function normRules(arr: Array<{ folder?: string | null; title?: string | null; template?: string | null }>): RuleDraft[] {
+    return arr.map((r) => ({
+      folder: (r.folder ?? "").trim(),
+      title: (r.title ?? "").trim(),
+      template: (r.template ?? "").trim(),
+    }));
+  }
+
   $effect(() => {
     if (path !== "notes.template_rules") return;
-    const arr = Array.isArray(v) ? (v as Array<{ folder?: string; title?: string; template?: string }>) : [];
-    const serialized = JSON.stringify(arr);
+    const arr = Array.isArray(v) ? (v as Array<{ folder?: string | null; title?: string | null; template?: string | null }>) : [];
+    const cleaned = normRules(arr);
+    const serialized = JSON.stringify(cleaned);
     if (serialized !== lastSerializedRules) {
       lastSerializedRules = serialized;
-      ruleDrafts = arr.map((r) => ({
-        folder: r.folder ?? "",
-        title: r.title ?? "",
-        template: r.template ?? "",
-      }));
+      ruleDrafts = cleaned;
     }
   });
 
   function saveRules(next: RuleDraft[]): void {
-    const out = next
-      .map((r) => ({
-        ...(r.folder.trim() ? { folder: r.folder.trim() } : {}),
-        ...(r.title.trim() ? { title: r.title.trim() } : {}),
-        template: r.template.trim(),
-      }))
-      .filter((r) => r.template || r.folder || r.title);
-    lastSerializedRules = JSON.stringify(out);
+    const cleaned = normRules(next).filter((r) => r.template || r.folder || r.title);
+    lastSerializedRules = JSON.stringify(cleaned);
+    const out = cleaned.map((r) => ({
+      ...(r.folder ? { folder: r.folder } : {}),
+      ...(r.title ? { title: r.title } : {}),
+      template: r.template,
+    }));
     void setValue(path, out);
   }
 

@@ -21,11 +21,19 @@ const IDLE: Duration = Duration::from_secs(30 * 60);
 const RACY_WINDOW: Duration = Duration::from_secs(2);
 const RACY_SENTINEL: i64 = i64::MIN;
 const COMPACT_MIN_TOMBSTONES: usize = 256;
+const WALK_TRUST: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum IndexKind { Vault, Pdf }
 
 pub(super) struct WalkedFile { pub abs: PathBuf, pub rel: String, pub len: u64, pub modified: Option<SystemTime> }
+
+struct WarmWalk {
+    root: PathBuf,
+    used: Instant,
+    walked_at: (crate::vault_changes::Stamp, Instant),
+    files: Arc<Vec<WalkedFile>>,
+}
 
 #[derive(Clone)]
 struct DocEntry { rel: String, len: u64, mtime_secs: i64, mtime_nanos: u32, content_hash: u64, is_text: bool, worth_reading: bool, alive: bool }
@@ -54,13 +62,39 @@ struct VaultCache {
 }
 
 static MEM_CACHE: Mutex<Vec<VaultCache>> = Mutex::new(Vec::new());
+static WALK_CACHE: Mutex<Vec<WarmWalk>> = Mutex::new(Vec::new());
 
 /// Walk the workspace via `walk::keep` (keeping agent files so `o.agent` filters at query time) with size & mtime.
-pub(super) fn walk_vault(root: &Path, cfg: &Config) -> Vec<WalkedFile> {
+/// When a complete watcher covers `root` (`vault_changes::stamp`), an unchanged generation reuses the previous walk.
+pub(super) fn walk_vault(root: &Path, cfg: &Config) -> Arc<Vec<WalkedFile>> {
+    static WALKING: crate::key_lock::KeyLocks = crate::key_lock::KeyLocks::new();
+    let lk = WALKING.get(root);
+    let _one = lk.lock().unwrap_or_else(|e| e.into_inner());
+    let stamp = crate::vault_changes::stamp(root, cfg);
+    let now = Instant::now();
+    if let Some(s) = stamp {
+        let mut warm = WALK_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(i) = warm.iter().position(|w| w.root == root && w.walked_at.0 == s && now.saturating_duration_since(w.walked_at.1) < WALK_TRUST) {
+            let mut hit = warm.remove(i);
+            hit.used = now;
+            let out = hit.files.clone();
+            warm.retain(|w| now.saturating_duration_since(w.used) < IDLE);
+            warm.insert(0, hit);
+            return out;
+        }
+    }
     let iter = WalkDir::new(root).follow_links(false).into_iter().filter_entry(|e| {
         crate::paths::rel_path(root, e.path()).is_some_and(|r| walk::keep(cfg, &r) && !crate::state_dir::names_stale_twin(root, &r))
     });
-    collect_walked(root, iter, |_| true)
+    let files = Arc::new(collect_walked(root, iter, |_| true));
+    let now_sys = SystemTime::now();
+    if let Some(s) = stamp.filter(|_| !files.iter().any(|f| is_racy(f.modified, now_sys))) {
+        let mut warm = WALK_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        warm.retain(|w| w.root != root && now.saturating_duration_since(w.used) < IDLE);
+        warm.insert(0, WarmWalk { root: root.to_path_buf(), used: now, walked_at: (s, now), files: files.clone() });
+        warm.truncate(WARM_SLOTS);
+    }
+    files
 }
 
 fn collect_walked(root: &Path, iter: impl Iterator<Item = walkdir::Result<walkdir::DirEntry>>, keep_rel: impl Fn(&str) -> bool) -> Vec<WalkedFile> {
@@ -209,7 +243,16 @@ impl TrigramIndex {
             if d.alive && !seen[id] && prune_when(&d.rel) { d.alive = false; self.by_rel.remove(&d.rel); self.tombstones += 1; changed = true; }
         }
         if to_read.is_empty() { return changed; }
-        for item in read_batch_parallel(walked, &to_read, sniff_non_md, now_sys) {
+        let (entries, failed_existing) = read_batch_parallel(walked, &to_read, sniff_non_md, now_sys);
+        for (wi, old_id) in failed_existing {
+            if let Some(old) = self.docs.get_mut(old_id as usize).filter(|d| d.alive) {
+                old.alive = false;
+                self.tombstones += 1;
+                changed = true;
+            }
+            self.by_rel.remove(&walked[wi].rel);
+        }
+        for item in entries {
             let f = &walked[item.walked_idx];
             if let Some(old_id) = item.old_doc_id {
                 let old = &mut self.docs[old_id as usize];
@@ -388,16 +431,38 @@ impl TrigramIndex {
     }
 }
 
-fn read_batch_parallel(walked: &[WalkedFile], to_read: &[(usize, Option<u32>)], sniff_non_md: bool, now_sys: SystemTime) -> Vec<ReadEntry> {
-    use rayon::prelude::*;
-    to_read.par_iter().filter_map(|&(wi, old_id)| read_one_file(wi, old_id, &walked[wi], sniff_non_md, now_sys)).collect()
+fn read_batch_parallel(walked: &[WalkedFile], to_read: &[(usize, Option<u32>)], sniff_non_md: bool, now_sys: SystemTime) -> (Vec<ReadEntry>, Vec<(usize, u32)>) {
+    use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+    let next = AtomicUsize::new(0);
+    let results = Mutex::new(Vec::with_capacity(to_read.len()));
+    let failed = Mutex::new(Vec::new());
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 8).min(to_read.len().max(1));
+    let (next_ref, results_ref, failed_ref) = (&next, &results, &failed);
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(move || loop {
+                let pos = next_ref.fetch_add(1, Relaxed);
+                let Some(&(wi, old_id)) = to_read.get(pos) else { break };
+                match read_one_file(wi, old_id, &walked[wi], sniff_non_md, now_sys) {
+                    Some(entry) => results_ref.lock().unwrap_or_else(|e| e.into_inner()).push((pos, entry)),
+                    None => if let Some(id) = old_id { failed_ref.lock().unwrap_or_else(|e| e.into_inner()).push((wi, id)); },
+                }
+            });
+        }
+    });
+    let mut out = std::mem::take(&mut *results.lock().unwrap_or_else(|e| e.into_inner()));
+    out.sort_unstable_by_key(|(pos, _)| *pos);
+    let failed_out = std::mem::take(&mut *failed.lock().unwrap_or_else(|e| e.into_inner()));
+    (out.into_iter().map(|(_, e)| e).collect(), failed_out)
 }
 
 fn read_one_file(walked_idx: usize, old_doc_id: Option<u32>, f: &WalkedFile, sniff_non_md: bool, now_sys: SystemTime) -> Option<ReadEntry> {
     let (raw_secs, mtime_nanos) = system_time_parts(f.modified);
     let mtime_secs = if is_racy(f.modified, now_sys) { RACY_SENTINEL } else { raw_secs };
     if f.len > super::MAX_FILE { return Some(ReadEntry::binary_or_huge(walked_idx, old_doc_id, f.len, mtime_secs, mtime_nanos)); }
-    let mut file = std::fs::File::open(&f.abs).ok()?;
+    let mut file = std::fs::File::open(&f.abs)
+        .or_else(|_| { std::thread::sleep(Duration::from_millis(5)); std::fs::File::open(&f.abs) })
+        .ok()?;
     let mut buf = Vec::with_capacity((f.len as usize).min(4096));
     file.by_ref().take(4096).read_to_end(&mut buf).ok()?;
     if buf.contains(&0) { return Some(ReadEntry::binary_or_huge(walked_idx, old_doc_id, f.len, mtime_secs, mtime_nanos)); }

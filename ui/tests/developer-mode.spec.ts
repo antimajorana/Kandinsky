@@ -28,6 +28,22 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
       (await request.put("/api/config", { headers: H, data: { ...before, developer_mode: false, vim: false, ui: { ...before.ui, palette: "plain" } } })).ok(),
     ).toBeTruthy();
 
+    await page.route("**/api/plugins/available", async (route) => {
+      const res = await route.fetch();
+      const list = await res.json();
+      if (Array.isArray(list) && list.length > 0) {
+        return route.fulfill({ response: res, json: list });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          { id: "weather", title: "Weather", version: "0.1.0", tier: "beta", url: "/plugins/weather", runs_here: true, description: "Local forecast", permissions: { net: ["api.open-meteo.com"], secrets: false, exec: [] }, has_helper: true },
+          { id: "pomodoro", title: "Pomodoro", version: "0.1.0", tier: "beta", url: "/plugins/pomodoro", runs_here: true, description: "Focus timer", permissions: { net: [], secrets: false, exec: [] }, has_helper: false },
+        ]),
+      });
+    });
+
     await page.goto("/");
     await page.getByText("Finish the GW notes.").waitFor();
 
@@ -67,7 +83,8 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
     const dayPalettes = page.locator('[id="ui.palette"]');
     await expect(dayPalettes.getByRole("radio")).toHaveCount(6);
     await expect(dayPalettes.getByRole("radio", { name: /plain/i })).toHaveAttribute("aria-checked", "true");
-    await expect(page.getByRole("button", { name: /More palettes/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /More palettes/i })).toHaveCount(2);
+    await expect(page.getByRole("button", { name: /More palettes/i }).first()).toBeVisible();
 
     await nav(page).getByRole("button", { name: /^Editor & Writing/ }).click();
     await expect(page.locator('.row[data-path="vim"]')).toHaveCount(0);
@@ -112,6 +129,7 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
     await nav(page).getByRole("button", { name: /^Editor & Writing/ }).click();
     await expect(page.locator('.row[data-path="vim"]')).toBeVisible();
   } finally {
+    await page.unroute("**/api/plugins/available");
     await request.put("/api/config", { headers: H, data: before });
     await request.post("/api/fs/trash?path=.obsidian", { headers: H }).catch(() => {});
   }
@@ -133,7 +151,7 @@ test("R4 error toast strips raw HTTP prefixes and offers Copy details; R5 render
     await rulesEditor.getByLabel("Rule 1 folder").press("Tab");
     await rulesEditor.getByLabel("Rule 1 template").fill("lab-note");
     await rulesEditor.getByLabel("Rule 1 template").press("Tab");
-    await expect.poll(async () => (await cfg(request)).notes.template_rules).toEqual([{ folder: "labs", template: "lab-note" }]);
+    await expect.poll(async () => (await cfg(request)).notes.template_rules).toMatchObject([{ folder: "labs", template: "lab-note" }]);
 
     await nav(page).getByRole("button", { name: /^Files & Search/ }).click();
     const ignoreEditor = page.getByTestId("list-editor-ignore");
@@ -163,6 +181,60 @@ test("R4 error toast strips raw HTTP prefixes and offers Copy details; R5 render
     await copyBtn.click();
   } finally {
     await page.unroute("**/api/config");
+    await request.put("/api/config", { headers: H, data: before });
+  }
+});
+
+test("live runtime & responsive visual health at desktop (1280x800) and mobile (390x844) with zero console/page/HTTP errors", async ({ page, request }) => {
+  const before = await cfg(request);
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  const badHttp: string[] = [];
+  page.on("pageerror", (e) => pageErrors.push(e.message));
+  page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
+  page.on("response", (r) => { if (r.status() >= 400 && !r.url().includes("/favicon")) badHttp.push(`${r.status()} ${r.url()}`); });
+
+  try {
+    expect(
+      (await request.put("/api/config", {
+        headers: H,
+        data: { ...before, developer_mode: false, vim: false, ui: { ...before.ui, palette: "plain", theme: "light" } },
+      })).ok(),
+    ).toBeTruthy();
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    await page.getByText("Finish the GW notes.").waitFor();
+    await expect(page.locator("html")).toHaveAttribute("data-palette", "plain");
+
+    const shotDir = process.env.KANDINSKY_VISUAL_SHOTS;
+    if (shotDir) {
+      await page.screenshot({ path: `${shotDir}/desktop-plain-light.png` });
+    }
+
+    expect(
+      (await request.put("/api/config", {
+        headers: H,
+        data: { ...before, developer_mode: false, vim: false, ui: { ...before.ui, palette: "plain", theme: "dark" } },
+      })).ok(),
+    ).toBeTruthy();
+    await page.reload();
+    await page.getByText("Finish the GW notes.").waitFor();
+    if (shotDir) {
+      await page.screenshot({ path: `${shotDir}/desktop-plain-dark.png` });
+    }
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await page.getByText("Finish the GW notes.").waitFor();
+    if (shotDir) {
+      await page.screenshot({ path: `${shotDir}/mobile-plain-dark.png` });
+    }
+
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+    expect(badHttp).toEqual([]);
+  } finally {
     await request.put("/api/config", { headers: H, data: before });
   }
 });

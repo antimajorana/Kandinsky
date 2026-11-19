@@ -4,7 +4,7 @@
 // path (`notes/a/x.md` → `exports/notes/a/x.pdf`), a preview into the plugin's cache. The note is only read.
 import type { Params } from "kandinsky-helper";
 import { macroDefinitions } from "../../../../ui/src/lib/tex-portable";
-import { bibKeys, dirname, relative, splitFrontmatter, translate, type Translated } from "./translate";
+import { bibKeys, dirname, relative, translate, type Translated } from "./translate";
 
 export type Format = "pdf-typst" | "pdf-latex" | "tex" | "typ" | "html" | "docx";
 const FORMATS: Format[] = ["pdf-typst", "pdf-latex", "tex", "typ", "html", "docx"];

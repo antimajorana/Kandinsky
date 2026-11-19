@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+import { openFile } from "./open";
 
 const H = { "x-kandinsky": "1" };
 
@@ -23,29 +24,32 @@ async function openFreshNote(
   });
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  await page.request.post("/api/cmd/open", { headers: H, data: { args: { path } } });
+  await openFile(page, path.split("/").pop()!);
   const content = page.locator(".dv-active-group .cm-content");
   await expect(content).toBeVisible();
+  const firstNonEmpty = initialText.split("\n").map((l) => l.trim()).find((l) => l && !l.startsWith("```"));
+  if (firstNonEmpty) {
+    await expect(content).toContainText(firstNonEmpty);
+  }
   await content.click();
   return content;
 }
 
 async function selectRange(page: Page, target: string) {
-  const found = await page.evaluate((needle) => {
-    const cm = document.querySelector(".dv-active-group .cm-editor") as HTMLElement | null;
-    if (!cm) return false;
-    // CodeMirror attaches the EditorView reference via cmView on .cm-content
-    const content = cm.querySelector(".cm-content") as { cmView?: { view?: { state: { doc: { toString(): string } }; dispatch(tr: unknown): void; focus(): void } } } | null;
-    const view = content?.cmView?.view;
-    if (!view) return false;
-    const doc = view.state.doc.toString();
-    const idx = doc.indexOf(needle);
-    if (idx < 0) return false;
-    view.focus();
-    view.dispatch({ selection: { anchor: idx, head: idx + needle.length } });
-    return true;
-  }, target);
-  expect(found).toBe(true);
+  await expect.poll(async () => (await editorText(page)).includes(target)).toBe(true);
+  const doc = await editorText(page);
+  const idx = doc.indexOf(target);
+  expect(idx).toBeGreaterThanOrEqual(0);
+  const linesBefore = doc.slice(0, idx).split("\n");
+  const lineIdx = linesBefore.length - 1;
+  const colIdx = linesBefore[linesBefore.length - 1].length;
+
+  await page.locator(".dv-active-group .cm-content").click();
+  await page.keyboard.press("Control+Home");
+  for (let i = 0; i < lineIdx; i++) await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Home");
+  for (let i = 0; i < colIdx; i++) await page.keyboard.press("ArrowRight");
+  for (let i = 0; i < target.length; i++) await page.keyboard.press("Shift+ArrowRight");
 }
 
 async function dispatchHtmlPaste(page: Page, html: string, plainText: string) {

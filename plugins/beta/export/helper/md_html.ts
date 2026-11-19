@@ -1,6 +1,6 @@
 import { splitFrontmatter } from "./translate";
 import { MARGINS, type Options } from "./helper";
-import { CALLOUT_LABELS, convertInline, escapeHtml, parseTableAligns, parseTableRow, safeHref } from "./md_typst";
+import { CALLOUT_LABELS, convertInline, escapeHtml, parseTableAligns, parseTableRow } from "./md_typst";
 
 /** Direct Markdown -> standalone self-contained HTML5 converter. */
 export function markdownToHtml(md: string, opts: Options = {}): string {

@@ -1,7 +1,7 @@
 //! Search: filename "contains every token" match over the walk, plus ripgrep's searcher (its crates, linked in) for content.
 use crate::api::{FileWrite, LineHit, ReplaceResult, SearchResults};
 use crate::config::Config;
-use crate::{files, walk, Error, Result, Workspace};
+use crate::{files, Error, Result, Workspace};
 use grep_regex::{RegexMatcher, RegexMatcherBuilder};
 use grep_searcher::{sinks::UTF8, BinaryDetection, Searcher, SearcherBuilder};
 use std::path::Path;
@@ -108,7 +108,8 @@ pub fn names_with(root: &Path, cfg: &Config, q: &str, o: Opts) -> Vec<String> {
     }
     let index = crate::links::snapshot(root, cfg);
     let props = |rel: &str| index.parsed.get(rel).and_then(|p| p.props_whole());
-    match_names(root, walk::files(root, cfg).filter(|(_, rel)| o.agent || !cfg.is_agent_file(rel)).map(|(_, rel)| rel), q, props)
+    let walked = trigram::walk_vault(root, cfg);
+    match_names(root, walked.iter().filter(|f| o.agent || !cfg.is_agent_file(&f.rel)).map(|f| f.rel.clone()), q, props)
 }
 
 /// The PDFs' text (pdf_text.rs's cache), each hit mapped back to its PDF and page, most matches first; only PDFs this
@@ -140,7 +141,8 @@ fn pdf_lines(root: &Path, cfg: &Config, q: &str, o: Opts, walked: &[trigram::Wal
 
 /// Every whitespace token must appear (case-insensitive) in the path; basename hits rank first.
 pub fn match_files(root: &Path, cfg: &Config, q: &str, agent: bool) -> Vec<String> {
-    match_names(root, walk::files(root, cfg).filter(|(_, rel)| agent || !cfg.is_agent_file(rel)).map(|(_, rel)| rel), q, |_| None)
+    let walked = trigram::walk_vault(root, cfg);
+    match_names(root, walked.iter().filter(|f| agent || !cfg.is_agent_file(&f.rel)).map(|f| f.rel.clone()), q, |_| None)
 }
 
 /// [`match_files`] over paths already walked.
@@ -434,6 +436,7 @@ fn looks_encoded(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::walk;
 
     #[test]
     fn smart_case_counts_only_the_capitals_a_pattern_matches() {
@@ -741,5 +744,20 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         assert!(worth_reading(&d.path().join("missing.md"), "missing.md"));
         assert!(!worth_reading(&d.path().join("missing.py"), "missing.py"));
+    }
+
+    #[test]
+    fn trigram_watched_walk_cache_invalidates_on_touch() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        std::fs::write(r.join("old.md"), "hubbard start\n").unwrap();
+        let cfg = Config::default();
+        let feed = crate::vault_changes::Feed::new(r, &cfg);
+        feed.register();
+        assert_eq!(search(r, &cfg, "hubbard").counts.len(), 1);
+        assert_eq!(names_with(r, &cfg, "old", Opts::default()), ["old.md"]);
+        crate::vault_write::write(&r.join("added.md"), b"hubbard second\n").unwrap();
+        assert_eq!(search(r, &cfg, "hubbard").counts.len(), 2);
+        assert_eq!(names_with(r, &cfg, "added", Opts::default()), ["added.md"]);
     }
 }

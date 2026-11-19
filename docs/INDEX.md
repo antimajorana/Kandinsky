@@ -4,7 +4,7 @@
 
 - [PHILOSOPHY.md](PHILOSOPHY.md) — **read first**: everything is a file, everything linkable by `[[wikilink]]`, companion notes (properties + a block) for what is not Markdown, citing is linking, generated files only by their feature, integrations as plugins
 - [ARCHITECTURE.md](ARCHITECTURE.md) — shape, invariants, config, and the v0 HTTP/WS API contract
-- [SEARCH-PERFORMANCE.md](guides/SEARCH-PERFORMANCE.md) — persistent trigram candidate index (`.kandinsky/cache/search.idx`, `.kandinsky/cache/search-pdf.idx`), `FileStamp` freshness, `grep-searcher` verification, and palette `{ names: true }` fast path
+- [SEARCH-PERFORMANCE.md](guides/SEARCH-PERFORMANCE.md) — persistent trigram candidate index (`.kandinsky/cache/search.idx`, `.kandinsky/cache/search-pdf.idx`), racy-mtime content-hash freshness, `grep-searcher` verification, and palette `{ names: true }` fast path
 - [TOOLS.md](guides/TOOLS.md) — standalone Python tools (vault scoring/migration, Zotero import, refs.bib) with measurements on real data
 - [LSP-language-servers.md](guides/LSP-language-servers.md) — slice 1b: language servers (rust-analyzer, pylsp/pyright, texlab, clangd) relayed over WebSocket; [lsp] settings; fake-server test
 - [MD-RENDERING.md](guides/MD-RENDERING.md) — markdown rendering vs Obsidian: the render audit (`npm run audit:md`, every note), 11 root causes fixed (528 → 11 findings), properties panel, what is left in the sources
@@ -12,7 +12,7 @@
 - [PAPERS-PDF-SOURCES.md](guides/PAPERS-PDF-SOURCES.md) — how a plugin finds a paper's PDF: `[contributes.catalog-papers] pdf_sources`, `kandinsky.attach_pdf`, `POST /api/refs/attach`, the order setting; papers-open-access (Semantic Scholar, Europe PMC, CORE)
 - [ZOTERO.md](guides/ZOTERO.md) — Zotero → Kandinsky: automatic one-way sync (three-way per field, conflicts reported) and saving from the browser via the Zotero Connector protocol (off by default, `[refs] connector`); the reading note `<citekey>.md` and the `library.paper` block (section 4)
 - [MALLEABLE.md](guides/MALLEABLE.md) — the design guideline (D21, Ink & Switch *Malleable Software* + *Embark*): rules R1–R7, the rung ladder from settings to core, what exists vs planned, roadmap
-- [SETTINGS.md](guides/SETTINGS.md) — Settings organized into 7 calm workspace categories + Extensions (search across pages, features to try, controls by field shape, modified/reset, plugin forms/accounts, keyboard page, folded Advanced & Server drawer)
+- [SETTINGS.md](guides/SETTINGS.md) — Settings organized into 7 calm workspace categories + Plugins (search across pages, features to try, controls by field shape, modified/reset, plugin forms/accounts, keyboard page, folded Advanced & Server drawer)
 - [SERVER.md](guides/SERVER.md) — server mode: `kandinsky serve --listen`, the sign-in (password / Authelia / both), device tokens, Settings → Server, the CLI
 - [NOTEPAD.md](guides/NOTEPAD.md) — the Boox's notepad: pen drawings written natively (Boox Notes' pens, shapes, lasso, pages, paper), saved as Excalidraw; part of the app, its settings in Settings → Drawing
 - [ANDROID.md](guides/ANDROID.md) — the phone capture app: the capture box as a native Android app, the toolchain in local/toolchains/ (NDK + build-tools + one platform), build-apk.sh, what comes next

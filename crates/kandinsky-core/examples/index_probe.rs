@@ -298,6 +298,33 @@ fn search_bench(root: &Path, cfg: &Config, out: &Path) {
     }
     pdf_warm.sort_by(f64::total_cmp);
 
+    // Watched warm search & names-only latency (as in the running Kandinsky server, where `events::spawn_watcher` feeds `vault_changes`).
+    let watch = kandinsky_core::events::spawn_watcher(root, cfg.clone(), kandinsky_core::events::EventBus::default()).ok();
+    let _ = kandinsky_core::links::graph(root, cfg);
+    let _ = search::search_with(root, cfg, queries[0], Opts::default());
+    let mut watched_reports = Vec::new();
+    for q in queries {
+        let mut wt = Vec::with_capacity(11);
+        for _ in 0..11 {
+            let (ms, _, _, _) = once(|| search::search_with(root, cfg, q, Opts::default()));
+            wt.push(ms);
+        }
+        wt.sort_by(f64::total_cmp);
+        watched_reports.push(serde_json::json!({
+            "query": q,
+            "warm_min_ms": (wt[0] * 100.0).round() / 100.0,
+            "warm_p50_ms": (wt[wt.len() / 2] * 100.0).round() / 100.0,
+            "warm_p95_ms": (wt[((wt.len() * 95) / 100).min(wt.len() - 1)] * 100.0).round() / 100.0,
+        }));
+    }
+    let mut watched_names = Vec::with_capacity(11);
+    for _ in 0..11 {
+        let (ms, _, _, _) = once(|| search::names_with(root, cfg, "cond", Opts::default()));
+        watched_names.push(ms);
+    }
+    watched_names.sort_by(f64::total_cmp);
+    drop(watch);
+
     // 1-file edit freshness & re-query latency (uses a temporary scratch note, removed right after)
     let probe_rel = "_index_probe_fresh_check.md";
     let probe_abs = root.join(probe_rel);
@@ -319,9 +346,11 @@ fn search_bench(root: &Path, cfg: &Config, out: &Path) {
         "idle_rss_bytes": idle_rss,
         "idle_live_heap_bytes": idle_heap,
         "queries": q_reports,
+        "watched_queries": watched_reports,
         "names_only_cond": {
             "p50_ms": (names_times[names_times.len() / 2] * 100.0).round() / 100.0,
             "p95_ms": (names_times[((names_times.len() * 95) / 100).min(names_times.len() - 1)] * 100.0).round() / 100.0,
+            "watched_p50_ms": (watched_names[watched_names.len() / 2] * 100.0).round() / 100.0,
             "hits": names_count,
         },
         "pdf_only_renormalisation": {
