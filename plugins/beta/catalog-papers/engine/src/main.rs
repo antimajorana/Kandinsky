@@ -62,7 +62,7 @@ fn sync_connector(slot: &RefCell<Option<Listener>>, cfg: &Settings, plugin: &str
 
 fn ensure_inbox_watcher(slot: &RefCell<Option<InboxWatcher>>, cfg: &Settings, plugin: &str, root: &Path) {
     let mut watcher = slot.borrow_mut();
-    if watcher.is_none() && !cfg.watch_inbox.trim().is_empty() {
+    if watcher.is_none() && (!cfg.watch_inbox.trim().is_empty() || !cfg.external_pdf_roots.is_empty()) {
         *watcher = Some(InboxWatcher::start(plugin.to_string(), root.to_path_buf()));
     }
 }
@@ -183,10 +183,16 @@ fn main() {
     });
     let c = core.clone();
     m.add("find_duplicates", move |p| with_lib(&c, &p, inbox_dedupe::find_duplicates));
-    let c = core.clone();
+    let (c, iw) = (core.clone(), inbox_watching.clone());
     m.add("scan_external_roots", move |p| {
+        ensure_inbox_watcher(&iw, &c.settings(&p), &c.plugin, &c.root);
         let opts: ScanRootsOpts = if p.is_null() { ScanRootsOpts::default() } else { parse(&p)? };
         with_lib(&c, &p, |lib| scan_roots::scan_external_roots(lib, &opts))
+    });
+    let c = core.clone();
+    m.add("enrich_entry", move |p| {
+        let opts: enrich::EnrichEntryOpts = parse(&p)?;
+        with_lib(&c, &p, |lib| enrich::enrich_entry(lib, &opts))
     });
     let c = core.clone();
     m.add("search_remote", move |p| {

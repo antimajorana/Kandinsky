@@ -7,7 +7,11 @@
 //! requests are a handful of short POSTs, one at a time.
 use crate::entry::{self, Companion};
 use crate::net::Net;
-use crate::refs::{citekey, Lib, Res, Trash};
+use crate::refs::{
+    arxiv_of, citekey, classify_pdf, extract_pdf_identifiers_with_meta, isbn_core, list as ylist,
+    lookup_pdf_remote_with_meta, merge_local_fallbacks_with_meta, norm_doi, parse_filename,
+    s as ys, sha, sha_hex, ClassifyInput, Lib, Res, Trash,
+};
 use crate::settings::Settings;
 use serde_json::{json, Value};
 use serde_yaml::Mapping;
@@ -246,12 +250,31 @@ impl<H: Host> Connector<H> {
         )
     }
 
-    /// The entry for an item (or the one with its DOI already) → its folder.
+    /// The entry for an item (or an existing one matching its DOI, arXiv id, or ISBN) → its folder.
     fn create_entry(&self, cfg: &Settings, item: &Value) -> Res<PathBuf> {
         let lib = self.lib(cfg);
         let mut m = item_meta(item);
-        if let Some(d) = m.get("DOI").and_then(|v| v.as_str()).map(str::to_lowercase) {
-            if let Some(p) = lib.list()?.into_iter().find(|p| p.doi.as_deref().map(str::to_lowercase).as_deref() == Some(d.as_str())) {
+        let existing = lib.list()?;
+        if let Some(d) = ys(&m, "DOI").map(|v| norm_doi(&v)).filter(|d| !d.is_empty()) {
+            if let Some(p) = existing.iter().find(|p| p.doi.as_deref().map(norm_doi).as_deref() == Some(d.as_str())) {
+                return Ok(self.root.join(&p.dir));
+            }
+        }
+        if let Some(ax) = arxiv_of(&m).map(|a| a.to_ascii_lowercase()) {
+            if let Some(p) = existing.iter().find(|p| p.arxiv.as_deref().map(str::to_ascii_lowercase).as_deref() == Some(ax.as_str())) {
+                return Ok(self.root.join(&p.dir));
+            }
+        }
+        if let Some(ic) = ys(&m, "ISBN").or_else(|| ys(&m, "isbn")).and_then(|x| isbn_core(&x)) {
+            if let Some(p) = existing.iter().find(|p| {
+                kandinsky_text::paths::safe_join(&self.root, &p.dir)
+                    .ok()
+                    .and_then(|d| entry::read(&d))
+                    .and_then(|em| ys(&em, "ISBN").or_else(|| ys(&em, "isbn")))
+                    .and_then(|v| isbn_core(&v))
+                    .as_deref()
+                    == Some(ic.as_str())
+            }) {
                 return Ok(self.root.join(&p.dir));
             }
         }
@@ -330,11 +353,44 @@ impl<H: Host> Connector<H> {
         let key = entry::key_of(&dir);
         let cfg = self.host.settings();
         let mut m = entry::read(&dir).unwrap_or_default();
-        let stored = if ext == "pdf" && !cfg.external_pdf_roots.is_empty() && cfg.store_in_external {
-            let fname = crate::external::format_pdf_filename(&cfg.rename_format, &m, &key);
-            match crate::external::write_external_pdf(&self.root, &cfg, None, &fname, body) {
-                Ok((portable, _)) => portable,
-                Err(e) => return Response::text(500, e),
+        if ext == "pdf" && ylist(&m, "files").is_empty() {
+            let existing_ext = crate::external::find_existing_external_pdf(&self.root, &cfg, body);
+            let lib = self.lib(&cfg);
+            if let Some(existing_p) = lib.find_existing_by_sha(&sha(body), body.len(), existing_ext.as_ref().map(|(p, _)| p.as_str())) {
+                if let Ok(existing_dir) = kandinsky_text::paths::safe_join(&self.root, &existing_p.dir) {
+                    if existing_dir != dir {
+                        if let Some(s) = self.sessions().get_mut(sid) {
+                            s.items.insert(parent.to_string(), existing_dir.clone());
+                        }
+                        if let Some(rel) = kandinsky_text::paths::rel_path(&self.root, &dir) {
+                            let _ = self.host.trash().trash(&rel);
+                        }
+                        self.finish(&cfg, &[existing_dir]);
+                        return Response::empty(201);
+                    }
+                }
+            }
+        }
+        let stored = if ext == "pdf" {
+            if let Some((portable, _)) = crate::external::find_existing_external_pdf(&self.root, &cfg, body) {
+                portable
+            } else if !cfg.external_pdf_roots.is_empty() && cfg.store_in_external {
+                let fname = crate::external::format_pdf_filename(&cfg.rename_format, &m, &key);
+                match crate::external::write_external_pdf(&self.root, &cfg, None, &fname, body) {
+                    Ok((portable, _)) => portable,
+                    Err(e) => return Response::text(500, e),
+                }
+            } else {
+                let mut name = format!("{key}.{ext}");
+                let mut n = 1;
+                while dir.join(&name).exists() {
+                    n += 1;
+                    name = format!("{key}-{n}.{ext}");
+                }
+                if let Err(e) = kandinsky_plugin::write_file(dir.join(&name), body) {
+                    return Response::text(500, e.to_string());
+                }
+                name
             }
         } else {
             let mut name = format!("{key}.{ext}");
@@ -350,7 +406,81 @@ impl<H: Host> Connector<H> {
         };
         if let serde_yaml::Value::Sequence(v) = m.entry("files".into()).or_insert_with(|| serde_yaml::Value::Sequence(vec![])) {
             if !v.iter().any(|x| x.as_str() == Some(stored.as_str())) {
-                v.push(stored.into());
+                v.push(stored.clone().into());
+            }
+        }
+        if ext == "pdf" {
+            m.insert("pdfSha256".into(), sha_hex(body).into());
+            let cur_title = ys(&m, "title");
+            let generic_title = cur_title.as_deref().is_none_or(|t| {
+                let low = t.trim().to_ascii_lowercase();
+                low.is_empty() || low == "untitled" || low == "full text pdf" || low.ends_with(".pdf")
+            });
+            let missing_author = ylist(&m, "author").is_empty() && ylist(&m, "authors").is_empty();
+            if generic_title || missing_author {
+                let extract = crate::pdf_meta::extract_pdf_doc(body);
+                let fname = meta["title"]
+                    .as_str()
+                    .filter(|t| t.to_ascii_lowercase().ends_with(".pdf"))
+                    .unwrap_or_else(|| stored.rsplit(['/', '\\']).next().unwrap_or(&stored));
+                let parsed = parse_filename(fname);
+                let first = crate::firstpage::read_pages(&extract.text, fname);
+                let ids = extract_pdf_identifiers_with_meta(&extract.text, extract.pages, fname, Some(&extract.meta));
+                let class = classify_pdf(&ClassifyInput {
+                    text: &extract.text,
+                    pages: extract.pages,
+                    filename: fname,
+                    rel_dir: None,
+                    parsed: &parsed,
+                    isbn: ids.isbn.as_deref(),
+                    doi: ids.doi.as_deref(),
+                    arxiv: ids.arxiv.as_deref(),
+                    remote_type: ys(&m, "type").as_deref(),
+                    explicit_kind: None,
+                });
+                if generic_title {
+                    m.remove("title");
+                }
+                if let Some((rm, _)) = lookup_pdf_remote_with_meta(
+                    self.host.net(),
+                    &cfg.email,
+                    class,
+                    &ids,
+                    &parsed,
+                    first.as_ref(),
+                    Some(&extract.meta),
+                ) {
+                    for k in [
+                        "title", "type", "date", "publicationTitle", "publisher", "volume",
+                        "issue", "pages", "DOI", "archiveID", "arxivVersion", "ISBN", "abstractNote",
+                    ] {
+                        if ys(&m, k).is_none() || (k == "type" && ys(&m, k).as_deref() == Some("document")) {
+                            if let Some(v) = ys(&rm, k) {
+                                m.insert(k.into(), v.into());
+                            }
+                        }
+                    }
+                    if ylist(&m, "author").is_empty() {
+                        let ra = ylist(&rm, "author");
+                        if !ra.is_empty() {
+                            m.insert("author".into(), serde_yaml::Value::Sequence(ra.into_iter().map(serde_yaml::Value::from).collect()));
+                        }
+                    }
+                }
+                merge_local_fallbacks_with_meta(
+                    &mut m,
+                    &parsed,
+                    first.as_ref(),
+                    Some(&extract.meta),
+                    &ids,
+                    extract.pages,
+                    class,
+                );
+                if ys(&m, "title").is_none() {
+                    if let Some(t) = cur_title {
+                        m.insert("title".into(), t.into());
+                    }
+                }
             }
         }
         if let Err(e) = entry::write(self.host.companion(), &dir, &m) {
@@ -607,7 +737,7 @@ pub fn port() -> u16 {
 mod tests {
     use super::*;
     use crate::entry::tests::Plain;
-    use crate::net::fake::Table;
+    use crate::net::fake::{Answer, Table};
     use crate::refs::tests::TempTrash;
 
     struct TestHost {
@@ -772,5 +902,67 @@ mod tests {
         l.stop();
         drop(l);
         assert!(t0.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn deduplicates_arxiv_isbn_and_enriches_generic_attachment_with_zero_external_duplication() {
+        let ws = tempfile::tempdir().unwrap();
+        let ws_real = kandinsky_text::paths::real(ws.path()).unwrap();
+        let (root, pool) = (ws_real.join("vault"), ws_real.join("Papers"));
+        std::fs::create_dir_all(root.join("refs/papers")).unwrap();
+        std::fs::create_dir_all(&pool).unwrap();
+        let existing_pdf = crate::refs::tests::tiny_pdf(&["Anyons on a Lattice\nAlice Smith\ndoi:10.1000/conn.1"]);
+        std::fs::write(pool.join("ExistingConn.pdf"), &existing_pdf).unwrap();
+
+        struct ExtHost {
+            net: Table,
+            trash: TempTrash,
+        }
+        impl Host for ExtHost {
+            fn net(&self) -> &dyn Net { &self.net }
+            fn companion(&self) -> &dyn Companion { &Plain }
+            fn trash(&self) -> &dyn Trash { &self.trash }
+            fn settings(&self) -> Settings {
+                Settings { external_pdf_roots: vec!["../Papers".into()], ..Settings::default() }
+            }
+            fn capture(&self, _text: &str) -> Res<()> { Ok(()) }
+        }
+
+        let net = Table::default().on(
+            "https://api.crossref.org/works/10.1000/conn.1",
+            Answer::Json(json!({ "message": { "title": ["Anyons on a Lattice"], "type": "journal-article", "author": [{ "family": "Smith", "given": "Alice" }], "container-title": ["PRB"], "issued": { "date-parts": [[2023]] } } })),
+        );
+        let c = Connector::new(ExtHost { net, trash: TempTrash(root.clone()) }, root.clone());
+
+        // Deduplicates arXiv & ISBN in create_entry.
+        let ax_item = json!({ "id": "ax1", "itemType": "preprint", "title": "Preprint One", "archiveID": "arXiv:2301.11111" });
+        assert_eq!(c.handle(&req("/connector/saveItems", json!({ "sessionID": "sA", "items": [ax_item.clone()] }), false)).status, 201);
+        assert_eq!(c.handle(&req("/connector/saveItems", json!({ "sessionID": "sB", "items": [ax_item] }), false)).status, 201);
+        assert_eq!(std::fs::read_dir(root.join("refs/papers")).unwrap().count(), 1);
+
+        let book_item = json!({ "id": "bk1", "itemType": "book", "title": "Book One", "ISBN": "978-0-306-40615-7" });
+        assert_eq!(c.handle(&req("/connector/saveItems", json!({ "sessionID": "sC", "items": [book_item] }), false)).status, 201);
+        let book_dup = json!({ "id": "bk2", "itemType": "book", "title": "Book One Copy", "ISBN": "0-306-40615-2" });
+        assert_eq!(c.handle(&req("/connector/saveItems", json!({ "sessionID": "sD", "items": [book_dup] }), false)).status, 201);
+        assert_eq!(std::fs::read_dir(root.join("refs/papers")).unwrap().count(), 2);
+
+        // Generic title entry + saveAttachment reuses existing external PDF with zero writes and enriches from PDF/Crossref.
+        let bare_item = json!({ "id": "raw1", "itemType": "document", "title": "Full Text PDF" });
+        assert_eq!(c.handle(&req("/connector/saveItems", json!({ "sessionID": "sE", "items": [bare_item] }), false)).status, 201);
+        let att = attachment(json!({ "sessionID": "sE", "parentItemID": "raw1", "title": "paper.pdf" }), "application/pdf", &existing_pdf);
+        assert_eq!(c.handle(&att).status, 201);
+        let note_dir = root.join("refs/papers/full");
+        let m = entry::read(&note_dir).unwrap();
+        assert_eq!(m["files"][0].as_str(), Some("../Papers/ExistingConn.pdf"));
+        assert_eq!(m["title"].as_str(), Some("Anyons on a Lattice"));
+        assert_eq!(m["publicationTitle"].as_str(), Some("PRB"));
+        assert_eq!(std::fs::read_dir(root.join("refs/papers")).unwrap().count(), 3);
+
+        // Saving the same PDF again under a different bare item deduplicates by pdfSha256 into the existing entry.
+        let bare_dup = json!({ "id": "raw2", "itemType": "document", "title": "Another Tab PDF" });
+        assert_eq!(c.handle(&req("/connector/saveItems", json!({ "sessionID": "sF", "items": [bare_dup] }), false)).status, 201);
+        let att_dup = attachment(json!({ "sessionID": "sF", "parentItemID": "raw2", "title": "copy.pdf" }), "application/pdf", &existing_pdf);
+        assert_eq!(c.handle(&att_dup).status, 201);
+        assert_eq!(std::fs::read_dir(root.join("refs/papers")).unwrap().count(), 3);
     }
 }

@@ -4,10 +4,12 @@ use crate::core_api::CoreApi;
 use crate::entry;
 use crate::external::{self, format_pdf_filename, resolve_dir_from, resolve_pdf_ref, sanitize_pdf_filename, write_external_pdf};
 use crate::firstpage;
-use crate::refs::{arxiv_of, citekey, first_page_entry, list as ylist, now_stamp, pdf_text, s as ys, sha, year_of, Lib, Paper, Res};
+use crate::pdf_meta::extract_pdf_doc;
+use crate::refs::{arxiv_of, bytes_sha_hex, citekey, first_page_entry, list as ylist, now_stamp, s as ys, sha, year_of, Lib, Paper, Res};
 use crate::remote::{self, parse_arxiv_versioned, parse_doi, parse_isbn};
+use crate::scan_roots::{self, ScanRootsOpts};
 use crate::settings::Settings;
-use kandinsky_text::paths::safe_join;
+use kandinsky_text::paths::{real, safe_join};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as Json};
 use serde_yaml::{Mapping, Value};
@@ -111,11 +113,18 @@ struct InspectedPdf {
 
 fn inspect_pdf(lib: &Lib, existing: &[Paper], fname: &str, bytes: &[u8]) -> InspectedPdf {
     let digest = sha(bytes);
-    let (text, pages) = pdf_text(bytes);
-    let doi = parse_doi(&text);
-    let (arxiv, arxiv_ver) = match parse_arxiv_versioned(&text) { Some((a, v)) => (Some(a), v), None => (None, None) };
-    let isbn = parse_isbn(&text);
-    let first = firstpage::read(text.split('\x0c').next().unwrap_or(""), fname);
+    let extract = extract_pdf_doc(bytes);
+    let (text, pages, doc_meta) = (extract.text, extract.pages, extract.meta);
+    let doi = parse_doi(&text).or(doc_meta.doi);
+    let (arxiv, arxiv_ver) = match parse_arxiv_versioned(&text) {
+        Some((a, v)) => (Some(a), v),
+        None => match doc_meta.arxiv {
+            Some(a) => (Some(a), doc_meta.arxiv_version),
+            None => (None, None),
+        },
+    };
+    let isbn = parse_isbn(&text).or(doc_meta.isbn);
+    let first = firstpage::read_pages(&text, fname);
     let existing_key = existing.iter().find(|p| {
         doi.as_deref().zip(p.doi.as_deref()).is_some_and(|(a, b)| norm_doi(a) == norm_doi(b))
             || (arxiv.is_some() && p.arxiv == arxiv)
@@ -212,7 +221,7 @@ pub fn organize_inbox(lib: &Lib, req: &OrganizeInboxReq) -> Res<OrganizeInboxRes
             let m = entry::read(&refs_base.join(&ek)).unwrap_or_default();
             (ek, m, false)
         } else {
-            let fetched = if let Some(d) = &info.doi { remote::crossref(lib.net, d).ok() } else if let Some(a) = &info.arxiv {
+            let fetched = if let Some(d) = &info.doi { remote::crossref_with_openalex(lib.net, d, &lib.cfg.email).ok() } else if let Some(a) = &info.arxiv {
                 let q = info.arxiv_ver.as_ref().map_or_else(|| a.clone(), |ver| format!("{a}{ver}"));
                 remote::arxiv(lib.net, &q).or_else(|_| remote::arxiv(lib.net, a)).ok().map(|mut am| {
                     if let Some(ver) = &info.arxiv_ver {
@@ -222,7 +231,10 @@ pub fn organize_inbox(lib: &Lib, req: &OrganizeInboxReq) -> Res<OrganizeInboxRes
                     am
                 })
             } else {
-                info.first.as_ref().and_then(|fp| firstpage::crossref_match(lib.net, fp)).and_then(|d| remote::crossref(lib.net, &d).ok())
+                info.first
+                    .as_ref()
+                    .and_then(|fp| firstpage::crossref_match(lib.net, fp))
+                    .and_then(|d| remote::crossref_with_openalex(lib.net, &d, &lib.cfg.email).ok())
                     .or_else(|| info.isbn.as_deref().and_then(|i| remote::isbn_book(lib.net, i).ok()))
             };
             let mut m = fetched.unwrap_or_else(|| info.first.as_ref().map_or_else(|| fallback_stem_entry(&fname), |fp| first_page_entry(fp, info.pages)));
@@ -264,6 +276,7 @@ pub fn organize_inbox(lib: &Lib, req: &OrganizeInboxReq) -> Res<OrganizeInboxRes
         let mut files = ylist(&m, "files");
         if !files.contains(&stored_entry) { files.insert(0, stored_entry); }
         m.insert("files".into(), Value::Sequence(files.into_iter().map(Value::from).collect()));
+        m.insert("pdfSha256".into(), bytes_sha_hex(&info.digest).into());
         if let Some(cols) = item_opt.map(|o| &o.collections).filter(|c| !c.is_empty()) {
             let mut have = ylist(&m, "collections");
             for c in cols { if !have.contains(c) { have.push(c.clone()); } }
@@ -317,10 +330,73 @@ fn wait_or_stop(stop: &(Mutex<bool>, Condvar), dur: Duration) -> bool {
     true
 }
 
+pub fn collect_external_pdf_snapshot(root: &Path, cfg: &Settings, now: std::time::SystemTime) -> Vec<(String, u64, u64)> {
+    let roots = external::external_roots(root, cfg);
+    if roots.is_empty() {
+        return Vec::new();
+    }
+    let inbox_real = resolve_inbox_dir(root, cfg).ok().map(|p| real(&p).unwrap_or(p));
+    let mut out = Vec::new();
+    let mut visited = HashSet::new();
+    for ext in &roots {
+        if !ext.root.is_dir() {
+            continue;
+        }
+        let ext_real = real(&ext.root).unwrap_or_else(|_| ext.root.clone());
+        let mut stack: Vec<(PathBuf, Option<String>)> = vec![(ext_real.clone(), None)];
+        while let Some((dir, rel_dir)) = stack.pop() {
+            let Ok(dir_real) = real(&dir) else { continue };
+            if !dir_real.starts_with(&ext_real) || inbox_real.as_deref().is_some_and(|ib| dir_real == ib || dir_real.starts_with(ib)) {
+                continue;
+            }
+            if !visited.insert(dir_real) {
+                continue;
+            }
+            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+            for e in rd.flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                if name.starts_with('.') {
+                    continue;
+                }
+                let Ok(resolved) = real(&e.path()) else { continue };
+                if !resolved.starts_with(&ext_real) {
+                    continue;
+                }
+                if resolved.is_dir() {
+                    if name.eq_ignore_ascii_case("output") {
+                        continue;
+                    }
+                    let next_rel = match &rel_dir {
+                        Some(d) => format!("{d}/{name}"),
+                        None => name,
+                    };
+                    stack.push((resolved, Some(next_rel)));
+                } else if resolved.is_file() && name.len() > 4 && name.as_bytes()[name.len() - 4..].eq_ignore_ascii_case(b".pdf") {
+                    let Ok(md) = resolved.metadata() else { continue };
+                    let Ok(mtime) = md.modified() else { continue };
+                    if now.duration_since(mtime).ok().is_some_and(|d| d < Duration::from_secs(2)) {
+                        continue; // ignore newly written unstable files (< 2s)
+                    }
+                    let mtime_secs = mtime.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                    let rel_file = match &rel_dir {
+                        Some(d) => format!("{d}/{name}"),
+                        None => name,
+                    };
+                    out.push((format!("{}/{rel_file}", ext.prefix), md.len(), mtime_secs));
+                }
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
 fn spawn_inbox_watcher(plugin: String, root: PathBuf, stop: Arc<(Mutex<bool>, Condvar)>) {
     std::thread::spawn(move || {
         let core = CoreApi::new(plugin, root.clone());
         let mut last: Option<Vec<String>> = None;
+        let mut last_ext: Option<Vec<(String, u64, u64)>> = None;
+        let mut last_ext_poll = Instant::now() - Duration::from_secs(10);
         while !wait_or_stop(&stop, Duration::from_secs(5)) {
             let cfg = match core.kandinsky.get("/api/plugins") {
                 Ok(all) => {
@@ -332,15 +408,53 @@ fn spawn_inbox_watcher(plugin: String, root: PathBuf, stop: Arc<(Mutex<bool>, Co
             };
             if cfg.watch_inbox.trim().is_empty() {
                 last = None;
-                continue;
-            }
-            let Ok(paths) = resolve_inbox_dir(&root, &cfg).and_then(|d| list_inbox_pdfs(&d)) else { continue };
-            let names: Vec<String> = paths.iter().filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from)).collect();
-            if last.as_ref() != Some(&names) {
-                if !(last.is_none() && names.is_empty()) {
-                    kandinsky_plugin::event("papers:inbox", json!({ "count": names.len(), "files": names }));
+            } else if let Ok(paths) = resolve_inbox_dir(&root, &cfg).and_then(|d| list_inbox_pdfs(&d)) {
+                let names: Vec<String> = paths.iter().filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from)).collect();
+                if last.as_ref() != Some(&names) {
+                    if !(last.is_none() && names.is_empty()) {
+                        kandinsky_plugin::event("papers:inbox", json!({ "count": names.len(), "files": names }));
+                    }
+                    last = Some(names);
                 }
-                last = Some(names);
+            }
+
+            if cfg.external_pdf_roots.is_empty() {
+                last_ext = None;
+            } else if last_ext_poll.elapsed() >= Duration::from_secs(10) {
+                last_ext_poll = Instant::now();
+                let snap = collect_external_pdf_snapshot(&root, &cfg, std::time::SystemTime::now());
+                let changed_or_new = last_ext
+                    .as_ref()
+                    .is_some_and(|prev| snap != *prev && snap.iter().any(|item| !prev.contains(item)));
+                if changed_or_new {
+                    let lib = Lib { root: &root, cfg: &cfg, net: &core, made: &core, trash: &core };
+                    if let Ok(report) = scan_roots::scan_external_roots(
+                        &lib,
+                        &ScanRootsOpts { dry_run: false, root: None, rate_limit_ms: Some(250), max_lookups: None },
+                    ) {
+                        if report.created > 0 || report.updated > 0 || report.moved > 0 {
+                            kandinsky_plugin::event(
+                                "papers:external-sync",
+                                json!({
+                                    "created": report.created,
+                                    "updated": report.updated,
+                                    "moved": report.moved,
+                                    "enriched": report.enriched,
+                                    "total_pdfs": report.total_pdfs,
+                                }),
+                            );
+                            let mut changed_paths: Vec<String> = report
+                                .items
+                                .iter()
+                                .filter(|it| matches!(it.action.as_str(), "create" | "update" | "move") && !it.citekey.is_empty())
+                                .map(|it| format!("{}/{}/{}", cfg.dir, it.citekey, entry::note_file(&it.citekey)))
+                                .collect();
+                            changed_paths.push(cfg.bib.clone());
+                            core.changed(changed_paths);
+                        }
+                    }
+                }
+                last_ext = Some(snap);
             }
         }
     });
@@ -352,13 +466,10 @@ pub fn start_inbox_watcher(plugin: String, root: PathBuf) {
 }
 
 fn norm_ascii_word(s: &str) -> String {
-    s.chars().filter_map(|c| match c {
-        'á' | 'à' | 'ä' | 'â' | 'ã' => Some('a'), 'é' | 'è' | 'ë' | 'ê' => Some('e'),
-        'í' | 'ì' | 'ï' | 'î' => Some('i'), 'ó' | 'ò' | 'ö' | 'ô' | 'õ' => Some('o'),
-        'ú' | 'ù' | 'ü' | 'û' => Some('u'), 'ñ' => Some('n'), 'ç' => Some('c'), 'ß' => Some('s'),
-        c if c.is_ascii_alphanumeric() => Some(c.to_ascii_lowercase()),
-        _ => None,
-    }).collect()
+    crate::pdf_meta::fold_diacritics(s)
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect()
 }
 
 fn title_tokens(t: &str) -> BTreeSet<String> {
@@ -677,5 +788,42 @@ mod tests {
         assert!(target.starts_with("refs/papers/") && !target.contains("Quantum/"), "{target}");
         let dry = organize_inbox(&v.lib(), &OrganizeInboxReq { dry_run: true, ..Default::default() }).unwrap();
         assert_eq!(dry.organized[0].pdf_ref, target);
+    }
+
+    #[test]
+    fn norm_ascii_word_folds_diacritics_and_external_snapshot_skips_unstable_and_ignored_dirs() {
+        assert_eq!(norm_ascii_word("Cvetković"), "cvetkovic");
+        assert_eq!(norm_ascii_word("Łukasiewicz"), "lukasiewicz");
+        assert_eq!(norm_ascii_word("Sørensen"), "sorensen");
+
+        let ws = tempfile::tempdir().unwrap();
+        let ws_real = real(ws.path()).unwrap();
+        let (vault, pool, inbox, out_dir, dot_dir) = (
+            ws_real.join("vault"),
+            ws_real.join("Papers"),
+            ws_real.join("Papers/Sort"),
+            ws_real.join("Papers/output"),
+            ws_real.join("Papers/.hidden"),
+        );
+        std::fs::create_dir_all(&vault).unwrap();
+        std::fs::create_dir_all(&inbox).unwrap();
+        std::fs::create_dir_all(&out_dir).unwrap();
+        std::fs::create_dir_all(&dot_dir).unwrap();
+        std::fs::write(pool.join("stable.pdf"), b"%PDF-1.4 stable").unwrap();
+        std::fs::write(inbox.join("in.pdf"), b"%PDF-1.4 inbox").unwrap();
+        std::fs::write(out_dir.join("out.pdf"), b"%PDF-1.4 out").unwrap();
+        std::fs::write(dot_dir.join("dot.pdf"), b"%PDF-1.4 dot").unwrap();
+
+        let cfg = Settings {
+            external_pdf_roots: vec!["../Papers".into()],
+            watch_inbox: "../Papers/Sort".into(),
+            ..Settings::default()
+        };
+        // Immediately (mtime < 2s ago): ignored as unstable; 5s later: included!
+        let now = std::time::SystemTime::now();
+        assert!(collect_external_pdf_snapshot(&vault, &cfg, now).is_empty());
+        let snap = collect_external_pdf_snapshot(&vault, &cfg, now + Duration::from_secs(5));
+        assert_eq!(snap.len(), 1);
+        assert_eq!(snap[0].0, "../Papers/stable.pdf");
     }
 }

@@ -16,6 +16,8 @@ pub struct Ids {
     pub doi: Option<String>,
     pub arxiv: Option<String>,
     pub isbn: Option<String>,
+    pub inspire: Option<String>,
+    pub bibtex: Option<String>,
     /// A link straight to a PDF (a captured `….pdf`): downloaded and read for its identifiers.
     pub pdf: Option<String>,
 }
@@ -42,7 +44,12 @@ impl Ids {
             .and_then(|s| remote::normalize_isbn(&s).or_else(|| remote::parse_isbn(&s)))
             .or_else(|| params["url"].as_str().and_then(isbn_from_param))
             .or_else(|| params["id"].as_str().and_then(isbn_from_param));
-        Ids { doi: one("doi"), arxiv: one("arxiv"), isbn, pdf: one("pdf") }
+        let inspire = one("inspire")
+            .or_else(|| params["url"].as_str().and_then(crate::enrich::parse_inspire_id))
+            .or_else(|| params["id"].as_str().and_then(crate::enrich::parse_inspire_id));
+        let bibtex = one("bibtex")
+            .or_else(|| params["id"].as_str().filter(|s| crate::enrich::parse_bibtex(s).is_some()).map(String::from));
+        Ids { doi: one("doi"), arxiv: one("arxiv"), isbn, inspire, bibtex, pdf: one("pdf") }
     }
 
     /// The DOI to ask OpenAlex about: the paper's own, else its arXiv DOI.
@@ -199,6 +206,45 @@ fn skipped(why: String) -> Value {
     json!({ "fields": {}, "skipped": why })
 }
 
+fn from_work_mapping(m: &Mapping) -> Value {
+    let mut ids = Map::new();
+    if let Some(d) = yaml_str(m, "DOI") {
+        ids.insert("doi".into(), d.to_lowercase().into());
+    }
+    if let Some(a) = crate::refs::arxiv_of(m) {
+        ids.insert("arxiv".into(), a.into());
+    }
+    if let Some(i) = yaml_str(m, "ISBN").and_then(|s| remote::normalize_isbn(&s).or(Some(s))) {
+        ids.insert("isbn".into(), i.into());
+    }
+    let authors: Vec<Value> = m
+        .get("author")
+        .and_then(Yaml::as_sequence)
+        .into_iter()
+        .flatten()
+        .filter_map(Yaml::as_str)
+        .map(Value::from)
+        .collect();
+    let year_str = yaml_str(m, "date").and_then(|d| crate::refs::year_of(&d));
+    let year_val = year_str
+        .as_deref()
+        .and_then(|y| y.parse::<u64>().ok())
+        .map(Value::from)
+        .or_else(|| year_str.map(Value::from))
+        .unwrap_or(Value::Null);
+    found(
+        ids,
+        vec![
+            ("title", yaml_str(m, "title").into()),
+            ("authors", authors.into()),
+            ("year", year_val),
+            ("journal", yaml_str(m, "publicationTitle").or_else(|| yaml_str(m, "publisher")).into()),
+            ("abstract", yaml_str(m, "abstractNote").into()),
+            ("url", yaml_str(m, "url").into()),
+        ],
+    )
+}
+
 /// The `lookup` tool. arXiv ids are asked of arXiv itself (OpenAlex sometimes merges a preprint with another work:
 /// 1706.03762 was once answered with a 2025 record); DOIs of OpenAlex, whose answer about another work is
 /// refused; ISBNs (and book hints) via Crossref, OpenAlex, and OpenLibrary. `key_of(title, year, authors)`:
@@ -230,7 +276,21 @@ pub fn lookup(net: &dyn Net, params: &Value, email: &str, key_of: KeyOf) -> Valu
         from_openalex(&w)
     };
 
-    let mut got = if let Some(ref isbn) = ids.isbn {
+    let mut got = if let Some(ref bib) = ids.bibtex {
+        match crate::enrich::parse_bibtex(bib) {
+            Some((_, m)) => from_work_mapping(&m),
+            None => return skipped("invalid BibTeX entry".into()),
+        }
+    } else if let Some(ref recid) = ids.inspire {
+        match crate::enrich::inspire_by_id(net, recid) {
+            Ok(m) => {
+                let mut v = from_work_mapping(&m);
+                v["ids"]["inspire"] = recid.clone().into();
+                v
+            }
+            Err(_) => return skipped(format!("INSPIRE-HEP does not know {recid}")),
+        }
+    } else if let Some(ref isbn) = ids.isbn {
         if let Some((m, _)) = remote::lookup_book_metadata(net, Some(isbn), ids.doi.as_deref(), hint_title, hint_author, email) {
             from_book_mapping(&m, Some(isbn))
         } else if let Some(doi) = ids.doi_for_openalex() {
@@ -485,19 +545,21 @@ pub fn add(lib: &Lib, params: &Value, sources_of: &dyn Fn() -> Res<Map<String, V
     }
     let ids = Ids::of(params);
     let url_param = params["url"].as_str().map(str::trim).filter(|u| !u.is_empty());
-    let added = match (&ids.arxiv, &ids.doi, &ids.isbn, &ids.pdf) {
-        (Some(a), None, _, _) => {
+    let added = match (&ids.bibtex, &ids.inspire, &ids.arxiv, &ids.doi, &ids.isbn, &ids.pdf) {
+        (Some(bib), _, _, _, _, _) => lib.add(bib)?,
+        (_, Some(recid), _, _, _, _) => lib.add(&format!("inspire:{recid}"))?,
+        (None, None, Some(a), None, _, _) => {
             let ver = url_param.and_then(remote::parse_arxiv_versioned).filter(|(base, _)| base == a).and_then(|(_, v)| v).unwrap_or_default();
             lib.add(&format!("arXiv:{a}{ver}"))?
         }
-        (_, Some(d), Some(isbn), _) => match lib.add(d) {
+        (None, None, _, Some(d), Some(isbn), _) => match lib.add(d) {
             Ok(a) => a,
             Err(_) => add_book_by_isbn(lib, isbn, params)?,
         },
-        (_, Some(d), None, _) => lib.add(d)?,
-        (None, None, Some(isbn), _) => add_book_by_isbn(lib, isbn, params)?,
-        (None, None, None, Some(url)) => return add_pdf_link(lib, url),
-        (None, None, None, None) => match url_param {
+        (None, None, _, Some(d), None, _) => lib.add(d)?,
+        (None, None, None, None, Some(isbn), _) => add_book_by_isbn(lib, isbn, params)?,
+        (None, None, None, None, None, Some(url)) => return add_pdf_link(lib, url),
+        (None, None, None, None, None, None) => match url_param {
             Some(u) if u.split(['?', '#']).next().unwrap_or(u).to_ascii_lowercase().ends_with(".pdf") => return add_pdf_link(lib, u),
             Some(u) => lib.add(u)?,
             None => return Err("a paper needs a DOI, an arXiv id, an ISBN or a link to its PDF".into()),
@@ -766,5 +828,37 @@ mod tests {
         assert_eq!(syn["created"], json!(true));
         let syn_again = add(&v2.lib(), &json!({ "ids": { "isbn": "9780123456789" } }), &|| Ok(Map::new()), &|_, _| panic!("no pdf sources")).unwrap();
         assert_eq!(syn_again["created"], json!(false));
+    }
+
+    #[test]
+    fn supports_inspire_and_bibtex_in_lookup_and_add() {
+        let mut v = Vault::new();
+        v.cfg.pdf_sources_on = false;
+        let inspire_rec = json!({
+            "metadata": {
+                "control_number": 451647,
+                "titles": [{ "title": "The Large N Limit of Superconformal Field Theories" }],
+                "authors": [{ "full_name": "Maldacena, Juan" }],
+                "dois": [{ "value": "10.4310/ATMP.1998.v2.n2.a1" }],
+                "arxiv_eprints": [{ "value": "hep-th/9711200" }],
+                "publication_info": [{ "journal_title": "Adv. Theor. Math. Phys.", "journal_volume": "2", "page_start": "231", "year": 1998 }]
+            }
+        });
+        v.net = Table::default().on("https://inspirehep.net/api/literature/451647", Answer::Json(inspire_rec));
+
+        let looked = lookup(&v.net, &json!({ "ids": { "inspire": "451647" } }), "", NO_KEY);
+        assert_eq!(looked["ids"]["inspire"], "451647");
+        assert_eq!(looked["ids"]["arxiv"], "hep-th/9711200");
+        assert_eq!(looked["fields"]["title"], "The Large N Limit of Superconformal Field Theories");
+
+        let added = add(&v.lib(), &json!({ "ids": { "inspire": "451647" } }), &|| Ok(Map::new()), &|_, _| panic!("no sources")).unwrap();
+        assert_eq!(added["created"], json!(true));
+
+        let bib = "@article{weinberg1967model,\n  title = {A Model of Leptons},\n  author = {Weinberg, Steven},\n  year = {1967},\n  journal = {Phys. Rev. Lett.}\n}";
+        let bib_looked = lookup(&v.net, &json!({ "ids": { "bibtex": bib } }), "", NO_KEY);
+        assert_eq!(bib_looked["fields"]["title"], "A Model of Leptons");
+        let bib_added = add(&v.lib(), &json!({ "ids": { "bibtex": bib } }), &|| Ok(Map::new()), &|_, _| panic!("no sources")).unwrap();
+        assert_eq!(bib_added["created"], json!(true));
+        assert!(bib_added["path"].as_str().unwrap().contains("weinberg1967model"));
     }
 }
