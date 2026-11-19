@@ -93,7 +93,7 @@ test("bases: new note in the view, board with drag, hide and add a column", asyn
 
   await pane.getByRole("button", { name: "New", exact: true }).click();
   await expect.poll(() => text("db/tasks/Untitled.md")).toBe("---\nkind: task\nstatus:\n---\n");
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "tasks.base" }).click();
+  await page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row .pane-main", { hasText: "tasks.base" }).click();
   await expect(pane.locator("tbody tr")).toHaveCount(3);
 
   await pane.locator(".view-switch").click();
@@ -151,12 +151,12 @@ test("a column's summary, groups in a table, a card's picture — each written t
   await page.getByRole("button", { name: "Group by" }).click();
   await page.getByRole("menuitem", { name: "Shop" }).click();
   await page.keyboard.press("Escape");
-  await expect(pane.locator("tr.group")).toHaveText(["north2", "south1"]);
+  await expect(pane.locator("tr.group")).toHaveText([/north\s*2/, /south\s*1/]);
   await expect.poll(() => text("db/shop.base")).toMatch(/groupBy:\n\s+property: shop/);
 
   await pane.locator(".view-switch").click();
   await page.getByRole("menuitem", { name: "Show as cards" }).click();
-  await expect(pane.locator("h3.group")).toHaveCount(2);
+  await expect(pane.locator("button.group")).toHaveCount(2);
   await pane.locator(".view-switch").click();
   await page.getByRole("menuitem", { name: /Card picture/ }).click();
   await page.getByRole("menuitem", { name: "Cover" }).click();

@@ -246,6 +246,8 @@ html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone 
 .markdown .view-block { position: relative; margin: .6em 0; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); font-family: var(--font-ui); white-space: normal; }
 .markdown .view-block .block-cfg-slot { position: absolute; top: 6px; right: 34px; z-index: 6; opacity: 0; transition: opacity .12s; }
 .markdown .view-block:hover .block-cfg-slot, .markdown .view-block:focus-within .block-cfg-slot { opacity: 1; }
+/* an unframed block's own controls sit at its top right (the library's layout switch): the Configure bar rides above it, not over them */
+.markdown .view-block.own .block-cfg-slot { top: -22px; right: 0; }
 /* a Today part brings its own card: no second frame around it */
 .markdown .view-block.own { border: 0; padding: 0; background: none; margin: .9em 0; }
 .markdown .view-block .view-loading { color: var(--text-faint); margin: 0; padding: 4px 8px; }

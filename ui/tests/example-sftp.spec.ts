@@ -1,5 +1,6 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import { openFile, runCommand } from "./open";
+import { verticalTabs } from "./vertical-tabs";
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,6 +28,10 @@ test.afterAll(async ({ request }) => {
   await request.post("/api/plugins/ssh/helper/stop", { headers: H });
 });
 
+// the sidebar's Open section lists a lone tab only with vertical tabs; the shared config is put back after each test
+let restoreTabs: (() => Promise<unknown>) | null = null;
+test.beforeEach(async ({ request }) => { restoreTabs = await verticalTabs(request); });
+test.afterEach(async () => { await restoreTabs?.(); restoreTabs = null; });
 async function choose(page: Page, text: string, row: string | RegExp) {
   const palette = page.getByTestId("palette");
   await expect(palette.getByRole("textbox")).toBeFocused();
@@ -46,7 +51,7 @@ test("the explorer browses a host's files, opens and edits one, downloads, uploa
   await runCommand(page, "SSH: browse files", "SSH: browse files on… (SFTP)");
   await choose(page, "iq", "iq");
   const pane = page.locator(".explorer");
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: "(iq)" })).toBeVisible();
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "(iq)" })).toBeVisible();
   const row = (name: string) => pane.locator(".x-row", { has: page.locator(".label", { hasText: new RegExp(`^${name.replace(/[[\]]/g, "\\$&")}$`) }) });
   await expect(row("data run")).toBeVisible({ timeout: 15_000 });
   await expect(row("notes.md")).toContainText("40 B");
@@ -136,7 +141,7 @@ test("the explorer browses a host's files, opens and edits one, downloads, uploa
 
   // a picture opens in the image viewer, from its copy too
   writeFileSync(join(SFTP_ROOT, "dot.png"), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "(iq)" }).click();
+  await page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row .pane-main", { hasText: "(iq)" }).click();
   await page.locator(".explorer").getByRole("button", { name: "Refresh" }).click();
   await row("dot.png").dblclick();
   await expect(page.locator(".dv-active-group .dv-tab.dv-active-tab")).toContainText("dot.png");
@@ -166,7 +171,7 @@ test("slow link: the app stays responsive while a folder listing waits", async (
   await openFile(page, "FOCUS.md");
   await expect(page.locator(".dv-active-group .cm-editor")).toContainText("Finish the GW notes.");
   const other = Date.now() - t1;
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "(iq)" }).click();
+  await page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row .pane-main", { hasText: "(iq)" }).click();
   await expect(page.locator(".x-row").first()).toBeVisible({ timeout: 60_000 });
   const listed = Date.now() - t0;
   // into a folder (waits on the link) and back up: the folder seen before shows at once, "updating…" behind it

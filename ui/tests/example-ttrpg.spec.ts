@@ -38,7 +38,7 @@ test("the example TTRPG plugin: a stat block with dice, the initiative list, a s
   expect(total).toBeLessThanOrEqual(36);
 
   // the initiative block: characters by their property, highest first
-  const order = note.locator(".kandinsky-block.own button span");
+  const order = note.locator(".kandinsky-block.own button:has(b) span");
   await expect(order).toHaveText(["Mira", "Brok"]);
 
   // a session note goes to the folder of the plugin's setting, not to the vault's root
@@ -46,6 +46,6 @@ test("the example TTRPG plugin: a stat block with dice, the initiative list, a s
   await page.keyboard.type("TTRPG: new session note");
   await page.keyboard.press("Enter");
   const day = new Date().toISOString().slice(0, 10);
-  await expect(page.getByTestId("sidebar").locator(".tab.active", { hasText: `Session ${day}` })).toBeVisible();
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row.active", { hasText: `Session ${day}` })).toBeVisible();
   expect(await read(request, `campaigns/sessions/Session ${day}.md`)).toContain("type: session");
 });

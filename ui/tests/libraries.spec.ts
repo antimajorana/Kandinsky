@@ -43,7 +43,7 @@ test("the Drawings library: every drawing with its note's properties as filters,
   // the links to it at the bottom of the card, as under a note
   await expect(libs.locator(".links-bar .backlinks")).toContainText(/Linked mentions\s*2 from 2 notes/); // its own note and the page
   await libs.getByRole("button", { name: "Properties" }).click();
-  await expect(page.locator(".dv-active-group .cm-editor")).toContainText(/Properties\s*4/); // drawing, pages, project, tags
+  await expect(page.locator(".dv-active-group .cm-editor")).toContainText(/Properties[\s\S]*drawing[\s\S]*pages[\s\S]*project[\s\S]*tags[\s\S]*Add property/); // its four: drawing, pages, project, tags
 });
 
 // Drawings are managed in the library: the

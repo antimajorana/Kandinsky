@@ -113,7 +113,7 @@ test("Settings → Libraries lists the vault's own with their kind, order and la
   await page.goto("/");
   await page.waitForFunction(() => "__kandinsky" in window);
   await page.evaluate(() => (window as unknown as { __kandinsky: { run(id: string): void } }).__kandinsky.run("ui.settings"));
-  await page.getByRole("button", { name: /^Libraries$/ }).first().click();
+  await page.getByRole("button", { name: /^Files & Search/ }).first().click();
   const panel = page.locator(".libraries-panel");
   await expect(panel.getByRole("list", { name: "Libraries" }).locator(".row", { hasText: "Bookshelf" })).toContainText("Bookshelf/");
   await expect(panel.getByRole("list", { name: "Server libraries" })).toContainText("Films");

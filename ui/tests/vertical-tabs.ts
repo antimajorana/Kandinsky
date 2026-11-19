@@ -1,11 +1,10 @@
-import type { APIRequestContext } from "@playwright/test";
+import { expect, type APIRequestContext } from "@playwright/test";
 
-const H = { "x-kandinsky": "1" };
-
-// The Notion sidebar lists the open tabs (its "Open" section) only with two tabs open, or always with vertical tabs:
-// a spec that needs a row for a single tab turns vertical tabs on and puts the config back afterwards.
-export async function verticalTabs(request: APIRequestContext): Promise<() => Promise<void>> {
+// The sidebar's Open section lists a lone tab only with vertical tabs (ui.tabs). The config is shared by every spec
+// of the run: this sets it and returns what puts it back.
+export async function verticalTabs(request: APIRequestContext): Promise<() => Promise<unknown>> {
+  const H = { "x-kandinsky": "1" };
   const cfg = (await (await request.get("/api/config", { headers: H })).json()).config;
-  await request.put("/api/config", { headers: H, data: { ...cfg, ui: { ...cfg.ui, tabs: "vertical" } } });
-  return async () => { await request.put("/api/config", { headers: H, data: cfg }); };
+  expect((await request.put("/api/config", { headers: H, data: { ...cfg, ui: { ...cfg.ui, tabs: "vertical" } } })).ok()).toBe(true);
+  return () => request.put("/api/config", { headers: H, data: cfg });
 }
