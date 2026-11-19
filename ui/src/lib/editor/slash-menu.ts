@@ -5,6 +5,7 @@ import { closeCompletion, startCompletion } from "@codemirror/autocomplete";
 import { StateEffect, type EditorState, type Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { overlayOpened } from "../overlays";
+import { localDay } from "../local-day";
 import { settings } from "../settings.svelte";
 import { frontmatterClose } from "./live/live-preview.js";
 import { notePlaceAt } from "./math-context";
@@ -21,6 +22,7 @@ interface SlashBlock {
   /** Template with `\0` marking where the caret lands after insertion. */
   template: string;
   isCallout?: boolean;
+  developerOnly?: boolean;
   openCompletion?: boolean;
   action?: (view: EditorView) => void;
 }
@@ -29,13 +31,167 @@ const SLASH_LINE_RE = /^(\s*(?:>\s*)?)\/([a-zA-Z0-9_-]*)$/;
 
 const SLASH_BLOCKS: SlashBlock[] = [
   {
+    id: "heading-1",
+    badge: "H1",
+    tone: "muted",
+    title: "Heading 1",
+    hint: "#",
+    keywords: ["h1", "heading1", "heading 1", "title", "header"],
+    template: "# \0",
+    isCallout: true,
+  },
+  {
+    id: "heading-2",
+    badge: "H2",
+    tone: "muted",
+    title: "Heading 2",
+    hint: "##",
+    keywords: ["h2", "heading2", "heading 2", "section", "subtitle"],
+    template: "## \0",
+    isCallout: true,
+  },
+  {
+    id: "heading-3",
+    badge: "H3",
+    tone: "muted",
+    title: "Heading 3",
+    hint: "###",
+    keywords: ["h3", "heading3", "heading 3", "subsection"],
+    template: "### \0",
+    isCallout: true,
+  },
+  {
+    id: "bullet-list",
+    badge: "•",
+    tone: "muted",
+    title: "Bulleted list",
+    hint: "-",
+    keywords: ["bullet", "bulleted", "list", "ul", "unordered", "item"],
+    template: "- \0",
+    isCallout: true,
+  },
+  {
+    id: "numbered-list",
+    badge: "1.",
+    tone: "muted",
+    title: "Numbered list",
+    hint: "1.",
+    keywords: ["number", "numbered", "list", "ol", "ordered", "item"],
+    template: "1. \0",
+    isCallout: true,
+  },
+  {
+    id: "todo",
+    badge: "☐",
+    tone: "accent",
+    title: "To-do",
+    hint: "- [ ]",
+    keywords: ["todo", "to-do", "task", "checkbox", "action"],
+    template: "- [ ] \0",
+    isCallout: true,
+  },
+  {
+    id: "quote",
+    badge: "❝",
+    tone: "muted",
+    title: "Quote",
+    hint: ">",
+    keywords: ["quote", "blockquote", "citation"],
+    template: "> \0",
+    isCallout: true,
+  },
+  {
+    id: "divider",
+    badge: "―",
+    tone: "muted",
+    title: "Divider",
+    hint: "---",
+    keywords: ["divider", "hr", "horizontal", "rule", "line", "separator"],
+    template: "---\n\n\0",
+  },
+  {
+    id: "callout-note",
+    badge: "ⓘ",
+    tone: "accent",
+    title: "Callout",
+    hint: "> [!NOTE]",
+    keywords: ["callout", "note", "info", "box"],
+    template: "> [!NOTE]\n> \0",
+    isCallout: true,
+  },
+  {
+    id: "callout-warning",
+    badge: "▲",
+    tone: "yellow",
+    title: "Warning",
+    hint: "> [!WARNING]",
+    keywords: ["warn", "warning", "caution", "important", "alert", "lint", "callout"],
+    template: "> [!WARNING]\n> \0",
+    isCallout: true,
+  },
+  {
+    id: "callout-tip",
+    badge: "✦",
+    tone: "green",
+    title: "Tip",
+    hint: "> [!TIP]",
+    keywords: ["tip", "hint", "advice", "callout"],
+    template: "> [!TIP]\n> \0",
+    isCallout: true,
+  },
+  {
+    id: "table-3x3",
+    badge: "⊞",
+    tone: "muted",
+    title: "Table",
+    hint: "| a | b |",
+    keywords: ["table", "grid", "3x3", "columns", "rows"],
+    template: "| Col 1 | Col 2 | Col 3 |\n| --- | --- | --- |\n| \0 |  |  |\n|  |  |  |",
+  },
+  {
+    id: "code-block",
+    badge: "<>",
+    tone: "muted",
+    title: "Code block",
+    hint: "```python",
+    keywords: ["code", "python", "py", "fence", "script", "snippet"],
+    template: "```python\n\0\n```",
+  },
+  {
     id: "display-math",
     badge: "∑",
     tone: "accent",
-    title: "Display Math",
+    title: "Math block",
     hint: "$$",
     keywords: ["math", "display", "eq", "equation", "latex", "katex", "formula", "sum"],
     template: "$$\n\0\n$$",
+  },
+  {
+    id: "toggle-block",
+    badge: "▸",
+    tone: "muted",
+    title: "Toggle",
+    hint: "<details>",
+    keywords: ["toggle", "collapse", "collapsible", "details", "accordion", "fold"],
+    template: "<details open>\n<summary>\0Toggle heading</summary>\n\n\n</details>",
+  },
+  {
+    id: "date",
+    badge: "📅",
+    tone: "muted",
+    title: "Date",
+    hint: "today",
+    keywords: ["date", "today", "day"],
+    template: "\0",
+  },
+  {
+    id: "frontmatter",
+    badge: "---",
+    tone: "muted",
+    title: "Frontmatter",
+    hint: "yaml",
+    keywords: ["frontmatter", "yaml", "properties", "metadata"],
+    template: "---\n\0\n---\n",
   },
   {
     id: "aligned-math",
@@ -45,6 +201,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "align",
     keywords: ["align", "aligned", "equations", "math", "system", "derivation"],
     template: "$$\n\\begin{aligned}\n  \0\n\\end{aligned}\n$$",
+    developerOnly: true,
   },
   {
     id: "callout-theorem",
@@ -65,34 +222,6 @@ const SLASH_BLOCKS: SlashBlock[] = [
     keywords: ["proof", "pf", "note", "def", "definition", "result", "verified", "callout"],
     template: "> [!NOTE] Proof\n> \0",
     isCallout: true,
-  },
-  {
-    id: "callout-warning",
-    badge: "▲",
-    tone: "yellow",
-    title: "Warning Callout",
-    hint: "> [!WARNING]",
-    keywords: ["warn", "warning", "caution", "important", "alert", "lint", "callout"],
-    template: "> [!WARNING]\n> \0",
-    isCallout: true,
-  },
-  {
-    id: "table-3x3",
-    badge: "⊞",
-    tone: "muted",
-    title: "Table (3×3)",
-    hint: "| a | b |",
-    keywords: ["table", "grid", "3x3", "columns", "rows"],
-    template: "| Col 1 | Col 2 | Col 3 |\n| --- | --- | --- |\n| \0 |  |  |\n|  |  |  |",
-  },
-  {
-    id: "code-block",
-    badge: "<>",
-    tone: "muted",
-    title: "Code Block",
-    hint: "```python",
-    keywords: ["code", "python", "py", "fence", "script", "snippet"],
-    template: "```python\n\0\n```",
   },
   {
     id: "subpage-link",
@@ -166,6 +295,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "```notebook-preview",
     keywords: ["notebook-preview", "nb-preview", "ipynb", "transclude", "cells", "output", "readonly"],
     template: "```notebook-preview\npath: \ncells: 1-3\n```\n\0",
+    developerOnly: true,
   },
   {
     id: "table-preview",
@@ -175,6 +305,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "```table-preview",
     keywords: ["table-preview", "tsv", "csv", "dat", "scientific", "results", "data", "preview"],
     template: "```table-preview\npath: \nlimit: 20\nformat: scientific\n```\n\0",
+    developerOnly: true,
   },
   {
     id: "properties-audit",
@@ -184,6 +315,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "audit",
     keywords: ["audit", "properties", "schema", "lint", "broken", "links", "health", "view"],
     template: "```view\ntype: properties-audit\nstrict: false\n```\n\0",
+    developerOnly: true,
   },
   {
     id: "view-canvas",
@@ -211,6 +343,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "progress",
     keywords: ["progress", "year", "month", "goal", "bar", "percent", "widget", "view"],
     template: "```view\ntype: progress\nkind: both\nlabel: Goal\ncurrent: 40\ntarget: 100\n```\n\0",
+    developerOnly: true,
   },
   {
     id: "widget-countdown",
@@ -220,6 +353,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "countdown",
     keywords: ["countdown", "deadline", "target", "date", "days", "milestone", "widget", "view"],
     template: "```view\ntype: countdown\nlabel: Deadline\ntarget_date: 2026-12-31\n```\n\0",
+    developerOnly: true,
   },
   {
     id: "widget-pomodoro",
@@ -229,6 +363,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "pomodoro",
     keywords: ["pomodoro", "timer", "focus", "break", "session", "widget", "view"],
     template: "```view\ntype: pomodoro\nfocus: 25\nshort_break: 5\n```\n\0",
+    developerOnly: true,
   },
   {
     id: "widget-habits",
@@ -238,6 +373,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "habits",
     keywords: ["habits", "habit", "tracker", "daily", "streak", "routine", "widget", "view"],
     template: "```view\ntype: habits\npath: Habits.md\n```\n\0",
+    developerOnly: true,
   },
   {
     id: "widget-clock",
@@ -247,6 +383,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "clock",
     keywords: ["clock", "time", "analog", "digital", "timezone", "widget", "view"],
     template: "```view\ntype: clock\nstyle: both\n```\n\0",
+    developerOnly: true,
   },
   {
     id: "widget-weather",
@@ -256,6 +393,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "weather",
     keywords: ["weather", "forecast", "temperature", "sun", "city", "widget", "view"],
     template: "```view\ntype: weather\ncity: \nunits: C\n```\n\0",
+    developerOnly: true,
   },
   {
     id: "widget-button",
@@ -265,6 +403,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "button",
     keywords: ["button", "action", "automation", "create", "property", "toggle", "notion", "widget", "view"],
     template: "```view\ntype: button\nlabel: New Task\naction: create_note\nfolder: tasks\nproperties:\n  status: To do\n```\n\0",
+    developerOnly: true,
   },
   {
     id: "encrypted-block",
@@ -272,17 +411,9 @@ const SLASH_BLOCKS: SlashBlock[] = [
     tone: "green",
     title: "Encrypted Block (AES-256-GCM)",
     hint: "```encrypted",
-    keywords: ["encrypted", "encrypt", "secret", "password", "passphrase", "lock", "aes", "nota", "vault", "private"],
+    keywords: ["encrypted", "encrypt", "secret", "password", "passphrase", "lock", "aes", "vault", "private"],
     template: "```encrypted\n\n```\n\0",
-  },
-  {
-    id: "toggle-block",
-    badge: "▸",
-    tone: "muted",
-    title: "Toggle Block",
-    hint: "<details>",
-    keywords: ["toggle", "collapse", "collapsible", "details", "accordion", "fold"],
-    template: "<details open>\n<summary>\0Toggle heading</summary>\n\n\n</details>",
+    developerOnly: true,
   },
   {
     id: "columns-block",
@@ -292,6 +423,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     hint: "```columns",
     keywords: ["columns", "cols", "2col", "two", "side", "grid", "split"],
     template: "```columns\n### Column 1\n\0\n\n---\n\n### Column 2\n\n```",
+    developerOnly: true,
   },
   {
     id: "toc-block",
@@ -356,7 +488,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     tone: "red",
     title: "Important Tag",
     hint: "[!]",
-    keywords: ["important", "bang", "alert", "priority", "notecraft", "tag"],
+    keywords: ["important", "bang", "alert", "priority", "tag"],
     template: "[!] \0",
   },
   {
@@ -365,7 +497,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     tone: "accent",
     title: "Question Tag",
     hint: "[?]",
-    keywords: ["question", "ask", "unknown", "doubt", "notecraft", "tag"],
+    keywords: ["question", "ask", "unknown", "doubt", "tag"],
     template: "[?] \0",
   },
   {
@@ -374,7 +506,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     tone: "yellow",
     title: "Idea Tag",
     hint: "[*]",
-    keywords: ["idea", "star", "spark", "insight", "notecraft", "tag"],
+    keywords: ["idea", "star", "spark", "insight", "tag"],
     template: "[*] \0",
   },
   {
@@ -383,54 +515,20 @@ const SLASH_BLOCKS: SlashBlock[] = [
     tone: "green",
     title: "Remember / Definition Tag",
     hint: "[i]",
-    keywords: ["remember", "info", "def", "definition", "notecraft", "tag"],
+    keywords: ["remember", "info", "def", "definition", "tag"],
     template: "[i] \0",
-  },
-  {
-    id: "tag-todo",
-    badge: "☐",
-    tone: "accent",
-    title: "To-do Item",
-    hint: "- [ ]",
-    keywords: ["todo", "task", "checkbox", "action"],
-    template: "- [ ] \0",
-  },
-  {
-    id: "heading-1",
-    badge: "H1",
-    tone: "muted",
-    title: "Heading 1",
-    hint: "#",
-    keywords: ["h1", "heading1", "heading 1", "title", "header"],
-    template: "# \0",
-  },
-  {
-    id: "heading-2",
-    badge: "H2",
-    tone: "muted",
-    title: "Heading 2",
-    hint: "##",
-    keywords: ["h2", "heading2", "heading 2", "section", "subtitle"],
-    template: "## \0",
-  },
-  {
-    id: "heading-3",
-    badge: "H3",
-    tone: "muted",
-    title: "Heading 3",
-    hint: "###",
-    keywords: ["h3", "heading3", "heading 3", "subsection"],
-    template: "### \0",
   },
 ];
 
 const forceOpenEffect = StateEffect.define<{ slashPos: number; autoSlash: boolean }>();
 
 function filterBlocks(query: string): SlashBlock[] {
+  const dev = Boolean(settings.config?.developer_mode);
+  const available = dev ? SLASH_BLOCKS : SLASH_BLOCKS.filter((b) => !b.developerOnly);
   const q = query.trim().toLowerCase();
-  if (!q) return SLASH_BLOCKS;
+  if (!q) return available;
   const scored: { block: SlashBlock; rank: number }[] = [];
-  for (const block of SLASH_BLOCKS) {
+  for (const block of available) {
     const title = block.title.toLowerCase();
     const hint = block.hint.toLowerCase();
     if (block.keywords.some((k) => k === q) || title === q) scored.push({ block, rank: 0 });
@@ -761,6 +859,33 @@ class SlashMenuController {
     const replaceQuotePrefix = !!block.isCallout && /^\s*>\s*$/.test(cur.prefix);
     const from = replaceQuotePrefix ? cur.lineFrom + (/^\s*/.exec(cur.prefix)?.[0].length ?? 0) : cur.slashPos;
     const lineIndent = replaceQuotePrefix ? (/^\s*/.exec(cur.prefix)?.[0] ?? "") : cur.prefix;
+
+    if (block.id === "divider") {
+      const line = this.view.state.doc.lineAt(from);
+      const prevNonEmpty = line.number > 1 && this.view.state.doc.line(line.number - 1).text.trim().length > 0;
+      const blankBeforeFrom = this.view.state.sliceDoc(line.from, from).trim().length === 0;
+      const insert = prevNonEmpty && blankBeforeFrom ? "\n---\n\n" : "---\n\n";
+      this.view.focus();
+      this.view.dispatch({
+        changes: { from, to: cur.to, insert },
+        selection: { anchor: from + insert.length },
+        scrollIntoView: true,
+        userEvent: "input.complete",
+      });
+      return;
+    }
+
+    if (block.id === "date") {
+      const insert = localDay();
+      this.view.focus();
+      this.view.dispatch({
+        changes: { from, to: cur.to, insert },
+        selection: { anchor: from + insert.length },
+        scrollIntoView: true,
+        userEvent: "input.complete",
+      });
+      return;
+    }
 
     const rawLines = block.template.split("\n");
     const indented = rawLines

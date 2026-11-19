@@ -1,6 +1,7 @@
 // Obsidian's formatting keys for notes: bold, italic, link, to-do — on the note editor that has the keys
 // (a tab or an embedded one). Each is a toggle on every selection range.
 import { EditorSelection, type ChangeSpec, type EditorState } from "@codemirror/state";
+import { syntaxTree } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { noteFormat, type MdFormat } from "../registry";
 import { tickTaskLine } from "./task-tick";
@@ -106,27 +107,213 @@ const LINE: Record<"heading" | "bullet" | "number" | "quote", (now: string) => s
 function toggleCode(view: EditorView): void {
   view.dispatch(view.state.changeByRange((r) => {
     const text = view.state.sliceDoc(r.from, r.to);
-    if (text.length >= 2 && text.startsWith("`") && text.endsWith("`")) return { changes: { from: r.from, to: r.to, insert: text.slice(1, -1) }, range: EditorSelection.range(r.from, r.to - 2) };
+    if (text.length >= 2 && text.startsWith("`") && text.endsWith("`") && !text.startsWith("``")) {
+      return { changes: { from: r.from, to: r.to, insert: text.slice(1, -1) }, range: EditorSelection.range(r.from, r.to - 2) };
+    }
+    if (view.state.sliceDoc(r.from - 1, r.from) === "`" && view.state.sliceDoc(r.to, r.to + 1) === "`"
+      && view.state.sliceDoc(r.from - 2, r.from - 1) !== "`" && view.state.sliceDoc(r.to + 1, r.to + 2) !== "`") {
+      return { changes: [{ from: r.from - 1, to: r.from }, { from: r.to, to: r.to + 1 }], range: EditorSelection.range(r.from - 1, r.to - 1) };
+    }
     return { changes: [{ from: r.from, insert: "`" }, { from: r.to, insert: "`" }], range: EditorSelection.range(r.from + 1, r.to + 1) };
   }), { userEvent: "input.format", scrollIntoView: true });
 }
 
-/** `==highlight==`: toggle Obsidian-style highlight marks around each selection range. */
-function toggleHighlight(view: EditorView): void {
+function toggleDoubleDelim(view: EditorView, delim: string, disallowTriple: boolean): boolean {
+  const len = delim.length;
+  const ch = delim[0];
   view.dispatch(view.state.changeByRange((r) => {
     const text = view.state.sliceDoc(r.from, r.to);
-    if (text.length >= 4 && text.startsWith("==") && text.endsWith("==") && !text.startsWith("===")) {
-      const inner = text.slice(2, -2);
+    if (text.length >= 2 * len && text.startsWith(delim) && text.endsWith(delim) && (!disallowTriple || !text.startsWith(delim + ch))) {
+      const inner = text.slice(len, -len);
       return { changes: { from: r.from, to: r.to, insert: inner }, range: EditorSelection.range(r.from, r.from + inner.length) };
     }
-    if (view.state.sliceDoc(r.from - 2, r.from) === "==" && view.state.sliceDoc(r.to, r.to + 2) === "==" && view.state.sliceDoc(r.from - 3, r.from - 2) !== "=") {
-      return { changes: [{ from: r.from - 2, to: r.from }, { from: r.to, to: r.to + 2 }], range: EditorSelection.range(r.from - 2, r.to - 2) };
+    if (view.state.sliceDoc(r.from - len, r.from) === delim && view.state.sliceDoc(r.to, r.to + len) === delim
+      && (!disallowTriple || (view.state.sliceDoc(r.from - len - 1, r.from - len) !== ch && view.state.sliceDoc(r.to + len, r.to + len + 1) !== ch))) {
+      return { changes: [{ from: r.from - len, to: r.from }, { from: r.to, to: r.to + len }], range: EditorSelection.range(r.from - len, r.to - len) };
     }
-    if (r.empty && view.state.sliceDoc(r.to, r.to + 2) === "==" && /\S/.test(view.state.sliceDoc(r.from - 1, r.from))) {
-      return { range: EditorSelection.cursor(r.to + 2) };
+    if (r.empty && view.state.sliceDoc(r.to, r.to + len) === delim && /\S/.test(view.state.sliceDoc(r.from - 1, r.from))) {
+      return { range: EditorSelection.cursor(r.to + len) };
     }
-    return { changes: [{ from: r.from, insert: "==" }, { from: r.to, insert: "==" }], range: EditorSelection.range(r.from + 2, r.to + 2) };
+    return { changes: [{ from: r.from, insert: delim }, { from: r.to, insert: delim }], range: EditorSelection.range(r.from + len, r.to + len) };
   }), { userEvent: "input.format", scrollIntoView: true });
+  return true;
+}
+
+/** `**bold**`: toggle Markdown bold marks around each selection range. */
+export function toggleBold(view: EditorView): boolean {
+  toggleMark(view, "bold");
+  return true;
+}
+
+/** `*italic*`: toggle Markdown italic marks around each selection range. */
+export function toggleItalic(view: EditorView): boolean {
+  toggleMark(view, "italic");
+  return true;
+}
+
+/** `~~strike~~`: toggle GFM strikethrough marks around each selection range. */
+export function toggleStrike(view: EditorView): boolean {
+  return toggleDoubleDelim(view, "~~", false);
+}
+
+/** `` `code` ``: toggle inline code backticks around each selection range. */
+export function toggleInlineCode(view: EditorView): boolean {
+  toggleCode(view);
+  return true;
+}
+
+/** `==highlight==`: toggle Obsidian-style highlight marks around each selection range. */
+export function toggleHighlight(view: EditorView): boolean {
+  return toggleDoubleDelim(view, "==", true);
+}
+
+export type BlockKind = "text" | "h1" | "h2" | "h3" | "bullet" | "number" | "todo" | "quote";
+
+const BLOCK_LABELS: Record<BlockKind, string> = {
+  text: "Text",
+  h1: "H1",
+  h2: "H2",
+  h3: "H3",
+  bullet: "List",
+  number: "1. List",
+  todo: "To-do",
+  quote: "Quote",
+};
+
+/** Set each selected line's heading level (`0` strips heading/list/quote prefix back to plain text). */
+export function setHeading(view: EditorView, level: 0 | 1 | 2 | 3): boolean {
+  const prefix = level === 0 ? "" : `${"#".repeat(level)} `;
+  rewriteLineStarts(view, LINE_START, ([, indent]) => `${indent}${prefix}`);
+  return true;
+}
+
+/** Convert each selected line to the requested block kind. */
+export function setBlockKind(view: EditorView, kind: BlockKind): boolean {
+  if (kind === "text") return setHeading(view, 0);
+  if (kind === "h1") return setHeading(view, 1);
+  if (kind === "h2") return setHeading(view, 2);
+  if (kind === "h3") return setHeading(view, 3);
+  if (kind === "number") {
+    let idx = 0;
+    rewriteLineStarts(view, LINE_START, ([, indent]) => `${indent}${++idx}. `);
+    return true;
+  }
+  const mark = kind === "bullet" ? "- " : kind === "todo" ? "- [ ] " : "> ";
+  rewriteLineStarts(view, LINE_START, ([, indent]) => `${indent}${mark}`);
+  return true;
+}
+
+/** Wrap the active selection as `[selected](url)` or `[[note|selected]]` when given a `[[note]]` or bare note name. */
+export function wrapSelectionLink(view: EditorView, rawTarget: string): boolean {
+  const target = rawTarget.trim();
+  if (!target) return false;
+  view.dispatch(view.state.changeByRange((r) => {
+    const selected = view.state.sliceDoc(r.from, r.to);
+    const linkMatch = /^\[([^\]]*)\]\([^)]*\)$/.exec(selected);
+    const label = linkMatch ? linkMatch[1] : selected;
+    let insert: string;
+    if (target.startsWith("[[")) {
+      const note = target.slice(2).replace(/\]\]$/, "").trim();
+      if (!note) return { range: r };
+      insert = !label || note === label ? `[[${note}]]` : `[[${note}|${label}]]`;
+    } else if (/^(?:https?:\/\/|mailto:|tel:|\/|#|\.\.?\/)/i.test(target)) {
+      insert = `[${label}](${target})`;
+    } else if (/^www\./i.test(target) || /^[a-z0-9-]+(\.[a-z0-9-]+)+([/?#].*)?$/i.test(target)) {
+      insert = `[${label}](https://${target})`;
+    } else {
+      insert = !label || target === label ? `[[${target}]]` : `[[${target}|${label}]]`;
+    }
+    return { changes: { from: r.from, to: r.to, insert }, range: EditorSelection.cursor(r.from + insert.length) };
+  }), { userEvent: "input.format", scrollIntoView: true });
+  return true;
+}
+
+export interface SelectionFormatState {
+  bold: boolean;
+  italic: boolean;
+  strike: boolean;
+  code: boolean;
+  highlight: boolean;
+  link: boolean;
+  block: BlockKind;
+  blockLabel: string;
+}
+
+function starsInState(state: EditorState, pos: number, dir: -1 | 1): number {
+  let n = 0;
+  while (state.sliceDoc(dir < 0 ? pos - n - 1 : pos + n, dir < 0 ? pos - n : pos + n + 1) === "*") n++;
+  return n;
+}
+
+function hasDoubleDelim(state: EditorState, from: number, to: number, delim: string, disallowTriple = false): boolean {
+  const text = state.sliceDoc(from, to);
+  const len = delim.length;
+  const ch = delim[0];
+  if (text.length >= 2 * len && text.startsWith(delim) && text.endsWith(delim) && (!disallowTriple || !text.startsWith(delim + ch))) {
+    return true;
+  }
+  if (state.sliceDoc(from - len, from) === delim && state.sliceDoc(to, to + len) === delim) {
+    if (!disallowTriple) return true;
+    return state.sliceDoc(from - len - 1, from - len) !== ch && state.sliceDoc(to + len, to + len + 1) !== ch;
+  }
+  return false;
+}
+
+function detectBlockKind(lineText: string): BlockKind {
+  const trimmed = lineText.replace(/^\s*/, "");
+  if (/^#\s+/.test(trimmed)) return "h1";
+  if (/^##\s+/.test(trimmed)) return "h2";
+  if (/^#{3,6}\s+/.test(trimmed)) return "h3";
+  if (/^(?:[-*+]|\d+[.)])\s+\[.\]\s+/.test(trimmed)) return "todo";
+  if (/^[-*+]\s+/.test(trimmed)) return "bullet";
+  if (/^\d+[.)]\s+/.test(trimmed)) return "number";
+  if (/^>\s?/.test(trimmed)) return "quote";
+  return "text";
+}
+
+/** Inspect active inline marks and line block type for the primary selection. */
+export function getSelectionFormat(state: EditorState): SelectionFormatState {
+  const sel = state.selection.main;
+  let bold = false;
+  let italic = false;
+  let strike = false;
+  let code = false;
+  let highlight = false;
+  let link = false;
+
+  if (sel.from < sel.to) {
+    syntaxTree(state).iterate({
+      from: sel.from,
+      to: sel.to,
+      enter(node) {
+        if (node.from > sel.from || node.to < sel.to) return;
+        switch (node.name) {
+          case "StrongEmphasis": bold = true; break;
+          case "Emphasis": italic = true; break;
+          case "Strikethrough": strike = true; break;
+          case "InlineCode": code = true; break;
+          case "Highlight": highlight = true; break;
+          case "Link":
+          case "Wikilink": link = true; break;
+        }
+      },
+    });
+  }
+
+  const text = state.sliceDoc(sel.from, sel.to);
+  const starSpan = Math.min(starsInState(state, sel.from, -1), starsInState(state, sel.to, 1));
+  if (!bold && (starSpan >= 2 || (text.length >= 4 && text.startsWith("**") && text.endsWith("**")))) bold = true;
+  if (!italic && (starSpan % 2 === 1 || (text.length >= 2 && text.startsWith("*") && text.endsWith("*") && (!text.startsWith("**") || text.startsWith("***"))))) italic = true;
+  if (!strike && hasDoubleDelim(state, sel.from, sel.to, "~~")) strike = true;
+  if (!highlight && hasDoubleDelim(state, sel.from, sel.to, "==", true)) highlight = true;
+  if (!code && ((text.length >= 2 && text.startsWith("`") && text.endsWith("`") && !text.startsWith("``"))
+    || (state.sliceDoc(sel.from - 1, sel.from) === "`" && state.sliceDoc(sel.to, sel.to + 1) === "`"))) {
+    code = true;
+  }
+  if (!link && (/^\[[^\]]+\]\([^)]*\)$/.test(text) || /^\[\[[^\]\n]+\]\]$/.test(text))) link = true;
+
+  const block = detectBlockKind(state.doc.lineAt(sel.from).text);
+  return { bold, italic, strike, code, highlight, link, block, blockLabel: BLOCK_LABELS[block] };
 }
 
 /** A small table under the caret's line, the caret in its first cell. */
