@@ -58,7 +58,9 @@ run() { # name, what it checks, command…
 
 for s in "${stages[@]}"; do
   case "$s" in
-    rust)   run rust   "core and CLI tests"            cargo test --workspace ;;
+    # the MCP tests start the catalog-papers helper (target/debug/papers), but `cargo test` builds a package's bin only
+    # for its integration tests and kandinsky-papers has none: built first, or only a later e2e stage left it there
+    rust)   run rust   "core and CLI tests"            sh -c "cargo build -p kandinsky-papers && cargo test --workspace" ;;
     clippy) run clippy "lints as errors"               cargo clippy --workspace --all-targets -- -D warnings ;;
     py)     run py     "Python tests: vault scripts and plugin helpers" bash scripts/dev/py-tests.sh ;;
     ui)     run ui     "Svelte + TypeScript types (the app, and each plugin's ui/ with its build current)" sh -c "npm --prefix ui run check && node scripts/dev/plugin-ui.mjs --check" ;;
