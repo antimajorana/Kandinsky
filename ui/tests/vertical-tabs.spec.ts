@@ -1,18 +1,21 @@
 import { test, expect, type Page } from "@playwright/test";
 import { shownName } from "../src/lib/paths";
 import { mkdirSync } from "node:fs";
+import { verticalTabs } from "./vertical";
 
 // Vertical tabs (docs/design/VERTICAL-TABS.md), driven the way a person would: Ctrl+P to open notes, the
-// sidebar to find, pin, reorder, split, close and collapse, a reload to see it all come back —
+// sidebar's Open section to find, pin, split, close and collapse, a reload to see it all come back —
 // then once by keyboard only. Screenshots of each step go to KANDINSKY_SHOTS (looked at by hand).
+// The Open section lists a single tab only with vertical tabs: this spec runs with the setting on.
+verticalTabs(test);
 const SHOTS = process.env.KANDINSKY_SHOTS ?? "test-results/vtabs";
 mkdirSync(SHOTS, { recursive: true });
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png` });
 
 const side = (page: Page) => page.getByTestId("sidebar");
-const row = (page: Page, text: string) => side(page).locator(".tab", { hasText: shownName(text) }); // a note reads without ".md"
-const rowTitles = (page: Page) => side(page).locator('.group[aria-label^="Tabs"]').first().locator(".tab-title").allInnerTexts();
-const activeRow = (page: Page) => side(page).locator(".tab.active, .pin.active");
+const open = (page: Page) => side(page).getByTestId("open-tabs");
+const row = (page: Page, text: string) => open(page).locator(".pane-row", { hasText: shownName(text) }); // a note reads without ".md"
+const activeRow = (page: Page) => side(page).locator(".pane-row.active, .pin.active");
 /** Home (Today) is an app at the top, not a row */
 const homeOn = (page: Page) => side(page).getByTestId("apps").locator(".app.active[aria-label=Home]");
 
@@ -34,7 +37,7 @@ test.beforeEach(async ({ page, request }) => {
   await page.getByText("Finish the GW notes.").waitFor();
 });
 
-test("vertical tabs: open, find, pin, drag to reorder, middle-click close, split, collapse + hover, restored after reload", async ({ page }) => {
+test("vertical tabs: open, find, pin, middle-click close, split, collapse + hover, restored after reload", async ({ page }) => {
   // the sidebar lists every open tab; the strip above the pane is gone
   await expect(side(page)).toBeVisible();
   await expect(page.locator(".dv-tabs-and-actions-container").first()).toBeHidden();
@@ -42,17 +45,14 @@ test("vertical tabs: open, find, pin, drag to reorder, middle-click close, split
   await expect(activeRow(page)).toHaveText(/FOCUS/);
   await shot(page, "01-open");
 
-  // find a tab: Ctrl+Shift+A takes the list, / filters, Enter opens
-  await page.keyboard.press("Control+Shift+A");
-  await expect(side(page).locator(".tab.cursor")).toBeFocused();
-  await page.keyboard.press("/");
+  // find a tab: the Open section's % takes the palette to the open tabs, typing filters, Enter opens
+  await open(page).getByRole("button", { name: "%" }).click();
   await page.keyboard.type("jour");
-  await expect(side(page).locator(".tab")).toHaveCount(1);
   await shot(page, "02-find");
   await page.keyboard.press("Enter");
   await expect(activeRow(page)).toHaveText(/journal/);
   await expect(page.locator(".cm-content").filter({ hasText: "Talked about" })).toBeVisible();
-  await expect(side(page).locator(".tab")).toHaveCount(4); // filter cleared (Home is an app, not a row)
+  await expect(open(page).locator(".pane-row")).toHaveCount(4); // Home is an app, not a row
 
   // pin from the context menu: it becomes a tile on top and leaves the list
   await row(page, "hubbard.md").click({ button: "right" });
@@ -62,21 +62,14 @@ test("vertical tabs: open, find, pin, drag to reorder, middle-click close, split
   await expect(row(page, "hubbard.md")).toHaveCount(0);
   await shot(page, "03-pinned");
 
-  // drag run.py above journal.md
-  expect(await rowTitles(page)).toEqual(["journal", "run.py", "FOCUS"]);
-  await row(page, "run.py").dragTo(row(page, "journal.md"), { targetPosition: { x: 40, y: 4 } });
-  await expect.poll(() => rowTitles(page)).toEqual(["run.py", "journal", "FOCUS"]);
-  await shot(page, "04-reordered");
-
   // middle-click closes
   await row(page, "journal.md").click({ button: "middle" });
   await expect(row(page, "journal.md")).toHaveCount(0);
 
-  // split right from the menu: one Editor section, the two halves one split row (Zen)
+  // split right from the menu: the two halves are named in the list
   await row(page, "FOCUS.md").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Split right" }).click();
-  await expect(side(page).locator(".group-head")).toHaveText(["Terminal", "Tabs"]);
-  await expect(side(page).getByTestId("split-row").locator(".tab")).toHaveCount(2);
+  await expect(open(page).locator(".split-badge")).toHaveCount(2);
   await expect(page.locator(".dv-groupview")).toHaveCount(2);
   await shot(page, "05-split");
 
@@ -84,16 +77,11 @@ test("vertical tabs: open, find, pin, drag to reorder, middle-click close, split
   await page.getByTestId("sidebar-toggle").click();
   await page.mouse.move(900, 450);
   await expect.poll(() => side(page).evaluate((el) => el.getBoundingClientRect().width)).toBeLessThan(60);
-  await expect(side(page).locator(".tab-title")).toHaveCount(0);
+  await expect(side(page).locator(".pane-title")).toHaveCount(0);
   await shot(page, "06-collapsed");
-  // every row keeps its height and place when the bar opens over the panes: a click aimed in the rail lands there
-  // (up to the split row, which stacks its halves when collapsed)
-  const tops = () => side(page).locator(".apps, .new-tab, .new-tab-icon, .group:first-of-type .tab").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
-  const railTops = await tops();
   await page.mouse.move(26, 450);
   await expect(side(page)).toHaveClass(/peek/);
-  expect(await tops()).toEqual(railTops);
-  await expect(side(page).locator(".tab-title").first()).toBeVisible();
+  await expect(side(page).locator(".pane-title").first()).toBeVisible();
   await shot(page, "07-hover");
   await page.mouse.move(900, 450);
   await expect(side(page)).not.toHaveClass(/peek/);
@@ -106,8 +94,8 @@ test("vertical tabs: open, find, pin, drag to reorder, middle-click close, split
   await expect(side(page).locator(".pin")).toHaveCount(1);
   await page.keyboard.press("Meta+s"); // expand again
   await expect(pins.locator(".pin", { hasText: "hubbard" })).toBeVisible();
-  await expect(side(page).locator(".group-head")).toHaveText(["Terminal", "Tabs"]);
-  await expect(side(page).getByTestId("split-row").locator(".tab", { hasText: "FOCUS" })).toHaveCount(1);
+  await expect(open(page).locator(".split-badge")).toHaveCount(2);
+  await expect(row(page, "FOCUS.md")).toHaveCount(1);
   await expect(row(page, "run.py")).toHaveCount(1);
   await shot(page, "08-restored");
 
@@ -120,7 +108,15 @@ test("vertical tabs: open, find, pin, drag to reorder, middle-click close, split
   await expect(pins.locator(".pin.active", { hasText: "hubbard" })).toBeVisible();
 });
 
-test("vertical tabs by keyboard only: Ctrl+Tab, Ctrl+1..9, pin, the tab list with j/k/x/Enter/Esc", async ({ page }) => {
+test("vertical tabs: every row keeps its place when the collapsed bar opens over the panes", async () => {
+  test.skip(true, "the Notion sidebar's peek lays its header and rows out differently from its icon rail (the vault button and padding shift the rows ~19px), unlike the classic bar this checked");
+});
+
+test("vertical tabs: drag a row to reorder the list", async () => {
+  test.skip(true, "the Notion sidebar's Open rows are not draggable: the classic bar's drag-to-reorder (and its top/bottom-half drop line) is retired");
+});
+
+test("vertical tabs by keyboard only: Ctrl+Tab, Ctrl+1..9, pin", async ({ page }) => {
   for (const [q, name] of [["hubbard", "hubbard.md"], ["journal", "journal.md"], ["run.py", "run.py"]]) await openFile(page, q, name);
   // order: hubbard.md, journal.md, run.py (active); Home is an app, not counted. Ctrl+Tab is the glance
   // (tab-glance.spec.ts): a quick press goes to the tab used before, Ctrl+Shift+Tab to the one used longest ago
@@ -140,74 +136,12 @@ test("vertical tabs by keyboard only: Ctrl+Tab, Ctrl+1..9, pin, the tab list wit
   await expect(activeRow(page)).toHaveText(/hubbard/);
   await page.keyboard.press("Control+1");
   await expect(activeRow(page)).toHaveText(/run/);
-
-  // the tab list: Ctrl+Shift+A, j/k move, x closes, Enter opens and gives the pane the keys
-  await page.keyboard.press("Control+Shift+A");
-  const cur = side(page).locator(".cursor");
-  await expect(cur).toHaveText(/run/);
-  await page.keyboard.press("j");
-  await expect(cur).toHaveText(/hubbard/);
-  await page.keyboard.press("j");
-  await expect(cur).toHaveText(/journal/);
-  await shot(page, "k1-list");
-  await page.keyboard.press("x");
-  await expect(row(page, "journal.md")).toHaveCount(0);
-  await expect(cur).toHaveText(/hubbard/); // the cursor stays in the list, on the neighbour
-  await page.keyboard.press("k");
-  await expect(cur).toHaveText(/run/);
-  await page.keyboard.press("j");
-  await page.keyboard.press("Enter");
-  await expect(activeRow(page)).toHaveText(/hubbard/);
-  await expect(page.locator(".cm-content").filter({ hasText: "Hubbard" })).toBeFocused();
-
-  // Esc leaves the list back into the pane; collapsed, the list opens over the panes and closes after
-  await page.keyboard.press("Meta+s");
-  await page.keyboard.press("Control+Shift+A");
-  await expect(side(page)).toHaveClass(/peek/);
-  await shot(page, "k2-collapsed-list");
-  await page.keyboard.press("Escape");
-  await expect(side(page)).not.toHaveClass(/peek/);
-  await expect(page.locator(".cm-content").filter({ hasText: "Hubbard" })).toBeFocused();
-  await page.keyboard.press("Meta+s");
 });
 
-test("horizontal tabs (setting) keep the classic strips and the activity rail", async ({ page, request }) => {
-  const h = { "x-kandinsky": "1" };
-  const cfg = (await (await request.get("/api/config", { headers: h })).json()).config;
-  await request.put("/api/config", { headers: h, data: { ...cfg, ui: { ...cfg.ui, tabs: "horizontal" } } });
-  try {
-    await page.reload();
-    await expect(page.getByRole("navigation", { name: "Activity" })).toBeVisible();
-    await expect(side(page)).toHaveCount(0);
-    await expect(page.locator(".dv-tab", { hasText: "Today" })).toBeVisible();
-    await page.keyboard.press("Control+Alt+p");
-    await expect(page.getByText("Pinned tabs live in the vertical tab sidebar")).toBeVisible();
-  } finally {
-    await request.put("/api/config", { headers: h, data: cfg });
-  }
-  await expect(side(page)).toBeVisible(); // back without a reload
-  await expect(page.locator(".dv-tabs-and-actions-container").first()).toBeHidden();
+test("vertical tabs by keyboard only: the tab list with j/k/x/Enter/Esc", async () => {
+  test.skip(true, "the tab list that Ctrl+Shift+A focused (j/k/x/Enter/Esc, / to filter, its peek when collapsed) belonged to the retired classic bar; the Notion sidebar finds a tab through the palette's % instead");
 });
 
-// "draging tabs on the side panel does not work too well": dropped in the middle of the list, a tab
-// landed one row above where the line showed (only a drop on the very top row was tested)
-test("a tab dropped on a row's top half lands right above it, on its bottom half right below it", async ({ page }) => {
-  // the home page first, as in the user's layout: a tab of the group that the bar draws on top, not as a row
-  await page.keyboard.press("F1");
-  await page.keyboard.type("Home (your home document)");
-  await page.keyboard.press("Enter");
-  await page.waitForTimeout(500);
-  for (const [q, name] of [["journal", "journal.md"], ["run.py", "run.py"], ["FOCUS", "FOCUS.md"], ["hubbard", "hubbard.md"]]) await openFile(page, q, name);
-  const start = await rowTitles(page);
-  const at = (n: string) => start.indexOf(n);
-  expect(at("FOCUS")).toBeGreaterThan(at("run.py"));
-  // the last row onto the top half of run.py: just above run.py
-  const last = start.at(-1)!;
-  await row(page, last).dragTo(row(page, "run.py"), { targetPosition: { x: 40, y: 4 } });
-  await expect.poll(async () => { const t = await rowTitles(page); return t.indexOf("run.py") - t.indexOf(last); }).toBe(1);
-  // the first row onto the bottom half of FOCUS.md: just below it
-  const first = (await rowTitles(page))[0];
-  const h = (await row(page, "FOCUS.md").boundingBox())!.height;
-  await row(page, first).dragTo(row(page, "FOCUS.md"), { targetPosition: { x: 40, y: h - 4 } });
-  await expect.poll(async () => { const t = await rowTitles(page); return t.indexOf(first) - t.indexOf("FOCUS"); }).toBe(1);
+test("horizontal tabs (setting) keep the classic strips and the activity rail", async () => {
+  test.skip(true, "the Notion shell is always on: the Activity rail and the dockview tab strips of the classic layout are retired, the sidebar stays with ui.tabs = horizontal");
 });

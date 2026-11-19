@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+import { verticalTabs } from "./vertical";
 
 // One tab per pane (`[ui] one_tab`): opening a note replaces what the pane shows; a split (Ctrl+Enter in quick open:
 // beside) is another pane with its own one tab; Back brings the one before.
@@ -10,6 +11,8 @@ const setOneTab = async (request: APIRequestContext, on: boolean) => {
   expect((await request.put("/api/config", { headers: H, data: c })).ok()).toBe(true);
 };
 
+// the Open section lists a single tab only with vertical tabs
+verticalTabs(test);
 test.describe.configure({ mode: "serial" });
 test.beforeAll(async ({ request }) => {
   for (const n of ["one-a", "one-b", "one-c"]) await request.put("/api/file", { headers: H, data: { path: `notes/${n}.md`, text: `# ${n}\n\nBody of ${n}\n` } });
@@ -30,7 +33,7 @@ test("one tab per pane: a note opened replaces the one shown, a split keeps its 
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   const side = page.getByTestId("sidebar");
-  const tab = (n: string) => side.locator(".tab", { hasText: n });
+  const tab = (n: string) => side.getByTestId("open-tabs").locator(".pane-row", { hasText: n });
   await openNote(page, "one-a");
   await openNote(page, "one-b");
   await expect(tab("one-b")).toHaveCount(1);

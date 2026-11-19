@@ -29,7 +29,7 @@ test("middle click: a link opens beside and the note is unchanged; a tab closes"
   await page.evaluate(() => (window as unknown as { __kandinsky: { open(p: string): void } }).__kandinsky.open("mid/source.md"));
   await page.locator(".cm-editor:visible .cm-line", { hasText: "now." }).getByText("now.").dblclick().catch(() => {});
   // a middle click on its tab (the sidebar's list) closes it
-  const tab = page.getByTestId("sidebar").locator(".tab", { hasText: "source" }).first();
+  const tab = page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "source" }).first();
   await tab.click({ button: "middle" });
   await expect.poll(() => page.evaluate(() => (window as unknown as { __kandinsky: { panes(): { id: string }[] } }).__kandinsky.panes().some((p) => p.id.includes("source.md")))).toBe(false);
   await page.waitForTimeout(1200);

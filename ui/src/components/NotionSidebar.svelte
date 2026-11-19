@@ -534,6 +534,7 @@
                     <span class="nav-left">
                       {#if customIcon}<span class="fav-glyph">{customIcon}</span>{:else}<Icon name={t.icon} size={13} />{/if}
                       <span class="trunc pane-title">{t.title}</span>
+                      {#if t.hint}<span class="pane-hint">{t.hint}</span>{/if}<!-- two tabs of one name say which folder -->
                     </span>
                     {#if t.split > 0}<span class="split-badge">Split {t.split}</span>{/if}
                   </button>
@@ -689,6 +690,7 @@
   .pane-row:hover { background: var(--bg-hover); color: var(--text); }
   .pane-row.active { background: var(--accent-soft, var(--bg-active)); color: var(--heading); font-weight: 500; }
   .pane-row.split-shown { background: var(--bg-hover); color: var(--text); }
+  .pane-hint { flex: none; color: var(--text-faint); font-size: .88em; }
   .pane-main { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 0; font-size: calc(12.5px * var(--ui-scale, 1)); color: inherit; text-align: left; }
   .pane-row:hover .nav-left :global(.icon), .pane-row.active .nav-left :global(.icon) { color: currentColor; }
   .split-badge { flex: none; font-size: calc(9.5px * var(--ui-scale, 1)); font-weight: 600; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-faint); font-family: var(--font-mono); }

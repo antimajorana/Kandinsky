@@ -20,5 +20,5 @@ test("the history list shows the tabs visited and goes back to one", async ({ pa
   await expect(rows.first()).toContainText("journal");
   await expect(rows.first()).toContainText("here");
   await palette.getByText("hubbard", { exact: true }).first().click();
-  await expect(page.getByTestId("sidebar").locator(".tab.active", { hasText: "hubbard" })).toBeVisible();
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row.active", { hasText: "hubbard" })).toBeVisible();
 });
