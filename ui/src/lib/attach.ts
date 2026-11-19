@@ -1,11 +1,12 @@
 // Files pasted or dropped into text: clipboard paste saves immediately beside the note (`POST /api/attach`), while
-// external file drops open `DropFileChoiceModal` so the author can copy into `zAttachments/`, link in place (`file:///`),
+// external file drops open `DropFileChoiceModal` so the author can copy into the vault's attachment folder, link in place (`file:///`),
 // or copy beside the note.
 import { tick } from "svelte";
 import { createSubscriber } from "svelte/reactivity";
 import { api, ApiError } from "./api";
 import { IMAGE_RE } from "./paths";
 import { errText } from "./text";
+import { settings } from "./settings.svelte";
 import { toast } from "./state.svelte";
 
 /** Obsidian's name for clipboard images, which arrive as a bare "image.png". */
@@ -62,7 +63,10 @@ export function takeFiles(e: ClipboardEvent | DragEvent): Promise<File[]> | null
 
 // --- Interactive Drop-File Copy-vs-Link Workflow ------------------------------------------------
 
-export const VAULT_ATTACH_DIR = "zAttachments";
+export function vaultAttachDir(): string {
+  const configured = settings.config?.editor.attachment_folder?.trim().replace(/^\/+|\/+$/g, "");
+  return configured || "attachments";
+}
 export const VAULT_EMBED_RE = /\.(png|jpe?g|gif|webp|svg|avif|bmp|mp3|wav|ogg|m4a|opus|webm|mp4|pdf)$/i;
 
 export type DropFileChoice =
@@ -160,6 +164,7 @@ function sanitizeVaultName(name: string): string {
 }
 
 async function copyFilesToVaultAttachments(files: File[]): Promise<Attached[]> {
+  const attachDir = vaultAttachDir();
   const done: Attached[] = [];
   const taken = new Set<string>();
   for (const f of files) {
@@ -170,7 +175,7 @@ async function copyFilesToVaultAttachments(files: File[]): Promise<Attached[]> {
     let n = 1;
     while (n < 10_000) {
       const finalName = n === 1 ? `${stem}${ext}` : `${stem}-${n}${ext}`;
-      const destPath = `${VAULT_ATTACH_DIR}/${finalName}`;
+      const destPath = `${attachDir}/${finalName}`;
       try {
         if (taken.has(destPath) || (await api.exists(destPath))) { n++; continue; }
         await api.upload(destPath, f, false);
@@ -180,7 +185,7 @@ async function copyFilesToVaultAttachments(files: File[]): Promise<Attached[]> {
         break;
       } catch (err) {
         if (err instanceof ApiError && err.status === 409) { n++; continue; }
-        toast(`Could not copy ${f.name || "file"} into ${VAULT_ATTACH_DIR}/`, errText(err), "error");
+        toast(`Could not copy ${f.name || "file"} into ${attachDir}/`, errText(err), "error");
         break;
       }
     }

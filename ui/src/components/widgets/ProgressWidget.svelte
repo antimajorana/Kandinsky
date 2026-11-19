@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Nootion Progress & Countdown widget: live Year/Month/Week/Day pigment bars, frontmatter-backed
+  // Notion-style Progress & Countdown widget: live Year/Month/Week/Day pigment bars, frontmatter-backed
   // Goal progress with +/- steppers, and target-date Milestone countdowns.
   import { onMount } from "svelte";
   import { api } from "../../lib/api";

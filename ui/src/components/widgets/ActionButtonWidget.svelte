@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Nootion × Bauhaus Action Button widget for `.page` dashboards and ```view (`type: button`) blocks in `.md` notes.
+  // Notion-style × Bauhaus Action Button widget for `.page` dashboards and ```view (`type: button`) blocks in `.md` notes.
   import { tick } from "svelte";
   import Dialog from "../Dialog.svelte";
   import { api } from "../../lib/api";

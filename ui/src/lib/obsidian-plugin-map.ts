@@ -13,7 +13,7 @@ export const OBSIDIAN_BRIDGE: Record<string, ObsidianBridge> = {
     kind: "plugin",
     targetId: "templater",
     recommended: true,
-    summary: "Covered by Kandinsky's Templater & Folder Templates plugin (zMeta/Templates rules, Alt+E insert template, <% tp.* %> variables).",
+    summary: "Covered by Kandinsky's Templater & Folder Templates plugin (templates/ rules, Alt+E insert template, <% tp.* %> variables).",
   },
   "dataview": {
     kind: "plugin",
@@ -31,7 +31,7 @@ export const OBSIDIAN_BRIDGE: Record<string, ObsidianBridge> = {
     kind: "plugin",
     targetId: "paste-image-rename",
     recommended: true,
-    summary: "Covered by Kandinsky's Paste Image Rename plugin (saves pasted/dropped images into zAttachments named after the note).",
+    summary: "Covered by Kandinsky's Paste Image Rename plugin (saves pasted/dropped images into attachments/ named after the note).",
   },
   "pseudocode-in-obs": {
     kind: "plugin",
@@ -79,7 +79,7 @@ export const OBSIDIAN_BRIDGE: Record<string, ObsidianBridge> = {
     kind: "plugin",
     targetId: "external-files",
     recommended: true,
-    summary: "Covered by Kandinsky's External Attachments & Embeds plugin (links and opens external cloud files such as kDrive).",
+    summary: "Covered by Kandinsky's External Attachments & Embeds plugin (links and opens external files in your cloud folder).",
   },
   "external-file-embed-and-link": {
     kind: "plugin",
@@ -112,10 +112,9 @@ export const OBSIDIAN_BRIDGE: Record<string, ObsidianBridge> = {
     summary: "Covered by Kandinsky's Today plugin and Home & Today daily logs.",
   },
   "better-word-count": {
-    kind: "plugin",
-    targetId: "wordcount",
-    recommended: false,
-    summary: "Covered by Kandinsky's Word count plugin.",
+    kind: "unnecessary",
+    reason: "builtin",
+    summary: "Live word and character count is built into the status bar.",
   },
 
   // --- Unnecessary: already built natively into Kandinsky core (8) ---
@@ -174,25 +173,25 @@ export const OBSIDIAN_BRIDGE: Record<string, ObsidianBridge> = {
     summary: "Already built into Kandinsky (Settings → Drawing).",
   },
 
-  // --- Unnecessary: unused in vault / already covered by core views (4) ---
+  // --- Unnecessary: already covered by core features or optional extras (4) ---
   "obsidian-linter": {
     kind: "unnecessary",
     reason: "unused",
-    summary: "Unused in vault (all formatting rules off).",
+    summary: "Kandinsky keeps Markdown clean on save; formatting rules and frontmatter tools are built in.",
   },
   "obsidian-kanban": {
     kind: "unnecessary",
     reason: "unused",
-    summary: "Unused in vault (Bases already includes drag-and-drop Kanban boards).",
+    summary: "Built-in .base views include drag-and-drop Kanban boards without an extra plugin.",
   },
   "obsidian-icon-folder": {
     kind: "unnecessary",
     reason: "unused",
-    summary: "Unused in vault (built-in icons already work on sidebar apps and notes).",
+    summary: "Folder colors and custom note icons are built directly into the Pages sidebar.",
   },
   "auto-card-link": {
     kind: "unnecessary",
     reason: "unused",
-    summary: "Unused in vault (zero cardlink blocks).",
+    summary: "Link previews and rich bookmarks are built into Kandinsky notes without cardlink blocks.",
   },
 };

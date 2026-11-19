@@ -12,6 +12,7 @@
   import { reloadOnChange } from "../lib/reload-on-change";
   import { getDock, open, openPath } from "../lib/dock";
   import { editors, lastEditorId } from "../lib/registry";
+  import { settings } from "../lib/settings.svelte";
   import { app } from "../lib/state.svelte";
   import type { PaneProps } from "../lib/dock";
   import { Sim, type SimNode } from "../lib/graph/sim";
@@ -62,14 +63,15 @@
 
   function domainOf(path: string, kind: Kind): Domain {
     if (kind === "tag") return "meta";
+    const devMode = Boolean(settings.config?.developer_mode);
     const low = path.replace(/\\/g, "/").replace(/^\/+/, "").toLowerCase();
     const base = low.split("/").pop() ?? low;
     if (/\.(ipynb|wln)$/i.test(base) || low.startsWith("notebooks/") || low.includes("/notebooks/")) return "notebooks";
-    if (/\.pdf$/i.test(base) || low.startsWith("wiki/sources/") || low === "wiki/sources" || low.startsWith("zai/papers/") || low.startsWith("papers/") || low.includes("/papers/")) return "sources";
-    if (low.startsWith("wiki/entities/") || low.startsWith("entities/") || low.includes("/entities/")) return "entities";
+    if (/\.pdf$/i.test(base) || low.startsWith("papers/") || low.includes("/papers/") || (devMode && (low.startsWith("wiki/sources/") || low === "wiki/sources" || low.startsWith("zai/papers/")))) return "sources";
+    if (low.startsWith("entities/") || low.includes("/entities/") || (devMode && low.startsWith("wiki/entities/"))) return "entities";
     if (low.startsWith("problems/") || low.includes("/problems/")) return "problems";
-    if (low.startsWith("wiki/concepts/") || low.startsWith("concepts/") || low.includes("/concepts/") || low.startsWith("wiki/lectures/")) return "concepts";
-    if (low.startsWith("wiki/meta/") || low.startsWith("zai/") || low.startsWith("zmeta/") || low.startsWith("genkan/") || low.startsWith(".agents/") || low.startsWith(".claude/") || /^(agents|claude|gemini)\.md$/i.test(base) || /^wiki\/(hot|index|log|overview)\.md$/i.test(low)) return "meta";
+    if (low.startsWith("concepts/") || low.includes("/concepts/") || (devMode && (low.startsWith("wiki/concepts/") || low.startsWith("wiki/lectures/")))) return "concepts";
+    if (devMode && (low.startsWith("wiki/meta/") || low.startsWith("zai/") || low.startsWith("zmeta/") || low.startsWith("genkan/") || low.startsWith(".agents/") || low.startsWith(".claude/") || /^(agents|claude|gemini)\.md$/i.test(base) || /^wiki\/(hot|index|log|overview)\.md$/i.test(low))) return "meta";
     return kind === "attachment" ? "notebooks" : "other";
   }
 

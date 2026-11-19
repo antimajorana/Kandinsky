@@ -22,6 +22,7 @@
 
   let { host }: { host: BlockHost } = $props();
   const wide = $derived(host !== "side" || sideWide());
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
   const groups = $derived(tabGroups());
   const flat = $derived(flatIds());
   /** The Terminal heading's "+": what to start there (a menu under the button). */
@@ -54,9 +55,9 @@
         : zone === "main" && splitPair.ids.length > 1 ? gs.flatMap((g) => g.tabs.filter((t) => splitPair.ids.includes(t.id)).map((t) => ({ g, t }))) : [];
       const inSplit = new Set(split.map((e) => e.t.id));
       return { zone, label: LABEL[zone], groups: gs, visible: shown.length > 0, split, rest: gs.flatMap((g) => g.tabs.filter((t) => !inSplit.has(t.id)).map((t) => ({ g, t }))) };
-    }).filter((x) => x.split.length || x.rest.length || x.zone !== "main"); // only an app (Home) open: no bare "Tabs"
-    // the terminal keeps its heading (and its buttons) in its place with nothing open
-    if (!side.filter && !out.some((x) => x.zone === "bottom")) out.unshift({ zone: "bottom", label: LABEL.bottom, groups: [], visible: false, split: [], rest: [] });
+    }).filter((x) => (x.zone !== "bottom" || devMode || x.split.length > 0 || x.rest.length > 0) && (x.split.length || x.rest.length || x.zone !== "main")); // only an app (Home) open: no bare "Tabs"
+    // the terminal keeps its heading (and its buttons) in its place with nothing open in Developer mode
+    if (devMode && !side.filter && !out.some((x) => x.zone === "bottom")) out.unshift({ zone: "bottom", label: LABEL.bottom, groups: [], visible: false, split: [], rest: [] });
     return out;
   });
   $effect(() => { if (side.filtering && flat.length && (!side.cursor || !flat.includes(side.cursor))) side.cursor = flat[0]; });
@@ -101,7 +102,9 @@
       {@const right = settings.config?.terminal.position === "right"}
       <button class="icon-btn small-btn" class:off={!visible} onclick={toggleTerminalPanel} aria-label="{visible ? 'Hide' : 'Show'} the terminal panel" title="{visible ? 'Hide' : 'Show'} the terminal panel · {keysOf('ui.panel') ?? keyText('Super+J')} (the shells keep running)"><Icon name={visible ? "minus" : "chevron-down"} size={13} /></button>
       <button class="icon-btn small-btn" onclick={() => dockTerminal(right ? "bottom" : "right")} aria-label={right ? "Dock terminal at the bottom" : "Dock terminal on the right"} title={right ? "Dock at the bottom" : "Dock on the right"}><Icon name={right ? "panel-bottom" : "panel-right"} size={13} /></button>
-      <button class="icon-btn small-btn" onclick={newTerminalMenu} aria-haspopup="menu" aria-label="New terminal" title="New terminal: a shell or a Claude session"><Icon name="plus" size={13} /></button>
+      {#if devMode}
+        <button class="icon-btn small-btn" onclick={newTerminalMenu} aria-haspopup="menu" aria-label="New terminal" title="New terminal: a shell or a Claude session"><Icon name="plus" size={13} /></button>
+      {/if}
     {/if}
   </div>
 {/snippet}

@@ -37,7 +37,7 @@
 </script>
 
 <script lang="ts">
-  // Nootion Pomodoro widget: Focus / Short break / Long break tabs, Bauhaus SVG progress ring,
+  // Notion-style Pomodoro widget: Focus / Short break / Long break tabs, Bauhaus SVG progress ring,
   // tabular MM:SS countdown, Start/Pause/Reset/Skip controls, session dots, and gentle WebAudio chime.
   import { onMount, untrack } from "svelte";
 

@@ -1,4 +1,4 @@
-// Shared Nootion column display modes, status classification, and value formatters for Obsidian `.base` views.
+// Shared Notion-style column display modes, status classification, and value formatters for Obsidian `.base` views.
 // Metadata lives optionally under `.base` `properties.<col>.{format, currency, max}` with safe auto-detection fallbacks.
 import type { BaseCell } from "./gen/BaseCell";
 

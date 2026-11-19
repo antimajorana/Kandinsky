@@ -45,6 +45,8 @@ export interface Action {
   fromTerminal?: boolean;
   /** A built-in plugin's command (builtin-plugins.ts): it exists only while that plugin is on. */
   plugin?: BuiltinId;
+  /** Developer-only command: hidden from palette, shortcuts, and menus when developer_mode is false. */
+  developerOnly?: boolean;
   /** CSS selector of panes that keep this chord for themselves (the PDF zooms its page, not the app). */
   yieldTo?: string;
   /** As a toolbar button (lib/toolbar.ts): its icon, and a short name when the title is a sentence. */
@@ -175,7 +177,7 @@ export async function sendToAgent(): Promise<void> {
   const live = () => [...terminals].filter(([, t]) => sends(t) && t.ready()).sort(([, a], [, b]) => b.usedAt - a.usedAt)[0];
   const first = declared[0];
   if (!live()) {
-    if (!first) { toast("No AI agent here", "Switch on an agent plugin (Antigravity or Claude) in Settings → Plugins, then send again."); return; }
+    if (!first) { toast("No AI agent here", "Enable Developer mode and an AI agent plugin in Settings → Plugins", "info"); return; }
     open({ kind: "terminal", preset: "claude", agent: first.ref, n: nextTerminalN() });
   }
   for (let i = 0; i < 80; i++) {
@@ -264,7 +266,7 @@ export const actions: Action[] = [
   { id: "note.toggle", title: "Note: insert collapsible toggle block", where: "note", run: () => noteFormat.run?.("toggle") },
   { id: "note.columns", title: "Note: insert multi-column block", where: "note", run: () => noteFormat.run?.("columns") },
   { id: "note.toc", title: "Note: insert Table of Contents ([[_TOC_]])", where: "note", run: () => noteFormat.run?.("toc") },
-  { id: "note.voice", title: "Note: record voice memo (/voice → zAttachments/)", icon: "headphones", run: () => { window.dispatchEvent(new CustomEvent("kandinsky:voice-record")); } },
+  { id: "note.voice", title: "Note: record voice memo (/voice)", icon: "headphones", run: () => { window.dispatchEvent(new CustomEvent("kandinsky:voice-record")); } },
   { id: "note.link", title: "Note: link", keys: "Ctrl+K", where: "note", run: () => noteFormat.run?.("link") },
   { id: "note.task", title: "Note: to-do on this line (again: done, again: open)", keys: "Ctrl+L", where: "note", run: () => noteFormat.run?.("task") },
   // Obsidian Tasks' dialog: the caret's line (a to-do, or text that becomes one) with its fields in a form
@@ -294,16 +296,16 @@ export const actions: Action[] = [
   { id: "ui.canvas", title: "New canvas whiteboard (.canvas)", icon: "grid", keys: "Super+Shift+C", run: () => import("./canvas-new").then((m) => m.newCanvas()) },
   { id: "draw.exportSvg", title: "Drawing: export as SVG (beside it)", run: () => void exportDrawing() },
   { id: "draw.properties", title: "Drawing: its properties (tags, project, topics — its note, beside it)", run: () => drawingProperties() },
-  { id: "ui.terminal", title: "Focus terminal (again: hide)", keys: "Ctrl+`", fromTerminal: true, run: () => focusTerminalPanel() },
+  { id: "ui.terminal", title: "Focus terminal (again: hide)", keys: "Ctrl+`", fromTerminal: true, developerOnly: true, run: () => focusTerminalPanel() },
   // Super+F fullscreen; F11 distraction-free Zen mode across notes, pages, canvas & drawings
   { id: "ui.zen", title: "Zen mode: distraction-free fullscreen (notes, pages, canvas & drawings)", icon: "maximize", keys: "F11", run: () => { window.dispatchEvent(new CustomEvent("kandinsky:toggle-zen")); } },
   { id: "ui.fullscreen", title: "Fullscreen: this tab (terminal or editor) over the whole window; again: back", keys: "Super+F", run: () => { void toggleFullscreen(); } },
-  { id: "ui.terminal.new", title: "New shell terminal", run: () => { open({ kind: "terminal", preset: "shell", n: nextTerminalN() }); } },
+  { id: "ui.terminal.new", title: "New shell terminal", developerOnly: true, run: () => { open({ kind: "terminal", preset: "shell", n: nextTerminalN() }); } },
   // the id stays (keys the user rebound); the agent is the one used last (lib/agents.ts)
-  { id: "ui.sendToClaude", title: "Send the selection to the AI agent (@file#lines for Claude)", keys: "Ctrl+Alt+Enter", run: () => sendToAgent() },
+  { id: "ui.sendToClaude", title: "Send the selection to the AI agent (@file#lines for Claude)", keys: "Ctrl+Alt+Enter", developerOnly: true, run: () => sendToAgent() },
   // the ids stay (keys the user rebound): the agent is a plugin's (pty.rs: the `claude` agent, else the first declared)
-  { id: "ui.claude", title: "AI agent terminal (Claude, or the agent a plugin declares)", icon: "claude", label: "Agent", keys: "Super+K", run: () => claudeTerminal() },
-  { id: "ui.claude.new", title: "New AI agent session (another one beside the first)", run: () => { open({ kind: "terminal", preset: "claude", n: nextTerminalN() }); } },
+  { id: "ui.claude", title: "AI agent terminal (Claude, or the agent a plugin declares)", icon: "claude", label: "Agent", keys: "Super+K", developerOnly: true, run: () => claudeTerminal() },
+  { id: "ui.claude.new", title: "New AI agent session (another one beside the first)", developerOnly: true, run: () => { open({ kind: "terminal", preset: "claude", n: nextTerminalN() }); } },
   { id: "ui.files", title: "Show files", icon: "files", label: "Files", keys: "Super+Shift+F", run: () => { open({ kind: "files" }); } },
   // the big explorer (a tab, like Dolphin): the vault, SSH hosts, copyparty servers in one list
   { id: "ui.explorer", title: "Files: the explorer (vault, SSH hosts, servers)", icon: "folder-open", label: "Explorer", run: () => { open({ kind: "explorer", source: "vault", place: "" }); } },
@@ -313,7 +315,7 @@ export const actions: Action[] = [
   // Super+Q is Kandinsky's key (also from a terminal, which keeps Ctrl+W for the shell); Ctrl+W stays
   { id: "ui.close", title: "Close tab", keys: "Super+Q", alsoKeys: ["Ctrl+W"], run: () => closeActive() },
   { id: "ui.reload", title: "Reload the interface", run: () => { void reloadInterface(); } },
-  { id: "ui.vim", title: "Toggle vim mode", run: () => { toggleVim(); toast(`Vim mode ${app.vimEnabled ? "off" : "on"}`); } },
+  { id: "ui.vim", title: "Toggle vim mode", developerOnly: true, run: () => { toggleVim(); toast(`Vim mode ${app.vimEnabled ? "off" : "on"}`); } },
   { id: "ui.theme", title: "Toggle light / dark theme", icon: () => (app.theme === "dark" ? "sun" : "moon"), label: "Toggle theme", run: () => toggleTheme() },
   { id: "ui.plugins", title: "Plugins: browse & manage plugins", label: "Plugins", icon: "plugin", run: () => { openSettingsAt("plugins"); } },
   { id: "ui.settings", title: "Settings", icon: "settings", keys: "Super+,", run: () => { open({ kind: "settings" }); } },
@@ -329,8 +331,8 @@ export const actions: Action[] = [
   { id: "ui.libraries", title: "Libraries (drawings, references, films, comics…)", icon: "library", label: "Libraries", run: () => openLibraries() },
   // one Library page: References is its first library
   { id: "ui.library", title: "Library: references, then the vault's other libraries", icon: "library", label: "Library", keys: "Super+Shift+L", plugin: "library", run: () => openLibraries("references") },
-  { id: "ui.git", title: "Git: changes and history", icon: "git", label: "Git", keys: "Super+G", run: () => { open({ kind: "git" }); } },
-  { id: "ui.git.blame", title: "Git: who changed each line (blame)", icon: "git", run: () => void toggleBlame() },
+  { id: "ui.git", title: "Git: changes and history", icon: "git", label: "Git", keys: "Super+G", developerOnly: true, run: () => { open({ kind: "git" }); } },
+  { id: "ui.git.blame", title: "Git: who changed each line (blame)", icon: "git", developerOnly: true, run: () => void toggleBlame() },
   { id: "note.history", title: "Page: Version history, diff & restore…", icon: "clock", run: () => {
     const p = context.active?.path;
     if (!p) { toast("Version history", "Open a note or page first to view its history."); return; }
@@ -346,22 +348,22 @@ export const actions: Action[] = [
   { id: "ui.sidePanel", title: "Show / hide the side panel (files, search, outline, git)", icon: "folder-tree", label: "Side panel (show / hide)", keys: "Super+B", run: () => toggleSidePanel() },
   { id: "ui.sidePanel.move", title: "Move side panel (beside the editors ↔ in the left bar)", run: () => placeSidePanel(sideInBar() ? "dock" : "sidebar") },
   { id: "ui.calendar", title: "Calendar: open monthly, weekly, agenda & Daily Note schedule", icon: "calendar", label: "Calendar", keys: "Alt+C", run: () => { open({ kind: "calendar" }); } },
-  { id: "ui.panel", title: "Show / hide terminal panel", icon: "terminal", label: "Terminal (show / hide)", keys: "Super+J", run: () => toggleTerminalPanel() },
-  { id: "ui.panel.move", title: "Move terminal panel (bottom ↔ right)", run: () => setTerminalPosition(settings.config?.terminal.position === "right" ? "bottom" : "right") },
+  { id: "ui.panel", title: "Show / hide terminal panel", icon: "terminal", label: "Terminal (show / hide)", keys: "Super+J", developerOnly: true, run: () => toggleTerminalPanel() },
+  { id: "ui.panel.move", title: "Move terminal panel (bottom ↔ right)", developerOnly: true, run: () => setTerminalPosition(settings.config?.terminal.position === "right" ? "bottom" : "right") },
   { id: "ui.properties.inline", title: "Properties: show them in the note (as Obsidian)", run: () => setPropertiesView("inline") },
   { id: "ui.web", title: "Open web page…", run: () => openPalette("url") },
   { id: "ui.openWith", title: "Open with… (this file in another view)", keys: "Ctrl+Alt+O", run: () => openWith() },
   { id: "ui.focusFile", title: "Edit FOCUS.md", run: () => openPath(app.workspace?.config.focus ?? "FOCUS.md") },
-  { id: "ui.workspace.preset.quad", title: "Workspace: Research Quad (PDF + Note + Solver + Antigravity)", icon: "grid", label: "Research Quad", run: () => void applyWorkspacePreset("research-quad") },
-  { id: "ui.workspace.preset.derivation", title: "Workspace: Derivation Studio (Note + Notebook + Terminal)", icon: "sigma", label: "Derivation Studio", run: () => void applyWorkspacePreset("derivation-studio") },
+  { id: "ui.workspace.preset.quad", title: "Workspace: Research Quad (PDF + Note + Solver + Antigravity)", icon: "grid", label: "Research Quad", developerOnly: true, run: () => void applyWorkspacePreset("research-quad") },
+  { id: "ui.workspace.preset.derivation", title: "Workspace: Derivation Studio (Note + Notebook + Terminal)", icon: "sigma", label: "Derivation Studio", developerOnly: true, run: () => void applyWorkspacePreset("derivation-studio") },
   { id: "ui.workspace.preset.focus", title: "Workspace: Focus Sheet (Distraction-free writing)", icon: "file-text", label: "Focus Sheet", run: () => void applyWorkspacePreset("focus-sheet") },
   { id: "ui.workspace.save", title: "Workspace: Save current layout…", icon: "panel-left", run: () => askSaveWorkspace() },
   { id: "ui.workspace.switch", title: "Workspace: Load / manage saved workspaces…", keys: "Ctrl+Alt+W", icon: "grid", run: () => askManageWorkspaces() },
   { id: "ui.resetLayout", title: "Reset layout", run: () => resetLayout() },
-  { id: "ui.python.env", title: "Python: choose the environment (for the Python server and new terminals)", icon: "terminal", run: () => void import("./python-env").then((m) => m.choosePythonEnv()) },
+  { id: "ui.python.env", title: "Python: choose the environment (for the Python server and new terminals)", icon: "terminal", developerOnly: true, run: () => void import("./python-env").then((m) => m.choosePythonEnv()) },
   { id: "ui.glance", title: "Glance: follow another device (what it shows, full screen)", icon: "eye", run: () => void import("./where.svelte").then((m) => m.followDevice()) },
-  { id: "ui.symbols", title: "Go to a symbol in the project (functions, classes…)", icon: "file-code", run: () => goToSymbol() },
-  { id: "ui.problems", title: "Problems: errors and warnings of the current file", keys: "Super+M", run: () => showProblems() },
+  { id: "ui.symbols", title: "Go to a symbol in the project (functions, classes…)", icon: "file-code", developerOnly: true, run: () => goToSymbol() },
+  { id: "ui.problems", title: "Problems: errors and warnings of the current file", keys: "Super+M", developerOnly: true, run: () => showProblems() },
   { id: "ui.graph", title: "Graph view: the notes and the links between them", icon: "graph", label: "Graph view", keys: "Super+Shift+G", plugin: "graph", run: () => { open({ kind: "graph" }); } },
   { id: "ui.bases", title: "Bases: open one of the vault's bases, or make a new one", icon: "table", label: "Bases", plugin: "bases", run: () => void import("./bases-pick").then((m) => m.pickBase()) },
   { id: "ui.commands", title: "Commands & keyboard shortcuts (all commands, new command)", icon: "command", label: "Commands & shortcuts", keys: "Super+Shift+K", run: () => { open({ kind: "commands" }); } },

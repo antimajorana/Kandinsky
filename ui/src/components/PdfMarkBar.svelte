@@ -10,7 +10,10 @@
     sendPassageToAgent,
     type AgentTarget,
   } from "../lib/editor-insert-bus";
+  import { settings } from "../lib/settings.svelte";
   import { toast } from "../lib/state.svelte";
+
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
 
   let { mark, at, path = "", onrecolor, onreword, ondelete, onclose }: {
     mark: Mark;
@@ -96,27 +99,29 @@
   {/if}
   {#if mark.tags?.length}<span class="tags">{mark.tags.map((t) => `#${t}`).join(" ")}</span>{/if}
   {#if arxivId}<span class="arxiv-pill" title="Detected arXiv paper ID">arXiv:{arxivId}</span>{/if}
-  <span class="sep"></span>
-  <div class="send-wrap">
-    <button
-      class="send-btn"
-      title="Send this highlighted passage or region to Antigravity, Claude, or Solver"
-      onclick={(e) => {
-        e.stopPropagation();
-        sendOpen = !sendOpen;
-      }}
-    >
-      Send to Agent ▾
-    </button>
-    {#if sendOpen}
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <div class="send-menu" tabindex="-1" onclick={(e) => e.stopPropagation()} role="menu">
-        <button role="menuitem" onclick={() => void sendMarkToAgent("antigravity")}>Antigravity</button>
-        <button role="menuitem" onclick={() => void sendMarkToAgent("claude")}>Claude</button>
-        <button role="menuitem" onclick={() => void sendMarkToAgent("solver")}>Solver</button>
-      </div>
-    {/if}
-  </div>
+  {#if devMode}
+    <span class="sep"></span>
+    <div class="send-wrap">
+      <button
+        class="send-btn"
+        title="Send this highlighted passage or region to Antigravity, Claude, or Solver"
+        onclick={(e) => {
+          e.stopPropagation();
+          sendOpen = !sendOpen;
+        }}
+      >
+        Send to Agent ▾
+      </button>
+      {#if sendOpen}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div class="send-menu" tabindex="-1" onclick={(e) => e.stopPropagation()} role="menu">
+          <button role="menuitem" onclick={() => void sendMarkToAgent("antigravity")}>Antigravity</button>
+          <button role="menuitem" onclick={() => void sendMarkToAgent("claude")}>Claude</button>
+          <button role="menuitem" onclick={() => void sendMarkToAgent("solver")}>Solver</button>
+        </div>
+      {/if}
+    </div>
+  {/if}
   <span class="sep"></span>
   <button class="icon" title="Delete this mark (Delete; Ctrl+Z brings it back)" aria-label="Delete mark" onclick={ondelete}><Icon name="trash" size={14} /></button>
   <button class="icon" title="Done (Esc)" aria-label="Close" onclick={onclose}><Icon name="close" size={14} /></button>

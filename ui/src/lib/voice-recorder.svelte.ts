@@ -1,7 +1,8 @@
-// Reactive state, window event bridge (`kandinsky:voice-record`), and vault upload helper (`zAttachments/recording-…`)
+// Reactive state, window event bridge (`kandinsky:voice-record`), and vault upload helper (`<attachment_folder>/recording-…`)
 // for the `/voice` audio recorder modal.
 import type { EditorView } from "@codemirror/view";
 import { api } from "./api";
+import { vaultAttachDir } from "./attach";
 import { activeEditorId, lastEditorId } from "./dock";
 import { editors } from "./registry";
 import { toast } from "./state.svelte";
@@ -120,11 +121,12 @@ function normalizeAudioExt(blob: Blob, ext?: string): string {
 export async function saveVoiceRecording(blob: Blob, ext?: string): Promise<{ path: string; embed: string }> {
   const cleanExt = normalizeAudioExt(blob, ext);
   const stamp = formatRecordingStamp();
-  let targetPath = `zAttachments/recording-${stamp}.${cleanExt}`;
+  const dir = vaultAttachDir();
+  let targetPath = `${dir}/recording-${stamp}.${cleanExt}`;
   for (let suffix = 2; suffix < 100; suffix++) {
     const taken = await api.exists(targetPath).catch(() => false);
     if (!taken) break;
-    targetPath = `zAttachments/recording-${stamp}-${suffix}.${cleanExt}`;
+    targetPath = `${dir}/recording-${stamp}-${suffix}.${cleanExt}`;
   }
   await api.upload(targetPath, blob, false);
   return { path: targetPath, embed: `![[${targetPath}]]` };

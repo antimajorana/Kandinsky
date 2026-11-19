@@ -489,6 +489,8 @@ export const api = {
     request<import("./gen/TrustedBinary").TrustedBinary[]>("DELETE", "/api/security/binaries", {
       query: { command, sha256 },
     }),
+  notebookRun: (body: { path?: string; cells: Array<{ index: number; source: string }>; timeout?: number }) =>
+    request<unknown>("POST", "/api/notebook/run", { body }),
 };
 
 // --- WebSockets ----------------------------------------------------------------------------

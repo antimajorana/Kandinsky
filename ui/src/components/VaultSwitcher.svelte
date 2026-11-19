@@ -5,12 +5,15 @@
   import Icon from "./Icon.svelte";
   import Dialog from "./Dialog.svelte";
   import { errText } from "../lib/text";
+  import { settings } from "../lib/settings.svelte";
   import { toast } from "../lib/state.svelte";
   import { askFolder, askServer, forgetVault, openVault, setMirror, vaultListing, type VaultEntry } from "../lib/vaults";
   import { forgetMirrorState, hostOf, reach, serverVaults, type MirrorState } from "../lib/mirror";
 
   /** `linkMirror`: opened from a note ("edit live on its mirror"): this window's folder at its mirror form. */
   let { onclose, linkMirror = false }: { onclose: () => void; linkMirror?: boolean } = $props();
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
+  let syncGuideOpen = $state(false);
   let entries = $state<VaultEntry[]>([]);
   let manage = $state(false);
   let failed = $state("");
@@ -112,7 +115,7 @@
   <div class="dialog">
     <div class="search">
       <Icon name="search" size={15} />
-      <input bind:this={input} bind:value={query} placeholder="Switch vault — type a name, or a folder or server address" spellcheck="false" aria-label="Search vaults" />
+      <input bind:this={input} bind:value={query} placeholder={devMode ? "Switch vault — type a name, or a folder or server address" : "Switch vault — type a vault name or folder path"} spellcheck="false" aria-label="Search vaults" />
     </div>
 
     <ul class="rows" role="listbox" aria-label="Vaults">
@@ -141,7 +144,7 @@
           {#if e.managed}
             <span class="acts">
               {#if e.mirror && reached[e.mirror] === "signin"}<button class="act" onclick={() => { window.open(`/signin/door?url=${encodeURIComponent(new URL(e.mirror!).origin + "/")}`, "_blank"); }} title="The mirror's sign-in page, in a window of Kandinsky">Sign in</button>{/if}
-              {#if e.kind === "folder"}<button class="act" onclick={() => void startLinking(e)} title="Link this folder to its copy on a server">{e.mirror ? "Mirror…" : "Link mirror…"}</button>{/if}
+              {#if (devMode || e.mirror) && e.kind === "folder"}<button class="act" onclick={() => void startLinking(e)} title="Link this folder to its copy on a server">{e.mirror ? "Mirror…" : "Link mirror…"}</button>{/if}
               {#if !e.current}<button class="act" class:danger={removing === e.path} onclick={() => void remove(e)} title="Take it off this list (nothing is deleted)">{removing === e.path ? "Remove?" : "Remove"}</button>{/if}
             </span>
           {/if}
@@ -177,11 +180,27 @@
       {/if}
     </ul>
 
+      <div class="sync-guide">
+        <button type="button" class="sync-toggle" aria-expanded={syncGuideOpen} onclick={() => (syncGuideOpen = !syncGuideOpen)}>
+          <span>Sync across devices — Cloud folder guide</span>
+          <span class="sync-chev" class:open={syncGuideOpen}><Icon name="chevron" size={12} /></span>
+        </button>
+        {#if syncGuideOpen}
+          <p class="sync-copy">
+            Because a Kandinsky vault is just a folder of plain Markdown files, placing or opening a vault inside
+            <strong>iCloud Drive</strong>, <strong>OneDrive</strong>, <strong>Dropbox</strong>, <strong>Google Drive</strong>,
+            <strong>kDrive</strong>, or <strong>Syncthing</strong> syncs your notes automatically across computers with zero account setup.
+          </p>
+        {/if}
+      </div>
+
     {#if manage}
       <div class="foot">
         <button class="btn" onclick={() => act(() => void askFolder(false))}><Icon name="folder-open" size={14} /> Open folder…</button>
         <button class="btn" onclick={() => act(() => void askFolder(true))}><Icon name="plus" size={14} /> New vault…</button>
-        <button class="btn" onclick={() => act(askServer)}><Icon name="server" size={14} /> Connect to a server…</button>
+        {#if devMode}
+          <button class="btn" onclick={() => act(askServer)}><Icon name="server" size={14} /> Connect to a server…</button>
+        {/if}
         <span class="grow"></span>
         <span class="hint">↑↓ Enter · Esc</span>
       </div>
@@ -232,5 +251,11 @@
   .btn.primary { color: var(--accent-fg); background: var(--accent); border-color: transparent; }
   .btn:disabled { opacity: .5; cursor: default; }
   .note { padding: 14px 12px; color: var(--text-muted); font-size: calc(13px * var(--ui-scale, 1)); }
+  .sync-guide { border-top: 1px solid var(--border); padding: 8px 12px; background: var(--bg-alt); }
+  .sync-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; font: inherit; font-size: calc(12.5px * var(--ui-scale, 1)); font-weight: 500; color: var(--text-muted); text-align: left; cursor: pointer; }
+  .sync-toggle:hover { color: var(--text); }
+  .sync-chev { display: inline-flex; transition: transform .12s ease; }
+  .sync-chev.open { transform: rotate(90deg); }
+  .sync-copy { margin: 6px 0 2px; font-size: calc(12px * var(--ui-scale, 1)); line-height: 1.45; color: var(--text-muted); }
   @media (max-width: 520px) { .acts { display: flex; } .badges { display: none; } }
 </style>

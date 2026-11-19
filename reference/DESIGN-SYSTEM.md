@@ -1,4 +1,4 @@
-# Kandinsky Design System: Nootion Workspace × Obsidian Mechanics × Wassily Kandinsky Art
+# Kandinsky Design System: Kandinsky Paper × Obsidian Mechanics × Wassily Kandinsky Art
 
 This reference specification governs all UI/UX styling for **Kandinsky** (`kandinsky-source/ui/src/`).
 Pair this document with the `1440×900` reference captures in this folder:
@@ -12,14 +12,14 @@ Run `npm run visual-diff` in `$env:LOCALAPPDATA\Kandinsky` (or `craft-anything-c
 
 ## 1. Core Design Philosophy
 
-1. **Looks like Nootion / Notion (Unified Sidebar + Clean Page Canvas):**
+1. **Looks like Kandinsky Paper / Notion (Unified Sidebar + Clean Page Canvas):**
    - **Single unified navigation sidebar:** One clean `248px` collapsible sidebar replaces the old outer icon rail and multi-tab IDE strip in default Notion shell mode (with a Settings toggle to keep Dockview split tabs / Classic Rail available for power workflows):
      - Vault header (`The Oracle`) with the *Several Circles* emblem.
      - Primary navigation rows (`Search` `Ctrl K`, `Quick capture` `Ctrl Alt N`, `Home`, `Notifications`, `All pages`, `Graph`).
      - Collapsible `Favorites` and vault page tree with page icons and semantic folder accents.
      - Pinned bottom actions (`Trash`, `Plugins`, `Settings`).
    - **Minimal document top bar:** Clean breadcrumb trail (`The Oracle > wiki / concepts > ...`) on the left; `Edited ...`, `Star`, `History`, `...` menu (Full width, Source `Ctrl+E`), `Share/Export`, and `Trash` on the right—no IDE tab strip cluttering normal reading/writing.
-   - **Page hero & blocks:** Optional cover image banner / subtle `Add a cover` action, large note icon emblem, `33px` bold title (`letter-spacing: -0.028em`), compact **Notion property rows** (`13px` muted key on left, colored pills/dates/links on right), `/` slash-command menu, `+` / `⋮⋮` margin handles, inline highlights, toggles, horizontal-rule tables, and Nootion-grade `.base` views (`Table`, `Board`, `Calendar`, `Timeline`, `Gallery`, `List`).
+   - **Page hero & blocks:** Optional cover image banner / subtle `Add a cover` action, large note icon emblem, `33px` bold title (`letter-spacing: -0.028em`), compact **Notion property rows** (`13px` muted key on left, colored pills/dates/links on right), `/` slash-command menu, `+` / `⋮⋮` margin handles, inline highlights, toggles, horizontal-rule tables, and Notion-style `.base` views (`Table`, `Board`, `Calendar`, `Timeline`, `Gallery`, `List`).
 
 2. **Works like Obsidian (and *The Oracle*'s vault setup):**
    - **100% plain local files (`kandinsky-source/docs/PHILOSOPHY.md`):** Markdown + YAML frontmatter on disk, `[[wikilinks]]`, backlinks & unlinked mentions, `.base`, `.page`, `.canvas`, `.excalidraw`, KaTeX + TikZJax + Typst + Mermaid math/diagrams, Barnes–Hut Graph View, and docked `Antigravity` / `Claude` / `Solver` panes.

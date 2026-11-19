@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Nootion Weather widget: live Open-Meteo geocoding + forecast (3.5s AbortController, zero uncaught
+  // Notion-style Weather widget: live Open-Meteo geocoding + forecast (3.5s AbortController, zero uncaught
   // rejections), inline city switcher, Bauhaus weather glyphs, and calm Local Daylight & Sky fallback.
   import { onMount } from "svelte";
   import * as prefs from "../../lib/prefs";

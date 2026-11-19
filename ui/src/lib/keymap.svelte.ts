@@ -7,6 +7,7 @@ import { actions, runServerCommand, serverBuiltinToUi, type Action } from "./act
 import { api } from "./api";
 import { keySystem, onThisSystem, parseChord, sameChord, type Chord, type KeySystem } from "./keys";
 import type { CommandInfo } from "./types";
+import { settings } from "./settings.svelte";
 import { toast } from "./state.svelte";
 
 export interface Cmd {
@@ -48,7 +49,8 @@ const effective = (id: string, def?: string) => (id in keymap.overrides ? keymap
 const told = <R>(id: string, run: () => R) => (): R => { emitPluginEvent({ type: "command", id }); return run(); };
 
 export function allCommands(): Cmd[] {
-  const ui: Cmd[] = actions.filter((a) => !a.plugin || builtinOn(a.plugin)).map((a) => ({
+  const devMode = Boolean(settings.config?.developer_mode);
+  const ui: Cmd[] = actions.filter((a) => (!a.plugin || builtinOn(a.plugin)) && (devMode || !a.developerOnly)).map((a) => ({
     id: a.id, title: a.title, source: "ui", defaultKeys: a.keys, keys: effective(a.id, a.keys),
     fromTerminal: !!a.fromTerminal, alsoKeys: a.alsoKeys, where: a.where, yieldTo: a.yieldTo, icon: a.icon, label: a.label, run: told(a.id, a.run),
   }));

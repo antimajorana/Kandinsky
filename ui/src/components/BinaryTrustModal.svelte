@@ -12,8 +12,16 @@
   let dialogEl = $state<HTMLDialogElement | null>(null);
   let queue = $state<PendingBinaryApproval[]>([]);
   let busy = $state(false);
+  let techOpen = $state(false);
 
   const current = $derived(queue[0] ?? null);
+  const pluginTitle = $derived(
+    current?.plugin ? current.plugin.charAt(0).toUpperCase() + current.plugin.slice(1) : "A plugin",
+  );
+  $effect(() => {
+    void current?.id;
+    techOpen = false;
+  });
 
   function enqueue(req: PendingBinaryApproval): void {
     if (queue.some((q) => q.id === req.id || (q.command === req.command && q.sha256 === req.sha256))) {
@@ -84,18 +92,28 @@
       <header class="trust-head">
         <span class="trust-icon"><Icon name="warning" size={18} /></span>
         <div>
-          <h2 id="trust-title">Extension wants to run a local program</h2>
-          <p class="trust-sub">Extension <strong>{current.plugin}</strong> is asking permission to execute an external command.</p>
+          <h2 id="trust-title">{pluginTitle} wants to use a helper program on your computer</h2>
+          <p class="trust-sub">{current.reason || "Only allow programs you recognize and trust."}</p>
         </div>
       </header>
 
-      <div class="trust-details">
-        <div class="kv"><span>Reason</span><span>{current.reason || "External helper execution"}</span></div>
-        <div class="kv"><span>Program</span><code>{current.command}</code></div>
-        {#if current.args.length > 0}
-          <div class="kv"><span>Arguments</span><code>{current.args.join(" ")}</code></div>
-        {/if}
-        <div class="kv"><span>SHA-256</span><code class="hash">{current.sha256}</code></div>
+      <div class="trust-tech">
+        <button
+          type="button"
+          class="tech-toggle"
+          aria-expanded={techOpen}
+          aria-controls="trust-tech-details"
+          onclick={() => (techOpen = !techOpen)}
+        >
+          {techOpen ? "Hide technical details" : "Technical details"}
+        </button>
+        <dl id="trust-tech-details" class="trust-details" class:collapsed={!techOpen} inert={!techOpen}>
+          <div class="kv"><dt>Program</dt><dd><code>{current.command}</code></dd></div>
+          {#if current.args.length > 0}
+            <div class="kv"><dt>Arguments</dt><dd><code>{current.args.join(" ")}</code></dd></div>
+          {/if}
+          <div class="kv"><dt>SHA-256</dt><dd><code class="hash">{current.sha256}</code></dd></div>
+        </dl>
       </div>
 
       <footer class="trust-actions">
@@ -136,15 +154,20 @@
   /* a long command line scrolls inside the details, so the buttons below never leave the window */
   .trust-card { max-height: calc(100dvh - 32px); min-height: 0; }
   .trust-head, .trust-actions { flex: none; }
-  .trust-details { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .trust-tech { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+  .tech-toggle { align-self: flex-start; padding: 3px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); font-size: calc(12px * var(--ui-scale, 1)); font-weight: 500; cursor: pointer; }
+  .tech-toggle:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg-hover); }
+  .trust-details { min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--bg-side); border: 1px solid var(--border); font-size: calc(12px * var(--ui-scale, 1)); }
+  .trust-details.collapsed { max-height: 0; padding-block: 0; margin-block: 0; border-width: 0; opacity: 0; overflow-y: hidden; pointer-events: none; }
+  .trust-details:not(.collapsed) { max-height: min(36dvh, 220px); overflow-y: auto; }
   .trust-card { width: 100%; display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: var(--radius); background: var(--bg-elev); border: 1px solid var(--border-strong); box-shadow: var(--shadow-pop); }
   .trust-head { display: flex; align-items: flex-start; gap: 12px; }
   .trust-icon { flex: none; width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; background: var(--yellow-soft, color-mix(in srgb, var(--yellow) 16%, transparent)); color: var(--yellow); }
   .trust-head h2 { margin: 0; font-size: calc(15px * var(--ui-scale, 1)); color: var(--heading); }
   .trust-sub { margin: 4px 0 0; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text-muted); line-height: 1.4; }
-  .trust-details { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--bg-side); border: 1px solid var(--border); font-size: calc(12px * var(--ui-scale, 1)); }
   .kv { display: grid; grid-template-columns: 78px 1fr; gap: 8px; align-items: baseline; }
-  .kv > span:first-child { color: var(--text-faint); font-weight: 600; }
+  .kv dt { color: var(--text-faint); font-weight: 600; }
+  .kv dd { margin: 0; min-width: 0; }
   .kv code { font-family: var(--font-mono); color: var(--text); word-break: break-all; }
   .hash { font-size: calc(11px * var(--ui-scale, 1)); color: var(--text-muted); }
   .trust-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

@@ -34,7 +34,61 @@
   let custom = $state(false);
   let picks = $state<string[]>([]);
   let listError = $state("");
+  let newItem = $state("");
+  type RuleDraft = { folder: string; title: string; template: string };
+  let ruleDrafts = $state<RuleDraft[]>([]);
+  let lastSerializedRules = "";
   const listId = $derived(`dl-${path.replace(/\W/g, "-")}`);
+
+  $effect(() => {
+    if (path !== "notes.template_rules") return;
+    const arr = Array.isArray(v) ? (v as Array<{ folder?: string; title?: string; template?: string }>) : [];
+    const serialized = JSON.stringify(arr);
+    if (serialized !== lastSerializedRules) {
+      lastSerializedRules = serialized;
+      ruleDrafts = arr.map((r) => ({
+        folder: r.folder ?? "",
+        title: r.title ?? "",
+        template: r.template ?? "",
+      }));
+    }
+  });
+
+  function saveRules(next: RuleDraft[]): void {
+    const out = next
+      .map((r) => ({
+        ...(r.folder.trim() ? { folder: r.folder.trim() } : {}),
+        ...(r.title.trim() ? { title: r.title.trim() } : {}),
+        template: r.template.trim(),
+      }))
+      .filter((r) => r.template || r.folder || r.title);
+    lastSerializedRules = JSON.stringify(out);
+    void setValue(path, out);
+  }
+
+  function addRuleDraft(): void {
+    ruleDrafts = [...ruleDrafts, { folder: "", title: "", template: "" }];
+  }
+
+  function removeRuleDraft(idx: number): void {
+    const next = ruleDrafts.filter((_, i) => i !== idx);
+    ruleDrafts = next;
+    saveRules(next);
+  }
+
+  function addListItem(): void {
+    const item = newItem.trim();
+    if (!item) return;
+    newItem = "";
+    const cur = Array.isArray(v) ? (v as string[]) : [];
+    if (cur.includes(item)) return;
+    void setValue(path, [...cur, item]);
+  }
+
+  function removeListItem(idx: number): void {
+    const cur = Array.isArray(v) ? (v as string[]) : [];
+    void setValue(path, cur.filter((_, i) => i !== idx));
+  }
 
   $effect(() => {
     if (kind !== "folder" && kind !== "file") return;
@@ -97,8 +151,43 @@
         <input id={path} type="number" value={v as number} min={s.minimum} max={s.maximum} step={s.type === "integer" ? 1 : 0.02}
           onchange={(e) => { const n = num(e.currentTarget.value); if (n !== null) void setValue(path, n); }} />
       </div>
+    {:else if path === "notes.template_rules"}
+      <div class="rules-editor" data-testid="template-rules-editor">
+        {#each ruleDrafts as rule, idx (idx)}
+          <div class="rule-row">
+            <input
+              type="text"
+              class="rule-in"
+              placeholder="Folder (optional)"
+              aria-label="Rule {idx + 1} folder"
+              bind:value={rule.folder}
+              onchange={() => saveRules(ruleDrafts)}
+            />
+            <input
+              type="text"
+              class="rule-in"
+              placeholder="Title match (optional)"
+              aria-label="Rule {idx + 1} title match"
+              bind:value={rule.title}
+              onchange={() => saveRules(ruleDrafts)}
+            />
+            <input
+              type="text"
+              class="rule-in"
+              placeholder="Template name"
+              aria-label="Rule {idx + 1} template"
+              bind:value={rule.template}
+              onchange={() => saveRules(ruleDrafts)}
+            />
+            <button type="button" class="icon-btn" title="Remove rule" aria-label="Remove rule {idx + 1}" onclick={() => removeRuleDraft(idx)}>
+              <Icon name="close" size={12} />
+            </button>
+          </div>
+        {/each}
+        <button type="button" class="add-rule-btn" onclick={addRuleDraft}>+ Add rule</button>
+      </div>
     {:else if s.type === "array" && s.items && resolve(s.items).type === "object"}
-      <!-- a list of records (template rules…): one JSON object per line, checked before it is saved -->
+      <!-- a list of records: one JSON object per line, checked before it is saved -->
       <textarea id={path} rows={Math.min(8, Math.max(3, ((v as unknown[]) ?? []).length + 1))} spellcheck="false" class="records"
         onchange={(e) => {
           try { void setValue(path, e.currentTarget.value.split("\n").map((x) => x.trim()).filter(Boolean).map((x) => JSON.parse(x))); listError = ""; }
@@ -106,9 +195,39 @@
         }}>{((v as unknown[]) ?? []).map((x) => JSON.stringify(x, (_k, val) => (val === null ? undefined : val))).join("\n")}</textarea>
       <span class="hint">{listError || `one per line, as {${Object.keys(resolve(s.items).properties ?? {}).map((k) => `"${k}": …`).join(", ")}}`}</span>
     {:else if s.type === "array"}
-      <textarea id={path} rows={Math.min(8, Math.max(3, ((v as string[]) ?? []).length))} spellcheck="false"
-        onchange={(e) => setValue(path, e.currentTarget.value.split("\n").map((x) => x.trim()).filter(Boolean))}>{((v as string[]) ?? []).join("\n")}</textarea>
-      <span class="hint">one per line</span>
+      {@const items = Array.isArray(v) ? (v as string[]) : []}
+      <div class="list-editor" data-testid="list-editor-{path}">
+        {#if items.length}
+          <div class="chip-list">
+            {#each items as item, idx (`${idx}:${item}`)}
+              <span class="list-chip">
+                <span>{item}</span>
+                <button type="button" class="chip-rm" aria-label="Remove {item}" title="Remove {item}" onclick={() => removeListItem(idx)}>×</button>
+              </span>
+            {/each}
+          </div>
+        {/if}
+        <div class="list-add-row">
+          <input
+            id={path}
+            type="text"
+            class="list-input"
+            bind:value={newItem}
+            placeholder="Add item…"
+            spellcheck="false"
+            onkeydown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addListItem();
+              } else if (e.key === "Backspace" && !newItem && items.length) {
+                e.preventDefault();
+                removeListItem(items.length - 1);
+              }
+            }}
+          />
+          <button type="button" class="add-item-btn" disabled={!newItem.trim()} onclick={addListItem}>Add</button>
+        </div>
+      </div>
     {:else if kind === "colour"}
       <div class="colour">
         <input type="color" value={/^#[0-9a-f]{6}$/i.test(String(v)) ? String(v) : schemeAccent} aria-label="{label} picker"
@@ -186,4 +305,19 @@
   :global(html.phone) .seg button { padding: 8px 14px; }
   .icon-btn { display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-sm); color: var(--text-muted); }
   .icon-btn:hover { background: var(--bg-active); color: var(--text); }
+  .row.stacked .control { width: 100%; align-items: stretch; }
+  .rules-editor { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+  .rule-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; align-items: center; }
+  input.rule-in { width: 100%; min-width: 0; box-sizing: border-box; }
+  .add-rule-btn, .add-item-btn { align-self: flex-start; padding: 4px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elev); color: var(--text); font-size: calc(12px * var(--ui-scale, 1)); font-weight: 500; cursor: pointer; }
+  .add-rule-btn:hover, .add-item-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .add-item-btn:disabled { opacity: .45; cursor: default; }
+  .list-editor { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 320px; }
+  .chip-list { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+  .list-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px 2px 8px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--bg-alt); color: var(--text); font-family: var(--font-mono); font-size: calc(11.5px * var(--ui-scale, 1)); }
+  .chip-rm { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; color: var(--text-muted); cursor: pointer; }
+  .chip-rm:hover { background: var(--bg-hover); color: var(--red); }
+  .list-add-row { display: flex; align-items: center; gap: 6px; }
+  input.list-input { width: 184px; font-family: var(--font-mono); }
+  @media (max-width: 640px) { .rule-row { grid-template-columns: 1fr; } }
 </style>

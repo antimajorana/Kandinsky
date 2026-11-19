@@ -29,7 +29,7 @@ import { rememberFile } from "./recent";
 import { app } from "./state.svelte";
 import { iconSvg } from "./icons";
 import { setPanes } from "./context.svelte";
-import { onSettings } from "./settings.svelte";
+import { onSettings, settings } from "./settings.svelte";
 import { resolveSpec } from "./openers";
 import { api } from "./api";
 import type { PaneRef } from "./types";
@@ -120,6 +120,7 @@ function renameTab(api: DockviewPanelApi, title: HTMLElement, spec: SpecOf<"term
 class GroupActions implements IHeaderActionsRenderer {
   readonly element = document.createElement("div");
   private subs: { dispose(): void }[] = [];
+  private offSettings: (() => void) | null = null;
   init(p: IGroupHeaderProps): void {
     this.element.className = "kandinsky-group-actions";
     const add = document.createElement("button");
@@ -129,11 +130,15 @@ class GroupActions implements IHeaderActionsRenderer {
     add.innerHTML = iconSvg("plus", 14);
     add.addEventListener("click", () => open({ kind: "terminal", preset: "shell", n: nextTerminalN() }));
     this.element.append(add);
-    const sync = () => { this.element.style.display = p.group.panels.some((x) => kindOf(x) === "terminal") ? "" : "none"; };
+    const sync = () => {
+      this.element.style.display =
+        settings.config?.developer_mode && p.group.panels.some((x) => kindOf(x) === "terminal") ? "" : "none";
+    };
     sync();
+    this.offSettings = onSettings(sync);
     this.subs.push(p.containerApi.onDidAddPanel(sync), p.containerApi.onDidRemovePanel(sync), p.containerApi.onDidMovePanel(sync));
   }
-  dispose(): void { this.subs.forEach((s) => s.dispose()); }
+  dispose(): void { this.offSettings?.(); this.subs.forEach((s) => s.dispose()); }
 }
 
 /** With vertical tabs the side column's header is the side panel's row of tools (SideHead.svelte), as on top
@@ -390,6 +395,7 @@ function giveKeys(id: string): void {
 export function open(spec: PaneSpec, opts: { activate?: boolean; beside?: boolean } = {}): DockviewPanelApi | null {
   const dock = getDock();
   if (!dock) return null;
+  if (spec.kind === "terminal" && !settings.config?.developer_mode) return null;
   if (spec.kind === "files" && isNotionShell() && !phone.on) {
     window.dispatchEvent(new Event("kandinsky-expand-sidebar"));
     return null;

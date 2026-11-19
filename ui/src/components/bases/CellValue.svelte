@@ -1,5 +1,5 @@
 <script lang="ts">
-  // One Bases value: lists as chips, links, checkboxes, humanized dates, aligned numbers, plus Nootion column formats
+  // One Bases value: lists as chips, links, checkboxes, humanized dates, aligned numbers, plus Notion-style column formats
   // (semantic status pills with 1-click dot cycling, inline progress bars, %, currency, compact URL/email/phone, files).
   import Icon from "../Icon.svelte";
   import Self from "./CellValue.svelte";

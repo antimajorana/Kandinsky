@@ -238,7 +238,7 @@ registerBlock({
   tab: (c) => (str(c.options.path) ? { kind: "base", path: str(c.options.path), view: str(c.options.table) || undefined } : null),
 });
 
-// --- Nootion dashboard widgets (Page.svelte & ```view blocks in Markdown) -------------------------
+// --- Notion-style dashboard widgets (Page.svelte & ```view blocks in Markdown) -------------------------
 registerBlock({
   ...lazyBlock("chart", "Chart", () => import("../components/widgets/ChartWidget.svelte"), (c) => ({ options: c.options, doc: c.doc })),
   icon: "chart", card: true,

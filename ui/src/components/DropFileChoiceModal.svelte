@@ -1,6 +1,6 @@
 <script lang="ts">
   // Bauhaus / Notion choice dialog when external files or images are dropped onto a note:
-  // 1) Copy into `zAttachments/` (Default / Enter)  2) Link in place via `file:///` (L)  3) Copy beside note (B).
+  // 1) Copy into vault attachments folder (Default / Enter)  2) Link in place via `file:///` (L)  3) Copy beside note (B).
   import { tick } from "svelte";
   import Dialog from "./Dialog.svelte";
   import Icon from "./Icon.svelte";
@@ -10,10 +10,13 @@
     dropFilePrompt,
     formatFileSize,
     previewExternalMarkdown,
+    vaultAttachDir,
     type DropFilePromptState,
   } from "../lib/attach";
 
   let { prompt }: { prompt?: DropFilePromptState | null } = $props();
+
+  const attachDir = $derived(vaultAttachDir());
 
   const req = $derived(prompt !== undefined ? prompt : dropFilePrompt.current);
   const files = $derived(req?.files ?? []);
@@ -105,8 +108,8 @@
         >
           <span class="c-icon accent"><Icon name="folder-open" size={16} /></span>
           <span class="c-body">
-            <span class="c-title">Copy into vault (<code>zAttachments/</code>) <span class="badge">Default</span></span>
-            <span class="c-desc">Uploads cleanly without overwriting existing files and embeds <code>![[zAttachments/…]]</code></span>
+            <span class="c-title">Copy into vault (<code>{attachDir}/</code>) <span class="badge">Default</span></span>
+            <span class="c-desc">Uploads cleanly without overwriting existing files and embeds <code>![[{attachDir}/…]]</code></span>
           </span>
           <kbd class="keys-only">Enter</kbd>
         </button>

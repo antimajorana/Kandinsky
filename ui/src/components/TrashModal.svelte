@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Nootion-style Trash modal over `.kandinsky/trash/`: inspect, open, or restore deleted notes & folders.
+  // Notion-style Trash modal over `.kandinsky/trash/`: inspect, open, or restore deleted notes & folders.
   import { onMount } from "svelte";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import Dialog from "./Dialog.svelte";

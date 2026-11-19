@@ -149,8 +149,13 @@
     );
   });
 
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
   const visibleStatusCells = $derived.by(() => {
-    const list = statusCells.filter((c) => c.key !== "antigravity:agy");
+    const list = statusCells.filter((c) => {
+      if (c.key === "antigravity:agy") return false;
+      if (!devMode && (/^(?:solver|antigravity|claude):/.test(c.key) || c.text.includes("Solver"))) return false;
+      return true;
+    });
     return [...list].sort((a, b) => (a.key === "solver:solver" ? 1 : b.key === "solver:solver" ? -1 : 0));
   });
   const hasSolverCell = $derived(
@@ -430,13 +435,12 @@
 
 <footer class="status" class:notion={isNotionShell()}>
   {#if isNotionShell()}
-    {#if activeMdInfo?.hasVerification}
+    {#if devMode && activeMdInfo?.hasVerification}
       <span class="sb-verify">
         <span class="v-dot" class:clean={activeMdInfo.verifyClean}>●</span>
         {activeMdInfo.verifyClean ? "c_lint: verified" : `c_lint: ${activeMdInfo.rawVerify}`}
       </span>
     {/if}
-    <span class="sb-shape">Shape: {settings.config?.ui.shape === "cards" ? "Cards" : "Nootion Paper"}</span>
   {:else if tabs.layout !== "vertical"}
     <!-- the tab sidebar names the workspace itself -->
     <span class="ws" title={app.workspace?.root ?? ""}>{app.workspace?.name ?? "—"}</span>
@@ -454,7 +458,7 @@
     {:else if c.run}<button class="cell" class:solver-chip={isSolver} class:solver-open={solverOpen} class:solver-offline={solverOffline} title={c.title} data-cell={c.key} onclick={() => void c.run?.()}>{c.text}</button>
     {:else}<span class="cell" class:solver-chip={isSolver} class:solver-open={solverOpen} class:solver-offline={solverOffline} title={c.title} data-cell={c.key}>{c.text}</span>{/if}
   {/each}
-  {#if isNotionShell() && !hasSolverCell && !solverDisabled}
+  {#if devMode && isNotionShell() && !hasSolverCell && !solverDisabled}
     <button
       type="button"
       class="cell solver-chip"
@@ -463,49 +467,53 @@
       onclick={() => open({ kind: "plugin", id: "solver", title: "Solver" }, { beside: true })}
     >Σ Solver: ready</button>
   {/if}
-  <button
-    class="cell sb-item agy-chip"
-    class:open={agyOpen}
-    class:has-spec={!!effectiveSpecialist}
-    bind:this={agyAnchor}
-    title={agyChipTitle}
-    data-cell="agy"
-    data-testid="agy-chip"
-    aria-haspopup="dialog"
-    aria-expanded={agyOpen}
-    onclick={() => {
-      opened = null;
-      specialistQuery = "";
-      agyOpen = !agyOpen;
-    }}
-  >
-    <span class="agy-dot" class:live={agyLiveSubagents + agyLiveRoots > 0} aria-hidden="true">●</span>
-    <span class="agy-brand">agy</span>
-    {#if effectiveSpecialist}
-      <span class="agy-badge">{effectiveSpecialist}</span>
-    {/if}
-    <span class="agy-sep" aria-hidden="true">·</span>
-    <span class="agy-model">{activeModelPill.short}</span>
-    {#if agyLiveSubagents > 0}
-      <span class="agy-subcount" title="{agyLiveSubagents} live subagent(s)">⚡{agyLiveSubagents}</span>
-    {/if}
-  </button>
+  {#if devMode}
+    <button
+      class="cell sb-item agy-chip"
+      class:open={agyOpen}
+      class:has-spec={!!effectiveSpecialist}
+      bind:this={agyAnchor}
+      title={agyChipTitle}
+      data-cell="agy"
+      data-testid="agy-chip"
+      aria-haspopup="dialog"
+      aria-expanded={agyOpen}
+      onclick={() => {
+        opened = null;
+        specialistQuery = "";
+        agyOpen = !agyOpen;
+      }}
+    >
+      <span class="agy-dot" class:live={agyLiveSubagents + agyLiveRoots > 0} aria-hidden="true">●</span>
+      <span class="agy-brand">agy</span>
+      {#if effectiveSpecialist}
+        <span class="agy-badge">{effectiveSpecialist}</span>
+      {/if}
+      <span class="agy-sep" aria-hidden="true">·</span>
+      <span class="agy-model">{activeModelPill.short}</span>
+      {#if agyLiveSubagents > 0}
+        <span class="agy-subcount" title="{agyLiveSubagents} live subagent(s)">⚡{agyLiveSubagents}</span>
+      {/if}
+    </button>
+  {/if}
   {#if isNotionShell() && activeMdInfo}
     <span class="sb-words">{plural(activeMdInfo.words, "word")}</span>
   {/if}
-  {#if app.problems}
+  {#if devMode && app.problems}
     <button class="problems" class:bad={app.problems.errors > 0} onclick={showProblems} title={tipFor("Problems in this file", "ui.problems")}
       aria-label="Problems: {plural(app.problems.errors, 'error')}, {plural(app.problems.warnings, 'warning')}">
       <Icon name="error" size={12} />{app.problems.errors}<Icon name="warning" size={12} />{app.problems.warnings}
     </button>
   {/if}
-  <button class="vim" class:off={!app.vimEnabled} data-mode={app.vimMode} onclick={toggleVim} title="Toggle vim mode" data-testid="vim-mode">
-    {#if app.vimEnabled}{app.vimMode || "VIM"}{:else}vim off{/if}
-  </button>
+  {#if app.vimEnabled}
+    <button class="vim" data-mode={app.vimMode} onclick={toggleVim} title="Toggle vim mode" data-testid="vim-mode">
+      {app.vimMode || "VIM"}
+    </button>
+  {/if}
   <span class="conn" title={connLabel} data-state={app.conn} data-testid="conn"><span class="dot"></span>{connLabel}</span>
 </footer>
 
-{#if agyOpen && agyAnchor}
+{#if devMode && agyOpen && agyAnchor}
   <Popover anchor={agyAnchor} label="Antigravity Model & Specialist Switcher" width={320} onclose={() => (agyOpen = false)}>
     <div class="agy-pop" data-testid="agy-popover">
       <div class="agy-pop-sec">
@@ -634,7 +642,7 @@
   .sb-verify { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); white-space: nowrap; }
   .sb-verify .v-dot { font-size: 9.5px; line-height: 1; color: var(--yellow); }
   .sb-verify .v-dot.clean { color: var(--green); }
-  .sb-shape, .sb-words { color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sb-words { color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .grow { flex: 1; }
   /* a plugin's cell: quiet text; a button only shows it on hover */
   .cell { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -701,7 +709,6 @@
   .vim[data-mode="INSERT"] { color: var(--bg); background: var(--green); }
   .vim[data-mode="VISUAL"], .vim[data-mode="V-LINE"], .vim[data-mode="V-BLOCK"] { color: var(--bg); background: var(--purple); }
   .vim[data-mode="REPLACE"] { color: var(--bg); background: var(--red); }
-  .vim.off { background: none; font-weight: 400; }
   .problems { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); padding: 1px 6px; border-radius: 5px; font-variant-numeric: tabular-nums; }
   .problems:hover { background: var(--bg-hover); color: var(--text); }
   .problems.bad { color: var(--red); }

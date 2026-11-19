@@ -2,6 +2,7 @@
 import type { ConnState } from "./api";
 import type { Workspace } from "./types";
 import { load, loadRaw, saveRaw, KEYS } from "./prefs";
+import { humanizeErrorText } from "./text";
 
 export type Theme = "dark" | "light";
 export interface Problems { errors: number; warnings: number }
@@ -33,7 +34,7 @@ export type ToastKind = "info" | "success" | "error";
  *  each repeat (`shown` counts them, so the time-left line starts again). */
 /** A button on a notice ("Open", "Undo"); running it closes the notice. */
 export interface ToastAction { label: string; run: () => void }
-export interface Toast { id: number; title: string; body?: string; kind: ToastKind; actions: ToastAction[]; count: number; life: number; shown: number }
+export interface Toast { id: number; title: string; body?: string; rawDetails?: string; kind: ToastKind; actions: ToastAction[]; count: number; life: number; shown: number }
 export const toasts = $state<Toast[]>([]);
 let toastSeq = 0;
 const MAX_TOASTS = 5;
@@ -48,6 +49,15 @@ function arm(id: number, ms: number) {
 /** `act`: the notice's buttons (a new mail's Open, a capture's Undo); a notice with one stays longer, and so does an
  *  error (it has more to read). The same notice again is counted on the one shown, not stacked. */
 export function toast(title: string, body?: string, kind: ToastKind = "info", ms = 4500, act?: ToastAction | ToastAction[]): void {
+  let rawDetails: string | undefined;
+  if (kind === "error") {
+    rawDetails = [title, body].filter(Boolean).join("\n") || undefined;
+    title = humanizeErrorText(title) || title;
+    if (body !== undefined) {
+      const cleanBody = humanizeErrorText(body);
+      body = cleanBody || undefined;
+    }
+  }
   const actions = act ? [act].flat() : [];
   const life = actions.length ? Math.max(ms, 9000) : kind === "error" ? Math.max(ms, 8000) : ms;
   const same = !actions.length && toasts.find((t) => !t.actions.length && t.title === title && t.body === body && t.kind === kind);
@@ -55,11 +65,12 @@ export function toast(title: string, body?: string, kind: ToastKind = "info", ms
     same.count++;
     same.shown++;
     same.life = life;
+    if (rawDetails) same.rawDetails = rawDetails;
     arm(same.id, life);
     return;
   }
   const id = ++toastSeq;
-  toasts.push({ id, title, body, kind, actions, count: 1, life, shown: 1 });
+  toasts.push({ id, title, body, ...(rawDetails ? { rawDetails } : {}), kind, actions, count: 1, life, shown: 1 });
   arm(id, life);
   while (toasts.length > MAX_TOASTS) dismissToast(toasts[0].id);
 }
