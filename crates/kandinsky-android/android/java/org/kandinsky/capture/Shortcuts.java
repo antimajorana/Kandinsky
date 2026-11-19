@@ -17,7 +17,7 @@ import java.util.List;
 final class Shortcuts {
     private Shortcuts() {}
 
-    /** The extra naming the place an `KandinskyActivity` intent opens: "search", "files", "home", or "new" (New…). */
+    /** The extra naming the place an `KandinskyActivity` intent opens: "search", "files", "home", "agenda", or "new" (New…). */
     static final String PLACE = "org.kandinsky.place";
 
     static void publish(Context c, Look look) {
@@ -27,12 +27,14 @@ final class Shortcuts {
         all.add(make(c, look, "capture", "Capture", "plus", new Intent(c, CaptureActivity.class)));
         all.add(make(c, look, "new", "New note", "note", place(c, "new")));
         all.add(make(c, look, "home", "Today", "today", place(c, "home")));
+        all.add(make(c, look, "agenda", "Agenda", "calendar", place(c, "agenda")));
         all.add(make(c, look, "search", "Search", "search", place(c, "search")));
         all.add(make(c, look, "files", "Files", "vault", place(c, "files")));
         try { sm.setDynamicShortcuts(all); } catch (RuntimeException e) { /* a launcher's rate limit: next start */ }
     }
 
-    private static Intent place(Context c, String where) {
+    /** Kandinsky brought forward at a place (`PLACE`); also the home-screen widget's way to Today (TodayWidget). */
+    static Intent place(Context c, String where) {
         return new Intent(c, KandinskyActivity.class).putExtra(PLACE, where)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP); // the running one gets onNewIntent
     }

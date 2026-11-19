@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Kandinsky (docs/guides/ANDROID.md, "The full app"): the desktop app's phone part, native — Today, Files, Search, notes — and the
      capture box, tile and screen service of the capture app. The same Java (package org.kandinsky.capture) and Rust library. -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.kandinsky.app" android:versionCode="10" android:versionName="0.2.10">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.kandinsky.app" android:versionCode="16" android:versionName="0.4.2">
   <uses-permission android:name="android.permission.INTERNET" />
   <!-- Outbox: a job that waits for a network (JobScheduler asks for it; without it the app was killed, 2026-10-19) -->
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -9,6 +9,14 @@
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
   <!-- "kept captures were sent" (OutboxJob), asked for the first time a capture is kept offline -->
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- the app's player (MediaService): a book plays on with the screen off, the CPU kept awake while it plays -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <!-- reminders on time with the phone asleep (ReminderAlarms): exact alarms. Android 13+ grants USE_EXACT_ALARM to a
+       calendar/reminder app at install; 12 has SCHEDULE_EXACT_ALARM (granted, revocable). Withheld: inexact, still while idle -->
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
   <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
   <!-- the last screenshot, when all-files access is not given -->
@@ -18,14 +26,16 @@
   <queries><intent><action android:name="android.media.action.IMAGE_CAPTURE" /></intent></queries>
   <application android:networkSecurityConfig="@xml/network" android:label="Kandinsky" android:icon="@mipmap/ic_launcher" android:extractNativeLibs="true" android:requestLegacyExternalStorage="true">
     <!-- rotating keeps this window and its page (configChanges): recreated, the WebView and the vault opened anew -->
-    <activity android:name="org.kandinsky.capture.KandinskyActivity" android:exported="true" android:theme="@style/App" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">
+    <!-- enableOnBackInvokedCallback (here, the box and a plugin's screen; Android 14+): predictive back, the gesture
+         reaching the activity's own Back path (Shell.onBack); not the application's, so the capture overlay keeps the Back key -->
+    <activity android:name="org.kandinsky.capture.KandinskyActivity" android:enableOnBackInvokedCallback="true" android:exported="true" android:theme="@style/App" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity>
     <!-- the box: a translucent, dimmed window over whatever was on screen; out of the recent apps, its own task -->
-    <activity android:name="org.kandinsky.capture.CaptureActivity" android:exported="true" android:theme="@style/Capture" android:excludeFromRecents="true" android:taskAffinity="" android:launchMode="singleTask" android:windowSoftInputMode="stateAlwaysVisible|adjustResize">
+    <activity android:name="org.kandinsky.capture.CaptureActivity" android:enableOnBackInvokedCallback="true" android:exported="true" android:theme="@style/Capture" android:excludeFromRecents="true" android:taskAffinity="" android:launchMode="singleTask" android:windowSoftInputMode="stateAlwaysVisible|adjustResize">
       <intent-filter>
         <action android:name="android.intent.action.SEND" />
         <category android:name="android.intent.category.DEFAULT" />
@@ -51,6 +61,8 @@
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity-alias>
+    <!-- a native plugin as its own app in the launcher ([android] launcher): generated here by build-apk.sh -->
+    <!-- plugin launchers (scripts/dev/android-launchers.mjs) -->
     <!-- signing in to a server (docs/guides/ANDROID.md, "Signing in"): the browser comes back to the app's own address -->
     <activity android:name="org.kandinsky.capture.SignedInActivity" android:exported="true" android:launchMode="singleTask" android:theme="@android:style/Theme.Translucent.NoTitleBar">
       <intent-filter>
@@ -79,7 +91,7 @@
     </activity>
     <provider android:name="org.kandinsky.capture.PhotoProvider" android:authorities="org.kandinsky.app.photos" android:exported="false" android:grantUriPermissions="true" />
     <!-- a native plugin's screen (docs/refactor/REFACTOR-native-plugins.md): Manga, Books… -->
-    <activity android:name="org.kandinsky.capture.PluginActivity" android:exported="false" android:theme="@style/App" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+    <activity android:name="org.kandinsky.capture.PluginActivity" android:enableOnBackInvokedCallback="true" android:exported="false" android:theme="@style/App" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
     <service android:name="org.kandinsky.capture.CaptureTile" android:exported="true" android:label="@string/tile" android:icon="@drawable/ic_plus" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
       <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
     </service>
@@ -91,7 +103,24 @@
       <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
       <meta-data android:name="android.accessibilityservice" android:resource="@xml/screen_service" />
     </service>
+    <!-- the home-screen widget (TodayWidget): today's log, the open tasks, Capture -->
+    <receiver android:name="org.kandinsky.capture.TodayWidget" android:exported="false" android:label="@string/widget">
+      <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/today_widget" />
+    </receiver>
+    <!-- the reminders' alarms (ReminderAlarms): its own ring, and set again after a restart of the phone, an update, a
+         change of the exact-alarm permission. Exported for those system broadcasts; a ring is checked against the app's vaults -->
+    <receiver android:name="org.kandinsky.capture.ReminderAlarms" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+        <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+      </intent-filter>
+    </receiver>
+    <!-- the buttons on the core's notifications other than Open (Notices, NoticeActions) -->
+    <receiver android:name="org.kandinsky.capture.NoticeActions" android:exported="false" />
     <!-- captures kept while a server did not answer, sent once there is a network (Outbox) -->
+    <service android:name="org.kandinsky.capture.MediaService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
     <service android:name="org.kandinsky.capture.OutboxJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
   </application>
 </manifest>

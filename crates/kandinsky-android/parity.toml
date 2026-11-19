@@ -21,12 +21,12 @@
 "ui.note.new" = "page"
 "ui.drawing" = "page"
 "ui.today" = { page = true, note = "the Home place of the app's bottom bar calls it (KandinskyActivity)" }
-"ui.files" = { missing = "its native screen (FilesScreen) is not in this fork yet" }
-"ui.explorer" = { missing = "its native screen (FilesScreen) is not in this fork yet" }
-"ui.search" = { missing = "its native screen (SearchScreen) is not in this fork yet" }
+"ui.files" = { native = "FilesScreen", note = "the bottom bar's Files: the core's tree on a PlaceList, breadcrumbs, a menu per row; the page's pane stays for the desktop and the browser" }
+"ui.explorer" = { native = "FilesScreen", note = "the Files place is the phone's explorer (folders, rename, trash); no drag and drop" }
+"ui.search" = { native = "SearchScreen", note = "the bottom bar's Search: the core's /api/search as you type, names then lines; no regex, whole-word or replace there (the page's Replace does it)" }
 "ui.quickOpen" = "page"
 "ui.replace" = "page"
-"ui.libraries" = { missing = "its native screen (LibraryScreen) is not in this fork yet" }
+"ui.libraries" = { native = "LibraryScreen", note = "the bottom bar's Library: the vault's own libraries from the core (/api/libraries, /api/library), Continue, covers or a list, search, order; the servers' apps (Manga, Audiobookshelf) as chips apart; More… is the page's (Drawings, References, the plugins' others)" }
 "ui.library" = { page = true, note = "planned native with the libraries (§4)" }
 "ui.capture" = { native = "CaptureActivity", note = "the phone's capture: the + long press, the Quick Settings tile, the share target; the page's popup runs too" }
 "ui.capture-bar" = "page"
@@ -151,7 +151,7 @@
 "manga" = { native = "Manga" }
 # ---- the page, as on the desktop ----
 "notifications" = { native = "Notices", note = "what it raises reaches the shade through the core's notices, with their buttons, a channel per kind (NoticeKind); planned notices ring on time with the app gone (ReminderAlarms, exact alarms); the native Agenda lists what is planned (AgendaScreen)" }
-"plan" = "page"
+"plan" = { native = "AgendaScreen", note = "its dated tasks in the native Agenda (the top bar's calendar, the launcher's Agenda, the widget's Coming up): a day, 3 days or a week beside the Calendar's events, a task ticked through the core; its nudges ring on time with the app gone (ReminderAlarms); its settings are the page's" }
 "catalog" = { page = true, note = "its library pages planned native with the libraries (§4); the note of a thing (its `note` tool, the one-note rule) is asked by the native screens through Host.thingNote, the same call" }
 "catalog-anime" = { page = true, note = "a catalog source: its JavaScript helper runs in the phone's core as on the desktop" }
 "catalog-books" = { page = true, note = "a catalog source: its JavaScript helper runs in the phone's core as on the desktop" }

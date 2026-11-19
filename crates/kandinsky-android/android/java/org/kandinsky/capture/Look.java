@@ -1,5 +1,7 @@
 package org.kandinsky.capture;
 
+import org.json.JSONObject;
+
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
@@ -33,28 +35,60 @@ public final class Look {
         return b.matches("(?i).+\\.(md|markdown|txt|page)") && !b.matches("(?i).+\\.excalidraw\\.md") ? b.replaceFirst("(?i)\\.(md|markdown|txt|page)$", "") : b;
     }
 
+    /** The page's tokens each of Look's colours is read from (null: kept as the app's own), in the constructor's order. */
+    private static final String[] TOKENS = { "--bg-elev", "--bg-app", "--bg-elev", "--bg-hover", "--border", "--border-strong", "--text", "--text-muted", "--text-faint", "--accent", "--accent-soft", null, null, null, "--accent-fg" };
+    private static final String PREFS = "kandinsky.look", KEY = "page";
+
+    static boolean systemDark(Context c) { return (c.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES; }
+
+    /** The page's look as last saved, or null: none yet, or it follows the phone and the phone has since turned dark or
+     *  light (the page sends the new one as it loads). */
+    private static JSONObject saved(Context c, boolean systemDark) {
+        try {
+            String s = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null);
+            if (s == null) return null;
+            JSONObject o = new JSONObject(s);
+            return o.optBoolean("system", false) && o.optBoolean("dark") != systemDark ? null : o;
+        } catch (Exception e) { return null; }
+    }
+
+    /** The page's look (lib/settings.svelte.ts: {dark, system, "--bg": …}) kept for every native screen made after;
+     *  true when it differs from the one kept (the screens on show are then drawn again). */
+    static boolean save(Context c, String json) {
+        android.content.SharedPreferences p = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (json == null || json.equals(p.getString(KEY, null))) return false;
+        try { new JSONObject(json); } catch (Exception e) { return false; }
+        p.edit().putString(KEY, json).apply();
+        return true;
+    }
+
     /** Whether the last Look made was e-ink: what `Host.einkScreen` answers, where there is no Context to ask. */
     static volatile boolean einkApp = isEink();
 
     Look(Context c) {
         eink = Edition.of(c) == Edition.BOOX || isEink(); // the Boox app is always e-ink
         einkApp = eink;
-        dark = !eink && (c.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        boolean dark = !eink && systemDark(c);
         // e-ink: everything a little larger, its text too (label)
         density = c.getResources().getDisplayMetrics().density * (eink ? EINK_SCALE : 1f);
+        // the vault's own look, as its page last drew it (the theme the phone chose, its palette, its accent): every
+        // native screen takes the page's colours, so the app's bars, Settings, sheets and readers match the page
+        JSONObject page = eink ? null : saved(c, dark);
+        if (page != null) dark = page.optBoolean("dark", dark);
+        this.dark = dark;
+        int[] you = eink || page != null ? null : wallpaper(c, dark); // Android 12+: the accent is the wallpaper's (Material You)
+        int[] t; // bg, app, pop, hover, border, borderStrong, text, muted, faint, accent, accentSoft, purple, green, red, accentFg
         if (dark) {
-            bg = 0xff1f2229; app = 0xff16181d; pop = 0xff262a32; hover = 0x0bffffff; border = 0x12ffffff; borderStrong = 0x1fffffff;
-            text = 0xffdcdfe5; muted = 0xff9aa1ad; faint = 0xff8b919c; accent = 0xff8aa4ff; accentSoft = 0x1f8aa4ff;
-            purple = 0xffc4a7ff; green = 0xff86d1a0; red = 0xfff28b8f; accentFg = 0xff0b0d12;
+            int a = you != null ? you[0] : 0xff8aa4ff;
+            t = new int[] { 0xff1f2229, 0xff16181d, 0xff262a32, 0x0bffffff, 0x12ffffff, 0x1fffffff, 0xffdcdfe5, 0xff9aa1ad, 0xff8b919c, a, a & 0xffffff | 0x1f000000, 0xffc4a7ff, 0xff86d1a0, 0xfff28b8f, 0xff0b0d12 };
         } else if (eink) {
-            bg = 0xffffffff; app = 0xffffffff; pop = 0xffffffff; hover = 0x00000000; border = 0xff8a8a8a; borderStrong = 0xff000000;
-            text = 0xff000000; muted = 0xff1f1f1f; faint = 0xff3a3a3a; accent = 0xff000000; accentSoft = 0xffe4e4e4;
-            purple = 0xff000000; green = 0xff145c2e; red = 0xff8f1a20; accentFg = 0xffffffff;
+            t = new int[] { 0xffffffff, 0xffffffff, 0xffffffff, 0x00000000, 0xff8a8a8a, 0xff000000, 0xff000000, 0xff1f1f1f, 0xff3a3a3a, 0xff000000, 0xffe4e4e4, 0xff000000, 0xff145c2e, 0xff8f1a20, 0xffffffff };
         } else {
-            bg = 0xffffffff; app = 0xffeceef2; pop = 0xffffffff; hover = 0x0b0f172a; border = 0x160f172a; borderStrong = 0x240f172a;
-            text = 0xff23272e; muted = 0xff5b6270; faint = 0xff676c77; accent = 0xff4762d9; accentSoft = 0x1a4864dd;
-            purple = 0xff8150d6; green = 0xff2f9e5c; red = 0xffd4464f; accentFg = 0xffffffff;
+            t = new int[] { 0xffffffff, 0xffeceef2, 0xffffffff, 0x0b0f172a, 0x160f172a, 0x240f172a, 0xff23272e, 0xff5b6270, 0xff676c77, you != null ? you[0] : 0xff4762d9, you != null ? you[0] & 0xffffff | 0x1a000000 : 0x1a4864dd, 0xff8150d6, 0xff2f9e5c, 0xffd4464f, 0xffffffff };
         }
+        if (page != null) for (int i = 0; i < TOKENS.length; i++) if (TOKENS[i] != null) t[i] = cssColor(page.optString(TOKENS[i], null), t[i]);
+        bg = t[0]; app = t[1]; pop = t[2]; hover = t[3]; border = t[4]; borderStrong = t[5]; text = t[6]; muted = t[7]; faint = t[8];
+        accent = t[9]; accentSoft = t[10]; purple = t[11]; green = t[12]; red = t[13]; accentFg = t[14];
     }
 
     // faint and the light accent are a step darker (lighter in dark) than the desktop's tokens: on a phone they carry
@@ -63,6 +97,25 @@ public final class Look {
     static final float EINK_SCALE = 1.12f;
 
     public int dp(float v) { return Math.round(v * density); }
+
+    /** A menu card in `pop` shown by `anchor` — above it (the bottom bar's menus) or under it — its middle over the
+     *  anchor and always whole on the screen: inside the window's visible part, clear of the system bars, 8 dp from the
+     *  edges. Measured at the popup's own width (measured unbounded, its rows did not wrap and its height was wrong),
+     *  placed at a position of the screen (a dropdown's offsets are shifted by the platform when the menu would not fit). */
+    void showBy(android.widget.PopupWindow pop, View card, View anchor, boolean above) {
+        int w = pop.getWidth(), m = dp(8);
+        android.graphics.Rect frame = new android.graphics.Rect();
+        anchor.getWindowVisibleDisplayFrame(frame);
+        card.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(frame.height() - 2 * m, View.MeasureSpec.AT_MOST));
+        int h = card.getMeasuredHeight();
+        if (h >= frame.height() - 2 * m) pop.setHeight(h); // a menu as tall as the screen: no taller
+        int[] at = new int[2];
+        anchor.getLocationOnScreen(at);
+        int x = Math.max(frame.left + m, Math.min(at[0] + (anchor.getWidth() - w) / 2, frame.right - w - m));
+        int y = above ? at[1] - h - m : at[1] + anchor.getHeight() + m;
+        y = Math.max(frame.top + m, Math.min(y, frame.bottom - h - m));
+        pop.showAtLocation(anchor, Gravity.TOP | Gravity.START, x, y);
+    }
 
     /** Boox tablets: Onyx's framework carries its e-ink refresh API (`android.onyx.ViewUpdateHelper`, which Onyx's own
      *  SDK finds the same way — boox_5c_re docs/ONYX-EPD-PEN.md); else the maker or brand says Onyx. */
@@ -244,6 +297,34 @@ public final class Look {
 
     /** A CSS colour as the page computes it (`rgb(r, g, b)`, `#rrggbb`) as an opaque Android colour; `fallback` when it
      *  is neither (an empty string: the app's own). */
+    /** Material You (Android 12+): the wallpaper's colours as Material 3 picks them for a dark or light scheme —
+     *  {accent (primary: accent1 200 / 600), bars (surface: neutral1 900 / 50)} — or null on older Android. The app's
+     *  own accent (above), and what the page takes for Kandinsky's own palette (KandinskyActivity Bridge.wallpaper). */
+    static int[] wallpaper(Context c, boolean dark) {
+        if (android.os.Build.VERSION.SDK_INT < 31) return null;
+        android.content.res.Resources r = c.getResources();
+        return new int[] {
+            r.getColor(dark ? android.R.color.system_accent1_200 : android.R.color.system_accent1_600, null),
+            r.getColor(dark ? android.R.color.system_neutral1_900 : android.R.color.system_neutral1_50, null),
+        };
+    }
+
+    /** `#rrggbb` of a colour (its alpha dropped), as the page writes colours. */
+    static String hex(int color) { return String.format(java.util.Locale.ROOT, "#%06x", color & 0xffffff); }
+
+    /** A CSS colour (#rrggbb, rgb(), rgba() with its alpha kept) as ARGB; `fallback` when it is none. */
+    static int cssColor(String css, int fallback) {
+        if (css == null) return fallback;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("rgba\\(\\s*(\\d+)[ ,]+(\\d+)[ ,]+(\\d+)[ ,/]+([0-9.]+)").matcher(css.trim());
+        if (m.find()) {
+            try {
+                int a = Math.round(Math.max(0, Math.min(1, Float.parseFloat(m.group(4)))) * 255);
+                return a << 24 | Integer.parseInt(m.group(1)) << 16 | Integer.parseInt(m.group(2)) << 8 | Integer.parseInt(m.group(3));
+            } catch (NumberFormatException e) { return fallback; }
+        }
+        return parseCss(css, fallback);
+    }
+
     public static int parseCss(String css, int fallback) {
         if (css == null) return fallback;
         String c = css.trim();
