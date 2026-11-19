@@ -183,7 +183,7 @@ pub fn edit_view(base_src: &str, view: &str, edit: &ViewEdit) -> Result<String> 
             });
             return to_text(&doc);
         }
-        ViewEdit::Formula { name, expr } => {
+        ViewEdit::Formula { name, expr, .. } => {
             let name = name.trim();
             if name.is_empty() {
                 return Err(Error::BadRequest("formula needs a name".into()));
@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn formulas_automations_timeline_props_and_auto_ids_persist() {
-        let f_doc: Value = serde_yaml::from_str(&edit_view(BASE, "Open", &ViewEdit::Formula { name: "Score".into(), expr: Some("prio * 2".into()) }).unwrap()).unwrap();
+        let f_doc: Value = serde_yaml::from_str(&edit_view(BASE, "Open", &ViewEdit::Formula { name: "Score".into(), expr: Some("prio * 2".into()), was: None }).unwrap()).unwrap();
         assert_eq!(f_doc["formulas"]["Score"].as_str(), Some("prio * 2"));
         let dp: Value = serde_yaml::from_str(&edit_view(BASE, "Open", &ViewEdit::DateProperty { column: Some("start".into()), end_column: Some("end".into()) }).unwrap()).unwrap();
         assert_eq!((dp["views"][0]["dateProperty"].as_str(), dp["views"][0]["endDateProperty"].as_str()), (Some("start"), Some("end")));

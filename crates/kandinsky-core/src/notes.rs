@@ -274,7 +274,7 @@ pub(crate) fn templater_rules(root: &Path, cfg: &Config) -> Vec<crate::config::T
             } else {
                 (None, Some(what.replace('\\', "/").trim_matches('/').to_string()))
             };
-            rules.push(crate::config::TemplateRule { title, folder, template: name(t) });
+            rules.push(crate::config::TemplateRule { title, folder, linked_by: None, template: name(t) });
         }
     }
     rules
@@ -1023,7 +1023,7 @@ mod tests {
         assert_eq!(make("an idea", Some("labs"), &cfg), plain, "folder templates are off in Templater: not used");
         // the vault's own rules win over Templater's
         let mut own = cfg.clone();
-        own.notes.template_rules = vec![crate::config::TemplateRule { title: None, folder: Some("labs".into()), template: "lab".into() }];
+        own.notes.template_rules = vec![crate::config::TemplateRule { title: None, folder: Some("labs".into()), linked_by: None, template: "lab".into() }];
         assert_eq!(make("run 7", Some("labs/sub"), &own), "# Lab\n");
         assert_eq!(make("2026-10-21 Wed.", None, &own), plain, "own rules replace Templater's");
     }

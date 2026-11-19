@@ -370,7 +370,7 @@ pub fn permissions(root: &Path, id: &str) -> Result<Permissions> {
 /// `kandinsky.openLink(url, { outside })` (a web link opened as Kandinsky opens links; Shift+click's system browser).
 /// The page's number must be the same (a test holds it). A manifest with a key this Kandinsky does not know and an `api`
 /// above it is refused with "update Kandinsky", not with the parser's error (`read_manifest`).
-pub const API_VERSION: u32 = 28;
+pub const API_VERSION: u32 = 35;
 
 /// `"1.2.3"` → `[1, 2, 3]` (missing parts are 0; anything after a non-digit part is ignored).
 fn version_parts(v: &str) -> [u64; 3] {

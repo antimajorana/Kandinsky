@@ -6,7 +6,7 @@ import type { ServerOptions } from "./ServerOptions";
 /**
  * Settings → Server: how this core serves itself (`GET /api/server`, docs/guides/SERVER.md).
  */
-export type ServerState = { serving: boolean, port: number, options: ServerOptions, hasPassword: boolean, sessions: number, 
+export type ServerState = { serving: boolean, port: number, options: ServerOptions, hasPassword: boolean, gateKeyHeader: string | null, sessions: number, 
 /**
  * Why the server can't serve yet (no password set for password sign-in, …).
  */

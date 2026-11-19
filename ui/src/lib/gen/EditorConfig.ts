@@ -69,6 +69,10 @@ backlinks: boolean,
  */
 inline_title: boolean, 
 /**
+ * Editing a note's first `# heading` that says its file name renames the file too (when the caret leaves it).
+ */
+heading_renames: boolean, 
+/**
  * Typewriter scrolling in notes: the line being written stays at the middle of the pane, so
  * the text moves and your eyes do not.
  */
@@ -148,6 +152,11 @@ properties_spec: string,
  */
 vim_keys: VimKeys, 
 /**
+ * With vim on: a yank (`y` over a visual selection, `yy`, `yw`…) also copies to the system clipboard, to paste
+ * with Ctrl+V in any program. Deletes stay in vim's registers. Off: only vim's registers (`"+y` still copies).
+ */
+vim_clipboard: boolean, 
+/**
  * An AI agent's own files (memories, session logs, its instructions): not your notes. They are
  * left out of links, backlinks, the graph, `[[` completion, Bases, open tasks, quick open, the
  * activity list and search (the Search pane has a switch to include them); the file tree still
@@ -158,6 +167,12 @@ index_exclude: Array<string>,
  * Month and day names in Bases dates (`.format("MMMM")`, `dddd`), templates and daily notes.
  */
 date_names: DateNames, 
+/**
+ * How dates are shown in Bases, task chips and the note's date, in moment.js tokens as Obsidian's (`DD/MM/YYYY`,
+ * `D MMM YYYY HH:mm`; a time is left out for a date without one). Empty: automatic — Today, Yesterday, a weekday
+ * within the week, else `16 Nov`. The full date and how far it is show on hover.
+ */
+date_format: string, 
 /**
  * Obsidian's "Strict line breaks": on, a single newline inside a paragraph is not a break in rendered notes (the
  * Markdown rule); off (Obsidian's default), each line shows as written — an address, a poem, a screenshot's text.

@@ -2729,6 +2729,7 @@ async fn server_get(State(st): S) -> Result<Json<ServerState>> {
         sessions: a.session_count(),
         files: ServerFiles { settings: crate::auth::settings_file().display().to_string(), state: crate::auth::state_file().display().to_string() },
         not_ready: a.not_ready(),
+        gate_key_header: None,
     }))
 }
 

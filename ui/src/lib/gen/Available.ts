@@ -26,6 +26,18 @@ installed?: string,
  */
 description?: string, 
 /**
+ * Its icon, a Kandinsky icon name (its manifest's `icon`).
+ */
+icon?: string, 
+/**
+ * The archive's size in bytes, when the index says it.
+ */
+size?: number, 
+/**
+ * Installed here at an older version than the release's: an update is there to take (never a downgrade).
+ */
+update: boolean, 
+/**
  * Permissions declared in `plugin.toml` when known before download.
  */
 permissions?: Permissions, 

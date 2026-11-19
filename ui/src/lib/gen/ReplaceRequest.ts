@@ -3,7 +3,7 @@
 /**
  * Replace across files (POST /api/replace): the search options plus the replacement.
  */
-export type ReplaceRequest = { q: string, with: string, case: boolean, word: boolean, regex: boolean, agent: boolean, 
+export type ReplaceRequest = { q: string, with: string, case: boolean, word: boolean, regex: boolean, agent: boolean, all: boolean, 
 /**
  * Only these files (the ones the user left ticked); all matching files when absent.
  */

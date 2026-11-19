@@ -25,6 +25,39 @@ pub struct WorkspaceInfo {
     pub config: Config,
 }
 
+/// One plugin's answer to a search of the vault (`GET /api/search/plugins`, a tool with `on = "search"`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PluginHits {
+    pub plugin: String,
+    pub name: String,
+    pub hits: Vec<PluginHit>,
+}
+
+/// One thing a plugin found: what the row shows, and the plugin tool that opens it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PluginHit {
+    pub title: String,
+    #[serde(default)]
+    pub detail: Option<String>,
+    #[serde(default)]
+    pub date: Option<String>,
+    #[serde(default)]
+    pub open: PluginOpen,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PluginOpen {
+    pub tool: String,
+    #[ts(type = "Record<string, unknown>")]
+    #[serde(default)]
+    pub args: serde_json::Value,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
@@ -416,6 +449,28 @@ pub struct DayActivity {
     pub changed: Vec<Changed>,
 }
 
+/// Where a file's "made" time comes from, most trusted first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum MadeBy {
+    Property,
+    Git,
+    Disk,
+}
+
+/// `GET /api/file/made?path=`: when a file was made and last changed.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Made {
+    #[ts(type = "number")]
+    pub made: u64,
+    pub day_only: bool,
+    pub by: MadeBy,
+    #[ts(type = "number")]
+    pub changed: u64,
+}
+
 /// A file by when it was made (its creation time, not its last change).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -637,9 +692,16 @@ pub struct SearchQuery {
     /// Only the text of the vault's PDFs, not the files (without it both, the PDFs' hits after the files').
     #[serde(default)]
     pub pdf: bool,
+    /// Read every text file, not only the notes (code, logs, a run's outputs, data): off by default.
+    #[serde(default)]
+    pub all: bool,
     /// Only the names (files matched by name), no file read: answered at once, before the lines.
     #[serde(default)]
     pub names: bool,
+    /// Search lane id: a newer search in the same lane cancels earlier scans.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub lane: Option<String>,
 }
 
 /// Replace across files (POST /api/replace): the search options plus the replacement.
@@ -656,6 +718,8 @@ pub struct ReplaceRequest {
     pub regex: bool,
     #[serde(default)]
     pub agent: bool,
+    #[serde(default)]
+    pub all: bool,
     /// Only these files (the ones the user left ticked); all matching files when absent.
     #[serde(default)]
     #[ts(optional)]
@@ -871,10 +935,40 @@ pub struct Notice {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub open: Option<String>,
-    /// A later notice with the same id replaces the earlier one ("3 new mails" updated, never stacked).
+    /// A later notice with the same id replaces the earlier one ("3 new mails" updated, never stacked), and
+    /// `Event::Withdraw` with it takes it away.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub id: Option<String>,
+    /// Buttons on the notification (`kandinsky:*` internal actions or plugin action ids).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<NoticeAction>>", optional)]
+    pub actions: Vec<NoticeAction>,
+    /// What the notice is about (`<path>#^<block id>`), so ending it withdraws every notice about it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub subject: Option<String>,
+}
+
+/// One button of a notice: the id its press is answered by, and the words on it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct NoticeAction {
+    pub id: String,
+    pub label: String,
+}
+
+impl NoticeAction {
+    pub const OPEN: &'static str = "kandinsky:open";
+    pub const DISMISSED: &'static str = "kandinsky:dismissed";
+
+    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
+        Self { id: id.into(), label: label.into() }
+    }
+
+    pub fn snooze(minutes: u32) -> Self {
+        Self::new(format!("kandinsky:snooze:{minutes}"), format!("Snooze {minutes} min"))
+    }
 }
 
 impl Notice {
@@ -901,6 +995,33 @@ impl Notice {
         self.id = Some(id.into());
         self
     }
+    pub fn action(mut self, action: NoticeAction) -> Self {
+        self.actions.push(action);
+        self
+    }
+    pub fn subject(mut self, subject: impl Into<String>) -> Self {
+        self.subject = Some(subject.into());
+        self
+    }
+    pub fn withdrawn_by(&self, id: &str) -> bool {
+        self.id.as_deref() == Some(id) || self.subject.as_deref() == Some(id)
+    }
+}
+
+/// `POST /api/notices/action`: a button of a notice pressed on a page.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct NoticePress {
+    pub action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub notice: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub open: Option<String>,
 }
 
 /// Server → client messages on `WS /api/events`.
@@ -926,6 +1047,9 @@ pub enum Event {
     },
     /// A notice: a toast on every open page, and a system notification when nobody is looking (notify.rs).
     Notify(Notice),
+    Withdraw {
+        id: String,
+    },
     Focus {
         pane: FocusPane,
     },
@@ -953,6 +1077,9 @@ pub enum Event {
     },
     /// A plugin or helper tried to execute an external binary that is not yet trusted.
     BinaryApproval(PendingBinaryApproval),
+    Palette {
+        command: String,
+    },
 }
 
 /// Terminal presets for `WS /api/pty`.
@@ -1040,6 +1167,16 @@ pub struct UiState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub selection: Option<Selection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub commands: Option<Vec<UiCommand>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct UiCommand {
+    pub id: String,
+    pub title: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -1576,11 +1713,14 @@ pub enum ViewEdit {
         #[serde(default)]
         property: Option<String>,
     },
-    /// Add, update, or remove a formula expression in `formulas:`.
+    /// Add, update, rename, or remove a formula expression in `formulas:`.
     Formula {
         name: String,
-        #[serde(default)]
+        #[serde(default, alias = "formula")]
         expr: Option<String>,
+        #[ts(optional)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        was: Option<String>,
     },
     /// Replace the base's local rule automations (`automations:`).
     Automations {
@@ -1942,6 +2082,40 @@ pub struct TaskRef {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub block: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct TaskFields {
+    pub lead: String,
+    pub status: String,
+    pub block_id: String,
+    pub description: String,
+    pub done: bool,
+    pub priority: String,
+    pub repeat: String,
+    pub created: String,
+    pub start: String,
+    pub scheduled: String,
+    pub due: String,
+    pub done_on: String,
+}
+
+impl Default for TaskFields {
+    fn default() -> Self {
+        let none = String::new;
+        Self { lead: "- ".into(), status: " ".into(), block_id: none(), description: none(), done: false, priority: "none".into(), repeat: none(), created: none(), start: none(), scheduled: none(), due: none(), done_on: none() }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TaskRendered {
+    pub line: String,
 }
 
 /// What a `[[` link can point at (link_targets.rs).
@@ -1988,6 +2162,9 @@ pub struct LinkTargetsQuery {
 pub struct TaskTick {
     pub text: String,
     pub done: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -2178,6 +2355,7 @@ pub struct ServerState {
     pub port: u16,
     pub options: ServerOptions,
     pub has_password: bool,
+    pub gate_key_header: Option<String>,
     #[ts(type = "number")]
     pub sessions: usize,
     /// Why the server can't serve yet (no password set for password sign-in, …).

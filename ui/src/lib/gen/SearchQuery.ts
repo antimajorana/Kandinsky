@@ -22,6 +22,14 @@ agent: boolean,
  */
 pdf: boolean, 
 /**
+ * Read every text file, not only the notes (code, logs, a run's outputs, data): off by default.
+ */
+all: boolean, 
+/**
  * Only the names (files matched by name), no file read: answered at once, before the lines.
  */
-names: boolean, };
+names: boolean, 
+/**
+ * Search lane id: a newer search in the same lane cancels earlier scans.
+ */
+lane?: string, };

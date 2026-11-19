@@ -17,6 +17,8 @@ path = "src/main.rs"
 kandinsky-plugin = { path = "../../../../crates/kandinsky-plugin" }
 kandinsky-template = { path = "../../../../crates/kandinsky-template" }
 kandinsky-text = { path = "../../../../crates/kandinsky-text" }
+# a PDF's Info dictionary (first_page.rs), the reader catalog-papers already used
+pdf_oxide = "0.3.78"
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"

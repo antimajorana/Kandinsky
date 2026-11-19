@@ -3,6 +3,7 @@ import type { Contrast } from "./Contrast";
 import type { Eink } from "./Eink";
 import type { EinkRefresh } from "./EinkRefresh";
 import type { GpuRendering } from "./GpuRendering";
+import type { LibrarySpec } from "./LibrarySpec";
 import type { Motion } from "./Motion";
 import type { NoticeCorner } from "./NoticeCorner";
 import type { Palette } from "./Palette";
@@ -67,6 +68,12 @@ css_snippets_off: Array<string>,
  */
 tabs: TabsLayout, 
 /**
+ * One tab per pane: opening a file or a view in the editor area replaces what that pane shows instead of adding
+ * a tab beside it (Back and Forward step through what it showed). Splits each keep their own; terminals keep
+ * their tabs; an unsaved or pinned tab is never replaced.
+ */
+one_tab: boolean, 
+/**
  * Where the side panel (files, search, outline, git) shows: its own column beside the editors
  * (`dock`), or inside the left bar, under the list of tabs (`sidebar`; vertical tabs only).
  */
@@ -102,6 +109,12 @@ restore_layout: boolean,
  */
 tab_preview: boolean, 
 /**
+ * Tell your other devices which file this one shows (and where in it), so each can open it in one click: the
+ * lower bar's device chips on the desktop, "On your other devices" in the phone's Files. Off: this vault's devices
+ * keep their place to themselves; the others are still listed.
+ */
+share_place: boolean, 
+/**
  * Ctrl+Tab: `glance` shows the focused split's tabs, most recent first, and switches when Ctrl
  * is let go (Esc stays); `cycle` steps through every tab in the bar's order.
  */
@@ -116,11 +129,13 @@ sleep_after_min: number,
  */
 awake_tabs: number, 
 /**
- * The libraries the Library page shows, in this order, by id: the core's `drawings` and `references`, a plugin's
- * own (`books`, `manga`…), the catalog's one per group of kinds (`catalog.films-series`, `catalog.music`…). Empty:
- * every one the vault has. Settings → Appearance → Libraries lists them all with a switch and a place.
+ * The vault's libraries, in this order (libraries.rs; docs/design/DESIGN-android-native-app.md §4): a folder or a
+ * Base of a kind (`{ id = "books", kind = "books", folder = "Books" }`), or a library Kandinsky or a plugin gives, by
+ * its id (`drawings`, `references`, `catalog.music`…; a bare `"drawings"` reads as `{ id = "drawings" }`). The
+ * page shows one library per kind: a plugin's library of the same kind joins it. When the list names none of the
+ * libraries Kandinsky and the plugins give, every one of them shows. Settings → Libraries edits it.
  */
-libraries: Array<string>, 
+libraries: Array<LibrarySpec>, 
 /**
  * The apps at the top of the left bar (Home, the Library, plugins' panes with `rail = true`) put first, in this
  * order, by key (`home`, a built-in's or a plugin's id); the others follow in their own order.

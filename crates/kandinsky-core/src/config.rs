@@ -52,6 +52,8 @@ pub struct Config {
     pub notifications: NotificationsConfig,
     /// The desktop app around its window: closing it, the tray, starting with the session.
     pub desktop: DesktopConfig,
+    /// Notes while a film plays (the player's video engine, mpv).
+    pub player: PlayerConfig,
 }
 
 /// What the keys every other program uses do while vim is on.
@@ -122,6 +124,10 @@ pub struct TemplateRule {
     #[serde(default)]
     #[ts(optional)]
     pub folder: Option<String>,
+    /// A new note that other notes already name through this property (`topics`): see template_rules.rs `linked_by`.
+    #[serde(default)]
+    #[ts(optional)]
+    pub linked_by: Option<String>,
     /// A template's name in the templates folder (without `.md`).
     pub template: String,
 }
@@ -289,18 +295,30 @@ pub struct AutomationConfig {
     /// The computers that run them, by host name; empty: every computer that opens the vault. A vault synced to
     /// several computers runs a schedule on one, so two never write its output at once (Syncthing conflict copies).
     pub schedules_on: Vec<String>,
+    /// Where each background job runs when the vault is also on a server (docs/design/DESIGN-server-role.md), over
+    /// what its plugin says: `server` (the always-on server, here when there is none), `device` (never a server) or
+    /// `any`. By the job's id in the schedule log (`"plugin.finance.bank_sync"`), a whole plugin (`"plugin.runs"`) or a
+    /// command's id.
+    pub background: std::collections::BTreeMap<String, crate::server_role::Background>,
 }
 
 impl Default for AutomationConfig {
     fn default() -> Self {
-        Self { run_schedules: true, schedules_on: Vec::new() }
+        Self { run_schedules: true, schedules_on: Vec::new(), background: Default::default() }
     }
 }
 
 impl AutomationConfig {
     /// Whether the computer named `host` runs the schedules.
     pub fn schedules_here(&self, host: &str) -> bool {
-        self.run_schedules && (self.schedules_on.is_empty() || self.schedules_on.iter().any(|h| h.trim().eq_ignore_ascii_case(host)))
+        self.run_schedules && self.named_here(host)
+    }
+
+    /// Whether the computer named `host` is one of those `schedules_on` names (every computer when it names none).
+    /// Unlike [`Self::schedules_here`], `run_schedules = false` does not change it: switching the timer off leaves a
+    /// round's manual call (a button, an agent) where it was.
+    pub fn named_here(&self, host: &str) -> bool {
+        self.schedules_on.is_empty() || self.schedules_on.iter().any(|h| h.trim().eq_ignore_ascii_case(host))
     }
 }
 
@@ -339,6 +357,10 @@ pub struct UiConfig {
     /// Where open tabs are listed: a vertical sidebar (Zen-style, with pinned tabs) or the
     /// classic horizontal strip above each pane.
     pub tabs: TabsLayout,
+    /// One tab per pane: opening a file or a view in the editor area replaces what that pane shows instead of adding
+    /// a tab beside it (Back and Forward step through what it showed). Splits each keep their own; terminals keep
+    /// their tabs; an unsaved or pinned tab is never replaced.
+    pub one_tab: bool,
     /// Where the side panel (files, search, outline, git) shows: its own column beside the editors
     /// (`dock`), or inside the left bar, under the list of tabs (`sidebar`; vertical tabs only).
     pub side_panel: SidePanelPlace,
@@ -360,6 +382,10 @@ pub struct UiConfig {
     /// Resting the pointer on a tab in the left bar shows what it holds (a note, a picture, a PDF's
     /// first page).
     pub tab_preview: bool,
+    /// Tell your other devices which file this one shows (and where in it), so each can open it in one click: the
+    /// lower bar's device chips on the desktop, "On your other devices" in the phone's Files. Off: this vault's devices
+    /// keep their place to themselves; the others are still listed.
+    pub share_place: bool,
     /// Ctrl+Tab: `glance` shows the focused split's tabs, most recent first, and switches when Ctrl
     /// is let go (Esc stays); `cycle` steps through every tab in the bar's order.
     pub tab_switcher: TabSwitcher,
@@ -368,10 +394,14 @@ pub struct UiConfig {
     pub sleep_after_min: u32,
     /// The tabs seen last never sleep, however long unseen: switching among these stays instant.
     pub awake_tabs: u32,
-    /// The libraries the Library page shows, in this order, by id: the core's `drawings` and `references`, a plugin's
-    /// own (`books`, `manga`…), the catalog's one per group of kinds (`catalog.films-series`, `catalog.music`…). Empty:
-    /// every one the vault has. Settings → Appearance → Libraries lists them all with a switch and a place.
-    pub libraries: Vec<String>,
+    /// The vault's libraries, in this order (libraries.rs; docs/design/DESIGN-android-native-app.md §4): a folder or a
+    /// Base of a kind (`{ id = "books", kind = "books", folder = "Books" }`), or a library Kandinsky or a plugin gives, by
+    /// its id (`drawings`, `references`, `catalog.music`…; a bare `"drawings"` reads as `{ id = "drawings" }`). The
+    /// page shows one library per kind: a plugin's library of the same kind joins it. When the list names none of the
+    /// libraries Kandinsky and the plugins give, every one of them shows. Settings → Libraries edits it.
+    #[serde(deserialize_with = "crate::libraries::specs_any")]
+    #[schemars(with = "Vec<LibrarySpec>")]
+    pub libraries: Vec<LibrarySpec>,
     /// The apps at the top of the left bar (Home, the Library, plugins' panes with `rail = true`) put first, in this
     /// order, by key (`home`, a built-in's or a plugin's id); the others follow in their own order.
     pub apps_order: Vec<String>,
@@ -379,6 +409,47 @@ pub struct UiConfig {
     pub apps_hidden: Vec<String>,
     /// Folder name inside `.obsidian/themes/` whose `theme.css` overrides Kandinsky tokens; empty = built-in only.
     pub obsidian_theme: String,
+}
+
+/// One library of the vault (`[ui] libraries`): a view over files with a kind — a folder's files, a Base's notes — or
+/// one Kandinsky or a plugin gives, named by its id (neither `folder` nor `base`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(default)]
+#[ts(export)]
+pub struct LibrarySpec {
+    pub id: String,
+    pub title: String,
+    pub kind: LibraryKind,
+    pub folder: String,
+    pub base: String,
+    pub sort: String,
+    pub layout: LibraryLayout,
+    pub hidden: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum LibraryKind {
+    #[default]
+    Any,
+    Notes,
+    Books,
+    Comics,
+    Audio,
+    Video,
+    Pictures,
+    Papers,
+    Drawings,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum LibraryLayout {
+    #[default]
+    Covers,
+    List,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
@@ -630,6 +701,8 @@ pub struct EditorConfig {
     pub backlinks: bool,
     /// Show the note's file name as a title above its first line (Obsidian's "inline title").
     pub inline_title: bool,
+    /// Editing a note's first `# heading` that says its file name renames the file too (when the caret leaves it).
+    pub heading_renames: bool,
     /// Typewriter scrolling in notes: the line being written stays at the middle of the pane, so
     /// the text moves and your eyes do not.
     pub typewriter: bool,
@@ -677,6 +750,9 @@ pub struct EditorConfig {
     /// With vim on: `classic` leaves every key to vim; `desktop` gives Ctrl+C / X / V / Z / Y / A back
     /// to copy, cut, paste, undo, redo and select all, also in visual mode.
     pub vim_keys: VimKeys,
+    /// With vim on: a yank (`y` over a visual selection, `yy`, `yw`…) also copies to the system clipboard, to paste
+    /// with Ctrl+V in any program. Deletes stay in vim's registers. Off: only vim's registers (`"+y` still copies).
+    pub vim_clipboard: bool,
     /// An AI agent's own files (memories, session logs, its instructions): not your notes. They are
     /// left out of links, backlinks, the graph, `[[` completion, Bases, open tasks, quick open, the
     /// activity list and search (the Search pane has a switch to include them); the file tree still
@@ -684,6 +760,10 @@ pub struct EditorConfig {
     pub index_exclude: Vec<String>,
     /// Month and day names in Bases dates (`.format("MMMM")`, `dddd`), templates and daily notes.
     pub date_names: DateNames,
+    /// How dates are shown in Bases, task chips and the note's date, in moment.js tokens as Obsidian's (`DD/MM/YYYY`,
+    /// `D MMM YYYY HH:mm`; a time is left out for a date without one). Empty: automatic — Today, Yesterday, a weekday
+    /// within the week, else `16 Nov`. The full date and how far it is show on hover.
+    pub date_format: String,
     /// Obsidian's "Strict line breaks": on, a single newline inside a paragraph is not a break in rendered notes (the
     /// Markdown rule); off (Obsidian's default), each line shows as written — an address, a poem, a screenshot's text.
     pub strict_line_breaks: bool,
@@ -751,19 +831,6 @@ pub enum WebLinks {
     Browser,
 }
 
-/// How the desktop app on Linux shows a web page in a tab.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-#[ts(export)]
-pub enum WebTabView {
-    /// Inside the pane, like any part of Kandinsky: menus and previews draw over it. Sites that forbid being framed show all
-    /// the same, signed in (Kandinsky's WebKit hook lifts that for its own page only).
-    #[default]
-    Frame,
-    /// A browser view laid over the pane: it hides while a menu or a preview covers it.
-    Native,
-}
-
 /// When a notice (a failed schedule, a filed capture, a conflict copy, a plugin's word) also reaches the system's
 /// notifications, outside Kandinsky's window.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
@@ -794,11 +861,15 @@ pub struct NotificationsConfig {
     pub system_seconds: u32,
     /// Show local desktop or toast reminders before upcoming calendar events and timed @date mentions.
     pub calendar_reminders: bool,
+    /// Sources whose notices stay on the device that raised them (a plugin's id, `kandinsky`, a notifications source):
+    /// every other vault notice also reaches your other devices through the vault's server, and is taken away on all
+    /// of them when dismissed on one.
+    pub this_device_only: Vec<String>,
 }
 
 impl Default for NotificationsConfig {
     fn default() -> Self {
-        Self { system: SystemNotices::default(), system_seconds: 10, calendar_reminders: true }
+        Self { system: SystemNotices::default(), system_seconds: 10, calendar_reminders: true, this_device_only: Vec::new() }
     }
 }
 
@@ -899,14 +970,11 @@ pub struct WebConfig {
     /// Filter lists in Adblock Plus / uBlock Origin syntax, fetched once a week (uBlock's extended syntax — scriptlets —
     /// has no WebKit equivalent and is skipped). A change applies to the next window.
     pub filter_lists: Vec<String>,
-    /// Linux desktop app: a web tab is a frame inside the pane, or a browser view over it. A change applies to the next tab.
-    pub tab_view: WebTabView,
 }
 
 impl Default for WebConfig {
     fn default() -> Self {
         Self {
-            tab_view: WebTabView::Frame,
             open_links: WebLinks::Tab,
             block_ads: true,
             filter_lists: vec![
@@ -1121,9 +1189,31 @@ pub struct ActivityConfig {
     pub show_claude: bool,
     /// Show housekeeping commits (only history, session logs, HTML views touched) instead of one summary line.
     pub show_housekeeping: bool,
+    /// List every file made or changed, not only notes (pictures, data, a run's output).
+    pub show_files: bool,
     /// Changed files in the same folder collapse into one row from this many on.
     #[schemars(range(min = 2, max = 50))]
     pub group_threshold: u32,
+}
+
+/// Writing in a note while a film plays (docs/design/DESIGN-video-player.md §5).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(default)]
+#[ts(export)]
+pub struct PlayerConfig {
+    /// Typing in a note pauses the film that plays, so nothing is missed while a thought is written down.
+    pub pause_on_type: bool,
+    /// Seconds without a key after which a film paused by typing plays on (0: it stays paused until you play it).
+    #[schemars(range(min = 0, max = 60))]
+    pub resume_after: u32,
+    /// A line started while a film plays begins with the time, as a link that seeks it (`[[film#t=1:02:03]]`).
+    pub stamp_lines: bool,
+}
+
+impl Default for PlayerConfig {
+    fn default() -> Self {
+        Self { pause_on_type: false, resume_after: 2, stamp_lines: false }
+    }
 }
 
 /// Where a new vault's daily logs go.
@@ -1156,13 +1246,14 @@ impl Default for Config {
             web: WebConfig::default(),
             notifications: NotificationsConfig::default(),
             desktop: DesktopConfig::default(),
+            player: PlayerConfig::default(),
         }
     }
 }
 
 impl Default for UiConfig {
     fn default() -> Self {
-        Self { theme: Theme::System, accent: String::new(), palette: Palette::default(), palette_dark: None, contrast: Contrast::default(), shape: Shape::default(), ui_font: String::new(), font_size: 14, gpu_rendering: GpuRendering::Auto, css_snippets_off: Vec::new(), tabs: TabsLayout::Horizontal, side_panel: SidePanelPlace::Dock, motion: Motion::default(), notices: NoticeCorner::default(), eink: Eink::Auto, eink_refresh: EinkRefresh::Often, restore_layout: true, tab_preview: true, tab_switcher: TabSwitcher::Glance, sleep_after_min: 10, awake_tabs: 8, libraries: Vec::new(), apps_order: Vec::new(), apps_hidden: Vec::new(), obsidian_theme: String::new() }
+        Self { theme: Theme::System, accent: String::new(), palette: Palette::default(), palette_dark: None, contrast: Contrast::default(), shape: Shape::default(), ui_font: String::new(), font_size: 14, gpu_rendering: GpuRendering::Auto, css_snippets_off: Vec::new(), tabs: TabsLayout::Horizontal, one_tab: false, side_panel: SidePanelPlace::Dock, motion: Motion::default(), notices: NoticeCorner::default(), eink: Eink::Auto, eink_refresh: EinkRefresh::Often, restore_layout: true, tab_preview: true, share_place: true, tab_switcher: TabSwitcher::Glance, sleep_after_min: 10, awake_tabs: 8, libraries: Vec::new(), apps_order: Vec::new(), apps_hidden: Vec::new(), obsidian_theme: String::new() }
     }
 }
 
@@ -1184,8 +1275,10 @@ impl Default for EditorConfig {
             fold_headings: true,
             backlinks: true,
             inline_title: true,
+            heading_renames: true,
             typewriter: false,
             vim_keys: VimKeys::Classic,
+            vim_clipboard: true,
             math_preview: true,
             link_preview: true,
             task_chips: true,
@@ -1202,6 +1295,7 @@ impl Default for EditorConfig {
             git_gutter: true,
             index_exclude: vec!["docs/memory".into()],
             date_names: DateNames::English,
+            date_format: String::new(),
             strict_line_breaks: false,
             attachment_folder: "attachments".into(),
             prose_line_height: 1.68,
@@ -1230,7 +1324,7 @@ impl Default for FilesConfig {
 
 impl Default for ActivityConfig {
     fn default() -> Self {
-        Self { show_claude: true, show_housekeeping: false, group_threshold: 3 }
+        Self { show_claude: true, show_housekeeping: false, show_files: false, group_threshold: 3 }
     }
 }
 
@@ -1248,6 +1342,8 @@ pub const DEV_GATED_PLUGINS: &[&str] = &[
     "kiwix",
     "copyparty",
     "finance",
+    "jellyfin",
+    "audiobookshelf",
 ];
 
 /// Example plugins never shown in the user-facing plugin catalog.
@@ -1255,7 +1351,6 @@ pub const EXAMPLE_EXCLUDED_PLUGINS: &[&str] = &[
     "freshrss",
     "helper-js",
     "immich",
-    "jellyfin",
     "paperless",
     "ttrpg",
     "wordcount",
@@ -1544,8 +1639,22 @@ fn edit_value(v: &toml::Value) -> toml_edit::Value {
         toml::Value::Integer(i) => (*i).into(),
         toml::Value::Float(f) => (*f).into(),
         toml::Value::Boolean(b) => (*b).into(),
+        toml::Value::Array(a) if a.iter().any(toml::Value::is_table) => {
+            let mut out: toml_edit::Array = a.iter().map(edit_value).collect();
+            for v in out.iter_mut() {
+                v.decor_mut().set_prefix("\n  ");
+            }
+            out.set_trailing("\n");
+            out.set_trailing_comma(true);
+            toml_edit::Value::Array(out)
+        }
         toml::Value::Array(a) => toml_edit::Value::Array(a.iter().map(edit_value).collect()),
-        // datetimes and inline tables do not occur in Config
+        toml::Value::Table(t) => {
+            let blank = |v: &toml::Value| matches!(v, toml::Value::String(s) if s.is_empty()) || *v == toml::Value::Boolean(false);
+            let fields = t.iter().filter(|(_, v)| !blank(v));
+            let (id, rest): (Vec<_>, Vec<_>) = fields.partition(|(k, _)| k.as_str() == "id");
+            toml_edit::Value::InlineTable(id.into_iter().chain(rest).map(|(k, v)| (k.as_str(), edit_value(v))).collect())
+        }
         other => other.to_string().parse().unwrap_or_else(|_| other.to_string().into()),
     }
 }

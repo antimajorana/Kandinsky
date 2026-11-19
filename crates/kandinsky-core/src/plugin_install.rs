@@ -442,6 +442,16 @@ pub struct Available {
     #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Its icon, a Kandinsky icon name (its manifest's `icon`).
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// The archive's size in bytes, when the index says it.
+    #[ts(optional, type = "number")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+    /// Installed here at an older version than the release's: an update is there to take (never a downgrade).
+    pub update: bool,
     /// Permissions declared in `plugin.toml` when known before download.
     #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -533,6 +543,9 @@ pub fn available(root: &Path, index: &str) -> Result<Vec<Available>> {
                 version: e.version,
                 tier: e.tier,
                 description: e.description,
+                icon: None,
+                size: None,
+                update: false,
                 permissions: e.permissions,
                 has_helper: e.has_helper || built_engine,
             }
@@ -629,6 +642,9 @@ fn catalog_in(root: &Path, index: &str, bundled: Option<&Path>) -> Result<Vec<Av
                 id,
                 title: sum.title,
                 version: sum.version,
+                icon: None,
+                size: None,
+                update: false,
                 permissions: Some(sum.permissions),
                 has_helper: sum.has_helper,
             });
@@ -687,6 +703,9 @@ fn catalog_in(root: &Path, index: &str, bundled: Option<&Path>) -> Result<Vec<Av
                             version: e.version,
                             tier: e.tier,
                             description: e.description,
+                            icon: None,
+                            size: None,
+                            update: false,
                             permissions,
                             has_helper,
                         });

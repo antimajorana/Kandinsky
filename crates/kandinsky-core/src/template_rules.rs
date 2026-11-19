@@ -365,8 +365,8 @@ mod tests {
         let d = vault(&[("b", "---\n---\n")]);
         let mut cfg = Config::default();
         cfg.notes.template_rules = vec![
-            crate::config::TemplateRule { title: None, folder: Some("labs".into()), template: "gone".into() },
-            crate::config::TemplateRule { title: None, folder: Some("labs".into()), template: "b".into() },
+            crate::config::TemplateRule { title: None, folder: Some("labs".into()), linked_by: None, template: "gone".into() },
+            crate::config::TemplateRule { title: None, folder: Some("labs".into()), linked_by: None, template: "b".into() },
         ];
         assert_eq!(pick(&d, &cfg, Moment::NewNote { path: "labs/x.md" }).as_deref(), Some("b"));
     }

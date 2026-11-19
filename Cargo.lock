@@ -5244,7 +5244,7 @@ dependencies = [
 
 [[package]]
 name = "kandinsky"
-version = "0.2.10"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5259,7 +5259,7 @@ dependencies = [
 
 [[package]]
 name = "kandinsky-android"
-version = "0.2.10"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5278,27 +5278,32 @@ dependencies = [
  "serde_yaml",
  "tempfile",
  "tokio",
+ "toml 0.9.12+spec-1.1.0",
  "walkdir",
 ]
 
 [[package]]
 name = "kandinsky-app"
-version = "0.2.10"
+version = "0.4.2"
 dependencies = [
  "adblock",
  "anyhow",
  "base64 0.22.1",
+ "ciborium",
  "gio-sys",
  "glib-sys",
  "gobject-sys",
  "gtk",
- "javascriptcore-rs",
  "kandinsky-core",
  "ksni",
+ "objc2 0.6.4",
+ "objc2-foundation 0.3.2",
+ "objc2-web-kit",
  "png 0.17.16",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -5312,7 +5317,7 @@ dependencies = [
 
 [[package]]
 name = "kandinsky-capture"
-version = "0.2.10"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5339,6 +5344,7 @@ dependencies = [
  "kandinsky-plugin",
  "kandinsky-template",
  "kandinsky-text",
+ "pdf_oxide",
  "regex",
  "scraper",
  "serde",
@@ -5359,7 +5365,7 @@ dependencies = [
 
 [[package]]
 name = "kandinsky-core"
-version = "0.2.10"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "arboard",
@@ -5392,10 +5398,12 @@ dependencies = [
  "pdf_oxide",
  "portable-pty",
  "regex",
+ "regex-syntax",
  "reqwest 0.12.28",
  "rquickjs",
  "rust-embed",
  "rustls",
+ "ruzstd",
  "schemars 1.2.3",
  "scraper",
  "serde",
@@ -5447,9 +5455,11 @@ dependencies = [
  "rand 0.8.8",
  "regex",
  "rusqlite",
+ "ruzstd",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "socket2",
  "tempfile",
  "tokio",
  "tokio-rustls",
@@ -5513,21 +5523,21 @@ dependencies = [
 
 [[package]]
 name = "kandinsky-pen"
-version = "0.2.10"
+version = "0.4.2"
 dependencies = [
  "openink-shape",
 ]
 
 [[package]]
 name = "kandinsky-plugin"
-version = "0.2.10"
+version = "0.4.2"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "kandinsky-rar"
-version = "0.2.10"
+version = "0.4.2"
 dependencies = [
  "cmake",
  "flate2",
@@ -5559,7 +5569,7 @@ dependencies = [
 
 [[package]]
 name = "kandinsky-template"
-version = "0.2.10"
+version = "0.4.2"
 dependencies = [
  "chrono",
  "serde_json",
@@ -5570,6 +5580,7 @@ name = "kandinsky-text"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "regex",
  "serde_yaml",
  "tempfile",
 ]
@@ -7319,6 +7330,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "pollster"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f3a9f18d041e6d0e102a0a46750538147e5e8992d3b4873aaafee2520b00ce3"
+
+[[package]]
 name = "polycool"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8000,9 +8017,6 @@ checksum = "20dafead71c16a34e1ff357ddefc8afc11e7d51d6d2b9fbd07eaa48e3e540220"
 dependencies = [
  "block2 0.6.2",
  "dispatch2",
- "glib-sys",
- "gobject-sys",
- "gtk-sys",
  "js-sys",
  "libc",
  "log",
@@ -8011,9 +8025,13 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
  "percent-encoding",
+ "pollster",
  "raw-window-handle",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
  "web-sys",
  "windows-sys 0.61.2",
 ]
@@ -8337,6 +8355,15 @@ dependencies = [
  "unicode-ccc",
  "unicode-properties",
  "unicode-script",
+]
+
+[[package]]
+name = "ruzstd"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7c1c839d570d835527c9a5e4db7cb2198683a988cb9d7293fc8674e6bd58fc8"
+dependencies = [
+ "twox-hash",
 ]
 
 [[package]]
@@ -10301,6 +10328,12 @@ dependencies = [
  "serde_derive",
  "syntect",
 ]
+
+[[package]]
+name = "twox-hash"
+version = "2.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86a801b3cea342a06d468c8710662aa29e5e05e4f5c0d62f00bbb7f2ad7941c2"
 
 [[package]]
 name = "typed-arena"

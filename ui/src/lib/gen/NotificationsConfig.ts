@@ -17,4 +17,10 @@ system_seconds: number,
 /**
  * Show local desktop or toast reminders before upcoming calendar events and timed @date mentions.
  */
-calendar_reminders: boolean, };
+calendar_reminders: boolean, 
+/**
+ * Sources whose notices stay on the device that raised them (a plugin's id, `kandinsky`, a notifications source):
+ * every other vault notice also reaches your other devices through the vault's server, and is taken away on all
+ * of them when dismissed on one.
+ */
+this_device_only: Array<string>, };

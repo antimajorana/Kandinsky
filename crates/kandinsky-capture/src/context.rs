@@ -477,10 +477,19 @@ fn local_files(list: &str) -> Vec<PathBuf> {
     list.lines()
         .map(str::trim)
         .filter(|l| !l.starts_with('#'))
-        .filter_map(|l| l.strip_prefix("file://"))
-        .map(|l| l.strip_prefix("localhost").unwrap_or(l))
-        .filter(|l| l.starts_with('/'))
-        .map(|l| PathBuf::from(unescape(l)))
+        .filter_map(|l| {
+            let l = l.strip_prefix("file://")?;
+            let l = l.strip_prefix("localhost").unwrap_or(l);
+            #[cfg(windows)]
+            let l = l
+                .strip_prefix('/')
+                .filter(|r| matches!(r.as_bytes(), [b, b':', ..] if b.is_ascii_alphabetic()))
+                .unwrap_or(l);
+            let ok = l.starts_with('/')
+                || cfg!(windows)
+                    && matches!(l.as_bytes(), [b, b':', b'/' | b'\\', ..] if b.is_ascii_alphabetic());
+            ok.then(|| PathBuf::from(unescape(l)))
+        })
         .filter(|p| p.metadata().is_ok_and(|m| m.is_file() && m.len() <= FILE_MAX))
         .collect()
 }
