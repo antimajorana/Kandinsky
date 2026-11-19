@@ -112,6 +112,24 @@ jobs:
             target/release/bundle/dmg/*.dmg
             target/release/bundle/nsis/*.exe
           if-no-files-found: error
+      # Windows, also unpackaged: the three programs and the built UI as an install keeps them (the programs side by
+      # side, the UI as its own folder), so an existing install is updated by copying files instead of re-running the
+      # installer. Its root is the staging folder: bin/*.exe and ui/**.
+      - name: The programs and the UI, unpackaged
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          out="$RUNNER_TEMP/loose"
+          mkdir -p "$out/bin" "$out/ui"
+          cp target/release/kandinsky.exe target/release/kandinsky-app.exe target/release/kandinsky-capture.exe "$out/bin/"
+          cp -r ui/dist/. "$out/ui/"
+          test -f "$out/ui/core-types"
+      - uses: actions/upload-artifact@v7
+        if: runner.os == 'Windows'
+        with:
+          name: kandinsky-Windows-unpackaged
+          path: ${{ runner.temp }}/loose
+          if-no-files-found: error
 
   flatpak:
     needs: linux
