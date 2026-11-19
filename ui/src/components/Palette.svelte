@@ -19,6 +19,7 @@
   import { fileIcon, type IconName } from "../lib/panes";
   import { basename, dirOf, shownName } from "../lib/paths";
   import { app, toast } from "../lib/state.svelte";
+  import { settings } from "../lib/settings.svelte";
   import { tabs, activate, type TabItem } from "../lib/tabs.svelte";
   import { context } from "../lib/context.svelte";
   import { frontmatterOf } from "../lib/property-model";
@@ -83,6 +84,7 @@
   let specialistsBusy = $state(false);
 
   async function ensureSpecialists(): Promise<void> {
+    if (!settings.config?.developer_mode) { specialists = []; return; }
     const ws = app.workspace?.root ?? "_";
     if (specialistsBusy || (specialistsWs === ws && Date.now() - specialistsLoadedAt < 10_000)) return;
     specialistsBusy = true;
@@ -125,13 +127,13 @@
     void tick().then(() => input?.focus());
     if (palette.mode === "all") {
       void loadKeymap().catch(() => {});
-      void ensureSpecialists();
+      if (settings.config?.developer_mode) void ensureSpecialists();
     }
     if (req && !Array.isArray(req.items)) req.items().then((list) => (loaded = { req, list }), (err) => toast("Could not list the choices", errText(err), "error"));
   });
 
   $effect(() => {
-    if (palette.open && palette.mode === "all" && q.trim().startsWith("@")) void ensureSpecialists();
+    if (palette.open && palette.mode === "all" && settings.config?.developer_mode && q.trim().startsWith("@")) void ensureSpecialists();
   });
 
   $effect(() => {
@@ -170,6 +172,9 @@
   const captureWhat = () => captureHintNow.current.says;
   const captureNow = captureText;
 
+  /** `tag:name` asks the core for a tag's notes: its answer is the list, not something to match by name. */
+  const tagQuery = (q: string) => /^tag:/i.test(q.trim());
+
   // file search (server-side filename match), debounced
   const fileSearches = new Newest(110);
   $effect(() => {
@@ -179,7 +184,8 @@
     fileSearches.run(async (still) => {
       busy = true;
       try {
-        const [r, t] = await Promise.all([api.search(query), titledNotes(query)]);
+        const namesOnly = !tagQuery(query) && (mode === "files" || query.length < 3);
+        const [r, t] = await Promise.all([api.search(query, namesOnly ? { names: true } : {}), titledNotes(query)]);
         if (still()) { fileHits = r.files; lineHits = r.lines; hitsFor = query; titledHits = besides(t, r.files); }
       }
       catch { if (still()) { fileHits = []; lineHits = []; titledHits = []; } }
@@ -200,8 +206,6 @@
   /** Where a command stands among the ones run lately; the rest after them, in their order (the sort is stable). */
   const ranAt = (ran: string[], id: string) => { const i = ran.indexOf(id); return i < 0 ? ran.length : i; };
 
-  /** `tag:name` asks the core for a tag's notes: its answer is the list, not something to match by name. */
-  const tagQuery = (q: string) => /^tag:/i.test(q.trim());
   const titledItems = (): Item[] => titledHits.map((t) => ({
     key: `t:${t.path}`, section: "By title", title: t.title, detail: shownName(t.path), icon: fileIcon(t.path), score: 0, hl: [],
     run: () => openPath(t.path), beside: () => openPath(t.path, undefined, { beside: true }),
@@ -344,45 +348,47 @@
   }
 
   function atItems(aq: string): Item[] {
-    let curSpec = "";
-    try { curSpec = localStorage.getItem("kandinsky.agy.specialist") ?? ""; } catch { /* ignore */ }
     const specItems: Item[] = [];
-    for (const s of specialists) {
-      const mt = fuzzy(aq, s.handle);
-      const md = aq ? fuzzy(aq, `${s.handle} ${s.description}`) : mt;
-      if (aq && !mt && !md) continue;
-      const sc = mt ? mt.score + 50 : (md?.score ?? 0);
-      const detail = [curSpec === s.handle ? "(active)" : "", s.description || s.path].filter(Boolean).join(" · ");
-      specItems.push({
-        key: `ag:${s.handle}`,
-        section: "Vault @specialists",
-        title: s.handle,
-        path: s.path,
-        detail,
-        icon: "claude" as IconName,
-        score: sc,
-        hl: mt?.indices ?? [],
-        run: () => applySpecialist(s.handle, s.description),
-        beside: () => openPath(s.path, undefined, { beside: true }),
-      });
-    }
-    if (curSpec) {
-      const mc = fuzzy(aq, "@coordinator");
-      const md = aq ? fuzzy(aq, "@coordinator default reset") : mc;
-      if (!aq || mc || md) {
+    if (Boolean(settings.config?.developer_mode)) {
+      let curSpec = "";
+      try { curSpec = localStorage.getItem("kandinsky.agy.specialist") ?? ""; } catch { /* ignore */ }
+      for (const s of specialists) {
+        const mt = fuzzy(aq, s.handle);
+        const md = aq ? fuzzy(aq, `${s.handle} ${s.description}`) : mt;
+        if (aq && !mt && !md) continue;
+        const sc = mt ? mt.score + 50 : (md?.score ?? 0);
+        const detail = [curSpec === s.handle ? "(active)" : "", s.description || s.path].filter(Boolean).join(" · ");
         specItems.push({
-          key: "ag:@coordinator",
+          key: `ag:${s.handle}`,
           section: "Vault @specialists",
-          title: "@coordinator",
-          detail: `Clear ${curSpec} and return to default Coordinator`,
+          title: s.handle,
+          path: s.path,
+          detail,
           icon: "claude" as IconName,
-          score: mc ? mc.score : -1,
-          hl: mc?.indices ?? [],
-          run: () => applySpecialist("", "Default Antigravity coordinator"),
+          score: sc,
+          hl: mt?.indices ?? [],
+          run: () => applySpecialist(s.handle, s.description),
+          beside: () => openPath(s.path, undefined, { beside: true }),
         });
       }
+      if (curSpec) {
+        const mc = fuzzy(aq, "@coordinator");
+        const md = aq ? fuzzy(aq, "@coordinator default reset") : mc;
+        if (!aq || mc || md) {
+          specItems.push({
+            key: "ag:@coordinator",
+            section: "Vault @specialists",
+            title: "@coordinator",
+            detail: `Clear ${curSpec} and return to default Coordinator`,
+            icon: "claude" as IconName,
+            score: mc ? mc.score : -1,
+            hl: mc?.indices ?? [],
+            run: () => applySpecialist("", "Default Antigravity coordinator"),
+          });
+        }
+      }
+      if (aq) specItems.sort((a, b) => b.score - a.score);
     }
-    if (aq) specItems.sort((a, b) => b.score - a.score);
 
     const heads = headingItems(aq, "Headings & symbols");
 
@@ -496,7 +502,7 @@
     return [...linkedOut, ...unlinkedOut, ...siblingOut];
   }
 
-  const anyBusy = $derived(busy || backlinksBusy || (q.trim().startsWith("@") && specialistsBusy));
+  const anyBusy = $derived(busy || backlinksBusy || (q.trim().startsWith("@") && Boolean(settings.config?.developer_mode) && specialistsBusy));
   const fieldIcon = $derived.by((): IconName => {
     if (palette.mode === "pick") return palette.pick?.icon ?? "command";
     if (palette.mode === "url") return "globe";
@@ -504,7 +510,7 @@
     if (palette.mode === "capture") return "plus";
     const qt = q.trim();
     if (qt.startsWith("%")) return "pages";
-    if (qt.startsWith("@")) return "claude";
+    if (qt.startsWith("@")) return settings.config?.developer_mode ? "claude" : "link";
     if (qt.startsWith("~")) return "link";
     if (qt.startsWith("#")) return "hash";
     return "command";
@@ -516,7 +522,7 @@
     if (palette.mode === "url") return "Web";
     const qt = q.trim();
     if (qt.startsWith("%")) return "Open panes";
-    if (qt.startsWith("@")) return "@Agents & links";
+    if (qt.startsWith("@")) return settings.config?.developer_mode ? "@Agents & links" : "@Links & headings";
     if (qt.startsWith("~")) return "Backlinks";
     if (qt.startsWith("#")) return "Headings";
     return "Commands";
@@ -576,7 +582,7 @@
       </div>
       <div class="foot">
         <span class="keys-only"><kbd>↑</kbd><kbd>↓</kbd> move</span><span class="keys-only"><kbd>Enter</kbd> run</span>{#if items[sel]?.beside}<span class="keys-only"><kbd>Ctrl</kbd><kbd>Enter</kbd> open beside</span>{/if}<span class="keys-only"><kbd>Esc</kbd> close</span>
-        {#if palette.mode === "all"}<span class="faint"><kbd>#</kbd> headings · <kbd>%</kbd> open panes · <kbd>@</kbd> @agents &amp; links · <kbd>~</kbd> backlinks · <kbd>&gt;</kbd> commands · <kbd>+</kbd> capture</span>{/if}
+        {#if palette.mode === "all"}<span class="faint"><kbd>#</kbd> headings · <kbd>%</kbd> open panes · <kbd>@</kbd> {settings.config?.developer_mode ? "@agents & links" : "@links"} · <kbd>~</kbd> backlinks · <kbd>&gt;</kbd> commands · <kbd>+</kbd> capture</span>{/if}
         {#if palette.mode === "capture"}<span class="faint">{#if !q.trim()}<CaptureGuides box={input} /> · {/if}<kbd>⌫</kbd> back to commands</span>{/if}
       </div>
     </div>
