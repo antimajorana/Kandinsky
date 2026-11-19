@@ -8,8 +8,21 @@ import { errText } from "./text";
 import { openReadingNote, readPaper } from "./papers";
 import { openPaperWorkflowModal, openZoteroImportModal } from "./paper-modals.svelte";
 import { toast } from "./state.svelte";
-import type { Paper } from "./types";
+import type { Paper, PaperAdded } from "./types";
 import type { LibraryItem, LibrarySource } from "./plugin-api";
+
+type ZoteroPaper = Paper & {
+  isbn?: string | null;
+  volume?: string | null;
+  issue?: string | null;
+  pages?: string | null;
+  publisher?: string | null;
+  edition?: string | null;
+  series?: string | null;
+};
+
+const toGroup = (c: string) => c.split("/").map((s) => s.trim()).filter(Boolean).join(" › ");
+const fromGroup = (g: string) => g.split(" › ").map((s) => s.trim()).filter(Boolean).join("/");
 
 // Zotero's item types grouped as a reader thinks of them (2026-10-18: books, theses and lecture notes are references too)
 const typeOf = (p: Paper) =>
@@ -35,28 +48,45 @@ async function copy(text: string, what: string) {
 
 /** The References library. One per page: it keeps the papers it read, by citekey, for their actions. */
 export function referencesSource(): LibrarySource {
-  const papers = new Map<string, Paper>();
+  const papers = new Map<string, ZoteroPaper>();
   const paper = (i: LibraryItem) => papers.get(i.id)!;
-  const openPdf = (p: Paper) => (p.pdf ? openPath(p.pdf) : toast("No PDF yet", `Drop one into ${p.dir}/`));
+  const openPdf = (p: ZoteroPaper) => (p.pdf ? openPath(p.pdf) : toast("No PDF yet", `Drop one into ${p.dir}/`));
   let dir = "refs/papers";
 
-  const item = (p: Paper): LibraryItem => ({
+  const item = (p: ZoteroPaper): LibraryItem => ({
     id: p.key,
     note: `${p.dir}/${p.key}.md`,
     title: p.title,
     sub: [lastNames(p), p.year, p.venue].filter(Boolean).join(" · "),
     flags: [...(p.pdf ? [{ label: "PDF", tone: "red" as const }] : []), ...(p.has_notes ? [{ label: "notes" }] : [])],
     tab: typeOf(p),
-    groups: p.collections,
+    groups: p.collections.map(toGroup),
     tags: p.tags,
-    text: `${p.key} ${p.title} ${p.authors.join(" ")} ${p.year ?? ""} ${p.venue ?? ""} ${p.collections.join(" ")} ${p.tags.join(" ")}`,
-    sort: { added: p.added ?? "", year: Number(p.year ?? 0), author: (p.authors[0] ?? "").split(",")[0].toLowerCase(), title: p.title },
+    text: `${p.key} ${p.title} ${p.authors.join(" ")} ${p.year ?? ""} ${p.venue ?? ""} ${p.doi ?? ""} ${p.arxiv ?? ""} ${p.isbn ?? ""} ${p.collections.join(" ")} ${p.tags.join(" ")}`,
+    sort: {
+      added: p.added ?? "",
+      year: Number(p.year ?? 0),
+      author: (p.authors[0] ?? "").split(",")[0].toLowerCase(),
+      title: p.title,
+      venue: (p.venue ?? "").toLowerCase(),
+      kind: typeWords(p.kind),
+      pdf: p.pdf ? 1 : 0,
+    },
+    columns: {
+      creators: lastNames(p),
+      year: p.year ?? "",
+      venue: p.venue ?? "",
+      kind: typeWords(p.kind),
+      added: (p.added ?? "").slice(0, 10),
+      hasPdf: Boolean(p.pdf),
+      citekey: p.key,
+    },
   });
 
   return {
     id: "references", title: "References", icon: "library", noun: "references",
     async load() {
-      const all = await api.refs();
+      const all = (await api.refs()) as ZoteroPaper[];
       papers.clear();
       for (const p of all) papers.set(p.key, p);
       // the library's folder is catalog-papers' setting: read off the entries themselves (their folders' parent)
@@ -65,26 +95,94 @@ export function referencesSource(): LibrarySource {
     },
     tabs: [{ id: "paper", title: "Papers" }, { id: "book", title: "Books" }, { id: "thesis", title: "Theses" }, { id: "notes", title: "Notes" }],
     groupsTitle: "Collections",
-    layouts: ["list"],
+    async regroup(items, group) {
+      const col = fromGroup(group);
+      if (!col) return;
+      for (const i of items) {
+        const p = paper(i);
+        if (!p || p.collections.includes(col)) continue;
+        await api.refsEdit({
+          key: p.key,
+          title: p.title,
+          authors: p.authors,
+          date: p.year ?? "",
+          venue: p.venue ?? "",
+          collections: [...p.collections, col],
+          tags: p.tags,
+        });
+      }
+      toast(`Filed in ${group}`, `${items.length} item${items.length === 1 ? "" : "s"}`, "success");
+    },
+    layouts: ["list", "table"],
     sorts: [
-      { id: "added", label: "date added", desc: true }, { id: "year", label: "year", desc: true },
-      { id: "author", label: "first author" }, { id: "title", label: "title" },
+      { id: "added", label: "date added", desc: true },
+      { id: "year", label: "year", desc: true },
+      { id: "author", label: "first author" },
+      { id: "title", label: "title" },
+      { id: "venue", label: "venue" },
+      { id: "kind", label: "type" },
     ],
     search: "Search title, author, year, key, tag…",
     empty: "No papers yet — add one by DOI or arXiv id.",
     detail(i) {
       const p = paper(i);
+      const detailsLine = [
+        p.volume ? `Vol. ${p.volume}` : "",
+        p.issue ? `No. ${p.issue}` : "",
+        p.pages ? `pp. ${p.pages}` : "",
+      ].filter(Boolean).join(" · ");
+      const fields = (
+        [
+          ["Citekey", p.key],
+          ["Item type", typeWords(p.kind)],
+          ["Year", p.year ?? ""],
+          ["Venue", p.venue ?? ""],
+          ["Publisher", p.publisher && p.publisher !== p.venue ? p.publisher : ""],
+          ["Details", detailsLine],
+          ["Edition", p.edition ?? ""],
+          ["Series", p.series ?? ""],
+          ["DOI", p.doi ?? ""],
+          ["arXiv", p.arxiv ?? ""],
+          ["ISBN", p.isbn ?? ""],
+          ["PDF", p.pdf ?? ""],
+          ["Added", (p.added ?? "").slice(0, 10)],
+        ] as [string, string][]
+      ).filter(([, v]) => Boolean(v));
       return {
         kind: `${typeWords(p.kind)}${p.year ? ` · ${p.year}` : ""}`,
         title: p.title,
         lines: [{ text: p.authors.join("; ") }, ...(p.venue ? [{ text: p.venue, muted: true }] : [])],
+        fields,
         actions: [
           { label: "Read", icon: "pdf", primary: true, title: "Open the PDF (its note: “Note” in the PDF's bar) (R)", run: () => readPaper(p) },
           { label: "Open PDF", disabled: !p.pdf, title: "Only the PDF (Enter)", run: () => openPdf(p) },
+          ...(p.pdf ? [{ label: "Reveal in Explorer", icon: "folder-open", title: "Show PDF in system file manager", run: () => api.revealOutside(p.pdf!) }] : []),
           { label: p.has_notes ? "Notes" : "New notes", icon: "edit", run: () => openReadingNote(p.key) },
           { label: p.key, icon: "copy", run: () => copy(p.key, "citekey") },
           { label: "\\cite", run: () => copy(`\\cite{${p.key}}`, "\\cite") },
           { label: "BibTeX", run: async () => copy(await api.refsBibtex(p.key), "BibTeX") },
+          {
+            label: "Retrieve Metadata",
+            icon: "refresh",
+            title: "Recognize metadata from the PDF and online scholarly/book indexes",
+            run: async () => {
+              const r = (await api.pluginHelper("catalog-papers", "enrich_entry", { key: p.key, rename_citekey: true }, 120)) as {
+                key?: string;
+                old_key?: string;
+                upgraded?: boolean;
+                source?: string;
+                doi?: string;
+                venue?: string;
+              } | null;
+              const nextKey = r?.key || p.key;
+              toast(
+                r?.upgraded ? `Retrieved metadata for ${nextKey}` : `${nextKey}: metadata up to date`,
+                [r?.source, r?.venue, r?.doi ? `doi:${r.doi}` : ""].filter(Boolean).join(" · ") || "Metadata checked",
+                r?.upgraded ? "success" : "info",
+              );
+              return nextKey;
+            },
+          },
           {
             label: "Check published", title: "Check Crossref / INSPIRE-HEP / OpenAlex for a published journal version while keeping arXiv version provenance",
             run: async () => {
@@ -119,18 +217,38 @@ export function referencesSource(): LibrarySource {
           ] : []),
           { label: "Duplicates / merge…", title: "Compare and merge duplicate entries", run: () => openPaperWorkflowModal("duplicates", p.key) },
           {
-            label: "Edit", title: "Edit title, authors, year, venue, collections, tags",
+            label: "Edit", title: "Edit title, authors, year, venue, collections, tags, and identifiers",
             edit: {
               fields: [
                 { key: "title", label: "Title", value: p.title, rows: 2 },
                 { key: "authors", label: "Authors", hint: "“Last, First”; separated by ;", value: p.authors.join("; "), rows: 2 },
                 { key: "date", label: "Year / date", value: p.year ?? "", half: true },
                 { key: "venue", label: "Venue", value: p.venue ?? "", half: true },
-                { key: "collections", label: "Collections", hint: "comma-separated", value: p.collections.join(", ") },
+                { key: "doi", label: "DOI", value: p.doi ?? "", half: true },
+                { key: "arxiv", label: "arXiv", value: p.arxiv ?? "", half: true },
+                { key: "isbn", label: "ISBN", value: p.isbn ?? "", half: true },
+                { key: "volume", label: "Volume", value: p.volume ?? "", half: true },
+                { key: "issue", label: "Issue", value: p.issue ?? "", half: true },
+                { key: "pages", label: "Pages", value: p.pages ?? "", half: true },
+                { key: "collections", label: "Collections", hint: "comma-separated", value: p.collections.map(toGroup).join(", ") },
                 { key: "tags", label: "Tags", hint: "comma-separated", value: p.tags.join(", ") },
               ],
               async save(v) {
-                await api.refsEdit({ key: p.key, title: v.title, authors: split(v.authors, /;|\n/), date: v.date, venue: v.venue, collections: split(v.collections, /,/), tags: split(v.tags, /,/) });
+                await api.pluginHelper("catalog-papers", "edit", {
+                  key: p.key,
+                  title: v.title,
+                  authors: split(v.authors, /;|\n/),
+                  date: v.date,
+                  venue: v.venue,
+                  collections: split(v.collections, /,/).map(fromGroup),
+                  tags: split(v.tags, /,/),
+                  doi: v.doi,
+                  arxiv: v.arxiv,
+                  isbn: v.isbn,
+                  volume: v.volume,
+                  issue: v.issue,
+                  pages: v.pages,
+                });
                 toast("Saved", `${p.key} — refs.bib updated`, "success");
               },
             },
@@ -144,6 +262,24 @@ export function referencesSource(): LibrarySource {
             },
           },
         ],
+        choice: {
+          label: "Type",
+          options: [
+            { label: "Article", kind: "journalArticle" },
+            { label: "Preprint", kind: "preprint" },
+            { label: "Book", kind: "book" },
+            { label: "Thesis", kind: "thesis" },
+            { label: "Notes", kind: "manuscript" },
+          ].map((o) => ({
+            label: o.label,
+            on: o.kind === "book" ? (p.kind === "book" || p.kind === "science_book" || p.kind === "bookSection") : p.kind === o.kind,
+            run: async () => {
+              await api.pluginHelper("catalog-papers", "type", { key: p.key, kind: o.kind });
+              toast(`Set type to ${o.label}`, p.key, "success");
+              return p.key;
+            },
+          })),
+        },
         links: [
           ...(p.doi ? [{ label: `doi:${p.doi}`, url: `https://doi.org/${p.doi}` }] : []),
           ...(p.arxiv ? [{ label: `arXiv:${p.arxiv}`, url: `https://arxiv.org/abs/${p.arxiv}` }] : []),
@@ -151,25 +287,98 @@ export function referencesSource(): LibrarySource {
         body: p.abstract_text ? { title: "Abstract", text: p.abstract_text } : undefined,
       };
     },
+    many(items) {
+      return [
+        {
+          label: `Retrieve metadata (${items.length})`,
+          icon: "refresh",
+          title: "Recognize metadata from each PDF and online scholarly/book indexes",
+          run: async () => {
+            let upgraded = 0;
+            for (const i of items) {
+              try {
+                const r = (await api.pluginHelper("catalog-papers", "enrich_entry", { key: i.id, rename_citekey: true }, 120)) as { upgraded?: boolean } | null;
+                if (r?.upgraded) upgraded++;
+              } catch { /* continue remaining items */ }
+            }
+            toast("Metadata check complete", `${upgraded} of ${items.length} upgraded`, upgraded ? "success" : "info");
+          },
+        },
+        {
+          label: "Copy \\cite{…}",
+          icon: "copy",
+          run: () => copy(`\\cite{${items.map((i) => i.id).join(", ")}}`, `${items.length} citations`),
+        },
+        {
+          label: "Copy [[links]]",
+          icon: "link",
+          run: () => copy(items.map((i) => `[[${i.id}]]`).join(", "), `${items.length} links`),
+        },
+        {
+          label: "Copy BibTeX",
+          run: async () => {
+            const entries = await Promise.all(items.map((i) => api.refsBibtex(i.id)));
+            await copy(entries.join("\n\n"), `${items.length} BibTeX entries`);
+          },
+        },
+        {
+          label: `Delete ${items.length}…`,
+          danger: true,
+          confirm: {
+            title: `Remove ${items.length} references from the library?`,
+            hint: "Their folders (metadata, PDF, notes) go to the Trash; refs.bib is rewritten.",
+            button: "Move to Trash",
+          },
+          run: async () => {
+            for (const i of items) await api.refsDelete(i.id);
+            toast(`Removed ${items.length} references`, "Moved to Trash; refs.bib updated", "success");
+          },
+        },
+      ];
+    },
     add: {
-      placeholder: "DOI, arXiv id or link — or drop a PDF", busy: "Adding…",
+      placeholder: "DOI, arXiv id, ISBN, or title — or drop a PDF", busy: "Adding…",
       async run(text) {
-        const r = await api.refsAdd(text);
-        toast(r.created ? `Added ${r.paper.key}` : `Already in the library: ${r.paper.key}`, r.paper.title + (r.created && r.pdf ? " · PDF downloaded" : ""), r.created ? "success" : "info");
-        return r.paper.key;
+        try {
+          const r = await api.refsAdd(text);
+          toast(r.created ? `Added ${r.paper.key}` : `Already in the library: ${r.paper.key}`, r.paper.title + (r.created && r.pdf ? " · PDF downloaded" : ""), r.created ? "success" : "info");
+          return r.paper.key;
+        } catch (err) {
+          if (/not a DOI, arXiv id/i.test(errText(err))) {
+            openPaperWorkflowModal("add", text);
+            return;
+          }
+          throw err;
+        }
       },
     },
     drop: {
       // metadata from a DOI / arXiv id inside, else the file name
       hint: "Drop PDFs to add them to the library", accept: /\.pdf$/i,
-      async run(files) {
+      async run(files, group) {
         let last: string | undefined;
+        const col = group ? fromGroup(group) : "";
         for (const f of files) {
           try {
-            const r = await api.refsPdf(f.name, f);
+            let r: PaperAdded;
+            if (col) {
+              const safeName = f.name.replace(/[^\w.-]+/g, "_");
+              const cachePath = `.kandinsky/cache/plugins/catalog-papers/import-${Date.now()}-${safeName}`;
+              await api.upload(cachePath, f, true);
+              r = (await api.pluginHelper("catalog-papers", "import", {
+                path: cachePath,
+                name: f.name,
+                subfolder: col,
+                collections: [col],
+              })) as PaperAdded;
+            } else {
+              r = await api.refsPdf(f.name, f);
+            }
             last = r.paper.key;
+            const zp = r.paper as ZoteroPaper;
+            const recognized = Boolean(zp.doi || zp.arxiv || zp.isbn || (zp.authors.length && zp.year));
             toast(r.created ? `Added ${r.paper.key}` : `Already in the library: ${r.paper.key}`,
-              r.paper.doi || r.paper.arxiv ? r.paper.title : `${r.paper.title} — no DOI/arXiv id found: complete its fields in its note`, r.created ? "success" : "info", 7000);
+              recognized ? r.paper.title : `${r.paper.title} — no DOI/arXiv id found: complete its fields in its note`, r.created ? "success" : "info", 7000);
           } catch (err) { toast(`Could not add ${f.name}`, errText(err), "error", 9000); }
         }
         return last;
@@ -210,6 +419,8 @@ export function referencesSource(): LibrarySource {
         if (e.plugin === "catalog-papers" && e.event === "papers:inbox") {
           const count = (e.data as { count?: number } | null)?.count ?? 1;
           toast("New PDF(s) in drop inbox", `${count} file(s) ready to file`, "info", 7000, [{ label: "Triage", run: () => openPaperWorkflowModal("inbox") }]);
+          reload();
+        } else if (e.plugin === "catalog-papers" && e.event === "papers:external-sync") {
           reload();
         }
       });

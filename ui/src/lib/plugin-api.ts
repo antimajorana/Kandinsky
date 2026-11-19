@@ -437,6 +437,8 @@ export interface LibraryItem {
   text: string;
   /** Values by the source's sort ids. */
   sort: Record<string, string | number>;
+  /** Optional columns for table layouts (creators, year, venue, kind, added, hasPdf, citekey). */
+  columns?: { creators?: string; year?: string; venue?: string; kind?: string; added?: string; hasPdf?: boolean; citekey?: string };
   /** The vault file the item is (its note, the drawing): the links to it shown under its card, as under a note. */
   note?: string;
 }
@@ -504,7 +506,7 @@ export interface LibrarySource {
   /** Items dragged onto a group at the side go there (a film to another shelf); the page loads again after. */
   regroup?(items: LibraryItem[], group: string): Promise<void>;
   /** How items are drawn; the first is the default, more than one gives a switch. */
-  layouts: ("list" | "covers")[];
+  layouts: ("list" | "covers" | "table")[];
   /** Sort orders; the first is the default. `desc`: biggest / newest first. */
   sorts: { id: string; label: string; desc?: boolean }[];
   /** The search box's placeholder. */
@@ -516,7 +518,7 @@ export interface LibrarySource {
   /** The add box: an identifier typed in; resolves to the new item's id, to select it. */
   add?: { placeholder: string; busy: string; run(text: string): Promise<string | void> };
   /** Files dropped on the page; resolves to the last new item's id. */
-  drop?: { hint: string; accept: RegExp; run(files: File[]): Promise<string | void> };
+  drop?: { hint: string; accept: RegExp; run(files: File[], group?: string): Promise<string | void> };
   /** Buttons in the header that are not about one item (a sync); asked once when the page opens. */
   tools?(): Promise<LibraryAction[]>;
   /** Calls `reload` when the source's files change; returns the unsubscribe. */

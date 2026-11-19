@@ -2,12 +2,14 @@
 // plugin-api.ts): sorting, search, the group tree, the side's counts, and libraries of one subject made one page.
 import type { LibraryEntry, LibraryItem, LibrarySource, LibraryTab } from "../../../../../ui/src/lib/plugin-api";
 
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
 /** Sorts by one of the source's orders: numbers as numbers, text by locale; ties by id, so the order is stable. */
 export function sortItems(items: LibraryItem[], by: { id: string; desc?: boolean }): LibraryItem[] {
   const val = (i: LibraryItem) => i.sort[by.id] ?? "";
   return [...items].sort((a, b) => {
     const x = val(a), y = val(b);
-    const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true });
+    const c = typeof x === "number" && typeof y === "number" ? x - y : collator.compare(String(x), String(y));
     return (by.desc ? -c : c) || a.id.localeCompare(b.id);
   });
 }
@@ -68,6 +70,7 @@ export function mergeSources(id: string, title: string, icon: string, parts: Lib
   };
   const union = <T>(xs: T[][], key: (x: T) => string) => { const seen = new Set<string>(); return xs.flat().filter((x) => !seen.has(key(x)) && !!seen.add(key(x))); };
   const with_ = <K extends keyof LibrarySource>(k: K) => parts.find((p) => p[k]);
+  const dropSource = with_("drop")?.drop;
   return {
     id, title, icon,
     noun: parts[0].noun,
@@ -90,7 +93,7 @@ export function mergeSources(id: string, title: string, icon: string, parts: Lib
     empty: parts.map((p) => p.empty).join(" "),
     detail: (item) => { const o = owner(item); return o ? o.part.detail(o.item) : { title: item.title, actions: [] }; },
     add: with_("add")?.add,
-    drop: with_("drop")?.drop,
+    drop: dropSource ? { hint: dropSource.hint, accept: dropSource.accept, run: (files, group) => dropSource.run(files, group) } : undefined,
     tools: parts.some((p) => p.tools) ? async () => (await Promise.all(parts.map((p) => p.tools?.() ?? []))).flat() : undefined,
     watch: (reload) => { const offs = parts.map((p) => p.watch?.(reload)); return () => offs.forEach((f) => f?.()); },
     keys: Object.assign({}, ...parts.map((p) => Object.fromEntries(Object.entries(p.keys ?? {}).map(([k, run]) => [k, (item: LibraryItem) => { const o = owner(item); if (o?.part === p) run(o.item); }])))),
