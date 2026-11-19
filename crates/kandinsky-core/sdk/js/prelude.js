@@ -236,6 +236,10 @@
       djvuToPdf: (path) => native("convert.pdf", { path }),
       typstPdf: (path, to, o = {}) => native("convert.typst", { path, to, ...(o.source === undefined ? {} : { source: String(o.source) }), ...(o.fence ? { fence: true } : {}) }),
     }),
+    dictionaries: Object.freeze({
+      list: (folder) => native("dict.list", { folder: folder ?? "" }),
+      read: (code, folder) => native("dict.read", { code, folder: folder ?? "" }),
+    }),
   });
   // Installed helpers written before the rename (`atlas.*`, `AtlasError`) keep working unchanged.
   globalThis.atlas = globalThis.kandinsky;

@@ -490,6 +490,7 @@
 		"pdf-latex",
 		"tex",
 		"typ",
+		"html",
 		"docx"
 	];
 	const EXT = {
@@ -497,6 +498,7 @@
 		"pdf-latex": "pdf",
 		tex: "tex",
 		typ: "typ",
+		html: "html",
 		docx: "docx"
 	};
 	const ENGINES = {
@@ -585,41 +587,47 @@
 			throw new Error(/not installed/.test(e.message) ? `${program} is not installed on the machine running Kandinsky` : e.message);
 		});
 	}
-	/** Which formats work here: pandoc for all, latexmk for the LaTeX PDF; Typst is in the core. */
+	/** Whether an external CLI tool is available on PATH. */
+	async function hasProgram(program, flag) {
+		return run(program, [flag], { timeout: 20 }).then((r) => r.status === 0, () => false);
+	}
+	const PANDOC_HINT = "Requires Pandoc 3.0+ (https://pandoc.org/installing.html)";
+	/** Which formats work here: PDF (Typst), Typst source, and Standalone HTML work without Pandoc. */
 	async function formats() {
-		const has = async (p, flag) => await run(p, [flag], { timeout: 20 }).then((r) => r.status === 0, () => false);
-		const [pandoc, latexmk] = await Promise.all([has("pandoc", "--version"), has("latexmk", "-v")]);
-		const need = (ok, what) => ok ? {} : { needs: what };
+		const [pandoc, latexmk] = await Promise.all([hasProgram("pandoc", "--version"), hasProgram("latexmk", "-v")]);
 		return [
 			{
 				id: "pdf-typst",
 				label: "PDF (Typst)",
-				ok: pandoc,
-				...need(pandoc, "pandoc")
+				ok: true
 			},
 			{
 				id: "pdf-latex",
 				label: "PDF (LaTeX)",
 				ok: pandoc && latexmk,
-				...need(pandoc && latexmk, pandoc ? "latexmk (a TeX distribution)" : "pandoc and a TeX distribution")
+				...pandoc && latexmk ? {} : { needs: pandoc ? "latexmk (a TeX distribution)" : PANDOC_HINT }
 			},
 			{
 				id: "tex",
 				label: "LaTeX source (.tex)",
 				ok: pandoc,
-				...need(pandoc, "pandoc")
+				...pandoc ? {} : { needs: PANDOC_HINT }
 			},
 			{
 				id: "typ",
 				label: "Typst source (.typ)",
-				ok: pandoc,
-				...need(pandoc, "pandoc")
+				ok: true
+			},
+			{
+				id: "html",
+				label: "Standalone HTML",
+				ok: true
 			},
 			{
 				id: "docx",
 				label: "Word (.docx)",
 				ok: pandoc,
-				...need(pandoc, "pandoc")
+				...pandoc ? {} : { needs: PANDOC_HINT }
 			}
 		];
 	}
@@ -734,7 +742,7 @@
 			out[i] = `![](<${relative(j.outDir, pdf)}>)`;
 		} else if (f.lang === "tikz" && j.figures[keyOf(f.source)]) out[i] = `![](<${relative(j.outDir, tikzPng(keyOf(f.source)))}>){width=${j.figures[keyOf(f.source)].toFixed(1)}pt}`;
 		else {
-			j.t.warnings.push(`a ${f.lang} picture is left as code: ${f.lang === "tikz" ? "the TeX in the page did not draw it" : "Word has no Typst"}`);
+			j.t.warnings.push(`a ${f.lang} picture is left as code: ${f.lang === "tikz" ? "the TeX in the page did not draw it" : `${road === "html" ? "HTML" : "Word"} has no Typst`}`);
 			out[i] = "```" + f.lang + "\n" + f.source + "\n```";
 		}
 		const md = (road === "latex" ? j.t.markdown : j.t.markdown.replace(/\\tag\*?\{([^}]*)\}/g, (_, n) => `\\qquad\\text{(${n})}`)).replace(/<!--fence:(\d+)-->/g, (_, n) => out[Number(n)]);
@@ -765,11 +773,691 @@
 			i + 2
 		].filter((k) => k < lines.length)))].sort((a, b) => a - b).map((k) => lines[k]).join("\n").slice(-3e3) || lines.slice(-30).join("\n");
 	}
+	const escapeTypstText = (s) => s.replace(/([\\#*_$@<>\[\]])/g, "\\$1");
+	const escapeTypstString = (s) => s.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+	const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+	const safeHref = (url) => /^\s*(?:javascript|vbscript|data:text\/html):/i.test(url) ? "#" : url.trim();
+	/** Reads one `{...}` argument starting at `start`; returns `[inner, endIndex]` or null. */
+	function readBraceGroup(s, start) {
+		let i = start;
+		while (i < s.length && s[i] === " ") i++;
+		if (s[i] !== "{") return null;
+		let depth = 0;
+		for (let k = i; k < s.length; k++) {
+			if (s[k] === "\\" && k + 1 < s.length) {
+				k++;
+				continue;
+			}
+			if (s[k] === "{") depth++;
+			else if (s[k] === "}") {
+				depth--;
+				if (depth === 0) return [s.slice(i + 1, k), k + 1];
+			}
+		}
+		return null;
+	}
+	const TYPST_MATH_SYMS = [
+		[/\\qquad/g, " wide "],
+		[/\\quad/g, " quad "],
+		[/\\[,;!]/g, " thin "],
+		[/\\\\/g, " \\ "],
+		[/\\\{/g, "lbrace "],
+		[/\\\}/g, "rbrace "],
+		[/\\\|/g, " || "],
+		[/\\left\\langle\b/g, "angle.l "],
+		[/\\right\\rangle\b/g, " angle.r"],
+		[/\\left\b/g, ""],
+		[/\\right\b/g, ""],
+		[/\\langle\b/g, "angle.l "],
+		[/\\rangle\b/g, "angle.r "],
+		[/\\infty\b/g, "infinity"],
+		[/\\partial\b/g, "diff"],
+		[/\\nabla\b/g, "nabla"],
+		[/\\cdot\b/g, "dot.op"],
+		[/\\times\b/g, "times"],
+		[/\\div\b/g, "div"],
+		[/\\pm\b/g, "plus.minus"],
+		[/\\mp\b/g, "minus.plus"],
+		[/\\leq?\b/g, "<="],
+		[/\\geq?\b/g, ">="],
+		[/\\neq?\b/g, "!="],
+		[/\\approx\b/g, "approx"],
+		[/\\equiv\b/g, "equiv"],
+		[/\\sim\b/g, "tilde.op"],
+		[/\\subseteq\b/g, "subset.eq"],
+		[/\\subset\b/g, "subset"],
+		[/\\supseteq\b/g, "supset.eq"],
+		[/\\supset\b/g, "supset"],
+		[/\\notin\b/g, "in.not"],
+		[/\\in\b/g, "in"],
+		[/\\forall\b/g, "forall"],
+		[/\\exists\b/g, "exists"],
+		[/\\Leftrightarrow\b/g, "<=>"],
+		[/\\Rightarrow\b/g, "=>"],
+		[/\\Leftarrow\b/g, "<="],
+		[/\\leftrightarrow\b/g, "<->"],
+		[/\\rightarrow\b|\\to\b/g, "->"],
+		[/\\leftarrow\b|\\gets\b/g, "<-"],
+		[/\\mapsto\b/g, "|->"],
+		[/\\sum\b/g, "sum"],
+		[/\\prod\b/g, "product"],
+		[/\\oint\b/g, "integral.cont"],
+		[/\\iint\b/g, "integral.double"],
+		[/\\int\b/g, "integral"],
+		[/\\varepsilon\b/g, "epsilon.alt"],
+		[/\\varphi\b/g, "phi.alt"],
+		[/\\vartheta\b/g, "theta.alt"],
+		[/\\ell\b/g, "ell"],
+		[/\\hbar\b/g, "planck.reduce"]
+	];
+	const GREEK_RE = new RegExp(`\\\\(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega)\\b`, "g");
+	/** Converts common LaTeX math commands into valid Typst math notation. */
+	function latexMathToTypst(tex) {
+		let s = tex.trim().replace(/\\begin\{aligned\*?\}/g, "").replace(/\\end\{aligned\*?\}/g, "").replace(/\\begin\{cases\}([\s\S]*?)\\end\{cases\}/g, (_, body) => `cases(${body.replace(/\\\\/g, ", ")})`).replace(/\\begin\{[pbvBV]?matrix\}([\s\S]*?)\\end\{[pbvBV]?matrix\}/g, (_, body) => `mat(${body.replace(/&/g, ",").replace(/\\\\/g, ";")})`);
+		const expandCmds = (input) => {
+			let out = "";
+			for (let i = 0; i < input.length;) {
+				if (input[i] === "\\") {
+					const m = /^\\(frac|sqrt|ket|bra|braket|text|mathrm|mathbf|mathcal|mathbb|hat|tilde|bar|vec|dot|ddot)\b/.exec(input.slice(i));
+					if (m) {
+						const cmd = m[1];
+						let pos = i + m[0].length;
+						if (cmd === "sqrt" && input[pos] === "[") {
+							const end = input.indexOf("]", pos + 1);
+							if (end > pos) {
+								const g = readBraceGroup(input, end + 1);
+								if (g) {
+									out += `root(${input.slice(pos + 1, end)}, ${expandCmds(g[0])})`;
+									i = g[1];
+									continue;
+								}
+							}
+						}
+						const g1 = readBraceGroup(input, pos);
+						if (g1) {
+							if (cmd === "frac") {
+								const g2 = readBraceGroup(input, g1[1]);
+								if (g2) {
+									out += `(${expandCmds(g1[0])})/(${expandCmds(g2[0])})`;
+									i = g2[1];
+									continue;
+								}
+							}
+							const inner = expandCmds(g1[0]);
+							if (cmd === "sqrt") out += `sqrt(${inner})`;
+							else if (cmd === "ket") out += `lr(|${inner} angle.r)`;
+							else if (cmd === "bra") out += `lr(angle.l ${inner}|)`;
+							else if (cmd === "braket") out += `lr(angle.l ${inner} angle.r)`;
+							else if (cmd === "text") out += `"${escapeTypstString(inner)}"`;
+							else if (cmd === "mathrm") out += `upright(${inner})`;
+							else if (cmd === "mathbf") out += `bold(${inner})`;
+							else if (cmd === "mathcal") out += `cal(${inner})`;
+							else if (cmd === "mathbb") out += `bb(${inner})`;
+							else if (cmd === "bar") out += `macron(${inner})`;
+							else if (cmd === "vec") out += `arrow(${inner})`;
+							else if (cmd === "ddot") out += `dot.double(${inner})`;
+							else out += `${cmd}(${inner})`;
+							i = g1[1];
+							continue;
+						}
+					}
+				}
+				out += input[i++];
+			}
+			return out;
+		};
+		s = expandCmds(s);
+		for (const [re, rep] of TYPST_MATH_SYMS) s = s.replace(re, rep);
+		s = s.replace(GREEK_RE, "$1");
+		let grouped = "";
+		for (let i = 0; i < s.length;) {
+			if ((s[i] === "_" || s[i] === "^") && s[i + 1] === "{") {
+				const g = readBraceGroup(s, i + 1);
+				if (g) {
+					const inner = g[0].trim();
+					grouped += `${s[i]}${/^[A-Za-z0-9]$/.test(inner) ? inner : `(${inner})`}`;
+					i = g[1];
+					continue;
+				}
+			}
+			grouped += s[i++];
+		}
+		return grouped.replace(/\\([A-Za-z]+)\b/g, "$1").replace(/[ \t]+/g, " ").trim();
+	}
+	function normalizeImagePath(raw) {
+		const trimmed = raw.trim();
+		return trimmed.startsWith("<") && trimmed.endsWith(">") ? trimmed.slice(1, -1) : trimmed;
+	}
+	/** Converts one line of Markdown inline syntax for either `"typst"` or `"html"`. */
+	function convertInline(text, target) {
+		let out = "";
+		for (let i = 0; i < text.length;) {
+			if (text[i] === "`") {
+				let ticks = 1;
+				while (text[i + ticks] === "`") ticks++;
+				const fence = "`".repeat(ticks);
+				const end = text.indexOf(fence, i + ticks);
+				if (end !== -1) {
+					const code = text.slice(i + ticks, end);
+					out += target === "typst" ? `${fence}${code}${fence}` : `<code>${escapeHtml(code)}</code>`;
+					i = end + ticks;
+					continue;
+				}
+			}
+			if (text[i] === "$" && text[i + 1] !== "$" && text[i + 1] && !/\s/.test(text[i + 1])) {
+				let end = i + 1;
+				while (end < text.length && !(text[end] === "$" && text[end - 1] !== "\\")) end++;
+				if (end < text.length && end > i + 1 && !/\s/.test(text[end - 1])) {
+					const tex = text.slice(i + 1, end);
+					out += target === "typst" ? `$${latexMathToTypst(tex)}$` : `<span class="math inline">$${escapeHtml(tex)}$</span>`;
+					i = end + 1;
+					continue;
+				}
+			}
+			if (text.startsWith("![[", i)) {
+				const end = text.indexOf("]]", i + 3);
+				if (end !== -1) {
+					const [rawPath, alias] = text.slice(i + 3, end).split("|");
+					const p = rawPath.split("#")[0].trim();
+					out += target === "typst" ? `#image("${escapeTypstString(p)}")` : `<img src="${escapeHtml(safeHref(p))}" alt="${escapeHtml((alias ?? p).trim())}">`;
+					i = end + 2;
+					continue;
+				}
+			}
+			if (text.startsWith("![", i)) {
+				const closeAlt = text.indexOf("]", i + 2);
+				if (closeAlt !== -1 && text[closeAlt + 1] === "(") {
+					const closeUrl = text.indexOf(")", closeAlt + 2);
+					if (closeUrl !== -1) {
+						const alt = text.slice(i + 2, closeAlt).trim();
+						const url = normalizeImagePath(text.slice(closeAlt + 2, closeUrl));
+						let nextIdx = closeUrl + 1;
+						const wm = /^\{width=([\d.]+(?:pt|px|cm|mm|in|%))\}/.exec(text.slice(nextIdx));
+						const width = wm ? wm[1] : "";
+						if (wm) nextIdx += wm[0].length;
+						if (target === "typst") {
+							const imgCall = width ? `image("${escapeTypstString(url)}", width: ${width})` : `image("${escapeTypstString(url)}")`;
+							out += alt ? `#figure(${imgCall}, caption: [${convertInline(alt, "typst")}])` : `#${imgCall}`;
+						} else {
+							const style = width ? ` style="width:${escapeHtml(width)}"` : "";
+							out += alt ? `<figure><img src="${escapeHtml(safeHref(url))}" alt="${escapeHtml(alt)}"${style}><figcaption>${convertInline(alt, "html")}</figcaption></figure>` : `<img src="${escapeHtml(safeHref(url))}" alt=""${style}>`;
+						}
+						i = nextIdx;
+						continue;
+					}
+				}
+			}
+			if (text[i] === "[") {
+				const citeM = /^\[(@[\w:-]+(?:\s*[;,]\s*@[\w:-]+)*)\]/.exec(text.slice(i));
+				if (citeM) {
+					const keys = citeM[1].split(/[;,]/).map((k) => k.trim().replace(/^@/, "")).filter(Boolean);
+					out += target === "typst" ? keys.map((k) => `@${k}`).join(" ") : `<span class="cite">[${escapeHtml(keys.join(", "))}]</span>`;
+					i += citeM[0].length;
+					continue;
+				}
+				const closeLabel = text.indexOf("]", i + 1);
+				if (closeLabel !== -1 && text[closeLabel + 1] === "(") {
+					const closeUrl = text.indexOf(")", closeLabel + 2);
+					if (closeUrl !== -1) {
+						const label = text.slice(i + 1, closeLabel);
+						const url = normalizeImagePath(text.slice(closeLabel + 2, closeUrl));
+						out += target === "typst" ? `#link("${escapeTypstString(url)}")[${convertInline(label, "typst")}]` : `<a href="${escapeHtml(safeHref(url))}">${convertInline(label, "html")}</a>`;
+						i = closeUrl + 1;
+						continue;
+					}
+				}
+			}
+			if (text.startsWith("[[", i)) {
+				const end = text.indexOf("]]", i + 2);
+				if (end !== -1) {
+					const [rawTarget, alias] = text.slice(i + 2, end).split("|");
+					const label = (alias ?? rawTarget.split("#")[0].split("/").pop() ?? rawTarget).trim();
+					out += target === "typst" ? escapeTypstText(label) : `<span class="wikilink">${escapeHtml(label)}</span>`;
+					i = end + 2;
+					continue;
+				}
+			}
+			const deco = /^(\*\*|__|~~|==|\*|_)/.exec(text.slice(i));
+			if (deco) {
+				const marker = deco[1];
+				if ((marker === "_" || marker === "*") && /\s/.test(text[i + marker.length] ?? " ")) {
+					out += target === "typst" ? escapeTypstText(marker) : escapeHtml(marker);
+					i += marker.length;
+					continue;
+				}
+				const close = text.indexOf(marker, i + marker.length);
+				if (close > i + marker.length && (marker.length > 1 || !/\s/.test(text[close - 1]))) {
+					const inner = convertInline(text.slice(i + marker.length, close), target);
+					if (marker === "**" || marker === "__") out += target === "typst" ? `*${inner}*` : `<strong>${inner}</strong>`;
+					else if (marker === "~~") out += target === "typst" ? `#strike[${inner}]` : `<del>${inner}</del>`;
+					else if (marker === "==") out += target === "typst" ? `#highlight[${inner}]` : `<mark>${inner}</mark>`;
+					else out += target === "typst" ? `_${inner}_` : `<em>${inner}</em>`;
+					i = close + marker.length;
+					continue;
+				}
+			}
+			if (text[i] === "\\" && i + 1 < text.length && /[\\`*_{}[\]()#+\-.!$>~|=]/.test(text[i + 1])) {
+				const ch = text[i + 1];
+				out += target === "typst" ? escapeTypstText(ch) : escapeHtml(ch);
+				i += 2;
+				continue;
+			}
+			const ch = text[i++];
+			out += target === "typst" ? escapeTypstText(ch) : escapeHtml(ch);
+		}
+		return out;
+	}
+	const CALLOUT_LABELS = {
+		note: {
+			label: "Note",
+			color: "#3b82f6"
+		},
+		info: {
+			label: "Info",
+			color: "#3b82f6"
+		},
+		tip: {
+			label: "Tip",
+			color: "#10b981"
+		},
+		hint: {
+			label: "Hint",
+			color: "#10b981"
+		},
+		important: {
+			label: "Important",
+			color: "#8b5cf6"
+		},
+		warning: {
+			label: "Warning",
+			color: "#f59e0b"
+		},
+		caution: {
+			label: "Caution",
+			color: "#ef4444"
+		},
+		danger: {
+			label: "Danger",
+			color: "#ef4444"
+		},
+		abstract: {
+			label: "Abstract",
+			color: "#06b6d4"
+		},
+		summary: {
+			label: "Summary",
+			color: "#06b6d4"
+		},
+		question: {
+			label: "Question",
+			color: "#f59e0b"
+		},
+		example: {
+			label: "Example",
+			color: "#8b5cf6"
+		},
+		quote: {
+			label: "Quote",
+			color: "#6b7280"
+		}
+	};
+	function parseTableRow(line) {
+		return line.trim().replace(/^\|/, "").replace(/\|$/, "").split(/(?<!\\)\|/).map((c) => c.trim());
+	}
+	function parseTableAligns(sep) {
+		const cells = parseTableRow(sep);
+		if (!cells.length || !cells.every((c) => /^:?-{2,}:?$/.test(c))) return null;
+		return cells.map((c) => c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : "left");
+	}
+	/** Direct Markdown -> Typst converter used when Pandoc is not installed (and exported for tests). */
+	function markdownToTypst(md, opts = {}) {
+		const [fm, rawBody] = splitFrontmatter(md);
+		const title = opts.title ?? fm.title;
+		const subtitle = opts.subtitle ?? fm.subtitle;
+		const author = opts.author ?? fm.author;
+		const date = opts.date ?? fm.date;
+		const margin = MARGINS[opts.margins ?? "normal"] ?? MARGINS.normal;
+		const paper = opts.paper === "letter" ? "us-letter" : "a4";
+		const columns = Number(opts.columns) === 2 ? 2 : 1;
+		const font = opts.font || "Libertinus Serif";
+		const fontsize = opts.fontsize || "11pt";
+		const lang = opts.lang || "en";
+		const out = [
+			`#set page(paper: "${paper}", margin: (x: ${margin}, y: ${margin}), columns: ${columns}, numbering: "1")`,
+			`#set text(font: "${escapeTypstString(font)}", size: ${fontsize}, lang: "${escapeTypstString(lang)}")`,
+			`#set par(leading: 0.65em)`
+		];
+		if (opts.numbered) out.push(`#set heading(numbering: "1.1")`);
+		if (opts.typstPreambleText?.trim()) out.push(opts.typstPreambleText.trim());
+		if (title || author || date) {
+			const bits = [];
+			if (title) bits.push(`#text(size: 18pt, weight: "bold")[${convertInline(title, "typst")}]`);
+			if (subtitle) bits.push(`#text(size: 12pt)[${convertInline(subtitle, "typst")}]`);
+			if (author) bits.push(convertInline(author, "typst"));
+			if (date) bits.push(convertInline(date, "typst"));
+			out.push(`#align(center)[\n  ${bits.join(" \\\n  ")}\n]\n#v(0.8em)`);
+		}
+		if (opts.toc) out.push(`#outline(indent: auto)\n#v(0.8em)`);
+		const lines = rawBody.replace(/\r\n/g, "\n").split("\n");
+		for (let i = 0; i < lines.length;) {
+			const line = lines[i];
+			if (!line.trim()) {
+				out.push("");
+				i++;
+				continue;
+			}
+			const fmFence = /^\s*(`{3,}|~{3,})\s*(.*)$/.exec(line);
+			if (fmFence) {
+				const fence = fmFence[1], info = fmFence[2].trim();
+				const bodyLines = [];
+				i++;
+				while (i < lines.length && !(lines[i].trim().startsWith(fence) && lines[i].trim().replaceAll(fence[0], "") === "")) bodyLines.push(lines[i++]);
+				if (i < lines.length) i++;
+				if (info === "{=typst}") out.push(bodyLines.join("\n"));
+				else out.push(`${fence}${info.split(/\s+/)[0] || ""}\n${bodyLines.join("\n")}\n${fence}`);
+				continue;
+			}
+			if (line.trim().startsWith("$$")) {
+				const single = /^\$\$(.+)\$\$$/.exec(line.trim());
+				if (single) {
+					out.push(`$\n  ${latexMathToTypst(single[1])}\n$`);
+					i++;
+					continue;
+				}
+				const mathLines = [line.trim().slice(2)];
+				i++;
+				while (i < lines.length && !lines[i].includes("$$")) mathLines.push(lines[i++]);
+				if (i < lines.length) {
+					const tail = lines[i++];
+					mathLines.push(tail.slice(0, tail.indexOf("$$")));
+				}
+				out.push(`$\n  ${latexMathToTypst(mathLines.join("\n"))}\n$`);
+				continue;
+			}
+			const hm = /^(#{1,6})\s+(.+?)(?:\s+#+)?$/.exec(line);
+			if (hm) {
+				out.push(`${"=".repeat(hm[1].length)} ${convertInline(hm[2], "typst")}`);
+				i++;
+				continue;
+			}
+			if (/^(?:---+|\*\*\*+|___+)\s*$/.test(line)) {
+				out.push(`#line(length: 100%, stroke: 0.5pt + gray)`);
+				i++;
+				continue;
+			}
+			if (/^\s*>\s?/.test(line)) {
+				const qLines = [];
+				while (i < lines.length && /^\s*>\s?/.test(lines[i])) qLines.push(lines[i++].replace(/^\s*>\s?/, ""));
+				const cm = /^\[!([\w-]+)\]([+-]?)\s*(.*)$/.exec(qLines[0] ?? "");
+				if (cm) {
+					const meta = CALLOUT_LABELS[cm[1].toLowerCase()] ?? {
+						label: cm[1],
+						color: "#6b7280"
+					};
+					const heading = cm[3].trim() || meta.label;
+					const inner = qLines.slice(1).map((l) => l.trim() ? convertInline(l, "typst") : "").join("\n\n");
+					out.push(`#block(fill: luma(246), stroke: (left: 3pt + rgb("${meta.color}")), inset: 8pt, width: 100%)[*${escapeTypstText(heading)}*${inner ? ` \\\n${inner}` : ""}]`);
+				} else {
+					const inner = qLines.map((l) => l.trim() ? convertInline(l, "typst") : "").join(" \\\n");
+					out.push(`#quote(block: true)[${inner}]`);
+				}
+				continue;
+			}
+			if (line.includes("|") && i + 1 < lines.length) {
+				const aligns = parseTableAligns(lines[i + 1]);
+				if (aligns) {
+					const header = parseTableRow(line);
+					i += 2;
+					const rows = [];
+					while (i < lines.length && lines[i].includes("|") && lines[i].trim()) rows.push(parseTableRow(lines[i++]));
+					const cols = aligns.length;
+					const alignArg = aligns.join(", ");
+					const hdrCells = Array.from({ length: cols }, (_, c) => `[${convertInline(header[c] ?? "", "typst")}]`).join(", ");
+					const bodyCells = rows.flatMap((r) => Array.from({ length: cols }, (_, c) => `[${convertInline(r[c] ?? "", "typst")}]`)).join(", ");
+					out.push(`#table(columns: ${cols}, align: (${alignArg}), table.header(${hdrCells})${bodyCells ? `, ${bodyCells}` : ""})`);
+					continue;
+				}
+			}
+			const lm = /^([ \t]*)(?:([-*+])|(\d+)[.)])\s+(.*)$/.exec(line);
+			if (lm) {
+				const pad = " ".repeat(lm[1].replace(/\t/g, "  ").length);
+				const task = /^\[([ xX])\]\s+(.*)$/.exec(lm[4]);
+				if (lm[2]) {
+					const body = task ? `${task[1].toLowerCase() === "x" ? "☑" : "☐"} ${convertInline(task[2], "typst")}` : convertInline(lm[4], "typst");
+					out.push(`${pad}- ${body}`);
+				} else out.push(`${pad}+ ${convertInline(lm[4], "typst")}`);
+				i++;
+				continue;
+			}
+			out.push(convertInline(line, "typst"));
+			i++;
+		}
+		return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+	}
+	/** Direct Markdown -> standalone self-contained HTML5 converter. */
+	function markdownToHtml(md, opts = {}) {
+		const [fm, rawBody] = splitFrontmatter(md);
+		const title = opts.title ?? fm.title;
+		const docTitle = title || "Document";
+		const subtitle = opts.subtitle ?? fm.subtitle;
+		const author = opts.author ?? fm.author;
+		const date = opts.date ?? fm.date;
+		const lang = opts.lang || "en";
+		const margin = MARGINS[opts.margins ?? "normal"] ?? MARGINS.normal;
+		const fontsize = opts.fontsize || "11pt";
+		const paper = opts.paper === "letter" ? "letter" : "A4";
+		const twoCol = Number(opts.columns) === 2;
+		const headings = [];
+		const counters = [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		];
+		const blocks = [];
+		const lines = rawBody.replace(/\r\n/g, "\n").split("\n");
+		const nextHeadingId = (level, raw) => {
+			counters[level - 1]++;
+			for (let k = level; k < 6; k++) counters[k] = 0;
+			const slug = raw.toLowerCase().replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-") || "sec";
+			const num = counters.slice(0, level).join(".");
+			return {
+				id: `h-${headings.length + 1}-${slug}`,
+				num
+			};
+		};
+		for (let i = 0; i < lines.length;) {
+			const line = lines[i];
+			if (!line.trim()) {
+				i++;
+				continue;
+			}
+			const fmFence = /^\s*(`{3,}|~{3,})\s*(.*)$/.exec(line);
+			if (fmFence) {
+				const fence = fmFence[1], codeLang = fmFence[2].trim().split(/\s+/)[0] || "";
+				const codeLines = [];
+				i++;
+				while (i < lines.length && !(lines[i].trim().startsWith(fence) && lines[i].trim().replaceAll(fence[0], "") === "")) codeLines.push(lines[i++]);
+				if (i < lines.length) i++;
+				if (codeLang !== "{=typst}") {
+					const cls = codeLang ? ` class="language-${escapeHtml(codeLang)}"` : "";
+					blocks.push(`<pre><code${cls}>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+				}
+				continue;
+			}
+			if (line.trim().startsWith("$$")) {
+				const single = /^\$\$(.+)\$\$$/.exec(line.trim());
+				if (single) {
+					blocks.push(`<div class="math display">$$${escapeHtml(single[1].trim())}$$</div>`);
+					i++;
+					continue;
+				}
+				const mathLines = [line.trim().slice(2)];
+				i++;
+				while (i < lines.length && !lines[i].includes("$$")) mathLines.push(lines[i++]);
+				if (i < lines.length) {
+					const tail = lines[i++];
+					mathLines.push(tail.slice(0, tail.indexOf("$$")));
+				}
+				blocks.push(`<div class="math display">$$${escapeHtml(mathLines.join("\n").trim())}$$</div>`);
+				continue;
+			}
+			const hm = /^(#{1,6})\s+(.+?)(?:\s+#+)?$/.exec(line);
+			if (hm) {
+				const level = hm[1].length;
+				const { id, num } = nextHeadingId(level, hm[2]);
+				const inner = convertInline(hm[2], "html");
+				const prefix = opts.numbered ? `<span class="secnum">${num}</span> ` : "";
+				headings.push({
+					level,
+					id,
+					html: `${prefix}${inner}`
+				});
+				blocks.push(`<h${level} id="${id}">${prefix}${inner}</h${level}>`);
+				i++;
+				continue;
+			}
+			if (/^(?:---+|\*\*\*+|___+)\s*$/.test(line)) {
+				blocks.push("<hr>");
+				i++;
+				continue;
+			}
+			if (/^\s*>\s?/.test(line)) {
+				const qLines = [];
+				while (i < lines.length && /^\s*>\s?/.test(lines[i])) qLines.push(lines[i++].replace(/^\s*>\s?/, ""));
+				const cm = /^\[!([\w-]+)\]([+-]?)\s*(.*)$/.exec(qLines[0] ?? "");
+				if (cm) {
+					const meta = CALLOUT_LABELS[cm[1].toLowerCase()] ?? {
+						label: cm[1],
+						color: "#6b7280"
+					};
+					const heading = cm[3].trim() || meta.label;
+					const inner = qLines.slice(1).map((l) => l.trim() ? `<p>${convertInline(l, "html")}</p>` : "").join("");
+					blocks.push(`<aside class="callout" style="border-left-color:${meta.color}"><div class="callout-title">${escapeHtml(heading)}</div>${inner}</aside>`);
+				} else {
+					const inner = qLines.map((l) => l.trim() ? `<p>${convertInline(l, "html")}</p>` : "").join("");
+					blocks.push(`<blockquote>${inner}</blockquote>`);
+				}
+				continue;
+			}
+			if (line.includes("|") && i + 1 < lines.length) {
+				const aligns = parseTableAligns(lines[i + 1]);
+				if (aligns) {
+					const header = parseTableRow(line);
+					i += 2;
+					const rows = [];
+					while (i < lines.length && lines[i].includes("|") && lines[i].trim()) rows.push(parseTableRow(lines[i++]));
+					const ths = aligns.map((a, c) => `<th style="text-align:${a}">${convertInline(header[c] ?? "", "html")}</th>`).join("");
+					const trs = rows.map((r) => `<tr>${aligns.map((a, c) => `<td style="text-align:${a}">${convertInline(r[c] ?? "", "html")}</td>`).join("")}</tr>`).join("");
+					blocks.push(`<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`);
+					continue;
+				}
+			}
+			const parseList = (minIndent) => {
+				const first = /^([ \t]*)(?:([-*+])|(\d+)[.)])\s+(.*)$/.exec(lines[i] ?? "");
+				if (!first) return "";
+				const tag = first[2] ? "ul" : "ol";
+				const items = [];
+				while (i < lines.length) {
+					const m = /^([ \t]*)(?:([-*+])|(\d+)[.)])\s+(.*)$/.exec(lines[i]);
+					if (!m) break;
+					const ind = m[1].replace(/\t/g, "  ").length;
+					if (ind < minIndent) break;
+					if (ind > minIndent) {
+						const nested = parseList(ind);
+						if (items.length) items[items.length - 1] = items[items.length - 1].replace(/<\/li>$/, `${nested}</li>`);
+						else items.push(`<li>${nested}</li>`);
+						continue;
+					}
+					if ((m[2] ? "ul" : "ol") !== tag) break;
+					i++;
+					const task = m[2] ? /^\[([ xX])\]\s+(.*)$/.exec(m[4]) : null;
+					const content = task ? `<input type="checkbox" disabled${task[1].toLowerCase() === "x" ? " checked" : ""}> ${convertInline(task[2], "html")}` : convertInline(m[4], "html");
+					items.push(`<li>${content}</li>`);
+				}
+				return `<${tag}>${items.join("")}</${tag}>`;
+			};
+			const lm = /^([ \t]*)(?:([-*+])|(\d+)[.)])\s+/.exec(line);
+			if (lm) {
+				blocks.push(parseList(lm[1].replace(/\t/g, "  ").length));
+				continue;
+			}
+			const pLines = [];
+			while (i < lines.length && lines[i].trim() && !/^(?:#{1,6}\s|>|`{3,}|~{3,}|\$\$|---+|\*\*\*+|___+|[ \t]*(?:[-*+]|\d+[.)])\s)/.test(lines[i]) && !(lines[i].includes("|") && i + 1 < lines.length && parseTableAligns(lines[i + 1]))) pLines.push(convertInline(lines[i++], "html"));
+			if (pLines.length) blocks.push(`<p>${pLines.join(" ")}</p>`);
+		}
+		const tocHtml = opts.toc && headings.length ? `<nav class="toc"><h2>Contents</h2><ul>${headings.map((h) => `<li class="toc-l${h.level}"><a href="#${h.id}">${h.html}</a></li>`).join("")}</ul></nav>` : "";
+		const headerHtml = title ?? subtitle ?? author ?? date ? `<header class="doc-header">${title ? `<h1>${escapeHtml(title)}</h1>` : ""}${subtitle ? `<p class="subtitle">${escapeHtml(subtitle)}</p>` : ""}${[author, date].filter(Boolean).length ? `<p class="meta">${[author, date].filter((x) => Boolean(x)).map(escapeHtml).join(" · ")}</p>` : ""}</header>` : "";
+		return `<!DOCTYPE html>
+<html lang="${escapeHtml(lang)}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(docTitle)}</title>
+<style>
+@page { size: ${paper}; margin: ${margin}; }
+:root { color-scheme: light dark; --fg: #1c1917; --bg: #ffffff; --muted: #57534e; --border: #e7e5e4; --code-bg: #f5f5f4; --accent: #2563eb; }
+@media (prefers-color-scheme: dark) { :root { --fg: #e7e5e4; --bg: #18181b; --muted: #a8a29e; --border: #3f3f46; --code-bg: #27272a; --accent: #60a5fa; } }
+body { font-family: ${opts.font ? `"${escapeHtml(opts.font)}", ` : ""}Georgia, "Times New Roman", serif; font-size: ${escapeHtml(fontsize)}; line-height: 1.65; color: var(--fg); background: var(--bg); max-width: ${twoCol ? "68rem" : "46rem"}; margin: 0 auto; padding: 2.5rem ${escapeHtml(margin)}; }
+main { ${twoCol ? "column-count: 2; column-gap: 2.2rem;" : ""} }
+.doc-header { text-align: center; margin-bottom: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem; }
+.doc-header h1 { margin: 0 0 0.35rem; font-size: 1.9em; }
+.doc-header .subtitle, .doc-header .meta { margin: 0.2rem 0; color: var(--muted); }
+.toc { border: 1px solid var(--border); border-radius: 6px; padding: 0.85rem 1.2rem; margin-bottom: 1.6rem; font-size: 0.92em; }
+.toc h2 { margin: 0 0 0.5rem; font-size: 1em; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.toc ul { list-style: none; margin: 0; padding: 0; }
+.toc li.toc-l2 { padding-left: 1rem; } .toc li.toc-l3 { padding-left: 2rem; }
+h1, h2, h3, h4, h5, h6 { line-height: 1.3; margin: 1.4em 0 0.5em; break-after: avoid; }
+.secnum { color: var(--muted); font-weight: normal; }
+a { color: var(--accent); }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; background: var(--code-bg); border-radius: 4px; }
+code { padding: 0.12em 0.32em; }
+pre { padding: 0.85rem 1rem; overflow-x: auto; } pre code { padding: 0; background: none; }
+blockquote, .callout { margin: 1rem 0; padding: 0.65rem 1rem; border-left: 3px solid var(--border); background: var(--code-bg); border-radius: 0 4px 4px 0; }
+.callout-title { font-weight: 600; margin-bottom: 0.25rem; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+th, td { border: 1px solid var(--border); padding: 0.4rem 0.65rem; } th { background: var(--code-bg); }
+figure { margin: 1.2rem 0; text-align: center; } figcaption { color: var(--muted); font-size: 0.88em; margin-top: 0.35rem; }
+img { max-width: 100%; height: auto; }
+mark { background: #fef08a; color: #1c1917; padding: 0 0.2em; border-radius: 2px; }
+.math.display { overflow-x: auto; text-align: center; margin: 0.9rem 0; }
+hr { border: none; border-top: 1px solid var(--border); margin: 1.8rem 0; }
+</style>
+</head>
+<body>
+${headerHtml}${tocHtml}<main>
+${blocks.join("\n")}
+</main>
+</body>
+</html>
+`;
+	}
 	async function typstRoad(j, format) {
-		const typ = await pandoc(j, "typst", metadata(j, "typst", (j.o.typstPreamble ? [await kandinsky.read(j.o.typstPreamble).catch(() => {
+		const preamble = j.o.typstPreamble ? await kandinsky.read(j.o.typstPreamble).catch(() => {
 			j.t.warnings.push(`Typst preamble not found: ${j.o.typstPreamble}`);
 			return "";
-		})] : []).filter(Boolean).map((h) => "```{=typst}\n" + h + "\n```")) + await fences(j, "typst"));
+		}) : "";
+		const md = await fences(j, "typst");
+		const header2 = preamble ? ["```{=typst}\n" + preamble + "\n```"] : [];
+		let typ;
+		try {
+			typ = await pandoc(j, "typst", metadata(j, "typst", header2) + md);
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e);
+			if (!/not installed/i.test(msg)) throw e;
+			progress("typst", "translating Markdown to Typst");
+			typ = markdownToTypst(md, {
+				...j.t.meta,
+				...j.o,
+				typstPreambleText: preamble
+			});
+			if (j.bib && j.t.cited.length) {
+				const style = (STYLES[j.o.style ?? "numeric"] ?? STYLES.numeric).typst;
+				typ += `\n#bibliography("${escapeTypstString(relative(j.outDir, j.bib))}", style: "${style}")\n`;
+			}
+		}
 		const at = `${j.outDir}/${j.stem}.typ`;
 		if (format === "typ") {
 			await kandinsky.write(at, typ);
@@ -777,6 +1465,16 @@
 		}
 		progress("typst", "compiling the PDF with Typst");
 		return kandinsky.convert.typstPdf(at, `${j.outDir}/${j.stem}.pdf`, { source: typ });
+	}
+	async function htmlRoad(j) {
+		progress("html", "building standalone HTML");
+		const html = markdownToHtml(await fences(j, "html"), {
+			...j.t.meta,
+			...j.o
+		});
+		const at = `${j.outDir}/${j.stem}.html`;
+		await kandinsky.write(at, html);
+		return at;
 	}
 	async function latexRoad(j, format) {
 		const header = ["```{=latex}\n" + ["\\usepackage{soul}", ...layoutOf(j.o).header].join("\n") + "\n```"];
@@ -830,7 +1528,10 @@
 		const f = String(params.format ?? "");
 		if (FORMATS.includes(f)) return f;
 		if (params.to === "tex") return "tex";
-		return String(params.settings?.format ?? "") === "pdf-latex" ? "pdf-latex" : "pdf-typst";
+		const set = String(params.settings?.format ?? "");
+		if (set === "pdf-latex") return "pdf-latex";
+		if (set === "html") return "html";
+		return "pdf-typst";
 	}
 	async function exportNote(params) {
 		const format = formatOf(params);
@@ -838,6 +1539,7 @@
 		let written;
 		if (format === "pdf-typst" || format === "typ") written = [await typstRoad(j, format)];
 		else if (format === "pdf-latex" || format === "tex") written = await latexRoad(j, format);
+		else if (format === "html") written = [await htmlRoad(j)];
 		else written = [await docxRoad(j)];
 		progress("done", written.join(", "));
 		return {
@@ -877,7 +1579,10 @@
 	//#endregion
 	exports.LAYOUTS = LAYOUTS;
 	exports.latexErrors = latexErrors;
+	exports.latexMathToTypst = latexMathToTypst;
 	exports.layoutOf = layoutOf;
+	exports.markdownToHtml = markdownToHtml;
+	exports.markdownToTypst = markdownToTypst;
 	exports.tikzPng = tikzPng;
 	exports.yamlEntry = yamlEntry;
 	return exports;

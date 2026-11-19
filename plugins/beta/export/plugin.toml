@@ -3,7 +3,7 @@
 # [[citekey]] is cited from the vault's .bib; ```tikz pictures are drawn by the LaTeX road, ```typst ones by both.
 # Copy into a vault's .kandinsky/plugins/. The settings are the dialog's starting choices; the dialog saves them back.
 title = "Export"
-description = "a note to PDF (Typst or LaTeX), LaTeX, Typst or Word, in a dialog with a preview"
+description = "a note to PDF (Typst or LaTeX), HTML, LaTeX, Typst or Word, in a dialog with a preview"
 icon = "file"
 version = "1.3.1"
 api = 20
@@ -20,9 +20,9 @@ idle = "10m"                       # it only answers: stopped when unused, start
 key = "format"
 label = "Format"
 kind = "choice"
-choices = ["pdf-typst", "pdf-latex", "tex", "typ", "docx"]
+choices = ["pdf-typst", "pdf-latex", "tex", "typ", "html", "docx"]
 default = "pdf-typst"
-hint = "pdf-typst: PDF through Typst (no TeX needed); pdf-latex: PDF through latexmk; tex, typ: the source; docx: Word"
+hint = "pdf-typst: PDF through Typst (no TeX or Pandoc needed); html: standalone HTML; pdf-latex: PDF through latexmk; tex, typ: the source; docx: Word"
 
 [[setting]]
 key = "folder"
@@ -147,3 +147,5 @@ group = "Typst"
 # where it runs (PLUGIN-API.md, "Platforms"); a platform not named is untested (Android: only with `phone = true`)
 [platforms]
 linux = "works"
+windows = "works"
+macos = "works"

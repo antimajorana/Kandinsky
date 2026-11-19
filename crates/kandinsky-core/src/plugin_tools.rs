@@ -53,8 +53,9 @@ pub struct ToolManifest {
 /// The `for_agents` words of the plugins that can run here: (plugin, text), by id.
 pub fn guidance(root: &Path, cfg: &Config) -> Vec<(String, String)> {
     let all = crate::plugins::list(root);
+    let off = cfg.effective_plugins_off();
     all.iter()
-        .filter(|p| crate::plugins::blocked(&all, &cfg.plugins.off, &p.id).is_none())
+        .filter(|p| crate::plugins::blocked(&all, &off, &p.id).is_none())
         .filter_map(|p| crate::plugins::for_agents(root, &p.id).map(|t| (p.id.clone(), t.trim().to_string())))
         .collect()
 }
@@ -62,9 +63,10 @@ pub fn guidance(root: &Path, cfg: &Config) -> Vec<(String, String)> {
 /// Every tool of the plugins that can run here: (plugin, tool).
 fn runnable(root: &Path, cfg: &Config) -> Vec<(String, ToolManifest)> {
     let all = crate::plugins::list(root);
+    let off = cfg.effective_plugins_off();
     let mut out = Vec::new();
     for p in &all {
-        if crate::plugins::blocked(&all, &cfg.plugins.off, &p.id).is_some() {
+        if crate::plugins::blocked(&all, &off, &p.id).is_some() {
             continue;
         }
         let Ok((tools, _, _)) = crate::plugins::tool_parts(root, &p.id) else { continue };
@@ -83,7 +85,7 @@ pub fn listening(root: &Path, cfg: &Config, event: &str) -> Vec<(String, String)
 pub fn listening_elsewhere(root: &Path, cfg: &Config, event: &str) -> Vec<String> {
     crate::plugins::list(root)
         .into_iter()
-        .filter(|p| p.not_here.is_some() && p.error.is_none() && !cfg.plugins.off.contains(&p.id))
+        .filter(|p| p.not_here.is_some() && p.error.is_none() && !cfg.is_plugin_effectively_off(&p.id))
         .filter(|p| crate::plugins::tool_parts(root, &p.id).is_ok_and(|(tools, _, _)| tools.iter().any(|t| t.on.as_deref() == Some(event))))
         .map(|p| p.id)
         .collect()
@@ -105,9 +107,10 @@ pub struct Scheduled {
 /// Every scheduled tool of the plugins that can run in this vault (switched on, nothing they need missing).
 pub fn scheduled(root: &Path, cfg: &Config) -> Vec<Scheduled> {
     let all = crate::plugins::list(root);
+    let off = cfg.effective_plugins_off();
     let mut out = Vec::new();
     for p in &all {
-        if crate::plugins::blocked(&all, &cfg.plugins.off, &p.id).is_some() {
+        if crate::plugins::blocked(&all, &off, &p.id).is_some() {
             continue;
         }
         let Ok((tools, _, _)) = crate::plugins::tool_parts(root, &p.id) else { continue };
@@ -178,8 +181,9 @@ fn timeout_of(t: &ToolManifest) -> Duration {
 pub fn list(root: &Path, cfg: &Config) -> Vec<Tool> {
     let mut out = vec![];
     let all = crate::plugins::list(root);
+    let off = cfg.effective_plugins_off();
     for p in &all {
-        if !p.has_helper || crate::plugins::blocked(&all, &cfg.plugins.off, &p.id).is_some() {
+        if !p.has_helper || crate::plugins::blocked(&all, &off, &p.id).is_some() {
             continue;
         }
         let Ok((tools, _, _)) = crate::plugins::tool_parts(root, &p.id) else { continue };
@@ -198,7 +202,7 @@ pub async fn call(root: &Path, cfg: &Config, helpers: &Helpers, secrets: &Store,
     let _turn = crate::tool_turns::take(root, id, name).await; // a round never runs twice at once
     // reading every manifest and the secret store (a keyring over D-Bus may take seconds) runs off the async threads,
     // as does keeping a rotated secret: the core's other requests never wait behind a plugin's preparation
-    let (root, off, store, id_, name_) = (root.to_path_buf(), cfg.plugins.off.clone(), secrets.clone(), id.to_string(), name.to_string());
+    let (root, off, store, id_, name_) = (root.to_path_buf(), cfg.effective_plugins_off(), secrets.clone(), id.to_string(), name.to_string());
     let (method, params, timeout, keeps) = tokio::task::spawn_blocking(move || prepare(&root, &off, &store, &id_, &name_, args))
         .await
         .map_err(|e| Error::Other(anyhow::anyhow!("plugin {id}: {e}")))??;
@@ -238,7 +242,8 @@ fn prepare(root: &Path, off: &[String], secrets: &Store, id: &str, name: &str, a
 /// (defaults filled in) unless the page sent its own; `params.secrets` every one it keeps, when it may keep secrets (a
 /// page's own `secrets` field is replaced, never trusted). Non-object params are passed as they are.
 pub fn page_call_params(root: &Path, cfg: &Config, secrets: &Store, id: &str, params: Value) -> Result<Value> {
-    if let Some(why) = crate::plugins::blocked(&crate::plugins::list(root), &cfg.plugins.off, id) {
+    let off = cfg.effective_plugins_off();
+    if let Some(why) = crate::plugins::blocked(&crate::plugins::list(root), &off, id) {
         return Err(Error::BadRequest(format!("plugin {id} cannot run: {why}")));
     }
     let params = if params.is_null() { Value::Object(Map::new()) } else { params };

@@ -12,8 +12,10 @@ phone = true
 js = "helper.js"                   # run in the core (QuickJS), built from helper/helper.ts
 idle = "10m"
 
-[permissions]
-exec = ["ls", "cat", "base64"]               # find and read the Hunspell dictionaries (/usr/share/hunspell), for finishing words
+[platforms]
+linux = "works"
+windows = "works"
+macos = "works"
 
 [[setting]]
 key = "min_count"

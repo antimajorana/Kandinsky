@@ -8,12 +8,14 @@ version = "0.3.2"
 api = 22
 phone = true
 
-[permissions]
-exec = ["ls", "cat", "base64"]               # find and read the Hunspell dictionaries (/usr/share/hunspell)
-
 [helper]
 js = "helper.js"                   # run in the core (QuickJS), built from helper/helper.ts
 idle = "10m"
+
+[platforms]
+linux = "works"
+windows = "works"
+macos = "works"
 
 [[setting]]
 key = "dictionaries"

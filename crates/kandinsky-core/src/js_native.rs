@@ -4,8 +4,9 @@
 //! (sdk/js/prelude.js). Files are the vault's (a vault-relative path, checked by `paths::safe_join`), or the plugin's
 //! own cache for `cache.head`.
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// More than this is not handed to a script at once.
 const MAX_TEXT: u64 = 32 << 20;
@@ -26,7 +27,9 @@ pub fn call(root: &Path, id: &str, op: &str, args: &Value) -> Result<Value, Stri
         "convert.pdf" => crate::convert::djvu_to_pdf(root, id, s("path")).map(Value::from),
         "convert.typst" => convert_typst(root, args),
         "cache.head" => cache_head(root, id, s("name"), args.get("bytes").and_then(Value::as_u64).unwrap_or(8)),
-        other => Err(format!("no native {other:?} (html.select, html.unescape, csv.parse, zip.list, zip.read, hash.sha256, convert.cbz, convert.pdf, convert.typst, cache.head)")),
+        "dict.list" => Ok(dict_list(root, s("folder"))),
+        "dict.read" => dict_read(root, s("code"), s("folder")),
+        other => Err(format!("no native {other:?} (html.select, html.unescape, csv.parse, zip.list, zip.read, hash.sha256, convert.cbz, convert.pdf, convert.typst, cache.head, dict.list, dict.read)")),
     }
 }
 
@@ -115,6 +118,107 @@ fn cache_head(root: &Path, id: &str, name: &str, n: u64) -> Result<Value, String
     Ok(json!(bytes.iter().map(|&b| b as char).collect::<String>()))
 }
 
+fn dictionary_dirs(root: &Path, folder: &str) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    let custom = folder.trim();
+    if !custom.is_empty() {
+        let p = crate::platform::dirs::expand_tilde(custom);
+        dirs.push(if p.is_absolute() { p } else { root.join(p) });
+    }
+    dirs.push(crate::state_dir::join(root, ".kandinsky/dictionaries"));
+    for sys in [
+        "/usr/share/hunspell",
+        "/usr/share/myspell/dicts",
+        "/usr/share/myspell",
+        "/usr/local/share/hunspell",
+        "/opt/homebrew/share/hunspell",
+        "/Library/Spelling",
+    ] {
+        dirs.push(PathBuf::from(sys));
+    }
+    for var in ["ProgramFiles", "ProgramFiles(x86)"] {
+        if let Some(pf) = std::env::var_os(var) {
+            let ext = PathBuf::from(pf).join("LibreOffice/share/extensions");
+            if let Ok(rd) = std::fs::read_dir(&ext) {
+                let mut subs: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+                subs.sort();
+                dirs.extend(subs);
+            }
+            dirs.push(ext);
+        }
+    }
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        dirs.push(PathBuf::from(appdata).join("LibreOffice/4/user/wordbook"));
+    }
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        dirs.push(PathBuf::from(local).join("Hunspell"));
+    }
+    let mut out = Vec::new();
+    for d in dirs {
+        if d.is_dir() && !out.contains(&d) {
+            out.push(d);
+        }
+    }
+    out
+}
+
+fn dict_list(root: &Path, folder: &str) -> Value {
+    let mut codes = BTreeSet::new();
+    for dir in dictionary_dirs(root, folder) {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for entry in rd.flatten() {
+            let name = entry.file_name();
+            let Some(name_str) = name.to_str() else { continue };
+            let Some(code) = name_str.strip_suffix(".dic") else { continue };
+            if code.is_empty() || code == "." || code == ".." || code.contains(['/', '\\', '\0']) {
+                continue;
+            }
+            if entry.path().is_file() && dir.join(format!("{code}.aff")).is_file() {
+                codes.insert(code.to_string());
+            }
+        }
+    }
+    Value::Array(codes.into_iter().map(Value::String).collect())
+}
+
+fn decode_dict_bytes(bytes: &[u8], force_latin1: bool) -> String {
+    if !force_latin1 {
+        if let Ok(s) = std::str::from_utf8(bytes) {
+            return s.to_string();
+        }
+    }
+    bytes.iter().map(|&b| b as char).collect()
+}
+
+fn aff_is_iso8859_1(aff: &str) -> bool {
+    aff.lines().any(|line| {
+        let mut words = line.split_whitespace();
+        words.next().is_some_and(|k| k.eq_ignore_ascii_case("SET"))
+            && words.next().is_some_and(|v| v.eq_ignore_ascii_case("ISO8859-1") || v.eq_ignore_ascii_case("ISO-8859-1"))
+    })
+}
+
+fn dict_read(root: &Path, code: &str, folder: &str) -> Result<Value, String> {
+    let code = code.trim();
+    if code.is_empty() || code == "." || code == ".." || code.contains(['/', '\\', '\0']) || code.contains("..") {
+        return Err(format!("dict.read: invalid dictionary code {code:?}"));
+    }
+    for dir in dictionary_dirs(root, folder) {
+        let aff_path = dir.join(format!("{code}.aff"));
+        let dic_path = dir.join(format!("{code}.dic"));
+        if aff_path.is_file() && dic_path.is_file() {
+            let aff_bytes = std::fs::read(&aff_path).map_err(|e| format!("dict.read: {}: {e}", aff_path.display()))?;
+            let dic_bytes = std::fs::read(&dic_path).map_err(|e| format!("dict.read: {}: {e}", dic_path.display()))?;
+            let aff_probe = decode_dict_bytes(&aff_bytes, false);
+            let latin1 = aff_is_iso8859_1(&aff_probe);
+            let aff = if latin1 { decode_dict_bytes(&aff_bytes, true) } else { aff_probe };
+            let dic = decode_dict_bytes(&dic_bytes, latin1);
+            return Ok(json!({ "code": code, "aff": aff, "dic": dic }));
+        }
+    }
+    Ok(Value::Null)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,5 +252,25 @@ mod tests {
         std::fs::write(cache.join("k.pdf"), b"%PDF-1.7 rest").unwrap();
         assert_eq!(r("cache.head", json!({ "name": "pdf/k.pdf", "bytes": 4 })).unwrap(), json!("%PDF"));
         assert!(r("cache.head", json!({ "name": "../other/x" })).is_err());
+
+        let dicts = t.path().join("my-dicts");
+        std::fs::create_dir_all(&dicts).unwrap();
+        std::fs::write(dicts.join("zz_ZZ.aff"), "SET UTF-8\n").unwrap();
+        std::fs::write(dicts.join("zz_ZZ.dic"), "1\nhello\n").unwrap();
+        std::fs::write(dicts.join("orphan.dic"), "1\nignored\n").unwrap();
+        std::fs::write(dicts.join("en_GB_test.aff"), b"SET ISO8859-1\nappliqu\xe9d\n").unwrap();
+        std::fs::write(dicts.join("en_GB_test.dic"), b"1\ncaf\xe9\n").unwrap();
+        let folder = dicts.to_string_lossy().into_owned();
+        let listed = r("dict.list", json!({ "folder": folder })).unwrap();
+        let arr = listed.as_array().unwrap();
+        assert!(arr.contains(&json!("zz_ZZ")) && arr.contains(&json!("en_GB_test")));
+        assert!(!arr.contains(&json!("orphan")));
+
+        let read_gb = r("dict.read", json!({ "code": "en_GB_test", "folder": folder })).unwrap();
+        assert_eq!(read_gb["code"], json!("en_GB_test"));
+        assert_eq!(read_gb["aff"], json!("SET ISO8859-1\nappliquéd\n"));
+        assert_eq!(read_gb["dic"], json!("1\ncafé\n"));
+        assert_eq!(r("dict.read", json!({ "code": "no_such_dict_zzz", "folder": folder })).unwrap(), Value::Null);
+        assert!(r("dict.read", json!({ "code": "../etc/passwd" })).is_err());
     }
 }
