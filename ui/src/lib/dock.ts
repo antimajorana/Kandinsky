@@ -18,7 +18,8 @@ import {
 import { mount, unmount } from "svelte";
 import { basename, paneId, paneIcon, paneTitle, paneZone, specZone, type PaneKind, type PaneSpec, type SpecOf } from "./panes";
 import { getDock, setDock, kindOf, panelZone, zoneGroup } from "./dock-instance";
-import { besideActive, placement, reveal, hidePanel, setContentVisible, constrainTerminal, placeTerminalPanel, keepShape, nextTerminalN, noteToolSizes } from "./dock-panels";
+import { besideActive, placement, reveal, hidePanel, setContentVisible, constrainTerminal, placeTerminalPanel, keepShape, nextTerminalN, noteToolSizes, paneElement } from "./dock-panels";
+import { offerStep, paneCanStep } from "./pane-nav";
 import { canStep, jumpTo, noteVisit, stepHistory, visits } from "./nav-history";
 import { travelSign } from "./nav-signs";
 import { isSideKind, showSide, sideInBar, sidePanel, toggleSide, type SideId, type SideKind } from "./side-panel.svelte";
@@ -416,7 +417,7 @@ export function open(spec: PaneSpec, opts: { activate?: boolean; beside?: boolea
     if (spec.kind === "pdf" && spec.page !== undefined) pdfPages.get(id)?.(spec.page, { quote: spec.quote, annotation: spec.annotation });
     if (spec.kind === "excalidraw" && spec.page) drawingPages.get(id)?.(spec.page);
     if (spec.kind === "plugin" && spec.anchor) pluginAnchors.get(id)?.(spec.anchor);
-    if (spec.kind === "explorer" && spec.path !== undefined) explorerGo.get(id)?.(spec.path, spec.select);
+    if (spec.kind === "explorer" && spec.path !== undefined) explorerGo.get(id)?.({ source: spec.source, place: spec.place, path: spec.path }, spec.select);
     if (spec.kind === "calendar" && (spec.date !== undefined || spec.view !== undefined)) calendarGo.get(id)?.(spec.date, spec.view);
     return existing.api;
   }
@@ -435,11 +436,22 @@ export function open(spec: PaneSpec, opts: { activate?: boolean; beside?: boolea
     ...((opts.beside && besideActive()) || placement(specZone(spec))),
   } as AddPanelOptions<PaneSpec>);
   setOpening(null);
+  if (opts.activate !== false && !opts.beside) replaceInGroup(panel);
   // a pane added to a hidden tool panel (a new shell, an SSH session while Ctrl+J hid the terminals) shows it, as
   // asking again for an open one does; added in the background it stays hidden, its always-rendered content too
   if (opts.activate !== false) reveal(panel.group);
   else if (!panel.group.api.isVisible) setContentVisible(panel.group, false);
   return panel.api;
+}
+
+/** One tab per pane (`ui.one_tab`): the pane just opened in the editor area takes the place of what its group showed —
+ *  every other tab there closes, but a terminal, an unsaved or a pinned one. Splits are other groups: untouched. */
+function replaceInGroup(panel: IDockviewPanel): void {
+  if (!settings.config?.ui.one_tab || panelZone(panel) !== "main") return;
+  for (const p of [...panel.group.panels]) {
+    const spec = p.params as PaneSpec | undefined;
+    if (p.id !== panel.id && spec?.kind !== "terminal" && !app.dirty[p.id] && !tabFacts.pinned(p.id)) p.api.close();
+  }
 }
 
 // the usage journal (toolsmith miners): one entry per file per 10 s, so tab-hopping is not "use"
@@ -461,9 +473,10 @@ export function setNativeOpener(fn: ((path: string) => boolean) | null): void { 
 /** `path` handed to the phone app's native plugin that opens it (a reader): false off the phone, or none opens it. */
 export const openNative = (path: string): boolean => nativeOpener?.(path) ?? false;
 
-/** `anchor`: the link's `#…` (`Chapter 3`), handed to a plugin's pane that shows the file (`kandinsky.anchor`). */
+/** `anchor`: the link's `#…` (`Chapter 3`), handed to a plugin's pane that shows the file (`kandinsky.anchor`). A PDF's
+ *  `line` is its page, which the phone's native reader is handed as `path#page=N` (openPdfAt's form). */
 export function openPath(path: string, line?: number, opts: { beside?: boolean; anchor?: string } = {}): void {
-  if (openNative(path)) return;
+  if (openNative(line !== undefined && /\.pdf$/i.test(path) ? `${path}#page=${line}` : path)) return;
   openIntent.path = path;
   openIntent.t = Date.now();
   open(resolveSpec(path, line, opts.anchor), { beside: opts.beside }); // the vault's "Open with… → always", a plugin's claim, else the usual viewer
@@ -531,14 +544,19 @@ export function historyList(): void {
 let steppedAt = 0;
 /** A step was taken a moment ago (the mouse's side button): the browser's own Back for that same press is not another. */
 export const steppedJustNow = (): boolean => Date.now() - steppedAt < 400;
-export function navigate(step: -1 | 1): void {
+/** Back (-1) / forward (+1): first inside the pane (its own places, lib/pane-nav.ts) — the one under the pointer when
+ *  `at` is given (a mouse button, a swipe), else the active one — then to the previous / next pane visited, a closed
+ *  one reopened. Whether a step was taken. */
+export function navigate(step: -1 | 1, at?: Element | null): boolean {
   steppedAt = Date.now();
   const leaving = getDock()?.activePanel;
+  if (offerStep(step, at ?? (leaving ? paneElement(leaving.id) : null))) return true;
   const went = stepHistory(step, leaving?.id, (v) => { if (!show(v.id)) open(v.spec); });
-  if (!went) return;
+  if (!went) return false;
   travelSign(step < 0, paneTitle(went.visit.spec), went.at, went.of);
   // back closes the tab it leaves, forward opens it again from the history
   if (step < 0 && leaving && leaving.id !== went.visit.id && closesOnBack(leaving)) leaving.api.close();
+  return true;
 }
 
 /** A document tab (one with a file: never a terminal), nothing unsaved, not pinned, not an app (Home, a plugin's
@@ -549,8 +567,12 @@ function closesOnBack(p: IDockviewPanel): boolean {
     && !app.dirty[p.id] && !tabFacts.pinned(p.id) && !isApp(p.id, spec);
 }
 
-/** Whether back (-1) / forward (+1) has anywhere to go — the swipe sign greys out when not. */
-export const canNavigate = (step: -1 | 1): boolean => canStep(step, getDock()?.activePanel?.id);
+/** Whether back (-1) / forward (+1) has anywhere to go, in the pane (at `at`, else the active one) or between panes —
+ *  the swipe sign greys out when not. */
+export function canNavigate(step: -1 | 1, at?: Element | null): boolean {
+  const active = getDock()?.activePanel;
+  return paneCanStep(step, at ?? (active ? paneElement(active.id) : null)) || canStep(step, active?.id);
+}
 
 // --- the two tool panels (lib/dock-panels.ts), by key ---------------------------------------------
 

@@ -8,6 +8,7 @@ import { errText } from "./text";
 import { openReadingNote, readPaper } from "./papers";
 import { openPaperWorkflowModal, openZoteroImportModal } from "./paper-modals.svelte";
 import { toast } from "./state.svelte";
+import { noteProps } from "./plugin-host-api.svelte";
 import type { Paper, PaperAdded } from "./types";
 import type { LibraryItem, LibrarySource } from "./plugin-api";
 
@@ -56,9 +57,13 @@ export function referencesSource(): LibrarySource {
   const item = (p: ZoteroPaper): LibraryItem => ({
     id: p.key,
     note: `${p.dir}/${p.key}.md`,
+    // its first page (the panel's picture; the list draws none): the core's thumbnail of the PDF
+    cover: p.pdf ?? undefined,
     title: p.title,
     sub: [lastNames(p), p.year, p.venue].filter(Boolean).join(" · "),
-    flags: [...(p.pdf ? [{ label: "PDF", tone: "red" as const }] : []), ...(p.has_notes ? [{ label: "notes" }] : [])],
+    // only the exception is flagged: nearly every entry has its PDF and its note, so a badge on each said nothing;
+    // one without a PDF is the one to act on (drop one on it)
+    flags: p.pdf ? [] : [{ label: "no PDF", tone: "red" as const }],
     tab: typeOf(p),
     groups: p.collections.map(toGroup),
     tags: p.tags,
@@ -125,43 +130,47 @@ export function referencesSource(): LibrarySource {
     ],
     search: "Search title, author, year, key, tag…",
     empty: "No papers yet — add one by DOI or arXiv id.",
-    detail(i) {
+    async detail(i) {
       const p = paper(i);
+      const props = await noteProps(`${p.dir}/${p.key}.md`).catch(() => ({} as Record<string, unknown>));
       const detailsLine = [
         p.volume ? `Vol. ${p.volume}` : "",
         p.issue ? `No. ${p.issue}` : "",
         p.pages ? `pp. ${p.pages}` : "",
       ].filter(Boolean).join(" · ");
-      const fields = (
-        [
-          ["Citekey", p.key],
-          ["Item type", typeWords(p.kind)],
-          ["Year", p.year ?? ""],
-          ["Venue", p.venue ?? ""],
-          ["Publisher", p.publisher && p.publisher !== p.venue ? p.publisher : ""],
-          ["Details", detailsLine],
-          ["Edition", p.edition ?? ""],
-          ["Series", p.series ?? ""],
-          ["DOI", p.doi ?? ""],
-          ["arXiv", p.arxiv ?? ""],
-          ["ISBN", p.isbn ?? ""],
-          ["PDF", p.pdf ?? ""],
-          ["Added", (p.added ?? "").slice(0, 10)],
-        ] as [string, string][]
-      ).filter(([, v]) => Boolean(v));
+      const fields: [string, string][] = [
+        ...noteFields(props),
+        ...((
+          [
+            ["Citekey", p.key],
+            ["Item type", typeWords(p.kind)],
+            ["Year", p.year ?? ""],
+            ["Venue", p.venue ?? ""],
+            ["Publisher", p.publisher && p.publisher !== p.venue ? p.publisher : ""],
+            ["Details", detailsLine],
+            ["Edition", p.edition ?? ""],
+            ["Series", p.series ?? ""],
+            ["DOI", p.doi ?? ""],
+            ["arXiv", p.arxiv ?? ""],
+            ["ISBN", p.isbn ?? ""],
+            ["PDF", p.pdf ? "" : "none yet — drop one here"],
+            ["Added", (p.added ?? "").slice(0, 10)],
+          ] as [string, string][]
+        ).filter(([k, v]) => Boolean(v) && !noteFields(props).some(([nk]) => nk.toLowerCase() === k.toLowerCase()))),
+      ];
       return {
         kind: `${typeWords(p.kind)}${p.year ? ` · ${p.year}` : ""}`,
         title: p.title,
         lines: [{ text: p.authors.join("; ") }, ...(p.venue ? [{ text: p.venue, muted: true }] : [])],
         fields,
         actions: [
-          { label: "Read", icon: "pdf", primary: true, title: "Open the PDF (its note: “Note” in the PDF's bar) (R)", run: () => readPaper(p) },
-          { label: "Open PDF", disabled: !p.pdf, title: "Only the PDF (Enter)", run: () => openPdf(p) },
-          ...(p.pdf ? [{ label: "Reveal in Explorer", icon: "folder-open", title: "Show PDF in system file manager", run: () => api.revealOutside(p.pdf!) }] : []),
+          { label: p.pdf ? "Read" : "Read the notes", icon: "pdf", primary: true, title: "Open the PDF (its note: “Note” in the PDF's bar) (R, Enter)", run: () => readPaper(p) },
+          ...(p.pdf ? [{ label: "Reveal in Explorer", icon: "folder-open", more: true, title: "Show PDF in system file manager", run: () => api.revealOutside(p.pdf!) }] : []),
           { label: p.has_notes ? "Notes" : "New notes", icon: "edit", run: () => openReadingNote(p.key) },
-          { label: p.key, icon: "copy", run: () => copy(p.key, "citekey") },
-          { label: "\\cite", run: () => copy(`\\cite{${p.key}}`, "\\cite") },
-          { label: "BibTeX", run: async () => copy(await api.refsBibtex(p.key), "BibTeX") },
+          { label: "Copy link", icon: "link", title: `[[${p.key}]]: citing is linking`, run: () => copy(`[[${p.key}]]`, "link") },
+          { label: "Copy citekey", icon: "copy", more: true, run: () => copy(p.key, "citekey") },
+          { label: "Copy \\cite", icon: "copy", more: true, run: () => copy(`\\cite{${p.key}}`, "\\cite") },
+          { label: "Copy BibTeX", icon: "copy", more: true, run: async () => copy(await api.refsBibtex(p.key), "BibTeX") },
           {
             label: "Retrieve Metadata",
             icon: "refresh",
@@ -257,7 +266,7 @@ export function referencesSource(): LibrarySource {
             },
           },
           {
-            label: "Delete…", danger: true, title: "Remove this entry (its folder goes to the Trash)",
+            label: "Delete…", danger: true, more: true, title: "Remove this entry (its folder goes to the Trash)",
             confirm: { title: `Remove “${p.title}” (${p.key}) from the library?`, hint: "Its folder (metadata, PDF, notes) goes to the Trash; refs.bib is rewritten.", button: "Move to Trash" },
             run: async () => {
               const r = await api.refsDelete(p.key);
@@ -283,11 +292,12 @@ export function referencesSource(): LibrarySource {
             },
           })),
         },
-        links: [
+        links: noteLinks(props, [
           ...(p.doi ? [{ label: `doi:${p.doi}`, url: `https://doi.org/${p.doi}` }] : []),
           ...(p.arxiv ? [{ label: `arXiv:${p.arxiv}`, url: `https://arxiv.org/abs/${p.arxiv}` }] : []),
-        ],
+        ]),
         body: p.abstract_text ? { title: "Abstract", text: p.abstract_text } : undefined,
+        notes: await ownWords(`${p.dir}/${p.key}.md`).then((text) => (text ? { text, open: () => void openReadingNote(p.key) } : undefined)),
       };
     },
     many(items) {
@@ -434,4 +444,46 @@ export function referencesSource(): LibrarySource {
     keys: { r: (i) => readPaper(paper(i)), n: (i) => void openReadingNote(i.id), c: (i) => void copy(i.id, "citekey") },
     open: (i) => openPdf(paper(i)),
   };
+}
+
+/** What the paper's note says beyond the title, authors, year and venue shown above: its status, the journal's
+ *  volume, issue and pages, when it was published, the publisher, ISBN / ISSN, its language, topics and project. */
+const NOTE_FIELDS: [string, string][] = [
+  ["status", "Status"], ["published", "Published"], ["volume", "Volume"], ["issue", "Issue"], ["pages", "Pages"],
+  ["numPages", "Pages in all"], ["edition", "Edition"], ["publisher", "Publisher"], ["place", "Place"], ["series", "Series"],
+  ["ISBN", "ISBN"], ["ISSN", "ISSN"], ["language", "Language"], ["topics", "Topics"], ["project", "Project"],
+];
+/** The note's web addresses (`sources`, `url`) as links after the item's own (DOI, arXiv), each address once, named by
+ *  its site: an address is something to open, not a field to read character by character. */
+function noteLinks(props: Record<string, unknown>, own: { label: string; url: string }[]): { label: string; url: string }[] {
+  const urls = [props.sources, props.url].flat().map((v) => (v == null ? "" : String(v).trim())).filter((u) => /^https?:\/\//i.test(u));
+  const seen = new Set(own.map((l) => l.url.toLowerCase()));
+  const site = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
+  return [...own, ...urls.filter((u) => !seen.has(u.toLowerCase()) && seen.add(u.toLowerCase())).map((u) => ({ label: site(u), url: u }))];
+}
+/** The person's own words in a paper's note: its text with the properties, the blocks the generator puts there
+ *  (the paper, its marks), embeds, its title line, HTML tags (Zotero's notes) and empty headings left out — the first ~500 characters, or "" when none. */
+async function ownWords(path: string): Promise<string> {
+  const text = await api.file(path).then((f) => f.text, () => "");
+  const own = text
+    .replace(/^---[\s\S]*?\n---\n?/, "")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/!\[\[[^\]]*\]\]/g, "")
+    .replace(/^\s*# .*\n/, "") // the note's own title, the panel's heading already
+    // a note from Zotero is HTML: its words, a paragraph or a line break as a new line
+    .replace(/<\/(p|div|h[1-6]|li)>|<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+    .split("\n")
+    .filter((l) => !/^#{1,6}\s*\S*\s*$/.test(l.trim()) || l.trim().split(/\s+/).length > 2) // a lone template heading
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return own.length > 500 ? `${own.slice(0, 500).replace(/\s+\S*$/, "")}…` : own;
+}
+
+function noteFields(props: Record<string, unknown>): [string, string][] {
+  const text = (v: unknown): string => Array.isArray(v) ? v.map(text).filter(Boolean).join(", ") : v == null ? "" : String(v).replace(/^\[\[|\]\]$/g, "").replace(/\|.*$/, "").trim();
+  // Zotero's `published` says the date twice ("1994-04-15 1994-4-15"): the first is enough
+  return NOTE_FIELDS.map(([k, label]) => [label, k === "published" ? text(props[k]).split(" ")[0] : text(props[k])] as [string, string]).filter(([, v]) => v);
 }

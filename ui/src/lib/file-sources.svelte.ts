@@ -4,7 +4,9 @@
 // file, and every save of that copy goes back through its source (`save`). docs/REFACTOR-explorer.md.
 import { errText } from "./text";
 import { load, save } from "./prefs";
-import { api } from "./api";
+import { api, ApiError } from "./api";
+// "already there" is the 409 status, never a 409 somewhere in a message (a file named report-409.pdf)
+const isConflict = (e: unknown) => e instanceof ApiError && e.status === 409;
 import { app, toast } from "./state.svelte";
 import { open, openPath } from "./dock";
 import { claimLinks, openPage } from "./web-links";
@@ -78,7 +80,7 @@ const EXCERPT_BYTES = 1200;
 
 export const REMOTE = ".kandinsky/remote/";
 /** Pictures the core can thumbnail (`/api/thumb`): IMAGE_RE (paths.ts) without the drawn kinds (svg, ico). */
-export const IMAGE = /\.(png|jpe?g|gif|webp|avif|bmp)$/i;
+export const IMAGE = /\.(png|jpe?g|gif|webp|avif|jxl|bmp)$/i;
 /** The last listings of the folders seen in this run ("source\nplace\npath", the newest 300: browse.svelte.ts): a
  *  folder seen before shows at once and is refreshed behind. */
 export const listings = new Map<string, { path: string; entries: Entry[] }>();
@@ -220,7 +222,7 @@ export const vaultSource: FileSource = {
   upload: async (_place, local, dir, replace) => {
     const to = joinPath(dir, basename(local));
     if (to === local) return "done";
-    try { await api.upload(to, await api.raw(local), replace); } catch (e) { if (/409/.test(String(e))) return "exists"; throw e; }
+    try { await api.upload(to, await api.raw(local), replace); } catch (e) { if (isConflict(e)) return "exists"; throw e; }
     return "done";
   },
   thumb: async (_place, path, width) => {
@@ -247,7 +249,7 @@ export async function downloadInto(src: FileSource, place: string, path: string,
   const name = path.replace(/\/+$/, "").split("/").pop() || "download";
   for (let n = 1; ; n++) {
     const to = joinPath(folder, n === 1 ? name : name.replace(/(\.[^.]*)?$/, ` ${n}$1`));
-    try { await api.upload(to, data, false); return to; } catch (e) { if (!/409/.test(String(e))) throw e; }
+    try { await api.upload(to, data, false); return to; } catch (e) { if (!isConflict(e)) throw e; }
   }
 }
 
@@ -257,7 +259,7 @@ export async function receive(src: FileSource, place: string, dir: string, files
   const exists: File[] = [];
   for (const f of files) {
     if (src.id === vaultSource.id) {
-      try { await api.upload(joinPath(dir, f.name), f, replace); } catch (e) { if (/409/.test(String(e))) { exists.push(f); continue; } throw e; }
+      try { await api.upload(joinPath(dir, f.name), f, replace); } catch (e) { if (isConflict(e)) { exists.push(f); continue; } throw e; }
       continue;
     }
     if (!src.upload) throw new Error(`${src.title} takes no uploads`);

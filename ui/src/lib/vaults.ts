@@ -103,6 +103,13 @@ export interface VaultEntry {
   mirror?: string;
   /** Can be taken off the list (and, for a folder, linked to a mirror) here. */
   managed: boolean;
+  /** A folder of this computer started with the app and kept running in the background (its schedules, rounds and
+   *  notices go on with no window on it); null where it cannot be set (a server's vault, a server's page). */
+  alwaysOn: boolean | null;
+  /** Its notices that came while it was not shown (the core serving it says; 0 when it does not serve it). */
+  unseen: number;
+  /** Its page on this desktop's one core (`/v/<name>/`), when it has one: what "Open in a new window" opens. */
+  page?: string;
   go(): void;
 }
 
@@ -112,21 +119,23 @@ const slash = (a: string) => a.replace(/\/?$/, "/");
 
 /** Every vault this window can switch to. On a server vault's page (through the bridge) that is the desktop's own list
  *  plus the server's vaults. */
+type VaultRow = Vault & { always_on?: boolean; unseen?: number };
+
 export async function vaultListing(): Promise<VaultListing> {
   const remote = remoteHost();
   const l = remote ? await ownCore<VaultList>("GET", "/api/vaults") : await api.vaults();
   const theirs = remote ? await api.vaults().catch(() => null) : null;
   const here = remote ? slash(`https://${remote}${apiBase().replace(/^\/remote\/[^/]+/, "")}`) : l.current;
   // a server lists its own vaults at their place on it (`/v/notes/`): going there is the switch
-  const own = (v: Vault) => !!v.url?.startsWith("/");
+  const own = (v: VaultRow) => !!v.url?.startsWith("/");
   const mirrors = new Set(l.vaults.flatMap((v) => (v.mirror ? [slash(v.mirror)] : [])));
   const entries: VaultEntry[] = [];
-  for (const v of l.vaults) {
+  for (const v of l.vaults as VaultRow[]) {
     const server = !!v.url && !own(v);
     if (server && mirrors.has(slash(v.path))) continue; // shown as its folder's mirror
     entries.push({
       name: v.name, path: v.path, kind: server ? "server" : "folder", current: !remote && slash(v.path) === slash(l.current), missing: v.missing,
-      warm: v.warm, mirror: v.mirror, managed: l.manage,
+      warm: v.warm, mirror: v.mirror, managed: l.manage, unseen: v.unseen ?? 0, page: !remote && own(v) ? v.url : undefined, alwaysOn: l.manage && !server && !own(v) ? (v.always_on ?? false) : null, // an older core says nothing: off
       go: () => {
         if (remote && v.path === l.current) location.href = "/"; // back to this desktop's own vault
         else if (own(v)) location.replace(v.url!); // no history entry: Back never lands in the other vault
@@ -134,14 +143,14 @@ export async function vaultListing(): Promise<VaultListing> {
       },
     });
   }
-  for (const v of theirs?.vaults ?? []) {
+  for (const v of (theirs?.vaults ?? []) as VaultRow[]) {
     const address = `https://${remote}${v.url ?? "/"}`;
     if (mirrors.has(slash(address))) continue;
-    entries.push({ name: v.name, path: address, kind: "server", current: slash(address) === here, missing: false, warm: false, managed: false, go: () => { location.href = throughBridge(address); } });
+    entries.push({ name: v.name, path: address, kind: "server", current: slash(address) === here, missing: false, warm: false, managed: false, alwaysOn: null, unseen: v.unseen ?? 0, go: () => { location.href = throughBridge(address); } });
   }
   // a vault served by `kandinsky serve` is on no list: this window's vault is shown all the same
   if (!remote && !entries.some((e) => e.current)) {
-    entries.push({ name: l.current.split(/[\\/]/).filter(Boolean).pop() ?? l.current, path: l.current, kind: "folder", current: true, missing: false, warm: true, managed: false, go: () => {} });
+    entries.push({ name: l.current.split(/[\\/]/).filter(Boolean).pop() ?? l.current, path: l.current, kind: "folder", current: true, missing: false, warm: true, managed: false, alwaysOn: null, unseen: 0, go: () => {} });
   }
   // the vault of this window first, then as the list has them (most recently opened first)
   entries.sort((a, b) => Number(b.current) - Number(a.current));
@@ -154,8 +163,22 @@ export async function vaultListing(): Promise<VaultListing> {
 export const setMirror = (path: string, mirror: string): Promise<void> =>
   ownCore("POST", "/api/vaults/mirror", { path, mirror: mirror.trim() || undefined });
 
+/** Marks a folder on the list as started with the app and kept running in the background (`on`), or started when
+ *  opened; marked on, it starts now (core: `POST /api/vaults/always-on`). */
+export const setAlwaysOn = (path: string, on: boolean): Promise<void> => ownCore("POST", "/api/vaults/always-on", { path, on });
+
 /** Takes a vault off the list (its folder stays as it is). */
 export const forgetVault = (path: string): Promise<void> => ownCore("POST", "/api/vaults/forget", { path });
+
+/** A vault of this desktop in a window of Kandinsky of its own (kandinsky-app opens a `?window=1` page so), started first when
+ *  it is not yet; this window stays on its vault. */
+export async function openVaultWindow(path: string): Promise<void> {
+  try {
+    const r = await ownCore<{ url?: string } | undefined>("POST", "/api/vaults/open", { path });
+    if (r?.url) window.open(`${r.url}${r.url.includes("?") ? "&" : "?"}window=1`, "_blank");
+    else toast("Vault opened in its own window", path, "success");
+  } catch (e) { toast("Could not open the vault", errText(e), "error"); }
+}
 
 export { askFolder, askServer, openVault };
 

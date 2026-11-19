@@ -1,5 +1,6 @@
 // What a plugin is handed (`register(kandinsky)`, a pane's `api`): the PluginApi of plugin-api.ts, built for one plugin.
 // Every registration goes through `own`, so it is undone when the plugin reloads or is switched off.
+import { playerFor } from "./player.svelte";
 import { zipIndex, zipBlob } from "./zip";
 import { openOutside, openWeb } from "./web-links";
 import { mount, unmount } from "svelte";
@@ -29,11 +30,14 @@ import { exists } from "./vault-files";
 import { registerLibrary as addLibrary, openLibraries, shownLibraries, watchLibraries, type LibraryEntry } from "./libraries.svelte";
 import { registerEmbed } from "./embed-registry";
 import { pick } from "./palette.svelte";
+import { pickNote } from "./pick-note";
+import { nativePrint, nativePrints } from "./native-shell.svelte";
 import { registerSuggestion } from "./suggestions";
 import { isIconName } from "./icons";
 import Plot from "../components/Plot.svelte";
 import { registerEntities } from "./entities";
-import { registerMenu } from "./plugin-menus";
+import { pluginRow, registerMenu } from "./plugin-menus";
+import { partMenu } from "./app-menu";
 import { addStatusCell } from "./plugin-status.svelte";
 import { addGreetingChip } from "./plugin-greeting.svelte";
 import { addSideTool, toolId } from "./side-tools.svelte";
@@ -53,6 +57,7 @@ import { joinLive } from "./live";
 import { addSettingsSection } from "./settings-sections.svelte";
 import { api, apiBase } from "./api";
 import { pageSvg } from "./pdf-marks";
+import { encodeSamples, decodeSamples } from "./pdf-samples";
 import { open, openNative, openPath, openSide } from "./dock";
 import { guard, logPlugin } from "./plugin-log.svelte";
 import { pluginAssetUrl } from "./plugin-files";
@@ -151,6 +156,7 @@ export function pluginApi(p: Plugin, at: PaneAt = {}): PluginApi {
     writeProperty: (path, key, value) => api.setProperty({ path, key, text: Array.isArray(value) ? value.join(", ") : value, list: Array.isArray(value) }),
     query: (baseYaml, thisPath) => api.baseQuery(baseYaml, thisPath),
     view: (src, path) => api.view(path ?? "", String(src)),
+    tickTask: (path, line, text) => api.tickTask(String(path), Number(line), text),
     registerEmbed: (patterns, render) => own(p.id, registerEmbed(p.id, patterns, render)),
     registerView: (type, render) => own(p.id, registerView(type, render)),
     registerNoteView: (name, v) => own(p.id, registerNoteView(name, {
@@ -175,7 +181,7 @@ export function pluginApi(p: Plugin, at: PaneAt = {}): PluginApi {
     mountBlock: (host, block, notePath = "") => mountBlock(host, notePath, typeof block === "string" ? block : stringifyBlock(block)),
     registerLibrary: (source) => {
       const icon = isIconName(source.icon) ? source.icon : "library";
-      return own(p.id, addLibrary({ id: source.id, title: source.title, icon, by: p.id, subject: source.subject, source: () => ({ ...source, icon }) }));
+      return own(p.id, addLibrary({ id: source.id, title: source.title, icon, by: p.id, subject: source.subject, from: source.from, source: () => ({ ...source, icon }) }));
     },
     // what the Libraries page (a plugin's pane) draws; entries handed over without the core's own fields
     libraries: {
@@ -191,6 +197,8 @@ export function pluginApi(p: Plugin, at: PaneAt = {}): PluginApi {
     trash: async (path) => { await api.trash(path); },
     companion: async (path, opts) => (await api.companion({ path, title: opts?.title ?? null, properties: opts?.properties ?? {}, block: null, find: opts?.find ?? false })).path,
     marks: async (file) => { const r = await api.pdfMarks(file); return { note: r.note ?? null, marks: r.marks }; },
+    changeMarks: async (file, ops) => { const r = await api.changePdfMarks(file, ops); return { note: r.note ?? null, marks: r.marks }; },
+    samples: { encode: encodeSamples, decode: decodeSamples },
     marksSvg: (marks, page, size = [1000, 1000]) => {
       const svg = pageSvg(marks, page, { view: [0, 0, size[0], size[1]], rotate: 0 });
       svg.setAttribute("preserveAspectRatio", "none"); // a picture page's places are fractions of each side
@@ -205,6 +213,17 @@ export function pluginApi(p: Plugin, at: PaneAt = {}): PluginApi {
       return m.added;
     },
     pick: (req) => pick(req),
+    pickNote: (o = {}) => pickNote(o),
+    systemPrint: nativePrints()
+      ? async (path, title) => {
+          const r = await fetch(await blobUrl(path));
+          if (!r.ok) throw new Error(`${path}: ${r.status}`);
+          const said = nativePrint(title ?? path.split("/").pop() ?? "Kandinsky", new Uint8Array(await r.arrayBuffer()));
+          if (said !== true) throw new Error(said || "this app has no print dialog");
+          return true;
+        }
+      : undefined,
+    backlinks: async (path) => (await api.backlinks(path)).links.map((b) => ({ source: b.source, line: b.line, context: b.context })),
     signIn: (url, back) => signIn(url, back),
     signInReturned: (back) => returned(back),
     oauth: {
@@ -218,7 +237,8 @@ export function pluginApi(p: Plugin, at: PaneAt = {}): PluginApi {
     },
     registerSuggestion: (sp) => own(p.id, registerSuggestion(sp)),
     on: (type, fn) => hold(onPluginEvent(p.id, type, fn)),
-    media: async (url, init = {}) => `${apiBase()}/media/${(await api.pluginMedia(p.id, { url, headers: init.headers })).ticket}`,
+    player: playerFor(p.id),
+    media: async (src, init = {}) => `${apiBase()}/media/${(await api.pluginMedia(p.id, typeof src === "string" ? { url: src, headers: init.headers } : { file: String(src.file) })).ticket}`,
     fetch: async (url, init = {}) => {
       const json = init.body !== undefined && typeof init.body !== "string";
       const r = await api.pluginFetch(p.id, {
@@ -286,6 +306,7 @@ export function pluginApi(p: Plugin, at: PaneAt = {}): PluginApi {
     },
     shell: {
       menu: (where, fn) => own(p.id, registerMenu(p.id, where, fn)),
+      popMenu: (e, rows, about) => partMenu(e, rows.map((r) => (r && typeof r.label === "string" && typeof r.run === "function" ? pluginRow(p.id, r) : "sep")), about?.path, about?.openLabel),
       sideTool: (t) => {
         // a side tool is a block that lives in the side zone: registered as one, then listed as a tool
         const type = `${p.id}.${t.id}`;
@@ -307,7 +328,7 @@ export function pluginApi(p: Plugin, at: PaneAt = {}): PluginApi {
 const handed = new WeakMap<LibraryEntry, LibraryEntry>();
 const shownEntry = (e: LibraryEntry): LibraryEntry => {
   let h = handed.get(e);
-  if (!h) { const { id, title, icon, by, subject, source } = e; h = { id, title, icon, by, subject, source }; handed.set(e, h); }
+  if (!h) { const { id, title, icon, by, subject, from, source } = e; h = { id, title, icon, by, subject, from, source }; handed.set(e, h); }
   return h;
 };
 

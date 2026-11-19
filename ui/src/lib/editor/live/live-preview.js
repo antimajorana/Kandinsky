@@ -653,6 +653,8 @@ function normalizeOptions(options) {
     linkResolves: options.linkResolves || (() => true),
     // Kandinsky: what a link reads instead of its target (a numbered equation), null for most
     linkLabel: options.linkLabel || null,
+    // Kandinsky: a class (and a tooltip) for a [text](url) link by its address, null for most: a cached lookup
+    linkMark: options.linkMark || (() => null),
     // Syntax highlighting inside fenced code blocks, as [{from,to,cls}] ranges
     // over the code text. Defaults to none, which leaves code as plain
     // monospace -- the behaviour before this was wired in.
@@ -1375,7 +1377,9 @@ export function buildDecorations(state, ranges, options = {}) {
           // Kandinsky: the target on the mark, for the hover preview (lib/preview.ts)
           const href = node.node.getChild("URL");
           if (!href && !node.node.getChild("LinkLabel") && /^\[(?:[!?*i]|TODO)\]$/i.test(state.doc.sliceString(node.from, node.to))) return false;
-          add(node.from, node.to, Decoration.mark({ class: "cm-link", attributes: href ? { "data-href": state.doc.sliceString(href.from, href.to) } : undefined }));
+          const target = href ? state.doc.sliceString(href.from, href.to) : null;
+          const more = target ? opts.linkMark(target) : null; // Kandinsky: a DOI link, filed or not (doi-links.ts)
+          add(node.from, node.to, Decoration.mark({ class: more ? `cm-link ${more.class}` : "cm-link", attributes: target ? { "data-href": target, ...(more?.title ? { title: more.title } : {}), ...more?.attributes } : undefined }));
           if (!revealed(state, node.from, node.to)) {
             const url = node.node.getChild("URL");
             if (url) {

@@ -10,6 +10,8 @@
   /* Kandinsky Term Symbols: Adwaita Mono's symbols (OFL, assets/fonts) for what JetBrains Mono's subsets lack —
      Claude Code's ⎿ ⏺ ✻, arrows, shapes — at the same 0.6 em advance, so they keep the cell grid */
   --font-mono: "JetBrains Mono", "Kandinsky Term Symbols", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  /* a picture alone on screen (touch.css .image-viewer): near-black in every theme, as photo viewers do */
+  --image-viewer-bg: rgb(0 0 0 / 0.92);
   --radius-sm: 5px; --radius: 6px; --radius-lg: 10px; --radius-xl: 12px;
   --rail-w: 44px; --status-h: 26px;
   --editor-size: 16px; --prose-size: 16px; --prose-line-height: 1.68; --measure: 740px;

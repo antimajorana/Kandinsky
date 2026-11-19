@@ -6,7 +6,7 @@
   import { onMount } from "svelte";
   import { settings, loadSuggestions } from "../lib/settings.svelte";
   import { load, save } from "../lib/prefs";
-  import { leaves, sectionDescription, isModified, fieldTitle, shownOn } from "../lib/settings-schema";
+  import { leaves, sectionDescription, isModified, fieldTitle, fieldHere } from "../lib/settings-schema";
   import { placeFields, GROUPS, hostOf, pageDef, canonicalPage, isDevSettingField, isDevSettingFeature } from "../lib/settings-pages";
   import { nativeShell } from "../lib/native-shell.svelte";
   import { apiBase } from "../lib/api";
@@ -43,7 +43,7 @@
   const fields = $derived.by(() => { void settings.schema; return leaves(); });
   const host = $derived(hostOf({ server: !!me.info?.server, phone: nativeShell.on, path: apiBase() }));
   // a setting that does nothing here (a terminal's on the phone) is not offered (its `x-hosts`)
-  const pages = $derived(placeFields([...fields].filter(([, s]) => shownOn(s, host)).map(([p]) => p), host));
+  const pages = $derived(placeFields([...fields].filter(([p, s]) => fieldHere(p, s, host)).map(([p]) => p), host));
   // only show enabled extensions that actually have configurable fields or custom settings sections in the Settings nav
   const pluginPages = $derived(plugins.list.filter((p) => (p.fields.length || (sections[p.id]?.length ?? 0) > 0) && !isOff(p.id)).sort((a, b) => a.title.localeCompare(b.title)));
   const builtinPages = $derived(pages.filter((p) => p.plugin && !isOff(p.plugin)));

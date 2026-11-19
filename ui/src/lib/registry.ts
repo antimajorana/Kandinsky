@@ -28,6 +28,8 @@ export interface EditorHandle {
 export const editors = new Map<string, EditorHandle>();
 /** Told the path of the tab that comes forward (lib/where: the other devices hear what this one shows). */
 export const shownHooks = new Set<(path: string) => void>();
+/** Told a note's caret line (1-based) as the editor keeps its place (lib/where: the other devices open it there). */
+export const placeHooks = new Set<(path: string, line: number) => void>();
 
 /** Bold / italic / link on the note that has the keys. Set by lib/editor/md-format.ts when the
  *  editor's code loads, so the commands (lib/actions.ts) run it at once, without importing CodeMirror. */
@@ -82,7 +84,7 @@ export const searchRequest: { replace: boolean; q?: string } = { replace: false 
  *  activates the pane, so keys typed after a shortcut land there and not in the old focus. */
 export const paneFocus = new Map<string, () => void>();
 /** An open explorer tab asked for again: it goes to `path` and selects `select` (Show in the explorer, a breadcrumb). */
-export const explorerGo = new Map<string, (path: string, select?: string) => void>();
+export const explorerGo = new Map<string, (to: { source: string; place: string; path: string }, select?: string) => void>();
 /** An open calendar pane asked for again: navigate to `date` and/or switch `view`. */
 export const calendarGo = new Map<string, (date?: string, view?: "month" | "week" | "agenda" | "day") => void>();
 /** Open PDF panes by panel id: jump to a page (a search hit in a PDF that is already open). */

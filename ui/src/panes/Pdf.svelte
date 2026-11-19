@@ -1,6 +1,8 @@
 <script module lang="ts">
   import { releaseCanvases } from "../lib/release-canvases";
-  import { load, loadRaw, save, saveRaw } from "../lib/prefs";
+  import { loadRaw, save, saveRaw } from "../lib/prefs";
+  import { pdfPosKey, pdfPosition } from "../lib/pdf-position";
+  import { notedPlace, readingNote, writePlace } from "../lib/pdf-reading";
   import { superOf } from "../lib/keys";
   let lastUsed: HTMLElement | null = null; // the PDF pane the pointer was last in (see onWin below)
 </script>
@@ -25,7 +27,9 @@
   import { api, ApiError } from "../lib/api";
   import { exportWithMarks } from "../lib/pdf-export";
   import { ensureNoteOf, notesBeside } from "../lib/papers";
-  import { placeLink } from "../lib/pdf-place";
+  import { placeLink, type PdfPlace } from "../lib/pdf-place";
+  import { copy, partMenu } from "../lib/app-menu";
+  import { pressedByHand } from "../lib/menu";
   import Icon from "../components/Icon.svelte";
   import PdfThumbs from "../components/PdfThumbs.svelte";
   import PdfMarksList from "../components/PdfMarksList.svelte";
@@ -62,9 +66,47 @@
   // a link to this page, or to the selected passage by its words (lib/pdf-place.ts)
   async function copyLink() {
     const sel = (await r?.selection()) ?? [];
-    const link = sel.length ? placeLink(spec.path, { page: sel[0].page, quote: sel.map((s) => s.text).join(" ") }) : placeLink(spec.path, { page: current || 1 });
-    try { await navigator.clipboard.writeText(link); flash(sel.length ? "Link to the selected passage copied" : `Link to page ${current || 1} copied`); }
+    await copyPlace(sel.length ? { page: sel[0].page, quote: sel.map((s) => s.text).join(" ") } : { page: current || 1 });
+  }
+  /** A link to a place of this PDF on the clipboard, said in the bar (the link itself when the clipboard refuses). */
+  async function copyPlace(place: PdfPlace) {
+    const link = placeLink(spec.path, place);
+    const what = place.quote ? "the selected passage" : place.annotation ? "the mark" : `page ${place.page}`;
+    try { await navigator.clipboard.writeText(link); flash(`Link to ${what} copied`); }
     catch { flash(link, 8000); }
+  }
+
+  /** A page's right-click: the selection's marks and links, the mark under the pointer, the page's link and bookmark,
+   *  then the PDF's file rows. Off the pages, the pane's own menu (pane-menu.ts). */
+  async function pageMenu(e: MouseEvent) {
+    const at = r?.pageAt(e.clientX, e.clientY);
+    if (!r || !at || pressedByHand()) return;
+    e.preventDefault(); // now: what follows waits on the reader
+    const sel = await r.selection();
+    const [x, y] = await r.toPagePoint(at.n, at.X, at.Y).catch(() => [NaN, NaN]);
+    const hit = marks && Number.isFinite(x) ? markAt(marks.marks(), at.n, x, y) : null;
+    const hasBookmark = !!marks?.marks().some((m) => m.page === at.n && m.kind === "bookmark");
+    const words = sel.map((s) => s.text).join(" ");
+    const textRows = sel.length ? [
+      { label: "Highlight", icon: "highlighter" as const, hint: "H", run: () => void tools?.markSelection("highlight") },
+      { label: "Underline", hint: "U", run: () => void tools?.markSelection("underline") },
+      { label: "Strike through", hint: "X", run: () => void tools?.markSelection("strike") },
+      "sep" as const,
+      { label: "Copy", icon: "copy" as const, hint: "Ctrl+C", run: () => void copy(words) },
+      { label: "Copy link to the passage", icon: "link" as const, run: () => void copyPlace({ page: sel[0].page, quote: words }) },
+      "sep" as const,
+    ] : [];
+    const markRows = hit ? [
+      { label: "Copy link to the mark", icon: "link" as const, run: () => void copyPlace({ page: at.n, annotation: hit.id }) },
+      { label: "Delete the mark", icon: "trash" as const, danger: true, run: () => void tools?.remove(hit.id) },
+      "sep" as const,
+    ] : [];
+    partMenu(e, [
+      ...textRows, ...markRows,
+      { label: `Copy link to page ${at.n}`, icon: "link", run: () => void copyPlace({ page: at.n }) },
+      { label: hasBookmark ? `Take page ${at.n}'s bookmark away` : `Bookmark page ${at.n}`, icon: "bookmark", hint: "B",
+        run: () => void tools?.toggleBookmark(at.n).then((on) => { seeBookmark(); flash(on ? `Page ${at.n} bookmarked` : "Bookmark taken away"); }) },
+    ], spec.path);
   }
   let rotation = $state(0);
   const rotate = () => { r?.rotate(); rotation = r?.rotation ?? 0; };
@@ -81,7 +123,7 @@
   let findInput = $state<HTMLInputElement | null>(null);
 
   // per-viewer conveniences (which page, which zoom, dark pages): browser storage, never required
-  const posKey = () => `kandinsky.pdf.pos:${spec.path}`;
+  const posKey = () => pdfPosKey(spec.path);
   let posTimer = 0;
   function rememberPosition() {
     if (!container?.clientWidth) return; // hidden: nothing being read to remember
@@ -89,14 +131,32 @@
     posTimer = window.setTimeout(() => {
       if (!r || !container?.clientWidth) return;
       const at = r.where();
-      save(posKey(), { page: at.page, y: at.y, scale: String(r.zoom) });
+      save(posKey(), { page: at.page, y: at.y, scale: String(r.zoom), t: Date.now() });
+      notePlace(at.page);
       if (panel.isActive) tellWhere({ path: spec.path, page: r.page }); // the page, for a device that follows this one
     }, 400);
+  }
+  // where you are, also in the PDF's note when it has one (lib/pdf-reading.ts): a page held a while, then written once
+  let readingAt: Promise<string | null> | null = null;
+  const noteOfPdf = () => (readingAt ??= readingNote(spec.path));
+  let noteTimer = 0, notedPage = 0, pendingPage = 0;
+  const NOTE_AFTER_MS = 8000; // a page turned past, not read, is not written
+  function notePlace(page: number) {
+    pendingPage = page;
+    clearTimeout(noteTimer);
+    noteTimer = window.setTimeout(flushPlace, NOTE_AFTER_MS);
+  }
+  function flushPlace() {
+    clearTimeout(noteTimer); noteTimer = 0;
+    const page = pendingPage, total = r?.pages ?? 0;
+    if (!page || page === notedPage) return;
+    notedPage = page;
+    void noteOfPdf().then((note) => (note ? writePlace(note, page, total) : undefined)).catch(() => { notedPage = 0; });
   }
   /** The page and zoom this PDF was left at (the zoom saved as "page-width", "page-fit" or a number). */
   function savedPosition(): { page?: number; y?: number | null; zoom?: Zoom } {
     try {
-      const pos = load<{ page?: number; y?: number | null; scale?: string }>(posKey(), {});
+      const pos = pdfPosition(spec.path);
       const z = pos.scale === "page-width" || pos.scale === "page-fit" ? pos.scale : Number(pos.scale) > 0 ? Number(pos.scale) : undefined;
       return { ...(pos.page ? { page: pos.page, y: typeof pos.y === "number" ? pos.y : null } : {}), ...(z !== undefined ? { zoom: z } : {}) };
     } catch { return {}; }
@@ -284,6 +344,18 @@
     if (mod || typing) return;
     if (picked && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); e.stopPropagation(); deletePicked(); return; }
     if (picked && e.key === "Escape") { e.preventDefault(); e.stopPropagation(); unpick(); return; }
+    // zoomed to a column and at its end: Space / PageDown / ↓ go on to the next column, as reading does
+    if ((e.key === " " || e.key === "PageDown" || e.key === "ArrowDown") && !e.shiftKey && r?.atColumnEnd()) {
+      e.preventDefault(); e.stopPropagation();
+      void r.nextColumn();
+      return;
+    }
+    // ← / → turn the page (the page before / after the one in view), as a book reader does
+    if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.altKey && !e.shiftKey) {
+      e.preventDefault(); e.stopPropagation();
+      goto(current + (e.key === "ArrowRight" ? 1 : -1));
+      return;
+    }
     const k = e.key.toLowerCase();
     if (k === "escape" && findOpen && tool === "select" && !erasing) { e.preventDefault(); closeFind(); return; }
     // a text mark's key marks the selection at once, else picks that tool
@@ -300,6 +372,14 @@
     else if (k === "d") toggleDark();
     else return;
     e.preventDefault();
+  }
+
+  // A double-click on the page's white (between lines, a margin, the gutter) zooms to the text column there, the
+  // phone's double tap (core pdf_columns.rs); on a word it still selects the word. Again: the zoom before.
+  function columnZoom(e: MouseEvent) {
+    if (!r || tool !== "select" || erasing || (e.target as HTMLElement).closest(".textLayer span, a, .linkLayer section, [data-annotation-id]")) return;
+    e.preventDefault();
+    void r.zoomToColumn(e.clientX, e.clientY).then((ok) => { if (!ok) flash("No text column there", 2000); });
   }
 
   // Ctrl+wheel and a touchpad pinch zoom the pages smoothly: scaled at once, drawn sharp when the gesture rests
@@ -340,6 +420,10 @@
   async function openViewer(): Promise<void> {
     try {
       const was = savedPosition();
+      // read further on another device (its note's place newer than this viewer's): opened there
+      const noted = spec.page ? null : await noteOfPdf().then((n) => (n ? notedPlace(n) : null));
+      if (noted && noted.page !== was.page && noted.at > (pdfPosition(spec.path).t ?? 0)) { was.page = noted.page; was.y = null; }
+      if (noted) notedPage = noted.page;
       const reader = await openReader(container, spec.path, await engine(engineName), { zoom: was.zoom ?? openZoom(), page: spec.page ?? was.page, y: spec.page ? null : was.y });
       if (disposed) { reader.destroy(); return; }
       r = reader;
@@ -426,6 +510,7 @@
       document.removeEventListener("selectionchange", onSelChange);
       window.removeEventListener("click", onWinClick);
       marks?.stop(); offPan(); offActive.dispose(); pdfPages.delete(panel.id); ro.disconnect(); clearTimeout(posTimer); clearTimeout(exportTimer); clearTimeout(selTimer);
+      if (noteTimer) flushPlace(); // closed while a page was being held: its place still goes to the note
       // closed within the export's wait: the note still follows the last marks, once they are saved
       const reader = r;
       void (tools?.destroy() ?? Promise.resolve()).finally(() => { reader?.destroy(); if (exportTimer !== 0) { exportTimer = 0; void toNotes(); } });
@@ -566,7 +651,7 @@
           <button onclick={() => void sendToAgent("solver")}>Solver</button>
         </div>
       {/if}
-      <div class="viewer-container" tabindex="-1" onscroll={() => { if (picked) placeBar(); else if (selPassage) placeSelPill(); }} class:inking={tool === "ink"} class:noting={tool === "text" || tool === "postit" || tool === "clip" || tool === "stamp"} class:can-pan={tool === "select" && !erasing} class:erasing class:dark bind:this={container} onwheel={pinch} onclickcapture={eraseClick}>
+      <div class="viewer-container" tabindex="-1" onscroll={() => { if (picked) placeBar(); else if (selPassage) placeSelPill(); }} class:inking={tool === "ink"} class:noting={tool === "text" || tool === "postit" || tool === "clip" || tool === "stamp"} class:can-pan={tool === "select" && !erasing} class:erasing class:dark bind:this={container} onwheel={pinch} onclickcapture={eraseClick} oncontextmenu={pageMenu} ondblclick={columnZoom}>
         <div class="pdfViewer"></div>
       </div>
       {#if error}

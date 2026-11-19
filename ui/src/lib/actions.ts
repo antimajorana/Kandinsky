@@ -1,5 +1,5 @@
 // Built-in UI actions: one table drives the palette, the global keymap and the key hints.
-import type { BuiltinId } from "./builtin-plugins";
+import { builtinOn, type BuiltinId } from "./builtin-plugins";
 import { openCaptures, openQuickCapture } from "./quick-capture.svelte";
 import { errText } from "./text";
 import { renameFile } from "./rename-file";
@@ -71,6 +71,7 @@ export async function openHome(still: () => boolean = () => true): Promise<void>
   const spec: PaneSpec = !path ? { kind: "today" } : path.endsWith(".page") ? { kind: "page", path, title: title ?? undefined } : { kind: "editor", path };
   setHomeSpec(spec); // Home is an app, not a tab (lib/apps.svelte.ts)
   open(spec);
+  if (path) void import("./deadlines").then((m) => m.offerOnHome(path)); // what is due lives on Home: offered once when it lacks the box
 }
 
 /** An address opens as it is (`example.org` gets https://), anything else is searched for, in a tab (web-links.ts). */
@@ -273,20 +274,29 @@ export const actions: Action[] = [
   { id: "file.rename", title: "File: rename this file…", run: () => { const p = context.active?.path; if (p) renameFile(p); else toast("Rename", "Open the file to rename first."); } },
   { id: "note.task-edit", title: "Note: create or edit task…", where: "note", run: () => noteFormat.run?.("taskDialog") },
   { id: "note.insert-template", title: "Note: insert a template…", where: "note", run: () => noteFormat.run?.("insertTemplate") },
+  // notes while watching (lib/watch-notes.ts): what plays, into the note being written
+  { id: "player.time", title: "Player: insert the time as a link", keys: "Super+Alt+T", run: () => void import("./watch-notes").then((m) => m.insertTime()) },
+  { id: "player.quote", title: "Player: quote the subtitle shown", keys: "Super+Alt+S", run: () => void import("./watch-notes").then((m) => m.quoteSubtitle()) },
+  { id: "player.frame", title: "Player: grab the frame into the note", keys: "Super+Alt+F", run: () => void import("./watch-notes").then((m) => m.grabFrame()) },
   { id: "note.cycle", title: "Note: cycle this line — text, list item, to-do, text", keys: "Ctrl+Q", where: "note", run: () => noteFormat.run?.("cycle") },
   { id: "note.sourceToggle", title: "Note: toggle Source / Live preview mode", keys: "Ctrl+E", run: () => { window.dispatchEvent(new CustomEvent("kandinsky-toggle-source")); } },
   { id: "ui.quickSwitcher", title: "Quick switcher: search notes & commands", alsoKeys: ["Ctrl+O", "Ctrl+K"], run: () => openPalette("all") },
   { id: "ui.quickOpen", title: "Open file…", keys: "Super+P", alsoKeys: ["Ctrl+P"], run: () => openPalette("files") },
   // no default keys: Alt+←/→ move by word in the editor; the mouse's side buttons and a swipe do this (nav-input.ts)
-  { id: "ui.back", title: "Go back (previous pane)", keys: "Super+[", run: () => navigate(-1) },
+  { id: "ui.back", title: "Go back (in the pane, else the previous pane)", keys: "Super+[", run: () => { navigate(-1); } },
   { id: "ui.history", title: "History: the tabs visited, to go back to one…", run: () => historyList() },
-  { id: "ui.forward", title: "Go forward", keys: "Super+]", run: () => navigate(1) },
+  { id: "ui.forward", title: "Go forward", keys: "Super+]", run: () => { navigate(1); } },
   { id: "ui.today", title: "Home (your home document)", icon: "today", label: "Home", keys: "Super+H", run: () => void openHome() },
   { id: "ui.capture", title: "Capture (a popup over the current pane)", keys: "Super+C", alsoKeys: ["Ctrl+Alt+N"], run: () => openQuickCapture() },
   // the bar as a capture box, wherever one is: the same completions (task fields, [[notes, #tags, @days)
   { id: "ui.capture-bar", title: "Capture in the bar", run: () => openPalette("capture") },
   // every capture by day, to triage (components/views/Captures.svelte): the `captures` block alone in a tab
   { id: "ui.captures", title: "Captures: triage what was captured", icon: "inbox", run: () => openCaptures() },
+  // what must be done by a day — dated tasks, notes with due:, deadline calendars (lib/deadlines.ts): its page, and its box on Home
+  { id: "ui.deadlines", title: "Deadlines: what is due, overdue first", icon: "flag", label: "Deadlines", run: () => void import("./deadlines").then((m) => m.openDeadlines()) },
+  { id: "ui.home.addDeadlines", title: "Home: add the deadlines box", icon: "flag", run: () => void import("./deadlines").then((m) => m.addDeadlinesToHome()) },
+  // every Syncthing conflict copy left to settle (components/views/SyncConflicts.svelte), with the note banner's ways out
+  { id: "ui.syncConflicts", title: "Sync conflicts: the copies Syncthing left to settle", icon: "refresh", run: () => void import("./sync-copies").then((m) => m.openSyncConflicts()) },
   // the notes that wait for a decision (unsorted, untagged, orphaned, stale): a Base of the vault (lib/note-triage.ts)
   { id: "ui.note-triage", title: "Notes: triage (unsorted, untagged, orphaned, stale)", icon: "table", run: () => void import("./note-triage").then((m) => m.openNoteTriage()) },
   // New…: every kind of new thing, each placed by its kind; the phone app's + opens it
@@ -330,7 +340,9 @@ export const actions: Action[] = [
   // the Libraries page is a plugin's pane (the Catalog's: libraries.svelte.ts); without one on, a notice says so
   { id: "ui.libraries", title: "Libraries (drawings, references, films, comics…)", icon: "library", label: "Libraries", run: () => openLibraries() },
   // one Library page: References is its first library
-  { id: "ui.library", title: "Library: references, then the vault's other libraries", icon: "library", label: "Library", keys: "Super+Shift+L", plugin: "library", run: () => openLibraries("references") },
+  // the Library page is the Catalog's: its tile and key stay when References (the built-in "library") is off — a
+  // vault of books and films only, no papers — and open the page at its first library then
+  { id: "ui.library", title: "Library: references, then the vault's other libraries", icon: "library", label: "Library", keys: "Super+Shift+L", run: () => openLibraries(builtinOn("library") ? "references" : undefined) },
   { id: "ui.git", title: "Git: changes and history", icon: "git", label: "Git", keys: "Super+G", developerOnly: true, run: () => { open({ kind: "git" }); } },
   { id: "ui.git.blame", title: "Git: who changed each line (blame)", icon: "git", developerOnly: true, run: () => void toggleBlame() },
   { id: "note.history", title: "Page: Version history, diff & restore…", icon: "clock", run: () => {
@@ -352,6 +364,7 @@ export const actions: Action[] = [
   { id: "ui.panel.move", title: "Move terminal panel (bottom ↔ right)", developerOnly: true, run: () => setTerminalPosition(settings.config?.terminal.position === "right" ? "bottom" : "right") },
   { id: "ui.properties.inline", title: "Properties: show them in the note (as Obsidian)", run: () => setPropertiesView("inline") },
   { id: "ui.web", title: "Open web page…", run: () => openPalette("url") },
+  { id: "web.forgetSiteData", title: "Web tabs: forget sign-ins and site data", icon: "globe", run: () => void import("./web-links").then((m) => m.forgetWebData()) },
   { id: "ui.openWith", title: "Open with… (this file in another view)", keys: "Ctrl+Alt+O", run: () => openWith() },
   { id: "ui.focusFile", title: "Edit FOCUS.md", run: () => openPath(app.workspace?.config.focus ?? "FOCUS.md") },
   { id: "ui.workspace.preset.quad", title: "Workspace: Research Quad (PDF + Note + Solver + Antigravity)", icon: "grid", label: "Research Quad", developerOnly: true, run: () => void applyWorkspacePreset("research-quad") },
@@ -361,6 +374,7 @@ export const actions: Action[] = [
   { id: "ui.workspace.switch", title: "Workspace: Load / manage saved workspaces…", keys: "Ctrl+Alt+W", icon: "grid", run: () => askManageWorkspaces() },
   { id: "ui.resetLayout", title: "Reset layout", run: () => resetLayout() },
   { id: "ui.python.env", title: "Python: choose the environment (for the Python server and new terminals)", icon: "terminal", developerOnly: true, run: () => void import("./python-env").then((m) => m.choosePythonEnv()) },
+  { id: "ui.elsewhere", title: "Open what another device shows", icon: "eye", run: () => void import("./where.svelte").then((m) => m.openElsewhere()) },
   { id: "ui.glance", title: "Glance: follow another device (what it shows, full screen)", icon: "eye", run: () => void import("./where.svelte").then((m) => m.followDevice()) },
   { id: "ui.symbols", title: "Go to a symbol in the project (functions, classes…)", icon: "file-code", developerOnly: true, run: () => goToSymbol() },
   { id: "ui.problems", title: "Problems: errors and warnings of the current file", keys: "Super+M", developerOnly: true, run: () => showProblems() },

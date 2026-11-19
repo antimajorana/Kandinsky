@@ -5,7 +5,6 @@ import type { SyntaxNode } from "@lezer/common";
 import { EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { getCM } from "@replit/codemirror-vim";
 import FloatingToolbar, { type FloatingToolbarSnapshot } from "../../components/FloatingToolbar.svelte";
-import { overlayOpened } from "../overlays";
 import { app } from "../state.svelte";
 import { findEnclosingLink, getSelectionFormat } from "./md-format";
 import { frontmatterClose } from "./live/live-preview.js";
@@ -80,7 +79,6 @@ class FloatingToolbarPlugin {
   private lastW = 0;
   private lastH = 0;
   private dismissedRange: { from: number; to: number } | null = null;
-  private closeOverlay: (() => void) | null = null;
   private destroyed = false;
   private rafRefine = 0;
 
@@ -164,8 +162,6 @@ class FloatingToolbarPlugin {
   private hide(): void {
     if (!this.visible) return;
     this.visible = false;
-    this.closeOverlay?.();
-    this.closeOverlay = null;
     this.instance.setState({
       visible: false,
       top: 0,
@@ -251,10 +247,6 @@ class FloatingToolbarPlugin {
       format: measure.format,
       initialLink: measure.initialLink,
     });
-    const el = this.instance.getElement();
-    if (el && !this.closeOverlay) {
-      this.closeOverlay = overlayOpened(el);
-    }
     if (measure.refine && !this.rafRefine) {
       this.rafRefine = requestAnimationFrame(() => {
         this.rafRefine = 0;
@@ -269,8 +261,6 @@ class FloatingToolbarPlugin {
       cancelAnimationFrame(this.rafRefine);
       this.rafRefine = 0;
     }
-    this.closeOverlay?.();
-    this.closeOverlay = null;
     this.view.dom.removeEventListener("pointerdown", this.onPointerDown);
     this.view.dom.removeEventListener("keydown", this.onEditorKeyDown, true);
     window.removeEventListener("pointerup", this.onPointerUp);
