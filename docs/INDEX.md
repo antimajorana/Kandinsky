@@ -4,6 +4,7 @@
 
 - [PHILOSOPHY.md](PHILOSOPHY.md) — **read first**: everything is a file, everything linkable by `[[wikilink]]`, companion notes (properties + a block) for what is not Markdown, citing is linking, generated files only by their feature, integrations as plugins
 - [ARCHITECTURE.md](ARCHITECTURE.md) — shape, invariants, config, and the v0 HTTP/WS API contract
+- [SEARCH-PERFORMANCE.md](guides/SEARCH-PERFORMANCE.md) — persistent trigram candidate index (`.kandinsky/cache/search.idx`, `.kandinsky/cache/search-pdf.idx`), `FileStamp` freshness, `grep-searcher` verification, and palette `{ names: true }` fast path
 - [TOOLS.md](guides/TOOLS.md) — standalone Python tools (vault scoring/migration, Zotero import, refs.bib) with measurements on real data
 - [LSP-language-servers.md](guides/LSP-language-servers.md) — slice 1b: language servers (rust-analyzer, pylsp/pyright, texlab, clangd) relayed over WebSocket; [lsp] settings; fake-server test
 - [MD-RENDERING.md](guides/MD-RENDERING.md) — markdown rendering vs Obsidian: the render audit (`npm run audit:md`, every note), 11 root causes fixed (528 → 11 findings), properties panel, what is left in the sources

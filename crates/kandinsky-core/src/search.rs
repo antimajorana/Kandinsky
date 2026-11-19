@@ -6,6 +6,9 @@ use grep_regex::{RegexMatcher, RegexMatcherBuilder};
 use grep_searcher::{sinks::UTF8, BinaryDetection, Searcher, SearcherBuilder};
 use std::path::Path;
 
+#[path = "search_trigram.rs"]
+mod trigram;
+
 /// Names listed at most (the pane shows them a page at a time).
 pub const MAX_NAMES: usize = 1000;
 /// Files with matching lines listed at most, best first; each shows its first [`LINES_PER_FILE`] lines.
@@ -40,8 +43,8 @@ pub fn search_with(root: &Path, cfg: &Config, q: &str, o: Opts) -> SearchResults
     if let Some(tag) = q.trim().strip_prefix("tag:") {
         return SearchResults { files: crate::tags::notes(root, cfg, tag), ..Default::default() };
     }
-    // one walk for both the lines and the names
-    let walked: Vec<(std::path::PathBuf, String)> = walk::files(root, cfg).filter(|(_, rel)| o.agent || !cfg.is_agent_file(rel)).collect();
+    // one walk for both the lines and the names; agent files stay in the walk so the trigram index keeps them for `o.agent`
+    let walked = trigram::walk_vault(root, cfg);
     crate::pdf_text::catch_up(root, cfg);
     if o.pdf {
         let mut out = SearchResults::default();
@@ -53,15 +56,21 @@ pub fn search_with(root: &Path, cfg: &Config, q: &str, o: Opts) -> SearchResults
     }
     let index = crate::links::snapshot(root, cfg);
     let props = |rel: &str| index.parsed.get(rel).and_then(|p| p.props_whole());
-    let names = if o.regex { Vec::new() } else { match_names(root, walked.iter().map(|(_, rel)| rel.clone()), q, props) };
-    // every file read (on several threads), the PDFs' text at the same time; then ranked, not in the walk's order
-    let texts = walked.iter().filter(|&(abs, _)| small(abs)).cloned();
+    let names = if o.regex {
+        Vec::new()
+    } else {
+        match_names(root, walked.iter().filter(|f| o.agent || !cfg.is_agent_file(&f.rel)).map(|f| f.rel.clone()), q, props)
+    };
+    // trigram candidate filter + exact ripgrep verification, PDFs' text at the same time; then ranked
     let (found, pdf) = std::thread::scope(|s| {
         let pdf = s.spawn(|| pdf_lines(root, cfg, q, o, &walked));
-        (file_lines(q, o, texts, true), pdf.join().unwrap_or_default())
+        let candidates = trigram::vault_candidates(root, cfg, q, o, &walked);
+        (file_lines(q, o, candidates.into_iter(), false), pdf.join().unwrap_or_default())
     });
     let named: std::collections::HashSet<&str> = names.iter().map(String::as_str).collect();
-    let mut ranked: Vec<(Rank, FileLines)> = found.into_iter().map(|f| (rank(root, &f, &named), f)).collect();
+    let modified: std::collections::HashMap<&str, std::time::SystemTime> =
+        walked.iter().filter_map(|f| f.modified.map(|m| (f.rel.as_str(), m))).collect();
+    let mut ranked: Vec<(Rank, FileLines)> = found.into_iter().map(|f| (rank(&f, &named, &modified), f)).collect();
     ranked.sort_by_key(|r| r.0);
     let mut out = SearchResults { files: Vec::new(), lines: Vec::new(), counts: Default::default() };
     // a hit in a hidden note is its thing's (a drawing's note text → the drawing; companion::thing_of), as the names are;
@@ -83,9 +92,9 @@ pub fn search_with(root: &Path, cfg: &Config, q: &str, o: Opts) -> SearchResults
 /// How a file with matching lines ranks (smaller first): its name matches the query too; a heading or the title says
 /// it; a note; more matches (up to [`MAX_COUNT`]); the newest. So a note about the thing leads, not the walk's order.
 type Rank = (bool, bool, bool, std::cmp::Reverse<usize>, std::cmp::Reverse<std::time::SystemTime>);
-fn rank(root: &Path, f: &FileLines, named: &std::collections::HashSet<&str>) -> Rank {
-    let modified = std::fs::metadata(root.join(&f.rel)).and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
-    (!named.contains(f.rel.as_str()), !f.titled, !f.rel.ends_with(".md"), std::cmp::Reverse(f.count), std::cmp::Reverse(modified))
+fn rank(f: &FileLines, named: &std::collections::HashSet<&str>, modified: &std::collections::HashMap<&str, std::time::SystemTime>) -> Rank {
+    let mtime = modified.get(f.rel.as_str()).copied().unwrap_or(std::time::UNIX_EPOCH);
+    (!named.contains(f.rel.as_str()), !f.titled, !f.rel.ends_with(".md"), std::cmp::Reverse(f.count), std::cmp::Reverse(mtime))
 }
 
 /// Only the names [`search_with`] would list, without reading a file: what the Search pane shows at once, while the
@@ -104,18 +113,20 @@ pub fn names_with(root: &Path, cfg: &Config, q: &str, o: Opts) -> Vec<String> {
 
 /// The PDFs' text (pdf_text.rs's cache), each hit mapped back to its PDF and page, most matches first; only PDFs this
 /// walk found: the text of one deleted, moved or now excluded stays in the cache until the next pass.
-fn pdf_lines(root: &Path, cfg: &Config, q: &str, o: Opts, walked: &[(std::path::PathBuf, String)]) -> Vec<FileLines> {
+fn pdf_lines(root: &Path, cfg: &Config, q: &str, o: Opts, walked: &[trigram::WalkedFile]) -> Vec<FileLines> {
     if !crate::state_dir::join(root, crate::pdf_text::CACHE).is_dir() {
         return Vec::new();
     }
     let ext = crate::external_roots::linked_external_pdfs(root, cfg);
     let pdfs: std::collections::HashSet<&str> = walked
         .iter()
-        .map(|(_, rel)| rel.as_str())
+        .filter(|f| o.agent || !cfg.is_agent_file(&f.rel))
+        .map(|f| f.rel.as_str())
         .filter(|r| r.to_lowercase().ends_with(".pdf"))
         .chain(ext.iter().map(|(_, rel)| rel.as_str()))
         .collect();
-    let mut found: Vec<FileLines> = file_lines(q, o, text_files(root, cfg, o, crate::pdf_text::CACHE), false)
+    let candidates = trigram::pdf_candidates(root, q, o);
+    let mut found: Vec<FileLines> = file_lines(q, o, candidates.into_iter(), false)
         .into_iter()
         .filter_map(|f| {
             let lines = crate::pdf_text::hits(f.lines, root);
@@ -159,7 +170,9 @@ fn match_names<'p>(root: &Path, paths: impl Iterator<Item = String>, q: &str, pr
 /// The lines matching `q` (fixed-string, smart-case unless the options say otherwise): each file's first
 /// [`LINES_PER_FILE`], in the files' order.
 pub fn rg_lines(root: &Path, cfg: &Config, q: &str, o: Opts) -> Vec<LineHit> {
-    file_lines(q, o, text_files(root, cfg, o, "."), true).into_iter().flat_map(|f| f.lines).collect()
+    let walked = trigram::walk_vault(root, cfg);
+    let candidates = trigram::vault_candidates(root, cfg, q, o, &walked);
+    file_lines(q, o, candidates.into_iter(), false).into_iter().flat_map(|f| f.lines).collect()
 }
 
 /// One file's matches: its first [`LINES_PER_FILE`] lines, and how many there are (up to [`MAX_COUNT`]).
@@ -225,8 +238,11 @@ fn is_title(line: &str) -> bool {
 /// Worth a content search, by the file's first 4 KB (the shape, as rg's binary sniff; no list of extensions): not
 /// binary (a NUL: pictures, PDFs, archives), not an SVG picture, and — unless a note — not a table of numbers (a run's
 /// `.tsv`, a data dump), whose words are only a header: under one character in twenty is in a word of four or more
-/// letters (so `1.5e-3`, `nan`, `inf` do not count as words).
+/// letters (so `1.5e-3`, `nan`, `inf` do not count as words). Markdown notes short-circuit before opening the file.
 fn worth_reading(abs: &Path, rel: &str) -> bool {
+    if rel.ends_with(".md") {
+        return true;
+    }
     use std::io::Read;
     let mut head = [0u8; 4096];
     let Ok(mut f) = std::fs::File::open(abs) else { return false };
@@ -237,7 +253,13 @@ fn worth_reading(abs: &Path, rel: &str) -> bool {
             Ok(k) => n += k,
         }
     }
-    let head = &head[..n];
+    worth_reading_head(&head[..n], rel)
+}
+
+pub(super) fn worth_reading_head(head: &[u8], rel: &str) -> bool {
+    if rel.ends_with(".md") {
+        return true;
+    }
     if head.contains(&0) {
         return false;
     }
@@ -245,9 +267,6 @@ fn worth_reading(abs: &Path, rel: &str) -> bool {
     let start = text.trim_start();
     if start.starts_with("<svg") || (start.starts_with("<?xml") && text.contains("<svg")) {
         return false;
-    }
-    if rel.ends_with(".md") {
-        return true;
     }
     let (mut in_words, mut shown, mut run) = (0usize, 0usize, 0usize);
     for c in text.chars().chain(std::iter::once(' ')) {
@@ -280,25 +299,6 @@ fn grep_matcher(q: &str, o: Opts) -> Result<RegexMatcher> {
 
 /// Largest file searched, as rg's `--max-filesize`.
 const MAX_FILE: u64 = 5 << 20;
-
-/// The files searched in `dir` ("." = the workspace, by the walk's ignores and, unless `o.agent`, without the agent's
-/// files; any other folder whole), at most [`MAX_FILE`] long, as (absolute, relative).
-fn text_files<'a>(root: &'a Path, cfg: &'a Config, o: Opts, dir: &str) -> Box<dyn Iterator<Item = (std::path::PathBuf, String)> + 'a> {
-    let files: Box<dyn Iterator<Item = (std::path::PathBuf, String)>> = if dir == "." {
-        Box::new(walk::files(root, cfg).filter(move |(_, rel)| o.agent || !cfg.is_agent_file(rel)))
-    } else {
-        Box::new(walkdir::WalkDir::new(root.join(dir)).into_iter().filter_map(|e| e.ok()).filter(|e| e.file_type().is_file()).filter_map(|e| {
-            let rel = crate::paths::rel_path(root, e.path())?;
-            Some((e.into_path(), rel))
-        }))
-    };
-    Box::new(files.filter(|(abs, _)| small(abs)))
-}
-
-/// At most [`MAX_FILE`] long.
-fn small(abs: &Path) -> bool {
-    std::fs::metadata(abs).is_ok_and(|m| m.len() <= MAX_FILE)
-}
 
 /// The same match rules as `rg` (which uses this regex engine): literal unless `regex`, whole
 /// words with `word`, and smart case (insensitive unless `case` or the query has a capital).
@@ -359,7 +359,9 @@ pub fn replace(ws: &Workspace, q: &str, o: Opts, with: &str, only: Option<&[Stri
     let cfg = ws.config()?;
     let m = grep_matcher(q, o)?;
     let mut searcher = searcher();
-    let found: Vec<String> = text_files(ws.root(), &cfg, o, ".")
+    let walked = trigram::walk_vault(ws.root(), &cfg);
+    let found: Vec<String> = trigram::vault_candidates(ws.root(), &cfg, q, o, &walked)
+        .into_iter()
         .filter(|(_, rel)| only.is_none_or(|o| o.iter().any(|p| p == rel)))
         .filter(|(abs, _)| {
             let mut hit = false;
@@ -619,5 +621,125 @@ mod tests {
         let mut hits: Vec<_> = search(r, &rooted, "subbath").lines.into_iter().map(|l| l.path).collect();
         hits.sort(); // ripgrep searches files in parallel: their order is not fixed
         assert_eq!(hits, ["notes/dmft/bath.md", "notes/runs/alpha.md"]);
+    }
+
+    #[test]
+    fn trigram_cold_warm_parity_and_unicode_short_regex() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        std::fs::create_dir_all(r.join("notes")).unwrap();
+        std::fs::write(r.join("notes/a.md"), "Hubbard model\nhubbardish\nU = 4\ncafé crème\n").unwrap();
+        std::fs::write(r.join("notes/b.md"), "HUBBARD\n量子ホール\n\u{212A}elvin scale\n42\n").unwrap();
+        std::fs::write(r.join("notes/c.md"), "lattice x]model\n").unwrap();
+        let cfg = Config::default();
+        let cases = [
+            ("hubbard", Opts::default()),
+            ("Hubbard", Opts::default()),
+            ("hubbard", Opts { case: true, ..Default::default() }),
+            ("hubbard", Opts { word: true, ..Default::default() }),
+            (r"U = \d", Opts { regex: true, ..Default::default() }),
+            ("hubbard|lattice", Opts { regex: true, ..Default::default() }),
+            ("hubbard?", Opts { regex: true, ..Default::default() }),
+            ("[^]a]model", Opts { regex: true, ..Default::default() }),
+            ("café", Opts::default()),
+            ("量子", Opts::default()),
+            ("kelvin", Opts::default()),
+            ("42", Opts::default()),
+            ("U", Opts::default()),
+        ];
+        let brute = |q: &str, o: Opts| -> Vec<(String, u32, String)> {
+            let mut v: Vec<_> = file_lines(q, o, walk::files(r, &cfg), true)
+                .into_iter()
+                .flat_map(|f| f.lines.into_iter().map(|h| (h.path, h.line, h.text)))
+                .collect();
+            v.sort();
+            v
+        };
+        // Cold build then warm queries, and verify `.kandinsky/cache/search.idx` rebuilds transparently if deleted.
+        for pass in 0..3 {
+            if pass == 2 {
+                crate::vault_write::cache::remove_dir_all(&r.join(".kandinsky/cache")).unwrap();
+            }
+            for &(q, o) in &cases {
+                let mut got: Vec<_> = search_with(r, &cfg, q, o).lines.into_iter().map(|h| (h.path, h.line, h.text)).collect();
+                got.sort();
+                assert_eq!(got, brute(q, o), "pass {pass} mismatch for {q:?} {o:?}");
+            }
+            assert!(r.join(".kandinsky/cache/search.idx").is_file(), "pass {pass} must persist search.idx");
+        }
+    }
+
+    #[test]
+    fn trigram_immediate_single_file_edit_freshness() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        std::fs::write(r.join("a.md"), "hubbard one\n").unwrap();
+        std::fs::write(r.join("b.md"), "nothing two\n").unwrap();
+        std::fs::write(r.join("c.md"), "same len A\n").unwrap();
+        let cfg = Config::default();
+        let paths = |q: &str| -> Vec<String> {
+            let mut p: Vec<String> = search(r, &cfg, q).counts.into_keys().collect();
+            p.sort();
+            p
+        };
+        assert_eq!(paths("hubbard"), ["a.md"]);
+        assert_eq!(paths("len A"), ["c.md"]);
+        // Immediate same-length overwrites without sleeping must invalidate stale trigram hits.
+        std::fs::write(r.join("a.md"), "nothing one\n").unwrap();
+        std::fs::write(r.join("b.md"), "hubbard two\n").unwrap();
+        std::fs::write(r.join("c.md"), "same len B\n").unwrap();
+        assert_eq!(paths("hubbard"), ["b.md"]);
+        assert!(paths("len A").is_empty());
+        assert_eq!(paths("len B"), ["c.md"]);
+    }
+
+    #[test]
+    fn trigram_query_time_config_and_agent_filtering() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        std::fs::create_dir_all(r.join("notes/runs")).unwrap();
+        std::fs::create_dir_all(r.join("docs/memory")).unwrap();
+        std::fs::write(r.join("notes/a.md"), "hubbard main\n").unwrap();
+        std::fs::write(r.join("notes/runs/r.md"), "hubbard run\n").unwrap();
+        std::fs::write(r.join("docs/memory/m.md"), "hubbard memory\n").unwrap();
+        let cfg = Config::default();
+        let hit_paths = |c: &Config, o: Opts| -> Vec<String> {
+            let mut p: Vec<String> = search_with(r, c, "hubbard", o).counts.into_keys().collect();
+            p.sort();
+            p
+        };
+        assert_eq!(hit_paths(&cfg, Opts::default()), ["notes/a.md"]);
+        assert_eq!(hit_paths(&cfg, Opts { agent: true, ..Default::default() }), ["docs/memory/m.md", "notes/a.md"]);
+        let rooted = Config { ignore: vec!["/runs".into()], ..Config::default() };
+        assert_eq!(hit_paths(&rooted, Opts::default()), ["notes/a.md", "notes/runs/r.md"]);
+        assert_eq!(hit_paths(&cfg, Opts::default()), ["notes/a.md"]);
+        let mut custom_agent = cfg.clone();
+        custom_agent.editor.index_exclude.push("notes/a.md".into());
+        assert!(hit_paths(&custom_agent, Opts::default()).is_empty());
+        assert_eq!(hit_paths(&custom_agent, Opts { agent: true, ..Default::default() }), ["docs/memory/m.md", "notes/a.md"]);
+    }
+
+    #[test]
+    fn trigram_replace_parity_with_warm_index() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        std::fs::create_dir_all(r.join("notes")).unwrap();
+        std::fs::write(r.join("notes/a.md"), "alpha beta\n").unwrap();
+        std::fs::write(r.join("notes/b.md"), "alpha gamma\n").unwrap();
+        let ws = Workspace::open(r).unwrap();
+        let cfg = Config::default();
+        assert_eq!(search(r, &cfg, "alpha").counts.len(), 2);
+        let rep = replace(&ws, "alpha", Opts::default(), "delta", None).unwrap();
+        assert_eq!(rep.replacements, 2);
+        assert_eq!(rep.files.len(), 2);
+        assert!(search(r, &cfg, "alpha").counts.is_empty());
+        assert_eq!(search(r, &cfg, "delta").counts.len(), 2);
+    }
+
+    #[test]
+    fn worth_reading_fast_path_skips_opening_markdown_notes() {
+        let d = tempfile::tempdir().unwrap();
+        assert!(worth_reading(&d.path().join("missing.md"), "missing.md"));
+        assert!(!worth_reading(&d.path().join("missing.py"), "missing.py"));
     }
 }
