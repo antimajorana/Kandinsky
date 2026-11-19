@@ -337,6 +337,13 @@ export const api = {
   obsidianPlugins: () => request<{ id: string; name: string; version?: string; description?: string; author?: string; enabled: boolean }[]>("GET", "/api/plugins/obsidian"),
   /** Moves unnecessary `.obsidian/plugins/<id>` folders safely into `.kandinsky/trash/`. */
   removeObsidianPlugins: (ids: string[]) => request<{ moved: string[] }>("POST", "/api/plugins/obsidian/remove", { body: { ids } }),
+  /** Inspect a plugin source's `plugin.toml` permissions inside a disposable cache folder without installing it. */
+  inspectPlugin: (from: string, id?: string) =>
+    request<{ id: string; title: string; version?: string; permissions: import("./gen/Permissions").Permissions; has_helper: boolean }>(
+      "POST",
+      "/api/plugins/inspect",
+      { body: { from, id } },
+    ),
   /** Copy a plugin into the vault (a folder, a git address, an archive); it arrives switched off. */
   installPlugin: (from: string, id?: string) => request<import("./gen/Installed").Installed>("POST", "/api/plugins/install", { body: { from, id } }),
   updatePlugin: (id: string) => request<import("./gen/Installed").Installed>("POST", `/api/plugins/${encodeURIComponent(id)}/update`),

@@ -31,6 +31,10 @@ pub fn may(id: &str, path: &str) -> bool {
     if path.starts_with("/api/notebook") {
         return false;
     }
+    // plugin installation and Obsidian plugin removal belong strictly to the user's UI, never to another plugin's helper
+    if path == "/api/plugins/install" || path == "/api/plugins/inspect" || path.starts_with("/api/plugins/obsidian/") {
+        return false;
+    }
     const OWN: [&str; 6] = ["secrets", "oauth", "fetch", "settings", "update", "remove"];
     match path.strip_prefix("/api/plugins/").and_then(|r| r.split_once('/')) {
         Some((other, rest)) if OWN.iter().any(|o| rest.split('/').next() == Some(*o)) => other == id,

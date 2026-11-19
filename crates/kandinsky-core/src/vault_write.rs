@@ -493,6 +493,20 @@ pub mod cache {
         check(abs);
         raw::atomic(abs, raw::Replace::Always, |f| Ok(f.write_all(bytes)?)).map(|_| ())
     }
+    /// `f` run holding both the in-process path lock and an exclusive cross-process lock on `<file>.lock` inside
+    /// `.kandinsky/cache/`, so concurrent `kandinsky` and `kandinsky mcp` processes serialize cache updates.
+    pub fn locked<T>(file: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
+        check(file);
+        super::locked(file, || {
+            let mut name = file.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+            name.push(".lock");
+            let lock_path = file.with_file_name(name);
+            raw::mkdir_parent(&lock_path)?;
+            let lock = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(&lock_path)?;
+            lock.lock()?;
+            f()
+        })
+    }
     pub fn append(abs: &Path, bytes: &[u8]) -> Result<()> {
         check(abs);
         raw::append(abs, bytes)

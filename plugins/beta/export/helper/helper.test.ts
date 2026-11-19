@@ -6,6 +6,7 @@ import { harness } from "kandinsky-helper/testing";
 import { translate, relative, mathPortable } from "./translate";
 import { macroDefinitions } from "../../../../ui/src/lib/tex-portable";
 import { latexErrors, yamlEntry } from "./helper";
+import { escapeTypstText, latexMathToTypst, markdownToTypst } from "./md_typst";
 
 const REPORT = `---
 author: Alice
@@ -214,4 +215,25 @@ test("a link to a figure reads Figure n, and the figure's block id is gone", asy
   const md = t.markdown.replace(/\s+/g, " ");
   assert.ok(md.includes("See Figure 2 and Far, Figure 1."), md);
   assert.ok(!md.includes("^fig-"), md);
+});
+
+test("Pandoc-free Typst and HTML fallbacks convert ordinary TeX math and escape Typst comments/backticks", async () => {
+  assert.equal(latexMathToTypst("E = mc^2"), "E = m c^2");
+  assert.equal(latexMathToTypst("\\frac{dx}{dt} + A_{ij}"), "(d x)/(d t) + A_(i j)");
+  assert.equal(latexMathToTypst("\\alpha\\beta + \\uparrow - \\customop{xy}"), 'alpha beta + arrow.t - upright("customop")(x y)');
+  assert.equal(escapeTypstText("Visit https://example.com ~ lone `tick"), "Visit https:/\\/example.com \\~ lone \\`tick");
+
+  const typ = markdownToTypst("# Note\n\nEnergy $E = mc^2$ at https://example.com with lone ` and ~.\n", { title: "Demo" });
+  assert.ok(typ.includes("$E = m c^2$"), typ);
+  assert.ok(typ.includes("https:/\\/example.com"), typ);
+  assert.ok(typ.includes("\\`") && typ.includes("\\~"), typ);
+
+  harness.exec = () => { throw new Error("pandoc is not installed"); };
+  const f = await harness.call("formats");
+  assert.equal(f.find((x: any) => x.id === "pdf-typst")?.ok, true, "pdf-typst stays ok without pandoc");
+  assert.equal(f.find((x: any) => x.id === "html")?.ok, true, "html stays ok without pandoc");
+  const r = await harness.call("export", { path: "notes/Report.md", format: "pdf-typst" });
+  assert.deepEqual(r.written, ["exports/notes/Report.pdf"]);
+  assert.equal(typst.length, 1);
+  assert.ok(typst[0].source?.includes('#set page(paper: "a4"') && typst[0].source?.includes('#bibliography('), String(typst[0].source));
 });

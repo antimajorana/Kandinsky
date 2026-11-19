@@ -9,9 +9,19 @@ import { frontmatterClose } from "./live/live-preview.js";
 import { notePlaceAt } from "./math-context";
 
 const PURIFY_OPTS = {
-  ADD_ATTR: ["style", "class", "start", "checked", "type", "colspan", "rowspan", "encoding"],
+  ADD_ATTR: ["style", "class", "start", "checked", "type", "colspan", "rowspan", "encoding", "display", "alttext", "data-tex"],
   ADD_TAGS: ["math", "semantics", "annotation"],
+  FORBID_TAGS: ["style", "script", "noscript", "template", "svg", "title", "meta", "link", "xml", "iframe", "object", "embed"],
 };
+
+const DROP_SELECTORS = "style,script,noscript,template,svg,title,meta,link,xml,iframe,object,embed,head";
+
+function parseSanitizedHtml(raw: string): Document {
+  const clean = DOMPurify.sanitize(raw, PURIFY_OPTS);
+  const doc = new DOMParser().parseFromString(clean, "text/html");
+  doc.body.querySelectorAll(DROP_SELECTORS).forEach((el) => el.remove());
+  return doc;
+}
 
 const BYPASS_NODES = new Set(["FencedCode", "CodeBlock", "InlineCode", "CodeText", "CodeMark", "InlineMath", "BlockMath"]);
 
@@ -52,8 +62,7 @@ export function shouldBypassRichPaste(
 export function isImageOnlyClipboardHtml(html: string): boolean {
   const trimmed = html.trim();
   if (!trimmed) return true;
-  const clean = DOMPurify.sanitize(trimmed, PURIFY_OPTS);
-  const doc = new DOMParser().parseFromString(clean, "text/html");
+  const doc = parseSanitizedHtml(trimmed);
   if ((doc.body.textContent ?? "").trim().length > 0) return false;
   const imgs = doc.body.querySelectorAll("img");
   return imgs.length === 1;
@@ -158,19 +167,56 @@ function inlineCodeText(raw: string): string {
 
 function texAnnotationOf(el: Element): { tex: string; display: boolean } | null {
   const tag = el.tagName.toLowerCase();
-  const isMathHost = tag === "math" || el.classList.contains("katex") || el.classList.contains("katex-display") || el.classList.contains("MathJax");
+  const isMathHost =
+    tag === "math" ||
+    el.classList.contains("katex") ||
+    el.classList.contains("katex-display") ||
+    el.classList.contains("MathJax") ||
+    el.hasAttribute("data-tex");
   if (!isMathHost) return null;
   const ann = el.querySelector('annotation[encoding="application/x-tex"]');
-  const tex = ann?.textContent?.trim() ?? "";
+  const rawTex = ann?.textContent ?? el.getAttribute("data-tex") ?? el.getAttribute("alttext") ?? "";
+  const tex = rawTex.trim();
   if (!tex) return null;
   const display = el.classList.contains("katex-display") || el.getAttribute("display") === "block" || !!el.closest(".katex-display");
   return { tex, display };
 }
 
+function isFormattedInlineEl(node: Node): boolean {
+  if (node.nodeType !== Node.ELEMENT_NODE) return false;
+  const el = node as Element;
+  if (isInlineCode(el) || texAnnotationOf(el) !== null) return false;
+  const tag = el.tagName.toLowerCase();
+  if (tag === "a" || tag === "img" || tag === "br" || tag === "input") return false;
+  return isBold(el) || isStrike(el) || isHighlight(el);
+}
+
 function inlineChildren(el: Element): string {
   let out = "";
-  for (const child of el.childNodes) out += convertInline(child);
+  let prevFormatted = false;
+  for (const child of el.childNodes) {
+    const seg = convertInline(child);
+    if (!seg) continue;
+    const curFormatted = isFormattedInlineEl(child);
+    let merged = false;
+    if (prevFormatted && curFormatted) {
+      for (const mark of ["**", "~~", "=="]) {
+        if (out.endsWith(mark) && seg.startsWith(mark) && out.length > mark.length * 2 && seg.length > mark.length * 2) {
+          out = out.slice(0, -mark.length) + seg.slice(mark.length);
+          merged = true;
+          break;
+        }
+      }
+    }
+    if (!merged) out += seg;
+    prevFormatted = curFormatted;
+  }
   return out;
+}
+
+function isExternalHttpUrl(raw: string): boolean {
+  const stripped = raw.replace(/[\u0000-\u0020]+/g, "");
+  return /^https?:\/\/\S+$/i.test(stripped);
 }
 
 function convertInline(node: Node): string {
@@ -201,7 +247,7 @@ function convertInline(node: Node): string {
   if (tag === "img") {
     const src = (el.getAttribute("src") ?? "").trim();
     const alt = (el.getAttribute("alt") ?? "").trim().replace(/[[\]]/g, "");
-    if (!src || !isSafeUrl(src)) return "";
+    if (!src || !isExternalHttpUrl(src)) return "";
     return `![${alt}](${src})`;
   }
 
@@ -304,7 +350,7 @@ function convertTable(tableEl: Element): string {
       const collapsed = raw
         .replace(/\n{2,}/g, "<br>")
         .replace(/\n/g, "<br>")
-        .replace(/\|/g, "\\|")
+        .replace(/(?<!\\)\|/g, "\\|")
         .trim();
       row.push(collapsed);
       const span = Math.max(1, Number(cell.getAttribute("colspan") ?? "1") || 1);
@@ -403,14 +449,12 @@ export function htmlToMarkdown(html: string): string | null {
   const trimmed = html.trim();
   if (!trimmed) return null;
 
-  const clean = DOMPurify.sanitize(trimmed, PURIFY_OPTS);
-  const doc = new DOMParser().parseFromString(clean, "text/html");
+  const doc = parseSanitizedHtml(trimmed);
   if (!hasSemanticFormatting(doc.body)) return null;
 
   const rawMd = convertBlocks(doc.body);
   const normalized = rawMd
     .replace(/\r\n?/g, "\n")
-    .replace(/(\*\*|~~|==)\1/g, "")
     .split("\n")
     .map((line) => line.replace(/[ \t]+$/g, ""))
     .join("\n")

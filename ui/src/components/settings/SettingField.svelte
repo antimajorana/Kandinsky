@@ -33,12 +33,15 @@
   const sug = $derived(settings.suggestions[path] ?? []);
   let custom = $state(false);
   let picks = $state<string[]>([]);
+  let templatePicks = $state<string[]>([]);
   let listError = $state("");
   let newItem = $state("");
   type RuleDraft = { folder: string; title: string; template: string };
   let ruleDrafts = $state<RuleDraft[]>([]);
   let lastSerializedRules = "";
   const listId = $derived(`dl-${path.replace(/\W/g, "-")}`);
+  const tplListId = $derived(`dl-tpl-${path.replace(/\W/g, "-")}`);
+  const isFolderList = $derived(path === "ignore" || path === "editor.index_exclude");
 
   function normRules(arr: Array<{ folder?: string | null; title?: string | null; template?: string | null }>): RuleDraft[] {
     return arr.map((r) => ({
@@ -55,14 +58,17 @@
     const serialized = JSON.stringify(cleaned);
     if (serialized !== lastSerializedRules) {
       lastSerializedRules = serialized;
-      ruleDrafts = cleaned;
+      const incomplete = ruleDrafts.filter((r) => !r.template.trim() && (r.folder.trim() || r.title.trim()));
+      ruleDrafts = [...cleaned, ...incomplete];
     }
   });
 
   function saveRules(next: RuleDraft[]): void {
-    const cleaned = normRules(next).filter((r) => r.template || r.folder || r.title);
-    lastSerializedRules = JSON.stringify(cleaned);
-    const out = cleaned.map((r) => ({
+    const complete = normRules(next).filter((r) => r.template.length > 0);
+    const serialized = JSON.stringify(complete);
+    if (serialized === lastSerializedRules) return;
+    lastSerializedRules = serialized;
+    const out = complete.map((r) => ({
       ...(r.folder ? { folder: r.folder } : {}),
       ...(r.title ? { title: r.title } : {}),
       template: r.template,
@@ -95,8 +101,18 @@
   }
 
   $effect(() => {
-    if (kind !== "folder" && kind !== "file") return;
-    void workspacePaths().then((p) => { picks = (kind === "folder" ? p.folders : p.files).slice(0, 4000); });
+    const wantFolders = kind === "folder" || isFolderList || path === "notes.template_rules";
+    if (!wantFolders && kind !== "file") return;
+    const tplPrefix = `${(settings.config?.notes.templates || "templates").replace(/\/+$/, "")}/`;
+    void workspacePaths().then((p) => {
+      picks = (wantFolders ? p.folders : p.files).slice(0, 4000);
+      if (path === "notes.template_rules") {
+        templatePicks = p.files
+          .filter((f) => f.startsWith(tplPrefix) && f.endsWith(".md"))
+          .map((f) => f.slice(tplPrefix.length, -3))
+          .slice(0, 1000);
+      }
+    });
   });
 
   // dragging a slider saves at most every 150 ms (each save rewrites config.toml)
@@ -164,6 +180,7 @@
               class="rule-in"
               placeholder="Folder (optional)"
               aria-label="Rule {idx + 1} folder"
+              list={picks.length ? listId : undefined}
               bind:value={rule.folder}
               onchange={() => saveRules(ruleDrafts)}
             />
@@ -180,6 +197,7 @@
               class="rule-in"
               placeholder="Template name"
               aria-label="Rule {idx + 1} template"
+              list={templatePicks.length ? tplListId : undefined}
               bind:value={rule.template}
               onchange={() => saveRules(ruleDrafts)}
             />
@@ -188,6 +206,8 @@
             </button>
           </div>
         {/each}
+        {#if picks.length}<datalist id={listId}>{#each picks as p (p)}<option value={p}></option>{/each}</datalist>{/if}
+        {#if templatePicks.length}<datalist id={tplListId}>{#each templatePicks as t (t)}<option value={t}></option>{/each}</datalist>{/if}
         <button type="button" class="add-rule-btn" onclick={addRuleDraft}>+ Add rule</button>
       </div>
     {:else if s.type === "array" && s.items && resolve(s.items).type === "object"}
@@ -217,6 +237,7 @@
             type="text"
             class="list-input"
             bind:value={newItem}
+            list={isFolderList && picks.length ? listId : undefined}
             placeholder="Add item…"
             spellcheck="false"
             onkeydown={(e) => {
@@ -231,6 +252,7 @@
           />
           <button type="button" class="add-item-btn" disabled={!newItem.trim()} onclick={addListItem}>Add</button>
         </div>
+        {#if isFolderList && picks.length}<datalist id={listId}>{#each picks as p (p)}<option value={p}></option>{/each}</datalist>{/if}
       </div>
     {:else if kind === "colour"}
       <div class="colour">

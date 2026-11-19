@@ -79,4 +79,6 @@ export function register(kandinsky) {
       },
     }];
   });
+
+  void prepareModels(false);
 }

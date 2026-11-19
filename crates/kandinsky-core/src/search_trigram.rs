@@ -166,7 +166,7 @@ fn query_index(
     };
     let mut persisted = false;
     let mut out = Vec::new();
-    let _ = vault_write::locked(idx_path, || {
+    let _ = vault_write::cache::locked(idx_path, || {
         let disk_meta = file_disk_stamp(idx_path);
         let mut idx = slot.write().unwrap_or_else(|e| e.into_inner());
         if idx.docs.is_empty() && disk_meta.is_some() {

@@ -485,7 +485,7 @@
 	}
 	//#endregion
 	//#region plugins/beta/export/helper/md_typst.ts
-	const escapeTypstText = (s) => s.replace(/([\\#*_$@<>\[\]])/g, "\\$1");
+	const escapeTypstText = (s) => s.replace(/([\\#*_$@<>\[\]`~])/g, "\\$1").replace(/\/\//g, "/\\/");
 	const escapeTypstString = (s) => s.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
 	const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 	const safeHref = (url) => /^\s*(?:javascript|vbscript|data:text\/html):/i.test(url) ? "#" : url.trim();
@@ -508,133 +508,327 @@
 		}
 		return null;
 	}
-	const TYPST_MATH_SYMS = [
-		[/\\qquad/g, " wide "],
-		[/\\quad/g, " quad "],
-		[/\\[,;!]/g, " thin "],
-		[/\\\\/g, " \\ "],
-		[/\\\{/g, "lbrace "],
-		[/\\\}/g, "rbrace "],
-		[/\\\|/g, " || "],
-		[/\\left\\langle\b/g, "angle.l "],
-		[/\\right\\rangle\b/g, " angle.r"],
-		[/\\left\b/g, ""],
-		[/\\right\b/g, ""],
-		[/\\langle\b/g, "angle.l "],
-		[/\\rangle\b/g, "angle.r "],
-		[/\\infty\b/g, "infinity"],
-		[/\\partial\b/g, "diff"],
-		[/\\nabla\b/g, "nabla"],
-		[/\\cdot\b/g, "dot.op"],
-		[/\\times\b/g, "times"],
-		[/\\div\b/g, "div"],
-		[/\\pm\b/g, "plus.minus"],
-		[/\\mp\b/g, "minus.plus"],
-		[/\\leq?\b/g, "<="],
-		[/\\geq?\b/g, ">="],
-		[/\\neq?\b/g, "!="],
-		[/\\approx\b/g, "approx"],
-		[/\\equiv\b/g, "equiv"],
-		[/\\sim\b/g, "tilde.op"],
-		[/\\subseteq\b/g, "subset.eq"],
-		[/\\subset\b/g, "subset"],
-		[/\\supseteq\b/g, "supset.eq"],
-		[/\\supset\b/g, "supset"],
-		[/\\notin\b/g, "in.not"],
-		[/\\in\b/g, "in"],
-		[/\\forall\b/g, "forall"],
-		[/\\exists\b/g, "exists"],
-		[/\\Leftrightarrow\b/g, "<=>"],
-		[/\\Rightarrow\b/g, "=>"],
-		[/\\Leftarrow\b/g, "<="],
-		[/\\leftrightarrow\b/g, "<->"],
-		[/\\rightarrow\b|\\to\b/g, "->"],
-		[/\\leftarrow\b|\\gets\b/g, "<-"],
-		[/\\mapsto\b/g, "|->"],
-		[/\\sum\b/g, "sum"],
-		[/\\prod\b/g, "product"],
-		[/\\oint\b/g, "integral.cont"],
-		[/\\iint\b/g, "integral.double"],
-		[/\\int\b/g, "integral"],
-		[/\\varepsilon\b/g, "epsilon.alt"],
-		[/\\varphi\b/g, "phi.alt"],
-		[/\\vartheta\b/g, "theta.alt"],
-		[/\\ell\b/g, "ell"],
-		[/\\hbar\b/g, "planck.reduce"]
-	];
-	const GREEK_RE = new RegExp(`\\\\(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega)\\b`, "g");
-	/** Converts common LaTeX math commands into valid Typst math notation. */
+	const TYPST_CMD_MAP = {
+		qquad: "wide",
+		quad: "quad",
+		infty: "infinity",
+		partial: "diff",
+		nabla: "nabla",
+		cdot: "dot.op",
+		cdots: "dots.c",
+		ldots: "dots",
+		dots: "dots",
+		vdots: "dots.v",
+		ddots: "dots.down",
+		times: "times",
+		otimes: "times.circle",
+		oplus: "plus.circle",
+		div: "div",
+		pm: "plus.minus",
+		mp: "minus.plus",
+		le: "<=",
+		leq: "<=",
+		ge: ">=",
+		geq: ">=",
+		ne: "!=",
+		neq: "!=",
+		approx: "approx",
+		equiv: "equiv",
+		sim: "tilde.op",
+		simeq: "tilde.eq",
+		propto: "prop",
+		subseteq: "subset.eq",
+		subset: "subset",
+		supseteq: "supset.eq",
+		supset: "supset",
+		notin: "in.not",
+		in: "in",
+		cup: "union",
+		cap: "sect",
+		emptyset: "emptyset",
+		varnothing: "emptyset",
+		forall: "forall",
+		exists: "exists",
+		neg: "not",
+		lnot: "not",
+		wedge: "and",
+		land: "and",
+		vee: "or",
+		lor: "or",
+		Leftrightarrow: "<=>",
+		iff: "<=>",
+		Rightarrow: "=>",
+		implies: "=>",
+		Leftarrow: "<=",
+		leftrightarrow: "<->",
+		rightarrow: "->",
+		to: "->",
+		leftarrow: "<-",
+		gets: "<-",
+		mapsto: "|->",
+		hookrightarrow: "arrow.r.hook",
+		uparrow: "arrow.t",
+		downarrow: "arrow.b",
+		updownarrow: "arrow.t.b",
+		Uparrow: "arrow.t.double",
+		Downarrow: "arrow.b.double",
+		Updownarrow: "arrow.t.b.double",
+		sum: "sum",
+		prod: "product",
+		oint: "integral.cont",
+		iiint: "integral.triple",
+		iint: "integral.double",
+		int: "integral",
+		langle: "angle.l",
+		rangle: "angle.r",
+		lceil: "ceil.l",
+		rceil: "ceil.r",
+		lfloor: "floor.l",
+		rfloor: "floor.r",
+		varepsilon: "epsilon.alt",
+		varphi: "phi.alt",
+		vartheta: "theta.alt",
+		ell: "ell",
+		hbar: "planck.reduce",
+		aleph: "aleph",
+		Re: "Re",
+		Im: "Im",
+		wp: "wp",
+		sin: "sin",
+		cos: "cos",
+		tan: "tan",
+		cot: "cot",
+		sec: "sec",
+		csc: "csc",
+		arcsin: "arcsin",
+		arccos: "arccos",
+		arctan: "arctan",
+		sinh: "sinh",
+		cosh: "cosh",
+		tanh: "tanh",
+		ln: "ln",
+		log: "log",
+		exp: "exp",
+		lim: "lim",
+		sup: "sup",
+		inf: "inf",
+		min: "min",
+		max: "max",
+		det: "det",
+		dim: "dim",
+		ker: "ker",
+		deg: "deg",
+		gcd: "gcd",
+		Pr: "Pr",
+		hom: "hom",
+		arg: "arg",
+		Tr: "op(\"Tr\")",
+		left: "",
+		right: "",
+		big: "",
+		Big: "",
+		bigg: "",
+		Bigg: "",
+		middle: "",
+		alpha: "alpha",
+		beta: "beta",
+		gamma: "gamma",
+		delta: "delta",
+		epsilon: "epsilon",
+		zeta: "zeta",
+		eta: "eta",
+		theta: "theta",
+		iota: "iota",
+		kappa: "kappa",
+		lambda: "lambda",
+		mu: "mu",
+		nu: "nu",
+		xi: "xi",
+		pi: "pi",
+		rho: "rho",
+		sigma: "sigma",
+		tau: "tau",
+		upsilon: "upsilon",
+		phi: "phi",
+		chi: "chi",
+		psi: "psi",
+		omega: "omega",
+		Gamma: "Gamma",
+		Delta: "Delta",
+		Theta: "Theta",
+		Lambda: "Lambda",
+		Xi: "Xi",
+		Pi: "Pi",
+		Sigma: "Sigma",
+		Upsilon: "Upsilon",
+		Phi: "Phi",
+		Psi: "Psi",
+		Omega: "Omega"
+	};
+	function appendMathToken(out, tok) {
+		if (!tok) return out;
+		return out.length > 0 && /[A-Za-z0-9.")\]]$/.test(out) && /^[A-Za-z"]/.test(tok) ? `${out} ${tok}` : `${out}${tok}`;
+	}
+	/** Converts common LaTeX math notation into valid Typst math notation (separating adjacent single-letter variables and commands). */
 	function latexMathToTypst(tex) {
-		let s = tex.trim().replace(/\\begin\{aligned\*?\}/g, "").replace(/\\end\{aligned\*?\}/g, "").replace(/\\begin\{cases\}([\s\S]*?)\\end\{cases\}/g, (_, body) => `cases(${body.replace(/\\\\/g, ", ")})`).replace(/\\begin\{[pbvBV]?matrix\}([\s\S]*?)\\end\{[pbvBV]?matrix\}/g, (_, body) => `mat(${body.replace(/&/g, ",").replace(/\\\\/g, ";")})`);
-		const expandCmds = (input) => {
+		const conv = (raw) => {
+			const input = raw.trim().replace(/\\begin\{aligned\*?\}/g, "").replace(/\\end\{aligned\*?\}/g, "").replace(/\\tag\{([^}]*)\}/g, "");
 			let out = "";
 			for (let i = 0; i < input.length;) {
+				const envM = /^\\begin\{(cases|[pbvBV]?matrix)\}([\s\S]*?)\\end\{\1\}/.exec(input.slice(i));
+				if (envM) {
+					const rows = envM[2].trim().split(/\\\\/).map((r) => r.trim()).filter(Boolean);
+					if (envM[1] === "cases") {
+						const rendered = rows.map((r) => r.split("&").map((c) => conv(c)).join(" & ")).join(", ");
+						out = appendMathToken(out, `cases(${rendered})`);
+					} else {
+						const rendered = rows.map((r) => r.split("&").map((c) => conv(c)).join(", ")).join("; ");
+						out = appendMathToken(out, `mat(${rendered})`);
+					}
+					i += envM[0].length;
+					continue;
+				}
 				if (input[i] === "\\") {
-					const m = /^\\(frac|sqrt|ket|bra|braket|text|mathrm|mathbf|mathcal|mathbb|hat|tilde|bar|vec|dot|ddot)\b/.exec(input.slice(i));
-					if (m) {
-						const cmd = m[1];
-						let pos = i + m[0].length;
+					const next = input[i + 1] ?? "";
+					if (next === "\\") {
+						out += " \\ ";
+						i += 2;
+						continue;
+					}
+					if (next === "{" || next === "}") {
+						out = appendMathToken(out, next === "{" ? "lbrace" : "rbrace");
+						i += 2;
+						continue;
+					}
+					if (next === "|") {
+						out += " || ";
+						i += 2;
+						continue;
+					}
+					if (",;!".includes(next)) {
+						out = appendMathToken(out, "thin");
+						i += 2;
+						continue;
+					}
+					if (next === " ") {
+						out += " ";
+						i += 2;
+						continue;
+					}
+					const cmdM = /^\\([A-Za-z]+)/.exec(input.slice(i));
+					if (cmdM) {
+						const cmd = cmdM[1];
+						let pos = i + cmdM[0].length;
+						if ((cmd === "left" || cmd === "right") && input[pos] === ".") {
+							i = pos + 1;
+							continue;
+						}
 						if (cmd === "sqrt" && input[pos] === "[") {
 							const end = input.indexOf("]", pos + 1);
 							if (end > pos) {
 								const g = readBraceGroup(input, end + 1);
 								if (g) {
-									out += `root(${input.slice(pos + 1, end)}, ${expandCmds(g[0])})`;
+									out = appendMathToken(out, `root(${conv(input.slice(pos + 1, end))}, ${conv(g[0])})`);
 									i = g[1];
 									continue;
 								}
 							}
 						}
-						const g1 = readBraceGroup(input, pos);
-						if (g1) {
-							if (cmd === "frac") {
-								const g2 = readBraceGroup(input, g1[1]);
-								if (g2) {
-									out += `(${expandCmds(g1[0])})/(${expandCmds(g2[0])})`;
-									i = g2[1];
-									continue;
+						if (/^(?:frac|sqrt|ket|bra|braket|text|mbox|mathrm|operatorname|mathbf|mathcal|mathbb|hat|tilde|bar|overline|vec|dot|ddot)$/.test(cmd)) {
+							const g1 = readBraceGroup(input, pos);
+							if (g1) {
+								if (cmd === "frac") {
+									const g2 = readBraceGroup(input, g1[1]);
+									if (g2) {
+										out = appendMathToken(out, `(${conv(g1[0])})/(${conv(g2[0])})`);
+										i = g2[1];
+										continue;
+									}
 								}
+								const rawInner = g1[0].trim();
+								if (cmd === "text" || cmd === "mbox") out = appendMathToken(out, `"${escapeTypstString(rawInner)}"`);
+								else if (cmd === "mathrm") out = appendMathToken(out, `upright("${escapeTypstString(rawInner)}")`);
+								else if (cmd === "operatorname") out = appendMathToken(out, `op("${escapeTypstString(rawInner)}")`);
+								else {
+									const inner = conv(rawInner);
+									if (cmd === "sqrt") out = appendMathToken(out, `sqrt(${inner})`);
+									else if (cmd === "ket") out = appendMathToken(out, `lr(|${inner} angle.r)`);
+									else if (cmd === "bra") out = appendMathToken(out, `lr(angle.l ${inner}|)`);
+									else if (cmd === "braket") out = appendMathToken(out, `lr(angle.l ${inner} angle.r)`);
+									else if (cmd === "mathbf") out = appendMathToken(out, `bold(${inner})`);
+									else if (cmd === "mathcal") out = appendMathToken(out, `cal(${inner})`);
+									else if (cmd === "mathbb") out = appendMathToken(out, `bb(${inner})`);
+									else if (cmd === "bar" || cmd === "overline") out = appendMathToken(out, `macron(${inner})`);
+									else if (cmd === "vec") out = appendMathToken(out, `arrow(${inner})`);
+									else if (cmd === "ddot") out = appendMathToken(out, `dot.double(${inner})`);
+									else out = appendMathToken(out, `${cmd}(${inner})`);
+								}
+								i = g1[1];
+								continue;
 							}
-							const inner = expandCmds(g1[0]);
-							if (cmd === "sqrt") out += `sqrt(${inner})`;
-							else if (cmd === "ket") out += `lr(|${inner} angle.r)`;
-							else if (cmd === "bra") out += `lr(angle.l ${inner}|)`;
-							else if (cmd === "braket") out += `lr(angle.l ${inner} angle.r)`;
-							else if (cmd === "text") out += `"${escapeTypstString(inner)}"`;
-							else if (cmd === "mathrm") out += `upright(${inner})`;
-							else if (cmd === "mathbf") out += `bold(${inner})`;
-							else if (cmd === "mathcal") out += `cal(${inner})`;
-							else if (cmd === "mathbb") out += `bb(${inner})`;
-							else if (cmd === "bar") out += `macron(${inner})`;
-							else if (cmd === "vec") out += `arrow(${inner})`;
-							else if (cmd === "ddot") out += `dot.double(${inner})`;
-							else out += `${cmd}(${inner})`;
-							i = g1[1];
+						}
+						if (cmd in TYPST_CMD_MAP) {
+							const mapped = TYPST_CMD_MAP[cmd];
+							if (mapped) out = /^[A-Za-z]/.test(mapped) ? appendMathToken(out, mapped) : `${out.trimEnd()} ${mapped} `;
+						} else {
+							const g = readBraceGroup(input, pos);
+							if (g) {
+								out = appendMathToken(out, `upright("${escapeTypstString(cmd)}")(${conv(g[0])})`);
+								i = g[1];
+								continue;
+							}
+							out = appendMathToken(out, `upright("${escapeTypstString(cmd)}")`);
+						}
+						i = pos;
+						continue;
+					}
+					out += next;
+					i += 2;
+					continue;
+				}
+				if (input[i] === "_" || input[i] === "^") {
+					const op = input[i++];
+					while (i < input.length && input[i] === " ") i++;
+					if (input[i] === "{") {
+						const g = readBraceGroup(input, i);
+						if (g) {
+							const inner = conv(g[0]);
+							out += `${op}${/^[A-Za-z0-9]$/.test(inner) ? inner : `(${inner})`}`;
+							i = g[1];
 							continue;
 						}
 					}
+					const subCmd = /^\\([A-Za-z]+)/.exec(input.slice(i));
+					if (subCmd) {
+						const inner = conv(subCmd[0]);
+						out += `${op}(${inner})`;
+						i += subCmd[0].length;
+						continue;
+					}
+					if (i < input.length) {
+						out += `${op}${input[i++]}`;
+						continue;
+					}
+					out += op;
+					continue;
+				}
+				if (input[i] === "{") {
+					const g = readBraceGroup(input, i);
+					if (g) {
+						out = appendMathToken(out, `(${conv(g[0])})`);
+						i = g[1];
+						continue;
+					}
+				}
+				if (/[A-Za-z]/.test(input[i])) {
+					out = appendMathToken(out, input[i++]);
+					continue;
 				}
 				out += input[i++];
 			}
-			return out;
+			return out.replace(/[ \t]+/g, " ").trim();
 		};
-		s = expandCmds(s);
-		for (const [re, rep] of TYPST_MATH_SYMS) s = s.replace(re, rep);
-		s = s.replace(GREEK_RE, "$1");
-		let grouped = "";
-		for (let i = 0; i < s.length;) {
-			if ((s[i] === "_" || s[i] === "^") && s[i + 1] === "{") {
-				const g = readBraceGroup(s, i + 1);
-				if (g) {
-					const inner = g[0].trim();
-					grouped += `${s[i]}${/^[A-Za-z0-9]$/.test(inner) ? inner : `(${inner})`}`;
-					i = g[1];
-					continue;
-				}
-			}
-			grouped += s[i++];
-		}
-		return grouped.replace(/\\([A-Za-z]+)\b/g, "$1").replace(/[ \t]+/g, " ").trim();
+		return conv(tex);
 	}
 	function normalizeImagePath(raw) {
 		const trimmed = raw.trim();
@@ -751,6 +945,11 @@
 			if (text[i] === "\\" && i + 1 < text.length && /[\\`*_{}[\]()#+\-.!$>~|=]/.test(text[i + 1])) {
 				const ch = text[i + 1];
 				out += target === "typst" ? escapeTypstText(ch) : escapeHtml(ch);
+				i += 2;
+				continue;
+			}
+			if (target === "typst" && text.startsWith("//", i)) {
+				out += "/\\/";
 				i += 2;
 				continue;
 			}

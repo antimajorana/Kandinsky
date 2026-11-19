@@ -76,6 +76,7 @@
   import PaperWorkflowsModal from "./components/PaperWorkflowsModal.svelte";
 
   let dockEl: HTMLDivElement;
+  let settingsReady: Promise<unknown> = Promise.resolve();
 
   const notion = $derived(shellMode.value === "notion" && isNotionShell());
 
@@ -94,6 +95,21 @@
     if ((e.defaultPrevented && !palette.open) || systemEditingChord(e)) return;
     const target = e.target as HTMLElement | null;
     const inTerminal = !!target?.closest?.(".xterm"), inNote = !!target?.closest?.(".cm-editor.live-cm");
+    if (!settings.config && !app.workspace) {
+      for (const b of bindings(true)) {
+        if (!matches(b.chord, e) || (b.cmd.where === "note" && !inNote)) continue;
+        const shellKey = !appChord(b.chord) && !/^F\d{1,2}$/.test(b.chord.code);
+        if ((inTerminal && shellKey && !b.cmd.fromTerminal) || (b.cmd.yieldTo && keeps(b.cmd.yieldTo, target))) return;
+        e.preventDefault();
+        e.stopPropagation();
+        void settingsReady.then(() => {
+          const hit = bindings().find((x) => x.cmd.id === b.cmd.id);
+          if (hit) void hit.cmd.run();
+        });
+        return;
+      }
+      return;
+    }
     for (const b of bound) {
       if (!matches(b.chord, e) || (b.cmd.where === "note" && !inNote)) continue;
       // a terminal keeps every key without Super for its shell (Ctrl+W, Ctrl+K, Ctrl+B, Alt+…): from
@@ -134,6 +150,7 @@
     if (document.hasFocus()) active(); // a switch loads the vault's page in a window that has the focus already
     paintTheme(app.theme); // cached choice first (no flash), then the real settings
     const settled = loadSettings().catch((err) => toast("Settings not loaded", errText(err), "error"));
+    settingsReady = settled;
     if (!nativeShell.on) void homeDoc(); // asked now, beside the settings: openHome finds it answered
     const dock = initDock(dockEl, components);
     attachTabs(dock);

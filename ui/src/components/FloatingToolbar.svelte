@@ -9,6 +9,7 @@
     toggleInlineCode,
     toggleItalic,
     toggleStrike,
+    unwrapSelectionLink,
     wrapSelectionLink,
     type BlockKind,
     type SelectionFormatState,
@@ -209,9 +210,10 @@
   function submitLink(): void {
     const raw = linkValue.trim();
     if (!raw) {
+      if (format.link) unwrapSelectionLink(view);
       linkOpen = false;
       view.focus();
-      onLayoutChange?.();
+      refreshFormatState();
       return;
     }
     wrapSelectionLink(view, raw);
@@ -338,7 +340,6 @@
           class="ft-btn"
           aria-label="Link"
           aria-pressed={format.link ? "true" : "false"}
-          aria-expanded={linkOpen}
           title="Add link"
           onpointerdown={keepEditorSelection}
           onmousedown={keepEditorSelection}

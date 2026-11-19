@@ -54,6 +54,15 @@
     void refreshCatalog();
   });
 
+  let prevDevMode: boolean | null = null;
+  $effect(() => {
+    const dm = devMode;
+    if (prevDevMode !== null && prevDevMode !== dm) {
+      void refreshCatalog();
+    }
+    prevDevMode = dm;
+  });
+
   const q = $derived(query.trim().toLowerCase());
   const matches = (...parts: (string | undefined | null)[]) =>
     !q || parts.some((s) => s && s.toLowerCase().includes(q));

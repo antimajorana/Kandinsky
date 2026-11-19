@@ -39,7 +39,7 @@ more?.addEventListener("change", () => settings.config && apply(settings.config)
 onDeviceLook(() => settings.config && apply(settings.config));
 
 const SHAPE_CHOICE_KEY = "kandinsky.shapeChosen";
-const vaultScope = () => (typeof location !== "undefined" ? location.pathname.match(/^\/v\/[^/]+/)?.[0] ?? "" : "");
+const vaultScope = () => (typeof location !== "undefined" ? location.pathname.match(/^\/(?:v\/[^/]+|r\/[^/]+(?:\/v\/[^/]+)?)/)?.[0] ?? "" : "");
 const paletteKey = () => `kandinsky.palette:${vaultScope()}`;
 const resolvePalette = (pal: string | null | undefined): string => (!pal ? "plain" : pal === "atlas" ? "kandinsky" : pal);
 // Apply per-vault saved palette (defaulting to Plain) & Paper shape immediately before /api/config resolves (zero startup flash).

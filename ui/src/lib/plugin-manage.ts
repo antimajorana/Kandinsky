@@ -136,24 +136,32 @@ export async function installFrom(
   try {
     const src = from.trim();
     let info = meta;
-    if (!info) {
+    if (!info || info.permissions === undefined) {
       const avail = await api.availablePlugins().catch(() => [] as Available[]);
       const found = avail.find((a) => a.url === src || a.id === src);
-      if (found) info = { id: found.id, title: found.title, permissions: found.permissions, has_helper: found.has_helper };
+      if (found) {
+        info = {
+          id: found.id,
+          title: found.title,
+          permissions: found.permissions,
+          has_helper: info?.has_helper || found.has_helper,
+        };
+      }
     }
-    if (info?.permissions !== undefined && hasSensitivePermissions(info.permissions, info.has_helper)) {
+    if (!info || info.permissions === undefined) {
+      const preview = await api.inspectPlugin(src, info?.id);
+      info = {
+        id: preview.id,
+        title: preview.title,
+        permissions: preview.permissions,
+        has_helper: Boolean(info?.has_helper || preview.has_helper),
+      };
+    }
+    if (hasSensitivePermissions(info.permissions, info.has_helper)) {
       const ok = await confirmPluginPermissions(info.title ?? info.id ?? src, info.permissions, info.has_helper, "Install");
       if (!ok) return false;
     }
     const r = await api.installPlugin(src);
-    if ((!info || info.permissions === undefined) && hasSensitivePermissions(r.permissions, r.has_helper)) {
-      const ok = await confirmPluginPermissions(r.title, r.permissions, r.has_helper, "Enable");
-      if (!ok) {
-        await api.removePlugin(r.id).catch(() => setPluginOn(r.id, false).catch(() => {}));
-        await loadPlugins();
-        return false;
-      }
-    }
     confirmedPlugins.add(r.id);
     await loadPlugins();
     const may = mayOf(r.permissions, r.has_helper);

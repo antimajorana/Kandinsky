@@ -100,6 +100,37 @@ test.describe("Notion-style editor UX", () => {
     await page.keyboard.press("Escape");
     await expect(toolbar).toBeHidden();
 
+    // Link wrap and unwrap via empty link submission (no conflicting aria-expanded on Link toggle)
+    await selectRange(page, "gamma");
+    await expect(toolbar).toBeVisible();
+    const linkBtn = toolbar.getByRole("button", { name: "Link", exact: true });
+    await expect(linkBtn).not.toHaveAttribute("aria-expanded");
+    await linkBtn.click();
+    const linkInput = toolbar.getByLabel("Link URL or note");
+    await linkInput.fill("https://example.org");
+    await linkInput.press("Enter");
+    await expect.poll(() => editorText(page)).toContain("[gamma](https://example.org)");
+
+    // Inner-label selection (Live Preview case: only "gamma" selected inside [gamma](https://example.org))
+    await selectRange(page, "gamma");
+    await expect(toolbar).toBeVisible();
+    await expect(linkBtn).toHaveAttribute("aria-pressed", "true");
+    await linkBtn.click();
+    await expect(linkInput).toHaveValue("https://example.org");
+    await linkInput.fill("https://updated.example.org");
+    await linkInput.press("Enter");
+    await expect.poll(() => editorText(page)).toContain("[gamma](https://updated.example.org)");
+    await expect.poll(() => editorText(page)).not.toContain("[[gamma]");
+
+    await selectRange(page, "gamma");
+    await expect(toolbar).toBeVisible();
+    await linkBtn.click();
+    await expect(linkInput).toHaveValue("https://updated.example.org");
+    await linkInput.fill("");
+    await linkInput.press("Enter");
+    await expect.poll(() => editorText(page)).not.toContain("updated.example.org");
+    await expect.poll(() => editorText(page)).toContain("gamma");
+
     // Suppress inside fenced code block
     await selectRange(page, "codeWord");
     await expect(toolbar).toBeHidden();
@@ -183,16 +214,26 @@ test.describe("Notion-style editor UX", () => {
     await page.keyboard.press("Control+v");
     await expect.poll(() => editorText(page)).toContain("Select [word](https://example.com) here.");
 
-    // Move to end for rich HTML paste
+    // Move to end for rich HTML paste (including Word <style>/file:// image noise, <svg>, code fences with ====/~~~~, and KaTeX \| in table)
     await page.keyboard.press("Control+End");
     const sampleHtml = [
-      '<b style="font-weight:normal;" id="docs-internal-guid-1"><span style="font-weight:700">Bold</span> costs $100</b>',
-      "<table><thead><tr><th>Name</th><th>Expr</th></tr></thead><tbody><tr><td>Row</td><td>a | b</td></tr></tbody></table>",
+      "<style>p.MsoNormal { font-weight: bold; color: red; }</style>",
+      '<b style="font-weight:normal;" id="docs-internal-guid-1"><span style="font-weight:700">Bold</span> costs $100<svg><style>.ic{fill:blue}</style><title>CopyIcon</title></svg></b>',
+      '<p class="MsoNormal">Card **** 1234 with <code>a ==== b</code> and <img src="file:///C:/Temp/msohtmlclip1/01/clip_image001.png"><img src="data:image/png;base64,AAAA"><img alt="Plot" src="https://example.org/plot.png"></p>',
+      '<pre><code class="language-python">sep = "========"\nfence = "~~~~"</code></pre>',
+      '<table><thead><tr><th>Name</th><th>Expr</th></tr></thead><tbody><tr><td>Row</td><td>a | b and <span class="katex"><math><semantics><annotation encoding="application/x-tex">\\|x\\|</annotation></semantics></math></span></td></tr></tbody></table>',
     ].join("");
     await dispatchHtmlPaste(page, sampleHtml, "Bold costs $100\nName\tExpr\nRow\ta | b");
 
     await expect.poll(() => editorText(page)).toContain("**Bold** costs \\$100");
-    await expect.poll(() => editorText(page)).toContain("| Name | Expr |\n| --- | --- |\n| Row | a \\| b |");
+    await expect.poll(() => editorText(page)).not.toContain("p.MsoNormal");
+    await expect.poll(() => editorText(page)).not.toContain("CopyIcon");
+    await expect.poll(() => editorText(page)).not.toContain("clip_image001");
+    await expect.poll(() => editorText(page)).not.toContain("data:image");
+    await expect.poll(() => editorText(page)).toContain("Card **** 1234 with `a ==== b`");
+    await expect.poll(() => editorText(page)).toContain("![Plot](https://example.org/plot.png)");
+    await expect.poll(() => editorText(page)).toContain('```python\nsep = "========"\nfence = "~~~~"\n```');
+    await expect.poll(() => editorText(page)).toContain("| Name | Expr |\n| --- | --- |\n| Row | a \\| b and $\\|x\\|$ |");
 
     // Single Ctrl+Z undoes the entire rich paste cleanly
     await page.keyboard.press("Control+z");

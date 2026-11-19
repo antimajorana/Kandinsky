@@ -7,7 +7,7 @@ import { getCM } from "@replit/codemirror-vim";
 import FloatingToolbar, { type FloatingToolbarSnapshot } from "../../components/FloatingToolbar.svelte";
 import { overlayOpened } from "../overlays";
 import { app } from "../state.svelte";
-import { getSelectionFormat } from "./md-format";
+import { findEnclosingLink, getSelectionFormat } from "./md-format";
 import { frontmatterClose } from "./live/live-preview.js";
 import { notePlaceAt } from "./math-context";
 
@@ -68,12 +68,7 @@ function isSuppressedSelection(state: EditorState, from: number, to: number): bo
 }
 
 function extractInitialLink(state: EditorState, from: number, to: number): string {
-  const slice = state.sliceDoc(from, to);
-  const md = /^\[[^\]]*\]\(([^)]+)\)$/.exec(slice);
-  if (md) return md[1];
-  const wiki = /^\[\[([^\]|#\n]+)(?:#[^\]|\n]+)?(?:\|[^\]]*)?\]\]$/.exec(slice);
-  if (wiki) return `[[${wiki[1]}]]`;
-  return "";
+  return findEnclosingLink(state, from, to)?.target ?? "";
 }
 
 class FloatingToolbarPlugin {

@@ -151,26 +151,86 @@ fn env_bin_dir(env: &Path) -> PathBuf {
     }
 }
 
-fn find_python(cfg: &Config, root: &Path) -> Option<(PathBuf, Vec<(String, OsString)>)> {
+fn is_usable_python(path: &Path) -> bool {
+    // `File::open` resolves real executables and installed Microsoft Store AppExecLinks (`len > 0`)
+    // while rejecting 0-byte placeholders and uninstalled `Microsoft\WindowsApps` Store stubs at the OS level.
+    std::fs::File::open(path)
+        .and_then(|f| f.metadata())
+        .is_ok_and(|m| m.is_file() && m.len() > 0)
+}
+
+type PythonSpec = (PathBuf, Vec<String>, Vec<(String, OsString)>);
+
+fn find_python(cfg: &Config, root: &Path) -> Option<PythonSpec> {
     if let Some(env) = crate::python_env::chosen(cfg, root) {
         let bin = env_bin_dir(&env);
-        if let Some(exe) = ["python3", "python", "python.exe"].iter().map(|n| bin.join(n)).find(|p| p.is_file()) {
-            return Some((exe, crate::python_env::vars(&env)));
+        if let Some(exe) = ["python3", "python", "python.exe"].iter().map(|n| bin.join(n)).find(|p| is_usable_python(p)) {
+            return Some((exe, Vec::new(), crate::python_env::vars(&env)));
+        }
+    }
+    if cfg.lsp.python_env.trim() != "none" {
+        for found in crate::python_env::found(root) {
+            let exe = PathBuf::from(&found.python);
+            if is_usable_python(&exe) {
+                return Some((exe, Vec::new(), crate::python_env::vars(Path::new(&found.path))));
+            }
         }
     }
     let names: &[&str] = if cfg!(windows) { &["python", "python3"] } else { &["python3", "python"] };
     if crate::platform::host::sandboxed() {
         for name in names {
+            // Inside a Flatpak sandbox `host::find` queries the host via `flatpak-spawn --host`;
+            // container `File::open` cannot inspect host-only paths (`/opt`, `~/.pyenv`, `/usr/local`).
             if let Some(exe) = crate::platform::host::find(name) {
-                return Some((exe, Vec::new()));
+                return Some((exe, Vec::new(), Vec::new()));
             }
         }
         return None;
     }
-    let path_var = std::env::var_os("PATH")?;
-    for name in names {
-        if let Some(exe) = std::env::split_paths(&path_var).find_map(|dir| crate::platform::run_line::executable(&dir.join(name))) {
-            return Some((exe, Vec::new()));
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for name in names {
+            if let Some(exe) = std::env::split_paths(&path_var)
+                .find_map(|dir| crate::platform::run_line::executable(&dir.join(name)).filter(|p| is_usable_python(p)))
+            {
+                return Some((exe, Vec::new(), Vec::new()));
+            }
+        }
+    }
+    if cfg!(windows) {
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            let progs = PathBuf::from(local).join("Programs/Python");
+            let mut dirs: Vec<PathBuf> = std::fs::read_dir(&progs)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|s| s.starts_with("Python") && s["Python".len()..].chars().next().is_some_and(|c| c.is_ascii_digit()))
+                })
+                .collect();
+            dirs.sort();
+            dirs.reverse();
+            for dir in dirs {
+                let exe = dir.join("python.exe");
+                if is_usable_python(&exe) {
+                    return Some((exe, Vec::new(), Vec::new()));
+                }
+            }
+        }
+        if let Some(path_var) = std::env::var_os("PATH") {
+            if let Some(py) = std::env::split_paths(&path_var)
+                .find_map(|dir| crate::platform::run_line::executable(&dir.join("py")).filter(|p| is_usable_python(p)))
+            {
+                return Some((py, vec!["-3".into()], Vec::new()));
+            }
+        }
+        if let Some(sys_root) = std::env::var_os("SystemRoot") {
+            let py = PathBuf::from(sys_root).join("py.exe");
+            if is_usable_python(&py) {
+                return Some((py, vec!["-3".into()], Vec::new()));
+            }
         }
     }
     None
@@ -188,17 +248,23 @@ fn resolve_cwd(root: &Path, path: Option<&str>) -> Result<PathBuf> {
 pub fn run(root: &Path, req: &NotebookRunRequest, bus: Option<&EventBus>) -> Result<JupyterNotebookRunResponse> {
     let cwd = resolve_cwd(root, req.path.as_deref())?;
     let cfg = Config::load(root)?;
-    let Some((exe, env_vars)) = find_python(&cfg, root) else {
+    let Some((exe, lead_args, env_vars)) = find_python(&cfg, root) else {
+        let hint = if cfg.developer_mode {
+            "No Python 3 interpreter found. Configure [lsp] python_env or install Python 3."
+        } else {
+            "No Python 3 interpreter found. Install Python 3 from python.org (or place a .venv folder in this workspace) to run notebook cells."
+        };
         return Ok(JupyterNotebookRunResponse {
             ok: false,
             kernel: "python3".into(),
             python_exe: None,
-            error: Some("No Python interpreter found. Configure [lsp] python_env or install Python on PATH.".into()),
+            error: Some(hint.into()),
             results: Vec::new(),
         });
     };
     let exe_str = exe.to_string_lossy().into_owned();
-    let py_args = ["-X".to_string(), "utf8".to_string(), "-u".to_string()];
+    let mut py_args = lead_args;
+    py_args.extend(["-X".to_string(), "utf8".to_string(), "-u".to_string()]);
     crate::binary_trust::authorize_blocking(root, "notebook", &exe, &py_args, bus)?;
 
     let payload_path = vault_write::cache::unique(&crate::state_dir::dir(root).join("cache/notebook-run")).with_extension("json");
@@ -207,7 +273,7 @@ pub fn run(root: &Path, req: &NotebookRunRequest, bus: Option<&EventBus>) -> Res
     let _cleanup = TempPayload(payload_path.clone());
 
     let mut cmd = Command::new(&exe);
-    cmd.arg("-X").arg("utf8").arg("-u").arg("-").arg(&payload_path).current_dir(&cwd);
+    cmd.args(&py_args).arg("-").arg(&payload_path).current_dir(&cwd);
     cmd.env("MPLBACKEND", "Agg");
     cmd.env("PYTHONIOENCODING", "utf-8");
     for (k, v) in env_vars {
@@ -360,5 +426,19 @@ mod tests {
         assert!(!err_resp.ok);
         assert_eq!(err_resp.results.len(), 1);
         assert_eq!(err_resp.results[0].error.as_ref().map(|e| e.ename.as_str()), Some("ZeroDivisionError"));
+    }
+
+    #[test]
+    fn empty_and_missing_files_are_not_usable_python_while_nonempty_binaries_are() {
+        let d = tempfile::tempdir().unwrap();
+        let empty = d.path().join("python.exe");
+        std::fs::write(&empty, b"").unwrap();
+        assert!(!is_usable_python(&empty), "0-byte stub must be rejected");
+        assert!(!is_usable_python(&d.path().join("missing-python")), "missing path must be rejected");
+
+        let real_like = d.path().join("Microsoft/WindowsApps/python3.exe");
+        std::fs::create_dir_all(real_like.parent().unwrap()).unwrap();
+        std::fs::write(&real_like, b"MZ\x90\x00").unwrap();
+        assert!(is_usable_python(&real_like), "a readable non-empty WindowsApps target must remain usable");
     }
 }

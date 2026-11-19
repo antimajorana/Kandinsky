@@ -50,8 +50,17 @@
   let obsidianThemes = $state<ObsidianThemeInfo[]>([]);
   onMount(() => { void api.obsidianThemes().then((t) => { obsidianThemes = t; }, () => {}); });
   const PRIMARY_PANELS = new Set(["preview", "device", "snippets", "templates", "keys", "plugins", "openwith", "capturekey", "overview"]);
-  const mainPanels = $derived((def?.panels ?? []).filter((p) => PRIMARY_PANELS.has(p) && (devMode || !isDevSettingPanel(p))));
+  const showSnippets = $derived(devMode);
+  const mainPanels = $derived(
+    (def?.panels ?? []).filter(
+      (p) => PRIMARY_PANELS.has(p) && (devMode || !isDevSettingPanel(p)) && (p !== "snippets" || showSnippets),
+    ),
+  );
   const advPanels = $derived((def?.panels ?? []).filter((p) => !PRIMARY_PANELS.has(p) && (devMode || !isDevSettingPanel(p))));
+  const shownNext = $derived((def?.next ?? []).filter((n) => n.run !== "settings.newSnippet" || showSnippets));
+  const sidebarItems = $derived(
+    ordered(allApps()).filter((a) => devMode || (a.key !== "graph" && a.key !== "bases")),
+  );
   const shownFields = $derived(page.fields.filter((f) => devMode || !isDevSettingField(f)));
   const shownAdvFields = $derived(page.advancedFields.filter((f) => devMode || !isDevSettingField(f)));
 
@@ -147,7 +156,7 @@
       <div class="adv-inner">
         {#each advPanels as panel (panel)}
           {#if panel === "apps"}
-            <SwitchList title="Sidebar shortcuts" label="Sidebar shortcuts" items={ordered(allApps())} hidden={appHidden} setHidden={setAppHidden} move={moveApp} desc="Optional sidebar shortcuts." />
+            <SwitchList title="Sidebar shortcuts" label="Sidebar shortcuts" items={sidebarItems} hidden={appHidden} setHidden={setAppHidden} move={moveApp} desc="Optional sidebar shortcuts." />
             {#if librariesPage()}
               <SwitchList title="Libraries" label="Libraries" items={libraryChoices().map((e) => ({ key: e.id, title: e.title, icon: isIconName(e.icon) ? e.icon : "library" }))} hidden={libraryHidden} setHidden={setLibraryHidden} move={moveLibrary} movable={(k) => !libraryHidden(k)} desc="Library groups." />
             {/if}
@@ -176,10 +185,10 @@
     </details>
   {/if}
 
-  {#if def?.next?.length && !embedded}
+  {#if shownNext.length && !embedded}
     <section class="next" aria-label="Go further">
       <h3>Go further</h3>
-      {#each def.next as n (n.label)}
+      {#each shownNext as n (n.label)}
         <button class="rung" onclick={() => next(n)}><b>{n.label} →</b><span>{n.why}</span></button>
       {/each}
     </section>

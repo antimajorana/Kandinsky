@@ -8,7 +8,7 @@ import { api } from "./api";
 import { keySystem, onThisSystem, parseChord, sameChord, type Chord, type KeySystem } from "./keys";
 import type { CommandInfo } from "./types";
 import { settings } from "./settings.svelte";
-import { toast } from "./state.svelte";
+import { app, toast } from "./state.svelte";
 
 export interface Cmd {
   id: string;
@@ -48,8 +48,8 @@ const effective = (id: string, def?: string) => (id in keymap.overrides ? keymap
  *  so this is the one place where plugins are told that it ran. */
 const told = <R>(id: string, run: () => R) => (): R => { emitPluginEvent({ type: "command", id }); return run(); };
 
-export function allCommands(): Cmd[] {
-  const devMode = Boolean(settings.config?.developer_mode);
+export function allCommands(includeDev = false): Cmd[] {
+  const devMode = includeDev || Boolean((settings.config ?? app.workspace?.config)?.developer_mode);
   const ui: Cmd[] = actions.filter((a) => (!a.plugin || builtinOn(a.plugin)) && (devMode || !a.developerOnly)).map((a) => ({
     id: a.id, title: a.title, source: "ui", defaultKeys: a.keys, keys: effective(a.id, a.keys),
     fromTerminal: !!a.fromTerminal, alsoKeys: a.alsoKeys, where: a.where, yieldTo: a.yieldTo, icon: a.icon, label: a.label, run: told(a.id, a.run),
@@ -113,8 +113,8 @@ export function addCommands(list: Action[]): void {
 
 /** Key → command, first match wins (UI actions before server commands, like the palette order). */
 /** Every chord and its command; those that count in one place only come first, so they win there. */
-export function bindings(): { chord: Chord; cmd: Cmd }[] {
-  const all = allCommands().flatMap((cmd) =>
+export function bindings(includeDev = false): { chord: Chord; cmd: Cmd }[] {
+  const all = allCommands(includeDev).flatMap((cmd) =>
     [cmd.keys, ...(cmd.alsoKeys ?? [])].flatMap((k) => { const chord = k ? parseChord(k) : null; return chord ? [{ chord, cmd }] : []; }));
   return [...all.filter((b) => b.cmd.where), ...all.filter((b) => !b.cmd.where)];
 }

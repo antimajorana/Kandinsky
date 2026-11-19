@@ -333,6 +333,37 @@ fn set_off_in(path: &Path, id: &str, off: bool) -> Result<()> {
     vault_write::write(path, doc.to_string().as_bytes())
 }
 
+/// Pre-install summary read from a source's `plugin.toml` inside a disposable cache directory without modifying the vault.
+#[derive(Debug, Clone, Serialize)]
+pub struct PluginPreview {
+    pub id: String,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    pub permissions: Permissions,
+    pub has_helper: bool,
+}
+
+/// Fetches `source` into a temporary `.kandinsky/cache/` folder, parses `plugin.toml`, and removes the temporary folder
+/// without copying anything into `.kandinsky/plugins/` or changing `config.toml`.
+pub fn inspect(root: &Path, source: &Source, id: Option<&str>) -> Result<PluginPreview> {
+    let work = vault_write::cache::unique(&crate::state_dir::dir(root).join(format!("cache/plugin-inspect-{}", stamp())));
+    let _ = vault_write::cache::remove_dir_all(&work);
+    let result = (|| -> Result<PluginPreview> {
+        let _ = fetch(source, &work)?;
+        let from = plugin_root(&work)?;
+        let id = id.map(str::to_string).unwrap_or_else(|| source.default_id());
+        if !plugins::valid_id(&id) {
+            return Err(Error::BadRequest(format!("{id:?} is not a plugin id (letters, digits, - and _): give one with --id")));
+        }
+        let m = plugins::summary_of(&std::fs::read_to_string(from.join("plugin.toml"))?)
+            .map_err(|e| Error::BadRequest(format!("plugin.toml: {e}")))?;
+        Ok(PluginPreview { id, title: m.title, version: m.version, permissions: m.permissions, has_helper: m.has_helper })
+    })();
+    let _ = vault_write::cache::remove_dir_all(&work);
+    result
+}
+
 /// Installs (or, with `replace`, updates) a plugin. An update keeps the vault's own `[settings]`.
 pub fn install(root: &Path, source: &Source, id: Option<&str>, replace: bool) -> Result<Installed> {
     // two installs at once (Update clicked on two plugins) each get their own folder
@@ -446,6 +477,12 @@ struct IndexEntry {
     tier: String,
     file: String,
     platforms: Platforms,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    permissions: Option<Permissions>,
+    #[serde(default)]
+    has_helper: bool,
 }
 
 /// `"any"` (plain files) or the platforms an engine was built for.
@@ -482,20 +519,23 @@ pub fn available(root: &Path, index: &str) -> Result<Vec<Available>> {
             !crate::config::Config::is_example_plugin(&e.id)
                 && (cfg.developer_mode || !crate::config::Config::is_dev_gated_plugin(&e.id))
         })
-        .map(|e| Available {
-            runs_here: match &e.platforms {
-                Platforms::Any(_) => true,
-                Platforms::Built(list) => list.contains(&here),
-            },
-            installed: have.iter().find(|p| p.id == e.id).map(|p| p.version.clone().unwrap_or_default()),
-            url: format!("{base}/{}", e.file),
-            id: e.id,
-            title: e.title,
-            version: e.version,
-            tier: e.tier,
-            description: None,
-            permissions: None,
-            has_helper: false,
+        .map(|e| {
+            let built_engine = matches!(&e.platforms, Platforms::Built(_));
+            Available {
+                runs_here: match &e.platforms {
+                    Platforms::Any(_) => true,
+                    Platforms::Built(list) => list.contains(&here),
+                },
+                installed: have.iter().find(|p| p.id == e.id).map(|p| p.version.clone().unwrap_or_default()),
+                url: format!("{base}/{}", e.file),
+                id: e.id,
+                title: e.title,
+                version: e.version,
+                tier: e.tier,
+                description: e.description,
+                permissions: e.permissions,
+                has_helper: e.has_helper || built_engine,
+            }
         })
         .collect())
 }
@@ -606,6 +646,10 @@ fn catalog_in(root: &Path, index: &str, bundled: Option<&Path>) -> Result<Vec<Av
                 platforms: Platforms,
                 #[serde(default)]
                 description: Option<String>,
+                #[serde(default)]
+                permissions: Option<Permissions>,
+                #[serde(default)]
+                has_helper: bool,
             }
             if let Ok(entries) = serde_json::from_str::<Vec<CachedRemote>>(&raw) {
                 for e in entries {
@@ -615,12 +659,13 @@ fn catalog_in(root: &Path, index: &str, bundled: Option<&Path>) -> Result<Vec<Av
                         continue;
                     }
                     if seen.insert(e.id.clone()) {
+                        let built_engine = matches!(&e.platforms, Platforms::Built(_));
                         let mut runs_here = match &e.platforms {
                             Platforms::Any(_) => true,
                             Platforms::Built(list) => list.contains(&here),
                         };
-                        let mut permissions = None;
-                        let mut has_helper = false;
+                        let mut permissions = e.permissions;
+                        let mut has_helper = e.has_helper || built_engine;
                         let toml_path = bdir.join(&e.id).join("plugin.toml");
                         if toml_path.is_file() {
                             if !manifest_runs_here(&toml_path) {

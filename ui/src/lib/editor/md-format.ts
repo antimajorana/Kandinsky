@@ -203,14 +203,62 @@ export function setBlockKind(view: EditorView, kind: BlockKind): boolean {
   return true;
 }
 
+export interface EnclosingLink { from: number; to: number; label: string; target: string }
+
+function parseLinkSyntax(slice: string, baseFrom: number): EnclosingLink | null {
+  const md = /^\[([^\]]*)\]\(([^)\n]*)\)$/.exec(slice);
+  if (md) return { from: baseFrom, to: baseFrom + slice.length, label: md[1], target: md[2] };
+  const wiki = /^\[\[([^\]|#\n]+)(#[^\]|\n]+)?(?:\|([^\]]*))?\]\]$/.exec(slice);
+  if (!wiki) return null;
+  return { from: baseFrom, to: baseFrom + slice.length, label: (wiki[3] ?? wiki[1]).trim(), target: `[[${wiki[1]}${wiki[2] ?? ""}]]` };
+}
+
+/** Find a Markdown `[label](url)` or Obsidian `[[note|alias]]` link matching or enclosing `from..to`. */
+export function findEnclosingLink(state: EditorState, from: number, to: number): EnclosingLink | null {
+  const direct = parseLinkSyntax(state.sliceDoc(from, to), from);
+  if (direct) return direct;
+  let found: EnclosingLink | null = null;
+  syntaxTree(state).iterate({
+    from, to,
+    enter(node) {
+      if (!found && node.from <= from && node.to >= to && (node.name === "Link" || node.name === "Wikilink")) {
+        found = parseLinkSyntax(state.sliceDoc(node.from, node.to), node.from);
+      }
+    },
+  });
+  if (found) return found;
+  const line = state.doc.lineAt(from);
+  if (to <= line.to) {
+    for (const m of line.text.matchAll(/\[[^\]]*\]\([^)\n]*\)|\[\[[^\]\n]+\]\]/g)) {
+      const idx = m.index ?? 0;
+      if (idx <= from - line.from && idx + m[0].length >= to - line.from) {
+        const parsed = parseLinkSyntax(m[0], line.from + idx);
+        if (parsed) return parsed;
+      }
+    }
+  }
+  return null;
+}
+
+/** Remove an enclosing Markdown `[label](url)` or Obsidian `[[note|label]]` link around each selection range. */
+export function unwrapSelectionLink(view: EditorView): boolean {
+  view.dispatch(view.state.changeByRange((r) => {
+    const enc = findEnclosingLink(view.state, r.from, r.to);
+    if (!enc) return { range: r };
+    return { changes: { from: enc.from, to: enc.to, insert: enc.label }, range: EditorSelection.range(enc.from, enc.from + enc.label.length) };
+  }), { userEvent: "input.format", scrollIntoView: true });
+  return true;
+}
+
 /** Wrap the active selection as `[selected](url)` or `[[note|selected]]` when given a `[[note]]` or bare note name. */
 export function wrapSelectionLink(view: EditorView, rawTarget: string): boolean {
   const target = rawTarget.trim();
   if (!target) return false;
   view.dispatch(view.state.changeByRange((r) => {
-    const selected = view.state.sliceDoc(r.from, r.to);
-    const linkMatch = /^\[([^\]]*)\]\([^)]*\)$/.exec(selected);
-    const label = linkMatch ? linkMatch[1] : selected;
+    const enc = findEnclosingLink(view.state, r.from, r.to);
+    const repFrom = enc ? enc.from : r.from;
+    const repTo = enc ? enc.to : r.to;
+    const label = enc ? enc.label : view.state.sliceDoc(r.from, r.to);
     let insert: string;
     if (target.startsWith("[[")) {
       const note = target.slice(2).replace(/\]\]$/, "").trim();
@@ -226,20 +274,14 @@ export function wrapSelectionLink(view: EditorView, rawTarget: string): boolean 
     } else {
       insert = !label || target === label ? `[[${target}]]` : `[[${target}|${label}]]`;
     }
-    return { changes: { from: r.from, to: r.to, insert }, range: EditorSelection.cursor(r.from + insert.length) };
+    return { changes: { from: repFrom, to: repTo, insert }, range: EditorSelection.cursor(repFrom + insert.length) };
   }), { userEvent: "input.format", scrollIntoView: true });
   return true;
 }
 
 export interface SelectionFormatState {
-  bold: boolean;
-  italic: boolean;
-  strike: boolean;
-  code: boolean;
-  highlight: boolean;
-  link: boolean;
-  block: BlockKind;
-  blockLabel: string;
+  bold: boolean; italic: boolean; strike: boolean; code: boolean; highlight: boolean; link: boolean;
+  block: BlockKind; blockLabel: string;
 }
 
 function starsInState(state: EditorState, pos: number, dir: -1 | 1): number {
@@ -313,7 +355,7 @@ export function getSelectionFormat(state: EditorState): SelectionFormatState {
     || (state.sliceDoc(sel.from - 1, sel.from) === "`" && state.sliceDoc(sel.to, sel.to + 1) === "`"))) {
     code = true;
   }
-  if (!link && (/^\[[^\]]+\]\([^)]*\)$/.test(text) || /^\[\[[^\]\n]+\]\]$/.test(text))) link = true;
+  if (!link && findEnclosingLink(state, sel.from, sel.to) !== null) link = true;
 
   const block = detectBlockKind(state.doc.lineAt(sel.from).text);
   return { bold, italic, strike, code, highlight, link, block, blockLabel: BLOCK_LABELS[block] };

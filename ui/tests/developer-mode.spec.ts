@@ -24,6 +24,34 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
         text: JSON.stringify({ id: "templater-obsidian", name: "Templater", version: "2.0.0" }),
       },
     });
+    await request.put("/api/file", {
+      headers: H,
+      data: {
+        path: ".kandinsky/plugins/rail_consumer/plugin.toml",
+        text: 'title = "Consumer Mail"\nrail = true\nicon = "mail"\n',
+      },
+    });
+    await request.put("/api/file", {
+      headers: H,
+      data: {
+        path: ".kandinsky/plugins/rail_consumer/view.js",
+        text: 'export default (host) => { host.textContent = "consumer"; };\n',
+      },
+    });
+    await request.put("/api/file", {
+      headers: H,
+      data: {
+        path: ".kandinsky/plugins/solver/plugin.toml",
+        text: 'title = "Solver"\nrail = true\nicon = "sigma"\n',
+      },
+    });
+    await request.put("/api/file", {
+      headers: H,
+      data: {
+        path: ".kandinsky/plugins/solver/view.js",
+        text: 'export default (host) => { host.textContent = "solver"; };\n',
+      },
+    });
     expect(
       (await request.put("/api/config", { headers: H, data: { ...before, developer_mode: false, vim: false, ui: { ...before.ui, palette: "plain" } } })).ok(),
     ).toBeTruthy();
@@ -51,6 +79,9 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
     const sb = side(page);
     await expect(sb.getByRole("button", { name: "Search", exact: true })).toBeVisible();
     await expect(sb.getByTestId("apps").getByRole("button", { name: "Home", exact: true })).toBeVisible();
+    // Consumer rail plugins remain visible in calm mode, while dev-gated plugins (`solver`) are hidden
+    await expect(sb.getByTestId("apps").getByRole("button", { name: "Consumer Mail", exact: true })).toBeVisible();
+    await expect(sb.getByTestId("apps").getByRole("button", { name: "Solver", exact: true })).toHaveCount(0);
     await expect(sb.locator(".tree-head .sec-label")).toHaveText("Pages");
     await expect(sb.getByRole("button", { name: "Trash", exact: true })).toBeVisible();
     await expect(sb.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
@@ -85,6 +116,8 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
     await expect(dayPalettes.getByRole("radio", { name: /plain/i })).toHaveAttribute("aria-checked", "true");
     await expect(page.getByRole("button", { name: /More palettes/i })).toHaveCount(2);
     await expect(page.getByRole("button", { name: /More palettes/i }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "CSS snippets" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Custom CSS snippet/i })).toHaveCount(0);
 
     await nav(page).getByRole("button", { name: /^Editor & Writing/ }).click();
     await expect(page.locator('.row[data-path="vim"]')).toHaveCount(0);
@@ -116,8 +149,11 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
     await expect(status.getByTestId("agy-chip")).toBeVisible();
     await expect(sb.getByTestId("sidebar-import")).toBeVisible();
     await expect(sb.getByRole("button", { name: "Plugins", exact: true })).toBeVisible();
+    // Toggling Developer mode ON immediately loads installed dev-gated plugins without a manual reload
+    await expect(sb.getByTestId("apps").getByRole("button", { name: "Solver", exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: /Installed & Active/ }).click();
+    await expect(page.getByRole("switch", { name: "Plugin Solver" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Install from path…" })).toBeVisible();
     await expect(page.getByRole("button", { name: "New plugin" })).toBeVisible();
     await expect(page.getByRole("button", { name: "New block" })).toBeVisible();
@@ -131,6 +167,8 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
   } finally {
     await page.unroute("**/api/plugins/available");
     await request.put("/api/config", { headers: H, data: before });
+    await request.post("/api/plugins/rail_consumer/remove", { headers: H }).catch(() => {});
+    await request.post("/api/plugins/solver/remove", { headers: H }).catch(() => {});
     await request.post("/api/fs/trash?path=.obsidian", { headers: H }).catch(() => {});
   }
 });
@@ -149,6 +187,8 @@ test("R4 error toast strips raw HTTP prefixes and offers Copy details; R5 render
     await rulesEditor.getByRole("button", { name: "+ Add rule" }).click();
     await rulesEditor.getByLabel("Rule 1 folder").fill("labs");
     await rulesEditor.getByLabel("Rule 1 folder").press("Tab");
+    // Incomplete rule without template must NOT write `{ folder: "labs", template: "" }` to config.toml
+    expect((await cfg(request)).notes.template_rules).toEqual([]);
     await rulesEditor.getByLabel("Rule 1 template").fill("lab-note");
     await rulesEditor.getByLabel("Rule 1 template").press("Tab");
     await expect.poll(async () => (await cfg(request)).notes.template_rules).toMatchObject([{ folder: "labs", template: "lab-note" }]);
@@ -236,5 +276,45 @@ test("live runtime & responsive visual health at desktop (1280x800) and mobile (
     expect(badHttp).toEqual([]);
   } finally {
     await request.put("/api/config", { headers: H, data: before });
+  }
+});
+
+test("standalone .ipynb notebook executes Python cells when developer_mode = false without exposing agent send menus", async ({ page, request }) => {
+  const before = await cfg(request);
+  const ipynb = JSON.stringify({
+    cells: [
+      {
+        cell_type: "code",
+        execution_count: null,
+        metadata: {},
+        outputs: [],
+        source: ["val = 6 * 7\n", "val"],
+      },
+    ],
+    metadata: { kernelspec: { display_name: "Python 3", language: "python", name: "python3" } },
+    nbformat: 4,
+    nbformat_minor: 5,
+  });
+  try {
+    await request.put("/api/file", { headers: H, data: { path: "notes/calc-default.ipynb", text: ipynb } });
+    expect(
+      (await request.put("/api/config", { headers: H, data: { ...before, developer_mode: false, vim: false } })).ok(),
+    ).toBeTruthy();
+
+    await page.goto("/");
+    await page.getByText("Finish the GW notes.").waitFor();
+    await page.keyboard.press("Control+p");
+    await page.getByTestId("palette").locator("input").fill("calc-default.ipynb");
+    await page.keyboard.press("Enter");
+
+    const pane = page.getByTestId("notebook-pane");
+    await expect(pane).toBeVisible();
+    await expect(pane.getByRole("button", { name: /Send ▾|Send Cell to Solver/i })).toHaveCount(0);
+
+    await pane.getByRole("button", { name: "▶ Run Cell" }).click();
+    await expect(pane.locator(".outputs")).toContainText("42", { timeout: 15000 });
+  } finally {
+    await request.put("/api/config", { headers: H, data: before });
+    await request.post("/api/fs/trash?path=notes/calc-default.ipynb", { headers: H }).catch(() => {});
   }
 });

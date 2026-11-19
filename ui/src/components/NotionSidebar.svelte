@@ -14,7 +14,7 @@
   import { openWorkspacesMenu, workspaceState } from "../lib/workspaces";
   import { allCommands, keysOf, tipFor } from "../lib/keymap.svelte";
   import { chordLabel } from "../lib/keys";
-  import { allApps, appLaunchers, ordered, setAppHidden, type AppTile } from "../lib/apps.svelte";
+  import { allApps, appHidden, appLaunchers, ordered, setAppHidden, type AppTile } from "../lib/apps.svelte";
   import { change, settings } from "../lib/settings.svelte";
   import { paneIcon } from "../lib/panes";
   import { tabs, activate, closeTab, canSplit, splitRight, unsplit, pin, unpin, isPinned, pinId, setSidebarWidth, toggleSidebar } from "../lib/tabs.svelte";
@@ -77,7 +77,7 @@
   const devMode = $derived(Boolean(settings.config?.developer_mode));
   const homeTile = $derived(appLaunchers().find((a) => a.key === "home"));
   const extraApps = $derived(appLaunchers().filter((a) => !["home", "calendar", "graph", "bases"].includes(a.key)));
-  const visibleExtraApps = $derived(devMode ? extraApps : []);
+  const visibleExtraApps = $derived(extraApps);
   const openAppId = (a: AppTile): string | null =>
     (a.ids.includes(tabs.active ?? "") ? tabs.active : a.ids.find((id) => tabs.apps.some((t) => t.id === id))) ?? null;
   const isAppActive = (a: AppTile): boolean => a.ids.includes(tabs.active ?? "");
@@ -443,9 +443,11 @@
           <button class="nav-row" class:active={context.active?.kind === "explorer"} aria-label="All pages" title="All pages" onclick={() => open({ kind: "explorer", source: "vault", place: "" })}>
             <span class="nav-left"><Icon name="pages" size={14} />{#if wide}<span>All pages</span>{/if}</span>
           </button>
-          <button class="nav-row" class:active={tabs.active === "graph"} aria-label="Graph" title={tipFor("Graph", "ui.graph")} onclick={() => open({ kind: "graph" })}>
-            <span class="nav-left"><Icon name="graph" size={14} />{#if wide}<span>Graph</span>{/if}</span>
-          </button>
+          {#if !appHidden("graph")}
+            <button class="nav-row" class:active={tabs.active === "graph"} aria-label="Graph" title={tipFor("Graph", "ui.graph")} onclick={() => open({ kind: "graph" })}>
+              <span class="nav-left"><Icon name="graph" size={14} />{#if wide}<span>Graph</span>{/if}</span>
+            </button>
+          {/if}
         {/if}
         {#each visibleExtraApps as a (a.ids[0] ?? `app:${a.key}`)}
           <button class="nav-row app" class:active={isAppActive(a)} class:open={Boolean(openAppId(a))}

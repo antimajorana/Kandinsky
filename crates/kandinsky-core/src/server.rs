@@ -511,6 +511,11 @@ async fn plugins_obsidian_remove_post(State(st): S, Json(req): Json<ObsidianRemo
     }
 }
 
+/// Inspects a plugin source's `plugin.toml` permissions before installing it into the vault.
+async fn plugin_inspect_post(State(st): S, Json(req): Json<PluginFrom>) -> Result<Json<crate::plugin_install::PluginPreview>> {
+    Ok(Json(with_ws(&st, move |ws| crate::plugin_install::inspect(ws.root(), &crate::plugin_install::Source::parse(&req.from), req.id.as_deref())).await?))
+}
+
 /// Copies a plugin into the vault (a folder, a git address or an archive); it arrives switched off.
 async fn plugin_install_post(State(st): S, Json(req): Json<PluginFrom>) -> Result<Json<crate::plugin_install::Installed>> {
     let got = with_ws(&st, move |ws| crate::plugin_install::install(ws.root(), &crate::plugin_install::Source::parse(&req.from), req.id.as_deref(), false)).await?;
@@ -2272,9 +2277,17 @@ async fn tasks_suggest(Query(q): Query<TaskSuggestQuery>) -> Json<Option<crate::
     Json(crate::task_suggest::suggest(&q.before, chrono::Local::now().date_naive(), ask))
 }
 
-async fn notebook_run_post(State(st): S, Json(req): Json<notebook_run::NotebookRunRequest>) -> Result<Json<notebook_run::JupyterNotebookRunResponse>> {
+async fn notebook_run_post(State(st): S, headers: HeaderMap, Json(req): Json<notebook_run::NotebookRunRequest>) -> Response {
+    if crate::auth::header(&headers, crate::auth::CLIENT_HEADER).is_some_and(|v| v == "mcp")
+        || crate::agents::Agents::here().who(&headers).is_some()
+    {
+        return forbidden("AI agents may not execute notebook code");
+    }
     let bus = st.bus.clone();
-    Ok(Json(with_ws(&st, move |ws| notebook_run::run(ws.root(), &req, Some(&bus))).await?))
+    match with_ws(&st, move |ws| notebook_run::run(ws.root(), &req, Some(&bus))).await {
+        Ok(res) => Json(res).into_response(),
+        Err(e) => e.into_response(),
+    }
 }
 
 async fn pty_ws(
@@ -2452,7 +2465,13 @@ fn locked(lock: &crate::local_lock::LocalLock, req: &Request) -> Option<Response
         return None;
     }
     if let Some(agent) = crate::agents::Agents::here().who(req.headers()) {
-        return path.starts_with("/api/agents").then(|| forbidden(&format!("the agent “{agent}” may not allow or revoke agents")));
+        if path.starts_with("/api/agents") {
+            return Some(forbidden(&format!("the agent “{agent}” may not allow or revoke agents")));
+        }
+        if path.starts_with("/api/notebook") {
+            return Some(forbidden(&format!("the agent “{agent}” may not execute notebook code")));
+        }
+        return None;
     }
     let why = if mcp {
         "this AI agent is not allowed in: Settings → Agents → Allow an agent, then give it the token (KANDINSKY_AGENT_TOKEN in its MCP config)"
@@ -2868,6 +2887,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/plugins", get(plugins_get))
         .route("/api/plugins/{id}/data", post(plugin_data_post))
         .route("/api/plugins/{id}/settings", put(plugin_settings_put))
+        .route("/api/plugins/inspect", post(plugin_inspect_post))
         .route("/api/plugins/install", post(plugin_install_post))
         .route("/api/plugins/available", get(plugins_available_get))
         .route("/api/plugins/obsidian", get(plugins_obsidian_get))

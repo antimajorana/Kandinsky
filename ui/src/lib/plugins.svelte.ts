@@ -163,10 +163,10 @@ async function startInit(): Promise<void> {
 export function watchPlugins(): () => void {
   let offList = "";
   const offSettings = onSettings((c) => {
-    const now = c.plugins.off.join("\n");
+    const now = `${Boolean(c.developer_mode)}\n${c.plugins.off.join("\n")}`;
     if (now === offList) return;
     offList = now;
-    // what can run now is the core's answer (`blocked`), so the list is read again rather than worked out here
+    // what can run now is the core's answer (`blocked` + `developer_mode` gating), so re-read the list
     if (plugins.loaded) void loadPlugins();
   });
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
