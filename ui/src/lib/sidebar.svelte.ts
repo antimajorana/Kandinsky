@@ -167,7 +167,7 @@ export async function takeKeyboard(): Promise<void> {
 
 /** "Embed in <note>": this tab as a live block in the note last written in (a ```view block — plain
  *  text in the note, so it can be edited or deleted like any other line). */
-function embedItem(id: string): { label: string; run: () => void }[] {
+export function embedItem(id: string): { label: string; run: () => void }[] {
   const target = lastEditorId(), note = target ? editors.get(target) : undefined;
   const spec = getDock()?.getPanel(id)?.params as PaneSpec | undefined;
   const opts = spec && embedOptions(spec);

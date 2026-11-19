@@ -39,7 +39,7 @@ test("New…: the kinds listed, a plugin's kind makes its file where it belongs,
   await palette.getByText("Note", { exact: true }).click();
   await page.keyboard.type("Placed by New");
   await page.keyboard.press("Enter");
-  await expect(page.locator(".tab, [role=option]").getByText(/Placed by New/).first()).toBeVisible();
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row").getByText(/Placed by New/).first()).toBeVisible();
 });
 
 // A template names itself for the lists (`template_title:`, not copied into its notes), and the vault's default

@@ -18,8 +18,8 @@ test("markdown: [[ link completion, / slash menu, foldable headings", async ({ p
   await page.keyboard.press("End");
   await page.keyboard.press("Enter");
   await page.keyboard.type("/to-d");
-  await expect(page.locator(".cm-tooltip-autocomplete")).toContainText("To-do");
-  await page.waitForTimeout(120); // CodeMirror ignores Enter for 75 ms after a list opens (interactionDelay)
+  await expect(page.locator(".cm-slash-menu")).toContainText("To-do");
+  await page.waitForTimeout(120); // the menu ignores Enter for a moment after it opens
   await page.keyboard.press("Enter");
   await page.keyboard.type("buy chalk");
   // what matters is the saved markdown (the live preview hides "- [ ]" while the caret is on the line)

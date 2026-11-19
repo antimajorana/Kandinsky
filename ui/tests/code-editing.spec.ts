@@ -117,7 +117,8 @@ test("a CRLF file, code or note, is saved with CRLF line endings", async ({ page
   await page.keyboard.insertText("c = 3");
   await page.keyboard.press("Control+s");
   await expect.poll(disk).toBe("a = 10\r\nc = 3\r\nb = 2\r\n");
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: "crlf" })).not.toHaveClass(/dirty/);
+  // the sidebar rows carry no dirty mark: the status bar counts the unsaved files
+  await expect(page.getByText(/\d+ unsaved/)).toHaveCount(0);
 
   // a note too, saved by itself
   const note = async () => ((await (await page.request.get("/api/file?path=code_edit/crlf-note.md", { headers: H })).json()) as { text: string }).text;

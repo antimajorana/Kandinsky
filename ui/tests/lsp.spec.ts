@@ -111,7 +111,7 @@ test("go to a symbol in the project: the server's symbols, the chosen one opened
   }
   await page.keyboard.type("Latt");
   await page.keyboard.press("Enter");
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: "lsp_sym" })).toHaveCount(1);
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "lsp_sym" })).toHaveCount(1);
   await expect.poll(() => page.evaluate(() => (window as any).__kandinsky.editor().text as string)).toContain("class Lattice");
 });
 

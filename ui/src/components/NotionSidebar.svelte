@@ -24,7 +24,7 @@
   import { FOLDER_COLOR_PALETTE, getCustomFolderColor, setCustomFolderColor, getNoteIcon } from "../lib/folder-colors.svelte";
   import { toggleShowAll, treeView } from "../lib/tree-view.svelte";
   import { revealPath } from "../lib/file-tree.svelte";
-  import { trashFile } from "../lib/sidebar.svelte";
+  import { trashFile, embedItem } from "../lib/sidebar.svelte";
   import { onFilesAddedOrRemoved } from "../lib/vault";
   import { onGitWorthyChange, refreshGitTree } from "../lib/gitstatus.svelte";
   import { VAULT_DRAG, dragRow } from "../lib/explorer/drag";
@@ -165,6 +165,8 @@
     ];
     if (canSplit(t.id)) items.push({ label: "Split right", icon: "panel-right", run: () => splitRight(t.id) });
     if (t.path) items.push({ label: "Reveal in Vault Pages", icon: "files", run: () => revealPath(t.path!) });
+    // the same menu entry the classic bar had: this tab as a live block in the note last written in
+    items.push(...embedItem(t.id));
     // the classic bar's tab menu offered this; keep it reachable from the Open section too
     if (t.path) items.push("sep", { label: "Move to Trash…", icon: "close", danger: true, run: () => trashFile(t.path!) });
     items.push("sep", { label: "Close", icon: "close", hint: keysOf("ui.close"), run: () => closeTab(t.id) });

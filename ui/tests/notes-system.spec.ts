@@ -127,5 +127,5 @@ test("the starter kit adds only missing files after a confirm; a note from a tem
   await expect(palette.getByRole("textbox")).toBeFocused();
   await page.keyboard.type("Zeta idea qq");
   await palette.getByText("Create note “Zeta idea qq”").click();
-  await expect(page.getByTestId("sidebar").locator(".tab.active", { hasText: "Zeta idea qq" })).toBeVisible();
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row.active", { hasText: "Zeta idea qq" })).toBeVisible();
 });
