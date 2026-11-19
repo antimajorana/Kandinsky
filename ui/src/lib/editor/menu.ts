@@ -7,7 +7,7 @@ import { selectAll } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
 import { LSPPlugin, findReferences, formatDocument, jumpToImplementation, jumpToTypeDefinition, renameSymbol, showSignatureHelp } from "@codemirror/lsp-client";
-import type { MenuItem } from "../../components/ContextMenu.svelte";
+import type { MenuItem } from "../menu";
 import { atPointer, popMenu, pressedByHand } from "../menu";
 import { keysOf } from "../keymap.svelte";
 import { toast } from "../state.svelte";
@@ -54,6 +54,9 @@ function items(view: EditorView, target: HTMLElement, o: EditorMenuOptions): Men
   const some = !view.state.selection.main.empty, link = linkAt(target);
   const list: MenuItem[] = [];
   if (link && o.onOpenLink) list.push({ label: "Open link", icon: "link", run: () => o.onOpenLink!(link) }, "sep");
+  // a DOI link the library has not got yet (doi-links.ts): Catalog's own dialog files it
+  const unfiled = target.closest<HTMLElement>(".cm-link.not-in-library[data-href]")?.dataset.href;
+  if (unfiled) list.push({ label: "Add to library…", icon: "library", run: () => void import("../doi-links").then((m) => m.addToLibrary(unfiled)) }, "sep");
   if (o.kind === "code") list.push(...codeItems(view), "sep");
   list.push(
     { label: "Cut", icon: "scissors", hint: "Ctrl+X", disabled: !some, run: () => { void copy(selected(view)); view.dispatch(view.state.replaceSelection(""), { userEvent: "delete.cut" }); } },

@@ -5,6 +5,7 @@
 import { diff } from "../frontmatter-edit";
 import { installImagePeek } from "../image-peek";
 import { basename } from "../paths";
+import { onVaultChange } from "../vault";
 import type { Problems } from "../state.svelte";
 import { SELECTION_TEXT_MAX } from "../context.svelte";
 import { ansiColors } from "./ansi";
@@ -31,10 +32,11 @@ import { guestLock } from "../guest.svelte";
 import { pluginCompletions, pluginHooks } from "./plugin-hooks";
 import { kandinskyTheme } from "./theme";
 import { drawnSelection } from "./drawn-selection";
-import { defineEx, exHooks, modeLabel, stashVisual, restoreVisual, desktopKeys, type VimModeLabel } from "./vim-glue";
+import { defineEx, yankToClipboard, exHooks, modeLabel, stashVisual, restoreVisual, desktopKeys, type VimModeLabel } from "./vim-glue";
 import { defineWordMotions } from "./vim-words";
 import { tabKey, untouchedTaskList } from "./tab-keys";
 import { placeOf, keepPlace, topIn, type Place } from "./places";
+import { placeHooks } from "../registry";
 import { noteExtensions, mdOptions } from "./note-extensions";
 import { codeExtensions, codeOptions, countProblems, openReplace } from "./code-extensions";
 import { setDiagnosticsEffect } from "@codemirror/lint";
@@ -45,7 +47,7 @@ import { PANE_ZOOM_EVENT } from "../pane-zoom";
 import type { Blame } from "../gen/Blame";
 
 export { codeTools } from "./code-extensions";
-export { headingRepeats } from "./note-extensions";
+export { headingRepeats } from "./heading-title";
 
 export type { VimModeLabel } from "./vim-glue";
 
@@ -99,6 +101,7 @@ installImagePeek(); // Ctrl over a picture: shown large (lib/image-peek.ts); onc
 
 export function createEditor(o: EditorOptions): KandinskyEditor {
   defineEx();
+  yankToClipboard();
   defineWordMotions();
   let keepTimer: ReturnType<typeof setTimeout> | undefined;
   let keep = () => {}; // set once the view exists: remembers the place it is left at
@@ -209,7 +212,12 @@ export function createEditor(o: EditorOptions): KandinskyEditor {
     last = { head: view.state.selection.main.head, top: last?.top ?? view.viewport.from };
     view.requestMeasure({ key: readKey, read: (v) => { if (v.dom.isConnected && last) last = { ...last, top: topIn(v) }; } });
   };
-  keep = () => { read(); clearTimeout(keepTimer); keepTimer = setTimeout(() => { if (!destroyed && last) keepPlace(o.path, last); }, 500); };
+  keep = () => { read(); clearTimeout(keepTimer); keepTimer = setTimeout(() => {
+    if (destroyed || !last) return;
+    keepPlace(o.path, last);
+    const line = view.state.doc.lineAt(Math.min(last.head, view.state.doc.length)).number;
+    for (const f of placeHooks) f(o.path, line); // the other devices hear the line (lib/where.svelte.ts)
+  }, 500); };
   if (left) {
     // after the first layout, and again once rendered blocks have their heights
     const top = Math.min(left.top, view.state.doc.length);
@@ -240,6 +248,9 @@ export function createEditor(o: EditorOptions): KandinskyEditor {
   const offShellLayout = () => window.removeEventListener("kandinsky-layout", onShellLayout);
   const offSpec = md ? onPropertySpec(() => view.dispatch({ effects: redecorate.of(null) })) : () => {};
   const offLang = md ? onHighlightLanguage(() => view.dispatch({ effects: redecorate.of(null) })) : () => {}; // a fence's language arrived
+  // links are coloured by whether their file exists (vault.ts's list): a list that arrived after the note was drawn, or a
+  // note made, moved or deleted since, redraws them — else a link kept the colour it had when its line was last drawn
+  const offVault = md ? onVaultChange(() => view.dispatch({ effects: redecorate.of(null) })) : () => {};
   const offRenderer = md ? onRendererArrived(() => { view.dispatch({ effects: redecorate.of(null) }); view.requestMeasure(); }) : () => {}; // KaTeX arrived
 
   let rawMode = false;
@@ -313,6 +324,7 @@ export function createEditor(o: EditorOptions): KandinskyEditor {
       offShellLayout();
       offSpec();
       offLang();
+      offVault();
       offRenderer();
       unwireVim();
       exHooks.delete(view);

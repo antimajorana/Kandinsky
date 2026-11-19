@@ -21,7 +21,7 @@ import { resolveLink } from "./vault";
 import { wikilinksIn } from "./wikilink-syntax";
 
 export type PreviewTarget =
-  | { kind: "file"; path: string; title?: string; subpath?: string }
+  | { kind: "file"; path: string; title?: string; subpath?: string; page?: number }
   | { kind: "equation"; notePath: string; ref: string; tex?: string; label?: string; number?: string }
   | { kind: "url"; url: string }
   | { kind: "pane"; title: string; detail: string }
@@ -86,16 +86,18 @@ export function findEquationInDoc(md: string, rawRef: string): MatchedEquation |
     const labels = [...source.matchAll(/\\label\{([^}]+)\}/g)].map((m) => m[1].trim());
     const blockId = /\$\$[ \t]*\^([A-Za-z0-9-]+)[ \t]*$/.exec(lines[close])?.[1];
     const ownTag = /\\tag\*?\{([^}]*)\}/.exec(source)?.[1]?.trim();
-    const num =
+    const texNums = eqs.byTex.get(texKey(source));
+    const singleNum =
       (blockId ? eqs.byId.get(blockId) : undefined) ??
-      labels.map((l) => eqs.byId.get(l)).find(Boolean) ??
-      eqs.byTex.get(texKey(source));
+      labels.map((l) => eqs.byId.get(l)).find(Boolean);
+    const displayNum = singleNum ?? texNums?.find((n): n is string => Boolean(n));
 
     const matched =
       labels.includes(cleanRef) ||
       blockId === cleanRef ||
       (ownTag !== undefined && ownTag === cleanRef) ||
-      (num !== undefined && num === cleanRef);
+      (singleNum !== undefined && singleNum === cleanRef) ||
+      Boolean(texNums?.includes(cleanRef));
 
     if (matched) {
       const stripped = source
@@ -107,11 +109,11 @@ export function findEquationInDoc(md: string, rawRef: string): MatchedEquation |
         .replace(/^(\$\$|\\\[)\s*/, "")
         .replace(/\s*(\$\$|\\\])$/, "")
         .trim();
-      const displayTex = numberedTex(stripped, ownTag ? undefined : num);
+      const displayTex = numberedTex(stripped, ownTag ? undefined : (texNums ?? singleNum));
       return {
         tex: displayTex,
         label: labels.includes(cleanRef) ? cleanRef : (labels[0] ?? blockId),
-        number: ownTag ?? num,
+        number: ownTag ?? displayNum,
       };
     }
     i = close;
@@ -421,6 +423,10 @@ async function buildCardData(t: PreviewTarget, width = CARD_W): Promise<HoverPre
       pre.textContent = term.lines(24).join("\n").replace(/\s+$/, "");
       return { title: t.title, badge: "Terminal", badgeTone: "muted", htmlNode: pre };
     }
+    if (t.path && /\.pdf$/i.test(t.path)) {
+      const { pdfPosition } = await import("./pdf-position");
+      return buildCardData({ kind: "file", path: t.path, title: t.title, page: pdfPosition(t.path).page ?? 1 }, width);
+    }
     const readable = !!t.path && TEXT.test(t.path);
     const mini = !readable && el && miniature(el, width);
     if (mini) return { title: t.title, htmlNode: mini };
@@ -467,9 +473,10 @@ async function buildCardData(t: PreviewTarget, width = CARD_W): Promise<HoverPre
   if (/\.pdf$/i.test(t.path)) {
     const { pageBitmap, paint, dpr } = await import("./pdf-pages");
     const canvas = document.createElement("canvas");
-    paint(canvas, await pageBitmap(t.path, 1, 380 * dpr()));
+    paint(canvas, await pageBitmap(t.path, t.page ?? 1, 380 * dpr()));
     canvas.style.width = "100%";
-    return { title, subpath: folder, badge: "PDF", badgeTone: "muted", htmlNode: canvas };
+    const badge = t.page && t.page > 1 ? `PDF · p. ${t.page}` : "PDF";
+    return { title, subpath: folder, badge, badgeTone: "muted", htmlNode: canvas };
   }
 
   if (/\.(md|markdown)$/i.test(t.path)) {

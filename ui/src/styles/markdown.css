@@ -38,6 +38,8 @@ html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone 
 /* a DOI link to a paper the library has not yet (lib/doi-links.ts): dashed, a small ＋ — a click offers to add it */
 .markdown a.doi-link.not-in-library { text-decoration-style: dashed; }
 .markdown a.doi-link.not-in-library::after { content: "+"; margin-left: 1px; font-size: .8em; vertical-align: super; color: var(--text-faint); }
+/* the same in the editor: a mark may be cut into several spans (hidden brackets), so a dashed line instead of the + */
+.markdown .cm-link.not-in-library { text-decoration: underline dashed; text-decoration-color: var(--text-faint); text-underline-offset: 3px; }
 /* hover sync (context.svelte.ts): the note another pane is pointing at */
 .markdown .kandinsky-hover-link { background: var(--accent-soft); border-radius: 3px; box-shadow: 0 0 0 2px var(--accent-soft); }
 .markdown .embed-chip { display: inline-flex; padding: .1em .55em; border: 1px solid var(--border-strong); border-radius: 6px; border-bottom-width: 1px; font-size: .9em; }
@@ -129,6 +131,11 @@ html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone 
 .markdown .katex { font-size: 1.08em; }
 .markdown .math-display, .markdown .cm-math-block { display: block; overflow-x: auto; overflow-y: hidden; padding: .55em 0; margin: .7em 0; text-align: center; }
 .markdown .katex-display { margin: 0; }
+/* a numbered display: the number after the formula, never over it (KaTeX puts it at the box's right edge, which a
+   display wider than its box — it scrolls — covered with its last terms). Equal space on both sides keeps it centred. */
+.markdown .katex-display > .katex > .katex-html:has(> .katex-tag) { display: flex; align-items: baseline; min-width: max-content; }
+.markdown .katex-display > .katex > .katex-html:has(> .katex-tag)::before { content: ""; flex: 1 1 0; }
+.markdown .katex-display > .katex > .katex-html > .katex-tag { position: static; flex: 1 1 0; text-align: right; padding-left: 1.5em; }
 .markdown .cm-math-inline { display: inline-block; }
 .markdown .math-glue { white-space: nowrap; }
 .markdown .cm-math-error, .markdown .math-error { color: var(--red); font-family: var(--font-mono); font-size: .88em; }

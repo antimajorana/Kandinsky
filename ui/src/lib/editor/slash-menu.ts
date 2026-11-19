@@ -4,7 +4,6 @@
 import { closeCompletion, startCompletion } from "@codemirror/autocomplete";
 import { StateEffect, type EditorState, type Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
-import { overlayOpened } from "../overlays";
 import { localDay } from "../local-day";
 import { settings } from "../settings.svelte";
 import { frontmatterClose } from "./live/live-preview.js";
@@ -614,7 +613,6 @@ class SlashMenuController {
   dismissedSlashPos: number | null = null;
   forcedSlashPos: number | null = null;
   autoSlashPos: number | null = null;
-  closeOverlay: (() => void) | null = null;
 
   private onKeyDown: (e: KeyboardEvent) => void;
   private onDocMouseDown: (e: MouseEvent) => void;
@@ -747,7 +745,6 @@ class SlashMenuController {
     if (this.menuEl.hidden) {
       this.menuEl.hidden = false;
       this.view.dom.classList.add("cm-slash-menu-active");
-      this.closeOverlay ??= overlayOpened(this.menuEl);
     }
     requestAnimationFrame(() => {
       if (this.active) this.positionMenu();
@@ -762,8 +759,6 @@ class SlashMenuController {
       this.menuEl.hidden = true;
       this.view.dom.classList.remove("cm-slash-menu-active");
     }
-    this.closeOverlay?.();
-    this.closeOverlay = null;
   }
 
   private dismiss(removeAutoSlash: boolean): void {

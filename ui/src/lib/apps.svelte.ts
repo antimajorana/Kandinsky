@@ -29,7 +29,8 @@ export type AppKey = string;
 export function allApps(): AppTile[] {
   const cmds = allCommands(), cmd = (id: string) => cmds.find((c) => c.id === id);
   const homeCmd = cmd("ui.today");
-  const builtins = BUILTINS.filter((b) => builtinOn(b.id)).flatMap((b): AppTile[] => {
+  // the Library tile is the Libraries page's (the Catalog's): there with References switched off too
+  const builtins = BUILTINS.filter((b) => b.id === "library" || builtinOn(b.id)).flatMap((b): AppTile[] => {
     const c = b.button && cmd(b.button.command), pane = b.button?.pane ? b.button.pane() : undefined;
     // a button with a pane shows only while there is one to open; one without (a chooser) always
     return c && pane !== null ? [{ key: b.id, ids: pane ? [paneId(pane)] : [], title: c.label ?? b.title, icon: b.icon, keys: c.keys, command: c.id, open: () => void c.run() }] : [];
@@ -38,7 +39,9 @@ export function allApps(): AppTile[] {
     key: p.id, ids: [paneId(pluginSpec(p))], title: p.title, icon: p.icon && isIconName(p.icon) ? p.icon : "plugin", keys: cmd(`plugin.${p.id}`)?.keys, command: `plugin.${p.id}`, open: () => void cmd(`plugin.${p.id}`)?.run(),
   }));
   // no Capture tile: a popup with its own shortcut and the palette, not an app
-  return [{ key: "home", ids: [...new Set([home.id, "today"])], title: "Home", icon: "home", keys: homeCmd?.keys, command: "ui.today", open: () => void homeCmd?.run() }, ...builtins, ...vault];
+  const homeTile: AppTile = { key: "home", ids: [...new Set([home.id, "today"])], title: "Home", icon: "home", keys: homeCmd?.keys, command: "ui.today", open: () => void homeCmd?.run() };
+  // no Deadlines tile: what is due is a box on Home (lib/deadlines.ts, `offerOnHome`); its page stays in the palette
+  return [homeTile, ...builtins, ...vault];
 }
 
 /** `apps` in the vault's order: the keys of `[ui] apps_order` first, as listed, then the rest as they came. */

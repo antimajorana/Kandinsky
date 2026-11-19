@@ -150,12 +150,13 @@ export type IconName =
   | "image" | "terminal" | "claude" | "globe" | "mail" | "folder" | "folder-open" | "chevron" | "close" | "edit" | "trash"
   | "eye" | "check" | "circle" | "commit" | "clock" | "sun" | "moon" | "plus" | "minus" | "more" | "refresh" | "zoom"
   | "settings" | "git" | "panel-bottom" | "panel-right" | "chevron-down" | "table" | "library" | "copy" | "scissors" | "clipboard" | "select-all" | "link" | "outline" | "plugin" | "chart"
-  | "error" | "warning" | "undo" | "arrow-up" | "arrow-down" | "arrow-left" | "arrow-right" | "pin" | "panel-left"
+  | "error" | "warning" | "undo" | "arrow-up" | "arrow-down" | "download" | "folder-plus" | "upload" | "columns" | "arrow-left" | "arrow-right" | "pin" | "panel-left"
   | "calendar" | "flag" | "repeat" | "chevrons-up" | "chevrons-down" | "return" | "hash" | "sigma" | "inbox" | "bell" | "server" | "grid" | "rows"
   | "pen" | "headphones" | "ballpoint" | "highlighter" | "eraser" | "pointer" | "hand" | "redo" | "maximize" | "sliders"
-  | "folder-tree" | "move-out" | "move-in" | "external-link" | "user"
+  | "folder-tree" | "move-out" | "move-in" | "external-link" | "user" | "key" | "film"
   | "bold" | "italic" | "code" | "heading" | "list" | "list-ordered" | "list-todo" | "quote"
-  | "contents" | "pages" | "bookmark" | "notes" | "text" | "underline" | "strike" | "sticky" | "crop" | "stamp";
+  | "contents" | "pages" | "bookmark" | "notes" | "text" | "underline" | "strike" | "sticky" | "crop" | "stamp"
+  | "mic" | "camera" | "indent" | "outdent" | "brackets" | "keyboard-down";
 
 export function paneIcon(s: PaneSpec): IconName {
   switch (s.kind) {

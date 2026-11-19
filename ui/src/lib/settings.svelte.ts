@@ -3,6 +3,7 @@
 import { errText } from "./text";
 import { load, loadRaw, save, saveRaw, KEYS } from "./prefs";
 import { einkOn, inPhoneApp, setEinkRefresh } from "./eink";
+import { setDatePrefs } from "./dates";
 import { api } from "./api";
 import type { PropertiesView, WorkspaceConfig } from "./types";
 import { app, paintTheme, toast } from "./state.svelte";
@@ -66,6 +67,7 @@ function apply(c: WorkspaceConfig): void {
   const eink = einkOn(c.ui.eink);
   root.classList.toggle("eink", eink); // tokens.css / base.css: black on white, no motion
   setEinkRefresh(c.ui.eink_refresh); // eink.ts: when the whole screen is refreshed
+  setDatePrefs(c.editor.date_format ?? "", c.editor.date_names === "spanish"); // dates.ts: how dates read everywhere
   // the phone app follows the phone (the vault's theme is the desktop's: one vault, several screens) until the
   // phone chooses a theme of its own
   const follows = ui.theme === "system" || (inPhoneApp() && !deviceChose("ui.theme"));
@@ -97,13 +99,40 @@ function apply(c: WorkspaceConfig): void {
   root.style.setProperty("--prose-line-height", String(c.editor.prose_line_height || 1.68));
   if (c.ui.ui_font.trim()) root.style.setProperty("--font-ui", font(c.ui.ui_font, "ui-sans-serif, system-ui, sans-serif"));
   else root.style.removeProperty("--font-ui");
-  applyAccent(root, high ? phosphorAccent(root, ui.accent.trim(), theme === "light") : ui.accent.trim());
+  // the phone app on Android 12+, Kandinsky's own palette and no accent chosen: the wallpaper's (Material You) — its accent
+  // here, its surface for the app's bars below (KandinskyActivity Bridge.wallpaper; "" on older Android or an older app)
+  const you = !eink && !high && !ui.accent.trim() && root.dataset.palette === "kandinsky" ? wallpaper(theme === "dark") : null;
+  applyAccent(root, high ? phosphorAccent(root, ui.accent.trim(), theme === "light") : ui.accent.trim() || (you?.accent ?? ""));
   root.style.setProperty("--prose-width", c.editor.prose_width ? `${c.editor.prose_width}ch` : "none");
   // the phone app's own bars take the page's background (KandinskyActivity Bridge.paper; an older app has no such call):
   // the palette's own token, not the body's computed colour, which is transparent (read as black) until it is styled
-  (globalThis as unknown as { KandinskyNative?: { paper?: (css: string) => void } }).KandinskyNative?.paper?.(getComputedStyle(root).getPropertyValue("--bg-app").trim());
+  // with the accent, so the app's home-screen widget is drawn in the vault's palette too
+  const shell = nativeLook();
+  shell?.paper?.(you?.bars ?? getComputedStyle(root).getPropertyValue("--bg-app").trim());
+  shell?.accent?.(getComputedStyle(root).getPropertyValue("--accent").trim());
+  // and the whole look, so the app's native screens (its bars' text and icons, Settings, sheets, the readers) are
+  // drawn in the page's theme, palette and accent rather than the phone's own light or dark (Look.save)
+  if (shell?.look) {
+    const css = getComputedStyle(root), tokens: Record<string, string | boolean> = { dark: theme === "dark", system: follows };
+    for (const t of NATIVE_TOKENS) tokens[t] = css.getPropertyValue(t).trim();
+    shell.look(JSON.stringify(tokens));
+  }
   const listenerCfg = c.ui.shape === effectiveShape ? c : { ...c, ui: { ...c.ui, shape: effectiveShape } };
   for (const f of listeners) f(listenerCfg);
+}
+
+/** The phone app's side of the look (KandinskyActivity's Bridge; each call missing in an older app). */
+interface NativeLook { paper?(css: string): void; accent?(css: string): void; wallpaper?(dark: boolean): string; look?(json: string): void }
+/** The tokens the app's Look takes (Look.java TOKENS). */
+const NATIVE_TOKENS = ["--bg-app", "--bg-elev", "--bg-hover", "--border", "--border-strong", "--text", "--text-muted", "--text-faint", "--accent", "--accent-soft", "--accent-fg"];
+const nativeLook = () => (globalThis as unknown as { KandinskyNative?: NativeLook }).KandinskyNative;
+/** The wallpaper's colours for a dark or light scheme, `#rrggbb` each; null when the app has none to give. */
+function wallpaper(dark: boolean): { accent: string; bars: string } | null {
+  try {
+    const w = JSON.parse(nativeLook()?.wallpaper?.(dark) || "null") as { accent?: string; bars?: string } | null;
+    const ok = (x?: string) => !!x && /^#[0-9a-f]{6}$/i.test(x);
+    return w && ok(w.accent) && ok(w.bars) ? { accent: w.accent!, bars: w.bars! } : null;
+  } catch { return null; }
 }
 
 // The accent family derives from one colour; the palette's accent stays when none is set. A chosen accent also tints

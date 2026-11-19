@@ -8,8 +8,9 @@
 }
 .shell:is(.vtabs, .notion):not(.split) .dockview-theme-kandinsky .dv-groupview.dv-active-group { border-color: var(--border); box-shadow: none; }
 
-/* the editor's path bar is the page's title bar now (SilverBullet's page name): roomier, no rule */
-.shell:is(.vtabs, .notion) .editor-pane .crumbs { min-height: 36px; padding: 6px 16px; border-bottom-color: transparent; }
+/* the editor's path bar is the page's title bar now (SilverBullet's page name): roomier; its hairline divides it from
+   the note's own strip (format bar, Properties heading) below */
+.shell:is(.vtabs, .notion) .editor-pane .crumbs { min-height: 36px; padding: 6px 16px; }
 .shell:is(.vtabs, .notion) .editor-pane .crumbs .seg.file { font-weight: 600; color: var(--heading); }
 
 /* blocks (lib/blocks.ts): anything drawn inside a note or a page */

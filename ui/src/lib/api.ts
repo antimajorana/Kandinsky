@@ -116,13 +116,23 @@ export const ownCore = <T>(method: string, path: string, body?: unknown): Promis
 
 export const api = {
   vaults: () => request<VaultList>("GET", "/api/vaults"),
+  /** A vault's sync state in plain words (core sync_state.rs): this window's, or with `path` another vault on the list. */
+  syncState: (path?: string) => request<import("./gen/SyncStatus").SyncStatus>("GET", "/api/sync/state", { query: { path: path || undefined } }),
   /** This window's vault becomes the one the capture box starts on. */
   vaultActive: () => request<void>("POST", "/api/vaults/active"),
   /** This window's guest folder (core guest.rs), `null` for a vault. */
   guest: () => request<GuestInfo | null>("GET", "/api/guest"),
   /** The guest window's Edit switch. */
   guestEdit: (on: boolean) => request<GuestInfo>("POST", "/api/guest/edit", { body: { on } }),
+  /** The guest folders open in this desktop's core (Settings → Vaults). */
+  guests: () => request<GuestInfo[]>("GET", "/api/guests"),
+  /** A guest closed now: no longer served, its link and state removed, its files kept. */
+  guestClose: (folder: string) => request<null>("POST", "/api/guests/close", { body: { folder } }),
   /** `blocked` filled by the core (the one rule); `android`: as the phone app sees them. */
+  /** The vault's libraries (`[ui] libraries`, libraries.rs), one with its items, a folder or Base added. */
+  libraries: () => request<import("./gen/LibraryInfo").LibraryInfo[]>("GET", "/api/libraries"),
+  library: (id: string) => request<import("./gen/LibraryView").LibraryView>("GET", "/api/library", { query: { id } }),
+  addLibrary: (req: Partial<import("./gen/LibraryAdd").LibraryAdd>) => request<import("./gen/LibrarySpec").LibrarySpec>("POST", "/api/libraries/add", { body: req }),
   plugins: (platform?: "android") => request<Plugin[]>("GET", "/api/plugins", { query: { platform } }),
   /** What a capture's text will become (capture.rs `describe`), for `vault` when it is not this window's. */
   describeCapture: (text: string, vault?: string) => request<CaptureHint>("POST", "/api/capture/describe", { body: { text, vault } }),
@@ -149,6 +159,7 @@ export const api = {
   server: () => request<ServerState>("GET", "/api/server"),
   serverOptions: (o: ServerOptions) => request<void>("PUT", "/api/server/options", { body: o }),
   serverPassword: (current: string | null, next: string) => request<void>("POST", "/api/server/password", { body: { current, new: next } }),
+  serverGateKey: (header: string, key: string | null) => request<void>("PUT", "/api/server/gate-key", { body: { header, key } }),
   serverToken: (name: string, scope: "capture" | "full") => request<{ token: string }>("POST", "/api/server/tokens", { body: { name, scope } }),
   serverRevoke: (name: string) => request<void>("DELETE", `/api/server/tokens/${encodeURIComponent(name)}`),
   /** Sign-ins to services kept for the plugins (service_signin.rs): hosts and dates, never a cookie. */
@@ -156,6 +167,12 @@ export const api = {
   forgetServiceSignin: (host: string) => request<boolean>("DELETE", `/api/signin/doors/${encodeURIComponent(host)}`),
   oidcSignins: () => request<import("./gen/OidcSignin").OidcSignin[]>("GET", "/api/signin/tokens"),
   forgetOidcSignin: (key: string) => request<boolean>("DELETE", `/api/signin/tokens/${encodeURIComponent(key)}`),
+  /** A gate's bypass keys (service_signin.rs): hosts and header only, never the key. `value` empty keeps the kept key.
+   *  Always this machine's own core (`base: ""`), also on a server vault's page through the bridge: the key is what
+   *  this machine sends to get past the server's gate, so it is kept here, never on the server. */
+  signinBypasses: () => request<import("./gen/Bypass").Bypass[]>("GET", "/api/signin/bypass", { base: "" }),
+  setSigninBypass: (rule: import("./gen/Bypass").Bypass, value: string) => request<boolean>("PUT", "/api/signin/bypass", { body: { ...rule, value }, base: "" }),
+  forgetSigninBypass: (rule: import("./gen/Bypass").Bypass) => request<boolean>("DELETE", "/api/signin/bypass", { body: rule, base: "" }),
   /** Settings → AI agents (agents.rs): this machine's agents, each with its own token; 400 on a server (device tokens there). */
   agents: () => request<AgentsState>("GET", "/api/agents"),
   allowAgent: (name: string) => request<{ token: string; mcp: unknown }>("POST", "/api/agents", { body: { name } }),
@@ -166,6 +183,8 @@ export const api = {
   workspace: () => request<Workspace>("GET", "/api/workspace"),
   /** Every file (the tree); `index`: the user's own only, the agent's (`editor.index_exclude`) left out. */
   exists: (path: RelPath) => request<boolean>("GET", "/api/exists", { query: { path } }),
+  /** When a file was made (its property, first commit or birth) and last changed (today.rs `made`); null when gone. */
+  fileMade: (path: RelPath) => request<import("./gen/Made").Made | null>("GET", "/api/file/made", { query: { path } }),
   /** `under`: only what is at or under that file or folder (a file event's path) */
   files: (o: { index?: boolean; under?: RelPath } = {}) => request<string[]>("GET", "/api/files", { query: { ...(o.index ? { index: "true" } : {}), ...(o.under !== undefined ? { under: o.under } : {}) } }),
   /** One folder's entries; `hidden`: dotfiles too, whatever `[files] show_hidden` says. */
@@ -198,9 +217,12 @@ export const api = {
   /** `agent`: also the agent's own files (editor.index_exclude), left out by default. */
   /** A definition outside the vault, read for a look (lsp.rs `peek`): `line` 0-based, as the language server says. */
   lspPeek: (uri: string, line: number) => request<import("./gen/LspPeek").LspPeek>("GET", "/api/lsp/peek", { query: { uri, line: String(line) } }),
-  /** `pdf`: the PDFs' text instead of the files; `names`: only the names, no file read (answered at once). */
-  search: (q: string, o: { case?: boolean; word?: boolean; regex?: boolean; agent?: boolean; pdf?: boolean; names?: boolean } = {}) =>
-    request<SearchResult>("GET", "/api/search", { query: { q, case: o.case ? "true" : undefined, word: o.word ? "true" : undefined, regex: o.regex ? "true" : undefined, agent: o.agent ? "true" : undefined, pdf: o.pdf ? "true" : undefined, names: o.names ? "true" : undefined } }),
+  /** `pdf`: the PDFs' text instead of the files; `names`: only the names, no file read (answered at once).
+   *  `lane`: the asker's own id (a Search pane's): a newer search in the same lane stops this one reading files. */
+  search: (q: string, o: { case?: boolean; word?: boolean; regex?: boolean; agent?: boolean; pdf?: boolean; all?: boolean; names?: boolean; lane?: string } = {}) =>
+    request<SearchResult>("GET", "/api/search", { query: { q, case: o.case ? "true" : undefined, word: o.word ? "true" : undefined, regex: o.regex ? "true" : undefined, agent: o.agent ? "true" : undefined, pdf: o.pdf ? "true" : undefined, all: o.all ? "true" : undefined, names: o.names ? "true" : undefined, lane: o.lane } }),
+  /** The plugins' answers to a search (mail…), a group per plugin; each hit opens through `pluginTool(plugin, open.tool, open.args)`. */
+  searchPlugins: (q: string) => request<import("./gen/PluginHits").PluginHits[]>("GET", "/api/search/plugins", { query: { q } }),
   /** Every tag with its number of notes; a tag's notes are `search("tag:<name>").files`. */
   tags: () => request<import("./gen/TagCount").TagCount[]>("GET", "/api/tags"),
   /** A tag renamed in every note, the tags nested under it too (core tags.rs `rename`). */
@@ -277,6 +299,11 @@ export const api = {
     request<import("./gen/PdfExported").PdfExported>("POST", "/api/pdf-export", { query: { pdf, mode } }),
   /** A ```typst fence drawn by the core (typst_doc.rs): its pages as SVG, or Typst's errors. */
   typstSvg: (path: string, source: string) => request<import("./gen/TypstDrawn").TypstDrawn>("POST", "/api/typst/svg", { body: { path, source } }),
+  /** The text column under (x, y) of a page whose characters' boxes (left, top, right, bottom in shown points, four
+   *  numbers each) are `boxes` (core pdf_columns.rs, the phone's reader asks the same); null: no text there.
+   *  With `after`, the column read after that one. */
+  pdfColumn: (boxes: number[], x: number, y: number, after?: [number, number, number, number]) =>
+    request<[number, number, number, number] | null>("POST", "/api/pdf-column", { body: { boxes, x, y, ...(after ? { after } : {}) } }),
   pdfOfNote: (note: string) => request<{ pdf: string | null }>("GET", "/api/pdf-of-note", { query: { note } }),
   /** Changes a PDF's marks (its note made with the first one); the marks after. */
   changePdfMarks: (pdf: string, ops: import("./gen/Op").Op[]) => request<import("./gen/PdfMarks").PdfMarks>("POST", "/api/pdf-marks", { query: { pdf }, body: ops }),
@@ -330,7 +357,18 @@ export const api = {
   /** A request made by the core for a plugin (`kandinsky.fetch`): only to hosts its manifest lists. */
   pluginFetch: (id: string, req: PluginFetchRequest) => request<PluginFetchResponse>("POST", `/api/plugins/${encodeURIComponent(id)}/fetch`, { body: req }),
   /** A plugin's media address (core plugin_media.rs): the ticket the core keeps its headers under, secrets filled in. */
-  pluginMedia: (id: string, req: { url: string; headers?: PluginFetchRequest["headers"] }) => request<{ src: string; ticket: string }>("POST", `/api/plugins/${encodeURIComponent(id)}/media`, { body: req }),
+  /** A report of the app's player to the plugin whose media it plays (lib/player.svelte.ts; the core's `[media] progress`). */
+  mediaProgress: (id: string, report: object) => request<{ key?: unknown } | null>("POST", `/api/plugins/${encodeURIComponent(id)}/media/progress`, { body: report }),
+  /** The player's video engine (mpv.rs): always the desktop's own core (`base: ""`), whatever vault the page shows —
+   *  mpv opens its window where the person sits; a server's stream reaches it through the bridge. */
+  mpv: (cmd: { cmd: string; [k: string]: unknown }) => request<null>("POST", "/api/player/mpv", { body: cmd, base: "" }),
+  mpvState: () => request<MpvState>("GET", "/api/player/mpv", { base: "" }),
+  /** The frame mpv shows now (a PNG), or null when nothing plays there. */
+  mpvFrame: async (): Promise<Blob | null> => {
+    const res = await fetch(url("/api/player/mpv/frame", undefined, ""), { headers: { "x-kandinsky": "1" } });
+    return res.status === 200 ? res.blob() : null;
+  },
+  pluginMedia: (id: string, req: { url: string; headers?: PluginFetchRequest["headers"] } | { file: string }) => request<{ src: string; ticket: string }>("POST", `/api/plugins/${encodeURIComponent(id)}/media`, { body: req }),
   /** The plugins the bundled catalog and configured release offer, marked with what this vault has. */
   availablePlugins: () => request<import("./gen/Available").Available[]>("GET", "/api/plugins/available"),
   /** Obsidian community plugins detected in `<vault>/.obsidian/plugins/` (read-only). */
@@ -377,6 +415,8 @@ export const api = {
     }
     return r;
   },
+  /** The Syncthing conflict copies left for the user (core sync_merge.rs `left_copies`): all, or `of` one file's. */
+  syncConflicts: (of?: RelPath) => request<import("./gen/ConflictCopy").ConflictCopy[]>("GET", "/api/sync/conflicts", { query: { path: of || undefined } }),
   trash: async (path: string) => {
     const t = await request<import("./types").Trashed>("POST", "/api/fs/trash", { query: { path } });
     emitPluginEvent({ type: "file:delete", path });
@@ -392,7 +432,11 @@ export const api = {
   /** The `[[` list for `q`, ranked by the core (link_targets.rs); `from`: the note being written (its neighbours rank higher). */
   linkTargets: (q: string, from?: string) => request<LinkTarget[]>("GET", "/api/link-targets", { query: from ? { q, from } : { q } }),
   /** One task line ticked (`done`) or opened again, as text: the lines that replace it (no file is touched). */
-  taskLine: (text: string, done: boolean) => request<TaskTicked>("POST", "/api/task/line", { body: { text, done } }),
+  taskLine: (text: string, done: boolean, path?: string) => request<TaskTicked>("POST", "/api/task/line", { body: { text, done, path } }),
+  /** A notice's button pressed on its toast: answered by the core's router, as a press on the system's notification. */
+  noticeAction: (press: import("./gen/NoticePress").NoticePress) => request<void>("POST", "/api/notices/action", { body: press }),
+  /** The task dialog's form → its line, written by the core's one task writer (tasks.rs `render_line`); no file is touched. */
+  renderTask: (f: import("./types").TaskFields) => request<import("./types").TaskRendered>("POST", "/api/task/render", { body: f }),
   graph: () => request<import("./types").Graph>("GET", "/api/graph"),
   backlinks: (path: string) => request<import("./types").Backlinks>("GET", "/api/backlinks", { query: { path } }),
   snippets: () => request<{ sources: string[]; variables: string }>("GET", "/api/snippets"),
@@ -587,3 +631,6 @@ export function ptyEnd(ws: WebSocket): void {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify("end" satisfies PtyControl));
   ws.close();
 }
+
+/** mpv.rs `State`. */
+export interface MpvState { running: boolean; at: number; duration: number; playing: boolean; speed: number; ended: boolean; sub_text: string; error: string }

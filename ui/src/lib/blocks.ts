@@ -18,7 +18,7 @@ import "./notebook-preview-fence"; // read-only .ipynb cell & output transclusio
 import "./table-preview-fence"; // read-only .tsv / .csv / .dat tabular preview fence
 import { mount, unmount, type Component } from "svelte";
 import WidgetConfigureBar from "../components/widgets/WidgetConfigureBar.svelte";
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, stringify } from "yaml";
 import type { DockviewPanelApi } from "dockview-core";
 import { api } from "./api";
 import { open, type PaneProps } from "./dock";
@@ -30,7 +30,8 @@ import { renderView, rowViewTypes } from "./views";
 import { BUILTIN_FIELDS, ROW_VIEW_FIELDS, type OptionField } from "./block-options";
 import type { ViewRow } from "./gen/ViewRow";
 import { lineOf, scopeAt, type Props } from "./section-props";
-import TodayParts, { type TodayPart } from "../components/TodayParts.svelte";
+import TodayParts from "../components/TodayParts.svelte";
+import type { TodayPart } from "./today-store.svelte";
 import { IMAGE_RE } from "./paths";
 import { reloadOnChange } from "./reload-on-change";
 import { keepCapped } from "./capped";
@@ -130,6 +131,13 @@ registerBlock(lazyBlock("settings", "Settings page", () => import("../components
 registerBlock(lazyBlock("search", "Saved search", () => import("../components/views/SearchBlock.svelte"), (c) => ({ src: c.src, doc: c.doc })));
 registerBlock({ ...lazyBlock("review", "Review (notes waiting, one at a time)", () => import("../components/views/Review.svelte"), (c) => ({ src: c.src, doc: c.doc })), icon: "check", card: true });
 registerBlock({ ...lazyBlock("captures", "Captures (every capture, to triage)", () => import("../components/views/Captures.svelte"), (c) => ({ src: c.src })), icon: "inbox", card: true });
+registerBlock({ ...lazyBlock("sync-conflicts", "Sync conflicts (copies Syncthing left to settle)", () => import("../components/views/SyncConflicts.svelte"), () => ({})), icon: "refresh", card: true });
+// what must be done by a day (the core's `from: deadlines`, lib/deadlines.ts): a task list grouped Overdue · Today · This
+// week · Later; the block's own options (`horizon`, `scheduled`, `limit`) go with the query
+registerBlock({
+  type: "deadlines", title: "Deadlines (overdue, today, this week)", icon: "flag", card: true,
+  mount: (host, ctx) => mountRows(host, ctx.doc, deadlinesSrc(ctx.options)),
+});
 registerBlock(lazyBlock("tags", "Tags (every tag, its notes)", () => import("../components/views/Tags.svelte"), () => ({})));
 registerBlock(lazyBlock("vaults", "Vaults (new, open, switch)", () => import("../components/views/VaultsBlock.svelte"), () => ({})));
 registerBlock({ ...lazyBlock("welcome", "Getting started (where things are, plugins to add)", () => import("../components/views/Welcome.svelte"), (c) => ({ doc: c.doc })), icon: "home", card: true });
@@ -218,7 +226,7 @@ registerBlock({
   tab: (c) => (str(c.options.path) ? { kind: "editor", path: str(c.options.path) } : null),
 });
 // the links to a file, as under a note ("Linked mentions"): the note it sits in, or `path` (a library's card)
-registerBlock({ ...lazyBlock("backlinks", "Linked mentions", () => import("../components/Backlinks.svelte"), (c) => ({ path: str(c.options.path) || c.doc })), icon: "link", bare: true });
+registerBlock({ ...lazyBlock("backlinks", "Linked mentions", () => import("../components/Backlinks.svelte"), (c) => ({ path: str(c.options.path) || c.doc, open: c.options.open === true })), icon: "link", bare: true });
 // `library` and `libraries` blocks written before the Libraries page became a plugin's pane: that pane (an old
 // `library` at References), or the plugin's "switched off" where none gives it (libraries.svelte.ts)
 for (const old of ["library", "libraries"]) {
@@ -379,6 +387,12 @@ registerBlock({
 });
 
 // --- mounting -------------------------------------------------------------------------------------
+
+/** The row view a `deadlines` block is: a task list over `from: deadlines`, with the block's own options. */
+export function deadlinesSrc(options: Record<string, unknown>): string {
+  const { type: _t, view: _v, title: _ti, height: _h, from: _f, ...rest } = options;
+  return stringify({ type: "task-list", from: "deadlines", ...rest });
+}
 
 function message(host: HTMLElement, cls: string, text: string): void {
   host.replaceChildren(Object.assign(document.createElement("p"), { className: cls, textContent: text }));

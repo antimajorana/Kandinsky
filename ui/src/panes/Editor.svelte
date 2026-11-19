@@ -14,6 +14,9 @@
   import { mount, onMount, unmount } from "svelte";
   import type { EditorView } from "@codemirror/view";
   import { api, ApiError } from "../lib/api";
+  import { rel } from "../lib/time";
+  import { dateTip, showDate } from "../lib/dates";
+  import { localDay } from "../lib/local-day";
   import { diff, editFrontmatter } from "../lib/frontmatter-edit";
   import { on, touches } from "../lib/bus";
   import { app, toast } from "../lib/state.svelte";
@@ -69,6 +72,18 @@
   // the last headings() answer and the text it was read from (one scan per version of the text)
   let headCache: { doc: Text; heads: { level: number; text: string; line: number }[] } | null = null;
   let status = $state<"loading" | "ready" | "error">("loading");
+  // the note's date beside the header actions: when it was made (its `created:`/`date:`, first commit or birth: the
+  // core's one rule, today.rs `made`); asked again on hover so "changed" is current
+  let made = $state<import("../lib/gen/Made").Made | null>(null);
+  const askMade = () => { const p = path; void api.fileMade(p).then((m) => { if (p === path) made = m; }, () => { made = null; }); };
+  $effect(() => { if (status === "ready") askMade(); });
+  // the day it was made (lib/dates.ts's form); the hour in the tooltip when known
+  const madeDay = (m: import("../lib/gen/Made").Made) => showDate(localDay(new Date(m.made)));
+  const madeTip = (m: import("../lib/gen/Made").Made) => {
+    const at = dateTip(m.day_only ? localDay(new Date(m.made)) : m.made);
+    const from = { property: "its created/date property", git: "its first commit", disk: "the file's creation" }[m.by];
+    return `Made ${at} (${from})\nLast changed ${rel(m.changed)}`;
+  };
   let loadError = $state("");
   let conflict = $state(false);
   let isNew = $state(false);
@@ -796,6 +811,7 @@
           </button>
         {/if}
         {#if editedLabel}<span class="edited-lbl">{editedLabel}</span>{/if}
+        {#if made}<span class="edited-lbl made-lbl" title={madeTip(made)} onmouseenter={askMade} role="note">{madeDay(made)}</span>{/if}
         {#if isMarkdown(path) && status === "ready" && isResearchNote}
           <span class="oracle-slot" class:notion-quiet={isNotionShell()} bind:this={oracleSlotEl}>
             <OracleBar {path} flush={() => save(false)} gotoLine={(line) => ed?.gotoLine(line)} />

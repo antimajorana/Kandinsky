@@ -1,14 +1,15 @@
 // Rows a plugin adds to the app's right-click menus (`kandinsky.shell.menu(where, fn)`). One list per
 // place; each menu builder ends with `...pluginMenu(place, target)`. A builder that throws loses
 // only its own rows (and gets a line in its plugin's log).
-import type { MenuItem } from "../components/ContextMenu.svelte";
+import type { MenuItem } from "./menu";
 import { isIconName } from "./icons";
 import { guard } from "./plugin-log.svelte";
 
-export type MenuPlace = "file" | "tab" | "editor" | "block" | "terminal";
+export type MenuPlace = "file" | "tab" | "editor" | "block" | "terminal" | "task";
 /** What was right-clicked. `file`: path (+ dir: true for a folder) · `tab`: path?, kind · `editor`: path,
- *  selection · `block`: type, note · `terminal`: nothing (the terminal's "+" menu: what to start). */
-export interface MenuTarget { path?: string; dir?: boolean; kind?: string; selection?: string; type?: string; note?: string }
+ *  selection · `block`: type, note · `terminal`: nothing (the terminal's "+" menu: what to start) · `task`: a task
+ *  row of a list (Home, Deadlines, a task block): path, line, its words as `selection`, `done`. */
+export interface MenuTarget { path?: string; dir?: boolean; kind?: string; selection?: string; type?: string; note?: string; line?: number; done?: boolean }
 /** A plugin's row: plain data, so the shape survives changes to the menu component. */
 export interface PluginMenuItem {
   label: string; run(): void | Promise<void>; icon?: string; hint?: string; detail?: string; danger?: boolean; disabled?: boolean;
@@ -17,7 +18,7 @@ export interface PluginMenuItem {
 }
 type Builder = { plugin: string; fn: (t: MenuTarget) => PluginMenuItem[] | null | undefined | void };
 
-const PLACES: readonly MenuPlace[] = ["file", "tab", "editor", "block", "terminal"];
+const PLACES: readonly MenuPlace[] = ["file", "tab", "editor", "block", "terminal", "task"];
 const builders = new Map<MenuPlace, Set<Builder>>(PLACES.map((p) => [p, new Set<Builder>()]));
 
 export function registerMenu(plugin: string, where: MenuPlace, fn: Builder["fn"]): () => void {
@@ -28,7 +29,8 @@ export function registerMenu(plugin: string, where: MenuPlace, fn: Builder["fn"]
   return () => set.delete(b);
 }
 
-const row = (plugin: string, it: PluginMenuItem): MenuItem => ({
+/** A plugin's row as the menu draws it; its `run` guarded (a throw is a line in the plugin's log). */
+export const pluginRow = (plugin: string, it: PluginMenuItem): MenuItem => ({
   label: String(it.label), hint: it.hint, detail: it.detail, danger: it.danger, disabled: it.disabled,
   icon: it.icon && isIconName(it.icon) ? it.icon : undefined,
   run: () => { void guard(plugin, `menu row “${it.label}”`, () => it.run(), undefined); },
@@ -40,7 +42,7 @@ export function pluginRows(where: MenuPlace, target: MenuTarget): { top: MenuIte
   const top: MenuItem[] = [], end: MenuItem[] = [];
   for (const b of builders.get(where) ?? []) {
     for (const it of guard(b.plugin, `menu("${where}")`, () => b.fn(target), null) ?? [])
-      if (it && typeof it.label === "string" && typeof it.run === "function") (it.top ? top : end).push(row(b.plugin, it));
+      if (it && typeof it.label === "string" && typeof it.run === "function") (it.top ? top : end).push(pluginRow(b.plugin, it));
   }
   return { top: top.length ? [...top, "sep"] : [], end: end.length ? ["sep", ...end] : [] };
 }

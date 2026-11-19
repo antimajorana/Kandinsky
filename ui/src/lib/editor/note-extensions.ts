@@ -3,6 +3,7 @@
 // dropped saved beside the note, and the settings-driven options (heading folds, typewriter scrolling).
 import { basename, dirOf, shownName } from "../paths";
 import { renameTo } from "../rename-file";
+import { editingTitle, headingRepeats, headingTitle } from "./heading-title";
 import { noteHtml } from "./big-html";
 import { attachDroppedFiles, attachFiles, extractDropUriHint, takeFiles } from "../attach";
 import { closeDisplayMath } from "./display-math";
@@ -24,6 +25,7 @@ import type { MarkdownConfig } from "@lezer/markdown";
 import { obsidianMarkdown, AnyTaskStatus } from "./live/obsidian-syntax.js";
 import { livePreview, bodyStart, frontmatterClose, redecorate } from "./live/live-preview.js";
 import { equationLabelNow, equationTarget, linkText, noteEquations, numberedTex, refOf, texKey, type Equations } from "../equations";
+import { doiLinkMark } from "../doi-links";
 import { readText } from "../vault-files";
 import { katexNow, loadMath, renderMathInto } from "../math";
 import { enhanceNotionProperties, scanExtraEquations } from "./pigment-pills";
@@ -48,6 +50,7 @@ import { gatedCompletion, syncSource } from "./completion-gate";
 import { completionTab } from "./tab-keys";
 import { citing, mdSymbols } from "./completion-sources";
 import { figureCaptions } from "./figure-captions";
+import { watching } from "./watching";
 import { slashMenuExtension } from "./slash-menu";
 import { floatingToolbarExtension } from "./floating-toolbar";
 import { handleRichHtmlPaste } from "./html-paste";
@@ -153,6 +156,8 @@ export function noteExtensions(
     return logs ? path.startsWith(`${logs}/`) : /^\d{4}-\d{2}-\d{2}\.md$/.test(basename(path));
   };
   watchPropertySpec(); // the inline table's kinds; once for the app
+  // one redraw per editor: the DOI lookups keep it to redraw this editor when the library changes (doi-links.ts)
+  const redraw = () => viewRef.view?.dispatch({ effects: redecorate.of(null) });
   const resolveAttachment = (src: string): string => {
     if (/^(https?:|data:|blob:)/.test(src)) return src;
     const known = resolveLink(src, dir);
@@ -219,7 +224,8 @@ export function noteExtensions(
     inlineTitle: (state) => {
       if (!(settings.config?.editor.inline_title ?? true)) return null;
       const name = shownName(path);
-      if (headingRepeats(state, name)) return null; // "titles are duplicated usually": the note's own `# ...` is the title
+      // the note's own `# name` is the title; and while that heading is being edited (heading-title.ts renames after)
+      if (headingRepeats(state, name) || editingTitle(state)) return null;
       const glyph = resolveNoteEmblem(state);
       return { key: `${name}\u0000${glyph}`, render: () => titleInput(path, name, glyph, viewRef, titleCleanups) };
     },
@@ -278,6 +284,7 @@ export function noteExtensions(
       const n = equationLabelNow(path, eq[1], readText, () => viewRef.view?.dispatch({ effects: redecorate.of(null) }));
       return n ? linkText(eq[0], n) : null;
     },
+    linkMark: (url: string) => doiLinkMark(url, redraw),
     hydrateBlock: (host: HTMLElement) => { unmount.set(host, hydrateRendered(host, path)); hydrateTables(host, viewRef); followLinksIn(host, path); },
     releaseBlock: (host: HTMLElement) => unmount.get(host)?.(), // the widget's DOM is gone for good (not a hidden tab)
   });
@@ -332,7 +339,9 @@ export function noteExtensions(
       liveSlot.of(live),
       hoverSync(dir),
       expressions(path),
+      headingTitle(path),
       mathPreview(() => settings.config?.editor.math_preview ?? true),
+      watching(),
       slashMenuExtension(),
       floatingToolbarExtension(() => settings.config?.editor.floating_toolbar ?? true),
       blockGutterExtension(),
@@ -408,7 +417,7 @@ export function noteExtensions(
 }
 
 /** The files' embeds (lib/attach.ts) inserted at `at`, the caret after them. */
-async function attachAt(view: EditorView, notePath: string, files: File[], at: number): Promise<void> {
+export async function attachAt(view: EditorView, notePath: string, files: File[], at: number): Promise<void> {
   const done = await attachFiles(notePath, files);
   if (!done.length) return;
   const insert = done.map((a) => a.embed).join("\n");
@@ -430,27 +439,6 @@ export function mdOptions(c: WorkspaceConfig | null): Extension {
     (c?.editor.fold_headings ?? true) ? [foldGutter({ openText: "▾", closedText: "▸" }), keymap.of(foldKeymap)] : [],
     c?.editor.typewriter ? typewriter : [], // zen-scroll.ts; the page menu's toggle uses the same extension
   ];
-}
-
-/** Whether the note's first line of text (after the frontmatter) is a `# heading` that serves as the single Notion page
- *  title — when frontmatter is present with a leading `# H1`, or when the `# H1` repeats / expands the file's name
- *  (e.g. `08 Higher-form Symmetries.md` → `# Higher-form Symmetries & Defect Homology`). */
-export function headingRepeats(state: EditorState, name: string): boolean {
-  const norm = (t: string) => t.replace(/[*_`~]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
-  const doc = state.doc;
-  const fmClose = frontmatterClose(doc);
-  const baseName = norm(name);
-  const strippedName = norm(name.replace(/^\d+[\s._-]+/, ""));
-  for (let n = fmClose + 1; n <= Math.min(doc.lines, 400); n++) {
-    const t = doc.line(n).text;
-    if (!t.trim()) continue;
-    const h = /^#[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/.exec(t);
-    if (!h) return false;
-    if (fmClose > 0) return true;
-    const hNorm = norm(h[1]);
-    return hNorm === baseName || (strippedName.length >= 4 && hNorm.startsWith(strippedName));
-  }
-  return false;
 }
 
 /** The inline title as a field: the note's name, renamed in place — Enter (or leaving the field) renames the file,

@@ -14,7 +14,8 @@ export type PageId =
 
 export type Panel =
   | "overview" | "device" | "preview" | "apps" | "snippets" | "keys" | "plugins"
-  | "scripts" | "drafts" | "openwith" | "capturekey" | "server" | "agents" | "templates" | "file";
+  | "scripts" | "drafts" | "openwith" | "capturekey" | "server" | "agents" | "templates" | "file"
+  | "libraries" | "webdata" | "vaultssync" | "vaults" | "syncconflicts" | "signins";
 
 export type Group = "workspace" | "extensions";
 export const GROUPS: { id: Group; title: string }[] = [
@@ -63,7 +64,7 @@ export const PAGES: PageDef[] = [
       "editor.prose_font", "editor.prose_font_size", "editor.prose_line_height", "editor.prose_width",
       "editor.code_font", "editor.code_font_size", "editor.inline_title",
     ],
-    advancedFields: ["ui.eink", "ui.eink_refresh", "ui.gpu_rendering", "ui.tabs", "ui.side_panel", "ui.restore_layout", "ui.tab_preview", "ui.tab_switcher", "ui.sleep_after_min", "ui.awake_tabs"],
+    advancedFields: ["ui.eink", "ui.eink_refresh", "ui.gpu_rendering", "ui.tabs", "ui.one_tab", "ui.share_place", "ui.side_panel", "ui.restore_layout", "ui.tab_preview", "ui.tab_switcher", "ui.sleep_after_min", "ui.awake_tabs"],
     features: ["ui.theme", "ui.zoomIn", "ui.zoomOut", "ui.zoomReset", "ui.resetLayout"],
     panels: ["device", "preview", "snippets"],
     next: [{ label: "Custom CSS snippet", why: "Restyle any element in .kandinsky/snippets/.", run: "settings.newSnippet" }],
@@ -75,15 +76,16 @@ export const PAGES: PageDef[] = [
     icon: "edit",
     blurb: "Markdown writing behavior, links, citations, properties, templates, math preview, and focus mode.",
     fields: [
-      "vim", "editor.vim_keys", "editor.floating_toolbar", "editor.rich_paste", "editor.format_bar", "editor.math_preview", "editor.link_preview",
+      "vim", "editor.vim_keys", "editor.vim_clipboard", "editor.floating_toolbar", "editor.rich_paste", "editor.format_bar", "editor.math_preview", "editor.link_preview",
       "editor.task_chips", "editor.task_suggest", "editor.task_short_forms",
       "editor.properties", "editor.properties_spec", "editor.link_completion", "editor.citation_completion",
-      "editor.slash_menu", "editor.fold_headings", "editor.typewriter", "editor.live",
-      "editor.backlinks", "editor.attachment_folder", "editor.date_names", "editor.strict_line_breaks",
+      "editor.slash_menu", "editor.fold_headings", "editor.heading_renames", "editor.typewriter", "editor.live",
+      "editor.backlinks", "editor.attachment_folder", "editor.date_names", "editor.date_format", "editor.strict_line_breaks",
       "editor.autosave_code", "editor.code_bar", "editor.git_gutter", "editor.line_numbers",
       "editor.wrap_code", "editor.indent_guides", "editor.minimap", "editor.breadcrumbs",
       "notes.*",
     ],
+    advancedFields: ["player.*"],
     features: ["ui.vim", "ui.new", "ui.note.new", "ui.outline", "ui.graph"],
     panels: ["templates"],
   },
@@ -109,7 +111,7 @@ export const PAGES: PageDef[] = [
     blurb: "Folders, excluded paths, search indexing, web links, and default file openers.",
     fields: ["ignore", "editor.index_exclude", "files.*", "web.*"],
     features: ["ui.files", "ui.explorer", "ui.quickOpen", "ui.search", "ui.vault"],
-    panels: ["openwith"],
+    panels: ["libraries", "webdata", "vaultssync", "syncconflicts", "openwith"],
   },
   {
     id: "papers",
@@ -139,13 +141,14 @@ export const PAGES: PageDef[] = [
     fields: ["developer_mode"],
     advancedFields: ["desktop.*", "terminal.*", "automation.*", "lsp.*", "notifications.*"],
     features: ["ui.commands"],
-    panels: ["plugins", "apps", "server", "agents", "scripts", "drafts", "file"],
+    panels: ["plugins", "apps", "server", "agents", "scripts", "drafts", "file", "signins"],
   },
 ];
 
 const DEV_WRITING_FIELDS = new Set([
   "vim",
   "editor.vim_keys",
+  "editor.vim_clipboard",
   "editor.autosave_code",
   "editor.code_bar",
   "editor.git_gutter",
@@ -156,7 +159,7 @@ const DEV_WRITING_FIELDS = new Set([
   "editor.breadcrumbs",
 ]);
 const DEV_ADVANCED_PREFIXES = ["terminal.", "lsp.", "automation."];
-const DEV_PANELS = new Set<Panel>(["server", "agents", "scripts", "drafts", "file"]);
+const DEV_PANELS = new Set<Panel>(["server", "agents", "scripts", "drafts", "file", "vaultssync", "vaults", "signins"]);
 const DEV_FEATURES = new Set(["ui.vim"]);
 
 export function isDevSettingField(path: string): boolean {
@@ -171,6 +174,7 @@ export function isDevSettingFeature(id: string): boolean {
 
 export const HIDDEN = new Set([
   "ui.css_snippets_off", "ui.apps_order", "ui.apps_hidden", "ui.libraries", "plugins.off", "files.open_with",
+  "automation.background",
   "plugins.oidc_issuer", "plugins.oidc_client_id", "plugins.oidc_redirect",
   "latex.snippets", "latex.snippets_file", "latex.variables_file",
 ]);
@@ -242,10 +246,13 @@ export const PAGE_ALIASES: Record<string, PageId> = {
   code: "writing",
   shortcuts: "keyboard",
   web: "files",
+  vaults: "files",
+  libraries: "files",
   draw: "papers",
   drawing: "papers",
   latex: "papers",
   extensions: "plugins",
+  signins: "plugins",
   terminal: "plugins",
   desktop: "plugins",
   automation: "plugins",
