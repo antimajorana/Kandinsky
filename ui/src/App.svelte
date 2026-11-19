@@ -18,7 +18,7 @@
   import { emit, on, touches } from "./lib/bus";
   import { sweep, counts as hibernationCounts } from "./lib/hibernate";
   import { guardMiddlePaste } from "./lib/middle-paste";
-  import { initDock, open, openPath, getDock, activeEditorId, canNavigate, navigate, steppedJustNow } from "./lib/dock";
+  import { initDock, open, openPath, getDock, activeEditorId, navigate, steppedJustNow } from "./lib/dock";
   import { attachBrowserBack } from "./lib/back";
   import { attachTouch } from "./lib/touch";
   import { attachAppMenu } from "./lib/app-menu";
@@ -29,7 +29,9 @@
   import { openQuickCapture } from "./lib/quick-capture.svelte";
   import { appChord, matches, systemEditingChord } from "./lib/keys";
   import { palette, openPalette } from "./lib/palette.svelte";
+  import { setCommands } from "./lib/context.svelte";
   import { app, toast, paintTheme } from "./lib/state.svelte";
+  import { showNotice, withdrawNotice } from "./lib/notices";
   import { loadSettings, settings } from "./lib/settings.svelte";
   import { installDiagnostics } from "./lib/diagnostics";
   import { installNavInput } from "./lib/nav-input";
@@ -40,10 +42,12 @@
   import { attachPaneZoom } from "./lib/pane-zoom";
   import { attachGoneFiles } from "./lib/gone-files";
   import { attachFullscreen, fullscreen } from "./lib/fullscreen.svelte";
-  import { attachPhone, phone } from "./lib/phone.svelte";
+  import { attachPhone, keyboardBar, phone } from "./lib/phone.svelte";
   import { attachEink } from "./lib/eink";
   import { attachNativeShell, nativeShell } from "./lib/native-shell.svelte";
+  import { attachPlayer } from "./lib/player.svelte";
   import PhoneBar from "./components/PhoneBar.svelte";
+  import KeyboardBar from "./components/KeyboardBar.svelte";
   import PhoneTop from "./components/PhoneTop.svelte";
   import { autosaveLayout, initWorkspaces, restoreLayout } from "./lib/workspaces";
   import { loadShellPrefs } from "./lib/shell-prefs";
@@ -74,6 +78,7 @@
   import { paperWorkflowModal, zoteroModal } from "./lib/paper-modals.svelte";
   import ZoteroImportModal from "./components/ZoteroImportModal.svelte";
   import PaperWorkflowsModal from "./components/PaperWorkflowsModal.svelte";
+  import { recordLiveNotice, withdrawLiveNotice } from "./components/NotificationsModal.svelte";
 
   let dockEl: HTMLDivElement;
   let settingsReady: Promise<unknown> = Promise.resolve();
@@ -89,6 +94,15 @@
     // the dock's wrapper (`dv-content-container`) holds the focus after a click on a tab: the pane is inside it
     if (target !== document.body) return !!target?.closest?.(sel) || (!!target?.matches?.(".dv-content-container") && !!target.querySelector(sel));
     return !!getDock()?.activePanel?.view.content.element.querySelector(sel);
+  }
+
+  // agents see the palette's commands (kandinsky_ui_commands) and run one as its key would (kandinsky_ui_command), in view
+  $effect(() => setCommands(allCommands().map(({ id, title }) => ({ id, title }))));
+  function runForAgent(id: string): void {
+    const c = allCommands().find((x) => x.id === id);
+    if (!c) return toast("An agent asked for a command this window does not have", id, "error");
+    toast(`An agent ran “${c.title}”`);
+    void Promise.resolve().then(() => c.run()).catch((e) => toast(`“${c.title}” failed`, errText(e), "error"));
   }
 
   function onKey(e: KeyboardEvent) {
@@ -162,11 +176,12 @@
     const offPhone = attachPhone(dock);
     const offEink = attachEink(dock); // e-ink: a full refresh where ghosts come from
     const offNative = attachNativeShell();
+    attachPlayer(); // the phone's player may already be playing: its state shown again
     // a browser's Back closes what is open, then goes back a place; a phone then leaves Kandinsky, a desktop stays in its vault.
     // A mouse's side button is taken by nav-input.ts as well: that step counts once.
     const offTouch = attachTouch(); // a long press is a right click; finger-sized targets are styles/touch.css
     const offMenu = attachAppMenu(); // the app's right-click menu where no part has its own (lib/app-menu.ts)
-    const offBack = attachBrowserBack(() => !nativeShell.on, () => steppedJustNow() || (canNavigate(-1) && (navigate(-1), true)), () => phone.on);
+    const offBack = attachBrowserBack(() => !nativeShell.on, () => steppedJustNow() || navigate(-1), () => phone.on);
     // The tabs as they were left (a file of this vault — docs/guides/SHELL.md), unless the setting says to
     // start clean. Home is the first screen either way: restored layouts keep their panes, but home
     // is always there. `home = ""` brings back the classic Today pane.
@@ -214,7 +229,7 @@
       paneKinds: PANE_KINDS,
       editor: () => { const id = activeEditorId() ?? lastEditorId(); const e = id ? editors.get(id) : undefined; return e ? { path: e.path, vim: e.vimMode(), ...e.snapshot() } : null; },
       // the profiler's long-day scenario (scripts/dev/profile-longday.mjs) drives tabs through these
-      open: (path: string) => openPath(path),
+      open: (path: string, line?: number) => openPath(path, line),
       run: (id: string) => allCommands().find((c) => c.id === id)?.run(),
       panes: () => getDock()?.panels.map((p) => ({ id: p.id, active: p.api.isActive })) ?? [],
       close: (id: string) => getDock()?.getPanel(id)?.api.close(),
@@ -226,8 +241,10 @@
     const events = connectEvents(emit, (s) => (app.conn = s));
     const offs = [
       on("open", (e) => openPath(e.path, e.line)),
-      on("notify", (e) => toast(e.title, e.body, e.level === "failure" ? "error" : e.level === "success" ? "success" : "info")),
+      on("notify", (e) => { showNotice(e); recordLiveNotice(e); }),
+      on("withdraw", (e) => { withdrawNotice(e.id); withdrawLiveNotice(e.id); }),
       on("focus", (e) => focusPane(e.pane)),
+      on("palette", (e) => runForAgent(e.command)),
       on("fs", (e) => { if (e.paths.length) e.paths.forEach(invalidate); else invalidateAll(); }),
       on("fs", (e) => { if (touches(e.paths, (p) => p === settings.path)) loadSettings().catch(() => {}); }),
       on("fs", (e) => { if (touches(e.paths, (p) => p === ".kandinsky/keys.toml" || p.startsWith(".kandinsky/commands/"))) void loadKeymap().catch(() => {}); }),
@@ -281,7 +298,7 @@
   });
 </script>
 
-<div class="shell" class:notion class:full={fullscreen.on} class:phone={phone.on} class:vtabs={!notion && tabs.layout === "vertical"} class:split={tabs.groups.filter((g) => g.visible).length > 1}>
+<div class="shell" class:notion class:full={fullscreen.on} class:phone={phone.on} class:typing={phone.on && keyboardBar.on} class:vtabs={!notion && tabs.layout === "vertical"} class:split={tabs.groups.filter((g) => g.visible).length > 1}>
   {#if phone.on && !nativeShell.on}<PhoneTop />{/if}
   {#if guest.info}<GuestBar />{/if}
   <div class="main">
@@ -294,7 +311,8 @@
     </div>
   </div>
   {#if notion || tabs.layout !== "vertical"}<StatusBar />{/if}
-  {#if phone.on && !nativeShell.on}<PhoneBar />{/if}
+  {#if phone.on}<KeyboardBar />{/if}
+  {#if phone.on && !nativeShell.on && !keyboardBar.on}<PhoneBar />{/if}
 </div>
 <Palette />
 <QuickCapture />
@@ -310,6 +328,9 @@
 <style>
   /* clip: the shell never scrolls, not even programmatically (focus/scrollIntoView) */
   .shell { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--bg-app); overflow: clip; }
+  /* typing on a phone: the shell ends at the keyboard's top (a browser keeps its layout under it; the app's window is
+     already above it, --keyboard 0), so the row above the keyboard sits on it and the note shrinks above */
+  .shell.typing { bottom: var(--keyboard, 0px); }
   .main { flex: 1; min-height: 0; display: flex; overflow: clip; }
   /* the dock gets explicit edges, not height: 100% — WebKitGTK (the desktop app) resolves a percentage
      inside a stretched flex item against the content, and the dock grew to 2× the window (ui.log) */

@@ -138,6 +138,7 @@ test("search options: match case, whole word, regex", async ({ page }) => {
   await expect.poll(() => pane.locator(".line-hit").count()).toBeLessThan(any);
   await pane.getByLabel("Match case").click();
   await pane.getByLabel("Regular expression").click();
+  await pane.getByLabel("All files' text").click(); // E_kin is in a .tsv: notes and PDFs only, by default
   await pane.getByLabel("Search", { exact: true }).fill("E_kin\\s");
   await expect(pane.locator(".line-hit").first()).toBeVisible();
 });
@@ -155,4 +156,24 @@ test("the PDF switch narrows the search to the PDFs' text: the files left out, a
   await expect(pane.getByLabel("Toggle replace")).toBeDisabled();
   await pane.getByLabel("Only the PDFs' text").click();
   await expect(pane.locator(".line-hit").first()).toBeVisible();
+});
+
+test("the notes' lines by default; All adds every text file's (code, logs), a file's name always matches", async ({ page, request }) => {
+  const H = { "x-kandinsky": "1" };
+  await request.put("/api/file", { headers: H, data: { path: "notes/allswitch.md", text: "the quokka in a note\n" } });
+  // a log outside runs/ (on the default ignore list: no walk, and so no search, sees it)
+  await request.put("/api/file", { headers: H, data: { path: "logs/allswitch.log", text: "step 3: quokka converged\n" } });
+  await request.put("/api/file", { headers: H, data: { path: "code/quokka.py", text: "x = 1\n" } });
+  await page.goto("/");
+  await page.getByText("Finish the GW notes.").waitFor();
+  await page.keyboard.press("Control+Shift+F");
+  const pane = page.locator(".search-pane");
+  await pane.getByLabel("Search", { exact: true }).fill("quokka");
+  await expect(pane.locator(".line-hit")).toHaveCount(1);
+  await expect(pane.locator(".hit-file")).toContainText(["notes/allswitch"]);
+  await expect(pane.locator(".file-hit"), "the name matches whatever the switch").toContainText(["quokka"]);
+  await pane.getByLabel("All files' text").click();
+  await expect(pane.locator(".line-hit")).toHaveCount(2);
+  await expect(pane.locator(".hit-file", { hasText: "allswitch.log" })).toBeVisible();
+  for (const path of ["notes/allswitch.md", "logs/allswitch.log", "code/quokka.py"]) await request.post(`/api/fs/trash?path=${encodeURIComponent(path)}`, { headers: H });
 });

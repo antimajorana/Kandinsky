@@ -7,7 +7,8 @@
   import { tick } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import Icon from "../Icon.svelte";
-  import ContextMenu, { type MenuItem } from "../ContextMenu.svelte";
+  import ContextMenu from "../ContextMenu.svelte";
+  import type { MenuItem } from "../../lib/menu";
   import Dialog from "../Dialog.svelte";
   import InputDialog from "../InputDialog.svelte";
   import CellValue from "./CellValue.svelte";

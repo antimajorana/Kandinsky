@@ -13,9 +13,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, chmodSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { plugins, root, shippedFiles } from "./plugin-files.mjs";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const log = (m) => console.log(`[plugin-pack] ${m}`);
 
 // Kandinsky's platform name (plugins.rs `target()`: Rust's ARCH-OS) → the Rust target an engine is built for. Linux
@@ -45,15 +44,6 @@ function args(argv) {
     else out._.push(a);
   }
   return out;
-}
-
-/** Every published plugin: plugins/stable/<id> and plugins/beta/<id> (examples are not released). */
-function plugins() {
-  return ["stable", "beta"].flatMap((tier) =>
-    readdirSync(join(root, "plugins", tier))
-      .filter((id) => existsSync(join(root, "plugins", tier, id, "plugin.toml")))
-      .map((id) => ({ id, tier, dir: join(root, "plugins", tier, id) })),
-  );
 }
 
 /** The top-level `key = "value"` of a plugin.toml (before its first table): enough for title and version. */
@@ -156,16 +146,6 @@ function engines(o) {
   log(`every engine built for ${target}`);
 }
 
-/** The files a plugin ships: tracked by git, without its sources. */
-function shippedFiles(p) {
-  const rel = relative(root, p.dir).replaceAll("\\", "/");
-  return execFileSync("git", ["-C", root, "ls-files", "-z", "--", rel], { encoding: "utf8" })
-    .split("\0")
-    .filter(Boolean)
-    .map((f) => relative(rel, f).replaceAll("\\", "/"))
-    .filter((f) => !/^(engine|ui|helper)\//.test(f));
-}
-
 function sha256(file) {
   return createHash("sha256").update(readFileSync(file)).digest("hex");
 }
@@ -202,6 +182,9 @@ function pack(o) {
     index.push({
       id: p.id,
       title: manifestField(text, "title") ?? p.id,
+      // what the store's card says and shows (its icon: a Kandinsky icon name)
+      description: manifestField(text, "description") ?? null,
+      icon: manifestField(text, "icon") ?? null,
       version: manifestField(text, "version") ?? null,
       tier: p.tier,
       // a plugin without an engine is plain files: every platform; one with an engine runs where it was built

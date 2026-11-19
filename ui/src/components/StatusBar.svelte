@@ -15,12 +15,18 @@
   import { onFilesAddedOrRemoved, vaultReady } from "../lib/vault";
   import { context } from "../lib/context.svelte";
   import { editors, terminals } from "../lib/registry";
-  import { activeEditorId, focusPanel, getDock, lastEditorId, nextTerminalN, open } from "../lib/dock";
+  import { activeEditorId, focusPanel, getDock, lastEditorId, nextTerminalN, open, openPath } from "../lib/dock";
   import { agentsOn } from "../lib/agents";
   import { sendPassageToAgent } from "../lib/editor-insert-bus";
   import { basename, type PaneSpec } from "../lib/panes";
   import { isNotionShell } from "../lib/shell-mode.svelte";
   import { frontmatterOf } from "../lib/property-model";
+  import { elsewhere, openElsewhere, placeDetail } from "../lib/where.svelte";
+  import { clockOf, nowPlaying, shellPlayer } from "../lib/player.svelte";
+  import { plugins, pluginSpec } from "../lib/plugin-registry.svelte";
+
+  /** A file's name as the tabs say it: no folders, a note without `.md`. */
+  const short = (p: string) => p.split("/").pop()!.replace(/\.md$/i, "");
 
   interface VaultSpecialist {
     id: string;
@@ -426,6 +432,15 @@
     agyOpen = false;
     opened = opened?.cell.key === cell.key ? null : { cell, anchor };
   };
+  /** What the app's player plays (lib/player.svelte.ts): its pane opened again from the lower bar. */
+  function showPlaying() {
+    const s = nowPlaying.s, p = s && plugins.list.find((x) => x.id === s.plugin);
+    // a film: its note, where its notes are written (mpv is its own window; a vault video's "note" is the file itself)
+    if (s?.video) { if (s.note && /\.md$/i.test(s.note)) openPath(s.note); return; }
+    if (!s || !p?.view) return;
+    const spec = pluginSpec(p);
+    if (spec.kind === "plugin") open({ ...spec, title: s.title, icon: "headphones", ...(s.open !== undefined ? { arg: s.open } : {}) });
+  }
   /** The plugin draws its panel into the popover's body; its cleanup runs when the popover closes. */
   function drawn(host: HTMLElement, cell: StatusCell) {
     const done = cell.panel?.(host, () => { opened = null; });
@@ -449,7 +464,22 @@
     <button class="cell zoom" data-cell="zoom" onclick={() => zoomPane(0)} title={tipFor(`This tab is shown at ${zoomShown.percent} % of the settings' sizes. Click for 100 %`, "ui.zoomReset")}>{zoomShown.percent} %</button>
   {/if}
   {#if dirtyCount}<span class="saving">{dirtyCount} unsaved</span>{/if}
+  <!-- what the other devices show (lib/where.svelte.ts): a click opens it here -->
+  {#each elsewhere.slice(0, 2) as d (d.peer)}
+    <button class="cell elsewhere" data-testid="elsewhere" onclick={() => openElsewhere(d.peer)} title="{d.name} shows {placeDetail(d.at)}. Click to open it here, at that place">
+      <Icon name="eye" size={12} />{d.name}: {short(d.at.path)}{d.at.page ? ` · p. ${d.at.page}` : ""}
+    </button>
+  {/each}
+  {#if elsewhere.length > 2}<button class="cell elsewhere" onclick={() => openElsewhere()} title="Other devices: what they show">+{elsewhere.length - 2}</button>{/if}
   <span class="grow"></span>
+  {#if nowPlaying.s}
+    {@const s = nowPlaying.s}
+    <span class="playing" data-testid="now-playing">
+      <button class="cell" onclick={showPlaying} title="{s.title}{s.author ? ` — ${s.author}` : ''}{s.chapter >= 0 ? ` · ${s.chapters[s.chapter].title}` : ''}{s.error ? ` · ${s.error}` : ''}. Click to show the player">
+        <Icon name={s.video ? "film" : "headphones"} size={12} />{s.title} · {clockOf(s.at)}</button>
+      <button class="pp" onclick={() => shellPlayer.toggle()} aria-label={s.playing ? "Pause" : "Play"} title={s.playing ? "Pause" : "Play"}>{s.playing ? "❚❚" : "▶"}</button>
+    </span>
+  {/if}
   {#each visibleStatusCells as c (c.key)}
     {@const isSolver = c.key === "solver:solver" || c.text.includes("Solver")}
     {@const solverOpen = isSolver && c.text.includes(": open")}
@@ -647,7 +677,12 @@
   /* a plugin's cell: quiet text; a button only shows it on hover */
   .cell { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   button.cell { padding: 1px 6px; border-radius: 5px; color: inherit; }
+  .elsewhere { display: inline-flex; align-items: center; gap: 4px; }
   button.cell:hover, button.cell.open { background: var(--bg-hover); color: var(--text); }
+  .playing { display: inline-flex; align-items: center; gap: 2px; color: var(--text-muted); }
+  .playing .cell { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+  .pp { padding: 1px 6px; border-radius: 5px; color: var(--accent); font-size: .9em; }
+  .pp:hover { background: var(--bg-hover); }
   .cell[data-cell="solver:solver"], .solver-chip {
     display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 5px;
     color: var(--text-muted); font-variant-numeric: tabular-nums; letter-spacing: -0.005em;

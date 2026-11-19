@@ -12,8 +12,7 @@
   import SnippetsPanel from "./SnippetsPanel.svelte";
   import SwitchList from "./SwitchList.svelte";
   import { allApps, ordered, appHidden, setAppHidden, moveApp } from "../../lib/apps.svelte";
-  import { libraryChoices, libraryHidden, librariesPage, setLibraryHidden, moveLibrary } from "../../lib/libraries.svelte";
-  import { isIconName } from "../../lib/icons";
+  import LibrariesPanel from "./LibrariesPanel.svelte";
   import TemplatesPanel from "./TemplatesPanel.svelte";
   import KeysPanel from "./KeysPanel.svelte";
   import { renderInlineMarkdown } from "../../lib/markdown";
@@ -23,6 +22,10 @@
   import CaptureKeyPanel from "./CaptureKeyPanel.svelte";
   import ServerPanel from "./ServerPanel.svelte";
   import AgentsPanel from "./AgentsPanel.svelte";
+  import VaultsSyncPanel from "./VaultsSyncPanel.svelte";
+  import SyncConflictsPanel from "./SyncConflictsPanel.svelte";
+  import WebDataPanel from "./WebDataPanel.svelte";
+  import SigninsPanel from "./SigninsPanel.svelte";
   import { allCommands, keysOf } from "../../lib/keymap.svelte";
   import { chordLabel } from "../../lib/keys";
   import { pageDef, isDevSettingField, isDevSettingPanel, isDevSettingFeature, type Placed, type NextRung } from "../../lib/settings-pages";
@@ -49,7 +52,7 @@
   let naming = $state<null | "snippet" | "plugin" | "block">(null);
   let obsidianThemes = $state<ObsidianThemeInfo[]>([]);
   onMount(() => { void api.obsidianThemes().then((t) => { obsidianThemes = t; }, () => {}); });
-  const PRIMARY_PANELS = new Set(["preview", "device", "snippets", "templates", "keys", "plugins", "openwith", "capturekey", "overview"]);
+  const PRIMARY_PANELS = new Set(["preview", "device", "snippets", "templates", "keys", "plugins", "openwith", "capturekey", "overview", "libraries", "syncconflicts", "webdata"]);
   const showSnippets = $derived(devMode);
   const mainPanels = $derived(
     (def?.panels ?? []).filter(
@@ -137,6 +140,9 @@
     {:else if panel === "plugins"}<PluginsPanel onnew={() => (naming = "plugin")} onblock={() => (naming = "block")} />
     {:else if panel === "openwith"}<OpenWithPanel />
     {:else if panel === "capturekey"}<CaptureKeyPanel />
+    {:else if panel === "libraries"}<LibrariesPanel />
+    {:else if panel === "syncconflicts"}<SyncConflictsPanel />
+    {:else if panel === "webdata"}<WebDataPanel />
     {/if}
   {/each}
 
@@ -157,12 +163,11 @@
         {#each advPanels as panel (panel)}
           {#if panel === "apps"}
             <SwitchList title="Sidebar shortcuts" label="Sidebar shortcuts" items={sidebarItems} hidden={appHidden} setHidden={setAppHidden} move={moveApp} desc="Optional sidebar shortcuts." />
-            {#if librariesPage()}
-              <SwitchList title="Libraries" label="Libraries" items={libraryChoices().map((e) => ({ key: e.id, title: e.title, icon: isIconName(e.icon) ? e.icon : "library" }))} hidden={libraryHidden} setHidden={setLibraryHidden} move={moveLibrary} movable={(k) => !libraryHidden(k)} desc="Library groups." />
-            {/if}
           {:else if panel === "scripts"}<ScriptsPanel />
           {:else if panel === "server"}<ServerPanel />
           {:else if panel === "agents"}<AgentsPanel />
+          {:else if panel === "vaults" || panel === "vaultssync"}<VaultsSyncPanel />
+          {:else if panel === "signins"}<SigninsPanel />
           {:else if panel === "file"}
             <section class="panel"><h3>Configuration file</h3>
               <p class="what">Every setting writes <code>{settings.path}</code>.</p>

@@ -7,8 +7,12 @@
   import { errText } from "../lib/text";
   import { settings } from "../lib/settings.svelte";
   import { toast } from "../lib/state.svelte";
-  import { askFolder, askServer, forgetVault, openVault, setMirror, vaultListing, type VaultEntry } from "../lib/vaults";
+  import { askFolder, askServer, forgetVault, openVault, openVaultWindow, setAlwaysOn, setMirror, vaultListing, type VaultEntry } from "../lib/vaults";
   import { forgetMirrorState, hostOf, reach, serverVaults, type MirrorState } from "../lib/mirror";
+  import { api } from "../lib/api";
+  import { hostMatches } from "../lib/service-signin";
+  import type { Bypass } from "../lib/gen/Bypass";
+  import BypassKeyForm from "./BypassKeyForm.svelte";
 
   /** `linkMirror`: opened from a note ("edit live on its mirror"): this window's folder at its mirror form. */
   let { onclose, linkMirror = false }: { onclose: () => void; linkMirror?: boolean } = $props();
@@ -26,11 +30,20 @@
   /** The folder whose mirror is being set, the address typed, the server vaults offered. */
   let linking = $state<{ path: string; address: string; offers: { name: string; address: string }[] } | null>(null);
   let removing = $state("");
+  /** A server's key past its gate (Settings → Sign-ins, "Keys that skip the sign-in"): the bypass rules kept, and the
+   *  row whose key form is open. One store for every outgoing path (service_signin.rs `site_headers`): the bridge to a
+   *  server vault, its mirror, the plugins' fetches. */
+  let keys = $state<Bypass[]>([]);
+  let keying = $state("");
+  const serverOf = (e: VaultEntry) => (e.kind === "server" ? e.path : e.mirror) ?? "";
+  const keyFor = (address: string) => { const h = hostOf(address); return keys.find((b) => b.hosts.some((p) => hostMatches(p, h))); };
+  async function loadKeys() { try { keys = await api.signinBypasses(); } catch { keys = []; /* a core that keeps none (a server's page) */ } }
 
   async function load() {
     try {
       const l = await vaultListing();
       entries = l.entries; manage = l.manage;
+      if (l.entries.some(serverOf)) void loadKeys(); // kept on this machine's core, also from a server vault's page
       for (const e of l.entries) if (e.mirror) void reach(e.mirror).then((s) => { reached = { ...reached, [e.mirror!]: s }; });
       const here = linkMirror && l.entries.find((e) => e.current && e.kind === "folder" && e.managed);
       if (here) void startLinking(here);
@@ -57,6 +70,12 @@
     if (e.missing) return toast("The folder is not there", `${e.path} — plugged out or moved? Take it off the list, or open it where it is now.`, "error", 7000);
     onclose();
     e.go();
+  }
+  /** "Always on": started with the app and kept running with no window on it; switched on, it starts now. */
+  async function toggleAlwaysOn(e: VaultEntry) {
+    const on = !e.alwaysOn;
+    try { await setAlwaysOn(e.path, on); e.alwaysOn = on; if (on) e.warm = true; entries = [...entries]; }
+    catch (err) { toast("Not changed", errText(err), "error"); }
   }
   const isAddress = (a: string) => /^https?:\/\/\S+$/.test(a.trim());
   function act(fn: () => void) { onclose(); fn(); }
@@ -133,20 +152,42 @@
             <span class="badges">
               {#if e.current}<span class="badge here">this window</span>
               {:else if e.missing}<span class="badge bad">folder not found</span>
+              {:else if e.warm && e.alwaysOn}<span class="badge warm" title="Running in the background: its schedules, plugin rounds and notices go on; switching is instant">running</span>
               {:else if e.warm}<span class="badge warm" title="Started already: switching is instant">ready</span>{/if}
               {#if e.kind === "server"}<span class="badge">server</span>{/if}
+              {#if e.unseen && !e.current}<span class="badge news" title="{e.unseen} notice{e.unseen === 1 ? '' : 's'} came while it was not shown">{e.unseen} new</span>{/if}
               {#if e.mirror}
                 {@const s = reached[e.mirror]}
                 <span class="badge mirror {s ?? ''}" title="Mirrored on {e.mirror}{s ? ` — ${MIRROR_WORD[s]}` : ''}">⇄ {hostOf(e.mirror)}</span>
               {/if}
             </span>
           </button>
-          {#if e.managed}
+          {#if e.managed || serverOf(e) || e.alwaysOn !== null || (e.page && !e.current)}
             <span class="acts">
-              {#if e.mirror && reached[e.mirror] === "signin"}<button class="act" onclick={() => { window.open(`/signin/door?url=${encodeURIComponent(new URL(e.mirror!).origin + "/")}`, "_blank"); }} title="The mirror's sign-in page, in a window of Kandinsky">Sign in</button>{/if}
-              {#if (devMode || e.mirror) && e.kind === "folder"}<button class="act" onclick={() => void startLinking(e)} title="Link this folder to its copy on a server">{e.mirror ? "Mirror…" : "Link mirror…"}</button>{/if}
-              {#if !e.current}<button class="act" class:danger={removing === e.path} onclick={() => void remove(e)} title="Take it off this list (nothing is deleted)">{removing === e.path ? "Remove?" : "Remove"}</button>{/if}
+              <!-- the desktop app opens this as a window of Kandinsky of its own (kandinsky-app `guest_page`), the switcher's
+                   window staying on its vault -->
+              {#if e.page && !e.current}<button class="act" onclick={() => { void openVaultWindow(e.path); onclose(); }} title="{e.name} in a window of its own, this one staying where it is">New window</button>{/if}
+              {#if e.alwaysOn !== null}
+                <button class="act" class:on={e.alwaysOn} role="switch" aria-checked={e.alwaysOn} data-testid="switcher-always-on" onclick={() => void toggleAlwaysOn(e)}
+                  title={e.alwaysOn ? `${e.name} starts with the app and keeps running with no window on it (its schedules, plugin rounds, notices) — click to start it only when opened` : `Start ${e.name} with the app and keep it running in the background: its schedules, plugin rounds and notices go on with no window on it`}>{e.alwaysOn ? "Always on ✓" : "Always on"}</button>
+              {/if}
+              {#if e.managed && e.mirror && reached[e.mirror] === "signin"}<button class="act" onclick={() => { window.open(`/signin/door?url=${encodeURIComponent(new URL(e.mirror!).origin + "/")}`, "_blank"); }} title="The mirror's sign-in page, in a window of Kandinsky">Sign in</button>{/if}
+              {#if e.managed && (devMode || e.mirror) && e.kind === "folder"}<button class="act" onclick={() => void startLinking(e)} title="Link this folder to its copy on a server">{e.mirror ? "Mirror…" : "Link mirror…"}</button>{/if}
+              {#if serverOf(e)}
+                {@const k = keyFor(serverOf(e))}
+                <button class="act" class:on={!!k} onclick={() => (keying = keying === e.path ? "" : e.path)}
+                  title={k ? `A key is kept for ${hostOf(serverOf(e))} (sent in ${k.header}); change it here, forget it in Settings → Sign-ins` : `A header key that lets this machine past the sign-in in front of ${hostOf(serverOf(e))} (a gate's bypass)`}>{k ? `Key ✓` : "Key…"}</button>
+              {/if}
+              {#if e.managed && !e.current}<button class="act" class:danger={removing === e.path} onclick={() => void remove(e)} title="Take it off this list (nothing is deleted)">{removing === e.path ? "Remove?" : "Remove"}</button>{/if}
             </span>
+          {/if}
+          {#if keying === e.path}
+            {@const k = keyFor(serverOf(e))}
+            <div class="link keyrow">
+              <p>A key in a header that the sign-in in front of {hostOf(serverOf(e))} lets through (a gate's bypass, such as Authelia's) — for when this machine cannot sign in there. It opens every host the rule names and skips your second factor: prefer “Sign in” when you can.{k ? ` Kept now: in ${k.header}.` : ""}</p>
+              <BypassKeyForm hosts={hostOf(serverOf(e))} header={k?.header ?? "X-Api-Key"} oncancel={() => (keying = "")}
+                onkept={() => { void loadKeys(); toast("Key kept", `Sent to ${hostOf(serverOf(e))} over https from now on.`); keying = ""; }} />
+            </div>
           {/if}
           {#if linking?.path === e.path}
             <form class="link" onsubmit={(ev) => { ev.preventDefault(); void saveMirror(linking!.address); }}>
@@ -227,6 +268,7 @@
   .badge { font-size: calc(11px * var(--ui-scale, 1)); color: var(--text-muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
   .badge.here { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
   .badge.warm { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+  .badge.news { color: var(--accent-fg); background: var(--accent); border-color: var(--accent); }
   .badge.bad { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, transparent); }
   .badge.mirror.online { color: var(--green); }
   .badge.mirror.offline { opacity: .6; }
@@ -236,6 +278,7 @@
   .act { font: inherit; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-muted); background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px 8px; cursor: pointer; }
   .act:hover { color: var(--text); border-color: var(--border-strong); }
   .act.danger { color: var(--red); border-color: var(--red); }
+  .act.on { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
   .link { flex-basis: 100%; display: flex; flex-direction: column; gap: 8px; margin: 0 10px 10px 38px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
   .link p { margin: 0; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text-muted); line-height: 1.45; }
   .link input { font: inherit; color: var(--text); background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 6px 9px; outline: none; }

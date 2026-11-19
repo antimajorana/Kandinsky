@@ -1,12 +1,42 @@
+<script module lang="ts">
+  import type { Notice } from "../lib/gen/Notice";
+
+  const MAX_LIVE_NOTICES = 30;
+  let liveNotices = $state<Notice[]>([]);
+
+  export function recordLiveNotice(n: Notice): void {
+    const idx = n.id ? liveNotices.findIndex((x) => x.id === n.id) : -1;
+    if (idx >= 0) {
+      liveNotices[idx] = n;
+      liveNotices = [...liveNotices];
+      return;
+    }
+    liveNotices = [n, ...liveNotices].slice(0, MAX_LIVE_NOTICES);
+  }
+
+  export function withdrawLiveNotice(id: string): void {
+    if (!id) return;
+    liveNotices = liveNotices.filter((n) => n.id !== id && n.subject !== id);
+  }
+
+  function dismissLiveNotice(target: Notice): void {
+    liveNotices = liveNotices.filter((n) => (target.id ? n.id !== target.id : n !== target));
+  }
+</script>
+
 <script lang="ts">
-  // Notion-style × Kandinsky Notifications & Inbox modal: plugin notification sources, sync/rescue alerts, and recent captures.
+  // Notion-style × Kandinsky Notifications & Inbox modal: plugin notification sources, sync/rescue alerts, live action notices, and recent captures.
   import { onMount } from "svelte";
   import Dialog from "./Dialog.svelte";
   import Icon from "./Icon.svelte";
+  import { api } from "../lib/api";
   import { openPath } from "../lib/dock";
+  import type { NoticeAction } from "../lib/gen/NoticeAction";
   import { shownName } from "../lib/paths";
   import { openCaptures, openQuickCapture } from "../lib/quick-capture.svelte";
   import { openSettingsAt } from "../lib/settings-nav.svelte";
+  import { toast } from "../lib/state.svelte";
+  import { errText } from "../lib/text";
   import {
     notificationsInbox,
     refreshInbox,
@@ -24,7 +54,17 @@
   const notices = $derived(notificationsInbox.syncNotices);
   const captures = $derived(notificationsInbox.captures);
   const unreadTotal = $derived(notificationsInbox.unreadMessages);
-  const totalBadge = $derived(notificationsInbox.totalBadgeCount);
+  const liveCount = $derived(liveNotices.length);
+  const totalBadge = $derived(notificationsInbox.totalBadgeCount + liveCount);
+
+  async function runNoticeAction(n: Notice, a: NoticeAction): Promise<void> {
+    try {
+      await api.noticeAction({ action: a.id, source: n.source, notice: n.id, open: n.open });
+      dismissLiveNotice(n);
+    } catch (err) {
+      toast(`“${a.label}” failed`, errText(err), "error");
+    }
+  }
 
   onMount(() => {
     void refreshInbox();
@@ -72,8 +112,8 @@
       </button>
       <button type="button" class="tab-btn" class:active={tab === "sync"} onclick={() => (tab = "sync")}>
         <span>Sync &amp; Alerts</span>
-        {#if notices.length > 0}
-          <span class="tab-count warn">{notices.length}</span>
+        {#if notices.length + liveCount > 0}
+          <span class="tab-count warn">{notices.length + liveCount}</span>
         {:else}
           <span class="sync-dot" aria-hidden="true"></span>
         {/if}
@@ -150,7 +190,7 @@
           <div class="sec-head">
             <span class="sec-title">Sync &amp; Vault Notices</span>
           </div>
-          {#if notices.length === 0}
+          {#if notices.length === 0 && liveNotices.length === 0}
             <div class="sync-ok" data-testid="sync-ok">
               <span class="ok-badge"><Icon name="check" size={14} /></span>
               <span class="ok-text">All vault files in sync</span>
@@ -158,6 +198,27 @@
             </div>
           {:else}
             <ul class="card-list">
+              {#each liveNotices as n, idx (n.id ?? `${n.title}:${idx}`)}
+                <li class="notice-row live" class:offline={n.level === "failure"}>
+                  <span class="warn-ico"><Icon name={n.level === "failure" ? "error" : n.level === "warning" ? "warning" : "bell"} size={15} /></span>
+                  <div class="notice-meta">
+                    <span class="notice-title">{n.title}{#if n.source} <span class="source-origin">· {n.source}</span>{/if}</span>
+                    {#if n.body}<span class="notice-detail">{n.body}</span>{/if}
+                  </div>
+                  <div class="row-actions">
+                    {#each n.actions ?? [] as a (a.id)}
+                      <button type="button" class="act-btn primary" onclick={() => void runNoticeAction(n, a)}>{a.label}</button>
+                    {/each}
+                    {#if n.open && !(n.actions ?? []).some((a) => /open/i.test(a.label))}
+                      {@const openTarget = n.open}
+                      <button type="button" class="act-btn" onclick={() => { openPath(openTarget); onclose(); }}>Open</button>
+                    {/if}
+                    <button type="button" class="icon-btn" aria-label="Dismiss notice" title="Dismiss" onclick={() => dismissLiveNotice(n)}>
+                      <Icon name="close" size={13} />
+                    </button>
+                  </div>
+                </li>
+              {/each}
               {#each notices as n (n.id)}
                 <li class="notice-row" class:offline={n.kind === "offline"}>
                   <span class="warn-ico"><Icon name={n.kind === "offline" ? "error" : "warning"} size={15} /></span>
@@ -263,6 +324,8 @@
   .ok-text { font-size: 13px; font-weight: 600; color: var(--green); }
   .ok-sub { margin-left: auto; font-size: 11.5px; color: var(--text-muted); }
   .notice-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius-lg); border: 1px solid color-mix(in srgb, var(--orange) 40%, var(--border)); background: var(--orange-soft, rgba(226, 131, 39, 0.1)); }
+  .notice-row.live { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); background: var(--bg-alt); }
+  .notice-row.live .warn-ico { color: var(--accent); }
   .notice-row.offline { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); background: var(--red-soft, rgba(217, 78, 65, 0.1)); }
   .warn-ico { color: var(--orange); display: inline-flex; flex: none; }
   .notice-row.offline .warn-ico { color: var(--red); }

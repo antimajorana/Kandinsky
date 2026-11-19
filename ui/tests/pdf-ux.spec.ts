@@ -222,3 +222,54 @@ for (const theme of ["light", "dark"] as const) test(`the find bar and its match
   expect(bg).not.toBe("rgba(0, 0, 0, 0)");
   await page.screenshot({ path: `test-results/pdf-find-${theme}.png` });
 });
+
+// Where you are, in the PDF's note (lib/pdf-reading.ts): the phone's properties, read on opening, written after a page
+// is held; a PDF without a note gets none from reading it.
+test("the place is the note's: opened at its page, the page held written back; no note is made by reading", async ({ page }) => {
+  const NOTE = `${DIR}/ux.md`;
+  const pane = await openPdf(page);
+  await pane.locator(".page-in").fill("3");
+  await pane.locator(".page-in").press("Enter");
+  await page.waitForTimeout(9000); // past the hold (NOTE_AFTER_MS)
+  expect((await page.request.get(`/api/file?path=${encodeURIComponent(NOTE)}`, { headers: H })).ok(), "reading made no note").toBe(false);
+
+  const now = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+  await page.request.put("/api/file", { headers: H, data: { path: NOTE, text: `---\nreading_page: 2\nlast_read: ${now}\n---\n` } });
+  const again = await openPdf(page);
+  await expect(again.locator(".page-in")).toHaveValue("2");
+  await again.locator(".page-in").fill("3");
+  await again.locator(".page-in").press("Enter");
+  await expect.poll(async () => (await (await page.request.get(`/api/file?path=${encodeURIComponent(NOTE)}`, { headers: H })).json()).text, { timeout: 15000 })
+    .toMatch(/reading_page: '?3'?[\s\S]*progress: '?100%'?/);
+});
+
+test("a page's right-click: the mark under it (its link, delete it), the page's link and bookmark", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const st = "m-uxmenu01";
+  await page.request.post(`/api/pdf-marks?pdf=${encodeURIComponent(PATH)}`, { headers: H, data: [
+    { op: "put", mark: { id: st, page: 1, version: 1, color: "#FF6B6B", kind: "stamp", stamp: "check", at: [300, 500] } },
+  ] });
+  const pane = await openPdf(page);
+  const drawn = pane.locator(`svg.kandinsky-marks [data-mark="${st}"]`);
+  await expect(drawn).toBeAttached({ timeout: 20000 });
+  // the mark's group has no box of its own to click: its drawing's middle, by the pointer
+  const onMark = async () => {
+    const b = await drawn.evaluate((g) => { const r = g.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+    await page.mouse.click(b.x, b.y, { button: "right" });
+  };
+  await onMark();
+  const menu = page.getByRole("menu");
+  for (const name of [/^Copy link to the mark/, /^Delete the mark/, /^Copy link to page 1/, /^Bookmark page 1/, /^Open with/]) await expect(menu.getByRole("menuitem", { name })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("pdf-page-menu.png") });
+  await menu.getByRole("menuitem", { name: /^Copy link to the mark/ }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(`${PATH}#page=1&annotation=${st}`);
+  await onMark();
+  await page.getByRole("menu").getByRole("menuitem", { name: /^Delete the mark/ }).click();
+  await expect(drawn).toHaveCount(0);
+  // away from any mark: the page's own rows, for the page clicked
+  await pane.locator('.page[data-page-number="1"]').click({ button: "right", position: { x: 30, y: 30 } });
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: /mark/i })).toHaveCount(1); // only "Bookmark page 1"
+  await page.getByRole("menu").getByRole("menuitem", { name: /^Bookmark page 1/ }).click();
+  await pane.locator(".toolbar").getByRole("button", { name: "Marks", exact: true }).click();
+  await expect(pane.getByRole("navigation", { name: "Marks" }).locator('.mark[data-kind="bookmark"]')).toHaveCount(1);
+});

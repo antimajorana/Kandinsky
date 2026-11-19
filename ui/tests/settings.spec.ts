@@ -1,5 +1,6 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 import { openFile } from "./open";
+import { vaultLook } from "./look";
 
 // Settings as pages (docs/guides/SETTINGS.md): an overview of what Kandinsky can do, a page per area with
 // features to try and options, search across pages, modified/reset, look options applied live,
@@ -15,6 +16,7 @@ async function openSettings(page: Page) {
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
 }
 
+test.beforeEach(({ page }) => vaultLook(page)); // these change the vault's look and expect the page to follow
 test("the 7 streamlined settings categories render cleanly with Advanced folded", async ({ page }) => {
   await openSettings(page);
   for (const name of ["Appearance", "Editor & Writing", "Calendar & Daily Notes", "Files & Search", "References & PDF", "Keyboard Shortcuts", "Plugins"]) {

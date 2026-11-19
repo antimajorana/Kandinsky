@@ -15,6 +15,7 @@
     nextStatusValue,
   } from "../../lib/base-format";
   import { openPath } from "../../lib/dock";
+  import { dateTip, readDate, showDate } from "../../lib/dates";
   import { basename, IMAGE_RE } from "../../lib/paths";
   import { resolveLink } from "../../lib/vault";
   import { openOutside } from "../../lib/web-links";
@@ -34,21 +35,8 @@
     : effectiveColumnFormat(column, cell),
   );
   const num = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(Math.abs(n) < 1 ? 3 : 2));
-  const ISO = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/;
-
-  function shortDate(v: string): string | null {
-    const m = ISO.exec(v.trim());
-    if (!m || v.trim().length > 30) return null;
-    const d = new Date(+m[1], +m[2] - 1, +m[3], +(m[4] ?? 0), +(m[5] ?? 0));
-    const now = new Date();
-    if (m[4] && d.toDateString() === now.toDateString()) return `${m[4]}:${m[5]}`;
-    return d.toLocaleDateString(
-      undefined,
-      d.getFullYear() === now.getFullYear()
-        ? { day: "numeric", month: "short" }
-        : { day: "numeric", month: "short", year: "numeric" },
-    );
-  }
+  /** A text that is a date reads as one (lib/dates.ts, the same everywhere). */
+  const isDate = (v: string) => readDate(v) !== null;
 
   function numVal(c: BaseCell): number | null {
     if (c.t === "num") return c.value;
@@ -154,9 +142,9 @@
   </span>
 {:else if cell.t === "num"}
   <span class="num">{num(cell.value)}</span>
-{:else if cell.t === "date" || (cell.t === "text" && shortDate(cell.value))}
+{:else if cell.t === "date" || (cell.t === "text" && isDate(cell.value))}
   {@const raw = cell.t === "date" ? cell.text : cell.value}
-  <span class="date" title={raw}>{shortDate(raw) ?? raw}</span>
+  <span class="date" title={dateTip(raw)} data-value={raw}>{showDate(raw)}</span>
 {:else if cell.t === "text"}
   {cell.value}
 {/if}

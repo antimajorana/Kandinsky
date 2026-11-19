@@ -36,29 +36,30 @@
   let templatePicks = $state<string[]>([]);
   let listError = $state("");
   let newItem = $state("");
-  type RuleDraft = { folder: string; title: string; template: string };
+  type RuleDraft = { folder: string; title: string; linked_by: string; template: string };
   let ruleDrafts = $state<RuleDraft[]>([]);
   let lastSerializedRules = "";
   const listId = $derived(`dl-${path.replace(/\W/g, "-")}`);
   const tplListId = $derived(`dl-tpl-${path.replace(/\W/g, "-")}`);
   const isFolderList = $derived(path === "ignore" || path === "editor.index_exclude");
 
-  function normRules(arr: Array<{ folder?: string | null; title?: string | null; template?: string | null }>): RuleDraft[] {
+  function normRules(arr: Array<{ folder?: string | null; title?: string | null; linked_by?: string | null; template?: string | null }>): RuleDraft[] {
     return arr.map((r) => ({
       folder: (r.folder ?? "").trim(),
       title: (r.title ?? "").trim(),
+      linked_by: (r.linked_by ?? "").trim(),
       template: (r.template ?? "").trim(),
     }));
   }
 
   $effect(() => {
     if (path !== "notes.template_rules") return;
-    const arr = Array.isArray(v) ? (v as Array<{ folder?: string | null; title?: string | null; template?: string | null }>) : [];
+    const arr = Array.isArray(v) ? (v as Array<{ folder?: string | null; title?: string | null; linked_by?: string | null; template?: string | null }>) : [];
     const cleaned = normRules(arr);
     const serialized = JSON.stringify(cleaned);
     if (serialized !== lastSerializedRules) {
       lastSerializedRules = serialized;
-      const incomplete = ruleDrafts.filter((r) => !r.template.trim() && (r.folder.trim() || r.title.trim()));
+      const incomplete = ruleDrafts.filter((r) => !r.template.trim() && (r.folder.trim() || r.title.trim() || r.linked_by.trim()));
       ruleDrafts = [...cleaned, ...incomplete];
     }
   });
@@ -71,13 +72,14 @@
     const out = complete.map((r) => ({
       ...(r.folder ? { folder: r.folder } : {}),
       ...(r.title ? { title: r.title } : {}),
+      ...(r.linked_by ? { linked_by: r.linked_by } : {}),
       template: r.template,
     }));
     void setValue(path, out);
   }
 
   function addRuleDraft(): void {
-    ruleDrafts = [...ruleDrafts, { folder: "", title: "", template: "" }];
+    ruleDrafts = [...ruleDrafts, { folder: "", title: "", linked_by: "", template: "" }];
   }
 
   function removeRuleDraft(idx: number): void {
@@ -190,6 +192,14 @@
               placeholder="Title match (optional)"
               aria-label="Rule {idx + 1} title match"
               bind:value={rule.title}
+              onchange={() => saveRules(ruleDrafts)}
+            />
+            <input
+              type="text"
+              class="rule-in"
+              placeholder="Linked by property (optional)"
+              aria-label="Rule {idx + 1} linked by property"
+              bind:value={rule.linked_by}
               onchange={() => saveRules(ruleDrafts)}
             />
             <input
@@ -313,10 +323,6 @@
   textarea.records { width: 100%; box-sizing: border-box; white-space: pre; overflow-x: auto; font-size: calc(12px * var(--ui-scale, 1)); }
   input:focus, textarea:focus { outline: none; border-color: var(--accent); }
   .hint { color: var(--text-faint); font-size: calc(11px * var(--ui-scale, 1)); }
-  .switch { width: 38px; height: 22px; border-radius: 11px; background: var(--border-strong); position: relative; transition: background .15s; }
-  .switch span { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--bg); transition: transform .15s; box-shadow: var(--shadow-sm); }
-  .switch.on { background: var(--accent); }
-  .switch.on span { transform: translateX(16px); }
   .seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; }
   .seg button { padding: 4px 12px; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text-muted); border-right: 1px solid var(--border); }
   .seg button:last-child { border-right: 0; }
@@ -333,7 +339,7 @@
   .icon-btn:hover { background: var(--bg-active); color: var(--text); }
   .row.stacked .control { width: 100%; align-items: stretch; }
   .rules-editor { display: flex; flex-direction: column; gap: 6px; width: 100%; }
-  .rule-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; align-items: center; }
+  .rule-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 6px; align-items: center; }
   input.rule-in { width: 100%; min-width: 0; box-sizing: border-box; }
   .add-rule-btn, .add-item-btn { align-self: flex-start; padding: 4px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elev); color: var(--text); font-size: calc(12px * var(--ui-scale, 1)); font-weight: 500; cursor: pointer; }
   .add-rule-btn:hover, .add-item-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }

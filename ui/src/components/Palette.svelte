@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { overlay } from "../lib/overlays";
   import { errText } from "../lib/text";
   import { closable } from "../lib/back";
   import { holdFocus, trapTab } from "../lib/focus-return";
@@ -45,6 +44,20 @@
   const picks = $derived.by<PickItem[]>(() => {
     const src = palette.pick?.items;
     return Array.isArray(src) ? src : loaded?.req === palette.pick ? loaded.list : [];
+  });
+  // a chooser whose choices follow the text (`PickRequest.search`): the newest answer, kept with its request
+  let searched = $state.raw<{ req: unknown; list: PickItem[] } | null>(null);
+  const pickSearches = new Newest(160);
+  $effect(() => {
+    const req = palette.open && palette.mode === "pick" ? palette.pick : null;
+    const query = q.trim();
+    if (!req?.search) { pickSearches.stop(); searched = null; return; }
+    const ask = req.search;
+    pickSearches.run(async (still) => {
+      const list = await ask(query).catch((err) => { toast("Could not search", errText(err), "error"); return []; });
+      if (still()) searched = { req, list };
+    });
+    return () => pickSearches.stop();
   });
   /** the text the search last finished for, found or failed: the capture row waits for it */
   let answered = $state("");
@@ -172,8 +185,10 @@
   const captureWhat = () => captureHintNow.current.says;
   const captureNow = captureText;
 
-  /** `tag:name` asks the core for a tag's notes: its answer is the list, not something to match by name. */
-  const tagQuery = (q: string) => /^tag:/i.test(q.trim());
+  /** `tag:name` asks the core for a tag's notes, `key:value` for the notes with that property (search.rs
+   *  `by_property`): its answer is the list, not something to match by name. The section says which. */
+  const listedBy = (q: string): string | null => /^tag:/i.test(q.trim()) ? "Notes with this tag" : /^[\p{L}\p{N}_-]+:(?!\/\/)\S/u.test(q.trim()) ? "Notes with this property" : null;
+  const filesFor = (q: string) => fileItems(fileHits, listedBy(q) ? "" : q, listedBy(q) ?? "Files");
 
   // file search (server-side filename match), debounced
   const fileSearches = new Newest(110);
@@ -184,7 +199,7 @@
     fileSearches.run(async (still) => {
       busy = true;
       try {
-        const namesOnly = !tagQuery(query) && (mode === "files" || query.length < 3);
+        const namesOnly = !listedBy(query) && (mode === "files" || query.length < 3);
         const [r, t] = await Promise.all([api.search(query, namesOnly ? { names: true } : {}), titledNotes(query)]);
         if (still()) { fileHits = r.files; lineHits = r.lines; hitsFor = query; titledHits = besides(t, r.files); }
       }
@@ -244,6 +259,13 @@
           key: `p:${p.value}:${p.title}`, section: p.section ?? "", title: p.title, detail: p.detail, icon: p.icon ?? req.icon ?? "command", score: s, hl,
           run: () => req.onpick(p.value, false),
         }));
+        if (searched?.req === req) {
+          const listed = new Set(ranked.map((r) => r.key));
+          for (const [i, p] of searched.list.entries()) {
+            const key = `p:${p.value}:${p.title}`;
+            if (!listed.has(key)) ranked.push({ key, section: p.section ?? "", title: p.title, detail: p.detail, icon: p.icon ?? req.icon ?? "command", score: -2 - i, hl: [], run: () => req.onpick(p.value, false) });
+          }
+        }
         const exact = picks.some((p) => p.title.toLowerCase() === query.toLowerCase() || p.value === query);
         const offer = req.typed && query && !exact ? req.typed(query) : null;
         if (offer) ranked.push({ key: "p:new", section: req.typedAs?.section ?? "New", title: offer, icon: req.typedAs?.icon ?? "plus", score: -1, hl: [], run: () => req.onpick(query, true) });
@@ -251,7 +273,7 @@
       }
       case "files": {
         if (!query) return fileItems(recentFiles(), "", "Recent");
-        const found = fileItems(fileHits, tagQuery(query) ? "" : query, tagQuery(query) ? "Notes with this tag" : "Files");
+        const found = filesFor(query);
         // no file is called that: offer to make the note (Obsidian's quick switcher) — once the search
         // has answered, so Enter typed early never creates what was about to be found
         const called = (f: Item) => !!f.path && [basename(f.path), shownName(f.path)].some((n) => n.toLowerCase() === query.toLowerCase());
@@ -271,10 +293,10 @@
           .slice(0, query ? 12 : 50)
           .map(({ item: c, score: s, hl }) => ({ key: `c:${c.id}`, section: ran.includes(c.id) ? "Recent commands" : "Commands", title: c.title, detail: c.description ?? (c.source === "script" ? "script" : undefined), keys: c.keys, icon: "command" as IconName, score: s, hl, run: c.run }));
         if (query.startsWith(">")) return cmds;
-        const files = query ? fileItems(fileHits, tagQuery(query) ? "" : query, tagQuery(query) ? "Notes with this tag" : "Files") : fileItems(recentFiles().slice(0, 6), "", "Recent files");
+        const files = query ? filesFor(query) : fileItems(recentFiles().slice(0, 6), "", "Recent files");
         const heads = query ? headingItems(query).slice(0, 5) : [];
         // the text of notes, after names: three letters at least, a few lines (the Search pane has them all)
-        const lines: Item[] = query.length >= 3 && hitsFor === query && !tagQuery(query)
+        const lines: Item[] = query.length >= 3 && hitsFor === query
           ? lineHits.slice(0, 8).map((h): Item => ({
               key: `l:${h.path}:${h.line}`, section: "In notes", title: h.text.trim().slice(0, 140), detail: `${shownName(h.path)}:${h.line}`, icon: "search", score: 0, hl: [],
               run: () => { openPath(h.path, h.line); }, beside: () => { openPath(h.path, h.line, { beside: true }); },
@@ -554,7 +576,7 @@
 
 {#if palette.open}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="scrim" use:overlay onclick={closePalette}>
+  <div class="scrim" onclick={closePalette}>
     <!-- Tab walks the box and its rows, never out to the page behind the scrim; Esc closes from a row as from the box -->
     <div class="palette" role="dialog" aria-modal="true" tabindex="-1" aria-label="Command palette" onclick={(e) => e.stopPropagation()} onkeydown={framekeys} data-testid="palette">
       <div class="field">

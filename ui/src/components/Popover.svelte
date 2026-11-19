@@ -8,7 +8,6 @@
   import { closable } from "../lib/back";
   import { FOCUSABLE, trapTab } from "../lib/focus-return";
   import { renderMathInto } from "../lib/math";
-  import { overlay } from "../lib/overlays";
   import Markdown from "./Markdown.svelte";
 
   export interface VirtualAnchor {
@@ -151,7 +150,6 @@
   class="popover"
   class:hover-preview={isHover}
   data-testid={isHover ? "hover-preview" : undefined}
-  use:overlay
   role={isHover ? "tooltip" : "dialog"}
   aria-label={label}
   tabindex="-1"
