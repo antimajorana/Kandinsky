@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Nootion Clock widget: Bauhaus Several Circles SVG analog face (12 ticks, geometric hour/minute
+  // Notion-style Clock widget: Bauhaus Several Circles SVG analog face (12 ticks, geometric hour/minute
   // hands, vermilion second hand & pivot) paired with a tabular digital readout and IANA timezone support.
   import { onMount } from "svelte";
 

@@ -3,19 +3,68 @@
 // defaults, and switching, installing, updating, removing it (replaced or removed folders go to .kandinsky/trash/).
 import { errText } from "./text";
 import { api } from "./api";
+import { confirmDialog } from "./confirm";
 import { pick, type PickItem } from "./palette.svelte";
 import { toast } from "./state.svelte";
 import { settings } from "./settings.svelte";
 import { loadPlugins, pluginOn, plugins, setPluginOn, type Plugin } from "./plugins.svelte";
 import type { Platform } from "./gen/Platform";
+import type { Permissions } from "./gen/Permissions";
 import type { Support } from "./gen/Support";
 import type { Available } from "./gen/Available";
 
 export const isOff = (id: string): boolean => (settings.config?.plugins.off ?? []).includes(id);
 export const pluginDir = (id: string): string => `.kandinsky/plugins/${id}`;
 
-export function switchPlugin(id: string, on: boolean): void {
-  setPluginOn(id, on).catch((e) => toast("Not saved", errText(e), "error"));
+const confirmedPlugins = new Set<string>();
+
+export function hasSensitivePermissions(perm?: Permissions | null, hasHelper = false): boolean {
+  return Boolean(hasHelper || perm?.secrets || (perm?.net?.length ?? 0) > 0 || (perm?.exec?.length ?? 0) > 0);
+}
+
+export function permissionDetails(perm?: Permissions | null, hasHelper = false): string[] {
+  const lines: string[] = [];
+  if (perm?.net?.length) {
+    lines.push(`Network: ${perm.net.includes("*") ? "any server (*)" : perm.net.join(", ")}`);
+  }
+  if (perm?.secrets) {
+    lines.push("Passwords/Secrets: store and read credentials outside the vault");
+  }
+  if (hasHelper) {
+    lines.push("Runs helper: starts a local helper program");
+  }
+  if (perm?.exec?.length) {
+    lines.push(`External programs: ${perm.exec.join(", ")}`);
+  }
+  return lines;
+}
+
+export async function confirmPluginPermissions(
+  title: string,
+  perm?: Permissions | null,
+  hasHelper = false,
+  verb = "Enable",
+): Promise<boolean> {
+  if (!hasSensitivePermissions(perm, hasHelper)) return true;
+  const details = permissionDetails(perm, hasHelper).join(" · ");
+  return confirmDialog(
+    `${verb} “${title}”?`,
+    `This plugin requests elevated permissions: ${details}.`,
+    `${verb} plugin`,
+    false,
+  );
+}
+
+export async function switchPlugin(id: string, on: boolean): Promise<void> {
+  if (on) {
+    const p = plugins.list.find((x) => x.id === id);
+    if (p && hasSensitivePermissions(p.permissions, p.has_helper) && !confirmedPlugins.has(id)) {
+      const ok = await confirmPluginPermissions(p.title, p.permissions, p.has_helper, "Enable");
+      if (!ok) return;
+      confirmedPlugins.add(id);
+    }
+  }
+  await setPluginOn(id, on).catch((e) => toast("Not saved", errText(e), "error"));
 }
 
 /** What a plugin asked to be allowed outside the page, in plain words (its manifest's [permissions] and [helper]). */
@@ -80,9 +129,32 @@ async function releaseRows(): Promise<PickItem[]> {
 
 /** Installs the plugin at `from` (a release archive's address, a folder, a git address…), switched on, and says what it
  *  may do. The one install path: Settings' Install… and the Home page's welcome block. False when it failed (said). */
-export async function installFrom(from: string): Promise<boolean> {
+export async function installFrom(
+  from: string,
+  meta?: { id?: string; title?: string; permissions?: Permissions; has_helper?: boolean },
+): Promise<boolean> {
   try {
-    const r = await api.installPlugin(from.trim());
+    const src = from.trim();
+    let info = meta;
+    if (!info) {
+      const avail = await api.availablePlugins().catch(() => [] as Available[]);
+      const found = avail.find((a) => a.url === src || a.id === src);
+      if (found) info = { id: found.id, title: found.title, permissions: found.permissions, has_helper: found.has_helper };
+    }
+    if (info && hasSensitivePermissions(info.permissions, info.has_helper)) {
+      const ok = await confirmPluginPermissions(info.title ?? info.id ?? src, info.permissions, info.has_helper, "Install");
+      if (!ok) return false;
+    }
+    const r = await api.installPlugin(src);
+    if (!info && hasSensitivePermissions(r.permissions, r.has_helper)) {
+      const ok = await confirmPluginPermissions(r.title, r.permissions, r.has_helper, "Enable");
+      if (!ok) {
+        await setPluginOn(r.id, false).catch(() => {});
+        await loadPlugins();
+        return false;
+      }
+    }
+    confirmedPlugins.add(r.id);
     await loadPlugins();
     const may = mayOf(r.permissions, r.has_helper);
     toast(`Installed ${r.title}`, `It is switched on.${may ? ` It may ${may}; Settings → Plugins switches it off.` : ""}`, "success", 12000);

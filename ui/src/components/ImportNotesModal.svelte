@@ -1,10 +1,11 @@
 <script lang="ts">
-  // Nootion × Bauhaus Import Notes modal: Notion (.zip / folder), NoteCraft (_node.toml), OneNote (.one / HTML / MD).
+  // Notion-style × Bauhaus Import Notes modal: Notion (.zip / folder), NoteCraft (_node.toml), OneNote (.one / HTML / MD).
   import Dialog from "./Dialog.svelte";
   import Icon from "./Icon.svelte";
   import { api } from "../lib/api";
   import { openPath } from "../lib/dock";
   import type { IconName } from "../lib/panes";
+  import { settings } from "../lib/settings.svelte";
   import { toast } from "../lib/state.svelte";
   import { errReason } from "../lib/text";
   import { importNotesModal, closeImportModal } from "../lib/import-modal.svelte";
@@ -14,12 +15,23 @@
 
   let { onclose }: { onclose?: () => void } = $props();
 
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
+  const attachFolder = $derived(settings.config?.editor.attachment_folder || "attachments");
+
   const FORMAT_CARDS: readonly { id: ImportFormat; title: string; desc: string; icon: IconName }[] = [
     { id: "auto", title: "Auto-detect", desc: "Detect Notion, NoteCraft, or OneNote automatically", icon: "move-in" },
     { id: "notion", title: "Notion Export", desc: ".zip or folder of .md pages + .csv databases", icon: "table" },
     { id: "notecraft", title: "NoteCraft", desc: "_node.toml notebook folder or .zip archive", icon: "notes" },
     { id: "onenote", title: "OneNote", desc: ".one section file, HTML, or Markdown export", icon: "file-text" },
   ];
+
+  const visibleFormatCards = $derived(
+    devMode
+      ? FORMAT_CARDS
+      : FORMAT_CARDS.filter((c) => c.id !== "notecraft").map((c) =>
+          c.id === "auto" ? { ...c, desc: "Detect Notion, Obsidian, Markdown, or OneNote automatically" } : c,
+        ),
+  );
 
   let format = $state<ImportFormat>("auto");
   let targetDir = $state("Imported");
@@ -185,7 +197,7 @@
         <div class="field-group">
           <span class="field-label">Source format</span>
           <div class="fmt-grid" role="radiogroup" aria-label="Import source format">
-            {#each FORMAT_CARDS as card (card.id)}
+            {#each visibleFormatCards as card (card.id)}
               <button
                 type="button"
                 class="fmt-card"
@@ -264,28 +276,30 @@
           {/if}
         </div>
 
-        <!-- 3: Local Path on Disk -->
-        <div class="field-group">
-          <label class="field-label" for="kandinsky-import-local">Or import from a local path on disk</label>
-          <div class="local-row">
-            <input
-              id="kandinsky-import-local"
-              type="text"
-              data-testid="import-local-path"
-              placeholder="C:\path\to\Notion-Export or section.one…"
-              bind:value={localPath}
-              disabled={busy}
-              onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); void runLocalPathImport(); } }}
-            />
-            <button
-              type="button"
-              class="imp-submit-btn"
-              data-testid="import-local-submit"
-              disabled={busy || !localPath.trim()}
-              onclick={() => void runLocalPathImport()}
-            >Import path</button>
+        {#if devMode}
+          <!-- 3: Local Path on Disk -->
+          <div class="field-group">
+            <label class="field-label" for="kandinsky-import-local">Or import from a local path on disk</label>
+            <div class="local-row">
+              <input
+                id="kandinsky-import-local"
+                type="text"
+                data-testid="import-local-path"
+                placeholder="C:\path\to\Notion-Export or section.one…"
+                bind:value={localPath}
+                disabled={busy}
+                onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); void runLocalPathImport(); } }}
+              />
+              <button
+                type="button"
+                class="imp-submit-btn"
+                data-testid="import-local-submit"
+                disabled={busy || !localPath.trim()}
+                onclick={() => void runLocalPathImport()}
+              >Import path</button>
+            </div>
           </div>
-        </div>
+        {/if}
 
         {#if errorMsg}
           <div class="err-banner" role="alert">
@@ -327,7 +341,7 @@
               </div>
               <div class="stat-tile">
                 <span class="stat-num">{report.attachments_saved}</span>
-                <span class="stat-lbl">Attachments in <code>zAttachments/</code></span>
+                <span class="stat-lbl">Attachments in <code>{attachFolder}/</code></span>
               </div>
             </div>
 

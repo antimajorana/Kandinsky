@@ -3,6 +3,7 @@
   import Dialog from "./Dialog.svelte";
   import Icon from "./Icon.svelte";
   import { shownName } from "../lib/paths";
+  import { settings } from "../lib/settings.svelte";
   import { toast } from "../lib/state.svelte";
   import { errText } from "../lib/text";
   import { closeVoiceRecorder, saveVoiceRecording, voiceRecorder } from "../lib/voice-recorder.svelte";
@@ -333,7 +334,7 @@
           {#each bars as lv, idx (idx)}<span class="vr-bar" style:--lv={lv.toFixed(3)}></span>{/each}
         </div>
         <div class="vr-status">
-          {#if phase === "idle"}Ready — saves into <code>zAttachments/recording-….{recordedExt}</code>
+          {#if phase === "idle"}Ready — saves into <code>{settings.config?.editor.attachment_folder || "attachments"}/recording-….{recordedExt}</code>
           {:else if phase === "requesting"}Requesting microphone permission…
           {:else if phase === "recording"}Recording live audio…
           {:else if phase === "paused"}Recording paused

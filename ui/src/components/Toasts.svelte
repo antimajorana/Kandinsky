@@ -10,8 +10,9 @@
   const ICON: Record<Toast["kind"], IconName> = { info: "circle", success: "check", error: "error" };
   let copied = $state(0);
 
-  function copy(t: Toast) {
-    void navigator.clipboard?.writeText(t.body ? `${t.title}\n${t.body}` : t.title).then(() => { copied = t.id; setTimeout(() => { if (copied === t.id) copied = 0; }, 1500); }, () => {});
+  function copyToast(t: Toast) {
+    const text = t.rawDetails ?? (t.body ? `${t.title}\n${t.body}` : t.title);
+    void navigator.clipboard?.writeText(text).then(() => { copied = t.id; setTimeout(() => { if (copied === t.id) copied = 0; }, 1500); }, () => {});
   }
   // kept while the pointer is on it or the focus is in it (a keyboard user tabbing to Undo); let go once neither is
   const release = (t: Toast, el: HTMLElement, to: EventTarget | null = null) => {
@@ -29,12 +30,17 @@
       <div class="body">
         <strong>{t.title}{#if t.count > 1}<span class="count">×{t.count}</span>{/if}</strong>
         {#if t.body}<span class="msg">{t.body}</span>{/if}
-        {#if t.actions.length}
-          <span class="acts">{#each t.actions as a (a.label)}<button type="button" class="act" onclick={() => act(t, a)}>{a.label}</button>{/each}</span>
+        {#if t.actions.length || t.kind === "error"}
+          <span class="acts">
+            {#each t.actions as a (a.label)}<button type="button" class="act" onclick={() => act(t, a)}>{a.label}</button>{/each}
+            {#if t.kind === "error"}
+              <button type="button" class="toast-copy" onclick={() => copyToast(t)}>{copied === t.id ? "Copied" : "Copy details"}</button>
+            {/if}
+          </span>
         {/if}
       </div>
       <span class="tools">
-        {#if t.kind === "error"}<button type="button" class="tool" title="Copy the message" aria-label="Copy the message" onclick={() => copy(t)}><Icon name={copied === t.id ? "check" : "copy"} size={13} /></button>{/if}
+        {#if t.kind === "error"}<button type="button" class="tool" title="Copy details" aria-label="Copy the message" onclick={() => copyToast(t)}><Icon name={copied === t.id ? "check" : "copy"} size={13} /></button>{/if}
         <button type="button" class="tool" title="Close" aria-label="Close" onclick={() => dismissToast(t.id)}><Icon name="close" size={13} /></button>
       </span>
       {#key t.shown}<span class="left" style="animation-duration:{t.life}ms"></span>{/key}
@@ -63,6 +69,9 @@
   .act { padding: 2px 10px; border: 1px solid color-mix(in srgb, var(--kind) 45%, var(--border)); border-radius: var(--radius-sm); background: var(--bg);
     color: var(--kind); font: inherit; font-size: calc(12.5px * var(--ui-scale, 1)); font-weight: 600; cursor: pointer; }
   .act:hover { background: color-mix(in srgb, var(--kind) 12%, var(--bg)); }
+  .toast-copy { padding: 2px 9px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg);
+    color: var(--text-muted); font: inherit; font-size: calc(11.5px * var(--ui-scale, 1)); font-weight: 500; cursor: pointer; }
+  .toast-copy:hover { color: var(--text); background: var(--bg-hover); border-color: var(--border-strong); }
   .count { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--bg-alt); color: var(--text-muted); font-weight: 500; font-size: .85em; }
   .msg { color: var(--text-muted); font-size: calc(12.5px * var(--ui-scale, 1)); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 12em; overflow-y: auto; }
   .tools { flex: none; display: flex; gap: 2px; margin-top: -3px; }

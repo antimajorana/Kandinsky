@@ -36,6 +36,7 @@
 
   let { spec, panel }: PaneProps<"pdf"> = $props();
   const arxivId = $derived(extractArxivId(spec.path));
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
   let selPassage = $state(""), selPage = $state(1), selAt = $state<{ left: number; top: number } | null>(null);
   let toolbarSendOpen = $state(false);
   let container: HTMLDivElement;
@@ -461,10 +462,12 @@
     <button class="icon-btn" title="This paper's note (its <citekey>.md), beside the PDF" aria-label="Paper's note" onclick={() => void notesBeside(spec.path)}><Icon name="file-text" size={14} /></button>
     <button class="icon-btn" title="Export a copy with the marks inside, as annotations any PDF reader shows — x (marked).pdf, beside this one. Shift+click: drawn into the pages, for printing — x (marked, flat).pdf" aria-label="Export with marks" onclick={(e) => void exportWithMarks(spec.path, e.shiftKey ? "flat" : "annotations")}><Icon name="pdf" size={14} /></button>
     <button class="icon-btn" title="Write the highlights and their comments into the paper's note — the same <citekey>.md the note button opens" aria-label="Highlights into the note" onclick={toNotes}><Icon name="quote" size={14} /></button>
-    <span class="sep"></span>
-    <button class="send-agent-btn" title="Send selected passage or equation to Antigravity, Claude, or Solver" onclick={(e) => { e.stopPropagation(); toolbarSendOpen = !toolbarSendOpen; }}>Send to Agent ▾</button>
+    {#if devMode}
+      <span class="sep"></span>
+      <button class="send-agent-btn" title="Send selected passage or equation to Antigravity, Claude, or Solver" onclick={(e) => { e.stopPropagation(); toolbarSendOpen = !toolbarSendOpen; }}>Send to Agent ▾</button>
+    {/if}
   </div>
-  {#if toolbarSendOpen}
+  {#if devMode && toolbarSendOpen}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div class="agent-menu" tabindex="-1" onclick={(e) => e.stopPropagation()} role="menu">
       <button role="menuitem" onclick={() => void sendToAgent("antigravity")}>Send to Antigravity</button>
@@ -497,7 +500,7 @@
     <div class="viewer-wrap" bind:this={wrap}>
       {#if picked && barAt}
         <PdfMarkBar mark={picked} at={barAt} path={spec.path} onrecolor={(hex) => editPicked(recoloured(picked!, hex))} onreword={(t) => editPicked(reworded(picked!, t))} ondelete={deletePicked} onclose={unpick} />
-      {:else if selPassage && selAt}
+      {:else if devMode && selPassage && selAt}
         <div class="sel-pill" style:left="{selAt.left}px" style:top="{selAt.top}px" role="toolbar" aria-label="Send selected PDF passage to agent" data-testid="pdf-selection-bar">
           {#if arxivId}<span class="arxiv-tag">arXiv:{arxivId}</span>{/if}
           <span class="sel-lbl">Send p.{selPage}:</span>

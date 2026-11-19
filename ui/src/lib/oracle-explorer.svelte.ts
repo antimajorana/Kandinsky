@@ -2,6 +2,7 @@
 // hides AI agent plumbing from the FileTree by default (while keeping every file linkable and searchable),
 // and assigns Bauhaus "Several Circles" pigments to semantic wiki/research folders.
 import { load, save } from "./prefs";
+import { settings } from "./settings.svelte";
 
 export const HIDE_PLUMBING_KEY = "kandinsky.hideAgentPlumbing";
 
@@ -46,7 +47,7 @@ function normPath(path: string): string {
 
 /** True when `path` is agent/vault plumbing hidden from the Explorer tree by default. */
 export function isAgentPlumbing(path: string | undefined): boolean {
-  if (!path) return false;
+  if (!settings.config?.developer_mode || !path) return false;
   const p = normPath(path);
   return PLUMBING_EXACT.has(p) || PLUMBING_PREFIXES.some((pre) => p.startsWith(pre));
 }
@@ -58,7 +59,7 @@ export interface FolderTint {
 
 /** Bauhaus "Several Circles" semantic pigment for Oracle wiki and problem folders. */
 export function folderTint(path: string | undefined): FolderTint | null {
-  if (!path) return null;
+  if (!settings.config?.developer_mode || !path) return null;
   const p = normPath(path);
   if (p === "wiki/concepts" || p.startsWith("wiki/concepts/")) {
     return { color: "var(--accent)", dot: "var(--accent)" };

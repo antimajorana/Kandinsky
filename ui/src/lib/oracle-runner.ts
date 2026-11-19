@@ -2,6 +2,7 @@
 // auto-installs/enables `oracle-runner` on first use and wraps `api.pluginHelper`.
 import { api } from "./api";
 import { loadPlugins, pluginOn, plugins, setPluginOn } from "./plugins.svelte";
+import { settings } from "./settings.svelte";
 
 const PLUGIN_ID = "oracle-runner";
 
@@ -126,6 +127,9 @@ export function runJupyterNotebook(opts: {
   timeout?: number;
 }): Promise<JupyterNotebookRunResponse> {
   const timeout = opts.timeout ?? 180;
+  if (!settings.config?.developer_mode) {
+    return api.notebookRun({ path: opts.path, cells: opts.cells, timeout }) as Promise<JupyterNotebookRunResponse>;
+  }
   return callRunner<JupyterNotebookRunResponse>("runJupyterNotebook", opts, timeout);
 }
 
@@ -137,6 +141,13 @@ export function runJupyterCell(opts: {
   timeout?: number;
 }): Promise<JupyterNotebookRunResponse> {
   const timeout = opts.timeout ?? 120;
+  if (!settings.config?.developer_mode) {
+    return api.notebookRun({
+      path: opts.path,
+      cells: [{ index: opts.index, source: opts.source }],
+      timeout,
+    }) as Promise<JupyterNotebookRunResponse>;
+  }
   return callRunner<JupyterNotebookRunResponse>(
     "runJupyterCell",
     { path: opts.path, cells: [{ index: opts.index, source: opts.source }], kernel: opts.kernel ?? "auto" },

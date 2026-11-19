@@ -4,7 +4,6 @@
   import Icon from "../Icon.svelte";
   import PlatformChips from "./PlatformChips.svelte";
   import { api } from "../../lib/api";
-  import { confirmDialog } from "../../lib/confirm";
   import type { Available } from "../../lib/gen/Available";
   import { OBSIDIAN_BRIDGE } from "../../lib/obsidian-plugin-map";
   import { pluginLog } from "../../lib/plugin-log.svelte";
@@ -13,7 +12,8 @@
   import { BUILTINS } from "../../lib/builtin-plugins";
   import { openSettingsAt } from "../../lib/settings-nav.svelte";
   import { plugins, pluginOn, pluginBlocked, pluginSpec, loadPlugins } from "../../lib/plugins.svelte";
-  import { changedSettings, installFrom, installPlugin, isOff, mayOf, partsOf, removePlugin, switchPlugin, updatePlugin } from "../../lib/plugin-manage";
+  import { changedSettings, confirmPluginPermissions, hasSensitivePermissions, installFrom, installPlugin, isOff, mayOf, partsOf, removePlugin, switchPlugin, updatePlugin } from "../../lib/plugin-manage";
+  import { settings } from "../../lib/settings.svelte";
   import { toast } from "../../lib/state.svelte";
   import { errText } from "../../lib/text";
   import { onMount } from "svelte";
@@ -32,7 +32,7 @@
   let trustedBins = $state<TrustedBinary[]>([]);
   let busyIds = $state<Record<string, boolean>>({});
   let batchBusy = $state(false);
-  let trashBusy = $state(false);
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
 
   async function refreshCatalog(): Promise<void> {
     const [avail, obs, bins] = await Promise.all([
@@ -60,12 +60,6 @@
 
   const installedById = $derived(new Map(plugins.list.map((p) => [p.id, p])));
   const catalogById = $derived(new Map(catalog.map((a) => [a.id, a])));
-  const solverInstalled = $derived(installedById.get("solver"));
-  const solverOffer = $derived(catalogById.get("solver"));
-  const showSolverCard = $derived(Boolean((solverInstalled || solverOffer) && matches("solver", "solver agent", "math", "physics", "app")));
-  const agyInstalled = $derived(installedById.get("antigravity"));
-  const agyOffer = $derived(catalogById.get("antigravity"));
-  const showAgyCard = $derived(Boolean((agyInstalled || agyOffer) && matches("antigravity", "agy", "google", "claude", "agent", "mcp")));
 
   const neededObsidian = $derived(obsidianList.filter((o) => OBSIDIAN_BRIDGE[o.id]?.kind !== "unnecessary"));
   const unnecessaryObsidian = $derived(obsidianList.filter((o) => OBSIDIAN_BRIDGE[o.id]?.kind === "unnecessary"));
@@ -103,7 +97,7 @@
     if (busyIds[targetId]) return;
     const existing = installedById.get(targetId);
     if (existing) {
-      switchPlugin(targetId, isOff(targetId));
+      await switchPlugin(targetId, isOff(targetId));
       return;
     }
     const offer = catalogById.get(targetId);
@@ -113,7 +107,12 @@
     }
     busyIds = { ...busyIds, [targetId]: true };
     try {
-      await installFrom(offer.url);
+      await installFrom(offer.url, {
+        id: offer.id,
+        title: offer.title,
+        permissions: offer.permissions,
+        has_helper: offer.has_helper,
+      });
       await refreshCatalog();
     } finally {
       const next = { ...busyIds };
@@ -130,11 +129,22 @@
       for (const id of missingRecommendedTargets) {
         const existing = installedById.get(id);
         if (existing) {
-          if (isOff(id)) { switchPlugin(id, true); count++; }
+          if (isOff(id)) {
+            if (hasSensitivePermissions(existing.permissions, existing.has_helper)) {
+              const ok = await confirmPluginPermissions(existing.title, existing.permissions, existing.has_helper, "Enable");
+              if (!ok) continue;
+            }
+            await switchPlugin(id, true);
+            count++;
+          }
           continue;
         }
         const offer = catalogById.get(id);
         if (!offer) continue;
+        if (hasSensitivePermissions(offer.permissions, offer.has_helper)) {
+          const ok = await confirmPluginPermissions(offer.title, offer.permissions, offer.has_helper, "Install");
+          if (!ok) continue;
+        }
         await api.installPlugin(offer.url, offer.id);
         count++;
       }
@@ -145,28 +155,6 @@
       toast("Could not enable all plugins", errText(e), "error", 9000);
     } finally {
       batchBusy = false;
-    }
-  }
-
-  async function trashUnnecessaryObsidian(): Promise<void> {
-    if (trashBusy || !unnecessaryObsidian.length) return;
-    const names = unnecessaryObsidian.map((o) => o.name).join(", ");
-    const ok = await confirmDialog(
-      `Move ${unnecessaryObsidian.length} unnecessary Obsidian plugins to Trash?`,
-      `${names} — moved safely to .kandinsky/trash/ so nothing is permanently deleted.`,
-      "Move to Trash",
-      false,
-    );
-    if (!ok) return;
-    trashBusy = true;
-    try {
-      const r = await api.removeObsidianPlugins(unnecessaryObsidian.map((o) => o.id));
-      await refreshCatalog();
-      toast(`Moved ${r.moved.length} plugin${r.moved.length === 1 ? "" : "s"} to Trash`, "Saved under .kandinsky/trash/.", "success", 8000);
-    } catch (e) {
-      toast("Could not move plugins", errText(e), "error", 9000);
-    } finally {
-      trashBusy = false;
     }
   }
 
@@ -194,73 +182,21 @@
         </button>
       {/if}
       <button class="pill" class:active={tab === "catalog"} onclick={() => (tab = "catalog")} data-testid="browse-extensions-tab">
-        Browse Extensions <span class="cnt">{sortedCatalog.length}</span>
+        Browse Plugins <span class="cnt">{sortedCatalog.length}</span>
       </button>
     </div>
   </div>
 
-  {#if showSolverCard && (tab === "installed" || tab === "catalog")}
-    {@const solverOn = !!(solverInstalled && !isOff("solver"))}
-    {@const solverNeedsUpdate = !!(solverInstalled && solverOffer?.version && solverInstalled.version !== solverOffer.version)}
-    <div class="solver-feature">
-      <span class="solver-badge" aria-hidden="true"><Icon name="sigma" size={16} /></span>
-      <div class="solver-copy">
-        <b>Solver App</b>
-        <span class="badge ok">Kandinsky App</span>
-        <span class="d">Pins Solver to the top of your left sidebar, launches local Solver services silently, docks Solver beside your notes, and imports verified derivations into Markdown notes in one click.</span>
-      </div>
-      <span class="acts">
-        {#if solverInstalled && solverOn && solverInstalled.view}
-          {#if solverNeedsUpdate && solverOffer}
-            <button class="btn small" onclick={() => void installFrom(solverOffer.url).then(refreshCatalog)}>Update to v{solverOffer.version}</button>
-          {/if}
-          <button class="btn primary" onclick={() => open(pluginSpec(solverInstalled))}><Icon name="sigma" size={13} /> Open Solver</button>
-          <button class="btn small" onclick={() => void openPluginSettings("solver")}>Settings…</button>
-        {:else}
-          <button class="btn primary" disabled={!!busyIds["solver"]} onclick={() => void enableByTargetId("solver")}>
-            <Icon name="sigma" size={13} />
-            {busyIds["solver"] ? "Adding…" : "Add Solver to Sidebar"}
-          </button>
-        {/if}
-      </span>
-    </div>
-  {/if}
-
-  {#if showAgyCard && (tab === "installed" || tab === "catalog")}
-    {@const agyOn = !!(agyInstalled && !isOff("antigravity"))}
-    {@const agyNeedsUpdate = !!(agyInstalled && agyOffer?.version && agyInstalled.version !== agyOffer.version)}
-    <div class="solver-feature">
-      <span class="solver-badge" aria-hidden="true"><Icon name="claude" size={16} /></span>
-      <div class="solver-copy">
-        <b>Google Antigravity</b>
-        <span class="badge ok">AI Agent</span>
-        <span class="d">Integrates Antigravity (agy) like Claude: live status-bar model switcher (Carbon, Argon, Hydrogen), active subagent monitor, terminal sessions (+ menu &amp; Super+K), and Kandinsky MCP bridge.</span>
-      </div>
-      <span class="acts">
-        {#if agyInstalled && agyOn && agyInstalled.view}
-          {#if agyNeedsUpdate && agyOffer}
-            <button class="btn small" onclick={() => void installFrom(agyOffer.url).then(refreshCatalog)}>Update to v{agyOffer.version}</button>
-          {/if}
-          <button class="btn primary" onclick={() => open(pluginSpec(agyInstalled))}><Icon name="claude" size={13} /> Open Antigravity</button>
-          <button class="btn small" onclick={() => void openPluginSettings("antigravity")}>Settings…</button>
-        {:else}
-          <button class="btn primary" disabled={!!busyIds["antigravity"]} onclick={() => void enableByTargetId("antigravity")}>
-            <Icon name="claude" size={13} />
-            {busyIds["antigravity"] ? "Enabling…" : "Enable Antigravity"}
-          </button>
-        {/if}
-      </span>
-    </div>
-  {/if}
-
   {#if tab === "installed"}
     <div class="group-head">
       <h3>Installed &amp; Core Plugins <span class="n">{shownBuiltins.length + shownInstalled.length}</span></h3>
-      <span class="group-acts">
-        <button class="btn small" onclick={installPlugin} title="Install from a folder, git repository, or archive"><Icon name="arrow-down" size={13} /> Install from path…</button>
-        <button class="btn small" onclick={onnew}><Icon name="plus" size={13} /> New plugin</button>
-        <button class="btn small" onclick={onblock} title="Create a note/page block from a template"><Icon name="plus" size={13} /> New block</button>
-      </span>
+      {#if devMode}
+        <span class="group-acts">
+          <button class="btn small" onclick={installPlugin} title="Install from a folder, git repository, or archive"><Icon name="arrow-down" size={13} /> Install from path…</button>
+          <button class="btn small" onclick={onnew}><Icon name="plus" size={13} /> New plugin</button>
+          <button class="btn small" onclick={onblock} title="Create a note/page block from a template"><Icon name="plus" size={13} /> New block</button>
+        </span>
+      {/if}
     </div>
     <ul>
       {#each shownBuiltins as b (b.id)}
@@ -370,12 +306,8 @@
       {/each}
     </ul>
     {#if unnecessaryObsidian.length}
-      <div class="prune-bar">
-        <span>{unnecessaryObsidian.length} unnecessary Obsidian plugin{unnecessaryObsidian.length === 1 ? "" : "s"} hidden (already built into Kandinsky or unused).</span>
-        <button class="btn small" disabled={trashBusy} onclick={() => void trashUnnecessaryObsidian()}>
-          <Icon name="trash" size={12} />
-          {trashBusy ? "Moving…" : `Move ${unnecessaryObsidian.length} from .obsidian to Trash…`}
-        </button>
+      <div class="prune-bar" data-testid="obsidian-readonly-summary">
+        <span>Built into Kandinsky ({unnecessaryObsidian.length}) — your <code>.obsidian/</code> folder is left untouched so Obsidian keeps working side-by-side.</span>
       </div>
     {/if}
   {/if}
@@ -417,6 +349,21 @@
               <span class="badge muted-badge">{a.tier}</span>
             {/if}
             {#if inst && !isOff(inst.id)}<span class="badge ok">installed</span>{/if}
+            {#if a.permissions?.net?.length}
+              <span class="badge perm" title="Network access: {a.permissions.net.join(', ')}">Network</span>
+            {/if}
+            {#if a.permissions?.secrets}
+              <span class="badge perm" title="May store and read passwords or API secrets">Passwords/Secrets</span>
+            {/if}
+            {#if a.has_helper}
+              <span class="badge perm" title="Runs a local helper program">Runs helper</span>
+            {/if}
+            {#if a.permissions?.exec?.length}
+              <span class="badge perm" title="Runs external programs: {a.permissions.exec.join(', ')}">External programs</span>
+            {/if}
+            {#if a.permissions && !a.permissions.net.length && !a.permissions.secrets && !a.permissions.exec.length && !a.has_helper}
+              <span class="badge perm-safe" title="Only reads and edits notes inside this workspace">Local notes only</span>
+            {/if}
             {#if a.description}<span class="d">{a.description}</span>{/if}
           </div>
           <span class="acts">
@@ -431,12 +378,12 @@
           </span>
         </li>
       {:else}
-        <li class="muted">No matching extensions in catalog.</li>
+        <li class="muted">No matching plugins in catalog.</li>
       {/each}
     </ul>
   {/if}
 
-  {#if trustedBins.length > 0 && tab === "installed"}
+  {#if devMode && trustedBins.length > 0 && tab === "installed"}
     <div class="group-head spaced">
       <h3>Trusted External Binaries <span class="n">{trustedBins.length}</span></h3>
     </div>
@@ -486,6 +433,8 @@
   .badge.obs { color: var(--text); background: var(--bg-hover); }
   .badge.core { color: var(--text-muted); }
   .badge.muted-badge { color: var(--text-faint); border-color: var(--border); font-weight: 400; }
+  .badge.perm { color: var(--yellow); background: var(--yellow-soft); border-color: color-mix(in srgb, var(--yellow) 35%, transparent); }
+  .badge.perm-safe { color: var(--green); background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 35%, transparent); }
   .builtin-dot { width: 34px; height: 20px; display: grid; place-items: center; color: var(--accent); flex: none; }
   .builtin-dot.faint { color: var(--text-faint); }
   .d { color: var(--text-muted); font-size: calc(12.5px * var(--ui-scale, 1)); flex-basis: 100%; }
@@ -513,7 +462,4 @@
   .problems { color: var(--red); text-align: left; padding: 0; }
   .problems:hover { text-decoration: underline; }
   .prune-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--bg-hover); color: var(--text-muted); font-size: calc(12px * var(--ui-scale, 1)); }
-  .solver-feature { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 10px 12px; margin: 2px 0 14px; border: 1px solid var(--accent); border-radius: var(--radius-sm); background: var(--bg-hover); }
-  .solver-badge { width: 32px; height: 32px; border-radius: 7px; background: var(--accent); color: var(--bg); display: grid; place-items: center; flex: none; }
-  .solver-copy { flex: 1 1 280px; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 </style>

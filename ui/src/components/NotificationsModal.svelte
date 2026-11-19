@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Nootion × Kandinsky Notifications & Inbox modal: plugin notification sources, sync/rescue alerts, and recent captures.
+  // Notion-style × Kandinsky Notifications & Inbox modal: plugin notification sources, sync/rescue alerts, and recent captures.
   import { onMount } from "svelte";
   import Dialog from "./Dialog.svelte";
   import Icon from "./Icon.svelte";

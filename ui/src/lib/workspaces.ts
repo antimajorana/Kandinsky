@@ -78,6 +78,10 @@ const PRESETS: { id: WorkspacePresetId; cmd: string; label: string; detail: stri
   { id: "focus-sheet", cmd: "ui.workspace.preset.focus", label: "◎ Focus Sheet", detail: "Distraction-free centered writing", icon: "file-text" },
 ];
 
+export function visiblePresets(developerMode: boolean): typeof PRESETS {
+  return developerMode ? PRESETS : PRESETS.filter((p) => p.id !== "research-quad" && p.id !== "derivation-studio");
+}
+
 const STARTER_IPYNB = JSON.stringify({
   cells: [
     { cell_type: "markdown", metadata: {}, source: ["# Derivation Scratchpad\n", "Symbolic & numerical checks beside your Kandinsky note.\n"] },
@@ -332,12 +336,14 @@ async function pickBestPdfSpec(): Promise<PaneSpec> {
   }
   const rec = await firstRecentMatching(/\.pdf$/i);
   if (rec) return { kind: "pdf", path: rec };
-  const paperFiles = (await exists("zAI/papers"))
+  const devMode = Boolean(settings.config?.developer_mode);
+  const hasZaiPapers = devMode && (await exists("zAI/papers"));
+  const paperFiles = hasZaiPapers
     ? (await api.files({ under: "zAI/papers" }).catch(() => [])).filter((f) => /\.pdf$/i.test(f)) : [];
   if (paperFiles.length) return { kind: "pdf", path: paperFiles[0] };
   const vaultPdfs = (await api.files().catch(() => [])).filter((f) => /\.pdf$/i.test(f));
   if (vaultPdfs.length) return { kind: "pdf", path: vaultPdfs[0] };
-  return { kind: "explorer", source: "vault", place: "", ...((await exists("zAI/papers")) ? { path: "zAI/papers" } : {}) };
+  return { kind: "explorer", source: "vault", place: "", ...(hasZaiPapers ? { path: "zAI/papers" } : {}) };
 }
 
 async function pickBestNotebookSpec(): Promise<PaneSpec> {
@@ -489,8 +495,9 @@ export function askManageWorkspaces(): void {
     placeholder: "Choose a 1-click preset or load / manage saved workspaces…", tag: "Workspaces", icon: "grid",
     items: async () => {
       const names = await listWorkspaces();
+      const presets = visiblePresets(Boolean(settings.config?.developer_mode));
       return [
-        ...PRESETS.map((p) => ({ value: `preset:${p.id}`, title: p.label, detail: p.detail, icon: p.icon, section: "1-Click Research Presets" })),
+        ...presets.map((p) => ({ value: `preset:${p.id}`, title: p.label, detail: p.detail, icon: p.icon, section: "1-Click Presets" })),
         ...names.map((n) => ({ value: `load:${n}`, title: n, detail: workspaceState.active === n ? "Active · click to reload" : "Load saved workspace", icon: "panel-left" as const, section: "Saved Workspaces" })),
         { value: "action:save", title: "Save current layout as workspace…", detail: "Persist multi-pane Dockview split & sidebar state", icon: "plus" as const, section: "Manage" },
         ...names.flatMap((n) => [
@@ -531,8 +538,9 @@ export async function openWorkspacesMenu(e: MouseEvent, onclose?: () => void): P
   const r = target ? target.getBoundingClientRect() : { left: e.clientX, bottom: e.clientY };
   const x = r.left, y = r.bottom + 4;
   const names = await listWorkspaces();
+  const presets = visiblePresets(Boolean(settings.config?.developer_mode));
   const items: MenuItem[] = [
-    ...PRESETS.map((p): MenuItem => ({ label: p.label, detail: p.detail, icon: p.icon, hint: keysOf(p.cmd), run: () => void applyWorkspacePreset(p.id) })),
+    ...presets.map((p): MenuItem => ({ label: p.label, detail: p.detail, icon: p.icon, hint: keysOf(p.cmd), run: () => void applyWorkspacePreset(p.id) })),
     "sep",
     ...names.map((n): MenuItem => ({ label: n, detail: workspaceState.active === n ? "Active · click to reload" : "Saved workspace", icon: "panel-left", hint: keysOf(`workspace.${n}`), run: () => void switchWorkspace(n) })),
     ...(names.length ? ["sep" as const] : []),

@@ -53,12 +53,13 @@
   type Remote = { kind: "remote"; key: string; src: FileSource; place: string; dir: string; name: string; folder: boolean; depth: number; open: boolean; group?: boolean; title?: string };
   type Row = { kind: "entry"; e: TreeEntry; depth: number; open: boolean } | { kind: "empty"; depth: number; key: string; text?: string } | Remote;
   const keyOf = (r: Row) => (r.kind === "entry" ? r.e.path : r.key);
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
   function filterEntries(entries: TreeEntry[], dirNote?: string): TreeEntry[] {
     const base = shownEntries(entries, dirNote);
-    if (!oracleExplorer.hidePlumbing || treeView.showAll) return base;
+    if (!devMode || !oracleExplorer.hidePlumbing || treeView.showAll) return base;
     return base.filter((e) => !isAgentPlumbing(e.path));
   }
-  const hasPlumbing = $derived(!treeView.showAll && roots.some((e) => isAgentPlumbing(e.path)));
+  const hasPlumbing = $derived(devMode && !treeView.showAll && roots.some((e) => isAgentPlumbing(e.path)));
 
   /** Every row of the tree as it unfolds now, top to bottom; and the open folders drawn whose entries are not here yet. */
   const walked = $derived.by(() => {

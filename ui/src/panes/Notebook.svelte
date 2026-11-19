@@ -23,6 +23,7 @@
   } from "../lib/oracle-runner";
   import { shownName } from "../lib/paths";
   import { paneParks } from "../lib/registry";
+  import { settings } from "../lib/settings.svelte";
   import { toast } from "../lib/state.svelte";
   import { errText } from "../lib/text";
 
@@ -48,13 +49,14 @@
   let editingMd = $state<Record<string, boolean>>({});
   let openSendMenuId = $state<string | null>(null); // "header" or cell.id
 
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
   const isWln = $derived(nb ? nb.format === "wln" : /\.wln$/i.test(spec.path));
   const autoNeeds314 = $derived(
-    Boolean(nb?.cells.some((c) => c.kind === "code" && /\b(tenpy|qutip)\b/.test(c.source))),
+    devMode && Boolean(nb?.cells.some((c) => c.kind === "code" && /\b(tenpy|qutip)\b/.test(c.source))),
   );
   const effectiveKernelBadge = $derived(
     activeKernelLabel ||
-      (kernel === "jupyter314" || (kernel === "auto" && autoNeeds314) ? "jupyter314" : "jupyter"),
+      (devMode && (kernel === "jupyter314" || (kernel === "auto" && autoNeeds314)) ? "jupyter314" : "jupyter"),
   );
 
   function markDirty(next: boolean) {
@@ -387,9 +389,14 @@
       <label class="kernel-wrap" title="Python kernel environment">
         <span class="kernel-dot"></span>
         <select class="kernel-select" bind:value={kernel} aria-label="Jupyter kernel">
-          <option value="auto">Auto ({autoNeeds314 ? "3.14 TeNPy/QuTiP" : "Standard"})</option>
-          <option value="jupyter">Jupyter (Standard)</option>
-          <option value="jupyter314">Jupyter 3.14 (TeNPy / QuTiP)</option>
+          {#if devMode}
+            <option value="auto">Auto ({autoNeeds314 ? "3.14 TeNPy/QuTiP" : "Standard"})</option>
+            <option value="jupyter">Jupyter (Standard)</option>
+            <option value="jupyter314">Jupyter 3.14 (TeNPy / QuTiP)</option>
+          {:else}
+            <option value="auto">Python (auto)</option>
+            <option value="jupyter">Jupyter Python</option>
+          {/if}
         </select>
       </label>
       <span class="kernel-pill" title="Active Python environment">{effectiveKernelBadge}</span>
@@ -398,7 +405,7 @@
       <button class="nb-btn" onclick={() => addCell("code")} title="Insert Python code cell below"><Icon name="plus" size={12} /> Code</button>
       <button class="nb-btn" onclick={() => addCell("markdown")} title="Insert Markdown + KaTeX cell below"><Icon name="plus" size={12} /> Markdown</button>
       <button class="nb-btn" class:dirty disabled={saving} onclick={() => void saveNotebook()} title="Save .ipynb to disk (Ctrl+S)"><Icon name="check" size={13} /> {saving ? "Saving…" : dirty ? "Save*" : "Save"}</button>
-    {:else}
+    {:else if devMode}
       <div class="menu-anchor">
         <button class="nb-btn" onclick={(e) => { e.stopPropagation(); openSendMenuId = openSendMenuId === "header" ? null : "header"; }}>Send Cell to Solver / Agent ▾</button>
         {#if openSendMenuId === "header"}
@@ -472,17 +479,19 @@
                     {#if cell.runtimeMs !== undefined}<span class="ms-pill">{cell.runtimeMs} ms</span>{/if}
                     <span class="spacer"></span>
                     <button class="cell-act" onclick={() => copyCellToNote(cell)} title="Insert cell into active Markdown note">+ Note</button>
-                    <div class="menu-anchor">
-                      <button class="cell-act" onclick={(e) => { e.stopPropagation(); openSendMenuId = openSendMenuId === cell.id ? null : cell.id; }}>Send ▾</button>
-                      {#if openSendMenuId === cell.id}
-                        <!-- svelte-ignore a11y_click_events_have_key_events -->
-                        <div class="pop-menu" tabindex="-1" onclick={(e) => e.stopPropagation()} role="menu">
-                          <button role="menuitem" onclick={() => void sendCellToAgent("solver", cell)}>Solver</button>
-                          <button role="menuitem" onclick={() => void sendCellToAgent("antigravity", cell)}>Antigravity</button>
-                          <button role="menuitem" onclick={() => void sendCellToAgent("claude", cell)}>Claude</button>
-                        </div>
-                      {/if}
-                    </div>
+                    {#if devMode}
+                      <div class="menu-anchor">
+                        <button class="cell-act" onclick={(e) => { e.stopPropagation(); openSendMenuId = openSendMenuId === cell.id ? null : cell.id; }}>Send ▾</button>
+                        {#if openSendMenuId === cell.id}
+                          <!-- svelte-ignore a11y_click_events_have_key_events -->
+                          <div class="pop-menu" tabindex="-1" onclick={(e) => e.stopPropagation()} role="menu">
+                            <button role="menuitem" onclick={() => void sendCellToAgent("solver", cell)}>Solver</button>
+                            <button role="menuitem" onclick={() => void sendCellToAgent("antigravity", cell)}>Antigravity</button>
+                            <button role="menuitem" onclick={() => void sendCellToAgent("claude", cell)}>Claude</button>
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
                     {#if !isWln}
                       <button class="icon-xs" onclick={() => moveCell(cell.id, -1)} title="Move cell up"><Icon name="arrow-up" size={12} /></button>
                       <button class="icon-xs" onclick={() => moveCell(cell.id, 1)} title="Move cell down"><Icon name="arrow-down" size={12} /></button>

@@ -25,8 +25,10 @@
     { id: "ui.terminal.new", icon: "terminal", title: "Terminal", what: "A shell in the vault; AI agents run here too" },
     { id: "ui.settings", icon: "settings", title: "Settings", what: "Every option, with features to try on each page" },
   ];
-  const known = new Set(allCommands().map((c) => c.id));
-  const tour = TOUR.filter((t) => known.has(t.id));
+  const tour = $derived.by(() => {
+    const known = new Set(allCommands().map((c) => c.id));
+    return TOUR.filter((t) => known.has(t.id));
+  });
   const run = (id: string) => void allCommands().find((c) => c.id === id)?.run();
 
   let offered = $state<Available[] | null>(null);
@@ -37,7 +39,7 @@
 
   async function install(p: Available) {
     busy = p.id;
-    if (await installFrom(p.url)) await load();
+    if (await installFrom(p.url, { id: p.id, title: p.title, permissions: p.permissions, has_helper: p.has_helper })) await load();
     busy = null;
   }
 

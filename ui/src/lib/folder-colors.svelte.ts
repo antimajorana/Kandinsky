@@ -1,5 +1,5 @@
 // Notecraft-inspired custom folder colors (`.kandinsky/folder-colors.json`) + lightweight per-note `icon:`
-// frontmatter cache for the unified Nootion vault page tree. Keeps Markdown syntax 100% untouched.
+// frontmatter cache for the unified Notion-style vault page tree. Keeps Markdown syntax 100% untouched.
 import { SvelteMap } from "svelte/reactivity";
 import { api } from "./api";
 import { folderTint, type FolderTint } from "./oracle-explorer.svelte";

@@ -313,11 +313,14 @@
   }
 
   // a note a plugin draws its own way (a mail note as the mail): drawn over the editor, which stays loaded underneath
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
   const noteProps = $derived(isMarkdown(path) && status === "ready" ? frontmatterOf(docText)?.data : null);
   const isFullWidth = $derived(isMarkdown(path) ? (localFullWidth ?? (noteProps?.width === "full")) : Boolean(localFullWidth));
   const isResearchNote = $derived(
-    /(?:^|\/)(?:research|derivations|computations|papers|runs)\//i.test(path) ||
-    /^(?:computation|derivation|proof|experiment|research|literature)$/i.test(String(noteProps?.type ?? "")),
+    devMode && (
+      /(?:^|\/)(?:research|derivations|computations|papers|runs)\//i.test(path) ||
+      /^(?:computation|derivation|proof|experiment|research|literature)$/i.test(String(noteProps?.type ?? ""))
+    ),
   );
   const wordCount = $derived.by(() => {
     const body = splitFrontmatter(docText).body.trim();
@@ -492,7 +495,7 @@
         { label: "Zen mode (distraction-free)", hint: "F11", icon: "maximize" as const, run: () => { window.dispatchEvent(new CustomEvent("kandinsky:toggle-zen")); } },
         { label: "Toggle RTL / LTR text direction", hint: "Ctrl+Shift+X", icon: "text" as const, run: () => { window.dispatchEvent(new CustomEvent("kandinsky:toggle-bidi", { detail: { view: ed?.view ?? null } })); } },
         "sep",
-        ...(isMarkdown(path) && isResearchNote
+        ...(devMode && isMarkdown(path) && isResearchNote
           ? [
               { label: "Run c_lint verification", icon: "check" as const, run: () => triggerOracleButton(0) },
               { label: "File computation to Oracle Wiki…", icon: "bookmark" as const, run: () => triggerOracleButton(1) },
@@ -500,7 +503,9 @@
             ]
           : []),
         { label: "Page history & restore…", icon: "clock" as const, run: () => void showPageHistory() },
-        { label: blameOn ? "Hide Git blame" : "Git blame (line history)", icon: "clock" as const, run: () => void editors.get(panel.id)?.toggleBlame() },
+        ...(devMode
+          ? [{ label: blameOn ? "Hide Git blame" : "Git blame (line history)", icon: "clock" as const, run: () => void editors.get(panel.id)?.toggleBlame() }]
+          : []),
         "sep",
         { label: isMarkdown(path) ? "Move to Trash" : "Move file to Trash", icon: "trash" as const, danger: true, run: () => void trashThisNote() },
         ...(isMarkdown(path)

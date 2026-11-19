@@ -1,6 +1,6 @@
 <script lang="ts">
   // A Bases cell being edited, by the property's kind and column format: text, number (incl. progress/%/currency), date,
-  // floating Nootion status picker with 1-click presets + cycle + custom input, or a list as chips.
+  // floating Notion-style status picker with 1-click presets + cycle + custom input, or a list as chips.
   import Icon from "../Icon.svelte";
   import type { BaseColumn } from "../../lib/gen/BaseColumn";
   import type { PropertyKind } from "../../lib/gen/PropertyKind";
