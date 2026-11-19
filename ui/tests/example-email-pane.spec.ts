@@ -90,6 +90,53 @@ test("the inbox from the index: read marks read, keys move and archive, Undo bri
   await expect.poll(() => subjects("Trash")).toEqual(["Séminaire jeudi"]);
 });
 
+test("a conversation's right-click acts on it, not on the open one: its keys' commands, named as in the palette", async ({ page }) => {
+  const mail = await openPane(page);
+  const row = (s: string) => mail.locator(".list .row", { hasText: s });
+  await expect(row("Cluster time on iq")).toBeVisible({ timeout: 30_000 });
+  await row("Draft of the DCA section").click(); // open: the keys would act on this one
+  await row("Cluster time on iq").click({ button: "right" });
+  const menu = page.getByRole("menu");
+  for (const name of [/^Reply(?! all)/, /^Reply all/, /^Forward/, /^Archive/, /^Star/, /^Snooze…/, /^Move to…/, /^Delete/]) await expect(menu.getByRole("menuitem", { name })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("mail-row-menu.png") });
+  await menu.getByRole("menuitem", { name: /^Star/ }).click();
+  await expect.poll(() => box("INBOX").find((m) => m.subject === "Cluster time on iq")?.flags).toContain("\\Flagged");
+  expect(box("INBOX").find((m) => m.subject === "Draft of the DCA section")?.flags ?? []).not.toContain("\\Flagged");
+  // starred now: the same row reads Unstar
+  await row("Cluster time on iq").click({ button: "right" });
+  await page.getByRole("menu").getByRole("menuitem", { name: /^Unstar/ }).click();
+  await expect.poll(() => box("INBOX").find((m) => m.subject === "Cluster time on iq")?.flags).not.toContain("\\Flagged");
+});
+
+test("the vault's search lists the mail in its own group, and a hit opens the message in the Email pane", async ({ page }) => {
+  const mail = await openPane(page); // the index synced
+  await expect(mail.locator(".list .row", { hasText: "Cluster time on iq" })).toBeVisible({ timeout: 30_000 });
+  await page.keyboard.press("Control+Shift+F");
+  const pane = page.locator(".search-pane");
+  await pane.getByLabel("Search", { exact: true }).fill("cluster time");
+  const hit = pane.locator(".plugin-hit", { hasText: "Cluster time on iq" });
+  await expect(hit).toBeVisible({ timeout: 15_000 });
+  await expect(pane.locator(".group-label", { hasText: "Email" })).toBeVisible();
+  for (const scheme of ["dark", "light"] as const) { // judged in both themes (docs/guides/UI-STYLE.md)
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.screenshot({ path: test.info().outputPath(`vault-search-mail-${scheme}.png`) });
+  }
+  // the keys reach it after the files' rows: ↓ until it is the chosen row, then Enter opens it
+  const box = pane.getByLabel("Search", { exact: true });
+  for (let i = 0; i < 40 && !(await hit.evaluate((b) => b.classList.contains("sel"))); i++) await box.press("ArrowDown");
+  await expect(hit).toHaveClass(/sel/);
+  await box.press("Enter");
+  await expect(page.locator(".mail .reader .subject")).toContainText("Cluster time on iq", { timeout: 15_000 });
+  // the pane's own search: the best matches first, the newest first one click away
+  await mail.getByPlaceholder("Search mail…").fill("cluster");
+  const order = mail.locator(".chips button", { hasText: /Best match|Newest first/ });
+  await expect(order).toHaveText("Best match");
+  await expect(mail.locator(".list .row", { hasText: "Cluster time on iq" })).toBeVisible();
+  await order.click();
+  await expect(order).toHaveText("Newest first");
+  await expect(mail.locator(".list .row", { hasText: "Cluster time on iq" })).toBeVisible();
+});
+
 test("a reply leaves threaded, quoted under the signature, Bcc never shown; a sent copy is kept", async ({ page }) => {
   test.setTimeout(120_000);
   const mail = await openPane(page);
@@ -130,6 +177,12 @@ test("search with operators, an HTML mail drawn safely, and Save as note drawn a
   const frame = reader.frameLocator("iframe.frame").first();
   await expect(frame.locator("p.hl")).toHaveText("Styled heading");
   await expect(frame.locator("a", { hasText: "the talk page" })).toHaveAttribute("href", "https://example.org/talk");
+  // Shift+click: the system's browser, through the desktop's core (web-links.ts openOutside)
+  const outside: string[] = [];
+  await page.route("**/api/open-outside", async (r) => { outside.push(r.request().postDataJSON().url); await r.fulfill({ status: 204 }); });
+  await frame.locator("a", { hasText: "the talk page" }).click({ modifiers: ["Shift"] });
+  await expect.poll(() => outside).toEqual(["https://example.org/talk"]);
+  await mail.locator(".list .row").first().click(); // the keys below are the pane's, not the frame's
   await expect(frame.locator("script")).toHaveCount(0);
   await expect(frame.locator("img[alt=logo]")).toHaveAttribute("src", /^data:image\/png;base64,/);
   await expect(frame.locator("details.kandinsky-quoted")).toHaveCount(1);
@@ -244,6 +297,16 @@ test("Ctrl+F finds in the conversation's frames; a pasted picture goes in the te
   });
   await expect(body).toContainText("![](cid:pasted-1.png)");
   await expect(form.locator(".file")).toContainText("pasted-1.png");
+  // a file dragged from the file tree onto the text attaches it, and its path is not typed into the message
+  await body.evaluate((t: HTMLElement) => {
+    const dt = new DataTransfer();
+    dt.setData("application/x-kandinsky-path", "papers/report.pdf");
+    dt.setData("text/plain", "papers/report.pdf");
+    for (const type of ["dragover", "drop"]) t.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(form.locator(".file", { hasText: "report.pdf" })).toBeVisible();
+  await expect(body).not.toContainText("papers/report.pdf");
+  await form.getByRole("button", { name: "Remove report.pdf" }).click(); // not in this vault: not sent
   await form.getByRole("button", { name: "Preview" }).click();
   await expect(form.locator(".preview img")).toHaveAttribute("src", /^data:image\/png;base64,/);
   await page.screenshot({ path: "target/email-compose-paste.png" });
@@ -254,4 +317,40 @@ test("Ctrl+F finds in the conversation's frames; a pasted picture goes in the te
   expect(sent.toLowerCase()).toContain("multipart/related");
   expect(sent).toMatch(/Content-ID: <pasted-1\.png>/i);
   expect(sent).toContain("[image: pasted-1.png]");
+});
+
+test("Link: a conversation linked to any note is kept in its own note's links, listed under Linked, the target untouched", async ({ page, request }) => {
+  test.setTimeout(120_000);
+  await put(request, "notes/Link target.md", "# Link target\n\nMy own text.\n");
+  const mail = await openPane(page);
+  // whichever conversation is first: the tests before this one move the stand-in server's mail about
+  const first = mail.locator(".list .row").first();
+  await expect(first).toBeVisible({ timeout: 30_000 });
+  const subject = (await first.locator(".subject").innerText()).trim();
+  await first.click();
+  const reader = mail.getByRole("region", { name: "The conversation" });
+  await expect(reader.locator("h2.subject")).toContainText(subject);
+  // a visible Link button, not an entry hidden under ⋯
+  await reader.getByRole("button", { name: "Link" }).click();
+  await reader.getByRole("menuitem", { name: /To a note or a mail/ }).click();
+  const palette = page.getByTestId("palette");
+  await expect(palette).toBeVisible();
+  await page.keyboard.type("Link target");
+  await palette.getByText("Link target", { exact: true }).first().click();
+  // the save's own toast ("Saved as a note") may still be showing beside it
+  await expect(mail.locator(".toast", { hasText: "Linked to Link target" })).toBeVisible();
+  // the link lives in the conversation's note (Email's file), the user's note is not written
+  await expect.poll(async () => {
+    const r = await request.get("/api/files", { headers: H });
+    const files = (await r.json()) as string[];
+    const note = files.find((f) => f.startsWith("mail/") && f.includes(subject));
+    return note ? (await read(request, note)) ?? "" : "";
+  }, { timeout: 20_000 }).toContain("[[notes/Link target]]");
+  expect(await read(request, "notes/Link target.md")).toBe("# Link target\n\nMy own text.\n");
+  // listed under the subject, both themes looked at
+  const chip = reader.getByRole("button", { name: "Link target" });
+  await expect(chip).toBeVisible({ timeout: 15_000 });
+  await page.screenshot({ path: "test-results/email-linked-light.png" });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.screenshot({ path: "test-results/email-linked-dark.png" });
 });

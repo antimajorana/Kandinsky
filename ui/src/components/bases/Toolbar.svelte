@@ -2,7 +2,8 @@
   // A base's toolbar, as Obsidian's: the view switcher (its menu adds, renames, copies, retypes and deletes views), the
   // results count, and Sort / Filter / Properties, each a popover under its button; "New" makes a note in the view.
   import Icon from "../Icon.svelte";
-  import ContextMenu, { type MenuItem } from "../ContextMenu.svelte";
+  import ContextMenu from "../ContextMenu.svelte";
+  import type { MenuItem } from "../../lib/menu";
   import InputDialog from "../InputDialog.svelte";
   import Popover from "../Popover.svelte";
   import FilterPanel from "./FilterPanel.svelte";
@@ -155,7 +156,7 @@
     </Popover>
   {:else}
     <Popover anchor={p.anchor} label="Properties" width={380} onclose={() => (pop = null)}>
-      <PropertiesPanel columns={view.columns} others={props.filter((x) => !columnIds.includes(x.id))} onedit={(e) => onedit(e)} />
+      <PropertiesPanel columns={view.columns} formulas={res.formula_exprs} others={props.filter((x) => !columnIds.includes(x.id))} onedit={(e, then) => onedit(e, then)} />
     </Popover>
   {/if}
 {/if}

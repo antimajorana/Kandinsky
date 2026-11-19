@@ -3,7 +3,7 @@
   // options live beside the work they change. Unknown page → the list of known ones.
   import { onMount } from "svelte";
   import { settings, loadSuggestions } from "../../lib/settings.svelte";
-  import { leaves, shownOn } from "../../lib/settings-schema";
+  import { leaves, fieldHere } from "../../lib/settings-schema";
   import { placeFields, hostOf, canonicalPage } from "../../lib/settings-pages";
   import { nativeShell } from "../../lib/native-shell.svelte";
   import { apiBase } from "../../lib/api";
@@ -16,7 +16,7 @@
   const want = $derived(canonicalPage(rawWant));
   const fields = $derived.by(() => { void settings.schema; return leaves(); });
   const host = $derived(hostOf({ server: !!me.info?.server, phone: nativeShell.on, path: apiBase() }));
-  const pages = $derived(placeFields([...fields].filter(([, s]) => shownOn(s, host)).map(([p]) => p), host));
+  const pages = $derived(placeFields([...fields].filter(([p, s]) => fieldHere(p, s, host)).map(([p]) => p), host));
   const page = $derived(pages.find((p) => p.page === want));
   onMount(() => { loadSuggestions().catch(() => {}); void loadMe(); });
 </script>

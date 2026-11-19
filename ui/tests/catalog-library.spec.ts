@@ -64,8 +64,13 @@ test("the catalog's library is the library page: kinds as tabs, shelves, covers 
   await expect(chips.nth(0)).toHaveText(/All\s*5/);
   await expect(chips.nth(1)).toHaveText(/Films\s*3/);
   await expect(chips.nth(2)).toHaveText(/Albums\s*2/);
-  // covers come as pictures: the films' poster property, an album's embedded picture, the other's PDF's first page
-  await expect(lib.locator(".card img")).toHaveCount(5, { timeout: 15000 });
+  // covers come as pictures: the films' poster property, an album's embedded picture, the other's PDF's first page —
+  // each asked as its card comes near the view (LibraryCover.svelte), so each is scrolled to
+  for (let i = 0; i < 5; i++) {
+    const card = lib.locator(".card").nth(i);
+    await card.scrollIntoViewIfNeeded();
+    await expect(card.locator("img")).toHaveCount(1, { timeout: 15000 });
+  }
 
   await lib.locator(".types .chip", { hasText: "Films" }).click();
   await expect(lib.locator(".card")).toHaveCount(3);
@@ -75,8 +80,10 @@ test("the catalog's library is the library page: kinds as tabs, shelves, covers 
   const detail = lib.locator(".detail");
   await expect(detail.locator("h2")).toHaveText("Perfect Days");
   await expect(detail.locator(".authors")).toContainText("Wim Wenders"); // its key fields, under the title
-  await expect(detail.locator("dl")).toContainText("to-watch");
-  await expect(detail.locator(".links")).toContainText("IMDb");
+  // its shelf is the Shelf choice (not a field twice), its service ids are the links below (not raw ids in the fields)
+  await expect(detail.getByRole("radio", { name: "To watch" })).toHaveAttribute("aria-checked", "true");
+  await expect(detail.getByText("tt0002023")).toHaveCount(0);
+  await expect(detail.getByRole("button", { name: "Open on IMDb" })).toBeVisible(); // its one service: the button, not a link again
 
   // the shelf changed in place, written to the note as a link
   await detail.getByRole("radio", { name: "Watched" }).click();

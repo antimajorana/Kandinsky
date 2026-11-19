@@ -19,6 +19,8 @@
   let optsMsg = $state("");
   // password
   let current = $state(""), next = $state(""), again = $state(""), pwMsg = $state<{ ok: boolean; text: string } | null>(null);
+  // the gate's bypass key: apps holding it get their token without a page
+  let gateHeader = $state("X-Api-Key"), gateKey = $state(""), gateMsg = $state<{ ok: boolean; text: string } | null>(null);
   // tokens
   let tokName = $state(""), tokScope = $state<"capture" | "full">("capture"), shown = $state<{ name: string; token: string } | null>(null), tokMsg = $state("");
 
@@ -26,6 +28,7 @@
     try {
       [st, me] = await Promise.all([api.server(), api.me()]);
       mode = st.options.auth; proxies = st.options.trustedProxies.join(", "); header = st.options.remoteUserHeader; plain = st.options.allowPlainHttp; mcp = st.options.mcp;
+      gateHeader = st.gateKeyHeader ?? gateHeader;
       error = "";
     } catch (e) { error = errText(e); }
   }
@@ -50,6 +53,14 @@
       await load();
     } catch (e) { pwMsg = { ok: false, text: why(e) }; }
   }
+  async function setGateKey(forget = false): Promise<void> {
+    try {
+      await api.serverGateKey(gateHeader, forget ? null : gateKey);
+      gateMsg = { ok: true, text: forget ? "Forgotten: the apps sign in on a page again." : "Set: apps that send it get their token." };
+      gateKey = "";
+      await load();
+    } catch (e) { gateMsg = { ok: false, text: why(e) }; }
+  }
   async function makeToken(): Promise<void> {
     try {
       const { token } = await api.serverToken(tokName, tokScope);
@@ -70,7 +81,7 @@
   {#if st}
     <h3>This Kandinsky</h3>
     {#if st.serving}
-      <p class="desc">Serving this vault to the network on port {st.port}. You are signed in {me?.via === "proxy" ? `by your proxy as ${me.user}` : me?.via === "token" ? `with the token “${me.device}”` : "with the password"}.</p>
+      <p class="desc">Serving this vault to the network on port {st.port}. You are signed in {me?.via === "proxy" ? `by your sign-in gate as ${me.user}` : me?.via === "token" ? `with the token “${me.device}”` : "with the password"}.</p>
       {#if me?.signOut}<button class="btn" onclick={() => void api.signOut().then(() => location.assign("/login"))}>Sign out of this browser</button>{/if}
     {:else}
       <p class="desc">Not serving to the network (the desktop listens on this machine only, with no sign-in). To serve a vault from a server: <code>kandinsky serve --listen 0.0.0.0:7700</code>. What you set below is what it starts with; it is kept in <code>{st.files.settings}</code>, never in the vault.</p>
@@ -79,18 +90,18 @@
 
     <h3>How people sign in</h3>
     <div class="modes" role="radiogroup" aria-label="Sign-in">
-      {#each [["password", "Password", "Kandinsky's own sign-in page, with the password below."], ["proxy", "Your proxy (Authelia)", "Only a request from a trusted proxy that names the user (forward-auth). Security keys come from the proxy."], ["both", "Both", "The proxy's word when there is one, the sign-in page otherwise."]] as [id, label, what] (id)}
+      {#each [["password", "Password", "Kandinsky's own sign-in page, with the password below."], ["proxy", "A sign-in gate (Authelia…)", "Only a request that came through your gate and names the user. Security keys and second factors are the gate's."], ["both", "Both", "The gate's word when a request came through it, Kandinsky's sign-in page otherwise."]] as [id, label, what] (id)}
         <label class="mode"><input type="radio" name="auth" value={id} bind:group={mode} /><span><strong>{label}</strong><span class="muted">{what}</span></span></label>
       {/each}
     </div>
     {#if mode !== "password"}
-      <label class="row"><span>Trusted proxies</span><input placeholder="10.0.0.2, 10.88.0.0/16, or *" bind:value={proxies} aria-label="Trusted proxies" /></label>
-      <label class="row"><span>User header</span><input bind:value={header} aria-label="User header" /></label>
+      <label class="row"><span>The gate's addresses</span><input placeholder="10.0.0.2, 10.88.0.0/16, or *" bind:value={proxies} aria-label="The gate's addresses" title="Where requests through the gate come from (its reverse proxy): only these may name the user" /></label>
+      <label class="row"><span>The gate's user header</span><input bind:value={header} aria-label="The gate's user header" /></label>
     {/if}
     <label class="check"><input type="checkbox" bind:checked={plain} /> Allow the password over plain HTTP from other machines <span class="muted">(only on a network you trust: a LAN or VPN)</span></label>
     <label class="check"><input type="checkbox" bind:checked={mcp} /> Let AI agents in (<code>kandinsky mcp</code>) <span class="muted">(off on a server by default; the desktop is not affected)</span></label>
     <div class="actions"><button class="btn primary" onclick={() => void saveOptions()}>Save sign-in options</button><span class="msg">{optsMsg}</span></div>
-    <p class="muted">Terminals, plugin helpers and code blocks work in a signed-in browser as on the desktop, so the sign-in is what stands between the internet and this machine: beyond your own network, put Authelia (with a security key) in front.</p>
+    <p class="muted">Terminals, plugin helpers and code blocks work in a signed-in browser as on the desktop, so the sign-in is what stands between the internet and this machine: beyond your own network, put a sign-in gate (Authelia, with a security key) in front.</p>
 
     {#if mode !== "proxy"}
       <h3>Password</h3>
@@ -100,6 +111,14 @@
       <div class="actions"><button class="btn primary" disabled={!next} onclick={() => void setPassword()}>{st.hasPassword ? "Change password" : "Set password"}</button>
         {#if pwMsg}<span class="msg" class:bad={!pwMsg.ok}>{pwMsg.text}</span>{/if}</div>
     {/if}
+
+    <h3>The gate's key</h3>
+    <p class="desc">When your sign-in gate lets Kandinsky's apps past with a key in a header (a bypass rule for native apps), give the same key here: the desktop and the phone, holding it, get their device token without the gate's page or a password. Security keys stay for the sign-ins that still need the gate (a service's OpenID). {st.gateKeyHeader ? `Set, checked in ${st.gateKeyHeader}.` : "Not set."}</p>
+    <div class="actions"><input placeholder="Header (X-Api-Key)" aria-label="The gate key's header" bind:value={gateHeader} />
+      <input type="password" autocomplete="off" placeholder="The gate's key" aria-label="The gate's key" bind:value={gateKey} />
+      <button class="btn primary" disabled={!gateKey.trim() || !gateHeader.trim()} onclick={() => void setGateKey()}>{st.gateKeyHeader ? "Change the key" : "Set the key"}</button>
+      {#if st.gateKeyHeader}<button class="btn" onclick={() => void setGateKey(true)}>Forget it</button>{/if}
+      {#if gateMsg}<span class="msg" class:bad={!gateMsg.ok}>{gateMsg.text}</span>{/if}</div>
 
     <h3>Devices</h3>
     <p class="desc">A token lets an app in without the password — the phone's capture app, a script. <em>Capture</em> may only add captures (and read the names its completions need); <em>Full</em> may do everything.</p>
@@ -129,7 +148,7 @@
   .mode { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
   .mode:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
   .mode > span { display: grid; gap: 1px; } .mode .muted { margin: 0; }
-  .row { display: grid; grid-template-columns: 9em 1fr; gap: 8px; align-items: center; margin: 4px 0; }
+  .row { display: grid; grid-template-columns: 12em 1fr; gap: 8px; align-items: center; margin: 4px 0; }
   .check { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; margin: 6px 0; }
   .check .muted { display: inline; margin: 0; }
   input:not([type]), input[type="password"], select { font: inherit; color: var(--text); background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 8px; min-width: 0; }

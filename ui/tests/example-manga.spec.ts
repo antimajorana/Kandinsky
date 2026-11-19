@@ -70,6 +70,8 @@ test("manga: the library, a series, a .cbz read in the page, and where you are s
   const pane = page.locator(".manga");
   // natural order: 9 before 10
   await expect(pane.locator(".m-ch .m-ch-name")).toHaveText(["Chapter 9", "Chapter 10"]);
+  // opening a series makes no note: it gets one once it is yours (read past the start; the catalog's rule)
+  expect(existsSync(join(WS, "manga/Blue Period/Blue Period.md"))).toBe(false);
   await pane.getByRole("button", { name: "Start" }).click();
   await expect(pane.locator(".m-num")).toHaveText("1 / 3"); // three pictures: __MACOSX left out
   await expect(pane.locator(".m-page")).toHaveAttribute("src", /^blob:/);
@@ -94,6 +96,16 @@ test("manga: the library, a series, a .cbz read in the page, and where you are s
   await expect(pane.getByRole("button", { name: "Read again" })).toBeVisible();
   await expect(pane.locator(".m-count")).toContainText("all read");
   await page.screenshot({ path: test.info().outputPath("series.png") });
+  // "Its note": the one note, opened beside — the same note the place went into
+  await pane.getByRole("button", { name: "Its note" }).click();
+  // the note's tab (the series pane is the Libraries page, a place of the left bar, not a tab), the series still beside
+  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: "Blue Period" })).toHaveCount(1);
+  await expect(pane.getByRole("button", { name: "Read again" })).toBeVisible();
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme }); // judged in both themes (docs/guides/UI-STYLE.md)
+    await page.screenshot({ path: test.info().outputPath(`series-note-${scheme}.png`) });
+  }
+  await page.emulateMedia({ colorScheme: "light" });
   // a right-click marks a chapter unread again (Mihon's long press)
   await pane.locator(".m-ch", { hasText: "Chapter 10" }).click({ button: "right" });
   await expect(pane.getByRole("button", { name: "Continue" })).toBeVisible();
@@ -200,11 +212,16 @@ test("manga on e-ink: a refresh asked on each page turn (flash_every = 1)", asyn
 });
 
 // The user's Suwayomi (plugins/beta/manga/suwayomi.js; its GraphQL API as a real server answers it): a
-// stand-in server with one series of two chapters; its library beside the vault's, a chapter read from it page by page,
-// where you are written back with updateChapter, and the Libraries page's Comics listing both.
-test("Suwayomi: its library beside the vault's, a chapter read from it, where you are written back", async ({ page, request }) => {
+// stand-in server with one series of two chapters; its library in its own tab (the Comics library's header button),
+// a chapter read from it page by page, where you are written back with updateChapter.
+test("Suwayomi: its library in its own tab, a chapter read from it, where you are written back", async ({ page, request }) => {
   const marks: { id: number; page: number; read: boolean }[] = [];
   let fetched = false, updates = 0; // a source looked at again (fetchMangaAndChapters) finds a third chapter
+  const queued: number[][] = []; // chapters queued in the server's own downloads (enqueueChapterDownloads)
+  const added: { id: number; inLibrary: boolean }[] = []; // Browse's Add to library (updateManga)
+  const cats: { id: number; add: number[]; remove: number[] }[] = []; // its category chips (updateMangaCategories)
+  const sidonia = { id: 77, title: "Knights of Sidonia", thumbnailUrl: "/api/v1/manga/77/thumbnail", author: "Tsutomu Nihei", artist: "Tsutomu Nihei", description: "A seed ship.", genre: ["Sci-fi"],
+    status: "COMPLETED", initialized: true, source: { displayName: "MangaDex (EN)" }, chapters: { totalCount: 78 } };
   const server: Server = createServer((req, res) => {
     const url = req.url ?? "";
     // the cover as JPEG XL, as some sources serve it: no browser here decodes it, so it shows only through the core's
@@ -215,14 +232,24 @@ test("Suwayomi: its library beside the vault's, a chapter read from it, where yo
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       const { query, variables } = JSON.parse(body) as { query: string; variables: Record<string, unknown> };
-      const data = query.includes("mangas(") ? { mangas: { nodes: [{ id: 6, title: "BLAME!", thumbnailUrl: "/api/v1/manga/6/thumbnail", user: { unreadCount: 2 },
+      // the server's download queue: what was queued, the first under way
+      const name = (id: number) => (id === 9598 ? "Chapter 002 - Fifteen Billion" : "Chapter 003 - The Electro-Fishers");
+      const data = query.includes("downloadStatus") ? { downloadStatus: { state: "STARTED", queue: queued.flat().map((id, i) => ({ progress: i ? 0 : 0.4, state: i ? "QUEUED" : "DOWNLOADING", chapter: { id, name: name(id), mangaId: 6 } })) } }
+        : query.includes("mangas(") ? { mangas: { nodes: [{ id: 6, title: "BLAME!", thumbnailUrl: "/api/v1/manga/6/thumbnail", user: { unreadCount: 2 },
           categories: { nodes: [{ name: "Default", default: true }, { name: "Weekly", default: false }] } }] } }
         : query.includes("chapters(") ? { chapters: { nodes: [
-          { id: 9597, name: "Chapter 001 - The Net's Offspring", user: { isRead: false, lastPageRead: 0, lastReadAt: "0" } },
+          { id: 9597, name: "Chapter 001 - The Net's Offspring", isDownloaded: true, user: { isRead: false, lastPageRead: 0, lastReadAt: "0" } },
           { id: 9598, name: "Chapter 002 - Fifteen Billion", user: { isRead: false, lastPageRead: 0, lastReadAt: "0" } },
           ...(fetched ? [{ id: 9599, name: "Chapter 003 - The Electro-Fishers", user: { isRead: false, lastPageRead: 0, lastReadAt: "0" } }] : [])] } }
         : query.includes("fetchMangaAndChapters") ? (fetched = true, { fetchMangaAndChapters: { clientMutationId: null } })
         : query.includes("updateLibrary") ? (updates++, { updateLibrary: { clientMutationId: null } })
+        : query.includes("sources {") ? { sources: { nodes: [{ id: "2499283573021220255", name: "MangaDex", lang: "en", displayName: "MangaDex (EN)", iconUrl: "/api/v1/extension/icon/mangadex.png", isNsfw: false, supportsLatest: true }] } }
+        : query.includes("fetchSourceManga") ? { fetchSourceManga: { hasNextPage: false, mangas: [{ id: 77, title: "Knights of Sidonia", thumbnailUrl: "/api/v1/manga/77/thumbnail", user: { inLibrary: false } }] } }
+        : query.includes("manga(id") ? { manga: { ...sidonia, user: { inLibrary: added.at(-1)?.inLibrary ?? false } } }
+        : query.includes("categories { nodes { id name order") ? { categories: { nodes: [{ id: 0, name: "Default", order: 0, default: true }, { id: 3, name: "Weekly", order: 1, default: false }] } }
+        : query.includes("updateMangaCategories") ? (cats.push(variables as never), { updateMangaCategories: { clientMutationId: null } })
+        : query.includes("updateManga(") ? (added.push(variables as never), { updateManga: { clientMutationId: null } })
+        : query.includes("enqueueChapterDownloads") ? (queued.push((variables as { ids: number[] }).ids), { enqueueChapterDownloads: { clientMutationId: null } })
         : query.includes("fetchChapterPages") ? { fetchChapterPages: { pages: ["/api/v1/manga/6/chapter/1/page/0", "/api/v1/manga/6/chapter/1/page/1", "/api/v1/manga/6/chapter/1/page/2"] } }
         : query.includes("updateChapter") ? (marks.push(variables as never), { updateChapter: { chapter: { id: variables.id } } }) : null;
       res.writeHead(200, { "content-type": "application/json" });
@@ -239,19 +266,20 @@ test("Suwayomi: its library beside the vault's, a chapter read from it, where yo
     await page.getByTestId("palette").getByText("Manga: library", { exact: true }).first().click();
     const libs = page.locator(".libraries");
     await expect(libs.locator(".card", { hasText: "Blue Period" })).toBeVisible(); // the vault's
-    const blame = libs.locator(".card", { hasText: "BLAME!" });
-    await expect(blame.locator(".m")).toHaveText("2 unread"); // the server's unread count
+    // only what is yours is listed: the server's series are in its own tab, behind the header's button
+    await expect(libs.locator(".card", { hasText: "BLAME!" })).toHaveCount(0);
+    await libs.getByRole("button", { name: "Suwayomi", exact: false }).first().click();
+    const pane = page.locator(".manga");
+    const blame = pane.locator(".m-found", { hasText: "BLAME!" });
+    await expect(blame.locator(".m-found-in")).toHaveText("2 unread"); // the server's unread count
     await expect(blame.locator("img")).toHaveAttribute("src", /^blob:/); // its cover, from the server
     await expect.poll(() => blame.locator("img").evaluate((i: HTMLImageElement) => i.naturalWidth)).toBe(3); // decoded: PNG by now
-    // its Suwayomi categories as folders under "Suwayomi" at the side (Suwayomi's own Default left out)
-    await expect(libs.getByRole("button", { name: "Close Suwayomi" })).toBeVisible(); // a top folder starts open
-    await libs.locator('button.item[title="Suwayomi › Weekly"]').click();
-    await expect(libs.locator(".card", { hasText: "Blue Period" })).toHaveCount(0);
+    // its Suwayomi categories as tabs (Suwayomi's own Default left out)
+    await expect(pane.locator(".m-tabs button")).toHaveText(["All", "Weekly"]);
+    await pane.locator(".m-tabs").getByRole("button", { name: "Weekly" }).click();
     await expect(blame).toBeVisible();
-    await expect(libs.locator('button.item[title="Suwayomi › Default"]')).toHaveCount(0);
     await blame.click();
-    await libs.locator(".detail").getByRole("button", { name: "Read" }).click();
-    const pane = page.locator(".manga");
+    await expect(pane.getByRole("button", { name: "‹ Back" })).toBeVisible(); // back to the server's library
     await expect(pane.locator(".m-ch .m-ch-name")).toHaveText(["Chapter 001 - The Net's Offspring", "Chapter 002 - Fifteen Billion"]);
     await pane.getByRole("button", { name: "Start" }).click();
     await expect(pane.locator(".m-num")).toHaveText("1 / 3");
@@ -272,6 +300,45 @@ test("Suwayomi: its library beside the vault's, a chapter read from it, where yo
     // the next unread chapters kept for offline: every page of each fetched into the cache now
     await pane.getByRole("button", { name: "Keep 5 for offline" }).click();
     await expect(page.getByText("3 chapters of BLAME! kept for offline")).toBeVisible();
+    // the server's own downloads: chapter 1 is there already (its mark), the other unread ones are queued
+    await expect(pane.locator(".m-ch").first().locator(".m-ch-kept")).toBeVisible();
+    await expect(pane.locator(".m-ch").nth(1).locator(".m-ch-kept")).toHaveCount(0);
+    await pane.getByRole("button", { name: "Download on the server" }).click();
+    await expect.poll(() => queued).toEqual([[9598, 9599]]);
+    await expect(page.getByText("2 chapters of BLAME! queued in Suwayomi's downloads")).toBeVisible();
+    // what the server is downloading, said on the series while it lasts
+    await expect(pane.locator(".m-queue")).toHaveText("Downloading on the server: 2 left · Chapter 002 - Fifteen Billion 40 %");
+    for (const scheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await pane.screenshot({ path: `test-results/manga-server-downloads-${scheme}.png` });
+    }
+
+    // Browse: the server's sources by language, a source's popular series, one added to the library
+    await page.keyboard.press("F1");
+    await page.keyboard.type("Manga: browse");
+    await page.getByTestId("palette").getByText("Manga: browse Suwayomi's sources").first().click();
+    const browse = page.locator(".manga").last();
+    await expect(browse.locator(".m-lang")).toHaveText(["English"]);
+    await browse.locator(".m-source", { hasText: "MangaDex (EN)" }).click();
+    await expect(browse.getByRole("button", { name: "Latest" })).toBeVisible();
+    const card = browse.locator(".m-found", { hasText: "Knights of Sidonia" });
+    await expect(card).toBeVisible();
+    for (const scheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await browse.screenshot({ path: `test-results/manga-browse-source-${scheme}.png` });
+    }
+    await card.click();
+    await expect(browse.locator(".m-count")).toContainText("Tsutomu Nihei · Completed · MangaDex (EN) · 78 chapters");
+    await browse.getByRole("button", { name: "Add to library" }).click();
+    await expect.poll(() => added).toEqual([{ id: 77, inLibrary: true }]);
+    await expect(browse.getByRole("button", { name: "Remove from library" })).toBeVisible();
+    await browse.getByRole("button", { name: "Weekly" }).click();
+    await expect.poll(() => cats).toEqual([{ id: 77, add: [3], remove: [] }]);
+    await expect(browse.getByRole("button", { name: "Weekly" })).toHaveAttribute("aria-pressed", "true");
+    for (const scheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await browse.screenshot({ path: `test-results/manga-browse-series-${scheme}.png` });
+    }
 
   } finally {
     await request.put("/api/file", { headers: { "x-kandinsky": "1" }, data: { path: ".kandinsky/plugin-settings/manga.toml", text: "" } });
@@ -294,13 +361,24 @@ test("on the phone the library is the page's, and a chapter is handed to the app
   const tabs = page.locator(".libraries .which");
   await expect(tabs.getByRole("tab")).not.toHaveText([/↗/]); // no tab leaves the page for a native library
   await tabs.getByRole("tab", { name: /Comics/ }).click();
+  // a comic's card opens its series in the Manga pane at once (no detail step between)
   await page.locator(".libraries .card", { hasText: "Blue Period" }).click();
-  await page.locator(".libraries .detail").getByRole("button", { name: "Read" }).click();
   const pane = page.locator(".manga");
   await pane.getByRole("button", { name: /Start|Continue|Read again/ }).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { opened: string[] }).opened)).toEqual([expect.stringMatching(/^manga\/Blue Period\/Chapter (9|10)\.cbz$/)]);
   await expect(pane.locator(".m-reader")).toHaveCount(0); // not read in the page as well
   await ctx.close();
+});
+
+test("pure: what a reading change makes of a series for its note (the catalog's rule)", async () => {
+  // @ts-expect-error a plugin's module is plain JavaScript, loaded as the page loads it
+  const { engagement, suwayomiId } = await import("../../plugins/beta/manga/suwayomi.js");
+  expect(engagement(0, 20, false)).toEqual({ why: "opened" });
+  expect(engagement(1, 20, false)).toEqual({ why: "progress", progress: 0.05 });
+  expect(engagement(19, 20, false)).toEqual({ why: "finished" });
+  expect(engagement(0, 0, true)).toEqual({ why: "finished" });
+  expect(suwayomiId("2499283573021220255", "/manga/123")).toBe("2499283573021220255:/manga/123");
+  expect(suwayomiId("", "/manga/123")).toBe("");
 });
 
 test("a Suwayomi error is one line, and a source gone says what to do", () => {
