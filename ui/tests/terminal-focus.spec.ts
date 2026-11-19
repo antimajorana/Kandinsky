@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
 // "sometimes its hard to put the terminal on focus": every way of going to a terminal must leave
-// the keys in it — a click on its text, its tab in the left bar, its key, the panel
+// the keys in it — a click on its text, its tab in the terminal group, its key, the panel
 // shown again, another terminal's tab, and back from the editor.
 const typed = (page: Page) => page.locator(".term-pane .xterm-helper-textarea:focus");
 
@@ -38,10 +38,10 @@ test("the terminal takes the keys however it is reached", async ({ page }) => {
   await page.keyboard.press("F11");
   await expect(page.locator(".cm-content:visible").first()).toBeVisible();
 
-  // its tab in the left bar
+  // its tab in the terminal group
   await toEditor();
-  await page.getByTestId("sidebar").locator(".tab", { hasText: /Shell/ }).first().click();
-  await expect(typed(page), "its tab in the left bar").toHaveCount(1);
+  await page.locator(".dv-tab", { hasText: /Shell/ }).first().click();
+  await expect(typed(page), "its tab in the terminal group").toHaveCount(1);
 
   // its key from the editor
   await toEditor();
@@ -55,11 +55,10 @@ test("the terminal takes the keys however it is reached", async ({ page }) => {
   await expect(typed(page), "the panel shown again").toHaveCount(1);
 
   // a second terminal, then back to the first by its tab
-  await page.getByTestId("sidebar").getByRole("button", { name: "New terminal" }).click();
-  await page.getByRole("menuitem", { name: "Shell" }).click();
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: /Shell/ })).toHaveCount(2);
+  await page.getByRole("button", { name: "New terminal" }).click();
+  await expect(page.locator(".dv-tab", { hasText: /Shell/ })).toHaveCount(2);
   await expect(typed(page), "the new terminal").toHaveCount(1);
-  await page.getByTestId("sidebar").locator(".tab", { hasText: /Shell/ }).first().click();
+  await page.locator(".dv-tab", { hasText: /Shell/ }).first().click();
   await expect(typed(page), "back to the first terminal").toHaveCount(1);
 
   // what is typed reaches the shell

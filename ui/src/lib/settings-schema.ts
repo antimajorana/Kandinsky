@@ -111,7 +111,9 @@ export const zoom = (step: -1 | 0 | 1) => {
   const ranges = leaves();
   const next = (p: string, now: unknown) => {
     const { minimum = -Infinity, maximum = Infinity } = ranges.get(p) ?? {};
-    const n = step === 0 ? at(settings.defaults, p) : Math.min(maximum, Math.max(minimum, (now as number) + step));
+    // the default prose size is drawn as 16 (settings.svelte.ts apply): the first step goes from what is shown, not from the stored 15
+    const shown = p === "editor.prose_font_size" && now === at(settings.defaults, p) && (now as number) < 16 ? 16 : now;
+    const n = step === 0 ? at(settings.defaults, p) : Math.min(maximum, Math.max(minimum, (shown as number) + step));
     return typeof n === "number" && !Number.isNaN(n) ? n : null;
   };
   for (const p of SIZES.filter(deviceKeeps)) {
