@@ -1,5 +1,4 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
-import { verticalTabs } from "./vertical-tabs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -26,8 +25,7 @@ test.afterAll(async ({ request }) => {
 });
 
 test("ssh_terminal opens a visible terminal tab on the host, and says so only once it is open", async ({ page, request }) => {
-  const restore = await verticalTabs(request);
-  try { await sshTerminal(page, request); } finally { await restore(); }
+  await sshTerminal(page, request);
 });
 async function sshTerminal(page: Page, request: APIRequestContext) {
   await page.goto("/");
@@ -42,6 +40,7 @@ async function sshTerminal(page: Page, request: APIRequestContext) {
   expect(answer).toMatchObject({ opened: "iq", host: "iq", connected: false });
   expect(answer.note, "not connected: the passphrase / 2FA is asked in the tab").toContain("2FA");
 
-  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: /\biq\b/ })).toBeVisible();
+  // a terminal's tab sits in the terminal group's own strip (the sidebar's Open section lists the editor tabs)
+  await expect(page.locator(".dv-tab", { hasText: /\biq\b/ })).toBeVisible();
   await expect(page.locator(".xterm").filter({ hasText: "fake ssh: logged in to iq" }).first()).toBeVisible({ timeout: 10_000 });
 }
