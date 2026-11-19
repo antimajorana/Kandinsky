@@ -338,14 +338,14 @@
             {#each sorted as i (i.id)}
               <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
               <tr class="trow" class:sel={isPicked(i)} data-pick={i.id} draggable={source.regroup ? "true" : undefined} ondragstart={(e) => dragItem(e, i)} onclick={(e) => click(e, i)} ondblclick={() => source.open?.(i)}>
-                <td class="c-title">
+                <td class="c-title" title={i.title}>
                   <button type="button" class="row-focus" onclick={(e) => { e.stopPropagation(); click(e, i); }} ondblclick={(e) => { e.stopPropagation(); source.open?.(i); }}>
                     <span class="t">{@html richTitle(i.title)}</span>
                   </button>
                 </td>
-                <td class="c-author">{i.columns?.creators ?? i.sub ?? ""}</td>
+                <td class="c-author" title={i.columns?.creators ?? i.sub ?? ""}>{i.columns?.creators ?? i.sub ?? ""}</td>
                 <td class="c-year">{i.columns?.year ?? ""}</td>
-                <td class="c-venue">{i.columns?.venue ?? ""}</td>
+                <td class="c-venue" title={i.columns?.venue ?? ""}>{i.columns?.venue ?? ""}</td>
                 <td class="c-kind">{i.columns?.kind ?? ""}</td>
                 <td class="c-added">{i.columns?.added ?? ""}</td>
                 <td class="c-pdf">

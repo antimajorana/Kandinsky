@@ -3640,7 +3640,7 @@ function Io(e, t) {
 			X(b, (e) => {
 				G(S) && e(x);
 			}), A(y), A(r), V((e) => {
-				a = Q(r, 1, "trow svelte-7gk24t", null, a, { sel: e }), $(r, "data-pick", G(n).id), $(r, "draggable", t.source.regroup ? "true" : void 0), Y(u, G(n).columns?.creators ?? G(n).sub ?? ""), Y(f, G(n).columns?.year ?? ""), Y(m, G(n).columns?.venue ?? ""), Y(g, G(n).columns?.kind ?? ""), Y(v, G(n).columns?.added ?? "");
+				a = Q(r, 1, "trow svelte-7gk24t", null, a, { sel: e }), $(r, "data-pick", G(n).id), $(r, "draggable", t.source.regroup ? "true" : void 0), $(o, "title", G(n).title), $(l, "title", G(n).columns?.creators ?? G(n).sub ?? ""), Y(u, G(n).columns?.creators ?? G(n).sub ?? ""), Y(f, G(n).columns?.year ?? ""), $(p, "title", G(n).columns?.venue ?? ""), Y(m, G(n).columns?.venue ?? ""), Y(g, G(n).columns?.kind ?? ""), Y(v, G(n).columns?.added ?? "");
 			}, [() => Ae(G(n))]), Er("dragstart", r, (e) => we(e, G(n))), K("click", r, (e) => je(e, G(n))), K("dblclick", r, () => t.source.open?.(G(n))), K("click", s, (e) => {
 				e.stopPropagation(), je(e, G(n));
 			}), K("dblclick", s, (e) => {

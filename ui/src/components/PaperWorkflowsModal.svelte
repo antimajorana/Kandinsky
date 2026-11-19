@@ -474,7 +474,10 @@
       if (iq) {
         addInput = iq;
         remoteQuery = iq;
-        if (paperWorkflowModal.tab === "add" && !/^(10\.|arxiv:|isbn\b|https?:|@|ty\s+-)/i.test(iq)) {
+        if (
+          paperWorkflowModal.tab === "add" &&
+          !/^(10\.|arxiv:|isbn\b|https?:|@|ty\s+-|\d{4}\.\d{4,5}|[a-z-]+\/\d{7}|97[89][\d -]{10,})/i.test(iq)
+        ) {
           remoteSource = "all";
           void runRemoteSearch();
         }

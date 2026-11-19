@@ -375,8 +375,10 @@ export function referencesSource(): LibrarySource {
               r = await api.refsPdf(f.name, f);
             }
             last = r.paper.key;
+            const zp = r.paper as ZoteroPaper;
+            const recognized = Boolean(zp.doi || zp.arxiv || zp.isbn || (zp.authors.length && zp.year));
             toast(r.created ? `Added ${r.paper.key}` : `Already in the library: ${r.paper.key}`,
-              r.paper.doi || r.paper.arxiv ? r.paper.title : `${r.paper.title} — no DOI/arXiv id found: complete its fields in its note`, r.created ? "success" : "info", 7000);
+              recognized ? r.paper.title : `${r.paper.title} — no DOI/arXiv id found: complete its fields in its note`, r.created ? "success" : "info", 7000);
           } catch (err) { toast(`Could not add ${f.name}`, errText(err), "error", 9000); }
         }
         return last;
