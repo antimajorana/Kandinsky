@@ -30,7 +30,7 @@ test("a plugin's rows in the tab, editor and file menus, and its cell in the sta
   const menu = page.getByRole("menu");
 
   // tab: after the app's rows, with its icon and second line
-  const tab = page.getByTestId("sidebar").locator(".tab", { hasText: "journal" });
+  const tab = page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "journal" });
   await tab.click({ button: "right" });
   const row = menu.locator('[data-label="Demo: say the path"]');
   await expect(row).toContainText("from a plugin");

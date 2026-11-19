@@ -156,7 +156,7 @@
   ]);
   const showPanes = $derived(openPanes.length > 1 || openPanes.some((t) => !t.shown) || (tabs.layout === "vertical" && openPanes.length > 0));
 
-  function onPaneMenu(e: MouseEvent, t: { id: string; path?: string }) {
+  function onPaneMenu(e: MouseEvent, t: { id: string; path?: string; kind?: string }) {
     e.preventDefault();
     e.stopPropagation();
     const pinned = isPinned(t.id);
@@ -168,6 +168,8 @@
     // the classic bar's tab menu offered this; keep it reachable from the Open section too
     if (t.path) items.push("sep", { label: "Move to Trash…", icon: "close", danger: true, run: () => trashFile(t.path!) });
     items.push("sep", { label: "Close", icon: "close", hint: keysOf("ui.close"), run: () => closeTab(t.id) });
+    // plugins' tab rows (kandinsky.shell.menu("tab")) come last, as in the classic bar's tab menu
+    items.push(...pluginMenu("tab", { path: t.path, kind: t.kind }));
     menu = atPointer(e, items);
   }
 
