@@ -16,6 +16,11 @@ the result goes under the exports folder at the note's own path (`notes/reports/
   - *Document* — title, subtitle, author, date (from the note's properties, else its first heading, else its name;
     changed for this export only), table of contents, numbered sections.
   - *Page* — paper (A4, US Letter), font size, margins, one or two columns, language, font.
+  - *The Typst look* (`kandinsky.typst`, pandoc's Typst template with Kandinsky's rules): a coloured title block with a rule
+    under it, headings in the accent colour (Libertinus Sans where installed), the title and page number at the top
+    of every page after the first, code and quotes on a tinted ground, tables with rules at the head, Libertinus Math
+    beside Libertinus text. A display wider than its column is shrunk to fit it, on both PDF roads (in LaTeX's two
+    columns through `adjustbox`, the number kept on its line); a Typst preamble overrides any of these rules.
   - *References* (when the note links papers) — the `.bib`, the citation style (numeric, author–year, alphabetic,
     physics), each written in the format's own way (biblatex, Typst's bibliography, citeproc for Word).
   - *LaTeX* — engine, an extra preamble `.tex`. *Typst* — a preamble `.typ` (set and show rules).
@@ -35,6 +40,9 @@ the result goes under the exports folder at the note's own path (`notes/reports/
   and Word writers); a `$$align` block and a whole `\begin{align}` in `$$` written
   as `aligned` (valid inside display math everywhere); a heading right after a line of text kept a heading. The
   definitions come from the table the drawing uses (`ui/src/lib/tex-portable.ts`).
+- **Numbered equations** over the whole document (an embedded note's continue the host's); a link to one reads its
+  number and is a real link in the PDF: `\label` + `\eqref` on the LaTeX road, a `<eq-n>` label and `#link` on the
+  Typst road (not `@eq-n`, which needs Typst's own numbering of every display); plain "(n)" in Word.
 - LaTeX's own files (`.aux`, `.log`, `.bbl`…) stay in `.kandinsky/cache/plugins/export/build/`; previews in
   `.kandinsky/cache/plugins/export/preview/`.
 

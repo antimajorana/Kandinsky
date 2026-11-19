@@ -173,11 +173,31 @@ async function fences(j: Job, road: "latex" | "typst" | "docx" | "html"): Promis
       out[i] = "```" + f.lang + "\n" + f.source + "\n```";
     }
   }
-  // an equation's number: LaTeX keeps `\tag`; pandoc's Typst and Word writers drop it, so there it is written beside it
-  const tagged = road === "latex" ? j.t.markdown : j.t.markdown.replace(/\\tag\*?\{([^}]*)\}/g, (_, n: string) => `\\qquad\\text{(${n})}`);
-  const md = tagged.replace(/<!--fence:(\d+)-->/g, (_, n: string) => out[Number(n)]);
+  const md = equationMarks(j.t.markdown, road).replace(/<!--fence:(\d+)-->/g, (_, n: string) => out[Number(n)]);
   // a note whose sections start at ## gets them one level up
   return /^# /m.test(md) || !/^## /m.test(md) ? md : md.replace(/^#(#+ )/gm, "$1");
+}
+
+/** The equation numbers `numberEquations` wrote (translate.ts `ANCHOR`, `REF`), for a road. LaTeX keeps `\tag`, labels
+ *  the display and links with `\eqref`. pandoc's Typst and Word writers drop `\tag`, so there the number is written
+ *  beside the formula; Typst labels it `<eq-n>` and links to the label (`#link`, not `@eq-n`: a reference needs Typst's
+ *  own equation numbering, which would number every display); Word and the Pandoc-free HTML have the plain numbers. */
+export function equationMarks(md: string, road: "latex" | "typst" | "docx" | "html"): string {
+  const label = (n: string) => `eq-${n.replace(/[^A-Za-z0-9_.:-]/g, "-")}`;
+  const text = (n: string, star: boolean) => (star ? n : `(${n})`);
+  md = md.replace(/\$\$([\s\S]+?)\$\$/g, (whole, tex: string) => {
+    let anchor = "";
+    const t = tex.replace(/\\tag(\*?)\{([^}]*)\}(\u0005?)/g, (tag, star: string, n: string, a: string) => {
+      if (road === "latex") return a ? `${tag.slice(0, -1)}\\label{${label(n)}}` : tag;
+      if (a && road === "typst") anchor = "`<" + label(n) + ">`{=typst}";
+      return `\\qquad\\text{${text(n, !!star)}}`;
+    });
+    return t === tex ? whole : `$$${t}$$${anchor}`;
+  });
+  return md.replace(/\u0006([^\u0006]*)\u0006/g, (_, n: string) =>
+    road === "latex" ? "`\\eqref{" + label(n) + "}`{=latex}"
+      : road === "typst" ? "`#link(<" + label(n) + ">)[" + text(n, false).replace(/[\\#*_`$<>@\[\]]/g, "\\$&") + "]`{=typst}"
+      : text(n, false));
 }
 
 const MD = "markdown+mark-implicit_figures+implicit_figures";
@@ -202,6 +222,37 @@ import { escapeTypstString, latexMathToTypst, markdownToTypst } from "./md_typst
 import { markdownToHtml } from "./md_html";
 export { latexMathToTypst, markdownToTypst, markdownToHtml };
 
+/** pandoc 3.7's Typst names that Typst 0.14–0.15 removed (codex 0.3), each to its successor. Found by writing every
+ *  KaTeX command through pandoc and compiling the result. */
+const TYPST_RENAMED: Record<string, string> = {
+  sect: "inter", "sect.big": "inter.big", "sect.double": "inter.double", "sect.sq": "inter.sq",
+  "planck.reduce": "planck", "angle.l": "chevron.l", "angle.r": "chevron.r", "angle.l.double": "chevron.l.double",
+  "angle.r.double": "chevron.r.double", "brace.l.double": "brace.l.stroked", "brace.r.double": "brace.r.stroked",
+  "bracket.l.double": "bracket.l.stroked", "bracket.r.double": "bracket.r.stroked", "circle.nested": "compose.o",
+  "ast.circle": "ast.op.o", "dash.circle": "dash.o", "dot.circle": "dot.o", "dot.circle.big": "dot.o.big",
+  "minus.circle": "minus.o", "times.circle": "times.o", "times.circle.big": "times.o.big",
+};
+
+/** pandoc's Typst with the removed symbol names renamed, inside math only (`$…$`; prose keeps its words). */
+export function typstSymbols(typ: string): string {
+  return typ.split(/(?<!\\)\$/).map((part, i) => (i % 2 === 0 ? part
+    : part.replace(/(?<![\w.])[a-z]+(?:\.[a-z]+)*(?![\w])/gi, (name) => TYPST_RENAMED[name] ?? name))).join("$");
+}
+
+/** A display too wide for a LaTeX column runs into the other one: in two columns each single-line display is boxed to
+ *  at most the column's width (adjustbox), its \tag and \label kept outside the box. Multi-row environments stay. */
+export function fitDisplays(md: string): string {
+  return md.replace(/\$\$([\s\S]+?)\$\$/g, (whole, tex: string) => {
+    if (/\\begin\{(align|gather|eqnarray|multline|flalign|alignat)\*?\}/.test(tex)) return whole;
+    const marks: string[] = [];
+    const body = tex.replace(/\\(?:tag\*?|label)\{[^}]*\}/g, (m) => { marks.push(m); return ""; }).trim();
+    if (/(^|[^\\])\\\\(?![a-zA-Z])/.test(body.replace(/\\begin\{(\w+\*?)\}[\s\S]*?\\end\{\1\}/g, ""))) return whole;
+    // a numbered one leaves room for its number on the same line
+    const width = marks.some((m) => m.startsWith("\\tag")) ? "\\dimexpr\\columnwidth-3em\\relax" : "\\columnwidth";
+    return "`\\begin{equation*}\\adjustbox{max width=" + width + "}{$\\displaystyle " + body + "$}" + marks.join("") + "\\end{equation*}`{=latex}";
+  });
+}
+
 async function typstRoad(j: Job, format: "pdf-typst" | "typ"): Promise<string> {
   const preamble = j.o.typstPreamble
     ? await kandinsky.read(j.o.typstPreamble).catch(() => { j.t.warnings.push(`Typst preamble not found: ${j.o.typstPreamble}`); return ""; })
@@ -210,7 +261,8 @@ async function typstRoad(j: Job, format: "pdf-typst" | "typ"): Promise<string> {
   const header2 = preamble ? ["```{=typst}\n" + preamble + "\n```"] : [];
   let typ: string;
   try {
-    typ = await pandoc(j, "typst", metadata(j, "typst", header2) + md);
+    // Kandinsky's look (kandinsky.typst): pandoc's template with a title block, headings, and displays fitted to their column
+    typ = typstSymbols(await pandoc(j, "typst", metadata(j, "typst", header2) + md, ["--template", `${PLUGIN}/kandinsky.typst`]));
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (!/not installed/i.test(msg)) throw e;
@@ -237,7 +289,8 @@ async function htmlRoad(j: Job): Promise<string> {
 }
 
 async function latexRoad(j: Job, format: "pdf-latex" | "tex"): Promise<string[]> {
-  const header = ["```{=latex}\n" + ["\\usepackage{soul}", ...layoutOf(j.o).header].join("\n") + "\n```"];
+  const two = Number(j.o.columns) === 2;
+  const header = ["```{=latex}\n" + ["\\usepackage{soul}", ...(two ? ["\\usepackage{adjustbox}"] : []), ...layoutOf(j.o).header].join("\n") + "\n```"];
   if (j.o.preamble) {
     if (j.files.includes(j.o.preamble)) header.push("```{=latex}\n\\input{" + relative(j.outDir, j.o.preamble) + "}\n```");
     else j.t.warnings.push(`LaTeX preamble not found: ${j.o.preamble}`);
@@ -245,7 +298,8 @@ async function latexRoad(j: Job, format: "pdf-latex" | "tex"): Promise<string[]>
   // after the preamble, so a \ket it (or a package) defines is the one used
   header.push("```{=latex}\n" + macroDefinitions("providecommand") + "\n```");
   const extra = ["--lua-filter", `${PLUGIN}/tikz.lua`, ...layoutOf(j.o).args, ...(j.t.cited.length && j.bib ? ["--biblatex"] : [])];
-  const tex = await pandoc(j, "latex", metadata(j, "latex", header) + (await fences(j, "latex")), extra);
+  const body = await fences(j, "latex");
+  const tex = await pandoc(j, "latex", metadata(j, "latex", header) + (two ? fitDisplays(body) : body), extra);
   const at = `${j.outDir}/${j.stem}.tex`;
   await kandinsky.write(at, tex);
   if (format === "tex") return [at];

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { harness } from "kandinsky-helper/testing";
 import { translate, relative, mathPortable } from "./translate";
 import { macroDefinitions } from "../../../../ui/src/lib/tex-portable";
-import { latexErrors, yamlEntry } from "./helper";
+import { latexErrors, yamlEntry, equationMarks, typstSymbols, fitDisplays } from "./helper";
 import { escapeTypstText, latexMathToTypst, markdownToTypst } from "./md_typst";
 
 const REPORT = `---
@@ -113,6 +113,7 @@ test("PDF (Typst): pandoc writes Typst with the page and the bibliography, the c
   assert.deepEqual(r.written, ["exports/notes/Report.pdf"]);
   const pandoc = harness.ran.find((x) => x.program === "pandoc")!;
   assert.deepEqual(pandoc.args.slice(0, 5), ["-f", "markdown+mark-implicit_figures+implicit_figures", "-t", "typst", "-s"]);
+  assert.deepEqual(pandoc.args.slice(-2), ["--template", ".kandinsky/plugins/export/kandinsky.typst"], "Kandinsky's look");
   const input = pandoc.stdin!;
   for (const line of ['papersize: "us-letter"', "columns: 2", "toc: true", 'section-numbering: "1.1"', 'bibliography: "../../refs/refs.bib"', 'bibliographystyle: "american-physics-society"', 'title: "A report"'])
     assert.ok(input.includes(line), line);
@@ -198,12 +199,29 @@ test("equations are numbered over the whole document, an embedded note's continu
     "notes/Far.md": "$$ u \\label{eq-g} $$\n$$ v \\label{eq-f} $$\n",
   };
   const t = await translate({ files: Object.keys(files), read: async (p: string) => files[p] }, "notes/Host.md", "exports", new Set());
-  const md = t.markdown.replace(/\s+/g, " ");
-  assert.ok(md.includes("a = b\\tag{1}"), md);
-  assert.ok(md.includes("\\end{aligned}\\tag{2}"), md); // the embedded note continues: (2)
-  assert.ok(md.includes("z \\tag{D2}") && !md.includes("\\label"), md);
-  assert.ok(md.includes("and (1), (2), Far (2)."), md); // a note not in the document: its own numbers
+  const md = t.markdown.replace(/\s+/g, " ").replace(/\u0005/g, "@").replace(/\u0006([^\u0006]*)\u0006/g, "<$1>");
+  assert.ok(md.includes("a = b\\tag{1}@"), md); // @: the display links go to
+  assert.ok(md.includes("\\end{aligned}\\tag{2}@"), md); // the embedded note continues: (2)
+  assert.ok(md.includes("z \\tag{D2}@") && !md.includes("\\label"), md);
+  assert.ok(md.includes("and <1>, <2>, Far (2)."), md); // a note not in the document: its own numbers, as text
   assert.ok(md.includes("$$ c $$"), "a plain display stays unnumbered");
+
+  // each road: LaTeX labels and \eqref, Typst the number beside the formula, a label and a link to it, Word the text
+  const roads = (r: "latex" | "typst" | "docx") => equationMarks(t.markdown, r).replace(/\s+/g, " ");
+  const latex = roads("latex"), typst = roads("typst"), word = roads("docx");
+  assert.ok(latex.includes("a = b\\tag{1}\\label{eq-1} $$") && latex.includes("\\tag{D2}\\label{eq-D2}"), latex);
+  assert.ok(latex.includes("and `\\eqref{eq-1}`{=latex}, `\\eqref{eq-2}`{=latex}, Far (2)."), latex);
+  assert.ok(typst.includes("a = b\\qquad\\text{(1)} $$`<eq-1>`{=typst}"), typst);
+  assert.ok(typst.includes("and `#link(<eq-1>)[(1)]`{=typst}, `#link(<eq-2>)[(2)]`{=typst}, Far (2)."), typst);
+  assert.ok(word.includes("a = b\\qquad\\text{(1)} $$ then") && word.includes("and (1), (2), Far (2).") && !/[\u0005\u0006]/.test(word), word);
+});
+
+test("an equation number is linked once, at its first display; a starred tag reads without brackets", () => {
+  const md = "$$ a \\tag*{A}\u0005\n$$\n\n$$ b \\tag{A}\n$$\n\nsee \u0006A\u0006";
+  const typst = equationMarks(md, "typst");
+  assert.equal((typst.match(/<eq-A>`/g) ?? []).length, 1, typst);
+  assert.ok(typst.includes("a \\qquad\\text{A}") && typst.includes("b \\qquad\\text{(A)}"), typst);
+  assert.equal((equationMarks(md, "latex").match(/\\label/g) ?? []).length, 1);
 });
 
 test("a link to a figure reads Figure n, and the figure's block id is gone", async () => {
@@ -236,4 +254,25 @@ test("Pandoc-free Typst and HTML fallbacks convert ordinary TeX math and escape 
   assert.deepEqual(r.written, ["exports/notes/Report.pdf"]);
   assert.equal(typst.length, 1);
   assert.ok(typst[0].source?.includes('#set page(paper: "a4"') && typst[0].source?.includes('#bibliography('), String(typst[0].source));
+});
+
+test("Typst: the symbol names Typst 0.15 removed are renamed in math only", () => {
+  const typ = "The sect of $A sect B$ and $planck.reduce angle.l x angle.r$, $dot.circle.big$; a \\$sect\\$ in prose.";
+  assert.equal(typstSymbols(typ), "The sect of $A inter B$ and $planck chevron.l x chevron.r$, $dot.o.big$; a \\$sect\\$ in prose.");
+});
+
+test("LaTeX in two columns: a one-line display is boxed to the column, its tag and label outside; rows stay", () => {
+  const md = "Text $$a + b \\tag{3}\\label{eq-3}$$ more.\n\n$$\\begin{align} a \\\\ b \\end{align}$$\n\n$$x \\\\ y$$\n\n$$\\begin{pmatrix} 1 \\\\ 2 \\end{pmatrix}$$";
+  const out = fitDisplays(md);
+  assert.ok(out.includes("`\\begin{equation*}\\adjustbox{max width=\\dimexpr\\columnwidth-3em\\relax}{$\\displaystyle a + b$}\\tag{3}\\label{eq-3}\\end{equation*}`{=latex} more."), out);
+  assert.ok(out.includes("$$\\begin{align} a \\\\ b \\end{align}$$") && out.includes("$$x \\\\ y$$"), out);
+  assert.ok(out.includes("{$\\displaystyle \\begin{pmatrix} 1 \\\\ 2 \\end{pmatrix}$}"), out);
+});
+
+test("Pandoc-free Typst: an equation's label follows its display and a link to it stays a link", () => {
+  const md = equationMarks("$$E = mc^2 \\tag{1}\u0005$$\n\nSee \u00061\u0006 and `code`.\n", "typst");
+  const typ = markdownToTypst(md, {});
+  assert.ok(/\$\s*<eq-1>/.test(typ), typ);
+  assert.ok(typ.includes("See #link(<eq-1>)[(1)] and `code`."), typ);
+  assert.ok(!typ.includes("{=typst}"), typ);
 });

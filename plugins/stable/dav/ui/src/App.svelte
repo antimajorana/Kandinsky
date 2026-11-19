@@ -15,9 +15,9 @@
   import Shortcuts from "./Shortcuts.svelte";
   import Icon from "./Icon.svelte";
   import CalendarPicker from "./CalendarPicker.svelte";
-  import { Cal, type Draft, type View } from "./store.svelte";
+  import { Cal, type Draft, type Moved, type View } from "./store.svelte";
   import { BY_KEY, COMMANDS, keyOf, shown, type Ui } from "./keys";
-  import { addDays, call, startOfDay, timeText, wall, ymd, type Ev, type PluginApi, type Quick } from "./api";
+  import { addDays, call, notePath, startOfDay, timeText, wall, ymd, type Ev, type PluginApi, type Quick, type TaskRow } from "./api";
 
   let { kandinsky }: { kandinsky: PluginApi } = $props();
   // svelte-ignore state_referenced_locally
@@ -25,6 +25,8 @@
 
   let width = $state(1200);
   let root: HTMLDivElement | undefined = $state();
+  // Back / Forward (mouse buttons, swipes, Super+[, the phone's Back) step through the views and dates shown
+  $effect(() => (root ? cal.steps.attach(root) : undefined));
   let sideOpen = $state(true);
   let help = $state(false);
   let searchBox: HTMLInputElement | undefined = $state();
@@ -50,6 +52,21 @@
   // ----- what the commands need
 
   function select(e: Ev, at: DOMRect) { pop = { e, at }; editor = null; }
+  /** An event's right-click menu: what its card and editor do, at the pointer; then, for an event from a note, the
+   *  rows every file has (the shell's popMenu). A task of the deadlines layer has only its note. */
+  function eventMenu(e: Ev, ev: MouseEvent) {
+    if (typeof kandinsky.shell.popMenu !== "function") return; // an app before API v34: the WebView's own menu
+    const at = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+    const note = e.task?.path ?? notePath(e) ?? undefined;
+    const rows = e.task ? [] : [
+      { label: "Show", icon: "calendar", run: () => select(e, at) },
+      { label: "Edit…", icon: "pen", disabled: !e.writable, run: () => edit(e) },
+      { label: "Duplicate", icon: "copy", run: () => void cal.duplicate(e) },
+      null,
+      { label: "Delete", icon: "trash", danger: true, disabled: !e.writable, run: () => void cal.remove(e) },
+    ];
+    kandinsky.shell.popMenu(ev, rows, { path: note, openLabel: "Open its note" });
+  }
   function create(start: Date, end: Date, allDay: boolean, at: DOMRect) {
     if (!cal.newCalendar()) { cal.toast(cal.configured ? "No calendar of your accounts takes new events (all read-only?)" : "Add a calendar account in Settings first", "error"); return; }
     pop = { draft: { start, end, all_day: allDay }, at };
@@ -76,6 +93,7 @@
   }
   function back() {
     if (help) { help = false; return; }
+    if (cal.placing) { cal.placing = null; return; }
     if (editor) { editor = null; return; }
     if (pop) { pop = null; return; }
     if (quickOpen) { quickOpen = false; return; }
@@ -161,10 +179,12 @@
     void (async () => { await cal.loadSources(); await cal.load(); void cal.sync(false); })();
     const offs = [
       kandinsky.helper.on("changed", () => { void cal.loadSources(); cal.later(); }),
+      // an event with linked tasks moved (dragged here, or synced from elsewhere): offer to move their ⏳
+      kandinsky.helper.on("moved", (d) => { for (const m of (d as { moved?: Moved[] }).moved ?? []) cal.offerMove(m); }),
     ];
     const tick = setInterval(() => (cal.now = new Date()), 30_000);
     // another part of Kandinsky asks to show a day (the Home card, a command)
-    const show = (e: Event) => { const d = (e as CustomEvent<{ date?: string; view?: View; quick?: boolean; create?: boolean }>).detail ?? {}; if (d.date) cal.go(new Date(`${d.date}T12:00`), d.view); else if (d.view) cal.setView(d.view); if (d.quick) openQuick(); if (d.create) newEvent(); };
+    const show = (e: Event) => { const d = (e as CustomEvent<{ date?: string; view?: View; quick?: boolean; create?: boolean; place?: TaskRow }>).detail ?? {}; if (d.date) cal.go(new Date(`${d.date}T12:00`), d.view); else if (d.view) cal.setView(d.view); if (d.quick) openQuick(); if (d.create) newEvent(); if (d.place) cal.startPlacing(d.place); };
     window.addEventListener("kandinsky-calendar:show", show);
     const pending = (window as unknown as { __kandinskyCalendarShow?: unknown }).__kandinskyCalendarShow;
     if (pending) { show(new CustomEvent("x", { detail: pending })); (window as unknown as { __kandinskyCalendarShow?: unknown }).__kandinskyCalendarShow = undefined; }
@@ -218,6 +238,14 @@
     </div>
   {/if}
 
+  {#if cal.placing}
+    <div class="placing" role="status">
+      <span class="tbox" aria-hidden="true"></span>
+      <span class="ptext">Time-block <b>{cal.placing.title}</b>: drag over the hours it takes, or click where it starts</span>
+      <button class="kandinsky-btn" onclick={() => (cal.placing = null)}>Cancel</button>
+    </div>
+  {/if}
+
   <div class="body">
     {#if sideShown}<aside class="side" aria-label="Calendars"><Sidebar {cal} oncreate={newEvent} /></aside>{/if}
     <main class="view">
@@ -227,16 +255,16 @@
         <div class="kandinsky-notice">No calendar account yet: add one in Settings (its server address, user name and app password; as many as you have) — or subscribe to a public calendar there.<div class="actions"><button class="kandinsky-btn primary" onclick={() => kandinsky.plugin.openSettings()}>Settings…</button></div></div>
       {/if}
       {#if cal.results}
-        <AgendaView {cal} events={cal.results} from={startOfDay(new Date())} to={startOfDay(new Date())} {selected} onselect={select} search />
+        <AgendaView {cal} events={cal.results} from={startOfDay(new Date())} to={startOfDay(new Date())} {selected} onselect={select} onmenu={eventMenu} search />
       {:else if view === "month"}
-        <MonthView {cal} days={cal.days()} {selected} onselect={select} oncreate={create} />
+        <MonthView {cal} days={cal.days()} {selected} onselect={select} onmenu={eventMenu} oncreate={create} />
       {:else if view === "agenda"}
-        <AgendaView {cal} events={cal.events} from={cal.range().from} to={cal.range().to} {selected} onselect={select} />
+        <AgendaView {cal} events={cal.shownEvents()} from={cal.range().from} to={cal.range().to} {selected} onselect={select} onmenu={eventMenu} />
       {:else if view === "year"}
         <YearView {cal} />
       {:else}
         {#key view + cal.range().from.getTime()}
-          <TimeGrid {cal} days={cal.days()} {selected} onselect={select} oncreate={create} />
+          <TimeGrid {cal} days={cal.days()} {selected} onselect={select} onmenu={eventMenu} oncreate={create} />
         {/key}
       {/if}
     </main>
@@ -283,6 +311,9 @@
   .qprev { color: var(--text-muted); font-size: 0.9em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .qprev b { color: var(--text); }
   .body { grid-row: 3; display: flex; min-height: 0; }
+  .placing { grid-row: 2; display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--accent-soft); color: var(--text); min-width: 0; flex-wrap: wrap; }
+  .ptext { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+  .placing .tbox { width: 11px; height: 11px; border: 1.5px solid var(--accent-strong); border-radius: 3px; flex: none; box-sizing: border-box; }
   .side { flex: none; width: 248px; border-right: 1px solid var(--border); background: var(--bg-alt); min-height: 0; }
   .view { flex: 1; min-width: 0; min-height: 0; position: relative; display: flex; flex-direction: column; }
   .view > :global(*) { flex: 1; min-height: 0; }

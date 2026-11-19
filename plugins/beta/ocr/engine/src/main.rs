@@ -18,6 +18,10 @@ fn fail<T>(why: impl Into<String>) -> Result<T> {
     Err(Error { status: None, why: why.into() })
 }
 
+fn is_pdf(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(".pdf")
+}
+
 fn is_picture(name: &str) -> bool {
     name.rsplit_once('.').is_some_and(|(_, ext)| PICTURES.contains(&ext.to_ascii_lowercase().as_str()))
 }
@@ -195,11 +199,16 @@ impl Reader {
     }
 
     fn read(&mut self, kandinsky: &Kandinsky, path: &Path, languages: &str) -> Result<String> {
-        let (img, scale) = prepare(image::open(path).or_else(|e| fail(format!("{}: {e}", path.display())))?);
+        let img = image::open(path).or_else(|e| fail(format!("{}: {e}", path.display())))?;
+        self.read_image(kandinsky, img, &path.display().to_string(), languages)
+    }
+
+    fn read_image(&mut self, kandinsky: &Kandinsky, img: image::DynamicImage, name: &str, languages: &str) -> Result<String> {
+        let (img, scale) = prepare(img);
         let (w, h) = img.dimensions();
         let api = self.engine(kandinsky, languages)?;
         let (w, h) = (i32::try_from(w).or_else(|_| fail("too wide"))?, i32::try_from(h).or_else(|_| fail("too tall"))?);
-        api.set_image(img.as_raw(), w, h, 1, w).or_else(|e| fail(format!("{}: {e}", path.display())))?;
+        api.set_image(img.as_raw(), w, h, 1, w).or_else(|e| fail(format!("{name}: {e}")))?;
         api.set_source_resolution(96 * scale).or_else(|e| fail(e.to_string()))?; // a screen's 96, times what prepare enlarged
         let text = api.get_utf8_text().or_else(|e| fail(e.to_string()))?;
         Ok(tidy(text.lines().map(mend_links)))
@@ -287,6 +296,36 @@ fn str_param<'a>(p: &'a Value, key: &str) -> Result<&'a str> {
     }
 }
 
+/// What was typed in a capture beside its pictures: the text with every embed (`![[…]]`, `![…](…)`) taken out.
+fn typed_words(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find('!') {
+        out.push_str(&rest[..at]);
+        let tail = &rest[at..];
+        // `![[name]]`, or `![alt](address)`: skipped whole; any other `!` kept
+        let skip = if let Some(inner) = tail.strip_prefix("![[") {
+            inner.find("]]").map(|e| 3 + e + 2)
+        } else if let Some(inner) = tail.strip_prefix("![") {
+            inner.find("](").and_then(|m| inner[m + 2..].find(')').map(|e| 2 + m + 2 + e + 1))
+        } else {
+            None
+        };
+        match skip {
+            Some(n) => {
+                out.push(' ');
+                rest = &tail[n..];
+            }
+            None => {
+                out.push('!');
+                rest = &tail[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// After a capture: each picture in it read, its text put under it, and all of it offered to the catalog.
 fn on_capture(kandinsky: &Kandinsky, reader: &mut Reader, p: &Value) -> Result<Value> {
     let text = str_param(p, "text")?;
@@ -328,8 +367,10 @@ fn on_capture(kandinsky: &Kandinsky, reader: &mut Reader, p: &Value) -> Result<V
     if !failed.is_empty() {
         said = format!("{said} ({} of {} pictures; not read: {})", read.len(), pictures.len(), failed.join("; "));
     }
-    // a link or an identifier in the picture is filed like a typed one (the catalog skips plain words)
-    let all: String = read.iter().map(|(_, w)| w.as_str()).collect::<Vec<_>>().join("\n");
+    // a link or an identifier in the picture is filed like a typed one (the catalog skips plain words); the words typed
+    // beside the picture go with it, so they help decide what it is ("a film:" over a poster's screenshot)
+    let typed = typed_words(text);
+    let all: String = std::iter::once(typed.as_str()).filter(|t| !t.is_empty()).chain(read.iter().map(|(_, w)| w.as_str())).collect::<Vec<_>>().join("\n");
     let filed = if p.pointer("/settings/to_catalog").and_then(Value::as_bool) == Some(false) {
         None
     } else {
@@ -350,7 +391,14 @@ fn main() {
         m.add("read", move |p| {
             let root = PathBuf::from(std::env::var("KANDINSKY_ROOT").unwrap_or_else(|_| ".".into()));
             let path = str_param(&p, "path")?;
-            let text = reader.borrow_mut().read(&kandinsky, &locate(&kandinsky, &root, "", path)?, &languages(&p))?;
+            let text = if is_pdf(path) {
+                // a scanned PDF: its first page, as the core draws it for its cover
+                let jpg = kandinsky.get_bytes(&format!("/api/thumb?path={}", kandinsky_plugin::q(path)))?;
+                let img = image::load_from_memory(&jpg).or_else(|e| fail(format!("{path}: its first page: {e}")))?;
+                reader.borrow_mut().read_image(&kandinsky, img, path, &languages(&p))?
+            } else {
+                reader.borrow_mut().read(&kandinsky, &locate(&kandinsky, &root, "", path)?, &languages(&p))?
+            };
             Ok(json!({ "text": text }))
         });
     }
@@ -370,6 +418,14 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn the_words_typed_beside_a_picture_go_to_the_catalog_with_what_was_read() {
+        assert_eq!(super::typed_words("a film: ![[Pasted image 1.png]] seen today"), "a film: seen today");
+        assert_eq!(super::typed_words("![[shot.png]]"), "", "only a picture: nothing typed");
+        assert_eq!(super::typed_words("see ![x](a.png) here"), "see here");
+    }
+
     use super::*;
 
     #[test]

@@ -23,7 +23,7 @@ secrets = true
 
 [helper]
 # built by engine/build.sh (crate kandinsky-papers): one static binary per platform
-run = "\"$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET/papers\""
+run = "\"${KANDINSKY_PLUGIN_BIN:-$KANDINSKY_PLUGIN_DIR/bin/$KANDINSKY_PLUGIN_TARGET}/papers\""  # the phone: the app's own copy (APK)
 # with the vault, so the Zotero Connector's listener is up when the setting is on
 start = "open"
 

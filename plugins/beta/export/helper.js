@@ -133,6 +133,39 @@
 	const OWN_TAG = /\\tag\*?\{([^}]*)\}/;
 	const NO_TAG = /\\(?:notag|nonumber)\b/;
 	const NUMBERED_ENV = /\\begin\{(equation|align|gather|multline|eqnarray)\}/;
+	/** The environments numbered row by row (their starred forms are not numbered at all). */
+	const MULTI_ROW = /\\begin\{(align|gather|eqnarray)\}/;
+	/** The rows of the display's multi-row environment as [start, end) offsets into `tex` (a row ends at a top-level
+	*  `\\` or the environment's `\end`; a trailing `\\` makes no row), or null when it has none. Nested environments
+	*  (`cases`, `matrix`) and braces are skipped whole. */
+	function rowSpans(tex) {
+		const m = MULTI_ROW.exec(tex);
+		if (!m) return null;
+		const rows = [];
+		let depth = 0, start = m.index + m[0].length;
+		for (let i = start; i < tex.length; i++) {
+			const env = /^\\(begin|end)\{[^}]*\}/.exec(tex.slice(i, i + 40));
+			if (env) {
+				if (env[1] === "begin") depth++;
+				else if (depth === 0) {
+					rows.push([start, i]);
+					break;
+				} else depth--;
+				i += env[0].length - 1;
+			} else if (tex.startsWith("\\\\", i)) {
+				if (depth === 0) {
+					rows.push([start, i]);
+					start = i + 2;
+				}
+				i++;
+			} else if (tex[i] === "\\") i++;
+			else if (tex[i] === "{") depth++;
+			else if (tex[i] === "}") depth--;
+		}
+		const last = rows.at(-1);
+		if (rows.length > 1 && last && !tex.slice(last[0], last[1]).trim()) rows.pop();
+		return rows.length ? rows : null;
+	}
 	/** A figure's line: an embed (`![[…]]` or `![…](…)`), anything after it, and its block id last. */
 	const FIGURE_LINE = /^[\s>]*(!\[\[[^\]]+\]\]|!\[[^\]]*\]\([^)]*\))(.*?)[ \t]+\^([A-Za-z0-9-]+)[ \t]*$/;
 	/** The label a numbered display takes: its own `\tag`, none for `\notag`, else the next number (`next` counts them). */
@@ -169,6 +202,26 @@
 			for (let k = i + 1; close < 0 && k < lines.length; k++) if (lines[k].includes("$$")) close = k;
 			if (close < 0) break;
 			const source = lines.slice(i, close + 1).join("\n");
+			const rows = rowSpans(source);
+			if (rows) {
+				const span = [i + 1, close + 1];
+				const nums = rows.map(([a, b]) => labelOf(source.slice(a, b), next));
+				rows.forEach(([a, b], r) => {
+					const rid = LABEL.exec(source.slice(a, b))?.[1], num = nums[r];
+					if (rid && num !== null) {
+						byId.set(rid, num);
+						spanOf.set(rid, span);
+					}
+				});
+				const blockId = ID_AFTER_CLOSE.exec(lines[close])?.[1], lastNum = nums.filter((x) => x !== null).at(-1);
+				if (blockId && lastNum) {
+					byId.set(blockId, lastNum);
+					spanOf.set(blockId, span);
+				}
+				if (nums.some((x) => x !== null)) byTex.set(texKey(source), nums);
+				i = close;
+				continue;
+			}
 			const id = LABEL.exec(source)?.[1] ?? ID_AFTER_CLOSE.exec(lines[close])?.[1];
 			if (id || NUMBERED_ENV.test(source)) {
 				const label = labelOf(source, next);
@@ -177,7 +230,7 @@
 						byId.set(id, label);
 						spanOf.set(id, [i + 1, close + 1]);
 					}
-					if (!OWN_TAG.test(source)) byTex.set(texKey(source), label);
+					if (!OWN_TAG.test(source)) byTex.set(texKey(source), [label]);
 				}
 			}
 			i = close;
@@ -192,12 +245,26 @@
 	/** A display's TeX as a lookup key: without its `$$`, a block id after them, container prefixes (`> `) and outer
 	*  blanks; the reader's token content and the editor's `$$…$$` source give the same key. */
 	const texKey = (display) => display.replace(/[ \t]*\^[A-Za-z0-9-]+[ \t]*$/, "").split("\n").map((l) => l.replace(/^[ \t>]*/, "")).join("\n").replace(/^\s*\$\$|\$\$\s*$/g, "").trim();
-	/** TeX as KaTeX should draw it: labels out (they are Kandinsky's), and with a number, a numbered environment made its
-	*  unnumbered twin (KaTeX would count from 1 in each display) and `\tag{n}` added — before the closing `$$` when the
-	*  text has them. */
-	function numberedTex(tex, n) {
+	/** TeX as KaTeX should draw it: labels out (they are Kandinsky's), and with numbers, either each row of a multi-row
+	*  environment given its `\tag{n}` (KaTeX's `align`/`gather` take one per row; `eqnarray`, which KaTeX lacks, is drawn
+	*  as `align`), or a numbered environment made its unnumbered twin (KaTeX would count from 1 in each display) and
+	*  `\tag{n}` added — before the closing `$$` when the text has them. */
+	function numberedTex(tex, nums) {
 		let t = tex.replace(LABELS, "");
-		if (!n) return t;
+		const rows = rowSpans(t);
+		if (rows && nums?.length) {
+			for (let r = rows.length - 1; r >= 0; r--) {
+				const [a, b] = rows[r], row = t.slice(a, b), n = nums[r];
+				if (n && !OWN_TAG.test(row) && !NO_TAG.test(row)) t = `${t.slice(0, b).trimEnd()} \\tag{${n}}${t.slice(b)}`;
+			}
+			return t.replace(/\\(begin|end)\{eqnarray\}/g, "\\$1{align}");
+		}
+		const n = nums?.[0];
+		return n ? numberedWhole(t, n) : t;
+	}
+	/** A display given one number as a whole (labels already out): a numbered environment made its unnumbered twin and
+	*  `\tag{n}` added — before the closing `$$` when the text has them. The export numbers displays this way. */
+	function numberedWhole(t, n) {
 		t = t.replace(/\\(begin|end)\{(equation|align|gather|multline|eqnarray)\}/g, (_m, be, env) => env === "equation" || env === "multline" ? "" : `\\${be}{${env === "align" || env === "eqnarray" ? "aligned" : "gathered"}}`);
 		const at = t.lastIndexOf("$$");
 		return at > 0 ? `${t.slice(0, at)}\\tag{${n}}${t.slice(at)}` : `${t.trimEnd()}\\tag{${n}}`;
@@ -307,6 +374,7 @@
 	*  own numbers. A link to a figure reads "Figure n" by its note's numbering ("Note, Figure n" from another note). */
 	async function numberEquations(md, read) {
 		const byLabel = /* @__PURE__ */ new Map();
+		const anchored = /* @__PURE__ */ new Set();
 		let n = 0;
 		md = md.replace(/\$\$([\s\S]+?)\$\$/g, (whole, tex) => {
 			const labels = [...tex.matchAll(/\\label\{([^}]*)\}/g)].map((m) => m[1]);
@@ -314,7 +382,12 @@
 			const own = /\\tag\*?\{([^}]*)\}/.exec(tex)?.[1];
 			const num = own ?? (/\\(?:notag|nonumber)\b/.test(tex) ? null : String(++n));
 			for (const l of labels) if (num && l !== AUTO) byLabel.set(l, num);
-			return `$$${num && !own ? numberedTex(tex.trimEnd(), num) : numberedTex(tex).trimEnd()}\n$$`;
+			let bare = num && !own ? numberedWhole(numberedTex(tex.trimEnd()), num) : numberedTex(tex).trimEnd();
+			if (num && !anchored.has(num)) {
+				anchored.add(num);
+				bare = bare.replace(/\\tag\*?\{[^}]*\}/, (t) => t + "");
+			}
+			return `$$${bare}\n$$`;
 		});
 		const elsewhere = /* @__PURE__ */ new Map();
 		const refs = [...new Set([...md.matchAll(/\u0001([^\u0001]*)\u0001/g)].map((m) => m[1]))];
@@ -324,7 +397,7 @@
 			const [note, id] = [key.slice(0, key.lastIndexOf("::")), key.slice(key.lastIndexOf("::") + 2)];
 			const here = byLabel.get(key);
 			if (here) {
-				text.set(r, `(${here})`);
+				text.set(r, `${here}`);
 				continue;
 			}
 			if (!elsewhere.has(note)) elsewhere.set(note, read(note).then((t) => noteEquations(t), () => void 0));
@@ -845,6 +918,12 @@
 				const end = text.indexOf(fence, i + ticks);
 				if (end !== -1) {
 					const code = text.slice(i + ticks, end);
+					const raw = /^\{=(\w+)\}/.exec(text.slice(end + ticks));
+					if (raw) {
+						if (raw[1] === target) out += code;
+						i = end + ticks + raw[0].length;
+						continue;
+					}
 					out += target === "typst" ? `${fence}${code}${fence}` : `<code>${escapeHtml(code)}</code>`;
 					i = end + ticks;
 					continue;
@@ -1069,20 +1148,22 @@
 				continue;
 			}
 			if (line.trim().startsWith("$$")) {
-				const single = /^\$\$(.+)\$\$$/.exec(line.trim());
+				const single = /^\$\$(.+?)\$\$(.*)$/.exec(line.trim());
 				if (single) {
-					out.push(`$\n  ${latexMathToTypst(single[1])}\n$`);
+					out.push(`$\n  ${latexMathToTypst(single[1])}\n$` + convertInline(single[2].trim(), "typst"));
 					i++;
 					continue;
 				}
 				const mathLines = [line.trim().slice(2)];
 				i++;
 				while (i < lines.length && !lines[i].includes("$$")) mathLines.push(lines[i++]);
+				let after = "";
 				if (i < lines.length) {
 					const tail = lines[i++];
 					mathLines.push(tail.slice(0, tail.indexOf("$$")));
+					after = tail.slice(tail.indexOf("$$") + 2).trim();
 				}
-				out.push(`$\n  ${latexMathToTypst(mathLines.join("\n"))}\n$`);
+				out.push(`$\n  ${latexMathToTypst(mathLines.join("\n"))}\n$` + convertInline(after, "typst"));
 				continue;
 			}
 			const hm = /^(#{1,6})\s+(.+?)(?:\s+#+)?$/.exec(line);
@@ -1609,8 +1690,26 @@ ${blocks.join("\n")}
 			j.t.warnings.push(`a ${f.lang} picture is left as code: ${f.lang === "tikz" ? "the TeX in the page did not draw it" : `${road === "html" ? "HTML" : "Word"} has no Typst`}`);
 			out[i] = "```" + f.lang + "\n" + f.source + "\n```";
 		}
-		const md = (road === "latex" ? j.t.markdown : j.t.markdown.replace(/\\tag\*?\{([^}]*)\}/g, (_, n) => `\\qquad\\text{(${n})}`)).replace(/<!--fence:(\d+)-->/g, (_, n) => out[Number(n)]);
+		const md = equationMarks(j.t.markdown, road).replace(/<!--fence:(\d+)-->/g, (_, n) => out[Number(n)]);
 		return /^# /m.test(md) || !/^## /m.test(md) ? md : md.replace(/^#(#+ )/gm, "$1");
+	}
+	/** The equation numbers `numberEquations` wrote (translate.ts `ANCHOR`, `REF`), for a road. LaTeX keeps `\tag`, labels
+	*  the display and links with `\eqref`. pandoc's Typst and Word writers drop `\tag`, so there the number is written
+	*  beside the formula; Typst labels it `<eq-n>` and links to the label (`#link`, not `@eq-n`: a reference needs Typst's
+	*  own equation numbering, which would number every display); Word and the Pandoc-free HTML have the plain numbers. */
+	function equationMarks(md, road) {
+		const label = (n) => `eq-${n.replace(/[^A-Za-z0-9_.:-]/g, "-")}`;
+		const text = (n, star) => star ? n : `(${n})`;
+		md = md.replace(/\$\$([\s\S]+?)\$\$/g, (whole, tex) => {
+			let anchor = "";
+			const t = tex.replace(/\\tag(\*?)\{([^}]*)\}(\u0005?)/g, (tag, star, n, a) => {
+				if (road === "latex") return a ? `${tag.slice(0, -1)}\\label{${label(n)}}` : tag;
+				if (a && road === "typst") anchor = "`<" + label(n) + ">`{=typst}";
+				return `\\qquad\\text{${text(n, !!star)}}`;
+			});
+			return t === tex ? whole : `$$${t}$$${anchor}`;
+		});
+		return md.replace(/\u0006([^\u0006]*)\u0006/g, (_, n) => road === "latex" ? "`\\eqref{" + label(n) + "}`{=latex}" : road === "typst" ? "`#link(<" + label(n) + ">)[" + text(n, false).replace(/[\\#*_`$<>@\[\]]/g, "\\$&") + "]`{=typst}" : text(n, false));
 	}
 	const MD = "markdown+mark-implicit_figures+implicit_figures";
 	async function pandoc(j, to, input, extra = [], output) {
@@ -1637,6 +1736,49 @@ ${blocks.join("\n")}
 			i + 2
 		].filter((k) => k < lines.length)))].sort((a, b) => a - b).map((k) => lines[k]).join("\n").slice(-3e3) || lines.slice(-30).join("\n");
 	}
+	/** pandoc 3.7's Typst names that Typst 0.14–0.15 removed (codex 0.3), each to its successor. Found by writing every
+	*  KaTeX command through pandoc and compiling the result. */
+	const TYPST_RENAMED = {
+		sect: "inter",
+		"sect.big": "inter.big",
+		"sect.double": "inter.double",
+		"sect.sq": "inter.sq",
+		"planck.reduce": "planck",
+		"angle.l": "chevron.l",
+		"angle.r": "chevron.r",
+		"angle.l.double": "chevron.l.double",
+		"angle.r.double": "chevron.r.double",
+		"brace.l.double": "brace.l.stroked",
+		"brace.r.double": "brace.r.stroked",
+		"bracket.l.double": "bracket.l.stroked",
+		"bracket.r.double": "bracket.r.stroked",
+		"circle.nested": "compose.o",
+		"ast.circle": "ast.op.o",
+		"dash.circle": "dash.o",
+		"dot.circle": "dot.o",
+		"dot.circle.big": "dot.o.big",
+		"minus.circle": "minus.o",
+		"times.circle": "times.o",
+		"times.circle.big": "times.o.big"
+	};
+	/** pandoc's Typst with the removed symbol names renamed, inside math only (`$…$`; prose keeps its words). */
+	function typstSymbols(typ) {
+		return typ.split(/(?<!\\)\$/).map((part, i) => i % 2 === 0 ? part : part.replace(/(?<![\w.])[a-z]+(?:\.[a-z]+)*(?![\w])/gi, (name) => TYPST_RENAMED[name] ?? name)).join("$");
+	}
+	/** A display too wide for a LaTeX column runs into the other one: in two columns each single-line display is boxed to
+	*  at most the column's width (adjustbox), its \tag and \label kept outside the box. Multi-row environments stay. */
+	function fitDisplays(md) {
+		return md.replace(/\$\$([\s\S]+?)\$\$/g, (whole, tex) => {
+			if (/\\begin\{(align|gather|eqnarray|multline|flalign|alignat)\*?\}/.test(tex)) return whole;
+			const marks = [];
+			const body = tex.replace(/\\(?:tag\*?|label)\{[^}]*\}/g, (m) => {
+				marks.push(m);
+				return "";
+			}).trim();
+			if (/(^|[^\\])\\\\(?![a-zA-Z])/.test(body.replace(/\\begin\{(\w+\*?)\}[\s\S]*?\\end\{\1\}/g, ""))) return whole;
+			return "`\\begin{equation*}\\adjustbox{max width=" + (marks.some((m) => m.startsWith("\\tag")) ? "\\dimexpr\\columnwidth-3em\\relax" : "\\columnwidth") + "}{$\\displaystyle " + body + "$}" + marks.join("") + "\\end{equation*}`{=latex}";
+		});
+	}
 	async function typstRoad(j, format) {
 		const preamble = j.o.typstPreamble ? await kandinsky.read(j.o.typstPreamble).catch(() => {
 			j.t.warnings.push(`Typst preamble not found: ${j.o.typstPreamble}`);
@@ -1646,7 +1788,7 @@ ${blocks.join("\n")}
 		const header2 = preamble ? ["```{=typst}\n" + preamble + "\n```"] : [];
 		let typ;
 		try {
-			typ = await pandoc(j, "typst", metadata(j, "typst", header2) + md);
+			typ = typstSymbols(await pandoc(j, "typst", metadata(j, "typst", header2) + md, ["--template", `${PLUGIN}/kandinsky.typst`]));
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
 			if (!/not installed/i.test(msg)) throw e;
@@ -1680,7 +1822,12 @@ ${blocks.join("\n")}
 		return at;
 	}
 	async function latexRoad(j, format) {
-		const header = ["```{=latex}\n" + ["\\usepackage{soul}", ...layoutOf(j.o).header].join("\n") + "\n```"];
+		const two = Number(j.o.columns) === 2;
+		const header = ["```{=latex}\n" + [
+			"\\usepackage{soul}",
+			...two ? ["\\usepackage{adjustbox}"] : [],
+			...layoutOf(j.o).header
+		].join("\n") + "\n```"];
 		if (j.o.preamble) {
 			if (j.files.includes(j.o.preamble)) header.push("```{=latex}\n\\input{" + relative(j.outDir, j.o.preamble) + "}\n```");
 			else j.t.warnings.push(`LaTeX preamble not found: ${j.o.preamble}`);
@@ -1692,7 +1839,8 @@ ${blocks.join("\n")}
 			...layoutOf(j.o).args,
 			...j.t.cited.length && j.bib ? ["--biblatex"] : []
 		];
-		const tex = await pandoc(j, "latex", metadata(j, "latex", header) + await fences(j, "latex"), extra);
+		const body = await fences(j, "latex");
+		const tex = await pandoc(j, "latex", metadata(j, "latex", header) + (two ? fitDisplays(body) : body), extra);
 		const at = `${j.outDir}/${j.stem}.tex`;
 		await kandinsky.write(at, tex);
 		if (format === "tex") return [at];
@@ -1782,12 +1930,15 @@ ${blocks.join("\n")}
 	//#endregion
 	exports.LAYOUTS = LAYOUTS;
 	exports.MARGINS = MARGINS;
+	exports.equationMarks = equationMarks;
+	exports.fitDisplays = fitDisplays;
 	exports.latexErrors = latexErrors;
 	exports.latexMathToTypst = latexMathToTypst;
 	exports.layoutOf = layoutOf;
 	exports.markdownToHtml = markdownToHtml;
 	exports.markdownToTypst = markdownToTypst;
 	exports.tikzPng = tikzPng;
+	exports.typstSymbols = typstSymbols;
 	exports.yamlEntry = yamlEntry;
 	return exports;
 })({});

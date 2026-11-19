@@ -160,7 +160,7 @@ fn human(slug: &str) -> String {
 }
 
 /// One name as a string, several as a list: what a property looks like when a person reads it.
-fn names_value(names: Vec<String>) -> Option<Value> {
+pub(crate) fn names_value(names: Vec<String>) -> Option<Value> {
     match names.len() {
         0 => None,
         1 => names.into_iter().next().map(Value::String),
@@ -574,6 +574,22 @@ pub struct Page {
     pub text: String,
 }
 
+/// Whether an address can be a web page: its last segment has no extension, or a page's (`.html`, `.php`…). A link
+/// to a file (a PDF, a book, an archive, a video) is no page to read: fetching it as one downloads the whole file.
+fn is_page_address(url: &str) -> bool {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    let path = path.split_once("://").map_or(path, |(_, rest)| rest);
+    let Some((_, last)) = path.split_once('/').map(|(_, p)| p.rsplit_once('/').unwrap_or(("", p))) else { return true };
+    match last.rsplit_once('.') {
+        None => true,
+        Some((_, ext)) => {
+            let ext = ext.to_ascii_lowercase();
+            // not an extension at all ("v1.2", "item.12345"), or a page's
+            ext.is_empty() || ext.len() > 5 || ext.chars().all(|c| c.is_ascii_digit()) || ["html", "htm", "xhtml", "shtml", "php", "asp", "aspx", "jsp", "cgi", "cfm"].contains(&ext.as_str())
+        }
+    }
+}
+
 /// Fetches a page through the core (the engine never reaches the network itself: `get(url, cookie)`) — a meta refresh
 /// followed once — and reads it. Only `http(s)`. A bot check, an error page or a 202 "come back later" is an error
 /// saying so, never a note titled "Just a moment…". Moved from the core (REFACTOR-core-to-plugins #3, 2026-10-20).
@@ -581,6 +597,9 @@ pub fn fetch(url: &str, get: impl Fn(&str, &str) -> Result<Page, String>) -> Res
     let mut url = if url.contains("://") { url.to_string() } else { format!("https://{url}") };
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err(format!("only web addresses can be clipped, not {url}"));
+    }
+    if !is_page_address(&url) {
+        return Err(format!("{url} is a file, not a page: not read"));
     }
     for hop in 0..2 {
         // YouTube shows Europe a consent wall instead of the video: the answer a browser gives it once (as the phone app does)
@@ -611,6 +630,18 @@ pub fn fetch(url: &str, get: impl Fn(&str, &str) -> Result<Page, String>) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A link to a file is never fetched as a page (a 20 MB book through the page reader); pages and bare paths are.
+    #[test]
+    fn a_link_to_a_file_is_not_read_as_a_page() {
+        for u in ["https://files.example.org/books/Classical%20Dynamics.pdf", "https://x.example.org/a.epub?dl=1", "https://x.example.org/v.mp4"] {
+            assert!(!is_page_address(u), "{u}");
+            assert!(fetch(u, |_, _| panic!("fetched {u}")).is_err());
+        }
+        for u in ["https://example.org", "https://example.org/", "https://example.org/post/a-title", "https://example.org/index.html", "https://arxiv.org/abs/1706.03762", "https://example.org/v1.2/page"] {
+            assert!(is_page_address(u), "{u}");
+        }
+    }
 
     #[test]
     fn a_youtube_video_gets_its_cover_whole_description_and_player() {

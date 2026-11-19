@@ -1,15 +1,18 @@
 <script lang="ts">
   // Week, work week and day (DESIGN-calendar §2): the all-day lane on top, the hours down the side in the user's
-  // locale, the now-line, overlapping events side by side. Drag on empty space makes an event, drag an event moves it
+  // locale, the now-line; overlapping events laid out by `dayColumns` (layout.ts: drawn over a running one, indented,
+  // or side by side when they start together). Drag on empty space makes an event, drag an event moves it
   // (across days too), drag its lower edge resizes it — 15-minute steps; Esc cancels; a click selects.
   import { onMount } from "svelte";
-  import { addDays, evEnd, evStart, sameDay, startOfDay, timeText, notePath, type Ev } from "./api";
+  import { addDays, evEnd, evStart, sameDay, startOfDay, timeText, notePath, type Ev, type TaskRow } from "./api";
   import { dayColumns, laneBars } from "./layout";
   import type { Cal } from "./store.svelte";
 
-  let { cal, days, selected, onselect, oncreate }: {
+  let { cal, days, selected, onselect, onmenu, oncreate }: {
     cal: Cal; days: Date[]; selected: Ev | null;
     onselect: (e: Ev, at: DOMRect) => void;
+    /** a right-click on an event: its menu (App's `eventMenu`) */
+    onmenu: (e: Ev, ev: MouseEvent) => void;
     oncreate: (start: Date, end: Date, allDay: boolean, at: DOMRect) => void;
   } = $props();
 
@@ -19,7 +22,7 @@
   let cols: HTMLDivElement | undefined = $state();
 
   const placed = $derived(days.map((d) => dayColumns(cal.events, d)));
-  const bars = $derived(laneBars(cal.events, days));
+  const bars = $derived(laneBars(cal.shownEvents(), days));
   const laneRows = $derived(Math.max(1, ...bars.map((b) => b.row + 1)));
   const hours = Array.from({ length: 24 }, (_, h) => h);
   // 00–23 on the 24-hour clock (the 00 line is the top edge, left unlabelled)
@@ -27,6 +30,10 @@
   const nowMin = $derived(cal.now.getHours() * 60 + cal.now.getMinutes());
   const isSel = (e: Ev) => selected !== null && selected.uid === e.uid && selected.rid === e.rid && selected.calendar === e.calendar;
   const color = (e: Ev) => e.color ?? cal.colorOf(e.calendar);
+  // a box's left and width (layout.ts `Box`): a fraction of the day column plus pixels, with a 1 px gap on each side
+  const px = (f: number, p: number) => `calc(${f * 100}% + ${p}px)`;
+  // the whole of it on hover: a narrow block shows only its title
+  const tip = (e: Ev) => [e.summary || "(no title)", `${timeText(evStart(e), cal.h12)} – ${timeText(evEnd(e), cal.h12)}`, e.location, e.calendar_name].filter(Boolean).join("\n");
 
   onMount(() => {
     const h = Number(cal.settings.day_start ?? 8);
@@ -84,12 +91,16 @@
   }
 
   async function up(ev: PointerEvent) {
+    // a task dragged from the lane is released here too, before the window hears it: that drop is taskUp's
+    if (taskDrag) return;
     const d = drag;
     drag = null;
     document.body.style.userSelect = "";
     if (!d) return;
     const t = (day: number, min: number) => new Date(days[day].getFullYear(), days[day].getMonth(), days[day].getDate(), 0, min);
     if (d.kind === "create") {
+      // a task being time-blocked takes the slot (a click: an hour from there)
+      if (cal.placing) { void cal.timeBlock(t(d.day, d.from), t(d.day, d.to)); return; }
       // the popover points at the new slot
       const r = cols!.getBoundingClientRect(), w = r.width / days.length;
       oncreate(t(d.day, d.from), t(d.day, d.to), false, new DOMRect(r.left + d.day * w, r.top + (d.from / 60) * HOUR, w, ((d.to - d.from) / 60) * HOUR));
@@ -107,12 +118,55 @@
     await cal.change(e, { start: w(start), end: w(end), from_start: e.start }, scope, d.kind === "move" ? "Moved" : "Resized");
   }
 
+  // ----- a task of the layer dragged from the all-day lane onto the hours: time-blocked there (an hour), as
+  // Time-block… then a slot would do. The bar is outside the hours, so the drag is followed on the window.
+  let taskDrag = $state<{ t: TaskRow; x0: number; y0: number; moved: boolean } | null>(null);
+  let swallowClick = false;
+  const blockable = (e: Ev) => !!e.task && e.task.done !== true && e.task.props.from !== "note" && e.task.line !== null;
+  function taskDown(ev: PointerEvent, e: Ev) {
+    if (ev.button !== 0 || !blockable(e)) return;
+    taskDrag = { t: e.task!, x0: ev.clientX, y0: ev.clientY, moved: false };
+    window.addEventListener("pointermove", taskMove);
+    window.addEventListener("pointerup", taskUp, { once: true });
+  }
+  const overHours = (ev: PointerEvent) => {
+    const r = cols?.getBoundingClientRect();
+    const vis = scroller?.getBoundingClientRect();
+    return !!r && !!vis && ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= vis.top && ev.clientY <= vis.bottom;
+  };
+  function taskMove(ev: PointerEvent) {
+    const t = taskDrag;
+    if (!t) return;
+    if (!t.moved && Math.hypot(ev.clientX - t.x0, ev.clientY - t.y0) < 4) return;
+    t.moved = true;
+    document.body.style.userSelect = "none";
+    if (!overHours(ev)) { drag = null; return; }
+    const p = where(ev), from = Math.min(24 * 60 - 60, snap(p.min));
+    drag = { kind: "create", day: p.day, from, to: from + 60, grab: from, x0: t.x0, y0: t.y0, moved: true, len: 60 };
+  }
+  function taskUp(ev: PointerEvent) {
+    window.removeEventListener("pointermove", taskMove);
+    const t = taskDrag, d = drag;
+    taskDrag = null;
+    if (!t?.moved) return; // a click: the bar's own (its card)
+    // the click a release may send to the bar is not a click on it; one that never comes must not eat the next
+    swallowClick = true;
+    setTimeout(() => (swallowClick = false), 0);
+    drag = null;
+    document.body.style.userSelect = "";
+    if (!d || !overHours(ev)) return;
+    const at = (min: number) => new Date(days[d.day].getFullYear(), days[d.day].getMonth(), days[d.day].getDate(), 0, min);
+    cal.placing = t.t;
+    void cal.timeBlock(at(d.from), at(d.to));
+  }
+
   function key(ev: KeyboardEvent) {
     if (drag && ev.key === "Escape") { drag = null; document.body.style.userSelect = ""; ev.stopPropagation(); }
   }
 
   function laneClick(ev: MouseEvent, day: number) {
     if ((ev.target as HTMLElement).closest(".bar")) return;
+    if (cal.placing) return; // a time-block wants hours
     const d = days[day];
     oncreate(startOfDay(d), addDays(startOfDay(d), 1), true, (ev.currentTarget as HTMLElement).getBoundingClientRect());
   }
@@ -135,10 +189,12 @@
     <div class="lanecols">
       {#each days as _d, i (i)}<div class="lanecell" role="button" tabindex="-1" aria-label="New all-day event" style:grid-column={i + 1} onclick={(ev) => laneClick(ev, i)} onkeydown={() => {}}></div>{/each}
       {#each bars as b (b.e.calendar + b.e.uid + (b.e.rid ?? "") + b.from)}
-        <button class="bar ev" class:sel={isSel(b.e)} class:clipl={b.clippedStart} class:clipr={b.clippedEnd} class:cancel={b.e.status === "CANCELLED"} style:--c={color(b.e)}
+        <button class="bar ev" class:task={!!b.e.task} class:sel={isSel(b.e)} class:clipl={b.clippedStart} class:clipr={b.clippedEnd} class:cancel={b.e.status === "CANCELLED"} style:--c={color(b.e)}
           style:grid-column="{b.from + 1} / {b.to + 2}" style:grid-row={b.row + 1}
-          onclick={(ev) => onselect(b.e, (ev.currentTarget as HTMLElement).getBoundingClientRect())} title={b.e.summary}>
-          {#if notePath(b.e)}<span class="dot" aria-hidden="true"></span>{/if}{b.e.summary || "(no title)"}
+          onpointerdown={(ev) => taskDown(ev, b.e)} oncontextmenu={(ev) => onmenu(b.e, ev)}
+          onclick={(ev) => { if (swallowClick) { swallowClick = false; return; } onselect(b.e, (ev.currentTarget as HTMLElement).getBoundingClientRect()); }}
+          title={blockable(b.e) ? `${b.e.summary} — drag it onto the hours to time-block it` : b.e.summary}>
+          {#if b.e.task}<span class="tbox" aria-hidden="true"></span>{:else if notePath(b.e)}<span class="dot" aria-hidden="true"></span>{/if}{b.e.summary || "(no title)"}
         </button>
       {/each}
     </div>
@@ -153,10 +209,11 @@
           <div class="col" class:today={sameDay(d, cal.now)} class:weekend={d.getDay() === 0 || d.getDay() === 6} role="gridcell" tabindex="-1" onpointerdown={(ev) => down(ev, "create")}>
             {#each placed[i] as p (p.e.calendar + p.e.uid + (p.e.rid ?? ""))}
               {@const short = p.bottom - p.top < 40}
-              <div class="ev" class:sel={isSel(p.e)} class:short class:ro={!p.e.writable} class:cancel={p.e.status === "CANCELLED"} class:free={p.e.free}
+              <div class="ev" class:sel={isSel(p.e)} class:short class:over={p.depth > 0} class:ro={!p.e.writable} class:cancel={p.e.status === "CANCELLED"} class:free={p.e.free}
                 class:ghosted={drag?.e === p.e && drag.moved}
                 style:--c={color(p.e)} style:top="{(p.top / 60) * HOUR}px" style:height="{Math.max(14, ((p.bottom - p.top) / 60) * HOUR - 2)}px"
-                style:left="calc({(p.col / p.cols) * 100}% + 1px)" style:width="calc({(1 / p.cols) * 100}% - 3px)"
+                style:left={px(p.box.x, p.box.xpx + 1)} style:width={px(p.box.w, p.box.wpx - 3)} style:--depth={p.depth}
+                title={tip(p.e)} oncontextmenu={(ev) => onmenu(p.e, ev)}
                 role="button" tabindex="0" aria-label="{p.e.summary}, {timeText(evStart(p.e), cal.h12)}"
                 onpointerdown={(ev) => (p.startsBefore || p.endsAfter ? ev.stopPropagation() : down(ev, "move", p.e, p.top, p.bottom))}
                 onclick={(ev) => { if (p.startsBefore || p.endsAfter) onselect(p.e, (ev.currentTarget as HTMLElement).getBoundingClientRect()); }}
@@ -169,7 +226,7 @@
             {/each}
             {#if drag && drag.moved && drag.day === i}
               <div class="ev slot-ghost" style:--c={drag.e ? color(drag.e) : "var(--accent)"} style:top="{(drag.from / 60) * HOUR}px" style:height="{((drag.to - drag.from) / 60) * HOUR - 2}px" style:left="1px" style:width="calc(100% - 3px)">
-                <span class="t">{drag.e?.summary ?? "New event"}</span>
+                <span class="t">{drag.e?.summary ?? taskDrag?.t.title ?? cal.placing?.title ?? "New event"}</span>
                 <span class="when">{timeText(new Date(2000, 0, 1, 0, drag.from), cal.h12)} – {timeText(new Date(2000, 0, 1, 0, drag.to), cal.h12)}</span>
               </div>
             {/if}
@@ -201,6 +258,10 @@
   .bar.clipl { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: 0; }
   .bar.clipr { border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: 0; }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c); flex: none; }
+  /* a task of the Tasks & deadlines layer: its box, not an event's colour block */
+  .bar.task { background: transparent; border: 1px dashed var(--border-strong); border-left-width: 1px; color: var(--text-muted); }
+  .bar.task:hover { background: var(--bg-hover); color: var(--text); }
+  .tbox { width: 9px; height: 9px; border: 1.5px solid currentColor; border-radius: 3px; flex: none; box-sizing: border-box; }
   .scroll { overflow-y: auto; min-height: 0; position: relative; }
   .body { position: relative; display: grid; grid-template-columns: var(--gutter) 1fr; height: calc(24 * var(--hour)); }
   .hours { position: relative; }
@@ -209,12 +270,14 @@
   .col { position: relative; border-left: 1px solid var(--border); cursor: cell; min-width: 0;
     background-image: repeating-linear-gradient(to bottom, var(--border) 0 1px, transparent 1px var(--hour)), repeating-linear-gradient(to bottom, transparent 0 calc(var(--hour) / 2), color-mix(in srgb, var(--border) 45%, transparent) calc(var(--hour) / 2) calc(var(--hour) / 2 + 1px), transparent calc(var(--hour) / 2 + 1px) var(--hour)); }
   .col.weekend { background-color: color-mix(in srgb, var(--bg-alt) 70%, transparent); }
-  .ev { position: absolute; box-sizing: border-box; cursor: pointer; border-radius: var(--radius-sm); padding: 2px 6px; overflow: hidden; display: flex; flex-direction: column; gap: 0; font-size: 0.8em; line-height: 1.25;
-    background: color-mix(in srgb, var(--c) 24%, var(--bg)); border-left: 3px solid var(--c); color: var(--text); box-shadow: 0 0 0 1px var(--bg); touch-action: none; z-index: 1; }
+  .ev { position: absolute; box-sizing: border-box; container-type: inline-size; cursor: pointer; border-radius: var(--radius-sm); padding: 2px 6px; overflow: hidden; display: flex; flex-direction: column; gap: 0; font-size: 0.8em; line-height: 1.25;
+    background: color-mix(in srgb, var(--c) 24%, var(--bg)); border-left: 3px solid var(--c); color: var(--text); box-shadow: 0 0 0 1px var(--bg); touch-action: none; z-index: calc(1 + var(--depth, 0)); }
+  /* drawn over a running event: opaque, with a ring of the page and a shadow so the one under it reads as a separate block */
+  .ev.over { box-shadow: 0 0 0 1px var(--bg), var(--shadow-sm); }
   /* a bar is an .ev too (selection, colours) but a grid item in a row: absolute dropped its grid-column (every bar on Monday), a column centred its words */
   .bar.ev { position: relative; flex-direction: row; }
   .ev:hover { background: color-mix(in srgb, var(--c) 34%, var(--bg)); }
-  .ev:focus-visible, .ev.sel, .bar.sel, .bar:focus-visible { outline: 2px solid var(--c); outline-offset: 1px; z-index: 3; }
+  .ev:focus-visible, .ev.sel, .bar.sel, .bar:focus-visible { outline: 2px solid var(--c); outline-offset: 1px; z-index: 40; }
   .ev.short { flex-direction: row; gap: 6px; align-items: baseline; }
   .ev.short .t { flex: 0 1 auto; min-width: 2.5em; }
   .ev.short .when { flex: 0 100 auto; min-width: 0; }
@@ -222,11 +285,17 @@
   .ev.free { background: color-mix(in srgb, var(--c) 10%, var(--bg)); }
   .ev.cancel .t, .bar.cancel { text-decoration: line-through; opacity: 0.7; }
   .ev.ghosted { opacity: 0.35; }
-  .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; min-width: 0; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; flex: none; }
+  .ev.short .t { display: block; white-space: nowrap; }
   .when, .loc { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
   .grip { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; }
-  .slot-ghost { z-index: 4; pointer-events: none; box-shadow: var(--shadow-md, 0 4px 16px rgba(0,0,0,.25)); background: color-mix(in srgb, var(--c) 40%, var(--bg)); }
-  .now { position: absolute; left: -1px; right: 0; height: 2px; background: var(--red); z-index: 5; pointer-events: none; }
+  .slot-ghost { z-index: 41; pointer-events: none; box-shadow: var(--shadow-md, 0 4px 16px rgba(0,0,0,.25)); background: color-mix(in srgb, var(--c) 40%, var(--bg)); }
+  .now { position: absolute; left: -1px; right: 0; height: 2px; background: var(--red); z-index: 42; pointer-events: none; }
   .now::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--red); }
+  /* narrow: the title alone (two lines when tall enough) rather than both cut — the rest is in the tooltip */
+  @container (max-width: 72px) {
+    .when, .loc { display: none; }
+  }
   @media (prefers-reduced-motion: no-preference) { .ev { transition: opacity 120ms var(--ease); } }
 </style>

@@ -19,7 +19,21 @@ export interface Ev {
   calendar: string; calendar_name: string; color?: string; href?: string; writable: boolean;
   /** the user's answer to a meeting they are invited to in an Exchange calendar (the card's Yes / Maybe / No) */
   answer?: Answer | "NEEDS-ACTION";
+  /** a row of the Tasks & deadlines layer drawn as an all-day item (not an event: no uid on a server) */
+  task?: TaskRow;
 }
+/** A deadline as the core's `from: deadlines` view gives it (a task with its line, or a note with `due:`). */
+export interface TaskRow { path: string; line: number | null; title: string; date: string; done: boolean | null; props: Record<string, string> }
+/** A link of an event's note, resolved by the engine (event_note.rs `Linked`). */
+export interface Linked { link: string; path: string; line?: number; title: string; task?: string }
+/** The engine's `event`: one occurrence, its note (made on demand) and that note's backlinks. */
+export interface EventInfo {
+  event: Ev | null;
+  note: { path: string; links: Linked[]; cancelled: boolean } | null;
+  backlinks: { links: { source: string; line: number; context: string }[] } | null;
+}
+/** The layer of the core's deadlines, kept like a calendar's visibility. */
+export const TASKS = "tasks";
 export type Answer = "ACCEPTED" | "TENTATIVE" | "DECLINED";
 
 /** The online meeting's join link (Teams, Zoom, Meet, Webex, Jitsi), from where an invitation puts it: the location,
@@ -82,6 +96,22 @@ export function startOfWeek(d: Date, first: number): Date {
   const s = startOfDay(d);
   return addDays(s, -((s.getDay() - first + 7) % 7));
 }
+
+// ----- the agenda's lengths
+
+/** How much the Agenda shows: a day, three days, a week (from the week's first day) — every day listed, the empty
+ *  ones said — or the coming 60 days, only the days with something. The phone's native agenda has the same first three
+ *  (AgendaRows.java), over the same answers (the engine's `range`, the core's `from: deadlines`). */
+export type Span = "day" | "3days" | "week" | "60days";
+export const SPANS: [Span, string][] = [["day", "Day"], ["3days", "3 days"], ["week", "Week"], ["60days", "60 days"]];
+export const isSpan = (s: unknown): s is Span => SPANS.some(([v]) => v === s);
+/** The days a span shows from `cursor` (first, last inclusive). */
+export function agendaRange(span: Span, cursor: Date, first: number): { from: Date; to: Date } {
+  if (span === "week") { const s = startOfWeek(cursor, first); return { from: s, to: addDays(s, 6) }; }
+  return { from: cursor, to: addDays(cursor, span === "day" ? 0 : span === "3days" ? 2 : 59) };
+}
+/** Days one step (← →) moves the agenda. */
+export const agendaStep = (span: Span) => (span === "day" ? 1 : span === "3days" ? 3 : span === "week" ? 7 : 30);
 
 // ----- words
 

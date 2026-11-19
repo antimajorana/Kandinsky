@@ -86,7 +86,7 @@ pub fn scan(request: Request, m: &Machine, root: &Path, params: &Value) -> Resul
     };
     // no paths at all: the core dropped events (anything may have changed), so the whole vault is scanned
     let everything = params["paths"].as_array().is_none_or(Vec::is_empty);
-    let mut paths: Vec<&str> = params["paths"].as_array().into_iter().flatten().filter_map(Value::as_str).filter(|p| !p.is_empty() && !p.starts_with(".kandinsky/cache/")).collect();
+    let mut paths: Vec<&str> = params["paths"].as_array().into_iter().flatten().filter_map(Value::as_str).filter(|p| !p.is_empty() && !p.starts_with(".kandinsky/cache/") && !p.starts_with(".atlas/cache/")).collect(); // `.atlas/cache`: a vault not migrated yet
     paths.sort_unstable();
     paths.dedup();
     if paths.is_empty() && !everything {
