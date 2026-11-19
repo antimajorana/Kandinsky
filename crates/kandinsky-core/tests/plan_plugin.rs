@@ -82,7 +82,8 @@ async fn nudges_are_planned_recorded_and_done_is_never_nudged() {
     assert_eq!(kept.len(), plan["planned"].as_array().unwrap().len(), "{plan}");
     let intro = kept.iter().find(|p| p.notice.id.as_deref() == Some("plan:notes/Thesis.md#^t3f9a")).unwrap();
     assert_eq!(intro.notice.subject.as_deref(), Some("notes/Thesis.md#^t3f9a"));
-    assert_eq!(intro.notice.actions.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), ["done", "snooze:2026-11-16T11:00", "kandinsky:open"]);
+    // Block too: with no calendar plugin the core time-blocks into its built-in calendar
+    assert_eq!(intro.notice.actions.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), ["done", "snooze:2026-11-16T11:00", "block:2026-11-16T11:00+30", "kandinsky:open"]);
     let ledger = dir.path().join(format!("plan/ledger/2026-11 {}.md", kandinsky_core::platform::proc::hostname()));
     let text = std::fs::read_to_string(&ledger).unwrap();
     assert!(text.starts_with("---\ntype: plan-ledger\n"), "{text}");
