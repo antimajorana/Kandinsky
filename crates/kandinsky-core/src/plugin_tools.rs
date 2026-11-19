@@ -48,6 +48,23 @@ pub struct ToolManifest {
     /// installed, updated or its settings saved (capture_hooks.rs).
     #[serde(default)]
     pub on: Option<String>,
+    /// Where its `schedule` and its `fs` / `start` hooks run when several cores serve the vault (server_role.rs); unset:
+    /// the plugin's `background`, else every core.
+    #[serde(default)]
+    pub background: Option<crate::server_role::Background>,
+}
+
+impl ToolManifest {
+    /// Where its background work runs (its own word, filled from the plugin's by `plugins::tool_parts`).
+    pub fn background(&self) -> crate::server_role::Background {
+        self.background.unwrap_or_default()
+    }
+}
+
+/// The `on` events that are background work (no person's action behind them on this core): they follow
+/// `background`. A capture's, a log's or a template's hook runs where the person acted.
+pub(crate) fn background_event(event: &str) -> bool {
+    matches!(event, "fs" | "start")
 }
 
 /// The `for_agents` words of the plugins that can run here: (plugin, text), by id.
@@ -76,8 +93,21 @@ fn runnable(root: &Path, cfg: &Config) -> Vec<(String, ToolManifest)> {
 }
 
 /// The tools of the plugins that can run here which act on `event` (`on = "capture"`): (plugin, tool).
+/// A background event's tools only where their `background` says (server_role.rs).
 pub fn listening(root: &Path, cfg: &Config, event: &str) -> Vec<(String, String)> {
-    runnable(root, cfg).into_iter().filter(|(_, t)| t.on.as_deref() == Some(event)).map(|(p, t)| (p, t.name)).collect()
+    listening_at(root, cfg, event, background_event(event).then(|| crate::server_role::Seat::of(root)))
+}
+
+/// `listening` for a core in `seat` (None: every tool, whatever its `background`).
+fn listening_at(root: &Path, cfg: &Config, event: &str, seat: Option<crate::server_role::Seat>) -> Vec<(String, String)> {
+    runnable(root, cfg)
+        .into_iter()
+        .filter(|(p, t)| {
+            let ids = [format!("plugin.{p}.{}", t.name), format!("plugin.{p}")];
+            t.on.as_deref() == Some(event) && seat.is_none_or(|s| t.background().in_vault(&cfg.automation.background, &[&ids[0], &ids[1]]).runs_at(s))
+        })
+        .map(|(p, t)| (p, t.name))
+        .collect()
 }
 
 /// The plugins with an `event` tool that are installed and switched on but cannot run on this device (their
@@ -102,6 +132,7 @@ pub struct Scheduled {
     pub plugin: String,
     pub tool: String,
     pub schedule: String,
+    pub background: crate::server_role::Background,
 }
 
 /// Every scheduled tool of the plugins that can run in this vault (switched on, nothing they need missing).
@@ -114,7 +145,7 @@ pub fn scheduled(root: &Path, cfg: &Config) -> Vec<Scheduled> {
             continue;
         }
         let Ok((tools, _, _)) = crate::plugins::tool_parts(root, &p.id) else { continue };
-        out.extend(tools.into_iter().filter_map(|t| Some(Scheduled { plugin: p.id.clone(), schedule: t.schedule?, tool: t.name })));
+        out.extend(tools.into_iter().filter_map(|t| Some(Scheduled { plugin: p.id.clone(), background: t.background(), schedule: t.schedule?, tool: t.name })));
     }
     out
 }
@@ -176,8 +207,50 @@ fn timeout_of(t: &ToolManifest) -> Duration {
     t.timeout_secs.map(Duration::from_secs).unwrap_or(crate::helper::CALL_TIMEOUT)
 }
 
-/// Every tool of the switched-on plugins that have a helper. A plugin whose manifest is broken is
-/// left out (Settings shows why); a tool with a bad `input` is left out with the reason logged.
+/// Whether agents see a tool: not one that only answers the core's own rounds (`on = "plan"`, `"notice"`, `"log"`, `"hook"`),
+/// whose arguments are the core's and whose answer means nothing to an agent. A capture's or a file change's hook stays:
+/// called by hand it does its work (files a link, syncs).
+fn for_agents(t: &ToolManifest) -> bool {
+    !matches!(t.on.as_deref(), Some("plan" | "notice" | "log" | "hook" | "search"))
+}
+
+/// How long the vault's search waits for a plugin's answer: a slow plugin's group is left out, never waited for.
+const SEARCH_DEADLINE: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// The vault's search asked of every plugin with an `on = "search"` tool, at once, each given `{ q, limit }` and
+/// [`SEARCH_DEADLINE`]: their hits, a group per plugin that found anything, in the plugins' order. A plugin that
+/// fails or is late is left out (logged).
+pub async fn search(root: &Path, cfg: &Config, helpers: &Helpers, secrets: &Store, q: &str, limit: usize) -> Vec<crate::api::PluginHits> {
+    let names: std::collections::HashMap<String, String> = crate::plugins::list(root).into_iter().map(|p| (p.id, p.title)).collect();
+    let asks = listening(root, cfg, "search").into_iter().map(|(plugin, tool)| {
+        let args = serde_json::json!({ "q": q, "limit": limit });
+        async move {
+            let answer = tokio::time::timeout(SEARCH_DEADLINE, call(root, cfg, helpers, secrets, &plugin, &tool, args)).await;
+            (plugin, answer)
+        }
+    });
+    let mut out = Vec::new();
+    for (plugin, answer) in futures_util::future::join_all(asks).await {
+        let hits = match answer {
+            Ok(Ok(v)) => serde_json::from_value::<Vec<crate::api::PluginHit>>(v.get("hits").cloned().unwrap_or_default()).unwrap_or_default(),
+            Ok(Err(e)) => {
+                eprintln!("plugin {plugin}: search: {e}");
+                continue;
+            }
+            Err(_) => {
+                eprintln!("plugin {plugin}: search: no answer within {SEARCH_DEADLINE:?}");
+                continue;
+            }
+        };
+        if !hits.is_empty() {
+            out.push(crate::api::PluginHits { name: names.get(&plugin).cloned().unwrap_or_else(|| plugin.clone()), plugin, hits });
+        }
+    }
+    out
+}
+
+/// Every tool agents may call (`kandinsky mcp`): those of the switched-on plugins that have a helper. A plugin whose
+/// manifest is broken is left out (Settings shows why); a tool with a bad `input` is left out with the reason logged.
 pub fn list(root: &Path, cfg: &Config) -> Vec<Tool> {
     let mut out = vec![];
     let all = crate::plugins::list(root);
@@ -187,7 +260,7 @@ pub fn list(root: &Path, cfg: &Config) -> Vec<Tool> {
             continue;
         }
         let Ok((tools, _, _)) = crate::plugins::tool_parts(root, &p.id) else { continue };
-        for t in tools {
+        for t in tools.into_iter().filter(for_agents) {
             match schema(&t.input) {
                 Ok(schema) => out.push(Tool { plugin: p.id.clone(), timeout: timeout_of(&t), name: t.name, description: t.description, schema }),
                 Err(e) => eprintln!("plugin {}: tool {}: {e}", p.id, t.name),
@@ -199,7 +272,8 @@ pub fn list(root: &Path, cfg: &Config) -> Vec<Tool> {
 
 /// Runs tool `name` of plugin `id` with the agent's `args`.
 pub async fn call(root: &Path, cfg: &Config, helpers: &Helpers, secrets: &Store, id: &str, name: &str, args: Value) -> Result<Value> {
-    let _turn = crate::tool_turns::take(root, id, name).await; // a round never runs twice at once
+    // a round never runs twice at once, nor on a core the vault does not run its rounds on
+    let _turn = crate::tool_turns::take(root, &cfg.automation, id, name).await.map_err(Error::BadRequest)?;
     // reading every manifest and the secret store (a keyring over D-Bus may take seconds) runs off the async threads,
     // as does keeping a rotated secret: the core's other requests never wait behind a plugin's preparation
     let (root, off, store, id_, name_) = (root.to_path_buf(), cfg.effective_plugins_off(), secrets.clone(), id.to_string(), name.to_string());
@@ -294,6 +368,31 @@ mod tests {
     }
 
     #[test]
+    fn background_hooks_and_schedules_follow_the_plugins_word_and_a_tool_may_say_otherwise() {
+        use crate::server_role::{Background, Seat};
+        let dir = tempfile::tempdir().unwrap();
+        let tools = |extra: &str| format!("[helper]\nrun = \"true\"\n[[tool]]\nname = \"scan\"\ndescription = \"files changed\"\non = \"fs\"\n[[tool]]\nname = \"tick\"\ndescription = \"a round\"\nschedule = \"every 5m\"\n{extra}[[tool]]\nname = \"capture\"\ndescription = \"after a capture\"\non = \"capture\"\n");
+        for (id, head, extra) in [("runs", "background = \"device\"\n", ""), ("bank", "background = \"server\"\n", "background = \"any\"\n"), ("plain", "", "")] {
+            let p = dir.path().join(".kandinsky/plugins").join(id);
+            std::fs::create_dir_all(&p).unwrap();
+            std::fs::write(p.join("plugin.toml"), format!("title = \"{id}\"\n{head}{}", tools(extra))).unwrap();
+        }
+        let cfg = Config::default();
+        let fs_at = |seat| listening_at(dir.path(), &cfg, "fs", Some(seat)).into_iter().map(|(p, _)| p).collect::<Vec<_>>();
+        assert_eq!(fs_at(Seat::Server), ["bank", "plain"]);
+        assert_eq!(fs_at(Seat::MirroredDevice), ["plain", "runs"]);
+        assert_eq!(fs_at(Seat::LoneDevice), ["bank", "plain", "runs"]);
+        let mut vault = Config::default();
+        vault.automation.background.insert("plugin.plain".into(), Background::Device);
+        assert_eq!(listening_at(dir.path(), &vault, "fs", Some(Seat::Server)).into_iter().map(|(p, _)| p).collect::<Vec<_>>(), ["bank"], "the vault's word over the plugin's");
+        // a capture's hook runs where the capture was made, whatever the plugin's background
+        assert_eq!(listening(dir.path(), &cfg, "capture").len(), 3);
+        let mut sched: Vec<(String, Background)> = scheduled(dir.path(), &cfg).into_iter().map(|s| (s.plugin, s.background)).collect();
+        sched.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(sched, [("bank".into(), Background::Any), ("plain".into(), Background::Any), ("runs".into(), Background::Device)], "the tool's own word wins over the plugin's");
+    }
+
+    #[test]
     fn a_hook_this_device_cannot_run_is_named_for_another() {
         let dir = tempfile::tempdir().unwrap();
         let tool = "[helper]\nrun = \"true\"\n[[tool]]\nname = \"capture\"\ndescription = \"after a capture\"\non = \"capture\"\n";
@@ -315,10 +414,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join(".kandinsky/plugins/mail");
         std::fs::create_dir_all(&p).unwrap();
-        std::fs::write(p.join("plugin.toml"), "title = \"Mail\"\n[helper]\nrun = \"true\"\n[permissions]\nsecrets = true\n[[tool]]\nname = \"inbox\"\ndescription = \"the inbox\"\ninput = { limit = \"integer?\" }\n[[tool]]\nname = \"wait\"\ndescription = \"a long one\"\ntimeout_secs = 400\n").unwrap();
+        std::fs::write(p.join("plugin.toml"), "title = \"Mail\"\n[helper]\nrun = \"true\"\n[permissions]\nsecrets = true\n[[tool]]\nname = \"inbox\"\ndescription = \"the inbox\"\ninput = { limit = \"integer?\" }\n[[tool]]\nname = \"wait\"\ndescription = \"a long one\"\ntimeout_secs = 400\n[[tool]]\nname = \"reminders\"\ndescription = \"the core's round\"\non = \"plan\"\n").unwrap();
         let mut cfg = Config::default();
         let tools = list(dir.path(), &cfg);
-        assert_eq!(tools.len(), 2);
+        assert_eq!(tools.len(), 2, "a hook of the core's own rounds is not an agent's tool");
         assert_eq!(tools[0].mcp_name(), "mail_inbox");
         // the agent bridge waits as long as the tool may run (a 2FA login), not a fixed time
         assert_eq!(tools[0].timeout, crate::helper::CALL_TIMEOUT);

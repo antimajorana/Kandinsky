@@ -6,6 +6,7 @@ pub mod dirs;
 pub mod dirs_migrate;
 pub mod host;
 pub mod keyring;
+pub mod idle;
 pub mod open;
 pub mod proc;
 pub mod run_line;

@@ -10,6 +10,9 @@ use std::sync::{Arc, Mutex};
 use crate::vault_changes::Stamp;
 use std::time::{Duration, Instant, SystemTime};
 
+#[path = "links_disk.rs"]
+mod disk;
+
 /// One link as written in a source note (target not yet resolved).
 #[derive(Debug, Clone, PartialEq)]
 struct RawLink {
@@ -60,26 +63,38 @@ pub(crate) struct Index {
     /// Each note's links resolved, made by the first request that needs them and kept for the index's life: backlinks,
     /// Bases, tags and the link completion each resolved every link of the vault per request before.
     resolved: std::sync::OnceLock<Resolved>,
+    /// How many notes link to each file, made once per index (search ranks by it).
+    incoming: std::sync::OnceLock<HashMap<String, u32>>,
 }
 
 /// For each note, the file each of its links points at (`None`: unresolved), in [`Parsed::links`] order.
 type Resolved = HashMap<String, Box<[Option<FileId>]>>;
 
 /// The vaults' indexes, the most recently used first. The desktop's one core serves several vaults, so one slot would
-/// rebuild from scratch on every switch; a vault unused for [`IDLE`] (or beyond [`WARM_VAULTS`]) is dropped.
+/// rebuild from scratch on every switch; a vault unused for [`IDLE`] (or beyond [`WARM_VAULTS`]) is dropped — except a
+/// vault [`keep_warm`] named (the desktop window's own), which is never dropped.
 struct Warm {
     root: PathBuf,
     used: Instant,
     index: Arc<Index>,
-    /// The vault's generation read before the index's walk, and when (None: no watcher vouches for this vault).
+    /// The vault's generation read before the index's walk (or patch), and when (None: no watcher vouches for it).
     walked: Option<(Stamp, Instant)>,
+    /// When the index last walked the whole vault: patches are taken only within [`FULL_EVERY`] of it.
+    full: Instant,
 }
 static CACHE: Mutex<Vec<Warm>> = Mutex::new(Vec::new());
+/// The vaults whose index is never dropped, idle or not ([`keep_warm`]).
+static KEPT: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 const WARM_VAULTS: usize = 3;
 const IDLE: Duration = Duration::from_secs(30 * 60);
 /// How long an unchanged generation is taken at its word before walking anyway (a blind spot the watcher cannot see,
 /// e.g. a folder moved in during its 250 ms batch, lasts at most this long).
 const TRUST: Duration = Duration::from_secs(30);
+/// How long patches (only the paths the watcher named) stand in for a walk before the whole vault is walked again — a
+/// change no event told of is found within this long.
+const FULL_EVERY: Duration = Duration::from_secs(5 * 60);
+/// More changed paths than this: a walk is as quick (a sync bringing a big folder, a checkout).
+const PATCH_MAX: usize = 400;
 
 /// Files larger than this are not scanned (multi-MB transcripts, generated dumps).
 const MAX_BYTES: u64 = 4 << 20;
@@ -425,62 +440,126 @@ pub(crate) fn scan(root: &Path, cfg: &Config) -> Arc<Index> {
     let _one = building.lock().unwrap_or_else(|e| e.into_inner());
     // read before the walk: a change while it runs makes the next request walk again
     let stamp = crate::vault_changes::stamp(root, cfg);
-    refresh(&CACHE, root, Instant::now(), stamp, |prev| rebuild(root, cfg, prev))
+    refresh(&CACHE, root, Instant::now(), stamp, |prev, since| {
+        // the watcher named every path changed since the last look: only those are looked at (no walk of the vault)
+        if let (Some(i), Some(was)) = (&prev, since) {
+            if let Some(paths) = crate::vault_changes::since(root, cfg, was).filter(|p| p.len() <= PATCH_MAX) {
+                return (patch(root, cfg, i.clone(), &paths), false);
+            }
+        }
+        (rebuild(root, cfg, prev), true)
+    })
 }
 
 /// `root`'s entry of the warm list brought up to date by `build` — or kept without a walk when its watcher saw no change
 /// since (the same `stamp`, within [`TRUST`]) — and moved to the front; vaults idle for [`IDLE`] or beyond the first
 /// [`WARM_VAULTS`] are dropped (their memory with them). The list is locked only to look and to store, not for `build`.
+/// `build` gets the index there was and, while patches may stand in for a walk ([`FULL_EVERY`]), the stamp it was
+/// made at; it answers the new index and whether it walked the whole vault.
 fn refresh(
     cache: &Mutex<Vec<Warm>>,
     root: &Path,
     now: Instant,
     stamp: Option<Stamp>,
-    build: impl FnOnce(Option<Arc<Index>>) -> Arc<Index>,
+    build: impl FnOnce(Option<Arc<Index>>, Option<Stamp>) -> (Arc<Index>, bool),
 ) -> Arc<Index> {
     let lock = || cache.lock().unwrap_or_else(|e| e.into_inner());
     let unchanged = |w: &Warm| {
         stamp.is_some() && w.walked.is_some_and(|(s, at)| Some(s) == stamp && now.saturating_duration_since(at) < TRUST)
     };
-    let prev = {
+    let (prev, since, full) = {
         let mut warm = lock();
         match warm.iter().position(|w| w.root == root) {
             Some(i) if unchanged(&warm[i]) => {
                 let w = warm.remove(i);
-                return keep(&mut warm, root, now, w.index, w.walked);
+                return keep(&mut warm, root, now, w.index, w.walked, w.full);
             }
-            Some(i) => Some(warm[i].index.clone()),
-            None => None,
+            Some(i) => {
+                let w = &warm[i];
+                let recent = now.saturating_duration_since(w.full) < FULL_EVERY;
+                (Some(w.index.clone()), w.walked.map(|(s, _)| s).filter(|_| recent && stamp.is_some()), w.full)
+            }
+            None => (None, None, now),
         }
     };
-    let index = build(prev);
-    keep(&mut lock(), root, now, index, stamp.map(|s| (s, now)))
+    let (index, walked_all) = build(prev, since);
+    keep(&mut lock(), root, now, index, stamp.map(|s| (s, now)), if walked_all { now } else { full })
 }
 
-/// `index` stored as `root`'s, at the front of the warm list.
-fn keep(warm: &mut Vec<Warm>, root: &Path, now: Instant, index: Arc<Index>, walked: Option<(Stamp, Instant)>) -> Arc<Index> {
-    warm.retain(|w| w.root != root && now.saturating_duration_since(w.used) < IDLE);
-    warm.insert(0, Warm { root: root.to_path_buf(), used: now, index: index.clone(), walked });
-    warm.truncate(WARM_VAULTS);
+/// `index` stored as `root`'s, at the front of the warm list. Idle vaults go, then the least recently used beyond
+/// [`WARM_VAULTS`] — never a kept one ([`keep_warm`]).
+fn keep(warm: &mut Vec<Warm>, root: &Path, now: Instant, index: Arc<Index>, walked: Option<(Stamp, Instant)>, full: Instant) -> Arc<Index> {
+    let kept = KEPT.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let is_kept = |w: &Warm| kept.contains(&w.root);
+    warm.retain(|w| w.root != root && (is_kept(w) || now.saturating_duration_since(w.used) < IDLE));
+    warm.insert(0, Warm { root: root.to_path_buf(), used: now, index: index.clone(), walked, full });
+    while warm.len() > WARM_VAULTS {
+        let Some(i) = warm.iter().rposition(|w| !is_kept(w)) else { break };
+        warm.remove(i);
+    }
     index
+}
+
+/// `root`'s index (canonical, as `Workspace::root`) is never dropped for being idle or for other vaults being used:
+/// the desktop's window comes back to its own vault after any time away, and would otherwise find the index of
+/// thousands of notes to build again (0.2–0.5 s, docs/decisions/PERFORMANCE.md "Two vaults open").
+pub(crate) fn keep_warm(root: &Path) {
+    let mut kept = KEPT.lock().unwrap_or_else(|e| e.into_inner());
+    if !kept.iter().any(|k| k == root) {
+        kept.push(root.to_path_buf());
+    }
+}
+
+/// Builds `root`'s index (and its links resolved) on a thread of its own at the lowest CPU priority, so the first
+/// look at a vault started ahead of use (its graph, backlinks, Bases, tags) finds it built. One that is being built is
+/// not built twice ([`scan`]'s lock); a request arriving meanwhile waits for this build instead of starting its own.
+pub(crate) fn warm_in_background(root: &Path, cfg: &Config) {
+    let (dir, cfg) = (root.to_path_buf(), cfg.clone());
+    let spawned = std::thread::Builder::new().name("kandinsky-index-warm".into()).spawn(move || {
+        lowest_priority();
+        let t = Instant::now();
+        let index = scan(&dir, &cfg);
+        let _ = index.resolved();
+        eprintln!("kandinsky: note index of {} built ahead — {} notes in {:.2}s", dir.display(), index.parsed.len(), t.elapsed().as_secs_f32());
+    });
+    if let Err(e) = spawned {
+        eprintln!("kandinsky: note index of {} not built ahead: {e}", root.display());
+    }
+}
+
+/// This thread at nice 19 (Linux and Android set the niceness per thread): background work never takes the CPU from
+/// a window's requests or the owner's other programs.
+pub(crate) fn lowest_priority() {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    // SAFETY: gettid and setpriority take no pointers; a failure only leaves the thread at its priority
+    unsafe {
+        let tid = libc::syscall(libc::SYS_gettid) as libc::id_t;
+        libc::setpriority(libc::PRIO_PROCESS, tid, 19);
+    }
 }
 
 /// `prev`'s index brought up to date: unchanged notes keep their `Arc<Parsed>`, an unchanged file list keeps its
 /// [`Names`], and an index with nothing changed is returned as is.
 fn rebuild(root: &Path, cfg: &Config, prev: Option<Arc<Index>>) -> Arc<Index> {
+    // no index in memory yet (a start): the parses kept on disk stand in for it (links_disk.rs)
+    let kept = if prev.is_none() { disk::load(root) } else { FileCache::new() };
+    let earlier = |rel: &str| prev.as_ref().map_or(kept.get(rel), |i| i.parsed.get(rel));
     let mut files = Vec::new();
     let mut parsed: FileCache = HashMap::new();
-    let mut reused = 0;
+    let (mut reused, mut read) = (0, 0);
     for (abs, rel) in walk::files(root, cfg) {
         if rel.to_lowercase().ends_with(".md") && !cfg.index_excluded(&rel) {
             if let Ok(meta) = abs.metadata() {
                 let mtime = meta.modified().ok();
-                let p = match prev.as_ref().and_then(|i| i.parsed.get(&rel)) {
-                    Some(p) if p.mtime == mtime => {
+                let p = match earlier(&rel) {
+                    Some(p) if p.mtime == mtime && p.size == meta.len() => {
                         reused += 1;
                         p.clone()
                     }
-                    _ => Arc::new(parse_note(&abs, &meta)),
+                    _ => {
+                        read += 1;
+                        Arc::new(parse_note(&abs, &meta))
+                    }
                 };
                 parsed.insert(rel.clone(), p);
             }
@@ -488,11 +567,64 @@ fn rebuild(root: &Path, cfg: &Config, prev: Option<Arc<Index>>) -> Arc<Index> {
         files.push(rel);
     }
     let same_files = prev.as_ref().is_some_and(|i| i.names.files == files);
-    match prev {
-        Some(i) if same_files && reused == parsed.len() && reused == i.parsed.len() => i,
+    let gone = prev.as_ref().map_or(kept.len(), |i| i.parsed.len()) != reused;
+    let index = match prev {
+        Some(i) if same_files && read == 0 && !gone => return i,
         Some(i) if same_files => Arc::new(Index::new(i.names.clone(), shrunk(parsed))),
         _ => Arc::new(Index::new(Arc::new(Names::new(files)), shrunk(parsed))),
+    };
+    // what changed is kept for the next start (a start that read nothing new writes nothing)
+    if read > 0 || gone {
+        disk::save_in_background(root, index.clone());
     }
+    index
+}
+
+/// `prev` with only `paths` looked at again (what the watcher named since it was made): each path — a file, or a
+/// folder created, moved or removed with everything under it — is taken out, then what the walk would list at it now
+/// (`walk::files_under`) goes back in, its notes read again; every other note keeps its parse, unread and unstatted.
+/// New files go at the end of the walk order. The same `Arc` comes back when nothing the index holds changed.
+fn patch(root: &Path, cfg: &Config, prev: Arc<Index>, paths: &[String]) -> Arc<Index> {
+    let under = |f: &str, p: &str| f == p || f.strip_prefix(p).is_some_and(|r| r.starts_with('/'));
+    let touched = |f: &str| paths.iter().any(|p| under(f, p));
+    // what the walk would list at the changed paths now
+    let mut now: Vec<(PathBuf, String)> = Vec::new();
+    let mut listed = std::collections::HashSet::new();
+    for p in paths {
+        for (abs, rel) in walk::files_under(root, &root.join(p), cfg) {
+            if listed.insert(rel.clone()) {
+                now.push((abs, rel));
+            }
+        }
+    }
+    // a file still there keeps its place in the walk order; one gone leaves it; a new one goes at the end
+    let had: std::collections::HashSet<&str> = prev.names.files.iter().map(String::as_str).collect();
+    let mut files: Vec<String> = prev.names.files.iter().filter(|f| !touched(f) || listed.contains(f.as_str())).cloned().collect();
+    files.extend(now.iter().filter(|(_, r)| !had.contains(r.as_str())).map(|(_, r)| r.clone()));
+    let mut parsed: FileCache = prev.parsed.iter().filter(|(f, _)| !touched(f)).map(|(f, p)| (f.clone(), p.clone())).collect();
+    let mut read = 0;
+    for (abs, rel) in &now {
+        if !rel.to_lowercase().ends_with(".md") || cfg.index_excluded(rel) {
+            continue;
+        }
+        let Ok(meta) = abs.metadata() else { continue };
+        let p = match prev.parsed.get(rel) {
+            Some(p) if p.mtime == meta.modified().ok() && p.size == meta.len() => p.clone(),
+            _ => {
+                read += 1;
+                Arc::new(parse_note(abs, &meta))
+            }
+        };
+        parsed.insert(rel.clone(), p);
+    }
+    let same_files = files == prev.names.files;
+    if same_files && read == 0 && parsed.len() == prev.parsed.len() {
+        return prev;
+    }
+    let names = if same_files { prev.names.clone() } else { Arc::new(Names::new(files)) };
+    let index = Arc::new(Index::new(names, shrunk(parsed)));
+    disk::save_in_background(root, index.clone());
+    index
 }
 
 fn shrunk(mut m: FileCache) -> FileCache {
@@ -537,7 +669,7 @@ pub(crate) fn snapshot(root: &Path, cfg: &Config) -> Snapshot {
 
 impl Index {
     pub(crate) fn new(names: Arc<Names>, parsed: FileCache) -> Self {
-        Index { names, parsed, resolved: std::sync::OnceLock::new() }
+        Index { names, parsed, resolved: std::sync::OnceLock::new(), incoming: std::sync::OnceLock::new() }
     }
 
     /// Every note's links resolved (once per index).
@@ -588,6 +720,11 @@ impl Index {
         stats
     }
 
+    /// How many distinct notes link to each file ([`LinkStats::incoming`]), kept for the index's life.
+    pub fn incoming(&self) -> &HashMap<String, u32> {
+        self.incoming.get_or_init(|| self.link_stats(None).incoming)
+    }
+
     /// The files each note's links resolve to (unresolved links left out).
     pub fn targets<'a>(&'a self, src: &'a str) -> impl Iterator<Item = String> + 'a {
         self.links_of(src).filter_map(|(_, t)| t.map(str::to_string))
@@ -597,6 +734,46 @@ impl Index {
     pub fn same_name(&self, file_name: &str) -> usize {
         self.names.by_name.get(file_name.to_lowercase().as_str()).map_or(0, Vec::len)
     }
+}
+
+/// The properties other notes name a note not yet made through (`topics: "[[Optics]]"` → `topics`): its unresolved
+/// links whose name is `stem`, any case, sorted and once each. What a new note's template rule `linked_by` reads.
+pub fn relations_to_missing(root: &Path, cfg: &Config, stem: &str) -> Vec<String> {
+    let index = scan(root, cfg);
+    let want = stem.trim().to_lowercase();
+    let mut out: Vec<String> = index
+        .parsed
+        .keys()
+        .flat_map(|src| index.links_of(src).filter(|(l, t)| t.is_none() && l.wiki).filter_map(|(l, _)| l.relation.clone().filter(|_| link_stem(&l.target) == want)))
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// The note that claims `path` as its thing by property `key` (`file: "[[Dune.epub]]"`: a catalog note of a thing
+/// whose file is in the vault — docs/design/DESIGN-server-libraries.md §3.5), the first by path. A folder (a manga
+/// series) is no link target, so its claim is matched by the link's written path.
+pub(crate) fn claimed_by(root: &Path, cfg: &Config, path: &str, key: &str) -> Option<String> {
+    let index = scan(root, cfg);
+    let want = path.trim_matches('/');
+    let mut srcs: Vec<&String> = index.parsed.keys().filter(|s| s.as_str() != want).collect();
+    srcs.sort();
+    srcs.into_iter()
+        .find(|src| {
+            index.links_of(src).any(|(l, t)| {
+                l.relation.as_deref() == Some(key)
+                    && (t == Some(want) || (t.is_none() && decode(l.target.split(['#', '|']).next().unwrap_or("")).trim().trim_matches('/') == want))
+            })
+        })
+        .cloned()
+}
+
+/// A wikilink's note name, lower case: no `#section`, `|label`, folder or `.md`.
+fn link_stem(target: &str) -> String {
+    let t = target.split(['#', '|']).next().unwrap_or("").trim();
+    let t = t.rsplit('/').next().unwrap_or(t);
+    t.strip_suffix(".md").unwrap_or(t).to_lowercase()
 }
 
 /// Notes that link to (or embed) `path`, sorted by source then line.
@@ -760,6 +937,69 @@ mod tests {
         parse(s).into_iter().map(|l| (l.target, l.wiki, l.embed)).collect()
     }
 
+    /// The parses kept on disk read back as they were made, and a start takes them for every note unchanged since —
+    /// a changed note is read again.
+    #[test]
+    fn a_start_takes_the_parses_kept_on_disk_for_unchanged_notes() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        let cfg = Config::default();
+        std::fs::write(r.join("a.md"), "---\ntitle: Alpha\nup: \"[[b]]\"\nn: 3\n---\nSee [[b#Sec|it]] and ![[fig.png]] #tag/x\n").unwrap();
+        std::fs::write(r.join("b.md"), "# B\nback to [[a]]\n").unwrap();
+        let first = rebuild(r, &cfg, None);
+        disk::settle(); // the build's own save (any test's, at the lowest priority) is done before ours
+        disk::save(r, &first.parsed).unwrap();
+        let mut kept = disk::load(r);
+        assert_eq!(kept.len(), 2);
+        for (rel, p) in &first.parsed {
+            let k = &kept[rel];
+            assert_eq!((&k.links, &k.props, &k.tags, k.size, k.mtime, k.ctime), (&p.links, &p.props, &p.tags, p.size, p.mtime, p.ctime), "{rel}");
+            assert_eq!(k.words.bits(), p.words.bits());
+        }
+        // marked so a reuse shows: the kept parse of a.md carries a tag the file does not have
+        let mut marked = (*kept["a.md"]).clone();
+        marked.tags.push("from-disk".into());
+        kept.insert("a.md".into(), Arc::new(marked));
+        disk::settle();
+        disk::save(r, &kept).unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        std::fs::write(r.join("b.md"), "# B\nback to [[a]] and [[c]]\n").unwrap();
+        let started = rebuild(r, &cfg, None);
+        assert!(started.parsed["a.md"].tags.contains(&"from-disk".to_string()), "unchanged: taken from disk, not read");
+        assert_eq!(started.parsed["b.md"].links.len(), 2, "changed: read again");
+        // a damaged file is ignored
+        std::fs::write(r.join(disk::FILE), b"ATNI\x01").unwrap();
+        assert!(disk::load(r).is_empty());
+    }
+
+    /// On a real vault (read-only: nothing is written to it): every note read and parsed, against the same parses
+    /// encoded and loaded back. `KANDINSKY_TEST_VAULT=… cargo test … -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn kept_parses_measured_on_a_real_vault() {
+        let Ok(root) = std::env::var("KANDINSKY_TEST_VAULT") else { return eprintln!("skipped: KANDINSKY_TEST_VAULT is unset") };
+        let root = Path::new(&root);
+        let cfg = Config::load(root).unwrap();
+        let t = Instant::now();
+        let files: Vec<_> = walk::files(root, &cfg).collect();
+        let walked = t.elapsed();
+        let mut parsed = FileCache::new();
+        for (abs, rel) in files.iter().filter(|(_, rel)| rel.to_lowercase().ends_with(".md") && !cfg.index_excluded(rel)) {
+            if let Ok(meta) = abs.metadata() {
+                parsed.insert(rel.clone(), Arc::new(parse_note(abs, &meta)));
+            }
+        }
+        let read = t.elapsed() - walked;
+        let t = Instant::now();
+        let bytes = disk::encode(&parsed);
+        let enc = t.elapsed();
+        let t = Instant::now();
+        let back = disk::decode(&bytes).unwrap();
+        eprintln!("NOTES {} files walked in {walked:.0?}; {} notes read and parsed in {read:.0?}; kept: {} KB, written in {enc:.0?}, loaded in {:.0?}",
+            files.len(), parsed.len(), bytes.len() >> 10, t.elapsed());
+        assert_eq!(back.len(), parsed.len());
+    }
+
     #[test]
     fn parses_wiki_md_and_embeds_but_not_code_or_urls() {
         let t = "See [[Green function|G]] and ![[fig.png]], [paper](../refs/a.md \"t\").\n\
@@ -914,20 +1154,98 @@ mod tests {
     }
 
     #[test]
+    fn a_patch_of_the_changed_paths_gives_the_index_a_walk_gives() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        let cfg = Config::default();
+        std::fs::create_dir_all(r.join("notes")).unwrap();
+        std::fs::write(r.join("notes/a.md"), "[[b]]").unwrap();
+        std::fs::write(r.join("notes/b.md"), "# B").unwrap();
+        std::fs::write(r.join("old.md"), "[[a]]").unwrap();
+        let first = rebuild(r, &cfg, None);
+        // a note written, a folder of notes arriving, a note removed
+        std::thread::sleep(Duration::from_millis(20));
+        std::fs::write(r.join("notes/a.md"), "[[b]] and [[c]]").unwrap();
+        std::fs::create_dir_all(r.join("new/deep")).unwrap();
+        std::fs::write(r.join("new/deep/c.md"), "#tag").unwrap();
+        std::fs::write(r.join("new/pic.png"), "x").unwrap();
+        std::fs::remove_file(r.join("old.md")).unwrap();
+        let paths = ["notes/a.md", "new", "old.md"].map(String::from);
+        let patched = patch(r, &cfg, first.clone(), &paths);
+        let walked = rebuild(r, &cfg, None);
+        let set = |i: &Index| { let mut f = i.names.files.clone(); f.sort(); f };
+        assert_eq!(set(&patched), set(&walked), "the same files");
+        let mut a: Vec<_> = patched.parsed.keys().cloned().collect();
+        let mut b: Vec<_> = walked.parsed.keys().cloned().collect();
+        a.sort();
+        b.sort();
+        assert_eq!(a, b, "the same notes");
+        assert_eq!(patched.parsed["notes/a.md"].links.len(), 2, "the written note read again");
+        assert!(Arc::ptr_eq(&patched.parsed["notes/b.md"], &first.parsed["notes/b.md"]), "an untouched note kept, unread");
+        assert_eq!(patched.names.resolve_target("c", true, "notes/a.md").as_deref(), Some("new/deep/c.md"));
+        // nothing the index holds changed: the same index
+        let again = patch(r, &cfg, patched.clone(), &["notes/b.md".to_string()]);
+        assert!(Arc::ptr_eq(&again, &patched));
+    }
+
+    #[test]
     fn several_vaults_stay_warm_until_idle_or_too_many() {
         let empty = || Arc::new(Index::new(Arc::new(Names::new(Vec::new())), HashMap::new()));
         let (warm, t0) = (Mutex::new(Vec::new()), Instant::now());
-        let a = refresh(&warm, Path::new("/a"), t0, None, |_| empty());
-        refresh(&warm, Path::new("/b"), t0, None, |_| empty());
-        let again = refresh(&warm, Path::new("/a"), t0, None, |prev| prev.expect("a is still warm"));
+        let a = refresh(&warm, Path::new("/a"), t0, None, |_, _| (empty(), true));
+        refresh(&warm, Path::new("/b"), t0, None, |_, _| (empty(), true));
+        let again = refresh(&warm, Path::new("/a"), t0, None, |prev, _| (prev.expect("a is still warm"), true));
         assert!(Arc::ptr_eq(&a, &again), "switching vaults does not drop the other's index");
         for v in ["/c", "/d"] {
-            refresh(&warm, Path::new(v), t0, None, |_| empty());
+            refresh(&warm, Path::new(v), t0, None, |_, _| (empty(), true));
         }
         let roots = |w: &Mutex<Vec<Warm>>| w.lock().unwrap().iter().map(|w| w.root.to_string_lossy().into_owned()).collect::<Vec<_>>();
         assert_eq!(roots(&warm), ["/d", "/c", "/a"], "the least recently used goes first");
-        refresh(&warm, Path::new("/d"), t0 + IDLE + Duration::from_secs(1), None, |prev| prev.unwrap());
+        refresh(&warm, Path::new("/d"), t0 + IDLE + Duration::from_secs(1), None, |prev, _| (prev.unwrap(), true));
         assert_eq!(roots(&warm), ["/d"], "idle vaults are dropped");
+    }
+
+    #[test]
+    fn the_kept_vault_stays_warm_idle_or_not() {
+        let empty = || Arc::new(Index::new(Arc::new(Names::new(Vec::new())), HashMap::new()));
+        let (warm, t0) = (Mutex::new(Vec::new()), Instant::now());
+        let own = Path::new("/kept-own-vault");
+        keep_warm(own);
+        let first = refresh(&warm, own, t0, None, |_, _| (empty(), true));
+        for (i, v) in ["/kept-x", "/kept-y", "/kept-z"].iter().enumerate() {
+            refresh(&warm, Path::new(v), t0 + IDLE * (i as u32 + 2), None, |_, _| (empty(), true));
+        }
+        let roots = |w: &Mutex<Vec<Warm>>| w.lock().unwrap().iter().map(|w| w.root.to_string_lossy().into_owned()).collect::<Vec<_>>();
+        assert_eq!(roots(&warm), ["/kept-z", "/kept-own-vault"], "the others went idle; the kept one stays");
+        for v in ["/kept-a", "/kept-b", "/kept-c"] {
+            refresh(&warm, Path::new(v), t0 + IDLE * 5, None, |_, _| (empty(), true));
+        }
+        assert!(roots(&warm).contains(&own.to_string_lossy().into_owned()), "beyond WARM_VAULTS the kept one stays too");
+        let again = refresh(&warm, own, t0 + IDLE * 5, None, |prev, _| (prev.expect("still warm"), true));
+        assert!(Arc::ptr_eq(&first, &again));
+    }
+
+    #[test]
+    fn an_index_warmed_in_the_background_is_the_one_a_request_finds() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("a.md"), "[[b]]\n").unwrap();
+        std::fs::write(d.path().join("b.md"), "# B\n").unwrap();
+        let cfg = Config::default();
+        // kept: the other tests' vaults, built at the same time, would otherwise push it out of the few kept warm
+        keep_warm(d.path());
+        warm_in_background(d.path(), &cfg);
+        let deadline = Instant::now() + Duration::from_secs(30);
+        // stored once built, its links resolved just after
+        let built = || CACHE.lock().unwrap().iter().find(|w| w.root == d.path() && w.index.resolved.get().is_some()).map(|w| w.index.clone());
+        let warmed = loop {
+            if let Some(i) = built() {
+                break i;
+            }
+            assert!(Instant::now() < deadline, "the background build finished, its links resolved");
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(warmed.parsed.len(), 2);
+        assert!(Arc::ptr_eq(&warmed, &scan(d.path(), &cfg)), "a request finds that index, not one of its own");
     }
 
     #[test]
@@ -939,15 +1257,15 @@ mod tests {
         let slow = {
             let warm = warm.clone();
             std::thread::spawn(move || {
-                refresh(&warm, Path::new("/slow"), Instant::now(), None, |_| {
+                refresh(&warm, Path::new("/slow"), Instant::now(), None, |_, _| {
                     started.send(()).unwrap();
                     held.recv().unwrap();
-                    empty()
+                    (empty(), true)
                 });
             })
         };
         wait.recv().unwrap();
-        refresh(&warm, Path::new("/quick"), Instant::now(), None, |_| empty());
+        refresh(&warm, Path::new("/quick"), Instant::now(), None, |_, _| (empty(), true));
         release.send(()).unwrap();
         slow.join().unwrap();
         assert_eq!(warm.lock().unwrap().len(), 2);
@@ -962,26 +1280,33 @@ mod tests {
         feed.register();
         let (warm, t0) = (Mutex::new(Vec::new()), Instant::now());
         let stamp = || crate::vault_changes::stamp(root, &cfg);
-        let first = refresh(&warm, root, t0, stamp(), |_| empty());
-        let kept = refresh(&warm, root, t0, stamp(), |_| panic!("no change: no walk"));
+        let first = refresh(&warm, root, t0, stamp(), |_, _| (empty(), true));
+        let kept = refresh(&warm, root, t0, stamp(), |_, _| panic!("no change: no walk"));
         assert!(Arc::ptr_eq(&first, &kept));
         feed.changed();
-        let mut walked = false;
-        refresh(&warm, root, t0, stamp(), |prev| {
-            walked = true;
-            prev.unwrap()
+        let mut asked = None;
+        refresh(&warm, root, t0, stamp(), |prev, since| {
+            asked = Some(since);
+            (prev.unwrap(), false)
         });
-        assert!(walked, "a change: walked again");
+        assert!(matches!(asked, Some(Some(_))), "a change: built again, given the stamp it was made at (a patch may do)");
         let mut walked = false;
-        refresh(&warm, root, t0 + TRUST, stamp(), |prev| {
+        refresh(&warm, root, t0 + TRUST, stamp(), |prev, _| {
             walked = true;
-            prev.unwrap()
+            (prev.unwrap(), true)
         });
         assert!(walked, "trusted for a while only");
+        let mut since_given = None;
+        refresh(&warm, root, t0 + TRUST + FULL_EVERY, { feed.changed(); stamp() }, |prev, since| {
+            since_given = Some(since);
+            (prev.unwrap(), true)
+        });
+        assert_eq!(since_given, Some(None), "a whole walk is due again: no patch offered");
         let mut walked = false;
-        refresh(&warm, root, t0 + TRUST, None, |prev| {
+        refresh(&warm, root, t0 + TRUST, None, |prev, since| {
+            assert!(since.is_none(), "no watcher: no patch");
             walked = true;
-            prev.unwrap()
+            (prev.unwrap(), true)
         });
         assert!(walked, "no watcher: always walked");
     }

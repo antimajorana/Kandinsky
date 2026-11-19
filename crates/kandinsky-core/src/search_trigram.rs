@@ -12,7 +12,8 @@ use std::time::{Duration, Instant, SystemTime};
 use walkdir::WalkDir;
 
 const MAGIC: &[u8; 4] = b"KDTG";
-const VERSION: u32 = 2;
+/// 3: a note's trigrams are those of its searchable text (search_text.rs), what the search matches.
+const VERSION: u32 = 3;
 const SEARCH_IDX: &str = ".kandinsky/cache/search.idx";
 const PDF_IDX: &str = ".kandinsky/cache/search-pdf.idx";
 const WARM_SLOTS: usize = 6;
@@ -480,8 +481,18 @@ fn read_one_file(walked_idx: usize, old_doc_id: Option<u32>, f: &WalkedFile, sni
         content_hash: fnv_mix(0xcbf2_9ce4_8422_2325u64, &buf),
         is_text: true,
         worth_reading,
-        trigrams: extract_unique_trigrams(&buf),
+        trigrams: indexed_trigrams(&f.rel, &buf),
     })
+}
+
+/// A note is matched as its searchable text (its HTML blanked, entities decoded: search_text.rs), so that is what is
+/// indexed; any other file as it is.
+fn indexed_trigrams(rel: &str, buf: &[u8]) -> Vec<u32> {
+    let note = rel.rsplit_once('.').is_some_and(|(_, e)| e.eq_ignore_ascii_case("md"));
+    match std::str::from_utf8(buf) {
+        Ok(text) if note => extract_unique_trigrams(crate::search_text::searchable(text).as_bytes()),
+        _ => extract_unique_trigrams(buf),
+    }
 }
 
 fn extract_unique_trigrams(bytes: &[u8]) -> Vec<u32> {

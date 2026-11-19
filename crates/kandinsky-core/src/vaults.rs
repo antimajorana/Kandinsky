@@ -34,6 +34,19 @@ pub struct Vault {
     /// The desktop's one core: already started, so switching to it is only a page load.
     #[serde(default, skip_deserializing)]
     pub warm: bool,
+    /// Started with the app and kept running whether or not a window shows it: its schedules, plugin rounds, hooks and
+    /// notifications go on in the background (docs/design/DESIGN-vaults-together.md). Others start when opened.
+    #[serde(default)]
+    pub always_on: bool,
+    /// Its notices that came while no page of it was looked at (notify.rs `UnseenList`): the switcher's badge. Said by
+    /// the core serving it, never written to the list.
+    #[serde(default, skip_deserializing, skip_serializing_if = "is_zero")]
+    #[ts(optional)]
+    pub unseen: Option<u32>,
+}
+
+fn is_zero(n: &Option<u32>) -> bool {
+    n.is_none_or(|n| n == 0)
 }
 
 /// `GET /api/vaults`.
@@ -127,8 +140,20 @@ fn read(file: &Path) -> Vec<Vault> {
 /// The list, or why it cannot be read (a hand edit gone wrong); none yet is an empty list.
 fn read_checked(file: &Path) -> std::result::Result<Vec<Vault>, String> {
     let text = std::fs::read_to_string(file).unwrap_or_default();
-    toml::from_str::<ListFile>(&text).map(|l| l.vault).map_err(|e| e.to_string())
+    let mut v = toml::from_str::<ListFile>(&text).map(|l| l.vault).map_err(|e| e.to_string())?;
+    // a list from before "always on" existed: the vaults the old rule started (a folder opened in the last 3 days)
+    // keep starting, so an update stops nothing that ran
+    if !text.contains("always_on") {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64);
+        for x in v.iter_mut().filter(|x| x.url.is_none() && now - x.last_opened < OLD_RULE_MS) {
+            x.always_on = true;
+        }
+    }
+    Ok(v)
 }
+
+/// The window of the rule before "always on": a folder opened this recently was started ahead.
+const OLD_RULE_MS: i64 = 3 * 24 * 3600 * 1000;
 
 fn write(file: &Path, vaults: Vec<Vault>) -> Result<()> {
     let text = toml::to_string(&ListFile { vault: vaults }).map_err(|e| Error::Other(e.into()))?;
@@ -171,9 +196,12 @@ pub fn remember(file: &Path, root: &Path, now_ms: i64) -> Result<()> {
     let path = root.to_string_lossy().into_owned();
     let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
     change(file, |v| {
-        let mirror = v.iter().find(|x| x.path == path).and_then(|x| x.mirror.clone()); // a reopen keeps its mirror
+        // a reopen keeps its mirror and its "always on"; a folder opened here for the first time is always on — both
+        // vaults load and do their background work by themselves, the switch in Settings turns one off (left off, the
+        // second vault silently stopped its schedules and notices: DESIGN-vaults-together.md §1)
+        let (mirror, always_on) = v.iter().find(|x| x.path == path).map(|x| (x.mirror.clone(), x.always_on)).unwrap_or((None, true));
         v.retain(|x| x.path != path);
-        v.insert(0, Vault { name, path, last_opened: now_ms, missing: false, url: None, mirror, warm: false });
+        v.insert(0, Vault { name, path, last_opened: now_ms, missing: false, url: None, mirror, warm: false, always_on, unseen: None });
         Ok(())
     })
 }
@@ -191,6 +219,25 @@ pub fn set_mirror(file: &Path, path: &str, mirror: Option<&str>) -> Result<()> {
         entry.mirror = mirror;
         Ok(())
     })
+}
+
+/// Marks the local vault `path` as started with the app and kept running (`on`), or started only when opened.
+pub fn set_always_on(file: &Path, path: &str, on: bool) -> Result<()> {
+    change(file, |v| {
+        let Some(entry) = v.iter_mut().find(|x| x.path == path && x.url.is_none()) else {
+            return Err(Error::NotFound(format!("{path}: not a folder on the vault list")));
+        };
+        entry.always_on = on;
+        Ok(())
+    })
+}
+
+/// `POST /api/vaults/always-on`.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[ts(export)]
+pub struct AlwaysOnRequest {
+    pub path: String,
+    pub on: bool,
 }
 
 /// What a window started without knowing its vault shows: the folder asked for, else the vault
@@ -233,7 +280,7 @@ pub fn remember_server(file: &Path, url: &str, now_ms: i64) -> Result<()> {
     let name = vault.map_or_else(|| host.to_string(), |v| format!("{host} · {v}"));
     change(file, |v| {
         v.retain(|x| x.path != url);
-        v.insert(0, Vault { name, path: url.to_string(), last_opened: now_ms, missing: false, url: Some(url.to_string()), mirror: None, warm: false });
+        v.insert(0, Vault { name, path: url.to_string(), last_opened: now_ms, missing: false, url: Some(url.to_string()), mirror: None, warm: false, always_on: false, unseen: None });
         Ok(())
     })
 }
@@ -271,7 +318,7 @@ pub fn start_plain(root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// The address of an Kandinsky already serving this vault, if one is: from its `.kandinsky/cache/server.json`,
+/// The address of a Kandinsky already serving this vault, if one is: from its `.kandinsky/cache/server.json`,
 /// believed only while the folder is the same and that process is alive (a crash leaves the file behind).
 pub fn running_server(root: &Path) -> Option<String> {
     let f = server_in(root, &crate::state_dir::dir(root))?;
@@ -316,6 +363,30 @@ pub fn open_window(root: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_folder_opened_here_first_is_always_on_and_a_reopen_keeps_the_choice() {
+        let d = tempfile::tempdir().unwrap();
+        let (file, a, b) = (d.path().join("vaults.toml"), d.path().join("A"), d.path().join("B"));
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        remember(&file, &b, 1).unwrap();
+        remember(&file, &a, 2).unwrap();
+        // each folder as the list spells it (on Windows a verbatim path): what the code under test wrote
+        let l = list(&file);
+        let (pa, pb) = (l[0].path.clone(), l[1].path.clone());
+        assert!(l[0].always_on && l[1].always_on, "first opened: always on");
+        set_always_on(&file, &pa, false).unwrap();
+        remember(&file, &a, 3).unwrap();
+        assert!(!list(&file).iter().find(|v| v.path == pa).unwrap().always_on, "switched off: a reopen keeps it off");
+        // a list written before the key existed: the folders opened in the last 3 days start, as they did (paths as
+        // TOML literal strings: a Windows path's backslashes are no escapes there)
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+        std::fs::write(&file, format!("[[vault]]\nname = \"A\"\npath = '{pa}'\nlast_opened = {}\nmissing = false\n\n[[vault]]\nname = \"B\"\npath = '{pb}'\nlast_opened = 1\nmissing = false\n", now - 1000)).unwrap();
+        let l = list(&file);
+        assert!(l.iter().find(|v| v.path == pa).unwrap().always_on, "opened lately: on");
+        assert!(!l.iter().find(|v| v.path == pb).unwrap().always_on, "not opened for long: off");
+    }
+
     #[test]
     fn throwaway_folders_are_the_temp_folders_and_cargos_target() {
         let tmp = tempfile::tempdir().unwrap();

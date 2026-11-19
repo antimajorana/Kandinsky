@@ -3,10 +3,10 @@
 //! platform's [`Notifier`]. The rules are the same on every device; only the notifier differs.
 use crate::api::{Notice, NoticeLevel};
 use crate::config::{NotificationsConfig, SystemNotices};
-use crate::events::EventBus;
+use crate::events::{EventBus, ToSystem};
 use crate::Workspace;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 /// Whether a notice goes to the system. `looked_at`: a page of this core is visible and focused; `muted`: its source
@@ -23,11 +23,15 @@ pub fn shown(mode: SystemNotices, n: &Notice, looked_at: bool, muted: bool) -> b
 }
 
 /// The pages of this process and whether each is looked at, as they report it on their event socket (`seen`). Kept
-/// per process, not per vault: a focused window of one vault means the person is looking at Kandinsky.
+/// per process, not per vault: a focused window of one vault means the person is looking at Kandinsky. With them, when the
+/// person last used this device (`active_at`): a page coming into focus, and the system's idle state sampled once a
+/// minute (`watch`, platform/idle.rs) — the presence the planner of nudges weighs (DESIGN-calendar-tasks-nudges §3.2).
 #[derive(Default)]
 pub struct Presence {
     pages: Mutex<HashMap<u64, bool>>,
     next: AtomicU64,
+    /// ms since the epoch; 0 while unknown
+    active: AtomicI64,
 }
 
 /// One page's place in [`Presence`]; gone with its socket.
@@ -53,12 +57,65 @@ impl Presence {
     pub fn looked_at(&self) -> bool {
         self.pages.lock().unwrap().values().any(|&v| v)
     }
+
+    /// The pages of one vault (the global one counts every vault's): whether a window shows it at all, for the work
+    /// that can slow down while none does (the mirror's catch-up, DESIGN-server-role.md "Two vaults").
+    pub fn of_vault(root: &std::path::Path) -> Arc<Presence> {
+        static BY_VAULT: LazyLock<Mutex<HashMap<std::path::PathBuf, Arc<Presence>>>> = LazyLock::new(Default::default);
+        BY_VAULT.lock().unwrap_or_else(|e| e.into_inner()).entry(root.to_path_buf()).or_default().clone()
+    }
+
+    /// Whether any page is connected, looked at or not (a window in the background still shows the vault).
+    pub fn connected(&self) -> bool {
+        !self.pages.lock().unwrap().is_empty()
+    }
+
+    /// When the person last used this device (ms since the epoch), as far as it is known.
+    pub fn active_at(&self) -> Option<i64> {
+        Some(self.active.load(Ordering::Relaxed)).filter(|&t| t > 0)
+    }
+
+    fn active_by(&self, t: i64) {
+        self.active.fetch_max(t, Ordering::Relaxed);
+    }
+
+    /// One sample of the system's idle state at `now`: in use is now; idle since a moment is that moment; idle since
+    /// an unknown moment keeps the last; no answer leaves it to the pages (a page looked at is in use).
+    pub fn sampled(&self, idle: Option<crate::platform::idle::Idle>, now: i64) {
+        use crate::platform::idle::Idle;
+        match idle {
+            Some(Idle::No) => self.active_by(now),
+            Some(Idle::Since(Some(t))) => self.active_by(t.min(now)),
+            Some(Idle::Since(None)) => {}
+            None if self.looked_at() => self.active_by(now),
+            None => {}
+        }
+    }
+
+    /// Samples the system's idle state now and once a minute, for the life of the process (once per process).
+    pub fn watch(self: &Arc<Self>) {
+        static STARTED: AtomicBool = AtomicBool::new(false);
+        if STARTED.swap(true, Ordering::Relaxed) {
+            return;
+        }
+        let me = self.clone();
+        let spawned = std::thread::Builder::new().name("presence".into()).spawn(move || loop {
+            me.sampled(crate::platform::idle::idle(), chrono::Utc::now().timestamp_millis());
+            std::thread::sleep(std::time::Duration::from_secs(60));
+        });
+        if let Err(e) = spawned {
+            eprintln!("kandinsky: presence: not watched: {e}");
+        }
+    }
 }
 
 impl Page {
     /// What the page reported: visible and focused, or not.
     pub fn seen(&self, looked_at: bool) {
         self.presence.pages.lock().unwrap().insert(self.id, looked_at);
+        if looked_at {
+            self.presence.active_by(chrono::Utc::now().timestamp_millis());
+        }
     }
 }
 
@@ -96,9 +153,13 @@ pub fn stay_of(seconds: u32, n: &Notice) -> Stay {
 
 /// The platform's notification shower. `replaces`: the handle an earlier notice of the same id got, to update it in
 /// place (D-Bus `replaces_id`, Android's notification id, a Windows toast's tag). `stay`: how long it shows, where the
-/// platform lets a program say (D-Bus; Android and Windows keep their own rules).
+/// platform lets a program say (D-Bus; Android and Windows keep their own rules). The notice's `actions` are its
+/// buttons; a press is said on the bus (`EventBus::chose`), the notifier having kept what it needs to name the notice.
+/// `withdraw`: the notification shown under `handle` is taken away (D-Bus `CloseNotification`, Android's `cancel`,
+/// a toast's `RemoveGroupedTagWithId`).
 pub trait Notifier: Send + Sync {
     fn show(&self, n: &Notice, replaces: Option<u32>, stay: Stay) -> Result<u32, String>;
+    fn withdraw(&self, handle: u32) -> Result<(), String>;
 }
 
 /// Says each notice on stderr: where no system notifier is reachable (a session without a notification server).
@@ -112,13 +173,20 @@ impl Notifier for LogNotifier {
         eprintln!("kandinsky: notice{}: {}{}", n.source.as_deref().map(|s| format!(" ({s})")).unwrap_or_default(), n.title, n.body.as_deref().map(|b| format!(" — {b}")).unwrap_or_default());
         Ok(handle)
     }
+
+    fn withdraw(&self, handle: u32) -> Result<(), String> {
+        eprintln!("kandinsky: notice {handle} withdrawn");
+        Ok(())
+    }
 }
 
-/// A click on one of Kandinsky's system notifications: the desktop shell brings its window forward (shell.rs; rebuilt
-/// with `open` if it was asleep), and a live page opens the note from the `Open` event the notifier publishes.
-#[cfg_attr(not(any(windows, all(target_os = "linux", not(target_os = "android")))), allow(dead_code))]
-fn clicked(open: Option<String>) {
-    crate::shell::show(crate::shell::Show { vault: None, open });
+/// A click on one of Kandinsky's system notifications, or its Open button: the desktop shell brings its window forward
+/// (shell.rs; rebuilt with `open` if it was asleep), and a live page opens the note from the `Open` event.
+pub fn open_notice(bus: &EventBus, open: Option<String>) {
+    crate::shell::show(crate::shell::Show { vault: None, open: open.clone() });
+    if let Some(path) = open {
+        bus.publish(crate::api::Event::Open { path, line: None });
+    }
 }
 
 /// Do not disturb (the tray's check mark): no system notification from this process while on, failures included.
@@ -133,13 +201,91 @@ pub fn quiet() -> bool {
     QUIET.load(Ordering::Relaxed)
 }
 
-type NoticeHook = Box<dyn Fn(&Notice, bool) + Send + Sync>;
+/// What the desktop shell's tray hears (notify.rs `on_notice`).
+pub enum Heard<'a> {
+    /// A notice, and whether a page was looked at when it came.
+    Notice(&'a Notice, bool),
+    /// `Event::Withdraw`: the notices of this id or about this subject are no longer news.
+    Withdrawn(&'a str),
+}
+
+type NoticeHook = Box<dyn Fn(Heard<'_>) + Send + Sync>;
 static OBSERVER: std::sync::OnceLock<NoticeHook> = std::sync::OnceLock::new();
 
-/// The desktop shell's tray hears every notice of every vault this process serves, and whether a page was looked at
-/// when it came (the tray gathers the unseen ones). Set once.
-pub fn on_notice(f: impl Fn(&Notice, bool) + Send + Sync + 'static) {
+/// The desktop shell's tray hears every notice of every vault this process serves, whether a page was looked at
+/// when it came (the tray gathers the unseen ones), and every withdrawal (it drops them again). Set once.
+pub fn on_notice(f: impl Fn(Heard<'_>) + Send + Sync + 'static) {
     let _ = OBSERVER.set(Box::new(f));
+}
+
+/// A notice that came while no page of its vault was looked at; its id and subject say which withdrawal takes it away.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct Unseen {
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+}
+
+/// How many unseen notices a vault keeps (every one is counted).
+const UNSEEN_KEPT: usize = 64;
+
+/// Unseen notices, newest first (not looked at when they came; a repeated id replaces; a withdrawal drops). One per
+/// vault is what an agent reads (`GET /api/notices`), fed by [`spawn`] and emptied when a page of the vault is looked
+/// at; the desktop tray keeps one for the whole process (kandinsky-app tray.rs).
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct UnseenList {
+    pub items: Vec<Unseen>,
+    /// Unseen notices counted, also those beyond the kept ones.
+    pub count: usize,
+}
+
+impl UnseenList {
+    pub fn add(&mut self, n: &Notice) {
+        let before = self.items.len();
+        if n.id.is_some() {
+            self.items.retain(|w| w.id != n.id);
+        }
+        if self.items.len() == before {
+            self.count += 1;
+        }
+        let u = Unseen { title: n.title.clone(), body: n.body.clone(), source: n.source.clone(), open: opens(n).map(str::to_string), id: n.id.clone(), subject: n.subject.clone() };
+        self.items.insert(0, u);
+        self.items.truncate(UNSEEN_KEPT);
+    }
+
+    /// `Event::Withdraw`: the notices of this id or about this subject dropped and no longer counted; whether any was.
+    pub fn withdraw(&mut self, id: &str) -> bool {
+        let before = self.items.len();
+        self.items.retain(|w| w.id.as_deref() != Some(id) && w.subject.as_deref() != Some(id));
+        let gone = before - self.items.len();
+        self.count = self.count.saturating_sub(gone);
+        gone > 0
+    }
+
+    pub fn clear(&mut self) {
+        self.items.clear();
+        self.count = 0;
+    }
+}
+
+/// `POST /api/notices/withdraw`: a notice's id or subject.
+#[derive(Debug, serde::Deserialize)]
+pub struct Withdrawal {
+    pub id: String,
+}
+
+/// The unseen notices of the vault at `root`, shared by its notice loop and its server.
+pub fn unseen_of(root: &std::path::Path) -> Arc<Mutex<UnseenList>> {
+    static BY_VAULT: LazyLock<Mutex<HashMap<std::path::PathBuf, Arc<Mutex<UnseenList>>>>> = LazyLock::new(Default::default);
+    BY_VAULT.lock().unwrap_or_else(|e| e.into_inner()).entry(root.to_path_buf()).or_default().clone()
 }
 
 /// The body's length a notification shows comfortably.
@@ -155,24 +301,25 @@ pub fn opens(n: &Notice) -> Option<&str> {
     n.open.as_deref().filter(|o| !o.contains("://"))
 }
 
-type MakeNotifier = Box<dyn Fn() -> Box<dyn Notifier> + Send + Sync>;
+type MakeNotifier = Box<dyn Fn(&EventBus) -> Box<dyn Notifier> + Send + Sync>;
 static SHELL_NOTIFIER: std::sync::OnceLock<MakeNotifier> = std::sync::OnceLock::new();
 
 /// A shell that reaches the system itself gives its notifier here, before the first vault is served: the phone, whose
-/// notifications are Java's (kandinsky-android, `notices.rs`).
-pub fn set_platform(make: impl Fn() -> Box<dyn Notifier> + Send + Sync + 'static) {
+/// notifications are Java's (kandinsky-android, `notices.rs`). It is made per vault, with that vault's bus (where a press
+/// on a button is said).
+pub fn set_platform(make: impl Fn(&EventBus) -> Box<dyn Notifier> + Send + Sync + 'static) {
     let _ = SHELL_NOTIFIER.set(Box::new(make));
 }
 
 /// The platform's notifier: the shell's own if it gave one; the desktop's notification server on Linux, toasts on
-/// Windows (a click publishes `Open` for the notice's note on `bus`); elsewhere, until its step of the design is
-/// built, the log. `KANDINSKY_NO_NOTIFY` (any value): the log only — a test's or a probe's core never reaches the desktop.
+/// Windows (a click publishes `Open` for the notice's note on `bus`, a button is said there); elsewhere (macOS: no
+/// notifier yet, DESIGN-calendar-tasks-nudges.md §7) the log. `KANDINSKY_NO_NOTIFY` (any value): the log only — a test's or a probe's core never reaches the desktop.
 pub fn platform(bus: &EventBus) -> Box<dyn Notifier> {
     if crate::env::var_os("NO_NOTIFY").is_some() {
         return Box::new(LogNotifier { next: AtomicU64::new(0) });
     }
     if let Some(make) = SHELL_NOTIFIER.get() {
-        return make();
+        return make(bus);
     }
     #[cfg(all(target_os = "linux", not(target_os = "android")))]
     match linux::DBus::connect(bus.clone()) {
@@ -192,8 +339,8 @@ pub fn platform(bus: &EventBus) -> Box<dyn Notifier> {
 #[cfg(all(target_os = "linux", not(target_os = "android")))]
 mod linux {
     use super::{Notice, NoticeLevel, Notifier, Stay};
-    use crate::api::Event;
-    use crate::events::EventBus;
+    use crate::api::NoticeAction;
+    use crate::events::{Chosen, EventBus};
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
     use zbus::zvariant::Value;
@@ -201,10 +348,21 @@ mod linux {
     const DEST: &str = "org.freedesktop.Notifications";
     const PATH: &str = "/org/freedesktop/Notifications";
 
+    /// What a notification shown needs when it is clicked or a button of it pressed: the notice's open, source, id.
+    #[derive(Clone)]
+    struct Kept {
+        open: Option<String>,
+        source: Option<String>,
+        id: Option<String>,
+    }
+
+    /// The server's key for a click on the body itself.
+    const DEFAULT: &str = "default";
+
     pub struct DBus {
         conn: zbus::blocking::Connection,
-        /// Each notification shown, and the vault path a click on it opens.
-        opens: Arc<Mutex<HashMap<u32, Option<String>>>>,
+        /// Each notification shown, and what a click on it or a press of its buttons needs.
+        shown: Arc<Mutex<HashMap<u32, Kept>>>,
         /// the server reads bodies as markup (`body-markup`, Plasma and GNOME do): `&`, `<`, `>` are escaped, or
         /// `Prof <prof@uni.example>` would lose its address as an unknown tag
         markup: bool,
@@ -229,33 +387,40 @@ mod linux {
             Self::on(zbus::blocking::Connection::session().map_err(|e| e.to_string())?, bus)
         }
 
-        /// Follows `ActionInvoked` on `conn`: a click on one of ours brings Kandinsky forward and opens its note.
+        /// Follows `ActionInvoked` and `NotificationClosed` on `conn`: a click on one of ours brings Kandinsky forward and
+        /// opens its note; a press of one of its buttons is said on the bus, and so is its dismissal by the person
+        /// (`NoticeAction::DISMISSED`).
         pub fn on(conn: zbus::blocking::Connection, bus: EventBus) -> Result<Self, String> {
-            let opens: Arc<Mutex<HashMap<u32, Option<String>>>> = Arc::default();
-            let rule = zbus::MatchRule::builder()
-                .msg_type(zbus::message::Type::Signal)
-                .interface(DEST)
-                .and_then(|r| r.member("ActionInvoked"))
-                .map_err(|e| e.to_string())?
-                .build();
+            let shown: Arc<Mutex<HashMap<u32, Kept>>> = Arc::default();
+            // both members on one stream: a press arrives before the close that follows it, which is then no dismissal
+            let rule = zbus::MatchRule::builder().msg_type(zbus::message::Type::Signal).interface(DEST).map_err(|e| e.to_string())?.build();
             let signals = zbus::blocking::MessageIterator::for_match_rule(rule, &conn, None).map_err(|e| e.to_string())?;
-            let clicked = opens.clone();
+            let clicked = shown.clone();
             std::thread::Builder::new()
                 .name("kandinsky-notify-clicks".into())
                 .spawn(move || {
                     for msg in signals.flatten() {
-                        let Ok((id, _action)) = msg.body().deserialize::<(u32, String)>() else { continue };
-                        // the signal is broadcast: another program's notifications are not ours to answer
-                        let Some(open) = clicked.lock().unwrap().get(&id).cloned() else { continue };
-                        super::clicked(open.clone());
-                        if let Some(path) = open {
-                            bus.publish(Event::Open { path, line: None });
+                        let member = msg.header().member().map(|m| m.to_string()).unwrap_or_default();
+                        let said = match member.as_str() {
+                            "ActionInvoked" => msg.body().deserialize::<(u32, String)>().ok().map(|(id, a)| (id, Some(a))),
+                            // reason 2: dismissed by the person (1 expired, 3 closed by us, 4 anything else)
+                            "NotificationClosed" => msg.body().deserialize::<(u32, u32)>().ok().map(|(id, why)| (id, (why == 2).then(|| NoticeAction::DISMISSED.to_string()))),
+                            _ => None,
+                        };
+                        let Some((id, action)) = said else { continue };
+                        // the signal is broadcast: another program's notifications are not ours to answer; once
+                        // answered (pressed, closed) one is forgotten
+                        let Some(kept) = clicked.lock().unwrap().remove(&id) else { continue };
+                        match action {
+                            Some(a) if a == DEFAULT => super::open_notice(&bus, kept.open),
+                            Some(action) => bus.chose(Chosen { action, source: kept.source, notice: kept.id, open: kept.open }),
+                            None => {}
                         }
                     }
                 })
                 .map_err(|e| e.to_string())?;
             let markup = reads_markup(&conn);
-            Ok(Self { conn, opens, markup })
+            Ok(Self { conn, shown, markup })
         }
     }
 
@@ -264,7 +429,11 @@ mod linux {
             let body = if self.markup { as_markup_text(&super::body_of(n)) } else { super::body_of(n) };
             // a click (`default`: the server's own click on the body) brings Kandinsky forward and opens a vault path
             let open = super::opens(n);
-            let actions = vec!["default", if open.is_some() { "Open" } else { "Show Kandinsky" }];
+            // the spec's flat list: key, label, key, label…; the notice's own buttons after the click
+            let mut actions = vec![DEFAULT, if open.is_some() { "Open" } else { "Show Kandinsky" }];
+            for a in &n.actions {
+                actions.extend([a.id.as_str(), a.label.as_str()]);
+            }
             // "critical" is what a server never puts away by itself (and shows over do-not-disturb): only for a failure
             // the person asked to keep until dismissed. With a stay, a failure is a normal one that shows longer.
             let urgency: u8 = if stay == Stay::UntilDismissed && n.level == Some(NoticeLevel::Failure) { 2 } else { 1 };
@@ -285,19 +454,26 @@ mod linux {
                 .call_method(Some(DEST), PATH, Some(DEST), "Notify", &("Kandinsky", replaces.unwrap_or(0), "kandinsky", n.title.as_str(), body.as_str(), actions, hints, expire))
                 .map_err(|e| e.to_string())?;
             let id: u32 = reply.body().deserialize().map_err(|e| e.to_string())?;
-            let mut opens = self.opens.lock().unwrap();
-            opens.insert(id, open.map(str::to_string));
+            let mut shown = self.shown.lock().unwrap();
+            shown.insert(id, Kept { open: open.map(str::to_string), source: n.source.clone(), id: n.id.clone() });
             // the server numbers its notifications upwards: only the last few hundred can still be clicked
-            if opens.len() > 512 {
-                opens.retain(|&k, _| k <= id && k > id.saturating_sub(256)); // (a restarted server counts from 1 again)
+            if shown.len() > 512 {
+                shown.retain(|&k, _| k <= id && k > id.saturating_sub(256)); // (a restarted server counts from 1 again)
             }
             Ok(id)
+        }
+
+        fn withdraw(&self, handle: u32) -> Result<(), String> {
+            self.shown.lock().unwrap().remove(&handle);
+            // a notification already closed (by the person, by the server) is no error: the server says nothing
+            self.conn.call_method(Some(DEST), PATH, Some(DEST), "CloseNotification", &(handle,)).map(drop).map_err(|e| e.to_string())
         }
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::api::{Event, NoticeAction};
         use std::io::BufRead;
         use std::time::{Duration, Instant};
 
@@ -305,8 +481,9 @@ mod linux {
         /// the expire_timeout.
         type Asked = Arc<Mutex<Vec<(String, u32, Vec<String>, u8, i32)>>>;
 
-        /// A notification server of the test's own, on a bus of its own: nothing reaches the desktop.
-        struct Fake(Asked);
+        /// A notification server of the test's own, on a bus of its own: nothing reaches the desktop. The second list:
+        /// the notifications closed.
+        struct Fake(Asked, Arc<Mutex<Vec<u32>>>);
 
         #[zbus::interface(name = "org.freedesktop.Notifications")]
         impl Fake {
@@ -315,6 +492,10 @@ mod linux {
                 let urgency = hints.get("urgency").and_then(|v| u8::try_from(&**v).ok()).unwrap_or(0);
                 self.0.lock().unwrap().push((summary, replaces, actions, urgency, timeout));
                 42
+            }
+
+            fn close_notification(&self, id: u32) {
+                self.1.lock().unwrap().push(id);
             }
         }
 
@@ -343,8 +524,8 @@ mod linux {
             std::io::BufReader::new(daemon.0.stdout.take().unwrap()).read_line(&mut addr).unwrap();
             let addr = addr.trim();
 
-            let asked: Asked = Arc::default();
-            let server = zbus::blocking::connection::Builder::address(addr).unwrap().name(DEST).unwrap().serve_at(PATH, Fake(asked.clone())).unwrap().build().unwrap();
+            let (asked, closed): (Asked, Arc<Mutex<Vec<u32>>>) = Default::default();
+            let server = zbus::blocking::connection::Builder::address(addr).unwrap().name(DEST).unwrap().serve_at(PATH, Fake(asked.clone(), closed.clone())).unwrap().build().unwrap();
             let bus = EventBus::default();
             let mut events = bus.subscribe();
             let client = zbus::blocking::connection::Builder::address(addr).unwrap().build().unwrap();
@@ -383,162 +564,91 @@ mod linux {
             };
             assert_eq!(opened, "notes/backup.md");
             assert!(events.try_recv().is_err(), "the other program's click opened nothing");
+
+            // its buttons after the click's; a press is said on the bus with the notice it was on
+            let mut chosen = bus.on_chosen();
+            let reminder = Notice::new("Seminar").source("dav").id("dav:s1").open("notes/Seminar.md").action(NoticeAction::new(NoticeAction::OPEN, "Open")).action(NoticeAction::snooze(10));
+            n.show(&reminder, None, secs(30)).unwrap();
+            let keys = asked.lock().unwrap().last().unwrap().2.clone();
+            assert_eq!(keys, ["default", "Open", "kandinsky:open", "Open", "kandinsky:snooze:10", "Snooze 10 min"]);
+            server.emit_signal(None::<zbus::names::BusName>, PATH, DEST, "ActionInvoked", &(42u32, "kandinsky:snooze:10")).unwrap();
+            let until = Instant::now() + Duration::from_secs(5);
+            let pressed = loop {
+                match chosen.try_recv() {
+                    Ok(c) => break c,
+                    Err(_) if Instant::now() < until => std::thread::sleep(Duration::from_millis(20)),
+                    Err(e) => panic!("no press heard: {e}"),
+                }
+            };
+            assert_eq!(pressed, Chosen { action: "kandinsky:snooze:10".into(), source: Some("dav".into()), notice: Some("dav:s1".into()), open: Some("notes/Seminar.md".into()) });
+            let next = |chosen: &mut tokio::sync::broadcast::Receiver<Chosen>| {
+                let until = Instant::now() + Duration::from_secs(5);
+                loop {
+                    match chosen.try_recv() {
+                        Ok(c) => return Some(c),
+                        Err(_) if Instant::now() < until => std::thread::sleep(Duration::from_millis(20)),
+                        Err(_) => return None,
+                    }
+                }
+            };
+
+            // dismissals: the close after a press is none; expired (1) or closed by us (3) is none; closed by the
+            // person (2) is said as kandinsky:dismissed with its notice
+            // each close heard before the next show of the same id (the listener runs on its own thread): a barrier —
+            // signals are handled in order, so once a marker notice's close is heard, the one before it was too
+            let forgotten = |n: &DBus| {
+                n.shown.lock().unwrap().insert(99, Kept { open: None, source: None, id: None });
+                server.emit_signal(None::<zbus::names::BusName>, PATH, DEST, "NotificationClosed", &(99u32, 3u32)).unwrap();
+                let until = Instant::now() + Duration::from_secs(5);
+                while n.shown.lock().unwrap().contains_key(&99) && Instant::now() < until {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            };
+            server.emit_signal(None::<zbus::names::BusName>, PATH, DEST, "NotificationClosed", &(42u32, 2u32)).unwrap();
+            forgotten(&n);
+            n.show(&reminder, None, secs(30)).unwrap();
+            server.emit_signal(None::<zbus::names::BusName>, PATH, DEST, "NotificationClosed", &(42u32, 1u32)).unwrap();
+            forgotten(&n);
+            n.show(&reminder, None, secs(30)).unwrap();
+            server.emit_signal(None::<zbus::names::BusName>, PATH, DEST, "NotificationClosed", &(42u32, 2u32)).unwrap();
+            server.emit_signal(None::<zbus::names::BusName>, PATH, DEST, "NotificationClosed", &(42u32, 2u32)).unwrap();
+            let dismissed = next(&mut chosen).expect("a dismissal heard");
+            assert_eq!(dismissed, Chosen { action: NoticeAction::DISMISSED.into(), source: Some("dav".into()), notice: Some("dav:s1".into()), open: Some("notes/Seminar.md".into()) });
+            assert_eq!(next(&mut chosen), None, "said once: the second close was of one already answered");
+
+            n.withdraw(42).unwrap();
+            assert_eq!(*closed.lock().unwrap(), [42], "withdrawn: closed on the server");
         }
     }
 }
 
-/// Windows toasts through WinRT. An app with no MSIX package has an identity only once this user's registry names it
-/// (`AppUserModelId\<id>`): done at start, needing no installer step, so a portable `kandinsky.exe` shows them too. The
-/// click is the toast's `Activated` event, which needs the process alive; the core is, as long as a vault is served.
 /// The same as the Tauri bundle's identifier (crates/kandinsky-app/tauri.conf.json), so Windows groups the toasts under
 /// one app; the WebView's data folder is named by it too (`platform::dirs_migrate` moves the one of the old identifier).
 pub const APP_ID: &str = "dev.kandinsky.app";
 
-#[cfg(windows)]
-mod toast {
-    use super::{Notice, Notifier, Stay};
-    use crate::api::Event;
-    use crate::events::EventBus;
-    use std::collections::VecDeque;
-    use std::sync::atomic::{AtomicU32, Ordering};
-    use std::sync::Mutex;
-    use windows::core::HSTRING;
-    use windows::Foundation::TypedEventHandler;
-    use windows::UI::Notifications::{ToastNotification, ToastNotificationManager, ToastNotifier, ToastTemplateType};
+/// Windows toasts through WinRT, their XML, buttons and withdrawal (notify/toast.rs; the WinRT half on Windows only).
+mod toast;
 
-    use super::APP_ID;
-    /// A tag or a group is at most 16 characters on older Windows (64 since 1703): a longer one is accepted when set
-    /// and refused when read back (CI's Windows Server). Sources are short (`sync`, a plugin's id).
-    const GROUP_MAX: usize = 16;
-    /// The toasts whose clicks are still awaited: their handlers live as long as they do.
-    const KEPT: usize = 32;
-
-    /// One notifier per vault, one identity per app: a process-wide counter, or one vault's toast would replace
-    /// another's with the same tag.
-    static NEXT: AtomicU32 = AtomicU32::new(1);
-
-    pub struct Toasts {
-        notifier: ToastNotifier,
-        bus: EventBus,
-        kept: Mutex<VecDeque<ToastNotification>>,
-    }
-
-    impl Toasts {
-        /// Names the app to Windows and opens its toast notifier.
-        pub fn open(bus: EventBus) -> Result<Self, String> {
-            register()?;
-            let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(APP_ID)).map_err(|e| e.to_string())?;
-            Ok(Self { notifier, bus, kept: Mutex::default() })
-        }
-    }
-
-    impl Notifier for Toasts {
-        fn show(&self, n: &Notice, replaces: Option<u32>, _stay: Stay) -> Result<u32, String> {
-            let handle = replaces.unwrap_or_else(|| NEXT.fetch_add(1, Ordering::Relaxed));
-            let toast = toast_of(n, handle).map_err(|e| e.to_string())?;
-            let (bus, open) = (self.bus.clone(), super::opens(n).map(str::to_string));
-            toast
-                .Activated(&TypedEventHandler::new(move |_, _| {
-                    super::clicked(open.clone());
-                    if let Some(path) = open.clone() {
-                        bus.publish(Event::Open { path, line: None });
-                    }
-                    Ok(())
-                }))
-                .map_err(|e| e.to_string())?;
-            self.notifier.Show(&toast).map_err(|e| e.to_string())?;
-            let mut kept = self.kept.lock().unwrap();
-            kept.push_back(toast);
-            if kept.len() > KEPT {
-                kept.pop_front();
-            }
-            Ok(handle)
-        }
-    }
-
-    /// The toast of a notice. Title and body go in as text nodes, so `<` and `&` in them are text, never markup. The
-    /// tag says which earlier toast it replaces; the group folds a source's burst.
-    fn toast_of(n: &Notice, handle: u32) -> windows::core::Result<ToastNotification> {
-        let xml = ToastNotificationManager::GetTemplateContent(ToastTemplateType::ToastText02)?;
-        let lines = xml.GetElementsByTagName(&HSTRING::from("text"))?;
-        for (i, line) in [n.title.clone(), super::body_of(n)].iter().enumerate() {
-            lines.Item(i as u32)?.AppendChild(&xml.CreateTextNode(&HSTRING::from(line))?)?;
-        }
-        let toast = ToastNotification::CreateToastNotification(&xml)?;
-        toast.SetTag(&HSTRING::from(handle.to_string()))?;
-        let group: String = n.source.as_deref().unwrap_or("kandinsky").chars().take(GROUP_MAX).collect();
-        toast.SetGroup(&HSTRING::from(group))?;
-        Ok(toast)
-    }
-
-    /// `HKCU\Software\Classes\AppUserModelId\<id>`: the name and the icon Windows shows above a toast. Set at every
-    /// start, as the icon's file may have moved; this user's own hive, so no elevation.
-    fn register() -> Result<(), String> {
-        use windows_sys::Win32::Foundation::ERROR_SUCCESS;
-        use windows_sys::Win32::System::Registry::{RegCloseKey, RegCreateKeyExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ};
-        let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
-        let path = wide(&format!("Software\\Classes\\AppUserModelId\\{APP_ID}"));
-        let mut key: HKEY = std::ptr::null_mut();
-        // SAFETY: the strings are NUL-terminated and outlive the calls; the key is closed below
-        let made = unsafe { RegCreateKeyExW(HKEY_CURRENT_USER, path.as_ptr(), 0, std::ptr::null(), REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, std::ptr::null(), &mut key, std::ptr::null_mut()) };
-        if made != ERROR_SUCCESS {
-            return Err(format!("the registry refused the app's name (error {made})"));
-        }
-        let set = |name: &str, value: &str| {
-            let (name, value) = (wide(name), wide(value));
-            // SAFETY: the length is the value's own, in bytes, its NUL included
-            let done = unsafe { RegSetValueExW(key, name.as_ptr(), 0, REG_SZ, value.as_ptr().cast(), (value.len() * 2) as u32) };
-            if done == ERROR_SUCCESS { Ok(()) } else { Err(format!("the registry refused a value of the app's name (error {done})")) }
-        };
-        let mut named = set("DisplayName", "Kandinsky");
-        match icon() {
-            Ok(file) => named = named.and(set("IconUri", &file.to_string_lossy())),
-            Err(e) => eprintln!("kandinsky: toasts without the icon: {e}"), // the toast still shows
-        }
-        // SAFETY: opened above, closed once
-        unsafe { RegCloseKey(key) };
-        named
-    }
-
-    /// The icon as a file: Windows reads it from a path, and the program's own is inside the exe.
-    fn icon() -> Result<std::path::PathBuf, String> {
-        let dir = crate::platform::dirs::app(crate::platform::dirs::Base::Cache);
-        let file = dir.join("toast-icon.png");
-        crate::vault_write::outside::write(&file, include_bytes!("../../kandinsky-app/icons/128x128.png")).map_err(|e| e.to_string())?;
-        Ok(file)
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        // Shows nothing: only builds the toast. CI's Windows has the real WinRT classes and must pass; Wine has none.
-        #[test]
-        fn a_toast_says_title_and_body_as_text_and_carries_tag_and_group() {
-            let n = Notice::new("a < b & c").body("line").source("x".repeat(GROUP_MAX + 9));
-            let toast = match toast_of(&n, 7) {
-                Ok(t) => t,
-                Err(e) if std::env::var_os("CI").is_none() => return eprintln!("skipped: no WinRT toasts here (Wine?): {e}"),
-                Err(e) => panic!("{e}"),
-            };
-            let xml = toast.Content().unwrap().GetXml().unwrap().to_string();
-            assert!(xml.contains("a &lt; b &amp; c"), "{xml}");
-            assert!(xml.contains(">line<"), "{xml}");
-            assert_eq!(toast.Tag().unwrap().to_string(), "7");
-            assert_eq!(toast.Group().unwrap().to_string().len(), GROUP_MAX);
-        }
-    }
-}
-
-/// The notices handed to a notifier, remembering each id's handle so a later one replaces it.
+/// The notices handed to a notifier, remembering each one's handle by its id (a later one replaces it) and its
+/// subject (a withdrawal by either takes it away).
 pub struct Delivery {
     notifier: Box<dyn Notifier>,
-    handles: HashMap<String, u32>,
+    held: Vec<Held>,
 }
+
+/// A system notification shown for a notice that has an id or a subject.
+struct Held {
+    id: Option<String>,
+    subject: Option<String>,
+    handle: u32,
+}
+
+/// How many shown notifications are remembered: the oldest beyond it is forgotten (long closed by then).
+const HELD_MAX: usize = 256;
 
 impl Delivery {
     pub fn new(notifier: Box<dyn Notifier>) -> Self {
-        Self { notifier, handles: HashMap::new() }
+        Self { notifier, held: Vec::new() }
     }
 
     /// Applies the rules and shows it; whether it was shown. A notifier's failure is said, never fatal.
@@ -546,11 +656,15 @@ impl Delivery {
         if !shown(cfg.system, n, looked_at, muted) {
             return false;
         }
-        let replaces = n.id.as_ref().and_then(|id| self.handles.get(id).copied());
+        let replaces = n.id.as_ref().and_then(|id| self.held.iter().find(|h| h.id.as_ref() == Some(id)).map(|h| h.handle));
         match self.notifier.show(n, replaces, stay_of(cfg.system_seconds, n)) {
             Ok(handle) => {
-                if let Some(id) = &n.id {
-                    self.handles.insert(id.clone(), handle);
+                if n.id.is_some() || n.subject.is_some() {
+                    self.held.retain(|h| h.handle != handle);
+                    self.held.push(Held { id: n.id.clone(), subject: n.subject.clone(), handle });
+                    if self.held.len() > HELD_MAX {
+                        self.held.remove(0);
+                    }
                 }
                 true
             }
@@ -560,6 +674,18 @@ impl Delivery {
             }
         }
     }
+
+    /// Takes away the system notifications shown for the notices of this id or about this subject; whether any was.
+    pub fn withdraw(&mut self, id: &str) -> bool {
+        let (gone, kept): (Vec<Held>, Vec<Held>) = std::mem::take(&mut self.held).into_iter().partition(|h| h.id.as_deref() == Some(id) || h.subject.as_deref() == Some(id));
+        self.held = kept;
+        for h in &gone {
+            if let Err(e) = self.notifier.withdraw(h.handle) {
+                eprintln!("kandinsky: system notification not withdrawn ({id}): {e}");
+            }
+        }
+        !gone.is_empty()
+    }
 }
 
 /// Follows a vault's notices for as long as it is served. Its `[notifications] system` is read per notice (notices are
@@ -567,23 +693,43 @@ impl Delivery {
 /// here when that half is built.
 pub fn spawn(ws: Workspace, bus: EventBus, presence: Arc<Presence>, notifier: Box<dyn Notifier>) -> tokio::task::JoinHandle<()> {
     let mut rx = bus.on_notice();
+    crate::notice_relay::attach(ws.root(), bus.clone()); // the other devices' notices are published here
     tokio::spawn(async move {
         let mut delivery = Delivery::new(notifier);
         loop {
-            let n = match rx.recv().await {
-                Ok(n) => n,
+            let said = match rx.recv().await {
+                Ok(s) => s,
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(_) => return,
             };
             let (ws, presence) = (ws.clone(), presence.clone());
             // the config read and a notifier's call (D-Bus) block: off the runtime's threads
             let offered = tokio::task::spawn_blocking(move || {
-                let cfg = ws.config().map(|c| c.notifications).unwrap_or_default();
-                let looked_at = presence.looked_at();
-                if let Some(f) = OBSERVER.get() {
-                    f(&n, looked_at);
+                match said {
+                    ToSystem::Show(n) => {
+                        let cfg = ws.config().map(|c| c.notifications).unwrap_or_default();
+                        // to the other devices, unless its source is kept to this one (Settings → Notifications)
+                        if !n.source.as_ref().is_some_and(|src| cfg.this_device_only.iter().any(|x| x == src)) {
+                            crate::notice_relay::raised(ws.root(), crate::notice_relay::Item::Show(n.clone()));
+                        }
+                        let looked_at = presence.looked_at();
+                        if let Some(f) = OBSERVER.get() {
+                            f(Heard::Notice(&n, looked_at));
+                        }
+                        if !looked_at {
+                            unseen_of(ws.root()).lock().unwrap_or_else(|e| e.into_inner()).add(&n);
+                        }
+                        delivery.offer(&cfg, &n, looked_at, quiet());
+                    }
+                    ToSystem::Withdraw(id) => {
+                        crate::notice_relay::raised(ws.root(), crate::notice_relay::Item::Withdraw(id.clone()));
+                        if let Some(f) = OBSERVER.get() {
+                            f(Heard::Withdrawn(&id));
+                        }
+                        unseen_of(ws.root()).lock().unwrap_or_else(|e| e.into_inner()).withdraw(&id);
+                        delivery.withdraw(&id);
+                    }
                 }
-                delivery.offer(&cfg, &n, looked_at, quiet());
                 delivery
             });
             match offered.await {
@@ -598,17 +744,107 @@ pub fn spawn(ws: Workspace, bus: EventBus, presence: Arc<Presence>, notifier: Bo
 mod tests {
     use super::*;
 
+    #[test]
+    fn each_vault_knows_whether_a_page_shows_it() {
+        let (a, b) = (std::path::Path::new("/vaults/a-presence-test"), std::path::Path::new("/vaults/b-presence-test"));
+        assert!(!Presence::of_vault(a).connected());
+        let page = Presence::of_vault(a).join();
+        assert!(Presence::of_vault(a).connected(), "the same table for the same vault");
+        assert!(!Presence::of_vault(b).connected(), "another vault's page is not this one's");
+        page.seen(false);
+        assert!(Presence::of_vault(a).connected(), "in the background, still shown");
+        drop(page);
+        assert!(!Presence::of_vault(a).connected(), "closed: gone");
+    }
+
     /// What a notifier was asked to show: each title, and the handle it was to replace.
     type Asked = Arc<Mutex<Vec<(String, Option<u32>)>>>;
 
-    /// Records what it was asked to show.
+    /// Records what it was asked to show; withdrawals are said as `withdrawn <handle>`, and each notice's buttons as
+    /// `buttons <ids>`.
     struct Shown(Asked);
     impl Notifier for Shown {
         fn show(&self, n: &Notice, replaces: Option<u32>, _stay: Stay) -> Result<u32, String> {
             let mut v = self.0.lock().unwrap();
             v.push((n.title.clone(), replaces));
-            Ok(replaces.unwrap_or(v.len() as u32))
+            let handle = replaces.unwrap_or(v.len() as u32);
+            if !n.actions.is_empty() {
+                v.push((format!("buttons {}", n.actions.iter().map(|a| a.id.as_str()).collect::<Vec<_>>().join(" ")), None));
+            }
+            Ok(handle)
         }
+        fn withdraw(&self, handle: u32) -> Result<(), String> {
+            self.0.lock().unwrap().push((format!("withdrawn {handle}"), None));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_notices_buttons_reach_the_notifier_and_a_withdrawal_takes_its_id_away() {
+        use crate::api::NoticeAction;
+        let seen = Arc::new(Mutex::new(vec![]));
+        let mut d = Delivery::new(Box::new(Shown(seen.clone())));
+        let always = NotificationsConfig { system: SystemNotices::Always, ..Default::default() };
+        let task = Notice::new("Send the report").id("plan:t1").action(NoticeAction::new("done", "Done")).action(NoticeAction::snooze(10));
+        assert!(d.offer(&always, &task, false, false));
+        assert!(d.offer(&always, &Notice::new("other").id("mail:inbox"), false, false));
+        assert!(!d.withdraw("plan:nope"), "an id never shown: nothing to take away");
+        assert!(d.withdraw("plan:t1"));
+        assert!(!d.withdraw("plan:t1"), "once");
+        assert!(d.offer(&always, &task, false, false), "shown again after: a new one, replacing nothing");
+        let seen = seen.lock().unwrap().iter().map(|(t, r)| format!("{t}{}", r.map(|r| format!(" ↺{r}")).unwrap_or_default())).collect::<Vec<_>>();
+        assert_eq!(seen, ["Send the report", "buttons done kandinsky:snooze:10", "other", "withdrawn 1", "Send the report", "buttons done kandinsky:snooze:10"]);
+    }
+
+    #[test]
+    fn a_withdrawal_by_subject_takes_away_every_notification_about_it() {
+        let seen = Arc::new(Mutex::new(vec![]));
+        let mut d = Delivery::new(Box::new(Shown(seen.clone())));
+        let always = NotificationsConfig { system: SystemNotices::Always, ..Default::default() };
+        let task = "notes/Report.md#^t3f9a";
+        assert!(d.offer(&always, &Notice::new("Due today").id("deadline:1").subject(task), false, false));
+        assert!(d.offer(&always, &Notice::new("Time to start").subject(task), false, false));
+        assert!(d.offer(&always, &Notice::new("other").subject("notes/Other.md#^x"), false, false));
+        assert!(d.withdraw(task));
+        assert!(!d.withdraw(task), "once");
+        assert!(!d.withdraw("deadline:1"), "its id went with it");
+        let seen = seen.lock().unwrap().iter().map(|(t, _)| t.clone()).collect::<Vec<_>>();
+        assert_eq!(seen, ["Due today", "Time to start", "other", "withdrawn 1", "withdrawn 2"]);
+    }
+
+    #[test]
+    fn the_unseen_list_replaces_a_repeated_id_and_drops_what_is_withdrawn_by_id_or_subject() {
+        let mut l = UnseenList::default();
+        l.add(&Notice::new("2 new mails").id("mail:inbox"));
+        l.add(&Notice::new("Due today").id("deadline:t1").subject("notes/R.md#^t1").open("notes/R.md"));
+        l.add(&Notice::new("Time to start").subject("notes/R.md#^t1"));
+        l.add(&Notice::new("3 new mails").id("mail:inbox").open("https://mail.example.org"));
+        assert_eq!((l.items.len(), l.count, l.items[0].title.as_str()), (3, 3, "3 new mails"), "the mail notice replaced, first");
+        assert_eq!((l.items[0].open.as_deref(), l.items[1].open.as_deref()), (None, None), "an address is not a vault path to open");
+        assert_eq!(l.items[2].open.as_deref(), Some("notes/R.md"));
+        assert!(l.withdraw("notes/R.md#^t1"), "by subject: both of the task's");
+        assert_eq!((l.items.len(), l.count), (1, 1));
+        assert!(!l.withdraw("deadline:t1"));
+        assert!(l.withdraw("mail:inbox"), "by id");
+        assert_eq!(l, UnseenList::default());
+        for i in 0..UNSEEN_KEPT + 2 {
+            l.add(&Notice::new(format!("n{i}")));
+        }
+        assert_eq!((l.items.len(), l.count), (UNSEEN_KEPT, UNSEEN_KEPT + 2), "kept newest, all counted");
+        l.clear();
+        assert_eq!(l, UnseenList::default());
+    }
+
+    #[test]
+    fn a_withdraw_event_reaches_the_system_channel_and_others_do_not() {
+        let bus = EventBus::default();
+        let mut rx = bus.on_notice();
+        bus.publish(crate::api::Event::Fs { paths: vec![] });
+        bus.publish(crate::api::Event::Notify(Notice::new("a").id("x")));
+        bus.publish(crate::api::Event::Withdraw { id: "x".into() });
+        assert_eq!(rx.try_recv().unwrap(), ToSystem::Show(Notice::new("a").id("x")));
+        assert_eq!(rx.try_recv().unwrap(), ToSystem::Withdraw("x".into()));
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]
@@ -668,6 +904,29 @@ mod tests {
         assert!(!p.looked_at(), "a closed page counts no more");
     }
 
+    #[test]
+    fn the_last_use_is_the_latest_of_the_systems_samples_and_a_page_in_focus() {
+        use crate::platform::idle::Idle;
+        let p = Arc::new(Presence::default());
+        assert_eq!(p.active_at(), None, "unknown until something says");
+        p.sampled(None, 1_000);
+        assert_eq!(p.active_at(), None, "no system answer and no page looked at: still unknown");
+        p.sampled(Some(Idle::No), 2_000);
+        assert_eq!(p.active_at(), Some(2_000));
+        p.sampled(Some(Idle::Since(Some(1_500))), 9_000);
+        assert_eq!(p.active_at(), Some(2_000), "an idle time before the last use moves nothing back");
+        p.sampled(Some(Idle::Since(Some(5_000))), 9_000);
+        assert_eq!(p.active_at(), Some(5_000), "idle since 5 s: used until then");
+        p.sampled(Some(Idle::Since(None)), 60_000);
+        assert_eq!(p.active_at(), Some(5_000), "locked since a moment unsaid: the last use stands");
+        let page = p.join();
+        page.seen(true);
+        assert!(p.active_at().unwrap() > 60_000, "a page coming into focus is a use, now");
+        let t = p.active_at().unwrap();
+        p.sampled(None, t + 60_000);
+        assert_eq!(p.active_at(), Some(t + 60_000), "no system answer: a page looked at is in use");
+    }
+
     #[tokio::test]
     async fn the_vaults_notices_are_followed_and_its_setting_applies() {
         let dir = tempfile::tempdir().unwrap();
@@ -686,9 +945,11 @@ mod tests {
         std::fs::create_dir_all(dir.path().join(".kandinsky")).unwrap();
         std::fs::write(dir.path().join(".kandinsky/config.toml"), "[notifications]\nsystem = \"failures\"\n").unwrap();
         bus.publish(crate::api::Event::Notify(Notice::new("filed")));
-        bus.publish(crate::api::Event::Notify(Notice::new("backup failed").level(NoticeLevel::Failure)));
+        bus.publish(crate::api::Event::Notify(Notice::new("backup failed").level(NoticeLevel::Failure).id("backup")));
         until(2).await;
+        bus.publish(crate::api::Event::Withdraw { id: "backup".into() });
+        until(3).await;
         task.abort();
-        assert_eq!(titles(), ["nobody looks", "backup failed"]);
+        assert_eq!(titles(), ["nobody looks", "backup failed", "withdrawn 2"]);
     }
 }

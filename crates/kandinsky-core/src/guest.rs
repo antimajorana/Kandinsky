@@ -195,36 +195,65 @@ pub fn set_editing(root: &Path, on: bool) -> Result<GuestInfo> {
     info(root).ok_or_else(|| Error::NotFound("the guest's state is gone".into()))
 }
 
+/// Every guest open in this core (`GET /api/guests`: Settings → Vaults lists them, each with Close).
+pub fn open_guests() -> Vec<GuestInfo> {
+    let roots: Vec<PathBuf> = GUESTS.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|(r, _)| r.clone()).collect();
+    roots.iter().filter_map(|r| info(r)).collect()
+}
+
+/// The root served for the open guest whose folder is `folder` (as `GuestInfo::folder` gives it).
+pub fn root_of(folder: &str) -> Option<PathBuf> {
+    GUESTS.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|(r, _)| r.clone()).find(|r| mark_of(r).is_some_and(|m| m.folder == folder))
+}
+
+/// `POST /api/guests/close`.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[ts(export)]
+pub struct GuestClose {
+    /// The guest's folder (`GuestInfo::folder`).
+    pub folder: String,
+}
+
+/// A guest closed now rather than at the next start, once the core stopped serving it: forgotten as [`sweep`] would.
+pub fn forget(root: &Path) -> Result<()> {
+    let r = forget_slot(&slot(root)); // the link goes through the guard, which allows `.kandinsky`
+    GUESTS.lock().unwrap_or_else(|e| e.into_inner()).retain(|(r, _)| r != root);
+    vault_write::clear_guard(root); // opened again, it is prepared outside any guarded vault
+    r
+}
+
 /// Whether the link target `t` is `<…>/guests/<slot's name>/<name>`: the same guest slot in another cache folder.
 fn links_to_slot(t: &Path, slot: &Path, name: &str) -> bool {
     let tail: Vec<_> = t.components().rev().take(3).map(|c| c.as_os_str().to_owned()).collect();
     tail.len() == 3 && tail[0] == name && Some(tail[1].as_os_str()) == slot.file_name() && tail[2] == "guests"
 }
 
-/// At the desktop core's start, before any guest is served: every guest of an earlier run forgotten — its folder's
-/// `.kandinsky` link removed (only when it still points at that state), its state deleted. Returns how many.
+/// One guest's state forgotten: its folder's `.kandinsky` link removed (only when it still points at that state), then
+/// the state itself. The folder's own files are never touched. A guest of a build from before the rename has `.atlas`
+/// (state and link), its slot maybe moved here from the old cache folder (platform::dirs): its link then points at the
+/// old place, the same slot name.
+fn forget_slot(slot: &Path) -> Result<()> {
+    let name = [crate::state_dir::STATE_DIR, crate::legacy::STATE_DIR].into_iter().find(|n| slot.join(n).is_dir()).unwrap_or(crate::state_dir::STATE_DIR);
+    let state = slot.join(name);
+    if let Some(m) = std::fs::read_to_string(state.join(MARK)).ok().and_then(|t| toml::from_str::<Mark>(&t).ok()) {
+        let link = Path::new(&m.folder).join(name);
+        let canon_state = crate::paths::real(&state).unwrap_or_else(|_| state.clone());
+        if read_dir_link(&link).is_some_and(|t| t == state || t == canon_state || links_to_slot(&t, slot, name)) {
+            // the folder's own entry: through its guard when one is still installed (it allows `.kandinsky`)
+            vault_write::remove_link(&link).map_err(|e| Error::Other(anyhow::anyhow!("the guest link {} stays: {e}", link.display())))?;
+        }
+    }
+    outside::remove_dir_all(slot).map_err(|e| Error::Other(anyhow::anyhow!("the guest state {} stays: {e}", slot.display())))
+}
+
+/// At the desktop core's start, before any guest is served: every guest of an earlier run forgotten. Returns how many.
 pub fn sweep() -> usize {
     let Ok(dir) = std::fs::read_dir(home()) else { return 0 };
     let mut n = 0;
     for slot in dir.flatten().map(|e| e.path()) {
-        // a guest of a build from before the rename has `.atlas` (state and link), its slot maybe moved here from the
-        // old cache folder (platform::dirs): its link then points at the old place, the same slot name
-        let name = [crate::state_dir::STATE_DIR, crate::legacy::STATE_DIR].into_iter().find(|n| slot.join(n).is_dir()).unwrap_or(crate::state_dir::STATE_DIR);
-        let state = slot.join(name);
-        if let Some(m) = std::fs::read_to_string(state.join(MARK)).ok().and_then(|t| toml::from_str::<Mark>(&t).ok()) {
-            let link = Path::new(&m.folder).join(name);
-            let canon_state = crate::paths::real(&state).unwrap_or_else(|_| state.clone());
-            if read_dir_link(&link).is_some_and(|t| t == state || t == canon_state || links_to_slot(&t, &slot, name)) {
-                // the folder's own entry: through its guard when one is still installed (it allows `.kandinsky`)
-                if let Err(e) = vault_write::remove_link(&link) {
-                    eprintln!("kandinsky: the guest link {} stays: {e}", link.display());
-                    continue;
-                }
-            }
-        }
-        match outside::remove_dir_all(&slot) {
+        match forget_slot(&slot) {
             Ok(()) => n += 1,
-            Err(e) => eprintln!("kandinsky: the guest state {} stays: {e}", slot.display()),
+            Err(e) => eprintln!("kandinsky: {e}"),
         }
     }
     n
@@ -272,6 +301,15 @@ mod tests {
         assert!(set_editing(&root, true).unwrap().editing);
         vault_write::write(&root.join("a.md"), b"changed").unwrap();
         ws.clear_write_guard();
+
+        // closed now: no longer listed, its link and state gone, its files kept; opened again it starts afresh
+        let listed = open_guests();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(root_of(&listed[0].folder).as_deref(), Some(root.as_path()));
+        forget(&root).unwrap();
+        assert!(open_guests().is_empty() && root.join(".kandinsky").symlink_metadata().is_err() && !slot(&root).exists());
+        assert_eq!(std::fs::read_to_string(root.join("a.md")).unwrap(), "changed");
+        let root = prepare(&folder, &vault).map_err(|e| format!("{e:?}")).unwrap();
 
         assert_eq!(sweep(), 1);
         assert!(root.join(".kandinsky").symlink_metadata().is_err(), "the link is gone");

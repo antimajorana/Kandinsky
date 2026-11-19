@@ -15,7 +15,7 @@ mod tray_tauri;
 #[cfg(target_os = "linux")]
 mod web_filters;
 #[cfg(target_os = "linux")]
-mod webtab;
+mod webauthn;
 
 use std::path::PathBuf;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
@@ -270,8 +270,11 @@ fn remote_window(url: tauri::Url) -> anyhow::Result<()> {
     let host = url.host_str().unwrap_or_default().to_string();
     eprintln!("kandinsky-app: a vault on a server, window → {url}");
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![webauthn_get])
         .setup(move |app| {
+            webauthn_capability(app, "main"); // the server's gate signs in inside this window
             window(app, "main", WebviewUrl::External(url))
+                .initialization_script(WEBAUTHN_SCRIPT)
                 .title(format!("Kandinsky — {host}"))
                 // OS file drops reach the page's own `drop` (the editor, the explorer, the capture popup); Tauri's
                 // handler would take them first (on Windows the page then never sees a dropped file)
@@ -330,13 +333,18 @@ fn paint_before_page(window: &tauri::WebviewWindow, vault: &std::path::Path) {
 /// declarativeNetRequest rules) removes X-Frame-Options and Content-Security-Policy from the pages Kandinsky's window frames
 /// — and only those (`initiatorDomains`: the core's own address) — and every site shows in a plain iframe, as in
 /// Obsidian. Written out under the cache at each start (WebView2 loads unpacked extensions from a folder). None: it
-/// could not be written; sites that refuse framing then open in a window, as before. WebKitGTK has no such hook
-/// (DEVELOPING.md, "Web pages as tabs"): Linux keeps a native view over the pane.
+/// could not be written; sites that refuse framing then open in a window, as before.
+///
+/// The same extension carries the web tabs' page script (`frame_script`, this run's token in it) as its content
+/// script: Chromium runs it in the extension's isolated world, the one isolated world WebView2 offers (its
+/// `AddScriptToExecuteOnDocumentCreated`, wry's initialization scripts, run in the page's), so a framed site never sees
+/// the token — as on Linux and macOS (`frame_script_isolated`).
 #[cfg(windows)]
 fn frame_any_extension() -> Option<PathBuf> {
     let root = kandinsky_core::platform::dirs::app(kandinsky_core::platform::dirs::Base::Cache).join("webview2-extensions");
     let dir = root.join("frame-any");
-    let files = [("manifest.json", include_str!("../webview2/frame-any/manifest.json")), ("rules.json", include_str!("../webview2/frame-any/rules.json"))];
+    let script = frame_script();
+    let files = [("manifest.json", include_str!("../webview2/frame-any/manifest.json")), ("rules.json", include_str!("../webview2/frame-any/rules.json")), ("frame_page.js", script.as_str())];
     let written = std::fs::create_dir_all(&dir).and_then(|_| files.iter().try_for_each(|(name, text)| std::fs::write(dir.join(name), text)));
     match written {
         Ok(()) => Some(root),
@@ -350,7 +358,7 @@ fn frame_any_extension() -> Option<PathBuf> {
 /// Web pages as tabs on Linux: the libsoup hook (frames/frames.rs, built by build.rs) is written under the cache and
 /// put in LD_PRELOAD before WebKit starts its processes; it acts in the network process only and takes itself out of
 /// LD_PRELOAD in every process it is loaded into, so the shells and helpers Kandinsky starts never carry it on. False: it
-/// could not be written (the web tabs keep the native view, webtab.rs).
+/// could not be written (a web tab then shows only sites that let themselves be framed, lib/web-links.ts).
 #[cfg(target_os = "linux")]
 fn frames_preload() -> bool {
     const LIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libkandinsky-webkit-frames.so"));
@@ -371,11 +379,58 @@ fn frames_preload() -> bool {
     written
 }
 
-/// Tells the page it is in the desktop app (in a plain browser, web links open the browser's own tabs) and whether its
-/// iframes can show any site (lib/web-links.ts): on Windows the extension above removes the headers that forbid it, on
-/// Linux the libsoup hook (`frames_preload`).
-fn frames_any_page(frames: bool) -> &'static str {
-    if frames { "window.__kandinskyDesktop = true; window.__kandinskyFramesAnything = true;" } else { "window.__kandinskyDesktop = true;" }
+/// Tells the page it is in the desktop app (in a plain browser, web links open the browser's own tabs), whether its
+/// iframes can show any site (lib/web-links.ts: on Windows the extension above removes the headers that forbid it, on
+/// Linux the libsoup hook, `frames_preload`), and the token its web tabs' page script signs its messages with.
+fn frames_any_page(frames: bool) -> String {
+    format!("window.__kandinskyDesktop = true; window.__kandinskyFramesAnything = {frames}; window.__kandinskyFrameToken = {:?};", frame_token())
+}
+
+/// A random token for this run: only Kandinsky's top page (`frames_any_page`) and the web tabs' page script
+/// (`frame_script`) know it, so a framed site cannot pass its own messages off as the script's (Web.svelte).
+fn frame_token() -> &'static str {
+    static TOKEN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    TOKEN.get_or_init(|| kandinsky_core::auth::random_hex(16))
+}
+
+/// The web tabs' page script (frame_page.js) with this run's token.
+fn frame_script() -> String {
+    include_str!("frame_page.js").replace("__KANDINSKY_FRAME_TOKEN__", frame_token())
+}
+
+/// On Linux and macOS the page script runs in a script world of its own (WebKit's isolated world, as a browser
+/// extension's content script): a framed site's scripts share the page's DOM with it but not its variables, so they
+/// never see the token, nor can they wrap the functions it calls. Added to the window's content manager for every
+/// frame; wry's own scripts go into the page's world. Windows: the content script of `frame_any_extension`.
+#[cfg(target_os = "linux")]
+fn frame_script_isolated(view: &webkit2gtk::WebView) {
+    use webkit2gtk::{UserContentInjectedFrames, UserContentManagerExt, UserScript, UserScriptInjectionTime, WebViewExt};
+    if let Some(m) = view.user_content_manager() {
+        m.add_script(&UserScript::for_world(&frame_script(), UserContentInjectedFrames::AllFrames, UserScriptInjectionTime::Start, "kandinsky-frame", &[], &[]));
+    }
+}
+
+/// macOS: a named `WKContentWorld` (macOS 11, the bundle's minimum), the script for all frames at document start.
+/// `view` is the window's WKWebView, as Tauri's `with_webview` hands it, on the main thread.
+#[cfg(target_os = "macos")]
+fn frame_script_isolated(view: *mut std::ffi::c_void) {
+    use objc2::MainThreadMarker;
+    use objc2_foundation::NSString;
+    use objc2_web_kit::{WKContentWorld, WKUserScript, WKUserScriptInjectionTime, WKWebView};
+    let Some(mtm) = MainThreadMarker::new() else {
+        return eprintln!("kandinsky-app: web tabs: the page script not added (not on the main thread)");
+    };
+    if view.is_null() {
+        return eprintln!("kandinsky-app: web tabs: the page script not added (no web view)");
+    }
+    // SAFETY: Tauri's pointer is the window's WKWebView, alive for this call, used on the main thread (checked above)
+    let view: &WKWebView = unsafe { &*view.cast::<WKWebView>() };
+    // SAFETY: plain WebKit calls with live, retained arguments, on the main thread
+    unsafe {
+        let world = WKContentWorld::worldWithName(&NSString::from_str("kandinsky-frame"), mtm);
+        let script = WKUserScript::initWithSource_injectionTime_forMainFrameOnly_inContentWorld(mtm.alloc(), &NSString::from_str(&frame_script()), WKUserScriptInjectionTime::AtDocumentStart, false, &world);
+        view.configuration().userContentController().addUserScript(&script);
+    }
 }
 
 /// The core's "choose a folder" (the vault switcher's Choose…) is the system's own dialog, over this window: typing a whole
@@ -510,10 +565,19 @@ async fn add_and_open_paper(base: &str, params: serde_json::Map<String, serde_js
 
 fn main() -> anyhow::Result<()> {
     leave_appimage_interpreters();
+    // the Flatpak: `kandinsky` and `kandinsky-capture` callable from the host's terminals, agents and shortcuts (host.rs)
+    kandinsky_core::platform::host::write_command_launchers();
     // GTK's Wayland app id (X11: WM_CLASS) is the program name; "kandinsky" makes KWin find kandinsky.desktop and its Icon=kandinsky,
     // where the binary's name "kandinsky-app" matched no desktop file and the window showed Wayland's generic icon.
     #[cfg(target_os = "linux")]
     gtk::glib::set_prgname(Some("kandinsky"));
+    // The WebView's own file choosers (`<input type=file>`: attach, import, upload) are GTK's FileChooserNative, which
+    // goes through the portal — the desktop's dialog — only in a sandbox or when asked; asked here, before GTK starts,
+    // unless the person set it. Programs started from Kandinsky inherit it, which gives them the same dialog.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("GTK_USE_PORTAL").is_none() {
+        std::env::set_var("GTK_USE_PORTAL", "1");
+    }
     // `kandinsky-app [folder]` is the app; `kandinsky-app --capture [folder]` the quick-capture box
     let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
     #[cfg(target_os = "linux")]
@@ -609,7 +673,7 @@ fn main() -> anyhow::Result<()> {
     let server = Some(server);
     let vault = root.clone();
 
-    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init()).invoke_handler(tauri::generate_handler![webauthn_get]);
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(capture_key(root.clone()));
     // the link a rebuilt window opens with: a locked core's one-time codes are spent, so a fresh one each time
@@ -621,6 +685,8 @@ fn main() -> anyhow::Result<()> {
     builder
         .setup(move |app| {
             let handle = app.handle().clone();
+            webauthn_capability(app, "door-*");
+            webauthn_capability(app, "signin-*");
             browser::prepare(&handle, kandinsky_core::config::Config::load(&vault).map(|c| c.web).unwrap_or_default());
             let spec = MainSpec { home: url.clone(), core: core.clone(), vault: vault.clone(), frames };
             let open_main: background::OpenMain = Box::new(move |app, open| {
@@ -638,8 +704,13 @@ fn main() -> anyhow::Result<()> {
             // a notification's click, a second launch, the tray: one way to bring the window forward (shell.rs)
             let s = shell.clone();
             kandinsky_core::shell::on_show(move |show| s.show(show.open));
+            #[cfg(target_os = "linux")]
+            {
+                let h = handle.clone();
+                kandinsky_core::shell::on_forget_web_data(move |done| forget_web_data(&h, done));
+            }
             let s = shell.clone();
-            kandinsky_core::notify::on_notice(move |n, looked_at| s.notice(n, looked_at));
+            kandinsky_core::notify::on_notice(move |heard| s.notice(heard));
             let start_vault = vault.clone();
             kandinsky_core::shell::on_config(move |root, cfg| {
                 if same_folder(root, &start_vault) {
@@ -680,7 +751,7 @@ fn main() -> anyhow::Result<()> {
         .run(move |_app, event| match event {
             // the window closed by its sleep (or never opened, `--background`): Kandinsky runs on in the tray
             tauri::RunEvent::ExitRequested { code: None, api, .. } if SHELL.get().is_some_and(|s| s.keeps_running()) => api.prevent_exit(),
-            // macOS: a click on the Dock icon of an Kandinsky with no window shown
+            // macOS: a click on the Dock icon of a Kandinsky with no window shown
             #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { has_visible_windows: false, .. } => {
                 if let Some(s) = SHELL.get() {
@@ -782,9 +853,19 @@ impl MainSpec {
         let spec = self.clone();
         let main = window(app, label, WebviewUrl::External(url))
             .title(title)
-            .initialization_script(frames_any_page(self.frames))
-            // a web tab's frame: its address, history, find and Kandinsky's keys (frame_page.js; inert elsewhere)
-            .initialization_script_for_all_frames(include_str!("frame_page.js"))
+            .initialization_script(frames_any_page(self.frames));
+        // a web tab's frame: its address, history, find and Kandinsky's keys (frame_page.js; inert elsewhere), in an
+        // isolated world — Linux and macOS: a script world of the window's, below (`frame_script_isolated`);
+        // Windows: the content script of the app's WebView2 extension, or in the page's world when the extension
+        // could not be written (the script then keeps the functions it calls from before the site's scripts run)
+        #[cfg(windows)]
+        let main = match frame_any_extension() {
+            Some(dir) => main.browser_extensions_enabled(true).extensions_path(dir),
+            None => main.initialization_script_for_all_frames(frame_script()),
+        };
+        #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+        let main = main.initialization_script_for_all_frames(frame_script());
+        let main = main
             // OS file drops reach the page's own `drop` (the editor, the explorer, the capture popup); Tauri's
             // handler would take them first (on Windows the page then never sees a dropped file)
             .disable_drag_drop_handler()
@@ -801,11 +882,6 @@ impl MainSpec {
         // frame's alone), below; elsewhere the navigation hook is the main frame's.
         #[cfg(not(target_os = "linux"))]
         let main = main.on_navigation(move |to| off_app.stay(to));
-        #[cfg(windows)]
-        let main = match frame_any_extension() {
-            Some(dir) => main.browser_extensions_enabled(true).extensions_path(dir),
-            None => main,
-        };
         let main = main
             // window.open: WebKitGTK opens nothing without a handler. A sign-in page that returns to a
             // localhost address gets a window of ours (it catches that address); a web page a browsing window
@@ -838,15 +914,28 @@ impl MainSpec {
             }
             pinch_to_wheel(&w.inner());
             pen_as_pen(&w.inner());
+            frame_script_isolated(&w.inner());
+            // ads and trackers blocked in web tabs (every frame of this window), Kandinsky's own page spared (web_filters.rs)
+            browser::filter::apply_to_kandinsky(&w.inner());
             stay_in_kandinsky(&w.inner(), off_app);
-            webtab::attach(&w.inner()); // web pages as tabs, framing allowed or not
             // a document, not a browser: no back/forward page cache, small memory caches — Kandinsky is one page and never goes back to a page it left
             if let Some(c) = w.inner().context() {
                 use webkit2gtk::WebContextExt;
                 c.set_cache_model(webkit2gtk::CacheModel::DocumentViewer);
             }
         })?;
+        #[cfg(target_os = "macos")]
+        main.with_webview(|w| frame_script_isolated(w.inner()))?;
         Ok(main)
+    }
+}
+
+/// Every website's data forgotten through the main window's WebContext (browser.rs `forget_site_data`), on GTK's thread.
+/// No window: `done` is dropped unheard, and the asker hears that.
+#[cfg(target_os = "linux")]
+fn forget_web_data(app: &tauri::AppHandle, done: kandinsky_core::shell::Forgotten) {
+    if let Some(w) = app.get_webview_window(MAIN_WINDOW) {
+        let _ = w.with_webview(move |v| browser::forget_site_data(&v.inner(), done));
     }
 }
 
@@ -932,7 +1021,10 @@ fn pen_as_pen(view: &webkit2gtk::WebView) {
 fn signin_return(page: &tauri::Url) -> Option<tauri::Url> {
     let back: tauri::Url = page.query_pairs().find(|(k, _)| k == "redirect_uri")?.1.parse().ok()?;
     let local = matches!(back.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
-    (local && matches!(back.scheme(), "http" | "https")).then_some(back)
+    // an app's own address (`audiobookshelf://oauth`, a mobile client's redirect a server allows) is caught as well:
+    // the window stops there, nothing outside ever sees it
+    let app_scheme = !matches!(back.scheme(), "http" | "https" | "file" | "data" | "javascript" | "blob" | "about");
+    ((local && matches!(back.scheme(), "http" | "https")) || app_scheme).then_some(back)
 }
 
 /// Whether `to` is the sign-in's return address (with its `?code=…`): same scheme, host and port, path under it.
@@ -951,6 +1043,7 @@ fn signin_window(app: &tauri::AppHandle, page: tauri::Url, back: tauri::Url, cor
     let label = format!("signin-{}", N.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
     let (app2, label2) = (app.clone(), label.clone());
     let built = window(app, &label, WebviewUrl::External(page.clone()))
+        .initialization_script(WEBAUTHN_SCRIPT) // the provider's page may ask for the security key (webauthn.rs)
         .title("Sign in — Kandinsky")
         .inner_size(520.0, 720.0)
         .center()
@@ -978,17 +1071,41 @@ fn signin_window(app: &tauri::AppHandle, page: tauri::Url, back: tauri::Url, cor
 }
 
 /// The page's ask for a service sign-in (core `/signin/door?url=…` on this computer): the service's address.
-/// A guest folder's page (`/v/<name>/?guest=1`, core guest.rs): it opens in a window of Kandinsky, not the browser.
+/// A page that opens in a window of Kandinsky, not the browser: a guest folder's (`/v/<name>/?guest=1`, core guest.rs), or
+/// a vault of this core asked for in a window of its own (`/v/<name>/?window=1`: the vault switcher's "Open in a new
+/// window").
 fn guest_page(to: &tauri::Url) -> bool {
-    to.path().starts_with("/v/") && to.query_pairs().any(|(k, v)| k == "guest" && v == "1")
+    to.path().starts_with("/v/") && to.query_pairs().any(|(k, v)| (k == "guest" || k == "window") && v == "1")
 }
 
 fn guest_window(app: &tauri::AppHandle, spec: &MainSpec, page: tauri::Url) {
     static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let label = format!("guest-{}", N.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
-    if let Err(e) = spec.window(app, &label, "Kandinsky — guest folder", page) {
-        eprintln!("kandinsky: the guest folder's window did not open: {e}");
+    let guest = page.query_pairs().any(|(k, v)| k == "guest" && v == "1");
+    let label = format!("{}-{}", if guest { "guest" } else { "vault" }, N.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+    let name = page.path().trim_start_matches("/v/").split('/').next().unwrap_or("").to_string();
+    let title = if guest { "Kandinsky — guest folder".to_string() } else { format!("Kandinsky — {}", urlencoding_decode(&name)) };
+    if let Err(e) = spec.window(app, &label, &title, page) {
+        eprintln!("kandinsky: the window did not open: {e}");
     }
+}
+
+/// A vault's name from its `/v/<name>/` path segment (percent-decoded; kept as is when it is not valid).
+fn urlencoding_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 3 <= bytes.len() {
+            if let Ok(b) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(b);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(out).unwrap_or_else(|_| s.to_string())
 }
 
 fn door_target(to: &tauri::Url) -> Option<tauri::Url> {
@@ -998,6 +1115,43 @@ fn door_target(to: &tauri::Url) -> Option<tauri::Url> {
     }
     let page: tauri::Url = to.query_pairs().find(|(k, _)| k == "url")?.1.parse().ok()?;
     matches!(page.scheme(), "http" | "https").then_some(page)
+}
+
+/// What the sign-in windows run first: a security key for their pages on Linux (webauthn.js; elsewhere the webview
+/// has its own WebAuthn, and the script leaves it alone).
+#[cfg(target_os = "linux")]
+const WEBAUTHN_SCRIPT: &str = webauthn::SCRIPT;
+#[cfg(not(target_os = "linux"))]
+const WEBAUTHN_SCRIPT: &str = "";
+
+/// A sign-in page's `navigator.credentials.get` (webauthn.js), answered with a security key over USB for the page's own
+/// origin — read from the window, never taken from the page.
+#[tauri::command]
+async fn webauthn_get(webview: tauri::Webview, request: serde_json::Value) -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let origin = webview.url().map_err(|e| e.to_string())?.origin().ascii_serialization();
+        let ask: webauthn::Ask = serde_json::from_value(request).map_err(|e| e.to_string())?;
+        let signed = tauri::async_runtime::spawn_blocking(move || webauthn::get(&origin, &ask)).await.map_err(|e| e.to_string())??;
+        serde_json::to_value(signed).map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (webview, request);
+        Err("this platform's webview answers security keys itself".into())
+    }
+}
+
+/// `webauthn_get` granted to the windows labelled `windows` (`door-*`: the sign-in windows; `main` for a vault on a
+/// server, whose gate signs in inside it) on any https page — the only command a page may call.
+fn webauthn_capability(app: &tauri::App, windows: &str) {
+    let cap = tauri::ipc::CapabilityBuilder::new(format!("webauthn-{}", windows.trim_end_matches("-*")))
+        .window(windows)
+        .remote("https://*".into())
+        .permission("allow-webauthn-get");
+    if let Err(e) = app.add_capability(cap) {
+        eprintln!("kandinsky-app: no security keys in the sign-in windows ({e})");
+    }
 }
 
 /// A service's gate (Authelia, Authentik…) in a window of Kandinsky: the user signs in on its page (a security key works
@@ -1010,6 +1164,7 @@ fn door_window(app: &tauri::AppHandle, page: tauri::Url, core: String) {
     let host = page.host_str().unwrap_or_default().to_ascii_lowercase();
     let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let built = window(app, &label, WebviewUrl::External(page.clone()))
+        .initialization_script(WEBAUTHN_SCRIPT) // the security key (webauthn.rs)
         .title(format!("Sign in to {host} — Kandinsky"))
         .inner_size(520.0, 720.0)
         .center()
@@ -1247,6 +1402,11 @@ mod tests {
         for plain in ["https://example.org/page", "https://x.example/auth?redirect_uri=https://app.example/cb", "https://x.example/?redirect_uri=file:///etc"] {
             assert!(signin_return(&plain.parse().unwrap()).is_none(), "{plain} goes to the browser");
         }
+        // a server's sign-in returning to an app's own address (Audiobookshelf's mobile redirect): caught here too
+        let abs: tauri::Url = "https://abs.example.org/auth/openid?code_challenge=x&redirect_uri=audiobookshelf%3A%2F%2Foauth&client_id=Audiobookshelf-App".parse().unwrap();
+        let back = signin_return(&abs).expect("an app scheme is caught");
+        assert!(returns_to(&"audiobookshelf://oauth?code=1&state=s".parse().unwrap(), &back));
+        assert!(!returns_to(&"https://abs.example.org/login".parse().unwrap(), &back));
     }
 
     #[test]

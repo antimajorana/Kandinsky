@@ -2,7 +2,7 @@
 use crate::api::{Activity, Changed, Created, DayActivity, DocSlot, LineHit, Mtime, Today};
 use crate::config::Config;
 use crate::{paths, walk, Result};
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, NaiveDate};
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
@@ -69,14 +69,17 @@ pub fn tick_line(l: &str, day: chrono::NaiveDate) -> Option<Vec<String>> {
     let i = checkbox(l).filter(|&i| &l[i..i + 3] == "[ ]")?;
     let mut ticked = format!("{}[x]{}", &l[..i], &l[i + 3..]);
     if crate::tasks::uses_fields(l) && !l.contains('✅') {
-        ticked = format!("{} ✅ {}", ticked.trim_end(), day.format("%Y-%m-%d"));
+        // before the block id, which stays last (Obsidian's rule: a link to `#^id` must still find the line)
+        let (body, block) = crate::tasks::split_block(&ticked);
+        let id = block.map(|b| format!(" ^{b}")).unwrap_or_default();
+        ticked = format!("{} ✅ {}{id}", body.trim_end(), day.format("%Y-%m-%d"));
     }
     Some(crate::tasks::next_occurrence(l, day).into_iter().chain([ticked]).map(|x| format!("{x}{cr}")).collect())
 }
 
 /// Where a list item's checkbox (`[ ]`, `[x]`…) starts: right after its `- `, `* `, `+ `, `1. ` or `1) `. A `[ ]`
 /// later in the text is text, never the box.
-fn checkbox(l: &str) -> Option<usize> {
+pub(crate) fn checkbox(l: &str) -> Option<usize> {
     let t = l.trim_start();
     let after = t.strip_prefix(['-', '*', '+']).or_else(|| {
         let n = t.trim_start_matches(|c: char| c.is_ascii_digit());
@@ -101,18 +104,125 @@ pub fn without_done_date(line: &str) -> String {
     DONE.replace(line, "").into_owned()
 }
 
-/// Ticks the task `t` points at (1-based line), when that line still holds `t.text`: Home's box, the task blocks,
-/// an agent (`kandinsky_task_done`) — one path. A line that changed meanwhile is a conflict, nothing written.
-pub fn tick_ref(ws: &crate::Workspace, t: &crate::api::TaskRef) -> Result<()> {
+/// Ticks the task `t` points at: Home's box, the task blocks, an agent (`kandinsky_task_done`) — one path. A task that
+/// cannot be found any more (its line changed, its id gone) is a conflict, nothing written. Gives the task's line as
+/// it was (for `notice_actions::task_done`, which withdraws the notices about it).
+pub fn tick_ref(ws: &crate::Workspace, t: &crate::api::TaskRef) -> Result<String> {
     let p = ws.resolve(&t.path)?;
+    let mut was = String::new();
     crate::vault_write::modify(&p, |text| {
-        let want = t.text.as_deref().map(str::trim).filter(|w| !w.is_empty());
-        let at = text.split('\n').nth((t.line as usize).saturating_sub(1)).unwrap_or_default();
-        if want.is_some_and(|w| !at.contains(w)) {
-            return Err(crate::Error::Conflict { current: None });
+        let line = locate(text, t).ok_or(crate::Error::Conflict { current: None })?;
+        was = text.split('\n').nth(line as usize - 1).unwrap_or_default().to_string();
+        tick_task(text, line).ok_or(crate::Error::Conflict { current: None })
+    })?;
+    Ok(was)
+}
+
+/// The 1-based line of `text` that holds the task `t` points at. By its block id first (`t.block`, else the one
+/// ending `t.text`), wherever the line moved; else line `t.line`, while it still holds `t.text`.
+pub fn locate(text: &str, t: &crate::api::TaskRef) -> Option<u32> {
+    let block = t.block.as_deref().map(|b| b.trim_start_matches('^')).or_else(|| t.text.as_deref().and_then(|x| crate::tasks::split_block(x).1));
+    if let Some(n) = block.filter(|b| !b.is_empty()).and_then(|b| crate::tasks::find_block(text, b)) {
+        return Some(n);
+    }
+    let want = t.text.as_deref().map(str::trim).filter(|w| !w.is_empty());
+    let at = text.split('\n').nth((t.line as usize).checked_sub(1)?)?;
+    want.is_none_or(|w| at.contains(w)).then_some(t.line)
+}
+
+/// The block id of the task `t` points at, given one at the end of its line when it has none — for an action the
+/// user took on that task (linking it, a nudge's snooze): the note changes because they asked
+/// (DESIGN-calendar-tasks-nudges §2.1). Only the id is appended; the rest of the line stays as written.
+pub fn block_of(ws: &crate::Workspace, t: &crate::api::TaskRef) -> Result<String> {
+    let p = ws.resolve(&t.path)?;
+    let mut id = String::new();
+    crate::vault_write::modify(&p, |text| {
+        let (next, got) = with_block(text, t).ok_or(crate::Error::Conflict { current: None })?;
+        id = got;
+        Ok(next)
+    })?;
+    Ok(id)
+}
+
+/// [`block_of`] on a note's text: the text with the task's id (unchanged when it had one), and the id.
+fn with_block(text: &str, t: &crate::api::TaskRef) -> Option<(String, String)> {
+    let n = locate(text, t)? as usize;
+    let mut lines: Vec<String> = text.split('\n').map(String::from).collect();
+    let l = lines.get_mut(n - 1)?;
+    parse_task(l).or_else(|| done_task(l))?;
+    if let Some(id) = crate::tasks::split_block(l).1 {
+        return Some((text.to_string(), id.to_string()));
+    }
+    let id = crate::tasks::new_block_id(text, l);
+    let (body, cr) = l.strip_suffix('\r').map_or((l.as_str(), ""), |b| (b, "\r"));
+    *l = format!("{} ^{id}{cr}", body.trim_end());
+    Some((lines.join("\n"), id))
+}
+
+/// A link a task's description carries to what it was planned into: `[[target|label]]` (an event's note, "Tue 14:00").
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct PlanLink {
+    pub target: String,
+    pub label: String,
+}
+
+/// The task `t` points at, planned on `day` (⏳) — time-blocked into an event, or moved with it
+/// (DESIGN-calendar-tasks-nudges §2.3): its scheduled date set, `link` put in its description (before the fields, so
+/// Obsidian Tasks still reads them; one link per target, the old label replaced when the event moved), and a block id
+/// given when it had none, so the event's note can link back. Written by the one task writer
+/// (`tasks::render_line`). Answers the block id and the line.
+pub fn schedule_ref(ws: &crate::Workspace, t: &crate::api::TaskRef, day: NaiveDate, link: Option<&PlanLink>) -> Result<(String, String)> {
+    let p = ws.resolve(&t.path)?;
+    let mut out = (String::new(), String::new());
+    crate::vault_write::modify(&p, |text| {
+        let (next, block, line) = with_schedule(text, t, day, link).ok_or(crate::Error::Conflict { current: None })?;
+        out = (block, line);
+        Ok(next)
+    })?;
+    Ok(out)
+}
+
+/// [`schedule_ref`] on a note's text: the text, the task's block id and its new line. None: no open task there.
+fn with_schedule(text: &str, t: &crate::api::TaskRef, day: NaiveDate, link: Option<&PlanLink>) -> Option<(String, String, String)> {
+    let n = locate(text, t)? as usize;
+    let mut lines: Vec<String> = text.split('\n').map(String::from).collect();
+    let l = lines.get(n - 1)?;
+    let (body, cr) = l.strip_suffix('\r').map_or((l.as_str(), ""), |b| (b, "\r"));
+    let mut parsed = crate::tasks::parse_line(body).filter(|x| x.status == ' ')?;
+    parsed.task.scheduled = Some(day);
+    if let Some(k) = link {
+        parsed.task.title = with_link(&parsed.task.title, k);
+    }
+    let block = match parsed.task.block.clone() {
+        Some(b) => b,
+        None => crate::tasks::new_block_id(text, body),
+    };
+    parsed.task.block = Some(block.clone());
+    let line = crate::tasks::render_line(&parsed);
+    lines[n - 1] = format!("{line}{cr}");
+    Some((lines.join("\n"), block, line))
+}
+
+/// `title` with `[[target|label]]` at its end, any earlier link to the same target (with or without `.md`, with any
+/// label) taken out first.
+fn with_link(title: &str, k: &PlanLink) -> String {
+    let key = |s: &str| s.trim().trim_end_matches(".md").to_lowercase();
+    let want = key(&k.target);
+    let mut out = String::new();
+    let mut rest = title;
+    while let Some(i) = rest.find("[[") {
+        let Some(j) = rest[i..].find("]]") else { break };
+        let inner = &rest[i + 2..i + j];
+        out.push_str(&rest[..i]);
+        if key(inner.split('|').next().unwrap_or_default()) != want {
+            out.push_str(&rest[i..i + j + 2]);
         }
-        tick_task(text, t.line).ok_or(crate::Error::Conflict { current: None })
-    })
+        rest = &rest[i + j + 2..];
+    }
+    out.push_str(rest);
+    let kept = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    let target = k.target.trim().trim_end_matches(".md");
+    format!("{kept} [[{target}|{}]]", k.label.trim()).trim_start().to_string()
 }
 
 /// Every task of the vault's notes, open and done (a task block that asks for done ones), in the
@@ -121,6 +231,53 @@ pub fn all_tasks(root: &Path, cfg: &Config) -> Vec<(LineHit, bool)> {
     task_hits(&found(root, cfg), cfg).take(MAX_ALL_TASKS).collect()
 }
 pub const MAX_ALL_TASKS: usize = 5000;
+
+/// Which tasks [`listed`] gives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Status {
+    #[default]
+    Open,
+    Done,
+    All,
+}
+
+/// A task as a client lists it: where it is, its text as written after the checkbox (the guard of a `TaskRef`), and
+/// its fields read by `tasks::parse`, so no client reads the Tasks plugin's emoji itself.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Listed {
+    pub path: String,
+    pub line: u32,
+    pub text: String,
+    pub done: bool,
+    pub title: String,
+    /// `YYYY-MM-DD`, as the note writes it.
+    pub due: Option<String>,
+    pub scheduled: Option<String>,
+    pub start: Option<String>,
+    pub priority: &'static str,
+    pub tags: Vec<String>,
+    pub recurrence: Option<String>,
+    pub block: Option<String>,
+}
+
+/// The vault's tasks with their fields, in [`all_tasks`]' order: what an agent's `kandinsky_tasks` and a plugin's
+/// `GET /api/tasks` read (the Plan plugin's nudges).
+pub fn listed(root: &Path, cfg: &Config, status: Status) -> Vec<Listed> {
+    all_tasks(root, cfg)
+        .into_iter()
+        .filter(|(_, done)| match status {
+            Status::Open => !done,
+            Status::Done => *done,
+            Status::All => true,
+        })
+        .map(|(h, done)| {
+            let t = crate::tasks::parse(&h.text);
+            let day = |d: Option<chrono::NaiveDate>| d.map(|d| d.format("%Y-%m-%d").to_string());
+            Listed { path: h.path, line: h.line, text: h.text, done, title: t.title, due: day(t.due), scheduled: day(t.scheduled), start: day(t.start), priority: t.priority.name(), tags: t.tags, recurrence: t.recurrence, block: t.block }
+        })
+        .collect()
+}
 
 /// Text after a ticked checkbox (`- [x] …`).
 pub fn done_task(line: &str) -> Option<&str> {
@@ -260,18 +417,27 @@ impl<S: PartialEq, V: Clone> PerFile<S, V> {
 
 
 /// Each thing once, under the path that stands for it (a file and its companion note are one: companion::stands_for),
-/// that `keep` accepts, the first [`MAX_CHANGED`]; `items` newest first, so the newest of a thing's files gives its
-/// time. Stops there: a thing's path reads its file, and a sync or a checkout can touch thousands at once.
+/// that `keep` accepts, the first [`MAX_CHANGED`] notes and the first [`MAX_CHANGED`] other files; `items` newest
+/// first, so the newest of a thing's files gives its time. Notes and files are counted apart: a run writing hundreds
+/// of output files must not push the day's notes out of the list (Activity shows notes only by default). Stops there:
+/// a thing's path reads its file, and a sync or a checkout can touch thousands at once.
 fn per_thing<T>(root: &Path, items: &mut Vec<T>, path: impl Fn(&mut T) -> &mut String, keep: impl Fn(&str) -> bool) {
-    let mut seen = std::collections::HashSet::new();
+    let (mut notes, mut files) = (std::collections::HashSet::new(), std::collections::HashSet::new());
     items.retain_mut(|it| {
-        if seen.len() >= MAX_CHANGED {
+        if notes.len() >= MAX_CHANGED && files.len() >= MAX_CHANGED {
             return false;
         }
         let p = path(it);
         *p = crate::companion::stands_for(root, p);
-        keep(p) && seen.insert(p.clone())
+        let seen = if is_text_note(p) { &mut notes } else { &mut files };
+        seen.len() < MAX_CHANGED && keep(p) && seen.insert(p.clone())
     });
+}
+
+/// A note as Activity counts one (the UI's `paths.ts` `isNote`): text, not a drawing kept as `.excalidraw.md`.
+fn is_text_note(p: &str) -> bool {
+    let l = p.to_ascii_lowercase();
+    [".md", ".markdown", ".txt", ".page"].iter().any(|x| l.ends_with(x)) && !l.ends_with(".excalidraw.md")
 }
 
 fn changed_since(root: &Path, files: &[Found], cfg: &Config, now: SystemTime) -> Vec<Changed> {
@@ -356,6 +522,22 @@ fn created_between(root: &Path, files: &[Found], cfg: &Config, start: DateTime<L
     out
 }
 
+/// When one file was made, by [`created_between`]'s rule: its `created:` / `date:` property, else its first commit, else
+/// (not in git) its birth on disk.
+pub fn made(root: &Path, rel: &str) -> Option<crate::api::Made> {
+    use crate::api::{Made, MadeBy};
+    let abs = root.join(rel);
+    let meta = std::fs::metadata(&abs).ok()?;
+    let changed = meta.modified().map(ms).unwrap_or(0);
+    if let Some((day, at)) = facts(&abs, &meta).made {
+        return Some(Made { made: at.unwrap_or_else(|| ms(start_of(day).into())), day_only: at.is_none(), by: MadeBy::Property, changed });
+    }
+    if let Some(t) = crate::git::born(root, rel) {
+        return Some(Made { made: t as u64 * 1000, day_only: false, by: MadeBy::Git, changed });
+    }
+    Some(Made { made: ms(meta.created().ok()?), day_only: false, by: MadeBy::Disk, changed })
+}
+
 /// What a file says of itself, read once per change (a vault's every note is asked for each day shown).
 #[derive(Clone, Copy)]
 struct Facts {
@@ -437,6 +619,25 @@ mod tests {
     }
 
     #[test]
+    fn a_files_made_time_is_its_property_else_its_birth() {
+        use crate::api::MadeBy;
+        let d = tempfile::tempdir().unwrap(); // not a git repository: no first commit to ask
+        let r = d.path();
+        std::fs::write(r.join("dated.md"), "---\ncreated: 2026-10-14 12:17\n---\n# Dated\n").unwrap();
+        std::fs::write(r.join("day.md"), "---\ndate: 2026-10-14\n---\n").unwrap();
+        std::fs::write(r.join("plain.md"), "# Plain\n").unwrap();
+        let dated = made(r, "dated.md").unwrap();
+        assert_eq!((dated.by, dated.day_only), (MadeBy::Property, false));
+        let at = chrono::DateTime::from_timestamp_millis(dated.made as i64).unwrap().with_timezone(&Local);
+        assert_eq!(at.format("%Y-%m-%d %H:%M").to_string(), "2026-10-14 12:17");
+        let day = made(r, "day.md").unwrap();
+        assert_eq!((day.by, day.day_only), (MadeBy::Property, true));
+        let plain = made(r, "plain.md").unwrap();
+        assert!(matches!(plain.by, MadeBy::Disk | MadeBy::Git), "{:?}", plain.by);
+        assert!(plain.changed > 0 && made(r, "gone.md").is_none());
+    }
+
+    #[test]
     fn what_was_made_since_yesterday_is_listed_without_the_mail() {
         let d = tempfile::tempdir().unwrap();
         let r = d.path();
@@ -495,6 +696,24 @@ mod tests {
     }
 
     #[test]
+    fn a_runs_many_output_files_never_push_the_days_notes_out_of_activity() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        std::fs::create_dir_all(r.join("data/r1")).unwrap();
+        std::fs::create_dir_all(r.join("notes")).unwrap();
+        std::fs::write(r.join("notes/plan.md"), "# Plan\n").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20)); // the output is newer than the note
+        for i in 0..(MAX_CHANGED + 10) {
+            std::fs::write(r.join(format!("data/r1/out{i}.csv")), "1,2,3\n").unwrap();
+        }
+        let a = day_activity(r, &Config::default(), Local::now().date_naive());
+        let listed = a.created.iter().map(|c| &c.path).chain(a.changed.iter().map(|c| &c.path)).any(|p| p == "notes/plan.md");
+        assert!(listed, "the note is there behind the newer files");
+        let files = a.created.iter().map(|c| &c.path).chain(a.changed.iter().map(|c| &c.path)).filter(|p| !is_text_note(p)).count();
+        assert!((MAX_CHANGED..=2 * MAX_CHANGED).contains(&files), "files still capped: {files}");
+    }
+
+    #[test]
     fn task_syntax() {
         assert_eq!(parse_task("- [ ] read Georges RMP"), Some("read Georges RMP"));
         assert_eq!(parse_task("    * [ ]  nested"), Some("nested"));
@@ -528,6 +747,63 @@ mod tests {
         cfg.editor.index_exclude = vec!["docs/sessions".into()];
         let tasks = scan_tasks(r, &cfg);
         assert_eq!(tasks, vec![LineHit { path: "notes/a.md".into(), line: 2, text: "real task".into() }]);
+    }
+
+    fn task_ref(line: u32, text: &str) -> crate::api::TaskRef {
+        crate::api::TaskRef { path: "plan.md".into(), line, text: Some(text.into()), block: None }
+    }
+
+    #[test]
+    fn a_task_with_an_id_is_found_and_ticked_after_its_line_moved() {
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 11, 16).unwrap();
+        let before = "# Plan\n- [ ] write the intro ^t1ab\n- [ ] other\n";
+        // seen on line 2; then two lines were written above it (a sync, another window)
+        let r = task_ref(2, "write the intro ^t1ab");
+        let after = "# Plan\nnew line\n- [ ] added\n- [ ] write the intro ^t1ab\n- [ ] other\n";
+        assert_eq!(locate(before, &r), Some(2));
+        let line = locate(after, &r).unwrap();
+        assert_eq!(line, 4, "by its id, not its old number");
+        assert_eq!(tick_task_on(after, line, day).unwrap(), "# Plan\nnew line\n- [ ] added\n- [x] write the intro ^t1ab\n- [ ] other\n");
+        // the id given on its own (a nudge's action carries only that), with a stale line and text
+        let by_id = crate::api::TaskRef { block: Some("^t1ab".into()), ..task_ref(9, "something else") };
+        assert_eq!(locate(after, &by_id), Some(4));
+        // without an id: the line number, guarded by the text, as before
+        assert_eq!(locate(after, &task_ref(2, "write the intro")), None, "moved, no id: a conflict");
+        assert_eq!(locate(after, &task_ref(3, "added")), Some(3));
+        assert_eq!(locate(after, &task_ref(0, "added")), None);
+        // the id gone (edited away) and the line changed: nothing to tick
+        assert_eq!(locate("# Plan\n- [ ] write it\n", &r), None);
+    }
+
+    #[test]
+    fn an_action_on_a_task_gives_it_an_id_once_and_changes_nothing_else() {
+        let text = "# Plan\n- [ ] write the intro 📅 2026-11-20  \r\n- [x] done ^t9zz\n";
+        let (next, id) = with_block(text, &task_ref(2, "write the intro")).unwrap();
+        assert_eq!(next, format!("# Plan\n- [ ] write the intro 📅 2026-11-20 ^{id}\r\n- [x] done ^t9zz\n"));
+        assert_eq!(with_block(&next, &task_ref(2, "write the intro")).unwrap(), (next.clone(), id.clone()), "the same id the second time");
+        assert_eq!(with_block(text, &task_ref(3, "done")).unwrap().1, "t9zz", "a done task's own id");
+        assert!(with_block(text, &task_ref(1, "Plan")).is_none(), "not a task");
+    }
+
+    #[test]
+    fn time_blocking_a_task_schedules_it_links_the_event_before_the_fields_and_keeps_the_id_last() {
+        let day = |s: &str| NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
+        let link = |t: &str, l: &str| PlanLink { target: t.into(), label: l.into() };
+        let text = "# Plan\n- [ ] Write the introduction ⏫ 📅 2026-11-20\r\n- [x] done\n";
+        let (next, id, line) = with_schedule(text, &task_ref(2, "Write the introduction"), day("2026-11-17"), Some(&link("calendar/2026/2026-11-17 Write the introduction.md", "Tue 14:00"))).unwrap();
+        // the design's shape (§2.3): the link in the description, then priority, ⏳, 📅, the block id last
+        assert_eq!(line, format!("- [ ] Write the introduction [[calendar/2026/2026-11-17 Write the introduction|Tue 14:00]] ⏫ ⏳ 2026-11-17 📅 2026-11-20 ^{id}"));
+        assert_eq!(next, format!("# Plan\n{line}\r\n- [x] done\n"), "the line's CR and the other lines kept");
+        let parsed = crate::tasks::parse(line.split_once("] ").unwrap().1);
+        assert_eq!((parsed.scheduled, parsed.due, parsed.block.as_deref()), (Some(day("2026-11-17")), Some(day("2026-11-20")), Some(id.as_str())), "Obsidian Tasks' fields still read");
+        // the event moved: the same task found by its id, its ⏳ and the link's label replaced, not doubled
+        let by_id = crate::api::TaskRef { block: Some(id.clone()), ..task_ref(9, "gone") };
+        let (_, id2, moved) = with_schedule(&next, &by_id, day("2026-11-18"), Some(&link("calendar/2026/2026-11-17 Write the introduction", "Wed 9:00"))).unwrap();
+        assert_eq!(id2, id);
+        assert_eq!(moved, format!("- [ ] Write the introduction [[calendar/2026/2026-11-17 Write the introduction|Wed 9:00]] ⏫ ⏳ 2026-11-18 📅 2026-11-20 ^{id}"));
+        // no link: only ⏳; a done task is not planned
+        assert!(with_schedule(text, &task_ref(2, "Write"), day("2026-11-19"), None).unwrap().2.contains("⏳ 2026-11-19 📅"));
+        assert!(with_schedule(text, &task_ref(3, "done"), day("2026-11-19"), None).is_none());
     }
 
     #[test]
@@ -568,6 +844,11 @@ mod tests {
             Some("- [ ] water 🔁 every week 📅 2026-10-19\r\n- [x] water 🔁 every week 📅 2026-10-12 ✅ 2026-10-14\r\nend\r\n"),
             "a CRLF note keeps CRLF"
         );
+        assert_eq!(
+            tick_task_on("- [ ] water 🔁 every week 📅 2026-10-12 ^tw4t\r\n", 1, day).as_deref(),
+            Some("- [ ] water 🔁 every week 📅 2026-10-19\r\n- [x] water 🔁 every week 📅 2026-10-12 ✅ 2026-10-14 ^tw4t\r\n"),
+            "the done date goes before the block id, which stays last; the next occurrence takes none"
+        );
     }
 
     /// Every checkbox of the vault, open and done.
@@ -577,6 +858,20 @@ mod tests {
         std::fs::write(d.path().join("a.md"), "- [ ] open\n- [x] done\n```\n- [ ] in code\n```\n").unwrap();
         let got: Vec<_> = all_tasks(d.path(), &Config::default()).into_iter().map(|(h, done)| (h.text, done)).collect();
         assert_eq!(got, [("open".to_string(), false), ("done".to_string(), true)]);
+    }
+
+    #[test]
+    fn listed_tasks_carry_their_fields_and_their_text() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("a.md"), "- [ ] Write the intro ⏫ 📅 2026-11-20 #writing ^t3f9a\n- [x] sent ✅ 2026-11-01\n").unwrap();
+        let open = listed(d.path(), &Config::default(), Status::Open);
+        assert_eq!(open.len(), 1);
+        let t = &open[0];
+        assert_eq!((t.path.as_str(), t.line, t.text.as_str()), ("a.md", 1, "Write the intro ⏫ 📅 2026-11-20 #writing ^t3f9a"));
+        assert_eq!((t.title.as_str(), t.priority, t.block.as_deref()), ("Write the intro #writing", "high", Some("t3f9a")));
+        assert_eq!(serde_json::to_value(t).unwrap()["due"], "2026-11-20", "dates as the notes write them");
+        assert_eq!(listed(d.path(), &Config::default(), Status::Done).iter().map(|t| t.title.as_str()).collect::<Vec<_>>(), ["sent"]);
+        assert_eq!(listed(d.path(), &Config::default(), Status::All).len(), 2);
     }
 
     #[test]

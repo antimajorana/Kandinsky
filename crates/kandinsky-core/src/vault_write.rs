@@ -106,8 +106,14 @@ impl Workspace {
     }
     /// Back to [`NoGuard`].
     pub fn clear_write_guard(&self) {
-        GUARDS.write().unwrap_or_else(|e| e.into_inner()).retain(|(r, _)| r != self.root());
+        clear_guard(self.root());
     }
+}
+
+/// The vault at `root` unguarded, with or without its `Workspace` at hand (a guest closed while requests may still hold
+/// its state: guest.rs `forget`).
+pub fn clear_guard(root: &Path) {
+    GUARDS.write().unwrap_or_else(|e| e.into_inner()).retain(|(r, _)| r != root);
 }
 
 /// The guard of the vault holding `abs`, with that vault's root; `None` when no vault there has one (the common
@@ -142,7 +148,8 @@ fn hash_file(abs: &Path) -> Result<Option<ContentHash>> {
     }
     match std::fs::read(abs) {
         Ok(bytes) => Ok(Some(ContentHash::of(&bytes))),
-        Err(e) if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::IsADirectory) => Ok(None),
+        // a folder has no content hash; Windows refuses reading one as "Access is denied", not IsADirectory
+        Err(e) if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::IsADirectory) || abs.is_dir() => Ok(None),
         Err(e) => Err(e.into()),
     }
 }
@@ -507,6 +514,11 @@ pub mod cache {
             f()
         })
     }
+    /// [`write`], the bytes streamed by `fill` (an index too large to build in memory twice).
+    pub fn write_with(abs: &Path, fill: impl FnOnce(&mut std::fs::File) -> Result<()>) -> Result<()> {
+        check(abs);
+        raw::atomic(abs, raw::Replace::Always, fill).map(|_| ())
+    }
     pub fn append(abs: &Path, bytes: &[u8]) -> Result<()> {
         check(abs);
         raw::append(abs, bytes)
@@ -575,6 +587,17 @@ pub mod cache {
         check(abs);
         raw::mkdir_parent(abs)?;
         Ok(std::fs::File::create(abs)?)
+    }
+}
+
+/// A sync tool's own settings at a vault's root, which that tool never carries to another device (Syncthing's
+/// `.stignore`, sync_ignore.rs): no guard, since no other copy of the vault ever has the file.
+pub mod sync_tool {
+    use super::*;
+
+    pub fn write(abs: &Path, bytes: &[u8]) -> Result<()> {
+        debug_assert!(abs.file_name().is_some_and(|n| n == ".stignore"), "{} is not a sync tool's file", abs.display());
+        raw::atomic(abs, raw::Replace::Always, |f| Ok(f.write_all(bytes)?)).map(|_| ())
     }
 }
 
@@ -661,6 +684,17 @@ pub mod outside {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A folder, or a link to one, has no hash on any system: a guarded change to it (a guest's `.kandinsky` link removed)
+    /// is not refused by reading it as a file.
+    #[test]
+    fn a_folder_has_no_hash() {
+        let d = tempfile::tempdir().unwrap();
+        assert!(hash_file(d.path()).unwrap().is_none());
+        assert!(hash_file(&d.path().join("missing")).unwrap().is_none());
+        std::fs::write(d.path().join("a.md"), "a").unwrap();
+        assert!(hash_file(&d.path().join("a.md")).unwrap().is_some());
+    }
 
     /// Where hard links are refused (Android's shared storage) a new note is still made, and one made meanwhile kept.
     #[test]
