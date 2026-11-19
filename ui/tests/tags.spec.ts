@@ -21,7 +21,7 @@ test("the tags block nests tags and opens a tag's notes; tag: works in quick ope
   await zoo.click();
   await expect(block.locator(".notes .note")).toHaveText(["tag-a", "tag-b"]);
   await block.locator(".notes .note", { hasText: "tag-b" }).click();
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: "tag-b" })).toHaveCount(1);
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "tag-b" })).toHaveCount(1);
 
   // the note just opened takes the focus a moment later: typed before, the query went into the note
   await expect(page.locator(".cm-editor.cm-focused")).toHaveCount(1);

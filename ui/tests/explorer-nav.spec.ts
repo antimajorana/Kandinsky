@@ -15,7 +15,7 @@ async function start(page: Page) {
 }
 const openNote = (page: Page, path: string) => page.evaluate((p) => (window as any).__kandinsky.open(p), path);
 const xrow = (page: Page, name: string) => page.locator(".explorer .x-row", { has: page.locator(".label", { hasText: new RegExp(`^${name.replace(/[.[\]]/g, "\\$&")}$`) }) });
-const treeRow = (page: Page, path: string) => page.locator(`.tree .row[data-path="${path}"]`);
+const treeRow = (page: Page, path: string) => page.locator(`.tree-scroll .row[data-path="${path}"]`);
 
 test("Show in the explorer moves the explorer already open, the file selected; a note's breadcrumb opens it there", async ({ page, request }) => {
   await put(request, "nav-a/one.md");
@@ -23,17 +23,17 @@ test("Show in the explorer moves the explorer already open, the file selected; a
   await start(page);
   await openNote(page, "nav-a/one.md");
   // through the note's breadcrumb (the same open() as the menu item): the folder, the note selected
-  await page.locator(".editor-pane .crumbs button", { hasText: "nav-a" }).click();
+  await page.locator(".editor-pane .breadcrumbs .folder-trail .seg", { hasText: "nav-a" }).click();
   await expect(page.locator(".explorer .crumbs")).toContainText("nav-a");
   await expect(page.locator(".explorer .x-row.sel")).toContainText("one.md");
   // again from another note, the explorer open: it goes there
   await openNote(page, "nav-b/inner/two.md");
-  await page.locator(".editor-pane:visible .crumbs button", { hasText: "inner" }).click();
+  await page.locator(".editor-pane:visible .breadcrumbs .folder-trail .seg", { hasText: "inner" }).click();
   await expect(page.locator(".explorer .crumbs")).toContainText("inner");
   await expect(page.locator(".explorer .x-row.sel")).toContainText("two.md");
   // the outer crumb: the folder, the one we came from selected; the keyboard in the list
   await openNote(page, "nav-b/inner/two.md");
-  await page.locator(".editor-pane:visible .crumbs button", { hasText: "nav-b" }).click();
+  await page.locator(".editor-pane:visible .breadcrumbs .folder-trail .seg", { hasText: "nav-b" }).click();
   await expect(page.locator(".explorer .x-row.sel")).toContainText("inner");
   await expect(page.locator(".explorer .x-list, .explorer [role=listbox], .explorer .list").first()).toBeFocused().catch(() => {});
 });
@@ -98,7 +98,7 @@ test("the tree: arrow keys, a renamed open folder stays open, the file opened ag
   // open a file far down, scroll the tree away, open it again: back in view
   await openNote(page, "nav-many/f79.md");
   await expect(treeRow(page, "nav-many/f79.md")).toBeInViewport();
-  await page.locator(".tree").evaluate((el) => (el.scrollTop = 0));
+  await page.locator(".tree-scroll").evaluate((el) => (el.scrollTop = 0));
   await openNote(page, "nav-many/f79.md");
   await expect(treeRow(page, "nav-many/f79.md")).toBeInViewport();
 });

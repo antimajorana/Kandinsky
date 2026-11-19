@@ -45,9 +45,9 @@ test("a workspace saves the open tabs to a file, and switching to it brings them
   await openFile(page, "aids.md");
   await openFile(page, "related.md");
   await expect(tabs(page).filter({ hasText: "related" })).toBeVisible();
-  await run(page, "Workspace: save the current tabs as");
+  await run(page, "Workspace: Save current layout");
   await page.keyboard.type("Pair");
-  await expect(page.getByTestId("palette").getByText("Save as “Pair”")).toBeVisible();
+  await expect(page.getByTestId("palette").getByText("Save current layout as “Pair”")).toBeVisible();
   await page.keyboard.press("Enter");
   await expect.poll(() => request.get("/api/file?path=.kandinsky/workspaces/Pair.json", { headers: H }).then((r) => r.status())).toBe(200);
 
@@ -136,18 +136,29 @@ test("quick open: Ctrl+Enter opens the file beside the active tab instead of ove
   await expect(open.locator(".split-badge", { hasText: "Split 3" })).toHaveCount(0);
 });
 
-test("the side panel hides and comes back without closing its tools (Super+B, the button in its row, the footer's)", async ({ page }) => {
+// The Notion sidebar is the side panel: its tree (the Files tool) stays in it and the sidebar hides and comes back with the
+// tree as it was (Super+B, the button in its header, the Files command that expands it again).
+test("the sidebar hides and comes back without closing its tree (Super+B, the button in its header, the Files command)", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
-  const side = page.getByTestId("sidebar"), pane = page.locator(".dv-groupview .side-pane").first();
-  await page.keyboard.press("Meta+Shift+f");
-  await expect(pane).toBeVisible();
-  await expect(side.locator(".tab", { hasText: "Files" }), "a tool is not a tab").toHaveCount(0);
-  await page.getByTestId("side-head").getByRole("button", { name: "Hide the side panel" }).click();
-  await expect(pane).toBeHidden();
-  await expect(page.locator(".dv-groupview .side-pane")).toHaveCount(1); // still open, only out of sight
-  await page.keyboard.press("Meta+b");
-  await expect(pane).toBeVisible();
-  await side.getByRole("button", { name: "Side panel (show / hide)" }).click();
-  await expect(pane).toBeHidden();
+  const side = page.getByTestId("sidebar");
+  const tree = side.locator(".tree-scroll"), notes = side.locator('.row[data-path="notes"]');
+  try {
+    await expect(tree).toBeVisible();
+    await expect(side.getByTestId("open-tabs").locator(".pane-row", { hasText: "Files" }), "a tool is not a tab").toHaveCount(0);
+    await notes.click(); // a folder unfolded in the tree: the proof that it is not closed meanwhile
+    await expect(side.locator('.row[data-path="notes/hubbard.md"]')).toBeVisible();
+    await side.getByRole("button", { name: "Collapse sidebar" }).click();
+    await expect(tree).toBeHidden();
+    await page.keyboard.press("Meta+b");
+    await expect(tree).toBeVisible();
+    await expect(side.locator('.row[data-path="notes/hubbard.md"]')).toBeVisible();
+    await page.keyboard.press("Meta+b");
+    await expect(tree).toBeHidden();
+    await page.keyboard.press("Meta+Shift+f"); // the Files tool asked for: the sidebar comes back with it
+    await expect(tree).toBeVisible();
+    await expect(side.locator('.row[data-path="notes/hubbard.md"]')).toBeVisible();
+  } finally {
+    await page.evaluate(() => window.dispatchEvent(new Event("kandinsky-expand-sidebar"))); // the layout is shared by the run
+  }
 });

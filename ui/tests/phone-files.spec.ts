@@ -74,6 +74,10 @@ test("Files tapped while Home is still being looked up stays Files", async ({ pa
   let release = () => {};
   const held = new Promise<void>((r) => { release = r; });
   await page.route("**/api/home", async (route) => { await held; await route.continue(); });
+  // the page asks for the home document once and keeps the answer: a reload, with the request held, is the app's start
+  const answered = page.waitForResponse("**/api/home");
+  await page.reload();
+  await page.waitForFunction(() => "kandinskyShell" in window);
   await page.evaluate(() => {
     const shell = (window as unknown as { kandinskyShell: Shell & { home(): void } }).kandinskyShell;
     shell.home();
@@ -81,7 +85,7 @@ test("Files tapped while Home is still being looked up stays Files", async ({ pa
   });
   await expect(page.locator(".pf")).toBeVisible();
   release();
-  await page.waitForResponse("**/api/home");
+  await answered;
   await page.waitForTimeout(300); // Home's open would have landed by now
   await expect(page.locator(".pf")).toBeVisible();
 });

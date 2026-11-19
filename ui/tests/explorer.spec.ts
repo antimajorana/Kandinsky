@@ -62,7 +62,7 @@ test("the vault in the explorer: browse, sort, upload from the computer, rename,
   await expect(page.locator(".dv-active-group .cm-editor")).toContainText("first");
 
   // dragged onto a folder: moved into it
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "explorer-test" }).click();
+  await page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "explorer-test" }).locator(".pane-main").click();
   await row("renamed.txt").dragTo(row("inner"));
   await expect(row("renamed.txt")).toHaveCount(0);
   expect((await request.get("/api/file?path=explorer-test/inner/renamed.txt", { headers: H })).ok()).toBe(true);

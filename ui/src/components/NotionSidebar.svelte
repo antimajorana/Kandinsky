@@ -164,7 +164,8 @@
       { label: pinned ? "Unpin" : "Pin", icon: "pin", hint: keysOf("ui.tabs.pin"), run: () => (pinned ? unpin(t.id) : pin(t.id)) },
     ];
     if (canSplit(t.id)) items.push({ label: "Split right", icon: "panel-right", run: () => splitRight(t.id) });
-    if (t.path) items.push({ label: "Reveal in Vault Pages", icon: "files", run: () => revealPath(t.path!) });
+    // the tab menu's Show in the explorer / the system's file manager (the classic bar's menu had them too)
+    if (t.path) items.push({ label: "Reveal in Vault Pages", icon: "files", run: () => revealPath(t.path!) }, ...revealItems(t.path));
     // the classic bar's tab menu offered this; keep it reachable from the Open section too
     if (t.path) items.push("sep", { label: "Move to Trash…", icon: "close", danger: true, run: () => trashFile(t.path!) });
     items.push("sep", { label: "Close", icon: "close", hint: keysOf("ui.close"), run: () => closeTab(t.id) });
