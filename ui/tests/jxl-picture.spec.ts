@@ -13,7 +13,7 @@ test("a JPEG XL picture shows in a note and on its own, decoded by the core", as
   await request.put("/api/file", { headers: H, data: { path: "notes/jxl-note.md", text: "# Pictures\n\n![[tiny.jxl]]\n" } });
   await page.goto("/");
   await openFile(page, "jxl-note.md");
-  const img = page.locator("img.cm-embed-image, .cm-content img").first();
+  const img = page.locator("img.cm-embed-image, .cm-content img.embed-img").first();
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBeGreaterThan(0);
   await page.screenshot({ path: test.info().outputPath("jxl-in-note.png") });
   // on its own: the image pane

@@ -45,22 +45,31 @@ test("in a note Ctrl+B / Ctrl+I / Ctrl+K make bold, italic and a link, and undo 
   await page.keyboard.press("Escape");
 });
 
-test("outside a note Ctrl+K / Ctrl+B do nothing; the app's Super+E / Super+B open the palette and the side panel", async ({ page }) => {
+test("outside a note Ctrl+B does nothing and Ctrl+K is the quick switcher; the app's Super+E / Super+B open the palette and fold the sidebar", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   const home = () => page.request.get("/api/file?path=Home.md", { headers: { "x-kandinsky": "1" } }).then((r) => r.json()).then((j) => j.text as string);
   const before = await home();
-  await page.keyboard.press("Control+k");
+  // Ctrl+B is nobody's outside a note; Ctrl+K is the quick switcher's second key (as Ctrl+O), not the note's link
   await page.keyboard.press("Control+b");
   await page.waitForTimeout(300); // a wrong binding would have acted by now
   await expect(page.getByTestId("palette")).toHaveCount(0);
   await expect(page.locator(".side-pane")).toHaveCount(0);
+  await page.keyboard.press("Control+k");
+  await expect(page.getByTestId("palette")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("palette")).toHaveCount(0);
   expect(await home(), "no key reached the home note").toBe(before);
   await page.keyboard.press("Meta+e");
   await expect(page.getByTestId("palette")).toBeVisible();
   await page.keyboard.press("Escape");
+  // the Notion shell's Super+B folds and unfolds its one sidebar (the classic side panel is retired)
+  const toggle = page.getByTestId("sidebar-toggle");
+  await expect(toggle).toHaveAttribute("aria-label", "Collapse sidebar");
   await page.keyboard.press("Meta+b");
-  await expect(page.locator(".side-pane").first()).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-label", "Keep sidebar open");
+  await page.keyboard.press("Meta+b");
+  await expect(toggle).toHaveAttribute("aria-label", "Collapse sidebar");
 });
 
 // "tasks behave weirdly like they disappear or duplicate the - [ ]": Enter on an empty second item

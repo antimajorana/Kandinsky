@@ -65,7 +65,7 @@ test("ink's geometry: pinned in em to its character, placed back from it, scaled
   expect(v.inkOf([m, { kind: "ink", page: 3, strokes: [] }, { ...m, page: 4 }], 3)).toEqual([m]);
 
   // a highlight never lands after the marks block the core keeps at the note's end
-  const { addHighlight, highlightBlock } = (globalThis as unknown as { atlasMarks: { addHighlight(md: string, b: string): string; highlightBlock(t: string, w: string, k?: number): string } }).atlasMarks;
+  const { addHighlight, highlightBlock } = (globalThis as unknown as { kandinskyMarks: { addHighlight(md: string, b: string): string; highlightBlock(t: string, w: string, k?: number): string } }).kandinskyMarks;
   const block = "```pdf-marks\nm-aaaaaaa1 text-ink p1 {}\n```\n";
   for (const md of [`# Q\n\n${block}`, `# Q\n\n## Highlights\n\n> a\n> — One, chapter 1\n\n${block}`]) {
     const out = addHighlight(md, highlightBlock("new words", "One, chapter 1", 5));
@@ -79,7 +79,7 @@ async function inkState(page: Page, k: number) {
   return page.evaluate((k) => {
     const frame = document.querySelector<HTMLIFrameElement>(".books iframe.b-frame")!;
     const d = frame.contentDocument!;
-    const marks = (window as unknown as { atlasMarks: { textMap(d: Document): unknown; charBox(d: Document, m: unknown, k: number): { x: number; y: number } | null } }).atlasMarks;
+    const marks = (window as unknown as { kandinskyMarks: { textMap(d: Document): unknown; charBox(d: Document, m: unknown, k: number): { x: number; y: number } | null } }).kandinskyMarks;
     const box = marks.charBox(d, marks.textMap(d), k);
     const starts = [...document.querySelectorAll(".books svg.b-ink path")].map((p) => {
       const m = /^M(-?[\d.]+) (-?[\d.]+)/.exec(p.getAttribute("d") ?? "");

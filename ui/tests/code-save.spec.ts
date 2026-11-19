@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { verticalTabs } from "./vertical-tabs";
 
 // Code files are not autosaved: a code file is saved by
 // Ctrl+S only; meanwhile its text is kept in a recovery copy, offered back when the file is opened again.
@@ -11,7 +12,11 @@ async function open(page: Page, name: string) {
   await expect(page.locator(".cm-content:visible").first()).toContainText("a = 1");
 }
 
+let restoreTabs: (() => Promise<void>) | null = null;
+test.afterEach(async () => { await restoreTabs?.(); restoreTabs = null; });
+
 test("a code file waits for Ctrl+S; its unsaved text comes back after the tab was closed", async ({ page }) => {
+  restoreTabs = await verticalTabs(page.request);
   await page.request.put("/api/file", { headers: H, data: { path: "notes/keep.py", text: "a = 1\n" } });
   await page.request.put("/api/file", { headers: H, data: { path: ".kandinsky/cache/recovery/notes/keep.py", text: "" } });
   await page.goto("/");
@@ -29,7 +34,7 @@ test("a code file waits for Ctrl+S; its unsaved text comes back after the tab wa
 
   await page.keyboard.type(" two");
   await page.waitForTimeout(800);
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "keep.py" }).getByRole("button", { name: /Close/ }).click();
+  await page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "keep.py" }).getByRole("button", { name: /^Close / }).click();
   await expect(page.getByText("keep.py was not saved")).toBeVisible();
   expect(await disk(page, "notes/keep.py")).toBe("a = 1  # one\n");
   await open(page, "keep.py");

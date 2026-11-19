@@ -34,7 +34,7 @@ test("a picture shows while its link is written, grows with Ctrl, opens on a cli
 
   // Ctrl+click opens it in its own tab (a plain click edits)
   await page.locator(".cm-content img.cm-embed-image").first().click({ modifiers: ["Control"] });
-  await expect(page.getByRole("option", { name: /peek-pic\.svg/ }).first()).toBeVisible();
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: /peek-pic.svg/ }).first()).toBeVisible();
 });
 
 // The large picture covers the small one: moving within it keeps it, leaving it hides it.

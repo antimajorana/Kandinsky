@@ -154,17 +154,14 @@ test("frontmatter shows as Obsidian-style properties (`[editor] properties = inl
   });
   await page.reload();
   await page.getByText("Finish the GW notes.").waitFor();
-  const ed = await open(page, "mdr/props.md");
-  const props = ed.locator(".note-properties");
+  await open(page, "mdr/props.md");
+  // the Notion shell draws the properties as rows under the title (InlineProperties.svelte)
+  const props = page.getByTestId("inline-properties");
   await expect(props.locator(".prop-row")).toHaveCount(5);
   await expect(props.locator(".prop-key", { hasText: "date" })).toBeVisible();
-  await expect(props.locator("a.prop-pill", { hasText: "Condensed Matter" })).toBeVisible();
-  await expect(props.locator(".prop-tag")).toHaveCount(2);
-  await expect(props.locator(".prop-empty")).toHaveCount(1);
-  await props.locator(".prop-head").click();
-  await expect(props.locator(".prop-rows")).toBeHidden();
-  await props.locator(".prop-head").click();
-  await expect(props.locator(".prop-rows")).toBeVisible();
+  await expect(props.locator(".pill.link", { hasText: "Condensed Matter" })).toBeVisible();
+  await expect(props.locator(".pill.tag")).toHaveCount(2);
+  await expect(props.locator(".prop-row.missing, .prop-row:has(input[placeholder=Empty]:placeholder-shown)").first()).toBeVisible();
 });
 
 test("KaTeX accepts MathJax habits (\\newcommand over a built-in, _ in \\text, \\mbox)", async ({ page }) => {
