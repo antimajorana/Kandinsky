@@ -1,10 +1,23 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type APIRequestContext } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { WS } from "../playwright.config";
 import { runCommand } from "./open";
 
 const H = { "x-kandinsky": "1" };
+
+// The sidebar's Open section lists a lone tab only with vertical tabs; the config is shared by every spec of the run, so it is
+// put back after the test, whatever its outcome.
+let savedConfig: unknown = null;
+async function verticalTabs(request: APIRequestContext) {
+  const cfg = (await (await request.get("/api/config", { headers: H })).json()).config;
+  savedConfig = cfg;
+  expect((await request.put("/api/config", { headers: H, data: { ...cfg, ui: { ...cfg.ui, tabs: "vertical" } } })).ok()).toBe(true);
+}
+test.afterEach(async ({ request }) => {
+  if (savedConfig) await request.put("/api/config", { headers: H, data: savedConfig });
+  savedConfig = null;
+});
 const FILE = ".kandinsky/bookmarks.yaml";
 
 // A bookmark whose file was moved or deleted said nothing and opened a blank "new file";
@@ -12,14 +25,16 @@ const FILE = ".kandinsky/bookmarks.yaml";
 test("Bookmarks: a gone file is reported (and can be removed), a gone heading is said", async ({ page, request }) => {
   const put = (text: string) => request.put("/api/file", { headers: H, data: { path: FILE, text } });
   await put("pins: []\nbookmarks:\n  - notes/side-gone-away.md\n  - {path: notes/hubbard.md, heading: Nowhere}\n");
+  await verticalTabs(request);
   try {
     await page.goto("/");
     await page.getByText("Finish the GW notes.").waitFor();
-    const list = page.getByTestId("bookmarks");
+    // the bookmarks are the sidebar's Favorites
+    const list = page.getByTestId("sidebar").locator('section[aria-label="Favorites"]');
     await list.getByText("side-gone-away").click();
     const gone = page.locator(".toast", { hasText: "The bookmarked file is gone" });
     await expect(gone).toContainText("notes/side-gone-away.md");
-    await expect(page.getByTestId("sidebar").locator(".tab", { hasText: "side-gone-away" })).toHaveCount(0);
+    await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "side-gone-away" })).toHaveCount(0);
 
     await list.getByText(/Nowhere/).click();
     await expect(page.locator(".toast", { hasText: "Heading not found" })).toBeVisible();

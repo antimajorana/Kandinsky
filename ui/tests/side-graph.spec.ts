@@ -31,7 +31,7 @@ test("Graph: Local follows the active note; Enter in the filter opens the match"
 
   await pane.getByRole("button", { name: "Graph settings" }).click();
   await pane.getByRole("button", { name: "Filters" }).click();
-  await pane.getByLabel("Search files").fill("hubbard");
+  await pane.getByLabel("Search files").fill("hubbard.md"); // the exact file: another spec may leave a "hubbard-…" note in the vault
   await expect(pane.locator(".meta")).toHaveText("1 node · 0 links");
   await pane.getByLabel("Search files").fill("");
   await expect(pane.locator(".meta")).toHaveText("2 nodes · 1 link");

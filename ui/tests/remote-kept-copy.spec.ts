@@ -10,6 +10,19 @@ import { WS } from "../playwright.config";
 // opened before still opens with the server out of reach (offline, the VPN down): the copy fetched last time, said so
 // (file-sources: every plugin source's `local` keeps its copies). The server is the copyparty stand-in.
 const H = { "x-kandinsky": "1" };
+
+// The sidebar's Open section lists a lone tab only with vertical tabs; the config is shared by every spec of the run, so it is
+// put back after the test, whatever its outcome.
+let savedConfig: unknown = null;
+async function verticalTabs(request: APIRequestContext) {
+  const cfg = (await (await request.get("/api/config", { headers: H })).json()).config;
+  savedConfig = cfg;
+  expect((await request.put("/api/config", { headers: H, data: { ...cfg, ui: { ...cfg.ui, tabs: "vertical" } } })).ok()).toBe(true);
+}
+test.afterEach(async ({ request }) => {
+  if (savedConfig) await request.put("/api/config", { headers: H, data: savedConfig });
+  savedConfig = null;
+});
 const DIR = ".kandinsky/plugins/copyparty";
 const ROOT = `${WS}-copyparty-offline`;
 const put = (r: APIRequestContext, path: string, text: string) => r.put("/api/file", { headers: H, data: { path, text } });
@@ -38,7 +51,7 @@ test("a server's folders in the vault's tree: unfolded, listed, a file opened fr
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+Shift+F");
-  const tree = page.locator(".tree");
+  const tree = page.locator(".tree-scroll");
   const key = (...parts: string[]) => tree.locator(`.row[data-key="${parts.join("\\A ")}"]`); // the keys join with a newline, "\A " in CSS
   await expect(key("copyparty")).toBeVisible();
   await expect(key("copyparty"), "no vault menu on a server's row").not.toHaveAttribute("data-path");
@@ -53,7 +66,8 @@ test("a server's folders in the vault's tree: unfolded, listed, a file opened fr
   await expect(key("copyparty", "far", "/away.md")).toHaveCount(0);
 });
 
-test("a server's file fetched before opens from its copy when the server is out of reach", async ({ page }) => {
+test("a server's file fetched before opens from its copy when the server is out of reach", async ({ page, request }) => {
+  await verticalTabs(request);
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("F1");
@@ -71,7 +85,7 @@ test("a server's file fetched before opens from its copy when the server is out 
   server = undefined;
   await page.keyboard.press("Control+w");
   await expect(ed).toHaveCount(0);
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "(far)" }).click();
+  await page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "(far)" }).locator(".pane-main").click();
   await row.dblclick();
   await expect(page.getByText(/Not fetched from copyparty/)).toBeVisible();
   await expect(page.getByText(/away\.md opened from the copy fetched just now/)).toBeVisible();

@@ -16,7 +16,6 @@ test("companions fold away, a folder with its own note opens it, the eye shows e
   try {
     await page.goto("/");
     await page.getByText("Finish the GW notes.").waitFor();
-    await page.keyboard.press("Meta+Shift+F");
     await page.locator('.row[data-path="tc"]').click();
     await expect(page.locator('.row[data-path="tc/mail.md"]')).toBeVisible();
     await expect(page.locator('.row[data-path="tc/mail files"]')).toHaveCount(0);
@@ -25,10 +24,9 @@ test("companions fold away, a folder with its own note opens it, the eye shows e
     await expect(page.locator(".cm-content").filter({ hasText: "The paper" })).toBeVisible();
     await expect(page.locator('.row[data-path="tc/k/chap.pdf"]')).toBeVisible();
     for (const hidden of ["tc/k/k.md", "tc/k/chap.pdf.excalidraw", "tc/k/data.md"]) await expect(page.locator(`.row[data-path="${hidden}"]`)).toHaveCount(0);
-    // the eye: the Files tool's own button (in the side panel, its icon's right-click lists it), everything, then hidden again
+    // the eye: the sidebar tree header's own button, everything, then hidden again
     const eye = async () => {
-      await page.getByTestId("side-head").getByRole("tab", { name: "Files" }).click({ button: "right" });
-      await page.getByRole("menuitem", { name: "Show hidden files" }).click();
+      await page.getByTestId("sidebar").getByRole("button", { name: "Show hidden files" }).click();
     };
     await eye();
     for (const shown of ["tc/k/k.md", "tc/k/chap.pdf.excalidraw", "tc/k/data.md", "tc/mail files"]) await expect(page.locator(`.row[data-path="${shown}"]`)).toBeVisible();
