@@ -22,7 +22,7 @@
   import { attachTools, COLORS, type ToolName, type Tools } from "../lib/pdf-tools";
   import { attachPdfMarks, markAt, recoloured, reworded, STAMPS, type Mark, type MarksView, type Stamp } from "../lib/pdf-marks";
   import PdfMarkBar from "../components/PdfMarkBar.svelte";
-  import { api } from "../lib/api";
+  import { api, ApiError } from "../lib/api";
   import { exportWithMarks } from "../lib/pdf-export";
   import { ensureNoteOf, notesBeside } from "../lib/papers";
   import { placeLink } from "../lib/pdf-place";
@@ -180,12 +180,69 @@
     exportTimer = disposed ? -1 : window.setTimeout(() => { exportTimer = 0; void toNotes(); }, 2000);
   }
 
+  function buildAnnotationsMarkdown(existingText: string, pdfName: string, lines: string[]): string {
+    const marksFenceRe = /(?:^|\r?\n)(```pdf-marks\r?\n[\s\S]*?\r?\n```[ \t]*\r?\n?)$/;
+    const fenceMatch = marksFenceRe.exec(existingText);
+    const body = fenceMatch ? existingText.slice(0, existingText.length - fenceMatch[1].length) : existingText;
+    const trailingMarks = fenceMatch ? fenceMatch[1] : "";
+    const section = `<!-- kandinsky:annotations -->\n## Annotations — ${pdfName}\n\n${lines.join("\n") || "_none yet_"}\n<!-- /kandinsky:annotations -->`;
+    const annBlockRe = /<!-- (?:kandinsky|atlas):annotations -->[\s\S]*?<!-- \/(?:kandinsky|atlas):annotations -->/;
+    let nextBody: string;
+    if (annBlockRe.test(body)) {
+      nextBody = body.replace(annBlockRe, () => section);
+    } else {
+      const trimmedBody = body.replace(/\s+$/, "");
+      nextBody = trimmedBody ? `${trimmedBody}\n\n${section}\n` : `${section}\n`;
+    }
+    if (trailingMarks) {
+      const sep = nextBody.endsWith("\n\n") ? "" : nextBody.endsWith("\n") ? "\n" : "\n\n";
+      return `${nextBody}${sep}${trailingMarks}`;
+    }
+    return nextBody.endsWith("\n") ? nextBody : `${nextBody}\n`;
+  }
+
   async function toNotes() {
     try {
       await ensureNoteOf(spec.path); // a paper's note starts with its properties and block, then the export
-      const res = await api.cmd("pdf.annotations", { path: spec.path });
-      if (!res.ok) throw new Error(res.error);
-      flash(typeof res.result === "string" ? res.result : "Annotations exported");
+      const pm = await api.pdfMarks(spec.path);
+      const notePath = pm.note ?? (await api.companion({ path: spec.path, title: null, properties: {}, block: null, find: false })).path;
+      if (!notePath || !/\.md$/i.test(notePath) || notePath.startsWith("../") || notePath.startsWith("/") || /^[A-Za-z]:/.test(notePath)) {
+        throw new Error(`Unsafe companion note path: ${notePath}`);
+      }
+      const active = pm.marks.filter((m) => m.kind !== "deleted").sort((a, b) => a.page - b.page);
+      const replies = new Map<string, string[]>();
+      for (const m of active) {
+        if (m.kind === "postit" && m.on) {
+          const txt = m.text.trim();
+          if (txt) replies.set(m.on, [...(replies.get(m.on) ?? []), txt]);
+        }
+      }
+      const lines: string[] = [];
+      for (const m of active) {
+        if (m.kind === "highlight" || m.kind === "underline" || m.kind === "strike") {
+          const exact = m.quote?.exact?.replace(/\s+/g, " ").trim();
+          lines.push(`- ${placeLink(spec.path, { page: m.page, annotation: m.id, quote: m.quote?.exact })}${exact ? ` — > ${exact}` : ""}`);
+          for (const reply of replies.get(m.id) ?? []) lines.push(`  - ${reply}`);
+        } else if ((m.kind === "postit" && !m.on) || m.kind === "text-box") {
+          lines.push(`- ${placeLink(spec.path, { page: m.page, annotation: m.id })} — note: ${m.text.trim() || "(empty)"}`);
+        } else if (m.kind === "clip") {
+          lines.push(`- ${placeLink(spec.path, { page: m.page, annotation: m.id })} — figure clip${m.title ? `: ${m.title}` : ""}`);
+        } else if (m.kind === "bookmark") {
+          lines.push(`- ${placeLink(spec.path, { page: m.page, annotation: m.id })} — bookmark${m.title ? `: ${m.title}` : ""}`);
+        }
+      }
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const doc = await api.file(notePath);
+        const updated = buildAnnotationsMarkdown(doc.text, shownName(spec.path), lines);
+        try {
+          await api.putFile(notePath, updated, doc.mtime);
+          break;
+        } catch (err) {
+          if (attempt === 0 && err instanceof ApiError && err.status === 409) continue;
+          throw err;
+        }
+      }
+      flash(`${lines.length} annotation(s) → ${shownName(notePath)}`);
     } catch (e) {
       flash(`Export failed: ${errText(e)}`, 6000);
     }

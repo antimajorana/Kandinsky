@@ -26,9 +26,20 @@
   let selId = $state<string | null>(null);
   // a page's source never changes: its defaults are read once
   let sortId = $state(untrack(() => source.sorts[0]?.id ?? ""));
+  let sortDesc = $state<boolean | null>(null);
   let layout = $state(untrack(() => source.layouts[0]));
   let tools = $state<LibraryAction[]>([]);
   let list: HTMLDivElement;
+
+  const TABLE_COLS = [
+    { id: "title", label: "Title" },
+    { id: "author", label: "Creators" },
+    { id: "year", label: "Year" },
+    { id: "venue", label: "Publication" },
+    { id: "kind", label: "Type" },
+    { id: "added", label: "Added" },
+    { id: "pdf", label: "PDF" },
+  ] as const;
 
   async function load() {
     try {
@@ -61,8 +72,20 @@
   const inScope = (i: LibraryItem) =>
     (!tab || i.tab === tab) && (scope.kind === "all" || (scope.kind === "group" ? inGroup(i.groups, scope.name) : (i.tags ?? []).includes(scope.name)));
   const shown = $derived(items.filter((i) => inScope(i) && matches(i, q)));
-  const sorted = $derived(sortItems(shown, source.sorts.find((s) => s.id === sortId) ?? { id: "" }));
+  const baseSort = $derived(source.sorts.find((s) => s.id === sortId));
+  const effectiveDesc = $derived(sortDesc ?? Boolean(baseSort?.desc));
+  const sorted = $derived(sortItems(shown, { id: sortId, desc: effectiveDesc }));
   const sel = $derived(sorted.find((i) => i.id === selId) ?? sorted[0] ?? null);
+
+  function toggleTableSort(colId: string) {
+    if (sortId === colId) {
+      sortDesc = !effectiveDesc;
+    } else {
+      sortId = colId;
+      const def = source.sorts.find((s) => s.id === colId);
+      sortDesc = def?.desc ?? (colId === "year" || colId === "added" || colId === "pdf");
+    }
+  }
   // narrow (a phone, a thin pane): one column, the groups a row of chips, the item's card a sheet opened by a tap —
   // never the first item's card by itself, which kept a third of a phone's width
   let width = $state(1000);
@@ -87,8 +110,13 @@
     await run(a.run);
   }
   async function run(f: () => unknown) {
-    try { await f(); } catch (e) { toast("It did not work", errText(e), "error"); }
+    let res: unknown;
+    try { res = await f(); } catch (e) { toast("It did not work", errText(e), "error"); }
     await load();
+    if (typeof res === "string" && res) {
+      selId = res;
+      picked = [res];
+    }
   }
   async function save() {
     if (!form) return;
@@ -119,9 +147,9 @@
     if (!source.drop) return;
     const files = [...(e.dataTransfer?.files ?? [])].filter((f) => source.drop!.accept.test(f.name));
     if (!files.length) { toast("Nothing here can take these files"); return; }
-    const id = await source.drop.run(files);
+    const id = await source.drop.run(files, scope.kind === "group" ? scope.name : undefined);
     await load();
-    if (id) selId = id;
+    if (id) { selId = id; picked = [id]; }
   }
 
   // items dragged onto a group at the side go there (source.regroup): the picked ones when the dragged card is one of them
@@ -187,7 +215,11 @@
     anchor = selId;
     // a row that held the focus hands it on: the ring and the selection stay one row
     const had = !!list?.contains(document.activeElement);
-    requestAnimationFrame(() => { const el = list?.querySelector<HTMLElement>(".row.sel, .card.sel"); el?.scrollIntoView({ block: "nearest" }); if (had) el?.focus(); });
+    requestAnimationFrame(() => {
+      const el = list?.querySelector<HTMLElement>(".row.sel, .card.sel, .trow.sel");
+      el?.scrollIntoView({ block: "nearest" });
+      if (had) (el?.querySelector<HTMLElement>(".row-focus") ?? el)?.focus();
+    });
   }
   function onKey(e: KeyboardEvent) {
     if ((e.target as HTMLElement).closest("input, select, textarea")) return;
@@ -234,11 +266,11 @@
     <h1><Icon name={source.icon} size={18} /> {source.title} <span class="count">{shown.length === items.length ? items.length : `${shown.length} / ${items.length}`}</span></h1>
     <input class="search" placeholder={source.search} bind:value={q} spellcheck="false" />
     {#if source.sorts.length > 1}
-      <Select value={sortId} label="Sort by" onchange={(v) => (sortId = v)} options={source.sorts.map((s) => ({ value: s.id, label: `Sort: ${s.label}` }))} />
+      <Select value={sortId} label="Sort by" onchange={(v) => { sortId = v; sortDesc = null; }} options={source.sorts.map((s) => ({ value: s.id, label: `Sort: ${s.label}` }))} />
     {/if}
     {#if source.layouts.length > 1}
       <div class="seg" role="radiogroup" aria-label="Layout">
-        {#each source.layouts as l (l)}<button role="radio" aria-checked={layout === l} class:on={layout === l} onclick={() => (layout = l)}>{l === "covers" ? "Covers" : "List"}</button>{/each}
+        {#each source.layouts as l (l)}<button role="radio" aria-checked={layout === l} class:on={layout === l} onclick={() => (layout = l)}>{l === "covers" ? "Covers" : l === "table" ? "Table" : "List"}</button>{/each}
       </div>
     {/if}
     {#if source.add}
@@ -266,7 +298,7 @@
             {#each treeRows as r (r.path)}
               <div class="tree-row" style:padding-left="{r.depth * 12}px">
                 {#if r.kids}<button class="twisty" aria-label={openSet.has(r.path) ? `Close ${r.name}` : `Open ${r.name}`} aria-expanded={openSet.has(r.path)} onclick={() => toggle(r.path)}><Icon name={openSet.has(r.path) ? "chevron-down" : "chevron"} size={12} /></button>{:else}<span class="twisty"></span>{/if}
-                <button class="item" class:on={isScope("group", r.path)} onclick={() => (scope = { kind: "group", name: r.path })} ondblclick={() => r.kids && toggle(r.path)} title={r.path}><Icon name={openSet.has(r.path) && r.kids ? "folder-open" : "folder"} size={14} /><span class="n">{r.name}</span><span class="c">{r.count}</span></button>
+                <button class="item" class:on={isScope("group", r.path)} class:drop={dropOn === r.path} onclick={() => (scope = { kind: "group", name: r.path })} ondblclick={() => r.kids && toggle(r.path)} title={r.path} {...groupDrop(r.path)}><Icon name={openSet.has(r.path) && r.kids ? "folder-open" : "folder"} size={14} /><span class="n">{r.name}</span><span class="c">{r.count}</span></button>
               </div>
             {/each}
           {:else}
@@ -287,24 +319,63 @@
         {/if}
       </nav>
     {/if}
-    <div class="list" class:covers={layout === "covers"} class:empty-list={!items.length} bind:this={list} use:marquee={{ pick: dragPick }}>
-      {#each sorted as i (i.id)}
-        {#if layout === "covers"}
-          <button class="card" class:sel={isPicked(i)} data-pick={i.id} draggable={source.regroup ? "true" : undefined} ondragstart={(e) => dragItem(e, i)} onclick={(e) => click(e, i)} ondblclick={() => source.open?.(i)} title={i.sub}>
-            <LibraryCover {kandinsky} cover={i.cover} title={i.title} />
-            <span class="t">{@html richTitle(i.title)}</span>
-            {#if i.sub}<span class="m">{i.sub}</span>{/if}
-          </button>
-        {:else}
-          <button class="row" class:sel={isPicked(i)} data-pick={i.id} draggable={source.regroup ? "true" : undefined} ondragstart={(e) => dragItem(e, i)} onclick={(e) => click(e, i)} ondblclick={() => source.open?.(i)}>
-            <span class="t">{@html richTitle(i.title)}</span>
-            {#if i.sub}<span class="m">{i.sub}</span>{/if}
-            {#if i.flags?.length}<span class="flags">{#each i.flags as f (f.label)}<span class="flag" class:red={f.tone === "red"}>{f.label}</span>{/each}</span>{/if}
-          </button>
-        {/if}
+    <div class="list" class:covers={layout === "covers"} class:table-mode={layout === "table"} class:empty-list={!items.length} bind:this={list} use:marquee={{ pick: dragPick }}>
+      {#if layout === "table" && sorted.length}
+        <table class="zot-table">
+          <caption class="sr-only">{source.title}</caption>
+          <thead>
+            <tr>
+              {#each TABLE_COLS as col (col.id)}
+                <th scope="col" class="col-{col.id}" aria-sort={sortId === col.id ? (effectiveDesc ? "descending" : "ascending") : undefined}>
+                  <button type="button" class="th-btn" onclick={() => toggleTableSort(col.id)}>
+                    <span>{col.label}</span><span class="sort-ind" aria-hidden="true">{sortId === col.id ? (effectiveDesc ? " ↓" : " ↑") : ""}</span>
+                  </button>
+                </th>
+              {/each}
+            </tr>
+          </thead>
+          <tbody>
+            {#each sorted as i (i.id)}
+              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+              <tr class="trow" class:sel={isPicked(i)} data-pick={i.id} draggable={source.regroup ? "true" : undefined} ondragstart={(e) => dragItem(e, i)} onclick={(e) => click(e, i)} ondblclick={() => source.open?.(i)}>
+                <td class="c-title">
+                  <button type="button" class="row-focus" onclick={(e) => { e.stopPropagation(); click(e, i); }} ondblclick={(e) => { e.stopPropagation(); source.open?.(i); }}>
+                    <span class="t">{@html richTitle(i.title)}</span>
+                  </button>
+                </td>
+                <td class="c-author">{i.columns?.creators ?? i.sub ?? ""}</td>
+                <td class="c-year">{i.columns?.year ?? ""}</td>
+                <td class="c-venue">{i.columns?.venue ?? ""}</td>
+                <td class="c-kind">{i.columns?.kind ?? ""}</td>
+                <td class="c-added">{i.columns?.added ?? ""}</td>
+                <td class="c-pdf">
+                  {#if i.columns?.hasPdf ?? i.flags?.some((f) => f.label === "PDF")}
+                    <span class="flag red">PDF</span>
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       {:else}
-        <p class="muted pad none">{items.length ? "Nothing matches." : source.empty}</p>
-      {/each}
+        {#each sorted as i (i.id)}
+          {#if layout === "covers"}
+            <button class="card" class:sel={isPicked(i)} data-pick={i.id} draggable={source.regroup ? "true" : undefined} ondragstart={(e) => dragItem(e, i)} onclick={(e) => click(e, i)} ondblclick={() => source.open?.(i)} title={i.sub}>
+              <LibraryCover {kandinsky} cover={i.cover} title={i.title} />
+              <span class="t">{@html richTitle(i.title)}</span>
+              {#if i.sub}<span class="m">{i.sub}</span>{/if}
+            </button>
+          {:else}
+            <button class="row" class:sel={isPicked(i)} data-pick={i.id} draggable={source.regroup ? "true" : undefined} ondragstart={(e) => dragItem(e, i)} onclick={(e) => click(e, i)} ondblclick={() => source.open?.(i)}>
+              <span class="t">{@html richTitle(i.title)}</span>
+              {#if i.sub}<span class="m">{i.sub}</span>{/if}
+              {#if i.flags?.length}<span class="flags">{#each i.flags as f (f.label)}<span class="flag" class:red={f.tone === "red"}>{f.label}</span>{/each}</span>{/if}
+            </button>
+          {/if}
+        {:else}
+          <p class="muted pad none">{items.length ? "Nothing matches." : source.empty}</p>
+        {/each}
+      {/if}
     </div>
     {#if pickedItems.length > 1}
       <aside class="detail many" aria-label="Picked">
@@ -417,6 +488,29 @@
   .picked { margin: 8px 0 12px; padding-left: 18px; font-size: .9em; color: var(--text-muted); }
   .picked li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .list.covers { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 14px 12px; align-content: start; padding: 12px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+  .list.table-mode { padding: 0; overflow: auto; }
+  .zot-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: calc(12.5px * var(--ui-scale, 1)); }
+  .zot-table thead th { position: sticky; top: 0; z-index: 1; background: var(--bg-alt); border-bottom: 1px solid var(--border-strong); padding: 0; text-align: left; font-weight: 600; color: var(--text-muted); }
+  .th-btn { width: 100%; display: flex; align-items: center; gap: 4px; padding: 7px 8px; text-align: left; font: inherit; font-size: calc(11.5px * var(--ui-scale, 1)); color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .th-btn:hover { background: var(--bg-hover); color: var(--text); }
+  .sort-ind { color: var(--accent); flex: none; }
+  .col-title { width: 34%; }
+  .col-author { width: 19%; }
+  .col-year { width: 58px; }
+  .col-venue { width: 18%; }
+  .col-kind { width: 10%; }
+  .col-added { width: 88px; }
+  .col-pdf { width: 48px; }
+  .trow { cursor: pointer; }
+  .trow td { padding: 6px 8px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); vertical-align: middle; }
+  .trow:hover td { background: var(--bg-hover); }
+  .trow.sel td { background: var(--accent-soft); }
+  .trow.sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+  .row-focus { display: block; width: 100%; text-align: left; padding: 0; font: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-focus .t { display: block; }
+  .c-year, .c-added { font-variant-numeric: tabular-nums; }
+  .c-pdf { text-align: center; }
   .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; width: 100%; text-align: left; padding: 8px 10px; border-radius: var(--radius-sm); }
   .row:hover { background: var(--bg-hover); }
   .row.sel { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
@@ -472,6 +566,7 @@
   .narrow .side .item { width: auto; flex: none; max-width: 70vw; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); }
   .narrow .side .item.on { box-shadow: none; border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
   .narrow .list { flex: 1; border-right: 0; }
+  .narrow .zot-table { min-width: 640px; }
   .narrow .list.covers { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px 10px; padding: 10px 12px; }
   .scrim { position: absolute; inset: 0; z-index: 6; background: var(--scrim); border: 0; padding: 0; cursor: default; }
   .narrow .detail { position: absolute; left: 0; right: 0; bottom: 0; z-index: 7; max-height: 80%; padding: 18px 16px calc(24px + env(safe-area-inset-bottom, 0px));

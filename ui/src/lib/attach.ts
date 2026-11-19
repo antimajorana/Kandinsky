@@ -66,6 +66,7 @@ export const VAULT_ATTACH_DIR = "zAttachments";
 export const VAULT_EMBED_RE = /\.(png|jpe?g|gif|webp|svg|avif|bmp|mp3|wav|ogg|m4a|opus|webm|mp4|pdf)$/i;
 
 export type DropFileChoice =
+  | { action: "library" }
   | { action: "vault" }
   | { action: "link"; uri: string }
   | { action: "beside" }
@@ -74,6 +75,7 @@ export type DropFileChoice =
 export interface DropFilePromptState {
   notePath: string;
   files: File[];
+  isPdfDrop?: boolean;
   uriHint: string;
   defaultUri: string;
   choose: (choice: DropFileChoice) => void;
@@ -220,6 +222,7 @@ export async function attachDroppedFiles(notePath: string, files: File[], uriHin
   if (!files.length) return [];
   if (dropFilePrompt.current) dropFilePrompt.current.cancel();
 
+  const isPdfDrop = files.length > 0 && files.every((f) => /\.pdf$/i.test(f.name || ""));
   const defaultUri = defaultExternalInput(files, uriHint);
   const choice = await new Promise<DropFileChoice>((resolve) => {
     let settled = false;
@@ -234,6 +237,7 @@ export async function attachDroppedFiles(notePath: string, files: File[], uriHin
     const state: DropFilePromptState = {
       notePath,
       files,
+      isPdfDrop,
       uriHint,
       defaultUri,
       choose: finish,
@@ -257,6 +261,20 @@ export async function attachDroppedFiles(notePath: string, files: File[], uriHin
     }
   });
 
+  if (choice.action === "library") {
+    const done: Attached[] = [];
+    for (const f of files) {
+      const name = f.name || attachmentName(f);
+      try {
+        const r = await api.refsPdf(name, f);
+        done.push({ path: `${r.paper.dir}/${r.paper.key}.md`, embed: `[[${r.paper.key}]]` });
+        toast(r.created ? `Added ${r.paper.key}` : `Cited ${r.paper.key}`, r.paper.title, r.created ? "success" : "info");
+      } catch (err) {
+        toast(`Could not add ${name} to library`, errText(err), "error");
+      }
+    }
+    return done;
+  }
   if (choice.action === "vault") return copyFilesToVaultAttachments(files);
   if (choice.action === "link") return linkFilesInPlace(files, choice.uri, defaultUri);
   if (choice.action === "beside") return attachFiles(notePath, files);

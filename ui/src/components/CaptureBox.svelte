@@ -12,6 +12,7 @@
   import { captureHint } from "../lib/capture-hints.svelte";
   import { attachFiles, takeFiles, type Attached } from "../lib/attach";
   import { PROMPT, afterSaved } from "../lib/capture-guides";
+  import { toast } from "../lib/state.svelte";
   import type { CaptureResult } from "../lib/gen/CaptureResult";
   import Icon from "./Icon.svelte";
   import CaptureGuides from "./CaptureGuides.svelte";
@@ -108,7 +109,23 @@
     try {
       const files = await taken;
       if (!files.length) return;
-      const done = await attachFiles((await api.todayLog()).path, files);
+      const pdfs = files.filter((f) => /\.pdf$/i.test(f.name || ""));
+      const rest = files.filter((f) => !/\.pdf$/i.test(f.name || ""));
+      const done: Attached[] = [];
+      const fallbackPdfs: File[] = [];
+      for (const f of pdfs) {
+        try {
+          const r = await api.refsPdf(f.name, f);
+          done.push({ path: `${r.paper.dir}/${r.paper.key}.md`, embed: `[[${r.paper.key}]]` });
+          toast(r.created ? `Added ${r.paper.key}` : `Cited ${r.paper.key}`, r.paper.title, r.created ? "success" : "info");
+        } catch {
+          fallbackPdfs.push(f);
+        }
+      }
+      const otherFiles = [...rest, ...fallbackPdfs];
+      if (otherFiles.length) {
+        done.push(...(await attachFiles((await api.todayLog()).path, otherFiles)));
+      }
       if (!done.length) return;
       attached = [...attached, ...done];
       const embeds = done.map((a) => a.embed);

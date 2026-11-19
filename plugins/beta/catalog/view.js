@@ -1,4 +1,4 @@
-//#region ui/node_modules/svelte/src/internal/shared/utils.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/shared/utils.js
 var e = Array.isArray, t = Array.prototype.indexOf, n = Array.prototype.includes, r = Array.from, i = Object.defineProperty, a = Object.getOwnPropertyDescriptor, o = Object.getOwnPropertyDescriptors, s = Object.prototype, c = Array.prototype, l = Object.getPrototypeOf, u = Object.isExtensible, d = () => {};
 function f(e) {
 	for (var t = 0; t < e.length; t++) e[t]();
@@ -21,11 +21,11 @@ function m(e, t) {
 	return n;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/constants.js
-var h = 1 << 24, g = 1024, _ = 2048, v = 4096, y = 8192, ee = 16384, b = 32768, x = 1 << 25, te = 65536, ne = 1 << 19, re = 1 << 20, ie = 1 << 25, ae = 1 << 21, oe = 1 << 22, se = 1 << 23, ce = Symbol("$state"), S = Symbol("component"), C = Symbol("legacy props"), le = Symbol(""), ue = Symbol("attributes"), de = Symbol("class"), w = Symbol("style"), T = Symbol("text"), fe = Symbol("form reset"), pe = new class extends Error {
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/constants.js
+var h = 1 << 24, g = 1024, _ = 2048, v = 4096, y = 8192, b = 16384, x = 32768, S = 1 << 25, ee = 65536, C = 1 << 19, te = 1 << 20, ne = 1 << 25, re = 1 << 21, ie = 1 << 22, ae = 1 << 23, oe = Symbol("$state"), se = Symbol("component"), ce = Symbol("legacy props"), le = Symbol(""), ue = Symbol("attributes"), de = Symbol("class"), w = Symbol("style"), fe = Symbol("text"), pe = Symbol("form reset"), me = new class extends Error {
 	name = "StaleReactionError";
 	message = "The reaction that called `getAbortSignal()` was re-run or destroyed";
-}(), me = !!globalThis.document?.contentType && /* @__PURE__ */ globalThis.document.contentType.includes("xml"), he = {}, E = Symbol("uninitialized"), ge = "http://www.w3.org/1999/xhtml", _e = "http://www.w3.org/2000/svg", ve = "http://www.w3.org/1998/Math/MathML";
+}(), he = !!globalThis.document?.contentType && /* @__PURE__ */ globalThis.document.contentType.includes("xml"), T = {}, E = Symbol("uninitialized"), ge = "http://www.w3.org/1999/xhtml", _e = "http://www.w3.org/2000/svg", ve = "http://www.w3.org/1998/Math/MathML";
 function ye() {
 	console.warn("https://svelte.dev/e/derived_inert");
 }
@@ -39,33 +39,33 @@ function Se() {
 	console.warn("https://svelte.dev/e/svelte_boundary_reset_noop");
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/hydration.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/hydration.js
 var D = !1;
-function O(e) {
+function Ce(e) {
 	D = e;
 }
-var k;
+var O;
+function k(e) {
+	if (e === null) throw be(), T;
+	return O = e;
+}
+function we() {
+	return k(/* @__PURE__ */ an(O));
+}
 function A(e) {
-	if (e === null) throw be(), he;
-	return k = e;
-}
-function Ce() {
-	return A(/* @__PURE__ */ an(k));
-}
-function j(e) {
 	if (D) {
-		if (/* @__PURE__ */ an(k) !== null) throw be(), he;
-		k = e;
+		if (/* @__PURE__ */ an(O) !== null) throw be(), T;
+		O = e;
 	}
 }
-function we(e = 1) {
+function Te(e = 1) {
 	if (D) {
-		for (var t = e, n = k; t--;) n = /* @__PURE__ */ an(n);
-		k = n;
+		for (var t = e, n = O; t--;) n = /* @__PURE__ */ an(n);
+		O = n;
 	}
 }
-function Te(e = !0) {
-	for (var t = 0, n = k;;) {
+function Ee(e = !0) {
+	for (var t = 0, n = O;;) {
 		if (n.nodeType === 8) {
 			var r = n.data;
 			if (r === "]") {
@@ -77,12 +77,12 @@ function Te(e = !0) {
 		e && n.remove(), n = i;
 	}
 }
-function Ee(e) {
-	if (!e || e.nodeType !== 8) throw be(), he;
+function j(e) {
+	if (!e || e.nodeType !== 8) throw be(), T;
 	return e.data;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/equality.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/equality.js
 function De(e) {
 	return e === this.v;
 }
@@ -96,7 +96,7 @@ function Ae(e) {
 	throw Error("https://svelte.dev/e/lifecycle_outside_component");
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/errors.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/errors.js
 function je() {
 	throw Error("https://svelte.dev/e/async_derived_orphan");
 }
@@ -131,7 +131,7 @@ function Ve() {
 	throw Error("https://svelte.dev/e/svelte_boundary_reset_onerror");
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/context.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/context.js
 var M = null;
 function He(e) {
 	M = e;
@@ -157,13 +157,13 @@ function We(e) {
 	return e !== void 0 && (t.x = e), t.i = !0, M = t.p, Ge(e);
 }
 function Ge(e = {}) {
-	return i(e, S, { value: !0 }), e;
+	return i(e, se, { value: !0 }), e;
 }
 function Ke() {
 	return !0;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/task.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/task.js
 var qe = [];
 function Je() {
 	var e = qe;
@@ -182,7 +182,7 @@ function Xe() {
 	for (; qe.length > 0;) Je();
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/status.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/status.js
 var Ze = ~(_ | v | g);
 function N(e, t) {
 	e.f = e.f & Ze | t;
@@ -191,12 +191,12 @@ function Qe(e) {
 	e.f & 512 || e.deps === null ? N(e, g) : N(e, v);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/utils.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/utils.js
 function $e(e, t, n) {
 	e.f & 2048 ? t.add(e) : e.f & 4096 && n.add(e), N(e, g);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/misc.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/misc.js
 function et(e, t) {
 	if (t) {
 		let t = document.body;
@@ -212,12 +212,12 @@ var nt = !1;
 function rt() {
 	nt || (nt = !0, document.addEventListener("reset", (e) => {
 		Promise.resolve().then(() => {
-			if (!e.defaultPrevented) for (let t of e.target.elements) t[fe]?.();
+			if (!e.defaultPrevented) for (let t of e.target.elements) t[pe]?.();
 		});
 	}, { capture: !0 }));
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/bindings/shared.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/bindings/shared.js
 function it(e) {
 	var t = U, n = W;
 	Hn(null), Un(null);
@@ -229,13 +229,13 @@ function it(e) {
 }
 function at(e, t, n, r = n) {
 	e.addEventListener(t, () => it(n));
-	let i = e[fe];
-	e[fe] = i ? () => {
+	let i = e[pe];
+	e[pe] = i ? () => {
 		i(), r(!0);
 	} : () => r(!0), rt();
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/async.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/async.js
 function ot(e, t, n, r) {
 	let i = Ke() ? ut : pt;
 	var a = e.filter((e) => !e.settled), o = t.map(i);
@@ -285,7 +285,7 @@ function lt() {
 /*#__NO_SIDE_EFFECTS__*/
 function ut(e) {
 	var t = 2 | _;
-	return W !== null && (W.f |= ne), {
+	return W !== null && (W.f |= C), {
 		ctx: M,
 		deps: null,
 		effects: null,
@@ -311,7 +311,7 @@ function ft(e, t, n) {
 		i = n.promise;
 		try {
 			Promise.resolve(e()).then(n.resolve, (e) => {
-				e !== pe && n.reject(e);
+				e !== me && n.reject(e);
 			}).finally(ct);
 		} catch (e) {
 			n.reject(e), ct();
@@ -324,7 +324,7 @@ function ft(e, t, n) {
 			s.add(n), c.async_deriveds.set(t, n);
 		}
 		let u = (e, t = void 0) => {
-			l?.(), s.delete(n), t !== dt && (c.activate(), t ? (a.f |= se, Wt(a, t)) : (a.f & 8388608 && (a.f ^= se), Wt(a, e)), c.deactivate());
+			l?.(), s.delete(n), t !== dt && (c.activate(), t ? (a.f |= ae, Wt(a, t)) : (a.f & 8388608 && (a.f ^= ae), Wt(a, e)), c.deactivate());
 		};
 		n.promise.then(u, (e) => u(null, e || "unknown"));
 	}), _n(() => {
@@ -377,14 +377,14 @@ function gt(e) {
 }
 function _t(e) {
 	if (e.effects !== null) for (let t of e.effects) (t.teardown || t.ac) && (t.teardown?.(), t.ac !== null && it(() => {
-		t.ac.abort(pe), t.ac = null;
+		t.ac.abort(me), t.ac = null;
 	}), t.fn !== null && (t.teardown = d), or(t, 0), On(t));
 }
 function vt(e) {
 	if (e.effects !== null) for (let t of e.effects) t.teardown && t.fn !== null && sr(t);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/batch.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/batch.js
 var yt = null, F = null, bt = null, xt = null, St = null, Ct = !1, wt = !1, Tt = null, Et = null, Dt = 0, Ot = 1, kt = class e {
 	id = Ot++;
 	#e = !1;
@@ -689,7 +689,7 @@ function It(e) {
 	for (var t = e.first; t !== null;) It(t), t = t.next;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/sources.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/sources.js
 var Lt = /* @__PURE__ */ new Set(), Rt = /* @__PURE__ */ new Map(), zt = !1;
 function Bt(e, t) {
 	return {
@@ -769,7 +769,7 @@ function qt(e, t, n) {
 	}
 }
 function Jt(t) {
-	if (typeof t != "object" || !t || ce in t || S in t) return t;
+	if (typeof t != "object" || !t || oe in t || se in t) return t;
 	let n = l(t);
 	if (n !== s && n !== c) return t;
 	var r = /* @__PURE__ */ new Map(), i = e(t), o = /* @__PURE__ */ I(0), u = null, d = Qn, f = (e) => {
@@ -799,7 +799,7 @@ function Jt(t) {
 			return !0;
 		},
 		get(e, n, i) {
-			if (n === ce) return t;
+			if (n === oe) return t;
 			var o = r.get(n), s = n in e;
 			if (o === void 0 && (!s || a(e, n)?.writable) && (o = f(() => /* @__PURE__ */ I(Jt(s ? e[n] : E), u)), r.set(n, o)), o !== void 0) {
 				var c = G(o);
@@ -824,7 +824,7 @@ function Jt(t) {
 			return n;
 		},
 		has(e, t) {
-			if (t === ce) return !0;
+			if (t === oe) return !0;
 			var n = r.get(t), i = n !== void 0 && n.v !== E || Reflect.has(e, t);
 			return (n !== void 0 || W !== null && (!i || a(e, t)?.writable)) && (n === void 0 && (n = f(() => /* @__PURE__ */ I(i ? Jt(e[t]) : E, u)), r.set(t, n)), G(n) === E) ? !1 : i;
 		},
@@ -866,7 +866,7 @@ function Jt(t) {
 }
 function Yt(e) {
 	try {
-		if (typeof e == "object" && e && ce in e) return e[ce];
+		if (typeof e == "object" && e && oe in e) return e[oe];
 	} catch {}
 	return e;
 }
@@ -878,7 +878,7 @@ function tn() {
 	if (Zt === void 0) {
 		Zt = window, Qt = /Firefox/.test(navigator.userAgent);
 		var e = Element.prototype, t = Node.prototype, n = Text.prototype;
-		$t = a(t, "firstChild").get, en = a(t, "nextSibling").get, u(e) && (e[de] = void 0, e[ue] = null, e[w] = void 0, e.__e = void 0), u(n) && (n[T] = void 0);
+		$t = a(t, "firstChild").get, en = a(t, "nextSibling").get, u(e) && (e[de] = void 0, e[ue] = null, e[w] = void 0, e.__e = void 0), u(n) && (n[fe] = void 0);
 	}
 }
 function nn(e = "") {
@@ -894,13 +894,13 @@ function an(e) {
 }
 function R(e, t) {
 	if (!D) return /* @__PURE__ */ rn(e);
-	var n = /* @__PURE__ */ rn(k);
-	if (n === null) n = k.appendChild(nn());
+	var n = /* @__PURE__ */ rn(O);
+	if (n === null) n = O.appendChild(nn());
 	else if (t && n.nodeType !== 3) {
 		var r = nn();
-		return n?.before(r), A(r), r;
+		return n?.before(r), k(r), r;
 	}
-	return t && un(n), A(n), n;
+	return t && un(n), k(n), n;
 }
 function on(e, t = !1) {
 	if (!D) {
@@ -908,31 +908,31 @@ function on(e, t = !1) {
 		return n instanceof Comment && n.data === "" ? /* @__PURE__ */ an(n) : n;
 	}
 	if (t) {
-		if (k?.nodeType !== 3) {
+		if (O?.nodeType !== 3) {
 			var r = nn();
-			return k?.before(r), A(r), r;
+			return O?.before(r), k(r), r;
 		}
-		un(k);
+		un(O);
 	}
-	return k;
+	return O;
 }
 function z(e, t = !1) {
 	if (!D) return /* @__PURE__ */ rn(e);
 	var n = R(e, t);
-	return j(e), n;
+	return A(e), n;
 }
 function B(e, t = 1, n = !1) {
-	let r = D ? k : e;
+	let r = D ? O : e;
 	for (var i; t--;) i = r, r = /* @__PURE__ */ an(r);
 	if (!D) return r;
 	if (n) {
 		if (r?.nodeType !== 3) {
 			var a = nn();
-			return r === null ? i?.after(a) : r.before(a), A(a), a;
+			return r === null ? i?.after(a) : r.before(a), k(a), a;
 		}
 		un(r);
 	}
-	return A(r), r;
+	return k(r), r;
 }
 function sn(e) {
 	e.textContent = "";
@@ -950,7 +950,7 @@ function un(e) {
 }
 function dn(e) {
 	var t = W;
-	if (t === null) return U.f |= se, e;
+	if (t === null) return U.f |= ae, e;
 	if (!(t.f & 32768) && !(t.f & 4)) throw e;
 	fn(e, t);
 }
@@ -972,7 +972,7 @@ function fn(e, t) {
 	}
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/effects.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/effects.js
 function pn(e) {
 	W === null && (U === null && Fe(e), Pe()), zn && Ne(e);
 }
@@ -1008,7 +1008,7 @@ function hn(e, t) {
 		} catch (e) {
 			throw H(r), e;
 		}
-		i.deps === null && i.teardown === null && i.nodes === null && i.first === i.last && !(i.f & 524288) && (i = i.first, e & 16 && e & 65536 && i !== null && (i.f |= te));
+		i.deps === null && i.teardown === null && i.nodes === null && i.first === i.last && !(i.f & 524288) && (i = i.first, e & 16 && e & 65536 && i !== null && (i.f |= ee));
 	}
 	if (i !== null && (i.parent = n, n !== null && mn(i, n), U !== null && U.f & 2 && !(e & 64))) {
 		var a = U;
@@ -1032,11 +1032,11 @@ function vn(e) {
 	} else return yn(e);
 }
 function yn(e) {
-	return hn(4 | re, e);
+	return hn(4 | te, e);
 }
 function bn(e) {
 	kt.ensure();
-	let t = hn(64 | ne, e);
+	let t = hn(64 | C, e);
 	return (e = {}) => new Promise((n) => {
 		e.outro ? Mn(t, () => {
 			H(t), n(void 0);
@@ -1047,7 +1047,7 @@ function xn(e) {
 	return hn(4, e);
 }
 function Sn(e) {
-	return hn(oe | ne, e);
+	return hn(ie | C, e);
 }
 function Cn(e, t = 0) {
 	return hn(8 | t, e);
@@ -1066,7 +1066,7 @@ function Tn(e, t = 0) {
 	return hn(h | t, e);
 }
 function En(e) {
-	return hn(32 | ne, e);
+	return hn(32 | C, e);
 }
 function Dn(e) {
 	var t = e.teardown;
@@ -1087,7 +1087,7 @@ function On(e, t = !1) {
 	for (e.first = e.last = null; n !== null;) {
 		let e = n.ac;
 		e !== null && it(() => {
-			e.abort(pe);
+			e.abort(me);
 		});
 		var r = n.next;
 		n.f & 64 ? n.parent = null : H(n, t), n = r;
@@ -1101,10 +1101,10 @@ function kn(e) {
 }
 function H(e, t = !0) {
 	var n = !1;
-	(t || e.f & 262144) && e.nodes !== null && e.nodes.end !== null && (An(e.nodes.start, e.nodes.end), n = !0), e.f |= x, On(e, t && !n), or(e, 0);
+	(t || e.f & 262144) && e.nodes !== null && e.nodes.end !== null && (An(e.nodes.start, e.nodes.end), n = !0), e.f |= S, On(e, t && !n), or(e, 0);
 	var r = e.nodes && e.nodes.t;
 	if (r !== null) for (let e of r) e.stop();
-	Dn(e), e.f ^= x, e.f |= ee;
+	Dn(e), e.f ^= S, e.f |= b;
 	var i = e.parent;
 	i !== null && i.first !== null && jn(e), e.next = e.prev = e.teardown = e.ctx = e.deps = e.fn = e.nodes = e.ac = e.b = null;
 }
@@ -1165,7 +1165,7 @@ function In(e, t) {
 	}
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/legacy.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/legacy.js
 var Ln = null, Rn = !1, zn = !1;
 function Bn(e) {
 	zn = e;
@@ -1215,12 +1215,12 @@ function nr(e, t, n = !0) {
 function rr(e) {
 	var t = Kn, n = qn, r = Jn, i = U, a = Wn, o = M, s = Vn, c = Qn, l = e.f;
 	Kn = null, qn = 0, Jn = null, U = l & 96 ? null : e, Wn = null, He(e.ctx), Vn = !1, Qn = ++Zn, e.ac !== null && (it(() => {
-		e.ac.abort(pe);
+		e.ac.abort(me);
 	}), e.ac = null);
 	try {
-		e.f |= ae;
+		e.f |= re;
 		var u = e.fn, d = u();
-		e.f |= b;
+		e.f |= x;
 		var f = ir(e);
 		if (Ke() && Jn !== null && !Vn && f !== null && !(e.f & 6146)) for (var p = 0; p < Jn.length; p++) nr(Jn[p], e);
 		if (i !== null && i !== e) {
@@ -1228,11 +1228,11 @@ function rr(e) {
 			if (t !== null) for (let e of t) e.rv = Zn;
 			Jn !== null && (r === null ? r = Jn : r.push(...Jn));
 		}
-		return e.f & 8388608 && (e.f ^= se), d;
+		return e.f & 8388608 && (e.f ^= ae), d;
 	} catch (t) {
 		return ir(e), dn(t);
 	} finally {
-		e.f ^= ae, Kn = t, qn = n, Jn = r, U = i, Wn = a, He(o), Vn = s, Qn = c;
+		e.f ^= re, Kn = t, qn = n, Jn = r, U = i, Wn = a, He(o), Vn = s, Qn = c;
 	}
 }
 function ir(e) {
@@ -1257,7 +1257,7 @@ function ar(e, r) {
 	if (i === null && r.f & 2 && (Kn === null || !n.call(Kn, r))) {
 		var s = r;
 		s.f & 512 && (s.f ^= 512), s.v !== E && Qe(s), s.ac !== null && it(() => {
-			s.ac.abort(pe), s.ac = null, N(s, _);
+			s.ac.abort(me), s.ac = null, N(s, _);
 		}), _t(s), or(s, 0);
 	}
 }
@@ -1301,7 +1301,7 @@ function G(e) {
 			var o = a.v;
 			return (!(a.f & 1024) && a.reactions !== null || ur(a)) && (o = ht(a)), Rt.set(a, o), o;
 		}
-		var s = !(a.f & 512) && !Vn && U !== null && (Rn || !!(U.f & 512)), c = (a.f & b) === 0;
+		var s = !(a.f & 512) && !Vn && U !== null && (Rn || !!(U.f & 512)), c = (a.f & x) === 0;
 		tr(a) && (s && (a.f |= 512), gt(a)), s && !c && (vt(a), lr(a));
 	}
 	if (xt?.has(e)) return xt.get(e);
@@ -1327,10 +1327,10 @@ function dr(e) {
 }
 function fr(e) {
 	if (!(typeof e != "object" || !e || e instanceof EventTarget)) {
-		if (ce in e) pr(e);
+		if (oe in e) pr(e);
 		else if (!Array.isArray(e)) for (let t in e) {
 			let n = e[t];
-			typeof n == "object" && n && ce in n && pr(n);
+			typeof n == "object" && n && oe in n && pr(n);
 		}
 	}
 }
@@ -1406,7 +1406,7 @@ function xr(e) {
 	return br.includes(e);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dev/css.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dev/css.js
 var Sr = Symbol("events"), Cr = /* @__PURE__ */ new Set(), wr = /* @__PURE__ */ new Set();
 function Tr(e, t, n, r = {}) {
 	function i(e) {
@@ -1481,7 +1481,7 @@ function Ar(e) {
 	}
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/reconciler.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/reconciler.js
 var jr = globalThis?.window?.trustedTypes && /* @__PURE__ */ globalThis.window.trustedTypes.createPolicy("svelte-trusted-html", { createHTML: (e) => e });
 function Mr(e) {
 	return jr?.createHTML(e) ?? e;
@@ -1491,7 +1491,7 @@ function Nr(e) {
 	return t.innerHTML = Mr(e.replaceAll("<!>", "<!---->")), t.content;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/template.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/template.js
 function Pr(e, t) {
 	var n = W;
 	n.nodes === null && (n.nodes = {
@@ -1505,7 +1505,7 @@ function Pr(e, t) {
 function q(e, t) {
 	var n = !!(t & 1), r = !!(t & 2), i, a = !e.startsWith("<!>");
 	return () => {
-		if (D) return Pr(k, null), k;
+		if (D) return Pr(O, null), O;
 		i === void 0 && (i = Nr(a ? e : "<!>" + e), n || (i = /* @__PURE__ */ rn(i)));
 		var t = r || Qt ? document.importNode(i, !0) : i.cloneNode(!0);
 		if (n) {
@@ -1516,20 +1516,20 @@ function q(e, t) {
 	};
 }
 function Fr() {
-	if (D) return Pr(k, null), k;
+	if (D) return Pr(O, null), O;
 	var e = document.createDocumentFragment(), t = document.createComment(""), n = nn();
 	return e.append(t, n), Pr(t, n), e;
 }
 function J(e, t) {
 	if (D) {
 		var n = W;
-		(!(n.f & 32768) || n.nodes.end === null) && (n.nodes.end = k), Ce();
+		(!(n.f & 32768) || n.nodes.end === null) && (n.nodes.end = O), we();
 		return;
 	}
 	e !== null && e.before(t);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/reactivity/create-subscriber.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/reactivity/create-subscriber.js
 function Ir(e) {
 	let t = 0, n = Bt(0), r;
 	return () => {
@@ -1541,8 +1541,8 @@ function Ir(e) {
 	};
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/blocks/boundary.js
-var Lr = te | ne;
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/blocks/boundary.js
+var Lr = ee | C;
 function Rr(e, t, n, r) {
 	new zr(e, t, n, r);
 }
@@ -1551,7 +1551,7 @@ var zr = class {
 	is_pending = !1;
 	transform_error;
 	#e;
-	#t = D ? k : null;
+	#t = D ? O : null;
 	#n;
 	#r;
 	#i;
@@ -1575,14 +1575,14 @@ var zr = class {
 		}, this.parent = W.b, this.transform_error = r ?? this.parent?.transform_error ?? ((e) => e), this.#i = wn(() => {
 			if (D) {
 				let e = this.#t;
-				Ce();
+				we();
 				let t = e.data === "[!";
 				if (e.data.startsWith("[?")) {
 					let t = JSON.parse(e.data.slice(2));
 					this.#_(t);
 				} else t ? this.#y() : this.#g();
 			} else this.#b();
-		}, Lr), D && (this.#e = k);
+		}, Lr), D && (this.#e = O);
 	}
 	#g() {
 		try {
@@ -1704,7 +1704,7 @@ var zr = class {
 		})) : this.#w(e);
 	}
 	#w(e) {
-		this.#a &&= (H(this.#a), null), this.#o &&= (H(this.#o), null), this.#s &&= (H(this.#s), null), D && (A(this.#t), we(), A(Te()));
+		this.#a &&= (H(this.#a), null), this.#o &&= (H(this.#o), null), this.#s &&= (H(this.#s), null), D && (k(this.#t), Te(), k(Ee()));
 		let t = this.#n.failed, n = (e) => {
 			let { reset: n, invoke_onerror: r } = this.#v(e);
 			r(), t && (this.#s = this.#S(() => {
@@ -1732,7 +1732,7 @@ var zr = class {
 };
 function Y(e, t) {
 	var n = t == null ? "" : typeof t == "object" ? `${t}` : t;
-	n !== (e[T] ??= e.nodeValue) && (e[T] = n, e.nodeValue = `${n}`);
+	n !== (e[fe] ??= e.nodeValue) && (e[fe] = n, e.nodeValue = `${n}`);
 }
 function Br(e, t) {
 	return Hr(e, t);
@@ -1745,7 +1745,7 @@ function Hr(e, { target: t, anchor: n, props: i = {}, events: a, context: o, int
 		Rr(s, { pending: () => {} }, (t) => {
 			Ue({});
 			var n = M;
-			if (o && (n.c = o), a && (i.$$events = a), D && Pr(t, null), l = e(t, i) || Ge(), D && (W.nodes.end = k, k === null || k.nodeType !== 8 || k.data !== "]")) throw be(), he;
+			if (o && (n.c = o), a && (i.$$events = a), D && Pr(t, null), l = e(t, i) || Ge(), D && (W.nodes.end = O, O === null || O.nodeType !== 8 || O.data !== "]")) throw be(), T;
 			We();
 		}, c);
 		var u = /* @__PURE__ */ new Set(), d = (e) => {
@@ -1779,7 +1779,7 @@ function Wr(e, t) {
 	return n ? (Ur.delete(e), n(t)) : Promise.resolve();
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/blocks/branches.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/blocks/branches.js
 var Gr = class {
 	anchor;
 	#e = /* @__PURE__ */ new Map();
@@ -1839,21 +1839,21 @@ var Gr = class {
 			for (let [t, r] of this.#t) t === e ? n.unskip_effect(r) : n.skip_effect(r);
 			for (let [t, r] of this.#n) t === e ? n.unskip_effect(r.effect) : n.skip_effect(r.effect);
 			n.oncommit(this.#a), n.ondiscard(this.#o);
-		} else D && (this.anchor = k), this.#a(n);
+		} else D && (this.anchor = O), this.#a(n);
 	}
 };
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/blocks/if.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/blocks/if.js
 function X(e, t, n = !1) {
 	var r;
-	D && (r = k, Ce());
-	var i = new Gr(e), a = n ? te : 0;
+	D && (r = O, we());
+	var i = new Gr(e), a = n ? ee : 0;
 	function o(e, t) {
 		if (D) {
-			var n = Ee(r);
+			var n = j(r);
 			if (e !== parseInt(n.substring(1))) {
-				var a = Te();
-				A(a), i.anchor = a, O(!1), i.ensure(e, t), O(!0);
+				var a = Ee();
+				k(a), i.anchor = a, Ce(!1), i.ensure(e, t), Ce(!0);
 				return;
 			}
 		}
@@ -1867,10 +1867,10 @@ function X(e, t, n = !1) {
 	}, a);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/blocks/key.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/blocks/key.js
 var Kr = Symbol("NaN");
 function qr(e, t, n) {
-	D && Ce();
+	D && we();
 	var r = new Gr(e), i = !Ke();
 	wn(() => {
 		var e = t();
@@ -1878,7 +1878,7 @@ function qr(e, t, n) {
 	});
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/blocks/each.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/blocks/each.js
 function Jr(e, t) {
 	return t;
 }
@@ -1914,7 +1914,7 @@ function Xr(e, t, n = !0) {
 	}
 	for (var i = 0; i < t.length; i++) {
 		var a = t[i];
-		r?.has(a) ? (a.f |= ie, In(a, document.createDocumentFragment())) : H(t[i], n);
+		r?.has(a) ? (a.f |= ne, In(a, document.createDocumentFragment())) : H(t[i], n);
 	}
 }
 var Zr;
@@ -1922,15 +1922,15 @@ function Z(t, n, i, a, o, s = null) {
 	var c = t, l = /* @__PURE__ */ new Map();
 	if (n & 4) {
 		var u = t;
-		c = D ? A(/* @__PURE__ */ rn(u)) : u.appendChild(nn());
+		c = D ? k(/* @__PURE__ */ rn(u)) : u.appendChild(nn());
 	}
-	D && Ce();
+	D && we();
 	var d = null, f = /* @__PURE__ */ pt(() => {
 		var t = i();
 		return e(t) ? t : t == null ? [] : r(t);
 	}), p, m = /* @__PURE__ */ new Map(), h = !0;
 	function g(e) {
-		v.effect.f & 16384 || (v.pending.delete(e), v.fallback = d, $r(v, p, c, n, a), d !== null && (p.length === 0 ? d.f & 33554432 ? (d.f ^= ie, ti(d, null, c)) : Pn(d) : Mn(d, () => {
+		v.effect.f & 16384 || (v.pending.delete(e), v.fallback = d, $r(v, p, c, n, a), d !== null && (p.length === 0 ? d.f & 33554432 ? (d.f ^= ne, ti(d, null, c)) : Pn(d) : Mn(d, () => {
 			d = null;
 		})));
 	}
@@ -1942,19 +1942,19 @@ function Z(t, n, i, a, o, s = null) {
 			p = G(f);
 			var e = p.length;
 			let t = !1;
-			D && Ee(c) === "[!" != (e === 0) && (c = Te(), A(c), O(!1), t = !0);
+			D && j(c) === "[!" != (e === 0) && (c = Ee(), k(c), Ce(!1), t = !0);
 			for (var r = /* @__PURE__ */ new Set(), u = F, v = cn(), y = 0; y < e; y += 1) {
-				D && k.nodeType === 8 && k.data === "]" && (c = k, t = !0, O(!1));
-				var ee = p[y], b = a(ee, y), x = h ? null : l.get(b);
-				x ? (x.v && Wt(x.v, ee), x.i && Wt(x.i, y), v && u.unskip_effect(x.e)) : (x = ei(l, h ? c : Zr ??= nn(), ee, b, y, o, n, i), h || (x.e.f |= ie), l.set(b, x)), r.add(b);
+				D && O.nodeType === 8 && O.data === "]" && (c = O, t = !0, Ce(!1));
+				var b = p[y], x = a(b, y), S = h ? null : l.get(x);
+				S ? (S.v && Wt(S.v, b), S.i && Wt(S.i, y), v && u.unskip_effect(S.e)) : (S = ei(l, h ? c : Zr ??= nn(), b, x, y, o, n, i), h || (S.e.f |= ne), l.set(x, S)), r.add(x);
 			}
-			if (e === 0 && s && !d && (h ? d = En(() => s(c)) : (d = En(() => s(Zr ??= nn())), d.f |= ie)), e > r.size && Me("", "", ""), D && e > 0 && A(Te()), !h) {
+			if (e === 0 && s && !d && (h ? d = En(() => s(c)) : (d = En(() => s(Zr ??= nn())), d.f |= ne)), e > r.size && Me("", "", ""), D && e > 0 && k(Ee()), !h) {
 				if (m.set(u, r), v) {
 					for (let [e, t] of l) r.has(e) || u.skip_effect(t.e);
 					u.oncommit(g), u.ondiscard(_);
 				} else g(u);
 			}
-			t && O(!0), G(f);
+			t && Ce(!0), G(f);
 		}),
 		flags: n,
 		items: l,
@@ -1962,7 +1962,7 @@ function Z(t, n, i, a, o, s = null) {
 		outrogroups: null,
 		fallback: d
 	};
-	h = !1, D && (c = k);
+	h = !1, D && (c = O);
 }
 function Qr(e) {
 	for (; e !== null && !(e.f & 32);) e = e.next;
@@ -1974,7 +1974,7 @@ function $r(e, t, n, i, a) {
 	for (v = 0; v < s; v += 1) {
 		if (h = t[v], g = a(h, v), _ = c.get(g).e, e.outrogroups !== null) for (let t of e.outrogroups) t.pending.delete(_), t.done.delete(_);
 		if (_.f & 8192 && (Pn(_), o && (_.nodes?.a?.unfix(), (f ??= /* @__PURE__ */ new Set()).delete(_))), _.f & 33554432) {
-			if (_.f ^= ie, _ === l) ti(_, null, n);
+			if (_.f ^= ne, _ === l) ti(_, null, n);
 			else {
 				var y = d ? d.next : l;
 				_ === e.effect.last && (e.effect.last = _.prev), _.prev && (_.prev.next = _.next), _.next && (_.next.prev = _.prev), ni(e, d, _), ni(e, _, y), ti(_, y, n), d = _, p = [], m = [], l = Qr(d.next);
@@ -1984,12 +1984,12 @@ function $r(e, t, n, i, a) {
 		if (_ !== l) {
 			if (u !== void 0 && u.has(_)) {
 				if (p.length < m.length) {
-					var ee = m[0], b;
-					d = ee.prev;
-					var x = p[0], te = p[p.length - 1];
-					for (b = 0; b < p.length; b += 1) ti(p[b], ee, n);
-					for (b = 0; b < m.length; b += 1) u.delete(m[b]);
-					ni(e, x.prev, te.next), ni(e, d, x), ni(e, te, ee), l = ee, d = te, --v, p = [], m = [];
+					var b = m[0], x;
+					d = b.prev;
+					var S = p[0], ee = p[p.length - 1];
+					for (x = 0; x < p.length; x += 1) ti(p[x], b, n);
+					for (x = 0; x < m.length; x += 1) u.delete(m[x]);
+					ni(e, S.prev, ee.next), ni(e, d, S), ni(e, ee, b), l = b, d = ee, --v, p = [], m = [];
 				} else u.delete(_), ti(_, l, n), ni(e, _.prev, _.next), ni(e, _, d === null ? e.effect.first : d.next), ni(e, d, _), d = _;
 				continue;
 			}
@@ -2003,17 +2003,17 @@ function $r(e, t, n, i, a) {
 		e.outrogroups.size === 0 && (e.outrogroups = null);
 	}
 	if (l !== null || u !== void 0) {
-		var ne = [];
-		if (u !== void 0) for (_ of u) _.f & 8192 || ne.push(_);
-		for (; l !== null;) !(l.f & 8192) && l !== e.fallback && ne.push(l), l = Qr(l.next);
-		var re = ne.length;
-		if (re > 0) {
-			var ae = i & 4 && s === 0 ? n : null;
+		var C = [];
+		if (u !== void 0) for (_ of u) _.f & 8192 || C.push(_);
+		for (; l !== null;) !(l.f & 8192) && l !== e.fallback && C.push(l), l = Qr(l.next);
+		var te = C.length;
+		if (te > 0) {
+			var re = i & 4 && s === 0 ? n : null;
 			if (o) {
-				for (v = 0; v < re; v += 1) ne[v].nodes?.a?.measure();
-				for (v = 0; v < re; v += 1) ne[v].nodes?.a?.fix();
+				for (v = 0; v < te; v += 1) C[v].nodes?.a?.measure();
+				for (v = 0; v < te; v += 1) C[v].nodes?.a?.fix();
 			}
-			Yr(e, ne, ae);
+			Yr(e, C, re);
 		}
 	}
 	o && Ye(() => {
@@ -2044,12 +2044,12 @@ function ri(e, t, n = !1, r = !1, i = !1, a = !1) {
 	var o = e, s = "";
 	if (n) {
 		var c = e;
-		D && (o = A(/* @__PURE__ */ rn(c)));
+		D && (o = k(/* @__PURE__ */ rn(c)));
 	}
 	V(() => {
 		var e = W;
 		if (s === (s = t() ?? "")) {
-			D && Ce();
+			D && we();
 			return;
 		}
 		if (n && !D) {
@@ -2058,9 +2058,9 @@ function ri(e, t, n = !1, r = !1, i = !1, a = !1) {
 		}
 		if (e.nodes !== null && (An(e.nodes.start, e.nodes.end), e.nodes = null), s !== "") {
 			if (D) {
-				for (var a = k.data, l = Ce(), u = l; l !== null && (l.nodeType !== 8 || l.data !== "");) u = l, l = /* @__PURE__ */ an(l);
-				if (l === null) throw be(), he;
-				Pr(k, u), o = A(l);
+				for (var a = O.data, l = we(), u = l; l !== null && (l.nodeType !== 8 || l.data !== "");) u = l, l = /* @__PURE__ */ an(l);
+				if (l === null) throw be(), T;
+				Pr(O, u), o = k(l);
 				return;
 			}
 			var d = ln(r ? "svg" : i ? "math" : "template", r ? _e : i ? ve : void 0);
@@ -2072,7 +2072,7 @@ function ri(e, t, n = !1, r = !1, i = !1, a = !1) {
 	});
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/css.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/css.js
 function ii(e, t) {
 	xn(() => {
 		e = W?.parent?.nodes?.start ?? e;
@@ -2084,7 +2084,7 @@ function ii(e, t) {
 	});
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/actions.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/actions.js
 function ai(e, t, n) {
 	xn(() => {
 		var r = dr(() => t(e, n?.()) || {});
@@ -2099,7 +2099,7 @@ function ai(e, t, n) {
 	});
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/attachments.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/attachments.js
 function oi(e, t) {
 	var n = void 0, r;
 	Tn(() => {
@@ -2109,7 +2109,7 @@ function oi(e, t) {
 	});
 }
 //#endregion
-//#region ui/node_modules/clsx/dist/clsx.mjs
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/clsx/dist/clsx.mjs
 function si(e) {
 	var t, n, r = "";
 	if (typeof e == "string" || typeof e == "number") r += e;
@@ -2126,7 +2126,7 @@ function ci() {
 	return r;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/shared/attributes.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/shared/attributes.js
 function li(e) {
 	return typeof e == "object" ? ci(e) : e ?? "";
 }
@@ -2185,7 +2185,7 @@ function mi(e, t) {
 	return e == null ? null : String(e);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/class.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/class.js
 function Q(e, t, n, r, i, a) {
 	var o = e[de];
 	if (D || o !== n || o === void 0) {
@@ -2198,7 +2198,7 @@ function Q(e, t, n, r, i, a) {
 	return a;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/style.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/style.js
 function hi(e, t = {}, n, r) {
 	for (var i in n) {
 		var a = n[i];
@@ -2214,7 +2214,7 @@ function gi(e, t, n, r) {
 	return r;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/bindings/select.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/bindings/select.js
 function _i(e, t) {
 	t ? e.hasAttribute("selected") || e.setAttribute("selected", "") : e.removeAttribute("selected");
 }
@@ -2277,8 +2277,8 @@ function Ci(e) {
 	return !1;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/attributes.js
-var wi = Symbol("class"), Ti = Symbol("style"), Ei = Symbol("is custom element"), Di = Symbol("is html"), Oi = me ? "link" : "LINK", ki = me ? "input" : "INPUT", Ai = me ? "option" : "OPTION", ji = me ? "select" : "SELECT";
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/attributes.js
+var wi = Symbol("class"), Ti = Symbol("style"), Ei = Symbol("is custom element"), Di = Symbol("is html"), Oi = he ? "link" : "LINK", ki = he ? "input" : "INPUT", Ai = he ? "option" : "OPTION", ji = he ? "select" : "SELECT";
 function Mi(e) {
 	if (D) {
 		var t = !1, n = () => {
@@ -2293,7 +2293,7 @@ function Mi(e) {
 				}
 			}
 		};
-		e[fe] = n, Ye(n), rt();
+		e[pe] = n, Ye(n), rt();
 	}
 }
 function $(e, t, n, r) {
@@ -2304,7 +2304,7 @@ function Ni(e, t, n, r, i = !1, a = !1) {
 	D && i && e.nodeName === ki && ("defaultValue" in n || "defaultChecked" in n || Mi(e));
 	var o = Fi(e), s = o[Ei], c = !o[Di];
 	let l = D && s;
-	l && O(!1);
+	l && Ce(!1);
 	var u = t || {}, d = e.nodeName === Ai, f = e.nodeName === ji;
 	for (var p in t) !(p in n) && p[0] + p[1] !== "$$" && (n[p] = null);
 	n.class ? n.class = li(n.class) : (r || n[wi]) && (n.class = null), n[Ti] && (n.style ??= null);
@@ -2353,9 +2353,9 @@ function Ni(e, t, n, r, i = !1, a = !1) {
 				else {
 					var y = i;
 					c || (y = yr(y));
-					var ee = y === "defaultValue" || y === "defaultChecked";
+					var b = y === "defaultValue" || y === "defaultChecked";
 					if (f && y === "defaultValue") continue;
-					if (l == null && !s && !ee) {
+					if (l == null && !s && !b) {
 						if (o[i] = null, y === "value" || y === "checked") {
 							let n = e, r = t === void 0;
 							if (y === "value") {
@@ -2366,12 +2366,12 @@ function Ni(e, t, n, r, i = !1, a = !1) {
 								n.removeAttribute(y), n.defaultChecked = e, n.checked = r ? e : !1;
 							}
 						} else e.removeAttribute(i);
-					} else ee || (s || typeof l != "string") && m.has(y) ? (e[y] = l, y in o && (o[y] = E)) : typeof l != "function" && $(e, y, l, a);
+					} else b || (s || typeof l != "string") && m.has(y) ? (e[y] = l, y in o && (o[y] = E)) : typeof l != "function" && $(e, y, l, a);
 				}
 			}
 		}
 	}
-	return l && O(!0), u;
+	return l && Ce(!0), u;
 }
 function Pi(e, t, n = [], r = [], i = [], a, o = !1, s = !1) {
 	ot(i, n, r, (n) => {
@@ -2416,7 +2416,7 @@ function Li(e) {
 	return n;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/bindings/input.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/bindings/input.js
 function Ri(e, t, n = t) {
 	var r = /* @__PURE__ */ new WeakSet();
 	at(e, "input", async (i) => {
@@ -2473,9 +2473,9 @@ function Hi(e, t, n) {
 	xn(() => (dr(() => n(e[t])), r));
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/bindings/this.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/bindings/this.js
 function Ui(e, t) {
-	return e === t || e?.[ce] === t;
+	return e === t || e?.[oe] === t;
 }
 function Wi(e = Ge(), t, n, r) {
 	var i = M.r, a = W;
@@ -2498,7 +2498,7 @@ function Wi(e = Ge(), t, n, r) {
 	}), e;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/store.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/store.js
 var Gi = !1;
 function Ki(e) {
 	var t = Gi;
@@ -2509,12 +2509,12 @@ function Ki(e) {
 	}
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/props.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/props.js
 function qi(e, t, n, r) {
 	var i = !0, o = !!(n & 8), s = !!(n & 16), c = r, l = !0, u = void 0, d = () => s && i ? (u ??= /* @__PURE__ */ ut(r), G(u)) : (l && (l = !1, c = s ? dr(r) : r), c);
 	let f;
 	if (o) {
-		var p = ce in e || C in e;
+		var p = oe in e || ce in e;
 		f = a(e, t)?.set ?? (p && t in e ? (n) => e[t] = n : void 0);
 	}
 	var m, h = !1;
@@ -2535,13 +2535,13 @@ function qi(e, t, n, r) {
 	}
 	var v = !1, y = (n & 1 ? ut : pt)(() => (v = !1, g()));
 	o && G(y);
-	var ee = W;
+	var b = W;
 	return (function(e, t) {
 		if (arguments.length > 0) {
 			let n = t ? G(y) : i && o ? Jt(e) : e;
 			return L(y, n), v = !0, c !== void 0 && (c = n), e;
 		}
-		return zn && v || ee.f & 16384 ? y.v : G(y);
+		return zn && v || b.f & 16384 ? y.v : G(y);
 	});
 }
 function Ji(e) {
@@ -2551,7 +2551,7 @@ function Ji(e) {
 	});
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/disclose-version.js
+//#region ../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/disclose-version.js
 typeof window < "u" && ((window.__svelte ??= {}).v ??= /* @__PURE__ */ new Set()).add("5");
 //#endregion
 //#region ui/src/lib/prefs.ts
@@ -2570,27 +2570,28 @@ function Xi(e, t) {
 }
 //#endregion
 //#region ui/src/lib/text.ts
-var Zi = (e) => String(e instanceof Error ? e.message : e);
-//#endregion
-//#region plugins/beta/catalog/ui/src/library.ts
-function Qi(e, t) {
+var Zi = (e) => String(e instanceof Error ? e.message : e), Qi = new Intl.Collator(void 0, {
+	numeric: !0,
+	sensitivity: "base"
+});
+function $i(e, t) {
 	let n = (e) => e.sort[t.id] ?? "";
 	return [...e].sort((e, r) => {
-		let i = n(e), a = n(r), o = typeof i == "number" && typeof a == "number" ? i - a : String(i).localeCompare(String(a), void 0, { numeric: !0 });
+		let i = n(e), a = n(r), o = typeof i == "number" && typeof a == "number" ? i - a : Qi.compare(String(i), String(a));
 		return (t.desc ? -o : o) || e.id.localeCompare(r.id);
 	});
 }
-function $i(e, t) {
+function ea(e, t) {
 	let n = e.text.toLowerCase();
 	return t.toLowerCase().split(/\s+/).filter(Boolean).every((e) => n.includes(e));
 }
-var ea = " › ", ta = (e, t) => (e ?? []).some((e) => e === t || e.startsWith(t + " › "));
-function na(e, t) {
+var ta = " › ", na = (e, t) => (e ?? []).some((e) => e === t || e.startsWith(t + " › "));
+function ra(e, t) {
 	let n = /* @__PURE__ */ new Map();
 	for (let [t, r] of e) {
-		let e = t.split(ea);
+		let e = t.split(ta);
 		e.forEach((t, i) => {
-			let a = e.slice(0, i + 1).join(ea), o = n.get(a) ?? {
+			let a = e.slice(0, i + 1).join(ta), o = n.get(a) ?? {
 				path: a,
 				name: t,
 				depth: i,
@@ -2601,17 +2602,17 @@ function na(e, t) {
 		});
 	}
 	return [...n.values()].sort((e, t) => e.path.localeCompare(t.path)).filter((e) => {
-		let n = e.path.split(ea);
-		return n.slice(0, -1).every((e, r) => t.has(n.slice(0, r + 1).join(ea)));
+		let n = e.path.split(ta);
+		return n.slice(0, -1).every((e, r) => t.has(n.slice(0, r + 1).join(ta)));
 	});
 }
-function ra(e, t, n = []) {
+function ia(e, t, n = []) {
 	let r = /* @__PURE__ */ new Map();
 	for (let n of e) for (let e of t(n) ?? []) r.set(e, (r.get(e) ?? 0) + 1);
 	let i = [...r].filter(([e]) => !n.includes(e)).sort((e, t) => e[0].localeCompare(t[0]));
 	return [...n.map((e) => [e, r.get(e) ?? 0]), ...i];
 }
-function ia(e, t, n, r) {
+function aa(e, t, n, r) {
 	let i = /* @__PURE__ */ new Map(), a = (e) => i.get(e.id), o = (e) => (typeof e.tabs == "function" ? e.tabs() : e.tabs) ?? [], s = (e, t) => {
 		let n = o(e);
 		return n.length ? n.map((e) => ({
@@ -2631,7 +2632,7 @@ function ia(e, t, n, r) {
 	}, l = (e, t) => {
 		let n = /* @__PURE__ */ new Set();
 		return e.flat().filter((e) => !n.has(t(e)) && !!n.add(t(e)));
-	}, u = (e) => r.find((t) => t[e]);
+	}, u = (e) => r.find((t) => t[e]), d = u("drop")?.drop;
 	return {
 		id: e,
 		title: t,
@@ -2668,7 +2669,11 @@ function ia(e, t, n, r) {
 			};
 		},
 		add: u("add")?.add,
-		drop: u("drop")?.drop,
+		drop: d ? {
+			hint: d.hint,
+			accept: d.accept,
+			run: (e, t) => d.run(e, t)
+		} : void 0,
 		tools: r.some((e) => e.tools) ? async () => (await Promise.all(r.map((e) => e.tools?.() ?? []))).flat() : void 0,
 		watch: (e) => {
 			let t = r.map((t) => t.watch?.(e));
@@ -2690,15 +2695,15 @@ function ia(e, t, n, r) {
 		}
 	};
 }
-var aa = (e) => e.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), oa = (e) => e.subject ?? aa(e.title), sa = /* @__PURE__ */ new Map();
-function ca(e) {
+var oa = (e) => e.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), sa = (e) => e.subject ?? oa(e.title), ca = /* @__PURE__ */ new Map();
+function la(e) {
 	let t = /* @__PURE__ */ new Map();
-	for (let n of e) t.set(oa(n), [...t.get(oa(n)) ?? [], n]);
+	for (let n of e) t.set(sa(n), [...t.get(sa(n)) ?? [], n]);
 	return [...t].map(([e, t]) => {
 		if (t.length === 1) return t[0];
-		let n = t.map((e) => e.id).join("\n"), r = sa.get(n);
+		let n = t.map((e) => e.id).join("\n"), r = ca.get(n);
 		if (!r || t.some((e, t) => r.members[t] !== e.id)) {
-			let i = t.find((t) => aa(t.title) === e)?.title ?? t[0].title, a = t[0].icon;
+			let i = t.find((t) => oa(t.title) === e)?.title ?? t[0].title, a = t[0].icon;
 			r = {
 				id: t[0].id,
 				title: i,
@@ -2706,30 +2711,30 @@ function ca(e) {
 				by: t[0].by,
 				subject: e,
 				members: t.map((e) => e.id),
-				source: async () => ia(t[0].id, i, a, await Promise.all(t.map((e) => e.source())))
-			}, sa.set(n, r);
+				source: async () => aa(t[0].id, i, a, await Promise.all(t.map((e) => e.source())))
+			}, ca.set(n, r);
 		}
 		return r;
 	});
 }
 //#endregion
 //#region ui/src/lib/keys.ts
-var la = !1, ua = /^(Meta|OS|Super|Hyper)(Left|Right)?$/;
+var ua = !1, da = /^(Meta|OS|Super|Hyper)(Left|Right)?$/;
 if (typeof window < "u") {
 	let e = (e) => (t) => {
-		(ua.test(t.key) || ua.test(t.code)) && (la = e);
+		(da.test(t.key) || da.test(t.code)) && (ua = e);
 	};
 	window.addEventListener("keydown", e(!0), !0), window.addEventListener("keyup", e(!1), !0), window.addEventListener("blur", () => {
-		la = !1;
+		ua = !1;
 	});
 }
-function da(e) {
-	return e.metaKey || la || e.getModifierState?.("Super") || e.getModifierState?.("OS") || !1;
+function fa(e) {
+	return e.metaKey || ua || e.getModifierState?.("Super") || e.getModifierState?.("OS") || !1;
 }
 //#endregion
 //#region ui/src/lib/marquee.ts
-var fa = 5;
-function pa(e, t) {
+var pa = 5;
+function ma(e, t) {
 	let n = t, r = null, i = null, a = {
 		x: 0,
 		y: 0
@@ -2777,7 +2782,7 @@ function pa(e, t) {
 			y: t.clientY
 		}, !i) {
 			let n = o(t.clientX, t.clientY);
-			if (Math.hypot(n.x - r.x, n.y - r.y) < fa) return;
+			if (Math.hypot(n.x - r.x, n.y - r.y) < pa) return;
 			i = document.createElement("div"), i.className = "marquee", e.append(i), e.setPointerCapture(t.pointerId), window.getSelection()?.removeAllRanges();
 		}
 		let n = e.getBoundingClientRect();
@@ -2809,29 +2814,29 @@ function pa(e, t) {
 }
 //#endregion
 //#region ui/src/lib/back.ts
-var ma = globalThis, ha = ma.kandinskyBackStack ??= ma.atlasBackStack ?? [];
-ma.atlasBackStack = ha;
-function ga(e, t) {
+var ha = globalThis, ga = ha.kandinskyBackStack ??= ha.atlasBackStack ?? [];
+ha.atlasBackStack = ga;
+function _a(e, t) {
 	let n = {
 		close: e,
 		shown: t
 	};
-	return ha.push(n), () => {
-		let e = ha.lastIndexOf(n);
-		e >= 0 && ha.splice(e, 1);
+	return ga.push(n), () => {
+		let e = ga.lastIndexOf(n);
+		e >= 0 && ga.splice(e, 1);
 	};
 }
 //#endregion
 //#region ui/src/components/Select.svelte
-var _a = /* @__PURE__ */ q("<span class=\"n svelte-ifm9j5\"> </span>"), va = /* @__PURE__ */ q("<li role=\"option\"><span class=\"l svelte-ifm9j5\"> </span><!></li>"), ya = /* @__PURE__ */ q("<ul class=\"menu svelte-ifm9j5\" role=\"listbox\" tabindex=\"-1\"></ul>"), ba = /* @__PURE__ */ q("<div class=\"select svelte-ifm9j5\"><button type=\"button\" class=\"trigger svelte-ifm9j5\" aria-haspopup=\"listbox\"><span class=\"cur svelte-ifm9j5\"> </span> <svg viewBox=\"0 0 16 16\" width=\"12\" height=\"12\" aria-hidden=\"true\" class=\"svelte-ifm9j5\"><path d=\"M4 6l4 4 4-4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path></svg></button> <!></div>"), xa = {
+var va = /* @__PURE__ */ q("<span class=\"n svelte-ifm9j5\"> </span>"), ya = /* @__PURE__ */ q("<li role=\"option\"><span class=\"l svelte-ifm9j5\"> </span><!></li>"), ba = /* @__PURE__ */ q("<ul class=\"menu svelte-ifm9j5\" role=\"listbox\" tabindex=\"-1\"></ul>"), xa = /* @__PURE__ */ q("<div class=\"select svelte-ifm9j5\"><button type=\"button\" class=\"trigger svelte-ifm9j5\" aria-haspopup=\"listbox\"><span class=\"cur svelte-ifm9j5\"> </span> <svg viewBox=\"0 0 16 16\" width=\"12\" height=\"12\" aria-hidden=\"true\" class=\"svelte-ifm9j5\"><path d=\"M4 6l4 4 4-4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path></svg></button> <!></div>"), Sa = {
 	hash: "svelte-ifm9j5",
 	code: ".select.svelte-ifm9j5 {position:relative;display:inline-block;min-width:180px;max-width:100%;}.trigger.svelte-ifm9j5 {display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;text-align:left;}.trigger.svelte-ifm9j5:hover {border-color:var(--text-faint);}.trigger.svelte-ifm9j5:focus-visible, .trigger[aria-expanded=\"true\"].svelte-ifm9j5 {outline:none;border-color:var(--accent);}.cur.svelte-ifm9j5 {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}svg.svelte-ifm9j5 {flex:none;color:var(--text-muted);}.menu.svelte-ifm9j5 {position:absolute;z-index:50;top:calc(100% + 4px);left:0;min-width:100%;max-width:460px;max-height:300px;overflow:auto;margin:0;padding:4px;list-style:none;background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);box-shadow:var(--shadow-pop);}li.svelte-ifm9j5 {display:flex;flex-direction:column;gap:1px;padding:5px 9px;border-radius:4px;cursor:pointer;color:var(--text);font-size:calc(13px * var(--ui-scale, 1));}li.on.svelte-ifm9j5 {background:var(--bg-hover);}li.cur.svelte-ifm9j5 .l:where(.svelte-ifm9j5) {color:var(--accent);font-weight:600;}.n.svelte-ifm9j5 {color:var(--text-muted);font-size:.86em;}"
 };
-function Sa(e, t) {
-	Ue(t, !0), ii(e, xa);
+function Ca(e, t) {
+	Ue(t, !0), ii(e, Sa);
 	let n = /* @__PURE__ */ I(!1), r = /* @__PURE__ */ I(0), i, a = /* @__PURE__ */ I(void 0), o = /* @__PURE__ */ P(() => t.options.find((e) => e.value === t.value));
 	vn(() => {
-		if (G(n)) return ga(() => L(n, !1));
+		if (G(n)) return _a(() => L(n, !1));
 	});
 	function s() {
 		L(r, Math.max(0, t.options.findIndex((e) => e.value === t.value)), !0), L(n, !0), requestAnimationFrame(() => G(a)?.querySelector(".on")?.scrollIntoView({ block: "nearest" }));
@@ -2862,20 +2867,20 @@ function Sa(e, t) {
 	function u(e) {
 		i.contains(e.relatedTarget) || L(n, !1);
 	}
-	var d = ba(), f = R(d), p = z(R(f), !0);
-	we(2), j(f);
+	var d = xa(), f = R(d), p = z(R(f), !0);
+	Te(2), A(f);
 	var m = B(f, 2), h = (e) => {
-		var n = ya();
+		var n = ba();
 		Z(n, 23, () => t.options, (e) => e.value, (e, n, i) => {
-			var a = va();
+			var a = ya();
 			let o;
 			var s = R(a), l = z(s, !0), u = B(s), d = (e) => {
-				var t = _a(), r = z(t, !0);
+				var t = va(), r = z(t, !0);
 				V(() => Y(r, G(n).note)), J(e, t);
 			};
 			X(u, (e) => {
 				G(n).note && e(d);
-			}), j(a), V(() => {
+			}), A(a), V(() => {
 				$(a, "aria-selected", G(n).value === t.value), o = Q(a, 1, "svelte-ifm9j5", null, o, {
 					on: G(i) === G(r),
 					cur: G(n).value === t.value
@@ -2883,11 +2888,11 @@ function Sa(e, t) {
 			}), K("mousedown", a, (e) => {
 				e.preventDefault(), c(G(i));
 			}), K("mousemove", a, () => L(r, G(i), !0)), J(e, a);
-		}), j(n), Wi(n, (e) => L(a, e), () => G(a)), J(e, n);
+		}), A(n), Wi(n, (e) => L(a, e), () => G(a)), J(e, n);
 	};
 	X(m, (e) => {
 		G(n) && e(h);
-	}), j(d), Wi(d, (e) => i = e, () => i), V(() => {
+	}), A(d), Wi(d, (e) => i = e, () => i), V(() => {
 		$(f, "id", t.id), $(f, "aria-expanded", G(n)), $(f, "aria-label", t.label), $(f, "title", G(o)?.note), Y(p, G(o)?.label ?? t.value);
 	}), K("focusout", d, u), K("click", f, () => G(n) ? L(n, !1) : s()), K("keydown", f, l), J(e, d), We();
 }
@@ -2900,7 +2905,7 @@ Dr([
 ]);
 //#endregion
 //#region ui/src/lib/icons.ts
-var Ca = {
+var wa = {
 	user: "<circle cx=\"12\" cy=\"8\" r=\"4\"/><path d=\"M4.5 20.5a7.5 7.5 0 0 1 15 0\"/>",
 	plugin: "<path d=\"M9 3.5v4M15 3.5v4\"/><path d=\"M6 7.5h12v4a6 6 0 0 1-12 0z\"/><path d=\"M12 17.5v3\"/>",
 	today: "<rect x=\"3\" y=\"4.5\" width=\"18\" height=\"16.5\" rx=\"2.5\"/><path d=\"M8 2.5v4M16 2.5v4M3 10h18\"/><path d=\"M8.5 15l2.3 2.3L15.5 12.8\"/>",
@@ -3005,34 +3010,34 @@ var Ca = {
 	sticky: "<path d=\"M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5z\"/><path d=\"M15 3v6h6\"/>",
 	crop: "<path d=\"M6 2.5V16a2 2 0 0 0 2 2h13.5\"/><path d=\"M18 21.5V8a2 2 0 0 0-2-2H2.5\"/>",
 	stamp: "<path d=\"m12 2.5 2.9 5.9 6.6 1-4.8 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5-4.8-4.6 6.6-1z\"/>"
-}, wa = (e) => Object.hasOwn(Ca, e);
-function Ta(e, t = 16) {
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="${t}" height="${t}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${Ca[e]}</svg>`;
+}, Ta = (e) => Object.hasOwn(wa, e);
+function Ea(e, t = 16) {
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="${t}" height="${t}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${wa[e]}</svg>`;
 }
 //#endregion
 //#region ui/src/components/Icon.svelte
-var Ea = /* @__PURE__ */ q("<span class=\"icon svelte-1yrfdk4\"></span>"), Da = {
+var Da = /* @__PURE__ */ q("<span class=\"icon svelte-1yrfdk4\"></span>"), Oa = {
 	hash: "svelte-1yrfdk4",
 	code: "\r\n  /* sized by the interface's scale (Settings → font size, a tab's zoom), as the text beside it */.icon.svelte-1yrfdk4 {display:inline-flex;align-items:center;justify-content:center;flex:none;line-height:0;}.icon.svelte-1yrfdk4 svg {width:100%;height:100%;}"
 };
-function Oa(e, t) {
-	Ue(t, !0), ii(e, Da);
+function ka(e, t) {
+	Ue(t, !0), ii(e, Oa);
 	let n = qi(t, "size", 3, 16);
-	var r = Ea();
+	var r = Da();
 	let i;
-	ri(r, () => Ta(t.name, n()), !0), j(r), V(() => i = gi(r, "", i, {
+	ri(r, () => Ea(t.name, n()), !0), A(r), V(() => i = gi(r, "", i, {
 		width: `calc(${n() ?? ""}px * var(--ui-scale, 1))`,
 		height: `calc(${n() ?? ""}px * var(--ui-scale, 1))`
 	})), J(e, r), We();
 }
 //#endregion
 //#region plugins/beta/catalog/ui/src/Icon.svelte
-function ka(e, t) {
+function Aa(e, t) {
 	Ue(t, !0);
 	let n = qi(t, "size", 3, 16);
 	{
-		let r = /* @__PURE__ */ P(() => wa(t.name) ? t.name : "library");
-		Oa(e, {
+		let r = /* @__PURE__ */ P(() => Ta(t.name) ? t.name : "library");
+		ka(e, {
 			get name() {
 				return G(r);
 			},
@@ -3045,12 +3050,12 @@ function ka(e, t) {
 }
 //#endregion
 //#region plugins/beta/catalog/ui/src/LibraryCover.svelte
-var Aa = /* @__PURE__ */ q("<img alt=\"\"/>"), ja = /* @__PURE__ */ q("<div class=\"cover tile svelte-enia8e\" aria-hidden=\"true\"> </div>"), Ma = /* @__PURE__ */ q("<div><!></div>"), Na = {
+var ja = /* @__PURE__ */ q("<img alt=\"\"/>"), Ma = /* @__PURE__ */ q("<div class=\"cover tile svelte-enia8e\" aria-hidden=\"true\"> </div>"), Na = /* @__PURE__ */ q("<div><!></div>"), Pa = {
 	hash: "svelte-enia8e",
 	code: ".cover.svelte-enia8e {width:100%;aspect-ratio:2 / 3;object-fit:cover;border-radius:var(--radius-sm);background:var(--bg-alt);box-shadow:var(--shadow-sm);}.cover.big.svelte-enia8e {aspect-ratio:auto;max-height:280px;width:auto;max-width:100%;margin-bottom:10px;}.tile.svelte-enia8e {display:grid;place-items:center;font-size:2.2em;font-weight:600;box-shadow:none;background:hsl(var(--hue) 32% 50% / .22);color:hsl(var(--hue) 40% 42%);} /* literal: a hue per title */.wrap.svelte-enia8e {width:100%;min-height:1px;}"
 };
-function Pa(e, t) {
-	Ue(t, !0), ii(e, Na);
+function Fa(e, t) {
+	Ue(t, !0), ii(e, Pa);
 	let n = qi(t, "big", 3, !1), r = /* @__PURE__ */ I(null), i = /* @__PURE__ */ I(void 0);
 	async function a(e) {
 		let r = typeof e == "function" ? await e() : e;
@@ -3071,16 +3076,16 @@ function Pa(e, t) {
 		};
 	});
 	let o = /* @__PURE__ */ P(() => t.title.replace(/[^\p{L}\p{N}]/gu, "").charAt(0).toUpperCase() || "?"), s = /* @__PURE__ */ P(() => [...t.title].reduce((e, t) => (e * 31 + t.charCodeAt(0)) % 360, 7));
-	var c = Ma();
+	var c = Na();
 	let l;
 	var u = R(c), d = (e) => {
-		var t = Aa();
+		var t = ja();
 		let i;
 		V(() => {
 			i = Q(t, 1, "cover svelte-enia8e", null, i, { big: n() }), $(t, "src", G(r));
 		}), J(e, t);
 	}, f = (e) => {
-		var t = ja();
+		var t = Ma();
 		let n;
 		var r = z(t, !0);
 		V(() => {
@@ -3089,21 +3094,21 @@ function Pa(e, t) {
 	};
 	X(u, (e) => {
 		G(r) ? e(d) : n() || e(f, 1);
-	}), j(c), Wi(c, (e) => L(i, e), () => G(i)), V(() => l = Q(c, 1, "wrap svelte-enia8e", null, l, { big: n() })), J(e, c), We();
+	}), A(c), Wi(c, (e) => L(i, e), () => G(i)), V(() => l = Q(c, 1, "wrap svelte-enia8e", null, l, { big: n() })), J(e, c), We();
 }
 //#endregion
 //#region plugins/beta/catalog/ui/src/Library.svelte
-var Fa = /* @__PURE__ */ q("<button><!> </button>"), Ia = /* @__PURE__ */ q("<div class=\"drop-hint svelte-7gk24t\"> </div>"), La = /* @__PURE__ */ q("<button role=\"radio\"> </button>"), Ra = /* @__PURE__ */ q("<div class=\"seg svelte-7gk24t\" role=\"radiogroup\" aria-label=\"Layout\"></div>"), za = /* @__PURE__ */ q("<form class=\"add svelte-7gk24t\"><input spellcheck=\"false\" class=\"svelte-7gk24t\"/> <button class=\"btn primary svelte-7gk24t\"> </button></form>"), Ba = /* @__PURE__ */ q("<button> <span class=\"c svelte-7gk24t\"> </span></button>"), Va = /* @__PURE__ */ q("<div class=\"types svelte-7gk24t\" role=\"toolbar\" aria-label=\"Type\"><button>All <span class=\"c svelte-7gk24t\"> </span></button> <!></div>"), Ha = /* @__PURE__ */ q("<p class=\"muted pad svelte-7gk24t\"> </p>"), Ua = /* @__PURE__ */ q("<button class=\"twisty svelte-7gk24t\"><!></button>"), Wa = /* @__PURE__ */ q("<span class=\"twisty svelte-7gk24t\"></span>"), Ga = /* @__PURE__ */ q("<div class=\"tree-row svelte-7gk24t\"><!> <button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button></div>"), Ka = /* @__PURE__ */ q("<button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button>"), qa = /* @__PURE__ */ q("<h4 class=\"svelte-7gk24t\"> </h4> <!>", 1), Ja = /* @__PURE__ */ q("<button><span class=\"hash svelte-7gk24t\">#</span><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button>"), Ya = /* @__PURE__ */ q("<button class=\"h4 svelte-7gk24t\"><!>Tags <span class=\"c svelte-7gk24t\"> </span></button> <!>", 1), Xa = /* @__PURE__ */ q("<nav class=\"side svelte-7gk24t\"><button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button> <!> <!></nav>"), Za = /* @__PURE__ */ q("<span class=\"m svelte-7gk24t\"> </span>"), Qa = /* @__PURE__ */ q("<button><!> <span class=\"t svelte-7gk24t\"></span> <!></button>"), $a = /* @__PURE__ */ q("<span> </span>"), eo = /* @__PURE__ */ q("<span class=\"flags svelte-7gk24t\"></span>"), to = /* @__PURE__ */ q("<button><span class=\"t svelte-7gk24t\"></span> <!> <!></button>"), no = /* @__PURE__ */ q("<p class=\"muted pad none svelte-7gk24t\"> </p>"), ro = /* @__PURE__ */ q("<li class=\"svelte-7gk24t\"></li>"), io = /* @__PURE__ */ q("<li class=\"muted svelte-7gk24t\"> </li>"), ao = /* @__PURE__ */ q("<aside class=\"detail many svelte-7gk24t\" aria-label=\"Picked\"><div class=\"kind svelte-7gk24t\"> </div> <ul class=\"picked svelte-7gk24t\"><!><!></ul> <div class=\"actions svelte-7gk24t\"><!><button class=\"btn svelte-7gk24t\">Clear</button></div></aside>"), oo = /* @__PURE__ */ q("<button class=\"scrim svelte-7gk24t\" aria-label=\"Close\"></button>"), so = /* @__PURE__ */ q("<button class=\"close icon-btn svelte-7gk24t\" aria-label=\"Close\" title=\"Close\"><!></button>"), co = /* @__PURE__ */ q("<span class=\"hint svelte-7gk24t\"> </span>"), lo = /* @__PURE__ */ q("<textarea class=\"svelte-7gk24t\"></textarea>"), uo = /* @__PURE__ */ q("<input class=\"svelte-7gk24t\"/>"), fo = /* @__PURE__ */ q("<label> <!> <!></label>"), po = /* @__PURE__ */ q("<form class=\"edit svelte-7gk24t\"><!> <div class=\"actions svelte-7gk24t\"><button class=\"btn primary svelte-7gk24t\">Save</button><button type=\"button\" class=\"btn svelte-7gk24t\">Cancel</button></div></form>"), mo = /* @__PURE__ */ q("<div class=\"kind svelte-7gk24t\"> </div>"), ho = /* @__PURE__ */ q("<p> </p>"), go = /* @__PURE__ */ q("<dt class=\"svelte-7gk24t\"> </dt><dd class=\"svelte-7gk24t\"> </dd>", 1), _o = /* @__PURE__ */ q("<dl class=\"svelte-7gk24t\"></dl>"), vo = /* @__PURE__ */ q("<div class=\"choice svelte-7gk24t\" role=\"radiogroup\"><span class=\"svelte-7gk24t\"> </span> <!></div>"), yo = /* @__PURE__ */ q("<a target=\"_blank\" rel=\"noreferrer\" class=\"svelte-7gk24t\"><!> </a>"), bo = /* @__PURE__ */ q("<div class=\"links svelte-7gk24t\"></div>"), xo = /* @__PURE__ */ q("<button class=\"tag coll svelte-7gk24t\"><!> </button>"), So = /* @__PURE__ */ q("<button class=\"tag svelte-7gk24t\"> </button>"), Co = /* @__PURE__ */ q("<div class=\"tags svelte-7gk24t\"><!> <!></div>"), wo = /* @__PURE__ */ q("<h3 class=\"svelte-7gk24t\"> </h3><p class=\"abstract svelte-7gk24t\"> </p>", 1), To = /* @__PURE__ */ q("<div></div>"), Eo = /* @__PURE__ */ q("<div class=\"links-bar svelte-7gk24t\"><!></div>"), Do = /* @__PURE__ */ q("<!> <aside class=\"detail svelte-7gk24t\"><!> <!> <!> <!> <h2 class=\"svelte-7gk24t\"></h2> <!> <!> <div class=\"actions svelte-7gk24t\"></div> <!> <!> <!> <!> <!></aside>", 1), Oo = /* @__PURE__ */ q("<aside class=\"detail none svelte-7gk24t\" aria-label=\"Details\"><p> <span class=\"keys-only\"><br/>↑ ↓ move, Enter opens.</span></p></aside>"), ko = /* @__PURE__ */ q("<div tabindex=\"0\" role=\"application\"><!> <header class=\"svelte-7gk24t\"><h1 class=\"svelte-7gk24t\"><!> <span class=\"count svelte-7gk24t\"> </span></h1> <input class=\"search svelte-7gk24t\" spellcheck=\"false\"/> <!> <!> <!> <!></header> <!> <!> <div><!> <div></div> <!></div></div>"), Ao = {
+var Ia = /* @__PURE__ */ q("<button><!> </button>"), La = /* @__PURE__ */ q("<div class=\"drop-hint svelte-7gk24t\"> </div>"), Ra = /* @__PURE__ */ q("<button role=\"radio\"> </button>"), za = /* @__PURE__ */ q("<div class=\"seg svelte-7gk24t\" role=\"radiogroup\" aria-label=\"Layout\"></div>"), Ba = /* @__PURE__ */ q("<form class=\"add svelte-7gk24t\"><input spellcheck=\"false\" class=\"svelte-7gk24t\"/> <button class=\"btn primary svelte-7gk24t\"> </button></form>"), Va = /* @__PURE__ */ q("<button> <span class=\"c svelte-7gk24t\"> </span></button>"), Ha = /* @__PURE__ */ q("<div class=\"types svelte-7gk24t\" role=\"toolbar\" aria-label=\"Type\"><button>All <span class=\"c svelte-7gk24t\"> </span></button> <!></div>"), Ua = /* @__PURE__ */ q("<p class=\"muted pad svelte-7gk24t\"> </p>"), Wa = /* @__PURE__ */ q("<button class=\"twisty svelte-7gk24t\"><!></button>"), Ga = /* @__PURE__ */ q("<span class=\"twisty svelte-7gk24t\"></span>"), Ka = /* @__PURE__ */ q("<div class=\"tree-row svelte-7gk24t\"><!> <button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button></div>"), qa = /* @__PURE__ */ q("<button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button>"), Ja = /* @__PURE__ */ q("<h4 class=\"svelte-7gk24t\"> </h4> <!>", 1), Ya = /* @__PURE__ */ q("<button><span class=\"hash svelte-7gk24t\">#</span><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button>"), Xa = /* @__PURE__ */ q("<button class=\"h4 svelte-7gk24t\"><!>Tags <span class=\"c svelte-7gk24t\"> </span></button> <!>", 1), Za = /* @__PURE__ */ q("<nav class=\"side svelte-7gk24t\"><button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button> <!> <!></nav>"), Qa = /* @__PURE__ */ q("<th scope=\"col\"><button type=\"button\" class=\"th-btn svelte-7gk24t\"><span class=\"svelte-7gk24t\"> </span><span class=\"sort-ind svelte-7gk24t\" aria-hidden=\"true\"> </span></button></th>"), $a = /* @__PURE__ */ q("<span class=\"flag red svelte-7gk24t\">PDF</span>"), eo = /* @__PURE__ */ q("<tr><td class=\"c-title svelte-7gk24t\"><button type=\"button\" class=\"row-focus svelte-7gk24t\"><span class=\"t svelte-7gk24t\"></span></button></td><td class=\"c-author svelte-7gk24t\"> </td><td class=\"c-year svelte-7gk24t\"> </td><td class=\"c-venue svelte-7gk24t\"> </td><td class=\"c-kind svelte-7gk24t\"> </td><td class=\"c-added svelte-7gk24t\"> </td><td class=\"c-pdf svelte-7gk24t\"><!></td></tr>"), to = /* @__PURE__ */ q("<table class=\"zot-table svelte-7gk24t\"><caption class=\"sr-only svelte-7gk24t\"> </caption><thead class=\"svelte-7gk24t\"><tr></tr></thead><tbody></tbody></table>"), no = /* @__PURE__ */ q("<span class=\"m svelte-7gk24t\"> </span>"), ro = /* @__PURE__ */ q("<button><!> <span class=\"t svelte-7gk24t\"></span> <!></button>"), io = /* @__PURE__ */ q("<span> </span>"), ao = /* @__PURE__ */ q("<span class=\"flags svelte-7gk24t\"></span>"), oo = /* @__PURE__ */ q("<button><span class=\"t svelte-7gk24t\"></span> <!> <!></button>"), so = /* @__PURE__ */ q("<p class=\"muted pad none svelte-7gk24t\"> </p>"), co = /* @__PURE__ */ q("<li class=\"svelte-7gk24t\"></li>"), lo = /* @__PURE__ */ q("<li class=\"muted svelte-7gk24t\"> </li>"), uo = /* @__PURE__ */ q("<aside class=\"detail many svelte-7gk24t\" aria-label=\"Picked\"><div class=\"kind svelte-7gk24t\"> </div> <ul class=\"picked svelte-7gk24t\"><!><!></ul> <div class=\"actions svelte-7gk24t\"><!><button class=\"btn svelte-7gk24t\">Clear</button></div></aside>"), fo = /* @__PURE__ */ q("<button class=\"scrim svelte-7gk24t\" aria-label=\"Close\"></button>"), po = /* @__PURE__ */ q("<button class=\"close icon-btn svelte-7gk24t\" aria-label=\"Close\" title=\"Close\"><!></button>"), mo = /* @__PURE__ */ q("<span class=\"hint svelte-7gk24t\"> </span>"), ho = /* @__PURE__ */ q("<textarea class=\"svelte-7gk24t\"></textarea>"), go = /* @__PURE__ */ q("<input class=\"svelte-7gk24t\"/>"), _o = /* @__PURE__ */ q("<label> <!> <!></label>"), vo = /* @__PURE__ */ q("<form class=\"edit svelte-7gk24t\"><!> <div class=\"actions svelte-7gk24t\"><button class=\"btn primary svelte-7gk24t\">Save</button><button type=\"button\" class=\"btn svelte-7gk24t\">Cancel</button></div></form>"), yo = /* @__PURE__ */ q("<div class=\"kind svelte-7gk24t\"> </div>"), bo = /* @__PURE__ */ q("<p> </p>"), xo = /* @__PURE__ */ q("<dt class=\"svelte-7gk24t\"> </dt><dd class=\"svelte-7gk24t\"> </dd>", 1), So = /* @__PURE__ */ q("<dl class=\"svelte-7gk24t\"></dl>"), Co = /* @__PURE__ */ q("<div class=\"choice svelte-7gk24t\" role=\"radiogroup\"><span class=\"svelte-7gk24t\"> </span> <!></div>"), wo = /* @__PURE__ */ q("<a target=\"_blank\" rel=\"noreferrer\" class=\"svelte-7gk24t\"><!> </a>"), To = /* @__PURE__ */ q("<div class=\"links svelte-7gk24t\"></div>"), Eo = /* @__PURE__ */ q("<button class=\"tag coll svelte-7gk24t\"><!> </button>"), Do = /* @__PURE__ */ q("<button class=\"tag svelte-7gk24t\"> </button>"), Oo = /* @__PURE__ */ q("<div class=\"tags svelte-7gk24t\"><!> <!></div>"), ko = /* @__PURE__ */ q("<h3 class=\"svelte-7gk24t\"> </h3><p class=\"abstract svelte-7gk24t\"> </p>", 1), Ao = /* @__PURE__ */ q("<div></div>"), jo = /* @__PURE__ */ q("<div class=\"links-bar svelte-7gk24t\"><!></div>"), Mo = /* @__PURE__ */ q("<!> <aside class=\"detail svelte-7gk24t\"><!> <!> <!> <!> <h2 class=\"svelte-7gk24t\"></h2> <!> <!> <div class=\"actions svelte-7gk24t\"></div> <!> <!> <!> <!> <!></aside>", 1), No = /* @__PURE__ */ q("<aside class=\"detail none svelte-7gk24t\" aria-label=\"Details\"><p> <span class=\"keys-only\"><br/>↑ ↓ move, Enter opens.</span></p></aside>"), Po = /* @__PURE__ */ q("<div tabindex=\"0\" role=\"application\"><!> <header class=\"svelte-7gk24t\"><h1 class=\"svelte-7gk24t\"><!> <span class=\"count svelte-7gk24t\"> </span></h1> <input class=\"search svelte-7gk24t\" spellcheck=\"false\"/> <!> <!> <!> <!></header> <!> <!> <div><!> <div><!></div> <!></div></div>"), Fo = {
 	hash: "svelte-7gk24t",
-	code: ".types.svelte-7gk24t {display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 10px;}.chip.svelte-7gk24t {display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--border);color:var(--text-muted);font-size:calc(12.5px * var(--ui-scale, 1));}.chip.svelte-7gk24t:hover {background:var(--bg-hover);color:var(--text);}.chip.on.svelte-7gk24t {background:var(--accent-soft);border-color:color-mix(in srgb, var(--accent) 45%, transparent);color:var(--accent);}.chip.svelte-7gk24t .c:where(.svelte-7gk24t) {color:var(--text-faint);font-variant-numeric:tabular-nums;}.library.svelte-7gk24t {height:100%;display:flex;flex-direction:column;background:var(--bg);outline:none;position:relative;}.library.dragging.svelte-7gk24t {box-shadow:inset 0 0 0 2px var(--accent);}.drop-hint.svelte-7gk24t {position:absolute;inset:0;z-index:5;display:grid;place-items:center;pointer-events:none;background:color-mix(in srgb, var(--bg) 70%, transparent);color:var(--accent);font-size:calc(16px * var(--ui-scale, 1));font-weight:600;}header.svelte-7gk24t {display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--border);}h1.svelte-7gk24t {display:inline-flex;gap:8px;align-items:center;margin:0 8px 0 0;font-size:calc(17px * var(--ui-scale, 1));color:var(--heading);}.count.svelte-7gk24t {font-size:.7em;font-weight:500;color:var(--text-faint);}input.svelte-7gk24t {font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;}input.svelte-7gk24t:focus {outline:none;border-color:var(--accent);}.search.svelte-7gk24t {flex:1;min-width:220px;}.add.svelte-7gk24t {display:flex;gap:6px;}.add.svelte-7gk24t input:where(.svelte-7gk24t) {width:270px;} /* the placeholder whole (clipped text is a bug) */.seg.svelte-7gk24t {display:inline-flex;border:1px solid var(--border-strong);border-radius:var(--radius-sm);overflow:hidden;}.seg.svelte-7gk24t button:where(.svelte-7gk24t) {padding:4px 10px;color:var(--text-muted);}.seg.svelte-7gk24t button.on:where(.svelte-7gk24t) {background:var(--accent-soft);color:var(--accent);}.btn.svelte-7gk24t {display:inline-flex;gap:6px;align-items:center;border:1px solid var(--border-strong);}.btn.svelte-7gk24t:hover:not(:disabled) {background:var(--bg-hover);}.btn.svelte-7gk24t:disabled {opacity:.45;cursor:default;}.btn.danger.svelte-7gk24t {color:var(--red);}.edit.svelte-7gk24t {display:grid;grid-template-columns:1fr 2fr;gap:8px;margin:0 0 14px;padding:12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--bg-alt);}.edit.svelte-7gk24t label:where(.svelte-7gk24t) {grid-column:1 / -1;display:flex;flex-direction:column;gap:3px;color:var(--text-muted);font-size:calc(12px * var(--ui-scale, 1));}.edit.svelte-7gk24t label.half:where(.svelte-7gk24t) {grid-column:auto;}.edit.svelte-7gk24t .actions:where(.svelte-7gk24t) {grid-column:1 / -1;}.edit.svelte-7gk24t textarea:where(.svelte-7gk24t) {font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;resize:vertical;}.hint.svelte-7gk24t {color:var(--text-faint);font-weight:400;}.body.svelte-7gk24t {flex:1;min-height:0;display:grid;grid-template-columns:210px minmax(300px, 1.15fr) minmax(280px, 1fr);}.body.bare.svelte-7gk24t {grid-template-columns:minmax(300px, 1.4fr) minmax(280px, 1fr);}.list.empty-list.svelte-7gk24t {grid-column:span 2;} /* nothing to list: its words get the detail's column too */.detail.none.svelte-7gk24t {display:grid;place-content:center;text-align:center;color:var(--text-faint);}.side.svelte-7gk24t {overflow:auto;border-right:1px solid var(--border);padding:8px 6px;background:var(--bg-alt);display:flex;flex-direction:column;gap:1px;}.side.svelte-7gk24t h4:where(.svelte-7gk24t), .side.svelte-7gk24t .h4:where(.svelte-7gk24t) {display:flex;align-items:center;gap:4px;margin:12px 8px 4px;padding:0;font-size:calc(10.5px * var(--ui-scale, 1));font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);text-align:left;}.side.svelte-7gk24t .h4:where(.svelte-7gk24t):hover {color:var(--text);}.item.svelte-7gk24t {display:flex;align-items:center;gap:7px;width:100%;padding:4px 8px;border-radius:var(--radius-sm);color:var(--text);text-align:left;font-size:calc(12.5px * var(--ui-scale, 1));}.item.svelte-7gk24t:hover {background:var(--bg-hover);}.item.on.svelte-7gk24t {background:var(--accent-soft);color:var(--heading);box-shadow:inset 2px 0 0 var(--accent);}.item.drop.svelte-7gk24t {outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft);}.item.svelte-7gk24t .n:where(.svelte-7gk24t) {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.c.svelte-7gk24t {color:var(--text-faint);font-size:.85em;font-variant-numeric:tabular-nums;}.hash.svelte-7gk24t {color:var(--text-faint);width:14px;text-align:center;}.tagitem.svelte-7gk24t {color:var(--text-muted);}.tag.coll.svelte-7gk24t {display:inline-flex;gap:4px;align-items:center;color:var(--text);}.list.svelte-7gk24t {overflow:hidden auto; /* the grid wraps: a horizontal offset only ever hid the first column */border-right:1px solid var(--border);padding:6px;position:relative;user-select:none;-webkit-user-select:none;}.list.svelte-7gk24t .marquee {position:absolute;z-index:2;pointer-events:none;border:1px solid var(--accent);background:color-mix(in srgb, var(--accent) 12%, transparent);border-radius:2px;}.tree-row.svelte-7gk24t {display:flex;align-items:center;min-width:0;}.tree-row.svelte-7gk24t .item:where(.svelte-7gk24t) {flex:1;min-width:0;}.twisty.svelte-7gk24t {flex:none;width:16px;height:22px;display:grid;place-items:center;color:var(--text-faint);padding:0;}.twisty.svelte-7gk24t:hover {color:var(--text);}.picked.svelte-7gk24t {margin:8px 0 12px;padding-left:18px;font-size:.9em;color:var(--text-muted);}.picked.svelte-7gk24t li:where(.svelte-7gk24t) {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.list.covers.svelte-7gk24t {display:grid;grid-template-columns:repeat(auto-fill, minmax(118px, 1fr));gap:14px 12px;align-content:start;padding:12px;}.row.svelte-7gk24t {display:grid;grid-template-columns:minmax(0, 1fr) auto;gap:2px 10px;width:100%;text-align:left;padding:8px 10px;border-radius:var(--radius-sm);}.row.svelte-7gk24t:hover {background:var(--bg-hover);}.row.sel.svelte-7gk24t {background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent);}.card.svelte-7gk24t {display:flex;flex-direction:column;gap:4px;text-align:left;padding:4px;border-radius:var(--radius-sm);min-width:0;}\r\n  /* a library of thousands: items out of view are not laid out or painted (still in the page, for the marquee and keys) */.row.svelte-7gk24t {content-visibility:auto;contain-intrinsic-size:auto 52px;}.card.svelte-7gk24t {content-visibility:auto;contain-intrinsic-size:auto 230px;}.card.svelte-7gk24t:hover {background:var(--bg-hover);}.card.sel.svelte-7gk24t {background:var(--accent-soft);box-shadow:0 0 0 2px var(--accent);}.card.svelte-7gk24t .t:where(.svelte-7gk24t) {font-size:.92em;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;}.card.svelte-7gk24t .m:where(.svelte-7gk24t) {font-size:.8em;}.t.svelte-7gk24t {grid-column:1;color:var(--heading);font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.m.svelte-7gk24t {grid-column:1;color:var(--text-muted);font-size:.9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.flags.svelte-7gk24t {grid-column:2;grid-row:1 / span 2;display:flex;gap:4px;align-items:center;}.flag.svelte-7gk24t {font-size:calc(11px * var(--ui-scale, 1));padding:1px 6px;border-radius:999px;background:var(--bg-hover);color:var(--text-muted);}.flag.red.svelte-7gk24t {color:var(--red);background:color-mix(in srgb, var(--red) 14%, transparent);}\r\n  /* a column, so the linked mentions sit at the bottom however short the item's card is */.detail.svelte-7gk24t {overflow:auto;padding:18px 22px 40px;display:flex;flex-direction:column;}.detail.svelte-7gk24t > * {flex-shrink:0;}.links-bar.svelte-7gk24t {position:sticky;bottom:-40px;margin:auto -22px -40px;padding-top:18px;display:flex;flex-direction:column;max-height:50vh;}.links-bar.svelte-7gk24t .backlinks {max-height:50vh;}.kind.svelte-7gk24t {text-transform:uppercase;letter-spacing:.07em;font-size:calc(11px * var(--ui-scale, 1));color:var(--text-faint);}h2.svelte-7gk24t {margin:4px 0 6px;font-size:calc(19px * var(--ui-scale, 1));color:var(--heading);line-height:1.3;}.authors.svelte-7gk24t {margin:0;color:var(--text);}.venue.svelte-7gk24t {margin:2px 0 0;color:var(--text-muted);font-style:italic;}dl.svelte-7gk24t {display:grid;grid-template-columns:max-content minmax(0, 1fr);gap:3px 12px;font-size:.9em;margin:10px 0;}dt.svelte-7gk24t {color:var(--text-faint);}dd.svelte-7gk24t {margin:0;overflow-wrap:anywhere;}.actions.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 8px;}.choice.svelte-7gk24t {display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 10px;}.choice.svelte-7gk24t span:where(.svelte-7gk24t) {color:var(--text-faint);font-size:.85em;margin-right:2px;}.links.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:14px;margin:6px 0;}.links.svelte-7gk24t a:where(.svelte-7gk24t) {display:inline-flex;gap:5px;align-items:center;color:var(--link, var(--accent));text-decoration:none;font-size:.92em;}.links.svelte-7gk24t a:where(.svelte-7gk24t):hover {text-decoration:underline;}.tags.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}.tag.svelte-7gk24t {font-size:calc(11.5px * var(--ui-scale, 1));padding:2px 9px;border-radius:999px;border:1px solid var(--border-strong);color:var(--text-muted);}.tag.svelte-7gk24t:hover {color:var(--text);border-color:var(--accent);}h3.svelte-7gk24t {margin:18px 0 6px;font-size:calc(11px * var(--ui-scale, 1));text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);}.abstract.svelte-7gk24t {margin:0;line-height:1.6;color:var(--text);}.pad.svelte-7gk24t {padding:12px 16px;}\r\n  /* the covers are a grid: the \"nothing here\" line spans all its columns (on a phone it sat in one, a word a line) */.none.svelte-7gk24t {grid-column:1 / -1;}\r\n\r\n  /* narrow: one column; groups as a row of chips; the card as a sheet over the list */.narrow.svelte-7gk24t header:where(.svelte-7gk24t) {padding:10px 12px;gap:8px;}.narrow.svelte-7gk24t .search:where(.svelte-7gk24t) {flex:1 1 100%;min-width:0;order:1;}.narrow.svelte-7gk24t .add:where(.svelte-7gk24t) {flex:1 1 100%;order:2;}.narrow.svelte-7gk24t .add:where(.svelte-7gk24t) input:where(.svelte-7gk24t) {flex:1;width:auto;min-width:0;}.narrow.svelte-7gk24t .types:where(.svelte-7gk24t) {padding:0 12px 8px;flex-wrap:nowrap;overflow-x:auto;}.narrow.svelte-7gk24t .body:where(.svelte-7gk24t), .narrow.svelte-7gk24t .body.bare:where(.svelte-7gk24t) {display:flex;flex-direction:column;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) {flex:none;flex-direction:row;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid var(--border);padding:6px 12px;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) h4:where(.svelte-7gk24t), .narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .h4:where(.svelte-7gk24t) {margin:0 2px 0 6px;flex:none;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .item:where(.svelte-7gk24t) {width:auto;flex:none;max-width:70vw;padding:5px 10px;border-radius:999px;border:1px solid var(--border);}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .item.on:where(.svelte-7gk24t) {box-shadow:none;border-color:color-mix(in srgb, var(--accent) 45%, transparent);}.narrow.svelte-7gk24t .list:where(.svelte-7gk24t) {flex:1;border-right:0;}.narrow.svelte-7gk24t .list.covers:where(.svelte-7gk24t) {grid-template-columns:repeat(auto-fill, minmax(104px, 1fr));gap:12px 10px;padding:10px 12px;}.scrim.svelte-7gk24t {position:absolute;inset:0;z-index:6;background:var(--scrim);border:0;padding:0;cursor:default;}.narrow.svelte-7gk24t .detail:where(.svelte-7gk24t) {position:absolute;left:0;right:0;bottom:0;z-index:7;max-height:80%;padding:18px 16px calc(24px + env(safe-area-inset-bottom, 0px));background:var(--bg-elev);border-top:1px solid var(--border-strong);border-radius:14px 14px 0 0;box-shadow:var(--shadow-pop);}.narrow.svelte-7gk24t .detail:where(.svelte-7gk24t) .cover.big {max-height:180px;}\r\n  /* stays at the sheet's top right while its card scrolls */.close.svelte-7gk24t {position:sticky;top:0;float:right;z-index:1;margin:-8px -6px 0 8px;width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:var(--bg-hover);}"
+	code: ".types.svelte-7gk24t {display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 10px;}.chip.svelte-7gk24t {display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--border);color:var(--text-muted);font-size:calc(12.5px * var(--ui-scale, 1));}.chip.svelte-7gk24t:hover {background:var(--bg-hover);color:var(--text);}.chip.on.svelte-7gk24t {background:var(--accent-soft);border-color:color-mix(in srgb, var(--accent) 45%, transparent);color:var(--accent);}.chip.svelte-7gk24t .c:where(.svelte-7gk24t) {color:var(--text-faint);font-variant-numeric:tabular-nums;}.library.svelte-7gk24t {height:100%;display:flex;flex-direction:column;background:var(--bg);outline:none;position:relative;}.library.dragging.svelte-7gk24t {box-shadow:inset 0 0 0 2px var(--accent);}.drop-hint.svelte-7gk24t {position:absolute;inset:0;z-index:5;display:grid;place-items:center;pointer-events:none;background:color-mix(in srgb, var(--bg) 70%, transparent);color:var(--accent);font-size:calc(16px * var(--ui-scale, 1));font-weight:600;}header.svelte-7gk24t {display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--border);}h1.svelte-7gk24t {display:inline-flex;gap:8px;align-items:center;margin:0 8px 0 0;font-size:calc(17px * var(--ui-scale, 1));color:var(--heading);}.count.svelte-7gk24t {font-size:.7em;font-weight:500;color:var(--text-faint);}input.svelte-7gk24t {font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;}input.svelte-7gk24t:focus {outline:none;border-color:var(--accent);}.search.svelte-7gk24t {flex:1;min-width:220px;}.add.svelte-7gk24t {display:flex;gap:6px;}.add.svelte-7gk24t input:where(.svelte-7gk24t) {width:270px;} /* the placeholder whole (clipped text is a bug) */.seg.svelte-7gk24t {display:inline-flex;border:1px solid var(--border-strong);border-radius:var(--radius-sm);overflow:hidden;}.seg.svelte-7gk24t button:where(.svelte-7gk24t) {padding:4px 10px;color:var(--text-muted);}.seg.svelte-7gk24t button.on:where(.svelte-7gk24t) {background:var(--accent-soft);color:var(--accent);}.btn.svelte-7gk24t {display:inline-flex;gap:6px;align-items:center;border:1px solid var(--border-strong);}.btn.svelte-7gk24t:hover:not(:disabled) {background:var(--bg-hover);}.btn.svelte-7gk24t:disabled {opacity:.45;cursor:default;}.btn.danger.svelte-7gk24t {color:var(--red);}.edit.svelte-7gk24t {display:grid;grid-template-columns:1fr 2fr;gap:8px;margin:0 0 14px;padding:12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--bg-alt);}.edit.svelte-7gk24t label:where(.svelte-7gk24t) {grid-column:1 / -1;display:flex;flex-direction:column;gap:3px;color:var(--text-muted);font-size:calc(12px * var(--ui-scale, 1));}.edit.svelte-7gk24t label.half:where(.svelte-7gk24t) {grid-column:auto;}.edit.svelte-7gk24t .actions:where(.svelte-7gk24t) {grid-column:1 / -1;}.edit.svelte-7gk24t textarea:where(.svelte-7gk24t) {font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;resize:vertical;}.hint.svelte-7gk24t {color:var(--text-faint);font-weight:400;}.body.svelte-7gk24t {flex:1;min-height:0;display:grid;grid-template-columns:210px minmax(300px, 1.15fr) minmax(280px, 1fr);}.body.bare.svelte-7gk24t {grid-template-columns:minmax(300px, 1.4fr) minmax(280px, 1fr);}.list.empty-list.svelte-7gk24t {grid-column:span 2;} /* nothing to list: its words get the detail's column too */.detail.none.svelte-7gk24t {display:grid;place-content:center;text-align:center;color:var(--text-faint);}.side.svelte-7gk24t {overflow:auto;border-right:1px solid var(--border);padding:8px 6px;background:var(--bg-alt);display:flex;flex-direction:column;gap:1px;}.side.svelte-7gk24t h4:where(.svelte-7gk24t), .side.svelte-7gk24t .h4:where(.svelte-7gk24t) {display:flex;align-items:center;gap:4px;margin:12px 8px 4px;padding:0;font-size:calc(10.5px * var(--ui-scale, 1));font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);text-align:left;}.side.svelte-7gk24t .h4:where(.svelte-7gk24t):hover {color:var(--text);}.item.svelte-7gk24t {display:flex;align-items:center;gap:7px;width:100%;padding:4px 8px;border-radius:var(--radius-sm);color:var(--text);text-align:left;font-size:calc(12.5px * var(--ui-scale, 1));}.item.svelte-7gk24t:hover {background:var(--bg-hover);}.item.on.svelte-7gk24t {background:var(--accent-soft);color:var(--heading);box-shadow:inset 2px 0 0 var(--accent);}.item.drop.svelte-7gk24t {outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft);}.item.svelte-7gk24t .n:where(.svelte-7gk24t) {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.c.svelte-7gk24t {color:var(--text-faint);font-size:.85em;font-variant-numeric:tabular-nums;}.hash.svelte-7gk24t {color:var(--text-faint);width:14px;text-align:center;}.tagitem.svelte-7gk24t {color:var(--text-muted);}.tag.coll.svelte-7gk24t {display:inline-flex;gap:4px;align-items:center;color:var(--text);}.list.svelte-7gk24t {overflow:hidden auto; /* the grid wraps: a horizontal offset only ever hid the first column */border-right:1px solid var(--border);padding:6px;position:relative;user-select:none;-webkit-user-select:none;}.list.svelte-7gk24t .marquee {position:absolute;z-index:2;pointer-events:none;border:1px solid var(--accent);background:color-mix(in srgb, var(--accent) 12%, transparent);border-radius:2px;}.tree-row.svelte-7gk24t {display:flex;align-items:center;min-width:0;}.tree-row.svelte-7gk24t .item:where(.svelte-7gk24t) {flex:1;min-width:0;}.twisty.svelte-7gk24t {flex:none;width:16px;height:22px;display:grid;place-items:center;color:var(--text-faint);padding:0;}.twisty.svelte-7gk24t:hover {color:var(--text);}.picked.svelte-7gk24t {margin:8px 0 12px;padding-left:18px;font-size:.9em;color:var(--text-muted);}.picked.svelte-7gk24t li:where(.svelte-7gk24t) {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.list.covers.svelte-7gk24t {display:grid;grid-template-columns:repeat(auto-fill, minmax(118px, 1fr));gap:14px 12px;align-content:start;padding:12px;}.sr-only.svelte-7gk24t {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0;}.list.table-mode.svelte-7gk24t {padding:0;overflow:auto;}.zot-table.svelte-7gk24t {width:100%;border-collapse:collapse;table-layout:fixed;font-size:calc(12.5px * var(--ui-scale, 1));}.zot-table.svelte-7gk24t thead:where(.svelte-7gk24t) th:where(.svelte-7gk24t) {position:sticky;top:0;z-index:1;background:var(--bg-alt);border-bottom:1px solid var(--border-strong);padding:0;text-align:left;font-weight:600;color:var(--text-muted);}.th-btn.svelte-7gk24t {width:100%;display:flex;align-items:center;gap:4px;padding:7px 8px;text-align:left;font:inherit;font-size:calc(11.5px * var(--ui-scale, 1));color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.th-btn.svelte-7gk24t:hover {background:var(--bg-hover);color:var(--text);}.sort-ind.svelte-7gk24t {color:var(--accent);flex:none;}.col-title.svelte-7gk24t {width:34%;}.col-author.svelte-7gk24t {width:19%;}.col-year.svelte-7gk24t {width:58px;}.col-venue.svelte-7gk24t {width:18%;}.col-kind.svelte-7gk24t {width:10%;}.col-added.svelte-7gk24t {width:88px;}.col-pdf.svelte-7gk24t {width:48px;}.trow.svelte-7gk24t {cursor:pointer;}.trow.svelte-7gk24t td:where(.svelte-7gk24t) {padding:6px 8px;border-bottom:1px solid var(--border);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted);vertical-align:middle;}.trow.svelte-7gk24t:hover td:where(.svelte-7gk24t) {background:var(--bg-hover);}.trow.sel.svelte-7gk24t td:where(.svelte-7gk24t) {background:var(--accent-soft);}.trow.sel.svelte-7gk24t td:where(.svelte-7gk24t):first-child {box-shadow:inset 2px 0 0 var(--accent);}.row-focus.svelte-7gk24t {display:block;width:100%;text-align:left;padding:0;font:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.row-focus.svelte-7gk24t .t:where(.svelte-7gk24t) {display:block;}.c-year.svelte-7gk24t, .c-added.svelte-7gk24t {font-variant-numeric:tabular-nums;}.c-pdf.svelte-7gk24t {text-align:center;}.row.svelte-7gk24t {display:grid;grid-template-columns:minmax(0, 1fr) auto;gap:2px 10px;width:100%;text-align:left;padding:8px 10px;border-radius:var(--radius-sm);}.row.svelte-7gk24t:hover {background:var(--bg-hover);}.row.sel.svelte-7gk24t {background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent);}.card.svelte-7gk24t {display:flex;flex-direction:column;gap:4px;text-align:left;padding:4px;border-radius:var(--radius-sm);min-width:0;}\r\n  /* a library of thousands: items out of view are not laid out or painted (still in the page, for the marquee and keys) */.row.svelte-7gk24t {content-visibility:auto;contain-intrinsic-size:auto 52px;}.card.svelte-7gk24t {content-visibility:auto;contain-intrinsic-size:auto 230px;}.card.svelte-7gk24t:hover {background:var(--bg-hover);}.card.sel.svelte-7gk24t {background:var(--accent-soft);box-shadow:0 0 0 2px var(--accent);}.card.svelte-7gk24t .t:where(.svelte-7gk24t) {font-size:.92em;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;}.card.svelte-7gk24t .m:where(.svelte-7gk24t) {font-size:.8em;}.t.svelte-7gk24t {grid-column:1;color:var(--heading);font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.m.svelte-7gk24t {grid-column:1;color:var(--text-muted);font-size:.9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.flags.svelte-7gk24t {grid-column:2;grid-row:1 / span 2;display:flex;gap:4px;align-items:center;}.flag.svelte-7gk24t {font-size:calc(11px * var(--ui-scale, 1));padding:1px 6px;border-radius:999px;background:var(--bg-hover);color:var(--text-muted);}.flag.red.svelte-7gk24t {color:var(--red);background:color-mix(in srgb, var(--red) 14%, transparent);}\r\n  /* a column, so the linked mentions sit at the bottom however short the item's card is */.detail.svelte-7gk24t {overflow:auto;padding:18px 22px 40px;display:flex;flex-direction:column;}.detail.svelte-7gk24t > * {flex-shrink:0;}.links-bar.svelte-7gk24t {position:sticky;bottom:-40px;margin:auto -22px -40px;padding-top:18px;display:flex;flex-direction:column;max-height:50vh;}.links-bar.svelte-7gk24t .backlinks {max-height:50vh;}.kind.svelte-7gk24t {text-transform:uppercase;letter-spacing:.07em;font-size:calc(11px * var(--ui-scale, 1));color:var(--text-faint);}h2.svelte-7gk24t {margin:4px 0 6px;font-size:calc(19px * var(--ui-scale, 1));color:var(--heading);line-height:1.3;}.authors.svelte-7gk24t {margin:0;color:var(--text);}.venue.svelte-7gk24t {margin:2px 0 0;color:var(--text-muted);font-style:italic;}dl.svelte-7gk24t {display:grid;grid-template-columns:max-content minmax(0, 1fr);gap:3px 12px;font-size:.9em;margin:10px 0;}dt.svelte-7gk24t {color:var(--text-faint);}dd.svelte-7gk24t {margin:0;overflow-wrap:anywhere;}.actions.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 8px;}.choice.svelte-7gk24t {display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 10px;}.choice.svelte-7gk24t span:where(.svelte-7gk24t) {color:var(--text-faint);font-size:.85em;margin-right:2px;}.links.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:14px;margin:6px 0;}.links.svelte-7gk24t a:where(.svelte-7gk24t) {display:inline-flex;gap:5px;align-items:center;color:var(--link, var(--accent));text-decoration:none;font-size:.92em;}.links.svelte-7gk24t a:where(.svelte-7gk24t):hover {text-decoration:underline;}.tags.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}.tag.svelte-7gk24t {font-size:calc(11.5px * var(--ui-scale, 1));padding:2px 9px;border-radius:999px;border:1px solid var(--border-strong);color:var(--text-muted);}.tag.svelte-7gk24t:hover {color:var(--text);border-color:var(--accent);}h3.svelte-7gk24t {margin:18px 0 6px;font-size:calc(11px * var(--ui-scale, 1));text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);}.abstract.svelte-7gk24t {margin:0;line-height:1.6;color:var(--text);}.pad.svelte-7gk24t {padding:12px 16px;}\r\n  /* the covers are a grid: the \"nothing here\" line spans all its columns (on a phone it sat in one, a word a line) */.none.svelte-7gk24t {grid-column:1 / -1;}\r\n\r\n  /* narrow: one column; groups as a row of chips; the card as a sheet over the list */.narrow.svelte-7gk24t header:where(.svelte-7gk24t) {padding:10px 12px;gap:8px;}.narrow.svelte-7gk24t .search:where(.svelte-7gk24t) {flex:1 1 100%;min-width:0;order:1;}.narrow.svelte-7gk24t .add:where(.svelte-7gk24t) {flex:1 1 100%;order:2;}.narrow.svelte-7gk24t .add:where(.svelte-7gk24t) input:where(.svelte-7gk24t) {flex:1;width:auto;min-width:0;}.narrow.svelte-7gk24t .types:where(.svelte-7gk24t) {padding:0 12px 8px;flex-wrap:nowrap;overflow-x:auto;}.narrow.svelte-7gk24t .body:where(.svelte-7gk24t), .narrow.svelte-7gk24t .body.bare:where(.svelte-7gk24t) {display:flex;flex-direction:column;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) {flex:none;flex-direction:row;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid var(--border);padding:6px 12px;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) h4:where(.svelte-7gk24t), .narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .h4:where(.svelte-7gk24t) {margin:0 2px 0 6px;flex:none;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .item:where(.svelte-7gk24t) {width:auto;flex:none;max-width:70vw;padding:5px 10px;border-radius:999px;border:1px solid var(--border);}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .item.on:where(.svelte-7gk24t) {box-shadow:none;border-color:color-mix(in srgb, var(--accent) 45%, transparent);}.narrow.svelte-7gk24t .list:where(.svelte-7gk24t) {flex:1;border-right:0;}.narrow.svelte-7gk24t .zot-table:where(.svelte-7gk24t) {min-width:640px;}.narrow.svelte-7gk24t .list.covers:where(.svelte-7gk24t) {grid-template-columns:repeat(auto-fill, minmax(104px, 1fr));gap:12px 10px;padding:10px 12px;}.scrim.svelte-7gk24t {position:absolute;inset:0;z-index:6;background:var(--scrim);border:0;padding:0;cursor:default;}.narrow.svelte-7gk24t .detail:where(.svelte-7gk24t) {position:absolute;left:0;right:0;bottom:0;z-index:7;max-height:80%;padding:18px 16px calc(24px + env(safe-area-inset-bottom, 0px));background:var(--bg-elev);border-top:1px solid var(--border-strong);border-radius:14px 14px 0 0;box-shadow:var(--shadow-pop);}.narrow.svelte-7gk24t .detail:where(.svelte-7gk24t) .cover.big {max-height:180px;}\r\n  /* stays at the sheet's top right while its card scrolls */.close.svelte-7gk24t {position:sticky;top:0;float:right;z-index:1;margin:-8px -6px 0 8px;width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:var(--bg-hover);}"
 };
-function jo(e, t) {
-	Ue(t, !0), ii(e, Ao);
+function Io(e, t) {
+	Ue(t, !0), ii(e, Fo);
 	let n = (e, t = d) => {
-		var n = Fa();
+		var n = Ia();
 		let r;
 		var i = R(n), a = (e) => {
-			ka(e, {
+			Aa(e, {
 				get name() {
 					return t().icon;
 				},
@@ -3114,14 +3119,43 @@ function jo(e, t) {
 			t().icon && e(a);
 		});
 		var o = B(i);
-		j(n), V(() => {
+		A(n), V(() => {
 			r = Q(n, 1, "btn svelte-7gk24t", null, r, {
 				primary: t().primary,
 				danger: t().danger
 			}), n.disabled = t().disabled, $(n, "title", t().title), Y(o, ` ${t().label ?? ""}`);
-		}), K("click", n, () => void fe(t())), J(e, n);
-	}, r = (e, n, r = "info", i) => t.kandinsky.toast(e, n, r, { timeout: i }), i = (e) => t.kandinsky.richTitle(e), a = /* @__PURE__ */ I(Jt([])), o = /* @__PURE__ */ I(""), s = /* @__PURE__ */ I(""), c = /* @__PURE__ */ I(Jt({ kind: "all" })), l = /* @__PURE__ */ I(null), u = /* @__PURE__ */ I(!1), f = /* @__PURE__ */ I(null), p = /* @__PURE__ */ I(Jt(dr(() => t.source.sorts[0]?.id ?? ""))), h = /* @__PURE__ */ I(Jt(dr(() => t.source.layouts[0]))), g = /* @__PURE__ */ I(Jt([])), _;
-	async function v() {
+		}), K("click", n, () => void ge(t())), J(e, n);
+	}, r = (e, n, r = "info", i) => t.kandinsky.toast(e, n, r, { timeout: i }), i = (e) => t.kandinsky.richTitle(e), a = /* @__PURE__ */ I(Jt([])), o = /* @__PURE__ */ I(""), s = /* @__PURE__ */ I(""), c = /* @__PURE__ */ I(Jt({ kind: "all" })), l = /* @__PURE__ */ I(null), u = /* @__PURE__ */ I(!1), f = /* @__PURE__ */ I(null), p = /* @__PURE__ */ I(Jt(dr(() => t.source.sorts[0]?.id ?? ""))), h = /* @__PURE__ */ I(null), g = /* @__PURE__ */ I(Jt(dr(() => t.source.layouts[0]))), _ = /* @__PURE__ */ I(Jt([])), v, y = [
+		{
+			id: "title",
+			label: "Title"
+		},
+		{
+			id: "author",
+			label: "Creators"
+		},
+		{
+			id: "year",
+			label: "Year"
+		},
+		{
+			id: "venue",
+			label: "Publication"
+		},
+		{
+			id: "kind",
+			label: "Type"
+		},
+		{
+			id: "added",
+			label: "Added"
+		},
+		{
+			id: "pdf",
+			label: "PDF"
+		}
+	];
+	async function b() {
 		try {
 			let e = new Map(G(a).map((e) => [e.id, e]));
 			L(a, (await t.source.load()).map((t) => {
@@ -3132,41 +3166,53 @@ function jo(e, t) {
 			L(o, Zi(e), !0);
 		}
 	}
-	let y = /* @__PURE__ */ P(() => ra(G(a), (e) => e.groups, t.source.groupOrder)), ee = /* @__PURE__ */ P(() => G(y).some(([e]) => e.includes(ea))), b = /* @__PURE__ */ I(Jt([])), x = /* @__PURE__ */ I(Jt([])), te = /* @__PURE__ */ P(() => new Set([...G(b), ...G(y).map(([e]) => e.split(ea)[0])].filter((e) => !G(x).includes(e)))), ne = /* @__PURE__ */ P(() => G(ee) ? na(G(y), G(te)) : []);
+	let x = /* @__PURE__ */ P(() => ia(G(a), (e) => e.groups, t.source.groupOrder)), S = /* @__PURE__ */ P(() => G(x).some(([e]) => e.includes(ta))), ee = /* @__PURE__ */ I(Jt([])), C = /* @__PURE__ */ I(Jt([])), te = /* @__PURE__ */ P(() => new Set([...G(ee), ...G(x).map(([e]) => e.split(ta)[0])].filter((e) => !G(C).includes(e)))), ne = /* @__PURE__ */ P(() => G(S) ? ra(G(x), G(te)) : []);
 	function re(e) {
-		G(te).has(e) ? (L(b, G(b).filter((t) => t !== e), !0), L(x, [...G(x), e], !0)) : (L(x, G(x).filter((t) => t !== e), !0), L(b, [...G(b), e], !0));
+		G(te).has(e) ? (L(ee, G(ee).filter((t) => t !== e), !0), L(C, [...G(C), e], !0)) : (L(C, G(C).filter((t) => t !== e), !0), L(ee, [...G(ee), e], !0));
 	}
-	let ie = /* @__PURE__ */ P(() => ra(G(a), (e) => e.tags)), ae = /* @__PURE__ */ P(() => {
+	let ie = /* @__PURE__ */ P(() => ia(G(a), (e) => e.tags)), ae = /* @__PURE__ */ P(() => {
 		let e = G(a);
 		return (typeof t.source.tabs == "function" ? t.source.tabs() : t.source.tabs ?? []).map((t) => ({
 			...t,
 			n: e.filter((e) => e.tab === t.id).length
 		})).filter((e) => e.n || e.always);
-	}), oe = (e, t) => G(c).kind === e && (e === "all" || G(c).name === t), se = (e) => (!G(l) || e.tab === G(l)) && (G(c).kind === "all" || (G(c).kind === "group" ? ta(e.groups, G(c).name) : (e.tags ?? []).includes(G(c).name))), ce = /* @__PURE__ */ P(() => G(a).filter((e) => se(e) && $i(e, G(s)))), S = /* @__PURE__ */ P(() => Qi(G(ce), t.source.sorts.find((e) => e.id === G(p)) ?? { id: "" })), C = /* @__PURE__ */ P(() => G(S).find((e) => e.id === G(f)) ?? G(S)[0] ?? null), le = /* @__PURE__ */ I(1e3), ue = /* @__PURE__ */ P(() => G(le) < 700), de = /* @__PURE__ */ P(() => G(ue) ? G(f) !== null && G(C)?.id === G(f) ? G(C) : null : G(C)), w = /* @__PURE__ */ I(null);
+	}), oe = (e, t) => G(c).kind === e && (e === "all" || G(c).name === t), se = (e) => (!G(l) || e.tab === G(l)) && (G(c).kind === "all" || (G(c).kind === "group" ? na(e.groups, G(c).name) : (e.tags ?? []).includes(G(c).name))), ce = /* @__PURE__ */ P(() => G(a).filter((e) => se(e) && ea(e, G(s)))), le = /* @__PURE__ */ P(() => t.source.sorts.find((e) => e.id === G(p))), ue = /* @__PURE__ */ P(() => G(h) ?? !!G(le)?.desc), de = /* @__PURE__ */ P(() => $i(G(ce), {
+		id: G(p),
+		desc: G(ue)
+	})), w = /* @__PURE__ */ P(() => G(de).find((e) => e.id === G(f)) ?? G(de)[0] ?? null);
+	function fe(e) {
+		if (G(p) === e) L(h, !G(ue));
+		else {
+			L(p, e, !0);
+			let n = t.source.sorts.find((t) => t.id === e);
+			L(h, n?.desc ?? (e === "year" || e === "added" || e === "pdf"), !0);
+		}
+	}
+	let pe = /* @__PURE__ */ I(1e3), me = /* @__PURE__ */ P(() => G(pe) < 700), he = /* @__PURE__ */ P(() => G(me) ? G(f) !== null && G(w)?.id === G(f) ? G(w) : null : G(w)), T = /* @__PURE__ */ I(null);
 	vn(() => {
-		let e = G(C);
+		let e = G(w);
 		if (!e) {
-			L(w, null);
+			L(T, null);
 			return;
 		}
 		let n = dr(() => t.source.detail(e));
 		if (!(n instanceof Promise)) {
-			L(w, n, !0);
+			L(T, n, !0);
 			return;
 		}
 		let r = !0;
 		return n.then((e) => {
-			r && L(w, e, !0);
+			r && L(T, e, !0);
 		}, (e) => {
 			r && L(o, Zi(e), !0);
 		}), () => {
 			r = !1;
 		};
 	});
-	let T = /* @__PURE__ */ I(null);
-	async function fe(e) {
+	let E = /* @__PURE__ */ I(null);
+	async function ge(e) {
 		if ("edit" in e) {
-			L(T, {
+			L(E, {
 				def: e.edit,
 				values: Object.fromEntries(e.edit.fields.map((e) => [e.key, e.value]))
 			}, !0);
@@ -3176,93 +3222,94 @@ function jo(e, t) {
 			hint: e.confirm.hint,
 			ok: e.confirm.button,
 			danger: !0
-		}) || await pe(e.run);
+		}) || await _e(e.run);
 	}
-	async function pe(e) {
+	async function _e(e) {
+		let t;
 		try {
-			await e();
+			t = await e();
 		} catch (e) {
 			r("It did not work", Zi(e), "error");
 		}
-		await v();
+		await b(), typeof t == "string" && t && (L(f, t, !0), L(j, [t], !0));
 	}
-	async function me() {
-		if (G(T)) try {
-			await G(T).def.save(G(T).values), L(T, null), await v();
+	async function ve() {
+		if (G(E)) try {
+			await G(E).def.save(G(E).values), L(E, null), await b();
 		} catch (e) {
 			r("Could not save", Zi(e), "error");
 		}
 	}
-	let he = /* @__PURE__ */ P(() => G(C)?.id);
+	let ye = /* @__PURE__ */ P(() => G(w)?.id);
 	vn(() => {
-		G(he), L(T, null);
+		G(ye), L(E, null);
 	});
-	let E = /* @__PURE__ */ I(!1), ge = /* @__PURE__ */ I("");
-	async function _e() {
-		if (t.source.add && G(ge).trim() && !G(E)) {
-			L(E, !0);
+	let be = /* @__PURE__ */ I(!1), xe = /* @__PURE__ */ I("");
+	async function Se() {
+		if (t.source.add && G(xe).trim() && !G(be)) {
+			L(be, !0);
 			try {
-				let e = await t.source.add.run(G(ge).trim());
-				await v(), e && L(f, e, !0), L(ge, "");
+				let e = await t.source.add.run(G(xe).trim());
+				await b(), e && L(f, e, !0), L(xe, "");
 			} catch (e) {
 				r("Could not add it", Zi(e), "error", 9e3);
 			} finally {
-				L(E, !1);
+				L(be, !1);
 			}
 		}
 	}
-	let ve = /* @__PURE__ */ I(!1);
-	async function ye(e) {
-		if (e.preventDefault(), L(ve, !1), !t.source.drop) return;
+	let D = /* @__PURE__ */ I(!1);
+	async function Ce(e) {
+		if (e.preventDefault(), L(D, !1), !t.source.drop) return;
 		let n = [...e.dataTransfer?.files ?? []].filter((e) => t.source.drop.accept.test(e.name));
 		if (!n.length) {
 			r("Nothing here can take these files");
 			return;
 		}
-		let i = await t.source.drop.run(n);
-		await v(), i && L(f, i, !0);
+		let i = await t.source.drop.run(n, G(c).kind === "group" ? G(c).name : void 0);
+		await b(), i && (L(f, i, !0), L(j, [i], !0));
 	}
-	let be = "text/x-kandinsky-library", xe = /* @__PURE__ */ I(null);
-	function Se(e, t) {
-		let n = G(O).length > 1 && G(A).has(t.id) ? G(O) : [t.id];
-		e.dataTransfer?.setData(be, JSON.stringify(n)), e.dataTransfer && (e.dataTransfer.effectAllowed = "move");
+	let O = "text/x-kandinsky-library", k = /* @__PURE__ */ I(null);
+	function we(e, t) {
+		let n = G(j).length > 1 && G(Oe).has(t.id) ? G(j) : [t.id];
+		e.dataTransfer?.setData(O, JSON.stringify(n)), e.dataTransfer && (e.dataTransfer.effectAllowed = "move");
 	}
-	let D = (e) => ({
+	let Ee = (e) => ({
 		ondragover: (n) => {
-			t.source.regroup && n.dataTransfer?.types.includes(be) && (n.preventDefault(), L(xe, e, !0));
+			t.source.regroup && n.dataTransfer?.types.includes(O) && (n.preventDefault(), L(k, e, !0));
 		},
 		ondragleave: () => {
-			G(xe) === e && L(xe, null);
+			G(k) === e && L(k, null);
 		},
 		ondrop: async (n) => {
-			let i = JSON.parse(n.dataTransfer?.getData(be) || "[]");
+			let i = JSON.parse(n.dataTransfer?.getData(O) || "[]");
 			if (t.source.regroup && i.length) {
-				n.preventDefault(), n.stopPropagation(), L(xe, null);
+				n.preventDefault(), n.stopPropagation(), L(k, null);
 				try {
 					await t.source.regroup(G(a).filter((e) => i.includes(e.id)), e);
 				} catch (e) {
 					r("Not moved", Zi(e), "error");
 				}
-				await v();
+				await b();
 			}
 		}
-	}), O = /* @__PURE__ */ I(Jt([])), k = null, A = /* @__PURE__ */ P(() => new Set(G(O))), Ce = /* @__PURE__ */ P(() => G(S).filter((e) => G(A).has(e.id))), Te = (e) => G(O).length > 1 ? G(A).has(e.id) : G(de)?.id === e.id;
-	function Ee(e, t) {
+	}), j = /* @__PURE__ */ I(Jt([])), De = null, Oe = /* @__PURE__ */ P(() => new Set(G(j))), ke = /* @__PURE__ */ P(() => G(de).filter((e) => G(Oe).has(e.id))), Ae = (e) => G(j).length > 1 ? G(Oe).has(e.id) : G(he)?.id === e.id;
+	function je(e, t) {
 		if (e.ctrlKey || e.metaKey) {
-			let e = G(O).length ? G(O) : G(C) ? [G(C).id] : [];
-			L(O, e.includes(t.id) ? e.filter((e) => e !== t.id) : [...e, t.id], !0);
-		} else if (e.shiftKey && k) {
-			let e = G(S).findIndex((e) => e.id === k), n = G(S).indexOf(t);
-			L(O, e < 0 ? [t.id] : G(S).slice(Math.min(e, n), Math.max(e, n) + 1).map((e) => e.id), !0);
-		} else L(O, [t.id], !0);
-		e.shiftKey || (k = t.id), L(f, t.id, !0);
+			let e = G(j).length ? G(j) : G(w) ? [G(w).id] : [];
+			L(j, e.includes(t.id) ? e.filter((e) => e !== t.id) : [...e, t.id], !0);
+		} else if (e.shiftKey && De) {
+			let e = G(de).findIndex((e) => e.id === De), n = G(de).indexOf(t);
+			L(j, e < 0 ? [t.id] : G(de).slice(Math.min(e, n), Math.max(e, n) + 1).map((e) => e.id), !0);
+		} else L(j, [t.id], !0);
+		e.shiftKey || (De = t.id), L(f, t.id, !0);
 	}
-	let De = [];
-	function Oe(e, t) {
-		t ? De.length || (De = G(O)) : De = [], L(O, [.../* @__PURE__ */ new Set([...De, ...e])], !0), e.length && L(f, e.at(-1), !0);
+	let Me = [];
+	function Ne(e, t) {
+		t ? Me.length || (Me = G(j)) : Me = [], L(j, [.../* @__PURE__ */ new Set([...Me, ...e])], !0), e.length && L(f, e.at(-1), !0);
 	}
-	let ke = /* @__PURE__ */ P(() => {
-		let e = G(Ce);
+	let Pe = /* @__PURE__ */ P(() => {
+		let e = G(ke);
 		if (e.length < 2) return [];
 		let n = t.source.open;
 		return [...n ? [{
@@ -3274,211 +3321,223 @@ function jo(e, t) {
 			}
 		}] : [], ...t.source.many?.(e) ?? []];
 	});
-	function Ae(e) {
-		if (!G(S).length) return;
-		let t = Math.max(0, Math.min(G(S).length - 1, (G(C) ? G(S).indexOf(G(C)) : -1) + e));
-		L(f, G(S)[t].id, !0), L(O, [G(f)], !0), k = G(f);
-		let n = !!_?.contains(document.activeElement);
+	function Fe(e) {
+		if (!G(de).length) return;
+		let t = Math.max(0, Math.min(G(de).length - 1, (G(w) ? G(de).indexOf(G(w)) : -1) + e));
+		L(f, G(de)[t].id, !0), L(j, [G(f)], !0), De = G(f);
+		let n = !!v?.contains(document.activeElement);
 		requestAnimationFrame(() => {
-			let e = _?.querySelector(".row.sel, .card.sel");
-			e?.scrollIntoView({ block: "nearest" }), n && e?.focus();
+			let e = v?.querySelector(".row.sel, .card.sel, .trow.sel");
+			e?.scrollIntoView({ block: "nearest" }), n && (e?.querySelector(".row-focus") ?? e)?.focus();
 		});
 	}
-	function je(e) {
+	function Ie(e) {
 		if (e.target.closest("input, select, textarea")) return;
 		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
-			e.preventDefault(), L(O, G(S).map((e) => e.id), !0);
+			e.preventDefault(), L(j, G(de).map((e) => e.id), !0);
 			return;
 		}
-		if (e.key === "Escape" && G(O).length > 1) {
-			e.preventDefault(), L(O, G(C) ? [G(C).id] : [], !0);
+		if (e.key === "Escape" && G(j).length > 1) {
+			e.preventDefault(), L(j, G(w) ? [G(w).id] : [], !0);
 			return;
 		}
-		if (e.ctrlKey || da(e) || e.altKey) return;
+		if (e.ctrlKey || fa(e) || e.altKey) return;
 		let n = e.key;
-		if (n === "ArrowDown" || n === "j" || G(h) === "covers" && n === "ArrowRight") Ae(1);
-		else if (n === "ArrowUp" || n === "k" || G(h) === "covers" && n === "ArrowLeft") Ae(-1);
-		else if (n === "Enter" && G(C) && t.source.open) t.source.open(G(C));
-		else if (G(C) && t.source.keys?.[n]) t.source.keys[n](G(C));
+		if (n === "ArrowDown" || n === "j" || G(g) === "covers" && n === "ArrowRight") Fe(1);
+		else if (n === "ArrowUp" || n === "k" || G(g) === "covers" && n === "ArrowLeft") Fe(-1);
+		else if (n === "Enter" && G(w) && t.source.open) t.source.open(G(w));
+		else if (G(w) && t.source.keys?.[n]) t.source.keys[n](G(w));
 		else return;
 		e.preventDefault();
 	}
-	function Me(e, n) {
+	function Le(e, n) {
 		return { destroy: t.kandinsky.mountBlock(e, {
 			type: "backlinks",
 			path: n
 		}) };
 	}
 	Ji(() => {
-		v(), t.source.tools?.().then((e) => L(g, e, !0), () => {});
+		b(), t.source.tools?.().then((e) => L(_, e, !0), () => {});
 		let e, n = t.source.watch?.(() => {
-			clearTimeout(e), e = setTimeout(v, 1200);
+			clearTimeout(e), e = setTimeout(b, 1200);
 		});
 		return () => {
 			n?.(), clearTimeout(e);
 		};
 	});
-	var Ne = ko();
-	let Pe;
-	var Fe = R(Ne), Ie = (e) => {
-		var n = Ia(), r = z(n, !0);
+	var Re = Po();
+	let ze;
+	var Be = R(Re), Ve = (e) => {
+		var n = La(), r = z(n, !0);
 		V(() => Y(r, t.source.drop.hint)), J(e, n);
 	};
-	X(Fe, (e) => {
-		G(ve) && t.source.drop && e(Ie);
+	X(Be, (e) => {
+		G(D) && t.source.drop && e(Ve);
 	});
-	var Le = B(Fe, 2), Re = R(Le), ze = R(Re);
-	ka(ze, {
+	var M = B(Be, 2), He = R(M), Ge = R(He);
+	Aa(Ge, {
 		get name() {
 			return t.source.icon;
 		},
 		size: 18
 	});
-	var Be = B(ze), Ve = z(B(Be), !0);
-	j(Re);
-	var M = B(Re, 2);
-	Mi(M);
-	var He = B(M, 2), Ge = (e) => {
+	var Ke = B(Ge), qe = z(B(Ke), !0);
+	A(He);
+	var Je = B(He, 2);
+	Mi(Je);
+	var Ye = B(Je, 2), Xe = (e) => {
 		{
 			let n = /* @__PURE__ */ P(() => t.source.sorts.map((e) => ({
 				value: e.id,
 				label: `Sort: ${e.label}`
 			})));
-			Sa(e, {
+			Ca(e, {
 				get value() {
 					return G(p);
 				},
 				label: "Sort by",
-				onchange: (e) => L(p, e, !0),
+				onchange: (e) => {
+					L(p, e, !0), L(h, null);
+				},
 				get options() {
 					return G(n);
 				}
 			});
 		}
 	};
-	X(He, (e) => {
-		t.source.sorts.length > 1 && e(Ge);
+	X(Ye, (e) => {
+		t.source.sorts.length > 1 && e(Xe);
 	});
-	var Ke = B(He, 2), qe = (e) => {
-		var n = Ra();
+	var Ze = B(Ye, 2), N = (e) => {
+		var n = za();
 		Z(n, 20, () => t.source.layouts, (e) => e, (e, t) => {
-			var n = La();
+			var n = Ra();
 			let r;
 			var i = z(n, !0);
 			V(() => {
-				$(n, "aria-checked", G(h) === t), r = Q(n, 1, "svelte-7gk24t", null, r, { on: G(h) === t }), Y(i, t === "covers" ? "Covers" : "List");
-			}), K("click", n, () => L(h, t, !0)), J(e, n);
-		}), j(n), J(e, n);
+				$(n, "aria-checked", G(g) === t), r = Q(n, 1, "svelte-7gk24t", null, r, { on: G(g) === t }), Y(i, t === "covers" ? "Covers" : t === "table" ? "Table" : "List");
+			}), K("click", n, () => L(g, t, !0)), J(e, n);
+		}), A(n), J(e, n);
 	};
-	X(Ke, (e) => {
-		t.source.layouts.length > 1 && e(qe);
+	X(Ze, (e) => {
+		t.source.layouts.length > 1 && e(N);
 	});
-	var Je = B(Ke, 2), Ye = (e) => {
-		var n = za(), r = R(n);
+	var Qe = B(Ze, 2), $e = (e) => {
+		var n = Ba(), r = R(n);
 		Mi(r);
 		var i = B(r, 2), a = z(i, !0);
-		j(n), V((e) => {
-			$(r, "placeholder", t.source.add.placeholder), r.disabled = G(E), i.disabled = e, Y(a, G(E) ? t.source.add.busy : "Add");
-		}, [() => !G(ge).trim() || G(E)]), Er("submit", n, (e) => {
-			e.preventDefault(), _e();
-		}), Ri(r, () => G(ge), (e) => L(ge, e)), J(e, n);
+		A(n), V((e) => {
+			$(r, "placeholder", t.source.add.placeholder), r.disabled = G(be), i.disabled = e, Y(a, G(be) ? t.source.add.busy : "Add");
+		}, [() => !G(xe).trim() || G(be)]), Er("submit", n, (e) => {
+			e.preventDefault(), Se();
+		}), Ri(r, () => G(xe), (e) => L(xe, e)), J(e, n);
 	};
-	X(Je, (e) => {
-		t.source.add && e(Ye);
-	}), Z(B(Je, 2), 17, () => G(g), (e) => e.label, (e, t) => {
+	X(Qe, (e) => {
+		t.source.add && e($e);
+	}), Z(B(Qe, 2), 17, () => G(_), (e) => e.label, (e, t) => {
 		n(e, () => G(t));
-	}), j(Le);
-	var Xe = B(Le, 2), Ze = (e) => {
-		var t = Va(), n = R(t);
+	}), A(M);
+	var et = B(M, 2), nt = (e) => {
+		var t = Ha(), n = R(t);
 		let r;
 		var i = z(B(R(n)), !0);
-		j(n), Z(B(n, 2), 17, () => G(ae), (e) => e.id, (e, t) => {
-			var n = Ba();
+		A(n), Z(B(n, 2), 17, () => G(ae), (e) => e.id, (e, t) => {
+			var n = Va();
 			let r;
 			var i = R(n), a = z(B(i), !0);
-			j(n), V(() => {
+			A(n), V(() => {
 				r = Q(n, 1, "chip svelte-7gk24t", null, r, { on: G(l) === G(t).id }), $(n, "aria-pressed", G(l) === G(t).id), Y(i, `${G(t).title ?? ""} `), Y(a, G(t).n);
 			}), K("click", n, () => L(l, G(l) === G(t).id ? null : G(t).id, !0)), J(e, n);
-		}), j(t), V(() => {
+		}), A(t), V(() => {
 			r = Q(n, 1, "chip svelte-7gk24t", null, r, { on: !G(l) }), Y(i, G(a).length);
 		}), K("click", n, () => L(l, null)), J(e, t);
 	};
-	X(Xe, (e) => {
-		G(ae).length > 1 && e(Ze);
+	X(et, (e) => {
+		G(ae).length > 1 && e(nt);
 	});
-	var N = B(Xe, 2), Qe = (e) => {
-		var t = Ha(), n = z(t, !0);
+	var rt = B(et, 2), it = (e) => {
+		var t = Ua(), n = z(t, !0);
 		V(() => Y(n, G(o))), J(e, t);
 	};
-	X(N, (e) => {
-		G(o) && e(Qe);
+	X(rt, (e) => {
+		G(o) && e(it);
 	});
-	var $e = B(N, 2);
-	let et;
-	var nt = R($e), rt = (e) => {
-		var n = Xa(), r = R(n);
+	var at = B(rt, 2);
+	let ot;
+	var st = R(at), ct = (e) => {
+		var n = Za(), r = R(n);
 		let i;
 		var o = R(r);
-		ka(o, {
+		Aa(o, {
 			get name() {
 				return t.source.icon;
 			},
 			size: 14
 		});
 		var s = B(o), l = z(s), d = z(B(s), !0);
-		j(r);
+		A(r);
 		var f = B(r, 2), p = (e) => {
-			var n = qa(), r = on(n), i = z(r, !0), a = B(r, 2), o = (e) => {
+			var n = Ja(), r = on(n), i = z(r, !0), a = B(r, 2), o = (e) => {
 				var t = Fr();
 				Z(on(t), 17, () => G(ne), (e) => e.path, (e, t) => {
-					var n = Ga();
+					var n = Ka();
 					let r;
 					var i = R(n), a = (e) => {
-						var n = Ua(), r = R(n);
+						var n = Wa(), r = R(n);
 						{
 							let e = /* @__PURE__ */ P(() => G(te).has(G(t).path) ? "chevron-down" : "chevron");
-							ka(r, {
+							Aa(r, {
 								get name() {
 									return G(e);
 								},
 								size: 12
 							});
 						}
-						j(n), V((e, t) => {
+						A(n), V((e, t) => {
 							$(n, "aria-label", e), $(n, "aria-expanded", t);
 						}, [() => G(te).has(G(t).path) ? `Close ${G(t).name}` : `Open ${G(t).name}`, () => G(te).has(G(t).path)]), K("click", n, () => re(G(t).path)), J(e, n);
 					}, o = (e) => {
-						J(e, Wa());
+						J(e, Ga());
 					};
 					X(i, (e) => {
 						G(t).kids ? e(a) : e(o, -1);
 					});
-					var s = B(i, 2);
-					let l;
-					var u = R(s);
+					var s = B(i, 2), l = () => L(c, {
+						kind: "group",
+						name: G(t).path
+					}, !0), u = () => G(t).kids && re(G(t).path);
+					Pi(s, (e, n) => ({
+						class: "item",
+						onclick: l,
+						ondblclick: u,
+						title: G(t).path,
+						...e,
+						[wi]: {
+							on: n,
+							drop: G(k) === G(t).path
+						}
+					}), [() => Ee(G(t).path), () => oe("group", G(t).path)], void 0, void 0, "svelte-7gk24t");
+					var d = R(s);
 					{
 						let e = /* @__PURE__ */ P(() => G(te).has(G(t).path) && G(t).kids ? "folder-open" : "folder");
-						ka(u, {
+						Aa(d, {
 							get name() {
 								return G(e);
 							},
 							size: 14
 						});
 					}
-					var d = B(u), f = z(d, !0), p = z(B(d), !0);
-					j(s), j(n), V((e) => {
-						r = gi(n, "", r, { "padding-left": `${G(t).depth * 12}px` }), l = Q(s, 1, "item svelte-7gk24t", null, l, { on: e }), $(s, "title", G(t).path), Y(f, G(t).name), Y(p, G(t).count);
-					}, [() => oe("group", G(t).path)]), K("click", s, () => L(c, {
-						kind: "group",
-						name: G(t).path
-					}, !0)), K("dblclick", s, () => G(t).kids && re(G(t).path)), J(e, n);
+					var f = B(d), p = z(f, !0), m = z(B(f), !0);
+					A(s), A(n), V(() => {
+						r = gi(n, "", r, { "padding-left": `${G(t).depth * 12}px` }), Y(p, G(t).name), Y(m, G(t).count);
+					}), J(e, n);
 				}), J(e, t);
 			}, s = (e) => {
 				var t = Fr();
-				Z(on(t), 17, () => G(y), ([e, t]) => e, (e, t) => {
+				Z(on(t), 17, () => G(x), ([e, t]) => e, (e, t) => {
 					var n = /* @__PURE__ */ P(() => m(G(t), 2));
 					let r = () => G(n)[0], i = () => G(n)[1];
-					var a = Ka(), o = () => L(c, {
+					var a = qa(), o = () => L(c, {
 						kind: "group",
 						name: r()
 					}, !0);
@@ -3489,32 +3548,32 @@ function jo(e, t) {
 						...e,
 						[wi]: {
 							on: t,
-							drop: G(xe) === r()
+							drop: G(k) === r()
 						}
-					}), [() => D(r()), () => oe("group", r())], void 0, void 0, "svelte-7gk24t");
+					}), [() => Ee(r()), () => oe("group", r())], void 0, void 0, "svelte-7gk24t");
 					var s = R(a);
-					ka(s, {
+					Aa(s, {
 						name: "folder",
 						size: 14
 					});
 					var l = B(s), u = z(l, !0), d = z(B(l), !0);
-					j(a), V(() => {
+					A(a), V(() => {
 						Y(u, r()), Y(d, i());
 					}), J(e, a);
 				}), J(e, t);
 			};
 			X(a, (e) => {
-				G(ee) ? e(o) : e(s, -1);
+				G(S) ? e(o) : e(s, -1);
 			}), V(() => Y(i, t.source.groupsTitle ?? "Groups")), J(e, n);
 		};
 		X(f, (e) => {
-			G(y).length && e(p);
+			G(x).length && e(p);
 		});
 		var h = B(f, 2), g = (e) => {
-			var t = Ya(), n = on(t), r = R(n);
+			var t = Xa(), n = on(t), r = R(n);
 			{
 				let e = /* @__PURE__ */ P(() => G(u) ? "chevron-down" : "chevron");
-				ka(r, {
+				Aa(r, {
 					get name() {
 						return G(e);
 					},
@@ -3522,17 +3581,17 @@ function jo(e, t) {
 				});
 			}
 			var i = z(B(r, 2), !0);
-			j(n);
+			A(n);
 			var a = B(n, 2), o = (e) => {
 				var t = Fr();
 				Z(on(t), 17, () => G(ie), ([e, t]) => e, (e, t) => {
 					var n = /* @__PURE__ */ P(() => m(G(t), 2));
 					let r = () => G(n)[0], i = () => G(n)[1];
 					var a = Fr(), o = on(a), s = (e) => {
-						var t = Ja();
+						var t = Ya();
 						let n;
 						var a = B(R(t)), o = z(a, !0), s = z(B(a), !0);
-						j(t), V((e) => {
+						A(t), V((e) => {
 							n = Q(t, 1, "item tagitem svelte-7gk24t", null, n, { on: e }), $(t, "title", r()), Y(o, r()), Y(s, i());
 						}, [() => oe("tag", r())]), K("click", t, () => L(c, {
 							kind: "tag",
@@ -3552,296 +3611,330 @@ function jo(e, t) {
 		};
 		X(h, (e) => {
 			G(ie).length && e(g);
-		}), j(n), V((e) => {
+		}), A(n), V((e) => {
 			$(n, "aria-label", t.source.groupsTitle ?? "Groups"), i = Q(r, 1, "item svelte-7gk24t", null, i, { on: e }), Y(l, `All ${t.source.noun ?? ""}`), Y(d, G(a).length);
 		}, [() => oe("all")]), K("click", r, () => L(c, { kind: "all" }, !0)), J(e, n);
 	};
-	X(nt, (e) => {
-		(G(y).length || G(ie).length) && e(rt);
+	X(st, (e) => {
+		(G(x).length || G(ie).length) && e(ct);
 	});
-	var it = B(nt, 2);
-	let at;
-	Z(it, 21, () => G(S), (e) => e.id, (e, n) => {
-		var r = Fr(), a = on(r), o = (e) => {
-			var r = Qa();
+	var lt = B(st, 2);
+	let ut;
+	var dt = R(lt), ft = (e) => {
+		var n = to(), r = R(n), a = z(r, !0), o = B(r), s = R(o);
+		Z(s, 21, () => y, (e) => e.id, (e, t) => {
+			var n = Qa(), r = R(n), i = R(r), a = z(i, !0), o = z(B(i), !0);
+			A(r), A(n), V(() => {
+				Q(n, 1, `col-${G(t).id ?? ""}`, "svelte-7gk24t"), $(n, "aria-sort", G(p) === G(t).id ? G(ue) ? "descending" : "ascending" : void 0), Y(a, G(t).label), Y(o, G(p) === G(t).id ? G(ue) ? " ↓" : " ↑" : "");
+			}), K("click", r, () => fe(G(t).id)), J(e, n);
+		}), A(s), A(o);
+		var c = B(o);
+		Z(c, 21, () => G(de), (e) => e.id, (e, n) => {
+			var r = eo();
 			let a;
-			var o = R(r);
-			Pa(o, {
-				get kandinsky() {
-					return t.kandinsky;
-				},
-				get cover() {
-					return G(n).cover;
-				},
-				get title() {
-					return G(n).title;
-				}
-			});
-			var s = B(o, 2);
-			ri(s, () => i(G(n).title), !0), j(s);
-			var c = B(s, 2), l = (e) => {
-				var t = Za(), r = z(t, !0);
-				V(() => Y(r, G(n).sub)), J(e, t);
+			var o = R(r), s = R(o), c = R(s);
+			ri(c, () => i(G(n).title), !0), A(c), A(s), A(o);
+			var l = B(o), u = z(l, !0), d = B(l), f = z(d, !0), p = B(d), m = z(p, !0), h = B(p), g = z(h, !0), _ = B(h), v = z(_, !0), y = B(_), b = R(y), x = (e) => {
+				J(e, $a());
+			}, S = /* @__PURE__ */ P(() => G(n).columns?.hasPdf ?? G(n).flags?.some((e) => e.label === "PDF"));
+			X(b, (e) => {
+				G(S) && e(x);
+			}), A(y), A(r), V((e) => {
+				a = Q(r, 1, "trow svelte-7gk24t", null, a, { sel: e }), $(r, "data-pick", G(n).id), $(r, "draggable", t.source.regroup ? "true" : void 0), Y(u, G(n).columns?.creators ?? G(n).sub ?? ""), Y(f, G(n).columns?.year ?? ""), Y(m, G(n).columns?.venue ?? ""), Y(g, G(n).columns?.kind ?? ""), Y(v, G(n).columns?.added ?? "");
+			}, [() => Ae(G(n))]), Er("dragstart", r, (e) => we(e, G(n))), K("click", r, (e) => je(e, G(n))), K("dblclick", r, () => t.source.open?.(G(n))), K("click", s, (e) => {
+				e.stopPropagation(), je(e, G(n));
+			}), K("dblclick", s, (e) => {
+				e.stopPropagation(), t.source.open?.(G(n));
+			}), J(e, r);
+		}), A(c), A(n), V(() => Y(a, t.source.title)), J(e, n);
+	}, pt = (e) => {
+		var n = Fr();
+		Z(on(n), 17, () => G(de), (e) => e.id, (e, n) => {
+			var r = Fr(), a = on(r), o = (e) => {
+				var r = ro();
+				let a;
+				var o = R(r);
+				Fa(o, {
+					get kandinsky() {
+						return t.kandinsky;
+					},
+					get cover() {
+						return G(n).cover;
+					},
+					get title() {
+						return G(n).title;
+					}
+				});
+				var s = B(o, 2);
+				ri(s, () => i(G(n).title), !0), A(s);
+				var c = B(s, 2), l = (e) => {
+					var t = no(), r = z(t, !0);
+					V(() => Y(r, G(n).sub)), J(e, t);
+				};
+				X(c, (e) => {
+					G(n).sub && e(l);
+				}), A(r), V((e) => {
+					a = Q(r, 1, "card svelte-7gk24t", null, a, { sel: e }), $(r, "data-pick", G(n).id), $(r, "draggable", t.source.regroup ? "true" : void 0), $(r, "title", G(n).sub);
+				}, [() => Ae(G(n))]), Er("dragstart", r, (e) => we(e, G(n))), K("click", r, (e) => je(e, G(n))), K("dblclick", r, () => t.source.open?.(G(n))), J(e, r);
+			}, s = (e) => {
+				var r = oo();
+				let a;
+				var o = R(r);
+				ri(o, () => i(G(n).title), !0), A(o);
+				var s = B(o, 2), c = (e) => {
+					var t = no(), r = z(t, !0);
+					V(() => Y(r, G(n).sub)), J(e, t);
+				};
+				X(s, (e) => {
+					G(n).sub && e(c);
+				});
+				var l = B(s, 2), u = (e) => {
+					var t = ao();
+					Z(t, 21, () => G(n).flags, (e) => e.label, (e, t) => {
+						var n = io();
+						let r;
+						var i = z(n, !0);
+						V(() => {
+							r = Q(n, 1, "flag svelte-7gk24t", null, r, { red: G(t).tone === "red" }), Y(i, G(t).label);
+						}), J(e, n);
+					}), A(t), J(e, t);
+				};
+				X(l, (e) => {
+					G(n).flags?.length && e(u);
+				}), A(r), V((e) => {
+					a = Q(r, 1, "row svelte-7gk24t", null, a, { sel: e }), $(r, "data-pick", G(n).id), $(r, "draggable", t.source.regroup ? "true" : void 0);
+				}, [() => Ae(G(n))]), Er("dragstart", r, (e) => we(e, G(n))), K("click", r, (e) => je(e, G(n))), K("dblclick", r, () => t.source.open?.(G(n))), J(e, r);
 			};
-			X(c, (e) => {
-				G(n).sub && e(l);
-			}), j(r), V((e) => {
-				a = Q(r, 1, "card svelte-7gk24t", null, a, { sel: e }), $(r, "data-pick", G(n).id), $(r, "draggable", t.source.regroup ? "true" : void 0), $(r, "title", G(n).sub);
-			}, [() => Te(G(n))]), Er("dragstart", r, (e) => Se(e, G(n))), K("click", r, (e) => Ee(e, G(n))), K("dblclick", r, () => t.source.open?.(G(n))), J(e, r);
-		}, s = (e) => {
-			var r = to();
-			let a;
-			var o = R(r);
-			ri(o, () => i(G(n).title), !0), j(o);
-			var s = B(o, 2), c = (e) => {
-				var t = Za(), r = z(t, !0);
-				V(() => Y(r, G(n).sub)), J(e, t);
-			};
-			X(s, (e) => {
-				G(n).sub && e(c);
-			});
-			var l = B(s, 2), u = (e) => {
-				var t = eo();
-				Z(t, 21, () => G(n).flags, (e) => e.label, (e, t) => {
-					var n = $a();
-					let r;
-					var i = z(n, !0);
-					V(() => {
-						r = Q(n, 1, "flag svelte-7gk24t", null, r, { red: G(t).tone === "red" }), Y(i, G(t).label);
-					}), J(e, n);
-				}), j(t), J(e, t);
-			};
-			X(l, (e) => {
-				G(n).flags?.length && e(u);
-			}), j(r), V((e) => {
-				a = Q(r, 1, "row svelte-7gk24t", null, a, { sel: e }), $(r, "data-pick", G(n).id), $(r, "draggable", t.source.regroup ? "true" : void 0);
-			}, [() => Te(G(n))]), Er("dragstart", r, (e) => Se(e, G(n))), K("click", r, (e) => Ee(e, G(n))), K("dblclick", r, () => t.source.open?.(G(n))), J(e, r);
-		};
-		X(a, (e) => {
-			G(h) === "covers" ? e(o) : e(s, -1);
-		}), J(e, r);
-	}, (e) => {
-		var n = no(), r = z(n, !0);
-		V(() => Y(r, G(a).length ? "Nothing matches." : t.source.empty)), J(e, n);
-	}), j(it), Wi(it, (e) => _ = e, () => _), ai(it, (e, t) => pa?.(e, t), () => ({ pick: Oe }));
-	var ot = B(it, 2), st = (e) => {
-		var r = ao(), a = R(r), o = z(a), s = B(a, 2), c = R(s);
-		Z(c, 17, () => G(Ce).slice(0, 12), (e) => e.id, (e, t) => {
-			var n = ro();
-			ri(n, () => i(G(t).title), !0), j(n), J(e, n);
+			X(a, (e) => {
+				G(g) === "covers" ? e(o) : e(s, -1);
+			}), J(e, r);
+		}, (e) => {
+			var n = so(), r = z(n, !0);
+			V(() => Y(r, G(a).length ? "Nothing matches." : t.source.empty)), J(e, n);
+		}), J(e, n);
+	};
+	X(dt, (e) => {
+		G(g) === "table" && G(de).length ? e(ft) : e(pt, -1);
+	}), A(lt), Wi(lt, (e) => v = e, () => v), ai(lt, (e, t) => ma?.(e, t), () => ({ pick: Ne }));
+	var mt = B(lt, 2), ht = (e) => {
+		var r = uo(), a = R(r), o = z(a), s = B(a, 2), c = R(s);
+		Z(c, 17, () => G(ke).slice(0, 12), (e) => e.id, (e, t) => {
+			var n = co();
+			ri(n, () => i(G(t).title), !0), A(n), J(e, n);
 		});
 		var l = B(c), u = (e) => {
-			var t = io(), n = z(t);
-			V(() => Y(n, `and ${G(Ce).length - 12} more`)), J(e, t);
+			var t = lo(), n = z(t);
+			V(() => Y(n, `and ${G(ke).length - 12} more`)), J(e, t);
 		};
 		X(l, (e) => {
-			G(Ce).length > 12 && e(u);
-		}), j(s);
+			G(ke).length > 12 && e(u);
+		}), A(s);
 		var d = B(s, 2), f = R(d);
-		Z(f, 17, () => G(ke), (e) => e.label, (e, t) => {
+		Z(f, 17, () => G(Pe), (e) => e.label, (e, t) => {
 			n(e, () => G(t));
 		});
 		var p = B(f);
-		j(d), j(r), V(() => Y(o, `${G(Ce).length ?? ""} ${t.source.noun ?? ""} picked`)), K("click", p, () => L(O, G(C) ? [G(C).id] : [], !0)), J(e, r);
-	}, ct = (e) => {
-		var r = Do(), a = on(r), o = (e) => {
-			var t = oo();
+		A(d), A(r), V(() => Y(o, `${G(ke).length ?? ""} ${t.source.noun ?? ""} picked`)), K("click", p, () => L(j, G(w) ? [G(w).id] : [], !0)), J(e, r);
+	}, gt = (e) => {
+		var r = Mo(), a = on(r), o = (e) => {
+			var t = fo();
 			K("click", t, () => L(f, null)), J(e, t);
 		};
 		X(a, (e) => {
-			G(ue) && e(o);
+			G(me) && e(o);
 		});
 		var s = B(a, 2), l = R(s), u = (e) => {
-			var t = so();
-			ka(R(t), {
+			var t = po();
+			Aa(R(t), {
 				name: "close",
 				size: 16
-			}), j(t), K("click", t, () => L(f, null)), J(e, t);
+			}), A(t), K("click", t, () => L(f, null)), J(e, t);
 		};
 		X(l, (e) => {
-			G(ue) && e(u);
+			G(me) && e(u);
 		});
 		var d = B(l, 2), p = (e) => {
-			var t = po(), n = R(t);
-			Z(n, 17, () => G(T).def.fields, (e) => e.key, (e, t) => {
-				var n = fo();
+			var t = vo(), n = R(t);
+			Z(n, 17, () => G(E).def.fields, (e) => e.key, (e, t) => {
+				var n = _o();
 				let r;
 				var i = R(n, !0), a = B(i), o = (e) => {
-					var n = co(), r = z(n, !0);
+					var n = mo(), r = z(n, !0);
 					V(() => Y(r, G(t).hint)), J(e, n);
 				};
 				X(a, (e) => {
 					G(t).hint && e(o);
 				});
 				var s = B(a, 2), c = (e) => {
-					var n = lo();
-					tt(n), V(() => $(n, "rows", G(t).rows)), Ri(n, () => G(T).values[G(t).key], (e) => G(T).values[G(t).key] = e), J(e, n);
+					var n = ho();
+					tt(n), V(() => $(n, "rows", G(t).rows)), Ri(n, () => G(E).values[G(t).key], (e) => G(E).values[G(t).key] = e), J(e, n);
 				}, l = (e) => {
-					var n = uo();
-					Mi(n), Ri(n, () => G(T).values[G(t).key], (e) => G(T).values[G(t).key] = e), J(e, n);
+					var n = go();
+					Mi(n), Ri(n, () => G(E).values[G(t).key], (e) => G(E).values[G(t).key] = e), J(e, n);
 				};
 				X(s, (e) => {
 					G(t).rows ? e(c) : e(l, -1);
-				}), j(n), V(() => {
+				}), A(n), V(() => {
 					r = Q(n, 1, "svelte-7gk24t", null, r, { half: G(t).half }), Y(i, G(t).label);
 				}), J(e, n);
 			});
 			var r = B(n, 2), i = B(R(r));
-			j(r), j(t), Er("submit", t, (e) => {
-				e.preventDefault(), me();
+			A(r), A(t), Er("submit", t, (e) => {
+				e.preventDefault(), ve();
 			}), K("keydown", t, (e) => {
-				e.key === "Escape" && (e.stopPropagation(), L(T, null));
-			}), K("click", i, () => L(T, null)), J(e, t);
+				e.key === "Escape" && (e.stopPropagation(), L(E, null));
+			}), K("click", i, () => L(E, null)), J(e, t);
 		};
 		X(d, (e) => {
-			G(T) && e(p);
+			G(E) && e(p);
 		});
-		var g = B(d, 2), _ = (e) => {
-			Pa(e, {
+		var h = B(d, 2), _ = (e) => {
+			Fa(e, {
 				get kandinsky() {
 					return t.kandinsky;
 				},
 				get cover() {
-					return G(C).cover;
+					return G(w).cover;
 				},
 				get title() {
-					return G(C).title;
+					return G(w).title;
 				},
 				big: !0
 			});
 		};
-		X(g, (e) => {
-			G(h) === "covers" && e(_);
+		X(h, (e) => {
+			G(g) === "covers" && e(_);
 		});
-		var v = B(g, 2), y = (e) => {
-			var t = mo(), n = z(t, !0);
-			V(() => Y(n, G(w).kind)), J(e, t);
+		var v = B(h, 2), y = (e) => {
+			var t = yo(), n = z(t, !0);
+			V(() => Y(n, G(T).kind)), J(e, t);
 		};
 		X(v, (e) => {
-			G(w).kind && e(y);
+			G(T).kind && e(y);
 		});
-		var ee = B(v, 2);
-		ri(ee, () => i(G(w).title), !0), j(ee);
-		var b = B(ee, 2);
-		Z(b, 17, () => G(w).lines ?? [], Jr, (e, t) => {
-			var n = ho(), r = z(n, !0);
+		var b = B(v, 2);
+		ri(b, () => i(G(T).title), !0), A(b);
+		var x = B(b, 2);
+		Z(x, 17, () => G(T).lines ?? [], Jr, (e, t) => {
+			var n = bo(), r = z(n, !0);
 			V(() => {
 				Q(n, 1, li(G(t).muted ? "venue" : "authors"), "svelte-7gk24t"), Y(r, G(t).text);
 			}), J(e, n);
 		});
-		var x = B(b, 2), te = (e) => {
-			var t = _o();
-			Z(t, 21, () => G(w).fields, ([e, t]) => e, (e, t) => {
+		var S = B(x, 2), ee = (e) => {
+			var t = So();
+			Z(t, 21, () => G(T).fields, ([e, t]) => e, (e, t) => {
 				var n = /* @__PURE__ */ P(() => m(G(t), 2));
 				let r = () => G(n)[0], i = () => G(n)[1];
-				var a = go(), o = on(a), s = z(o, !0), c = z(B(o), !0);
+				var a = xo(), o = on(a), s = z(o, !0), c = z(B(o), !0);
 				V(() => {
 					Y(s, r()), Y(c, i());
 				}), J(e, a);
-			}), j(t), J(e, t);
+			}), A(t), J(e, t);
 		};
-		X(x, (e) => {
-			G(w).fields?.length && e(te);
+		X(S, (e) => {
+			G(T).fields?.length && e(ee);
 		});
-		var ne = B(x, 2);
-		Z(ne, 21, () => G(w).actions, (e) => e.label, (e, t) => {
+		var C = B(S, 2);
+		Z(C, 21, () => G(T).actions, (e) => e.label, (e, t) => {
 			n(e, () => G(t));
-		}), j(ne);
-		var re = B(ne, 2), ie = (e) => {
-			var t = vo(), n = R(t), r = z(n, !0);
-			Z(B(n, 2), 17, () => G(w).choice.options, (e) => e.label, (e, t) => {
-				var n = La();
+		}), A(C);
+		var te = B(C, 2), ne = (e) => {
+			var t = Co(), n = R(t), r = z(n, !0);
+			Z(B(n, 2), 17, () => G(T).choice.options, (e) => e.label, (e, t) => {
+				var n = Ra();
 				let r;
 				var i = z(n, !0);
 				V(() => {
 					r = Q(n, 1, "chip svelte-7gk24t", null, r, { on: G(t).on }), $(n, "aria-checked", G(t).on), Y(i, G(t).label);
-				}), K("click", n, () => void pe(G(t).run)), J(e, n);
-			}), j(t), V(() => {
-				$(t, "aria-label", G(w).choice.label), Y(r, G(w).choice.label);
+				}), K("click", n, () => void _e(G(t).run)), J(e, n);
+			}), A(t), V(() => {
+				$(t, "aria-label", G(T).choice.label), Y(r, G(T).choice.label);
 			}), J(e, t);
 		};
-		X(re, (e) => {
-			G(w).choice && e(ie);
+		X(te, (e) => {
+			G(T).choice && e(ne);
 		});
-		var ae = B(re, 2), oe = (e) => {
-			var t = bo();
-			Z(t, 21, () => G(w).links, (e) => e.url, (e, t) => {
-				var n = yo(), r = R(n);
-				ka(r, {
+		var re = B(te, 2), ie = (e) => {
+			var t = To();
+			Z(t, 21, () => G(T).links, (e) => e.url, (e, t) => {
+				var n = wo(), r = R(n);
+				Aa(r, {
 					name: "link",
 					size: 13
 				});
 				var i = B(r);
-				j(n), V(() => {
+				A(n), V(() => {
 					$(n, "href", G(t).url), Y(i, ` ${G(t).label ?? ""}`);
 				}), J(e, n);
-			}), j(t), J(e, t);
+			}), A(t), J(e, t);
 		};
-		X(ae, (e) => {
-			G(w).links?.length && e(oe);
+		X(re, (e) => {
+			G(T).links?.length && e(ie);
 		});
-		var se = B(ae, 2), ce = (e) => {
-			var t = Co(), n = R(t);
-			Z(n, 16, () => G(C).groups ?? [], (e) => e, (e, t) => {
-				var n = xo(), r = R(n);
-				ka(r, {
+		var ae = B(re, 2), oe = (e) => {
+			var t = Oo(), n = R(t);
+			Z(n, 16, () => G(w).groups ?? [], (e) => e, (e, t) => {
+				var n = Eo(), r = R(n);
+				Aa(r, {
 					name: "folder",
 					size: 12
 				});
 				var i = B(r, 1, !0);
-				j(n), V(() => Y(i, t)), K("click", n, () => L(c, {
+				A(n), V(() => Y(i, t)), K("click", n, () => L(c, {
 					kind: "group",
 					name: t
 				}, !0)), J(e, n);
-			}), Z(B(n, 2), 16, () => G(C).tags ?? [], (e) => e, (e, t) => {
-				var n = So(), r = z(n);
+			}), Z(B(n, 2), 16, () => G(w).tags ?? [], (e) => e, (e, t) => {
+				var n = Do(), r = z(n);
 				V(() => Y(r, `#${t ?? ""}`)), K("click", n, () => L(c, {
 					kind: "tag",
 					name: t
 				}, !0)), J(e, n);
-			}), j(t), J(e, t);
+			}), A(t), J(e, t);
 		};
-		X(se, (e) => {
-			(G(C).groups?.length || G(C).tags?.length) && e(ce);
+		X(ae, (e) => {
+			(G(w).groups?.length || G(w).tags?.length) && e(oe);
 		});
-		var S = B(se, 2), le = (e) => {
-			var t = wo(), n = on(t), r = z(n, !0), i = z(B(n), !0);
+		var se = B(ae, 2), ce = (e) => {
+			var t = ko(), n = on(t), r = z(n, !0), i = z(B(n), !0);
 			V(() => {
-				Y(r, G(w).body.title), Y(i, G(w).body.text);
+				Y(r, G(T).body.title), Y(i, G(T).body.text);
 			}), J(e, t);
 		};
-		X(S, (e) => {
-			G(w).body && e(le);
+		X(se, (e) => {
+			G(T).body && e(ce);
 		});
-		var de = B(S, 2), fe = (e) => {
-			var t = Eo();
-			qr(R(t), () => G(C).note, (e) => {
-				var t = To();
-				ai(t, (e, t) => Me?.(e, t), () => G(C).note), J(e, t);
-			}), j(t), J(e, t);
+		var le = B(se, 2), ue = (e) => {
+			var t = jo();
+			qr(R(t), () => G(w).note, (e) => {
+				var t = Ao();
+				ai(t, (e, t) => Le?.(e, t), () => G(w).note), J(e, t);
+			}), A(t), J(e, t);
 		};
-		X(de, (e) => {
-			G(C).note && e(fe);
-		}), j(s), J(e, r);
-	}, lt = (e) => {
-		var n = Oo(), r = R(n), i = R(r);
-		we(), j(r), j(n), V(() => Y(i, `Pick one of the ${t.source.noun ?? ""} to see it here.`)), J(e, n);
+		X(le, (e) => {
+			G(w).note && e(ue);
+		}), A(s), J(e, r);
+	}, _t = (e) => {
+		var n = No(), r = R(n), i = R(r);
+		Te(), A(r), A(n), V(() => Y(i, `Pick one of the ${t.source.noun ?? ""} to see it here.`)), J(e, n);
 	};
-	X(ot, (e) => {
-		G(Ce).length > 1 ? e(st) : G(de) && G(w) ? e(ct, 1) : !G(ue) && G(a).length && e(lt, 2);
-	}), j($e), j(Ne), V(() => {
-		Pe = Q(Ne, 1, "library svelte-7gk24t", null, Pe, {
-			dragging: G(ve),
-			narrow: G(ue)
-		}), $(Ne, "aria-label", t.source.title), $(Ne, "data-source", t.source.id), Y(Be, ` ${t.source.title ?? ""} `), Y(Ve, G(ce).length === G(a).length ? G(a).length : `${G(ce).length} / ${G(a).length}`), $(M, "placeholder", t.source.search), et = Q($e, 1, "body svelte-7gk24t", null, et, { bare: !G(y).length && !G(ie).length }), at = Q(it, 1, "list svelte-7gk24t", null, at, {
-			covers: G(h) === "covers",
+	X(mt, (e) => {
+		G(ke).length > 1 ? e(ht) : G(he) && G(T) ? e(gt, 1) : !G(me) && G(a).length && e(_t, 2);
+	}), A(at), A(Re), V(() => {
+		ze = Q(Re, 1, "library svelte-7gk24t", null, ze, {
+			dragging: G(D),
+			narrow: G(me)
+		}), $(Re, "aria-label", t.source.title), $(Re, "data-source", t.source.id), Y(Ke, ` ${t.source.title ?? ""} `), Y(qe, G(ce).length === G(a).length ? G(a).length : `${G(ce).length} / ${G(a).length}`), $(Je, "placeholder", t.source.search), ot = Q(at, 1, "body svelte-7gk24t", null, ot, { bare: !G(x).length && !G(ie).length }), ut = Q(lt, 1, "list svelte-7gk24t", null, ut, {
+			covers: G(g) === "covers",
+			"table-mode": G(g) === "table",
 			"empty-list": !G(a).length
 		});
-	}), K("keydown", Ne, je), Er("dragover", Ne, (e) => {
-		t.source.drop && e.dataTransfer?.types.includes("Files") && (e.preventDefault(), L(ve, !0));
-	}), Er("dragleave", Ne, (e) => {
-		e.currentTarget === e.target && L(ve, !1);
-	}), Er("drop", Ne, ye), Ri(M, () => G(s), (e) => L(s, e)), Hi(Ne, "clientWidth", (e) => L(le, e)), J(e, Ne), We();
+	}), K("keydown", Re, Ie), Er("dragover", Re, (e) => {
+		t.source.drop && e.dataTransfer?.types.includes("Files") && (e.preventDefault(), L(D, !0));
+	}), Er("dragleave", Re, (e) => {
+		e.currentTarget === e.target && L(D, !1);
+	}), Er("drop", Re, Ce), Ri(Je, () => G(s), (e) => L(s, e)), Hi(Re, "clientWidth", (e) => L(pe, e)), J(e, Re), We();
 }
 Dr([
 	"click",
@@ -3850,13 +3943,13 @@ Dr([
 ]);
 //#endregion
 //#region plugins/beta/catalog/ui/src/Libraries.svelte
-var Mo = /* @__PURE__ */ q("<button role=\"tab\"><!> </button>"), No = /* @__PURE__ */ q("<div class=\"which svelte-1hozhyt\" role=\"tablist\" aria-label=\"Libraries\"></div>"), Po = /* @__PURE__ */ q("<p class=\"none svelte-1hozhyt\">No library in this vault: Kandinsky and its plugins give them (Drawings is Kandinsky's own; Settings → Appearance → Libraries chooses which show).</p>"), Fo = /* @__PURE__ */ q("<p class=\"none svelte-1hozhyt\"> </p>"), Io = /* @__PURE__ */ q("<div class=\"libraries svelte-1hozhyt\"><!> <!></div>"), Lo = {
+var Lo = /* @__PURE__ */ q("<button role=\"tab\"><!> </button>"), Ro = /* @__PURE__ */ q("<div class=\"which svelte-1hozhyt\" role=\"tablist\" aria-label=\"Libraries\"></div>"), zo = /* @__PURE__ */ q("<p class=\"none svelte-1hozhyt\">No library in this vault: Kandinsky and its plugins give them (Drawings is Kandinsky's own; Settings → Appearance → Libraries chooses which show).</p>"), Bo = /* @__PURE__ */ q("<p class=\"none svelte-1hozhyt\"> </p>"), Vo = /* @__PURE__ */ q("<div class=\"libraries svelte-1hozhyt\"><!> <!></div>"), Ho = {
 	hash: "svelte-1hozhyt",
 	code: ".libraries.svelte-1hozhyt {display:flex;flex-direction:column;height:100%;min-height:0;}.which.svelte-1hozhyt {display:flex;gap:4px;padding:6px 10px 0;overflow-x:auto;flex:none;border-bottom:1px solid var(--border);}.which.svelte-1hozhyt button:where(.svelte-1hozhyt) {display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:none;background:none;color:var(--text-muted);border-bottom:2px solid transparent;white-space:nowrap;font:inherit;cursor:pointer;}.which.svelte-1hozhyt button:where(.svelte-1hozhyt):hover {color:var(--text);}.which.svelte-1hozhyt button.on:where(.svelte-1hozhyt) {color:var(--text);border-bottom-color:var(--accent);}.libraries.svelte-1hozhyt > :last-child {flex:1;min-height:0;}.none.svelte-1hozhyt {padding:24px;color:var(--text-muted);}"
 };
-function Ro(e, t) {
-	Ue(t, !0), ii(e, Lo);
-	let n = "kandinsky.libraries.last", r = /* @__PURE__ */ I(dr(() => t.kandinsky.libraries.list())), i = /* @__PURE__ */ P(() => ca(G(r))), a = /* @__PURE__ */ I(Jt(dr(() => t.kandinsky.anchor) || Yi(n, "")));
+function Uo(e, t) {
+	Ue(t, !0), ii(e, Ho);
+	let n = "kandinsky.libraries.last", r = /* @__PURE__ */ I(dr(() => t.kandinsky.libraries.list())), i = /* @__PURE__ */ P(() => la(G(r))), a = /* @__PURE__ */ I(Jt(dr(() => t.kandinsky.anchor) || Yi(n, "")));
 	Ji(() => {
 		let e = t.kandinsky.libraries.onChange((e) => L(r, e)), n = t.kandinsky.pane?.onAnchor((e) => L(a, e, !0));
 		return () => {
@@ -3877,36 +3970,36 @@ function Ro(e, t) {
 			t = !1;
 		};
 	});
-	var l = Io(), u = R(l), d = (e) => {
-		var t = No();
+	var l = Vo(), u = R(l), d = (e) => {
+		var t = Ro();
 		Z(t, 21, () => G(i), (e) => e.id, (e, t) => {
-			var n = Mo();
+			var n = Lo();
 			let r;
 			var i = R(n);
-			ka(i, {
+			Aa(i, {
 				get name() {
 					return G(t).icon;
 				},
 				size: 14
 			});
 			var s = B(i, 1, !0);
-			j(n), V(() => {
+			A(n), V(() => {
 				$(n, "aria-selected", G(t) === G(o)), r = Q(n, 1, "svelte-1hozhyt", null, r, { on: G(t) === G(o) }), Y(s, G(t).title);
 			}), K("click", n, () => L(a, G(t).id, !0)), J(e, n);
-		}), j(t), J(e, t);
+		}), A(t), J(e, t);
 	};
 	X(u, (e) => {
 		G(i).length > 1 && e(d);
 	});
 	var f = B(u, 2), p = (e) => {
-		J(e, Po());
+		J(e, zo());
 	}, m = (e) => {
-		var t = Fo(), n = z(t, !0);
+		var t = Bo(), n = z(t, !0);
 		V(() => Y(n, G(c))), J(e, t);
 	}, h = (e) => {
 		var n = Fr();
 		qr(on(n), () => G(s), (e) => {
-			jo(e, {
+			Io(e, {
 				get kandinsky() {
 					return t.kandinsky;
 				},
@@ -3918,22 +4011,22 @@ function Ro(e, t) {
 	};
 	X(f, (e) => {
 		G(o) ? G(c) ? e(m, 1) : G(s) && e(h, 2) : e(p);
-	}), j(l), J(e, l), We();
+	}), A(l), J(e, l), We();
 }
 Dr(["click"]);
 //#endregion
 //#region plugins/beta/catalog/ui/src/view.ts
-function zo(e, t) {
+function Wo(e, t) {
 	e.style.height = "100%";
-	let n = Br(Ro, {
+	let n = Br(Uo, {
 		target: e,
 		props: { kandinsky: t }
 	});
 	return () => void Wr(n);
 }
-function Bo(e, t, n) {
+function Go(e, t, n) {
 	e.style.height = "100%";
-	let r = Br(jo, {
+	let r = Br(Io, {
 		target: e,
 		props: {
 			kandinsky: n,
@@ -3943,4 +4036,4 @@ function Bo(e, t, n) {
 	return () => void Wr(r);
 }
 //#endregion
-export { zo as default, Bo as mountLibrary };
+export { Wo as default, Go as mountLibrary };
