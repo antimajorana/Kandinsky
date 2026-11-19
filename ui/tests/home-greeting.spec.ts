@@ -86,7 +86,7 @@ test("the log card's one button makes today's log from the template, then opens 
   await page.goto("/");
   const log = page.locator(".card", { has: page.getByRole("heading", { name: "Today's log" }) });
   await log.getByRole("button", { name: "Create today's log" }).click();
-  await expect(page.locator(".cm-content")).toContainText("Properties"); // the template's properties, folded
+  await expect(page.locator(".cm-content")).toContainText(/date\s+type\s+log/); // the template's properties, in the note's property list
   const made = await (await request.get(`/api/file?path=${encodeURIComponent(today)}`, { headers: H })).json();
   expect(made.text).toMatch(/^---\ndate: \d{4}-\d{2}-\d{2}/);
   // made once: the next call finds it

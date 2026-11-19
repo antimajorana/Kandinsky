@@ -68,7 +68,7 @@ test("deadlines have no left-bar button; Home offers their box once and adds it 
     await page.goto("/");
     // Home is the page above (a greeting only): the vault's FOCUS line is not on it
     await page.getByTestId("sidebar").waitFor();
-    await expect(page.getByTestId("sidebar").getByRole("button", { name: "Deadlines" })).toHaveCount(0);
+    await expect(page.getByTestId("sidebar").locator(".nav-row", { hasText: "Deadlines" })).toHaveCount(0);
     const offer = page.locator(".toast", { hasText: "What is due is on Home now" });
     await expect(offer).toBeVisible();
     // once: Home opened again offers nothing more

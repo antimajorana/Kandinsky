@@ -429,7 +429,7 @@ async function buildCardData(t: PreviewTarget, width = CARD_W): Promise<HoverPre
     }
     const readable = !!t.path && TEXT.test(t.path);
     const mini = !readable && el && miniature(el, width);
-    if (mini) return { title: t.title, htmlNode: mini };
+    if (mini) return { title: t.title, htmlNode: mini, mini: true };
     return buildCardData(
       t.path ? { kind: "file", path: t.path, title: t.title } : { kind: "pane", title: t.title, detail: t.detail },
       width

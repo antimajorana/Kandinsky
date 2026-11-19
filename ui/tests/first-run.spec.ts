@@ -59,6 +59,7 @@ test("a first start: the Today screen with nothing configured, no error, no vim,
 test("the vaults block offers a new vault and an existing folder, as the vault switcher does", async ({ page }) => {
   writeFileSync(join(VAULT, "Welcome.page"), "title: Welcome\nrows:\n  - [greeting]\n  - - view: vaults\n      title: Start with a vault\n");
   await page.goto(`http://127.0.0.1:${PORT}/`);
+  await page.getByTestId("sidebar").waitFor(); // the page is drawn before its keys are pressed
   await page.keyboard.press("Control+p");
   await page.keyboard.type("Welcome");
   await page.getByRole("dialog", { name: "Command palette" }).getByRole("button", { name: "Welcome" }).click();

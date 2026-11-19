@@ -27,6 +27,8 @@
     notePath?: string;
     equationTex?: string;
     htmlNode?: HTMLElement;
+    /** htmlNode is a scaled copy of a pane, drawn edge to edge */
+    mini?: boolean;
   }
 
   let {
@@ -177,7 +179,8 @@
         <span class="preview-badge tone-{preview.badgeTone ?? 'accent'}">{preview.badge}</span>
       {/if}
     </div>
-    <div class="preview-body" class:is-eq={!!preview.equationTex} class:is-md={preview.markdown !== undefined && !preview.equationTex}>
+    <div class="preview-body" class:is-eq={!!preview.equationTex} class:is-md={preview.markdown !== undefined && !preview.equationTex}
+      class:markdown={preview.markdown !== undefined && !preview.equationTex} class:preview-mini={!!preview.mini}>
       {#if preview.equationTex}
         <div class="preview-equation math-display" use:mountMath={preview.equationTex}></div>
       {:else if preview.markdown !== undefined}
