@@ -1,4 +1,4 @@
-//#region ui/node_modules/svelte/src/internal/shared/utils.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/shared/utils.js
 var e = Array.isArray, t = Array.prototype.indexOf, n = Array.prototype.includes, r = Array.from, i = Object.defineProperty, a = Object.getOwnPropertyDescriptor, o = Object.getOwnPropertyDescriptors, s = Object.prototype, c = Array.prototype, l = Object.getPrototypeOf, u = Object.isExtensible, d = () => {};
 function f(e) {
 	for (var t = 0; t < e.length; t++) e[t]();
@@ -21,7 +21,7 @@ function m(e, t) {
 	return n;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/constants.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/constants.js
 var h = 1 << 24, g = 1024, _ = 2048, v = 4096, y = 8192, b = 16384, x = 32768, S = 1 << 25, ee = 65536, te = 1 << 19, ne = 1 << 20, re = 1 << 25, ie = 1 << 21, ae = 1 << 22, oe = 1 << 23, se = Symbol("$state"), ce = Symbol("component"), le = Symbol("legacy props"), ue = Symbol(""), de = Symbol("attributes"), fe = Symbol("class"), pe = Symbol("style"), me = Symbol("text"), C = Symbol("form reset"), he = new class extends Error {
 	name = "StaleReactionError";
 	message = "The reaction that called `getAbortSignal()` was re-run or destroyed";
@@ -39,7 +39,7 @@ function Se() {
 	console.warn("https://svelte.dev/e/svelte_boundary_reset_noop");
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/hydration.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/hydration.js
 var D = !1;
 function Ce(e) {
 	D = e;
@@ -82,7 +82,7 @@ function Oe(e) {
 	return e.data;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/equality.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/equality.js
 function ke(e) {
 	return e === this.v;
 }
@@ -96,7 +96,7 @@ function Me(e) {
 	throw Error("https://svelte.dev/e/lifecycle_outside_component");
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/errors.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/errors.js
 function Ne() {
 	throw Error("https://svelte.dev/e/async_derived_orphan");
 }
@@ -131,7 +131,7 @@ function He() {
 	throw Error("https://svelte.dev/e/svelte_boundary_reset_onerror");
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/context.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/context.js
 var j = null;
 function Ue(e) {
 	j = e;
@@ -163,7 +163,7 @@ function qe() {
 	return !0;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/task.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/task.js
 var Je = [];
 function Ye() {
 	var e = Je;
@@ -182,7 +182,7 @@ function Xe() {
 	for (; Je.length > 0;) Ye();
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/status.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/status.js
 var Ze = ~(_ | v | g);
 function N(e, t) {
 	e.f = e.f & Ze | t;
@@ -191,12 +191,12 @@ function Qe(e) {
 	e.f & 512 || e.deps === null ? N(e, g) : N(e, v);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/utils.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/utils.js
 function $e(e, t, n) {
 	e.f & 2048 ? t.add(e) : e.f & 4096 && n.add(e), N(e, g);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/misc.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/misc.js
 function et(e, t) {
 	if (t) {
 		let t = document.body;
@@ -217,7 +217,7 @@ function rt() {
 	}, { capture: !0 }));
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/bindings/shared.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/bindings/shared.js
 function it(e) {
 	var t = U, n = W;
 	Hn(null), Un(null);
@@ -235,7 +235,7 @@ function at(e, t, n, r = n) {
 	} : () => r(!0), rt();
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/async.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/async.js
 function ot(e, t, n, r) {
 	let i = qe() ? ut : pt;
 	var a = e.filter((e) => !e.settled), o = t.map(i);
@@ -384,7 +384,7 @@ function vt(e) {
 	if (e.effects !== null) for (let t of e.effects) t.teardown && t.fn !== null && sr(t);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/batch.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/batch.js
 var yt = null, F = null, bt = null, xt = null, St = null, Ct = !1, wt = !1, Tt = null, Et = null, Dt = 0, Ot = 1, kt = class e {
 	id = Ot++;
 	#e = !1;
@@ -689,7 +689,7 @@ function It(e) {
 	for (var t = e.first; t !== null;) It(t), t = t.next;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/sources.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/sources.js
 var Lt = /* @__PURE__ */ new Set(), Rt = /* @__PURE__ */ new Map(), zt = !1;
 function Bt(e, t) {
 	return {
@@ -972,7 +972,7 @@ function dn(e, t) {
 	}
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/effects.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/effects.js
 function fn(e) {
 	W === null && (U === null && Ie(e), Fe()), zn && A(e);
 }
@@ -1165,7 +1165,7 @@ function In(e, t) {
 	}
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/legacy.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/legacy.js
 var Ln = null, Rn = !1, zn = !1;
 function Bn(e) {
 	zn = e;
@@ -1406,7 +1406,7 @@ function xr(e) {
 	return br.includes(e);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dev/css.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dev/css.js
 var Sr = Symbol("events"), Cr = /* @__PURE__ */ new Set(), wr = /* @__PURE__ */ new Set();
 function Tr(e, t, n, r = {}) {
 	function i(e) {
@@ -1481,7 +1481,7 @@ function Ar(e) {
 	}
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/reconciler.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/reconciler.js
 var jr = globalThis?.window?.trustedTypes && /* @__PURE__ */ globalThis.window.trustedTypes.createPolicy("svelte-trusted-html", { createHTML: (e) => e });
 function Mr(e) {
 	return jr?.createHTML(e) ?? e;
@@ -1491,7 +1491,7 @@ function Nr(e) {
 	return t.innerHTML = Mr(e.replaceAll("<!>", "<!---->")), t.content;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/template.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/template.js
 function Pr(e, t) {
 	var n = W;
 	n.nodes === null && (n.nodes = {
@@ -1529,7 +1529,7 @@ function J(e, t) {
 	e !== null && e.before(t);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/reactivity/create-subscriber.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/reactivity/create-subscriber.js
 function Ir(e) {
 	let t = 0, n = Bt(0), r;
 	return () => {
@@ -1541,7 +1541,7 @@ function Ir(e) {
 	};
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/blocks/boundary.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/blocks/boundary.js
 var Lr = ee | te;
 function Rr(e, t, n, r) {
 	new zr(e, t, n, r);
@@ -1779,7 +1779,7 @@ function Wr(e, t) {
 	return n ? (Ur.delete(e), n(t)) : Promise.resolve();
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/blocks/branches.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/blocks/branches.js
 var Gr = class {
 	anchor;
 	#e = /* @__PURE__ */ new Map();
@@ -1843,7 +1843,7 @@ var Gr = class {
 	}
 };
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/blocks/if.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/blocks/if.js
 function X(e, t, n = !1) {
 	var r;
 	D && (r = O, Te());
@@ -1867,7 +1867,7 @@ function X(e, t, n = !1) {
 	}, a);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/blocks/key.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/blocks/key.js
 var Kr = Symbol("NaN");
 function qr(e, t, n) {
 	D && Te();
@@ -1878,7 +1878,7 @@ function qr(e, t, n) {
 	});
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/blocks/each.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/blocks/each.js
 function Jr(e, t) {
 	return t;
 }
@@ -2072,7 +2072,7 @@ function ri(e, t, n = !1, r = !1, i = !1, a = !1) {
 	});
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/css.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/css.js
 function ii(e, t) {
 	bn(() => {
 		e = W?.parent?.nodes?.start ?? e;
@@ -2084,7 +2084,7 @@ function ii(e, t) {
 	});
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/actions.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/actions.js
 function ai(e, t, n) {
 	bn(() => {
 		var r = dr(() => t(e, n?.()) || {});
@@ -2099,7 +2099,7 @@ function ai(e, t, n) {
 	});
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/attachments.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/attachments.js
 function oi(e, t) {
 	var n = void 0, r;
 	wn(() => {
@@ -2109,7 +2109,7 @@ function oi(e, t) {
 	});
 }
 //#endregion
-//#region ui/node_modules/clsx/dist/clsx.mjs
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/clsx/dist/clsx.mjs
 function si(e) {
 	var t, n, r = "";
 	if (typeof e == "string" || typeof e == "number") r += e;
@@ -2126,7 +2126,7 @@ function ci() {
 	return r;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/shared/attributes.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/shared/attributes.js
 function li(e) {
 	return typeof e == "object" ? ci(e) : e ?? "";
 }
@@ -2185,7 +2185,7 @@ function mi(e, t) {
 	return e == null ? null : String(e);
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/class.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/class.js
 function Q(e, t, n, r, i, a) {
 	var o = e[fe];
 	if (D || o !== n || o === void 0) {
@@ -2198,7 +2198,7 @@ function Q(e, t, n, r, i, a) {
 	return a;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/style.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/style.js
 function hi(e, t = {}, n, r) {
 	for (var i in n) {
 		var a = n[i];
@@ -2214,7 +2214,7 @@ function gi(e, t, n, r) {
 	return r;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/bindings/select.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/bindings/select.js
 function _i(e, t) {
 	t ? e.hasAttribute("selected") || e.setAttribute("selected", "") : e.removeAttribute("selected");
 }
@@ -2277,7 +2277,7 @@ function Ci(e) {
 	return !1;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/attributes.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/attributes.js
 var wi = Symbol("class"), Ti = Symbol("style"), Ei = Symbol("is custom element"), Di = Symbol("is html"), Oi = ge ? "link" : "LINK", ki = ge ? "input" : "INPUT", Ai = ge ? "option" : "OPTION", ji = ge ? "select" : "SELECT";
 function Mi(e) {
 	if (D) {
@@ -2416,7 +2416,7 @@ function Li(e) {
 	return n;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/bindings/input.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/bindings/input.js
 function Ri(e, t, n = t) {
 	var r = /* @__PURE__ */ new WeakSet();
 	at(e, "input", async (i) => {
@@ -2473,7 +2473,7 @@ function Hi(e, t, n) {
 	bn(() => (dr(() => n(e[t])), r));
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/dom/elements/bindings/this.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/dom/elements/bindings/this.js
 function Ui(e, t) {
 	return e === t || e?.[se] === t;
 }
@@ -2498,7 +2498,7 @@ function Wi(e = Ke(), t, n, r) {
 	}), e;
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/store.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/store.js
 var Gi = !1;
 function Ki(e) {
 	var t = Gi;
@@ -2509,7 +2509,7 @@ function Ki(e) {
 	}
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/client/reactivity/props.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/client/reactivity/props.js
 function qi(e, t, n, r) {
 	var i = !0, o = !!(n & 8), s = !!(n & 16), c = r, l = !0, u = void 0, d = () => s && i ? (u ??= /* @__PURE__ */ ut(r), G(u)) : (l && (l = !1, c = s ? dr(r) : r), c);
 	let f;
@@ -2551,7 +2551,7 @@ function Ji(e) {
 	});
 }
 //#endregion
-//#region ui/node_modules/svelte/src/internal/disclose-version.js
+//#region ../../../../../../../../Documents/GitHub/kandinsky/ui/node_modules/svelte/src/internal/disclose-version.js
 typeof window < "u" && ((window.__svelte ??= {}).v ??= /* @__PURE__ */ new Set()).add("5");
 //#endregion
 //#region ui/src/lib/prefs.ts
@@ -3045,7 +3045,7 @@ function ka(e, t = 16) {
 //#region ui/src/components/Icon.svelte
 var Aa = /* @__PURE__ */ q("<span class=\"icon svelte-1yrfdk4\"></span>"), ja = {
 	hash: "svelte-1yrfdk4",
-	code: "\r\n  /* sized by the interface's scale (Settings → font size, a tab's zoom), as the text beside it */.icon.svelte-1yrfdk4 {display:inline-flex;align-items:center;justify-content:center;flex:none;line-height:0;}.icon.svelte-1yrfdk4 svg {width:100%;height:100%;}"
+	code: "\n  /* sized by the interface's scale (Settings → font size, a tab's zoom), as the text beside it */.icon.svelte-1yrfdk4 {display:inline-flex;align-items:center;justify-content:center;flex:none;line-height:0;}.icon.svelte-1yrfdk4 svg {width:100%;height:100%;}"
 };
 function Ma(e, t) {
 	We(t, !0), ii(e, ja);
@@ -3079,7 +3079,7 @@ function Na(e, t) {
 //#region plugins/beta/catalog/ui/src/LibraryCover.svelte
 var Pa = /* @__PURE__ */ q("<img alt=\"\"/>"), Fa = /* @__PURE__ */ q("<div aria-hidden=\"true\"> </div>"), Ia = /* @__PURE__ */ q("<div><!></div>"), La = {
 	hash: "svelte-enia8e",
-	code: ".cover.svelte-enia8e {width:100%;aspect-ratio:2 / 3;object-fit:cover;border-radius:var(--radius-sm);background:var(--bg-alt);box-shadow:var(--shadow-sm);}.cover.big.svelte-enia8e {aspect-ratio:auto;max-height:280px;width:auto;max-width:100%;margin-bottom:10px;}.tile.svelte-enia8e {display:grid;place-items:center;font-size:2.2em;font-weight:600;box-shadow:none;background:hsl(var(--hue) 32% 50% / .22);color:hsl(var(--hue) 40% 42%);} /* literal: a hue per title */\r\n  /* the panel's: a tile its column's width while the picture is missing or on its way, not a blank column */.tile.big.svelte-enia8e {aspect-ratio:2 / 3;width:100%;max-height:240px;font-size:3em;}.wrap.svelte-enia8e {width:100%;min-height:1px;}"
+	code: ".cover.svelte-enia8e {width:100%;aspect-ratio:2 / 3;object-fit:cover;border-radius:var(--radius-sm);background:var(--bg-alt);box-shadow:var(--shadow-sm);}.cover.big.svelte-enia8e {aspect-ratio:auto;max-height:280px;width:auto;max-width:100%;margin-bottom:10px;}.tile.svelte-enia8e {display:grid;place-items:center;font-size:2.2em;font-weight:600;box-shadow:none;background:hsl(var(--hue) 32% 50% / .22);color:hsl(var(--hue) 40% 42%);} /* literal: a hue per title */\n  /* the panel's: a tile its column's width while the picture is missing or on its way, not a blank column */.tile.big.svelte-enia8e {aspect-ratio:2 / 3;width:100%;max-height:240px;font-size:3em;}.wrap.svelte-enia8e {width:100%;min-height:1px;}"
 };
 function Ra(e, t) {
 	We(t, !0), ii(e, La);
@@ -3127,7 +3127,7 @@ function Ra(e, t) {
 //#region plugins/beta/catalog/ui/src/Library.svelte
 var za = /* @__PURE__ */ q("<button><!> </button>"), Ba = /* @__PURE__ */ q("<div class=\"drop-hint svelte-7gk24t\"> </div>"), Va = /* @__PURE__ */ q("<button role=\"radio\"> </button>"), Ha = /* @__PURE__ */ q("<div class=\"seg svelte-7gk24t\" role=\"radiogroup\" aria-label=\"Layout\"></div>"), Ua = /* @__PURE__ */ q("<button class=\"btn home svelte-7gk24t\"><!> <!></button>"), Wa = /* @__PURE__ */ q("<form class=\"add svelte-7gk24t\"><input spellcheck=\"false\" class=\"svelte-7gk24t\"/> <button class=\"btn primary svelte-7gk24t\"> </button></form>"), Ga = /* @__PURE__ */ q("<button> <span class=\"c svelte-7gk24t\"> </span></button>"), Ka = /* @__PURE__ */ q("<div class=\"types svelte-7gk24t\" role=\"toolbar\" aria-label=\"Type\"><button>All <span class=\"c svelte-7gk24t\"> </span></button> <!></div>"), qa = /* @__PURE__ */ q("<button class=\"btn primary svelte-7gk24t\"> </button>"), Ja = /* @__PURE__ */ q("<p class=\"muted pad svelte-7gk24t\"> <!></p>"), Ya = /* @__PURE__ */ q("<span class=\"bar svelte-7gk24t\"></span>"), Xa = /* @__PURE__ */ q("<button class=\"go svelte-7gk24t\"><!> <span class=\"t svelte-7gk24t\"></span> <!></button>"), Za = /* @__PURE__ */ q("<section class=\"continue svelte-7gk24t\" aria-label=\"Continue\"><h4 class=\"svelte-7gk24t\">Continue</h4> <div class=\"strip svelte-7gk24t\"></div></section>"), Qa = /* @__PURE__ */ q("<button class=\"twisty svelte-7gk24t\"><!></button>"), $a = /* @__PURE__ */ q("<span class=\"twisty svelte-7gk24t\"></span>"), eo = /* @__PURE__ */ q("<div class=\"tree-row svelte-7gk24t\"><!> <button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button></div>"), to = /* @__PURE__ */ q("<button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button>"), no = /* @__PURE__ */ q("<h4 class=\"svelte-7gk24t\"> </h4> <!>", 1), ro = /* @__PURE__ */ q("<button><span class=\"hash svelte-7gk24t\">#</span><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button>"), io = /* @__PURE__ */ q("<button class=\"h4 svelte-7gk24t\"><!>Tags <span class=\"c svelte-7gk24t\"> </span></button> <!>", 1), ao = /* @__PURE__ */ q("<nav class=\"side svelte-7gk24t\"><button><!><span class=\"n svelte-7gk24t\"> </span><span class=\"c svelte-7gk24t\"> </span></button> <!> <!></nav>"), oo = /* @__PURE__ */ q("<th scope=\"col\"><button type=\"button\" class=\"th-btn svelte-7gk24t\"><span class=\"svelte-7gk24t\"> </span><span class=\"sort-ind svelte-7gk24t\" aria-hidden=\"true\"> </span></button></th>"), so = /* @__PURE__ */ q("<span class=\"flag red svelte-7gk24t\">PDF</span>"), co = /* @__PURE__ */ q("<tr><td class=\"c-title svelte-7gk24t\"><button type=\"button\" class=\"row-focus svelte-7gk24t\"><span class=\"t svelte-7gk24t\"></span></button></td><td class=\"c-author svelte-7gk24t\"> </td><td class=\"c-year svelte-7gk24t\"> </td><td class=\"c-venue svelte-7gk24t\"> </td><td class=\"c-kind svelte-7gk24t\"> </td><td class=\"c-added svelte-7gk24t\"> </td><td class=\"c-pdf svelte-7gk24t\"><!></td></tr>"), lo = /* @__PURE__ */ q("<div class=\"sr-only svelte-7gk24t\" role=\"status\"> </div> <table class=\"zot-table svelte-7gk24t\"><caption class=\"sr-only svelte-7gk24t\"> </caption><thead class=\"svelte-7gk24t\"><tr></tr></thead><tbody></tbody></table>", 1), uo = /* @__PURE__ */ q("<button class=\"btn from-home svelte-7gk24t\"> <!></button>"), fo = /* @__PURE__ */ q("<div class=\"from-head svelte-7gk24t\" role=\"heading\" aria-level=\"3\"><!><span class=\"fh svelte-7gk24t\"> </span> <span class=\"fc svelte-7gk24t\"> </span> <!></div>"), po = /* @__PURE__ */ q("<span class=\"m svelte-7gk24t\"> </span>"), mo = /* @__PURE__ */ q("<button><!> <!> <span class=\"t svelte-7gk24t\"></span> <!></button>"), ho = /* @__PURE__ */ q("<span> </span>"), go = /* @__PURE__ */ q("<span class=\"flags svelte-7gk24t\"></span>"), _o = /* @__PURE__ */ q("<button><span class=\"t svelte-7gk24t\"></span> <!> <!> <!></button>"), vo = /* @__PURE__ */ q("<!> <!> >>>>>>> theirs", 1), yo = /* @__PURE__ */ q("<p class=\"muted pad none svelte-7gk24t\"> <!></p>"), bo = /* @__PURE__ */ q("<li class=\"svelte-7gk24t\"></li>"), xo = /* @__PURE__ */ q("<li class=\"muted svelte-7gk24t\"> </li>"), So = /* @__PURE__ */ q("<aside class=\"detail many svelte-7gk24t\" aria-label=\"Picked\"><div class=\"kind svelte-7gk24t\"> </div> <ul class=\"picked svelte-7gk24t\"><!><!></ul> <div class=\"actions svelte-7gk24t\"><!><button class=\"btn svelte-7gk24t\">Clear</button></div></aside>"), Co = /* @__PURE__ */ q("<button class=\"scrim svelte-7gk24t\" aria-label=\"Close\"></button>"), wo = /* @__PURE__ */ q("<button class=\"close icon-btn svelte-7gk24t\" aria-label=\"Close\" title=\"Close\"><!></button>"), To = /* @__PURE__ */ q("<span class=\"hint svelte-7gk24t\"> </span>"), Eo = /* @__PURE__ */ q("<textarea class=\"svelte-7gk24t\"></textarea>"), Do = /* @__PURE__ */ q("<input class=\"svelte-7gk24t\"/>"), Oo = /* @__PURE__ */ q("<label> <!> <!></label>"), ko = /* @__PURE__ */ q("<form class=\"edit svelte-7gk24t\"><!> <div class=\"actions svelte-7gk24t\"><button class=\"btn primary svelte-7gk24t\">Save</button><button type=\"button\" class=\"btn svelte-7gk24t\">Cancel</button></div></form>"), Ao = /* @__PURE__ */ q("<div class=\"kind svelte-7gk24t\"> </div>"), jo = /* @__PURE__ */ q("<p> </p>"), Mo = /* @__PURE__ */ q("<button class=\"btn svelte-7gk24t\" aria-label=\"More\"><!></button>"), No = /* @__PURE__ */ q("<div class=\"facts-pic svelte-7gk24t\"><!></div>"), Po = /* @__PURE__ */ q("<dt class=\"svelte-7gk24t\"> </dt><dd class=\"svelte-7gk24t\"> </dd>", 1), Fo = /* @__PURE__ */ q("<dl class=\"svelte-7gk24t\"></dl>"), Io = /* @__PURE__ */ q("<div><!> <!></div>"), Lo = /* @__PURE__ */ q("<div class=\"choice svelte-7gk24t\" role=\"radiogroup\"><span class=\"svelte-7gk24t\"> </span> <!></div>"), Ro = /* @__PURE__ */ q("<a target=\"_blank\" rel=\"noreferrer\" class=\"svelte-7gk24t\"><!> </a>"), zo = /* @__PURE__ */ q("<div class=\"links svelte-7gk24t\"></div>"), Bo = /* @__PURE__ */ q("<button class=\"tag coll svelte-7gk24t\"><!> </button>"), Vo = /* @__PURE__ */ q("<button class=\"tag svelte-7gk24t\"> </button>"), Ho = /* @__PURE__ */ q("<div class=\"tags svelte-7gk24t\"><!> <!></div>"), Uo = /* @__PURE__ */ q("<h3 class=\"svelte-7gk24t\"> </h3><p class=\"abstract svelte-7gk24t\"> </p>", 1), Wo = /* @__PURE__ */ q("<h3 class=\"svelte-7gk24t\">Your notes</h3><p class=\"abstract own svelte-7gk24t\"> </p><button class=\"kandinsky-btn more-notes svelte-7gk24t\">Open the notes</button>", 1), Go = /* @__PURE__ */ q("<div></div>"), Ko = /* @__PURE__ */ q("<div class=\"links-bar svelte-7gk24t\"><!></div>"), qo = /* @__PURE__ */ q("<!> <aside class=\"detail svelte-7gk24t\"><!> <!> <!> <h2 class=\"svelte-7gk24t\"></h2> <!> <div class=\"actions svelte-7gk24t\"><!> <!></div> <!> <!> <!> <!> <!> <!> <!></aside>", 1), Jo = /* @__PURE__ */ q("<aside class=\"detail none svelte-7gk24t\" aria-label=\"Details\"><p> <span class=\"keys-only\"><br/>↑ ↓ move, Enter opens.</span></p></aside>"), Yo = /* @__PURE__ */ q("<div tabindex=\"0\" role=\"application\"><!> <header class=\"svelte-7gk24t\"><h1 class=\"svelte-7gk24t\"><!> <span class=\"count svelte-7gk24t\"> </span></h1> <input class=\"search svelte-7gk24t\" spellcheck=\"false\"/> <!> <!> <!> <!> <!></header> <!> <!> <!> <div><!> <div><!></div> <!></div></div>"), Xo = {
 	hash: "svelte-7gk24t",
-	code: ".types.svelte-7gk24t {display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 10px;}.chip.svelte-7gk24t {display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--border);color:var(--text-muted);font-size:calc(12.5px * var(--ui-scale, 1));}.chip.svelte-7gk24t:hover {background:var(--bg-hover);color:var(--text);}.chip.on.svelte-7gk24t {background:var(--accent-soft);border-color:color-mix(in srgb, var(--accent) 45%, transparent);color:var(--accent);}.chip.svelte-7gk24t .c:where(.svelte-7gk24t) {color:var(--text-faint);font-variant-numeric:tabular-nums;}.library.svelte-7gk24t {height:100%;display:flex;flex-direction:column;background:var(--bg);outline:none;position:relative;}.library.dragging.svelte-7gk24t {box-shadow:inset 0 0 0 2px var(--accent);}.drop-hint.svelte-7gk24t {position:absolute;inset:0;z-index:5;display:grid;place-items:center;pointer-events:none;background:color-mix(in srgb, var(--bg) 70%, transparent);color:var(--accent);font-size:calc(16px * var(--ui-scale, 1));font-weight:600;}header.svelte-7gk24t {display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--border);}h1.svelte-7gk24t {display:inline-flex;gap:8px;align-items:center;margin:0 8px 0 0;font-size:calc(17px * var(--ui-scale, 1));color:var(--heading);}.count.svelte-7gk24t {font-size:.7em;font-weight:500;color:var(--text-faint);}input.svelte-7gk24t {font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;}input.svelte-7gk24t:focus {outline:none;border-color:var(--accent);}.search.svelte-7gk24t {flex:1;min-width:220px;}.add.svelte-7gk24t {display:flex;gap:6px;}.add.svelte-7gk24t input:where(.svelte-7gk24t) {width:270px;} /* the placeholder whole (clipped text is a bug) */.seg.svelte-7gk24t {display:inline-flex;border:1px solid var(--border-strong);border-radius:var(--radius-sm);overflow:hidden;}.seg.svelte-7gk24t button:where(.svelte-7gk24t) {padding:4px 10px;color:var(--text-muted);}.seg.svelte-7gk24t button.on:where(.svelte-7gk24t) {background:var(--accent-soft);color:var(--accent);}.btn.svelte-7gk24t {display:inline-flex;gap:6px;align-items:center;border:1px solid var(--border-strong);}.btn.svelte-7gk24t:hover:not(:disabled) {background:var(--bg-hover);}.btn.svelte-7gk24t:disabled {opacity:.45;cursor:default;}.btn.danger.svelte-7gk24t {color:var(--red);}.edit.svelte-7gk24t {display:grid;grid-template-columns:1fr 2fr;gap:8px;margin:0 0 14px;padding:12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--bg-alt);}.edit.svelte-7gk24t label:where(.svelte-7gk24t) {grid-column:1 / -1;display:flex;flex-direction:column;gap:3px;color:var(--text-muted);font-size:calc(12px * var(--ui-scale, 1));}.edit.svelte-7gk24t label.half:where(.svelte-7gk24t) {grid-column:auto;}.edit.svelte-7gk24t .actions:where(.svelte-7gk24t) {grid-column:1 / -1;}.edit.svelte-7gk24t textarea:where(.svelte-7gk24t) {font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;resize:vertical;}.hint.svelte-7gk24t {color:var(--text-faint);font-weight:400;}.body.svelte-7gk24t {flex:1;min-height:0;display:grid;grid-template-columns:210px minmax(300px, 1.15fr) minmax(280px, 1fr);}.body.bare.svelte-7gk24t {grid-template-columns:minmax(300px, 1.4fr) minmax(280px, 1fr);}.list.empty-list.svelte-7gk24t {grid-column:span 2;} /* nothing to list: its words get the detail's column too */.detail.none.svelte-7gk24t {display:grid;place-content:center;text-align:center;color:var(--text-faint);}.side.svelte-7gk24t {overflow:auto;border-right:1px solid var(--border);padding:8px 6px;background:var(--bg-alt);display:flex;flex-direction:column;gap:1px;}.side.svelte-7gk24t h4:where(.svelte-7gk24t), .side.svelte-7gk24t .h4:where(.svelte-7gk24t) {display:flex;align-items:center;gap:4px;margin:12px 8px 4px;padding:0;font-size:calc(10.5px * var(--ui-scale, 1));font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);text-align:left;}.side.svelte-7gk24t .h4:where(.svelte-7gk24t):hover {color:var(--text);}.item.svelte-7gk24t {display:flex;align-items:center;gap:7px;width:100%;padding:4px 8px;border-radius:var(--radius-sm);color:var(--text);text-align:left;font-size:calc(12.5px * var(--ui-scale, 1));}.item.svelte-7gk24t:hover {background:var(--bg-hover);}.item.on.svelte-7gk24t {background:var(--accent-soft);color:var(--heading);box-shadow:inset 2px 0 0 var(--accent);}.item.drop.svelte-7gk24t {outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft);}.item.svelte-7gk24t .n:where(.svelte-7gk24t) {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.c.svelte-7gk24t {color:var(--text-faint);font-size:.85em;font-variant-numeric:tabular-nums;}.hash.svelte-7gk24t {color:var(--text-faint);width:14px;text-align:center;}.tagitem.svelte-7gk24t {color:var(--text-muted);}.tag.coll.svelte-7gk24t {display:inline-flex;gap:4px;align-items:center;color:var(--text);}.list.svelte-7gk24t {overflow:hidden auto; /* the grid wraps: a horizontal offset only ever hid the first column */border-right:1px solid var(--border);padding:6px;position:relative;user-select:none;-webkit-user-select:none;}.list.svelte-7gk24t .marquee {position:absolute;z-index:2;pointer-events:none;border:1px solid var(--accent);background:color-mix(in srgb, var(--accent) 12%, transparent);border-radius:2px;}.tree-row.svelte-7gk24t {display:flex;align-items:center;min-width:0;}.tree-row.svelte-7gk24t .item:where(.svelte-7gk24t) {flex:1;min-width:0;}.twisty.svelte-7gk24t {flex:none;width:16px;height:22px;display:grid;place-items:center;color:var(--text-faint);padding:0;}.twisty.svelte-7gk24t:hover {color:var(--text);}.picked.svelte-7gk24t {margin:8px 0 12px;padding-left:18px;font-size:.9em;color:var(--text-muted);}.picked.svelte-7gk24t li:where(.svelte-7gk24t) {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.list.covers.svelte-7gk24t {display:grid;grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));gap:16px 14px;align-content:start;padding:14px;}.sr-only.svelte-7gk24t {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0;}.list.table-mode.svelte-7gk24t {padding:0;overflow:auto;}.zot-table.svelte-7gk24t {width:100%;border-collapse:collapse;table-layout:fixed;font-size:calc(12.5px * var(--ui-scale, 1));}.zot-table.svelte-7gk24t thead:where(.svelte-7gk24t) th:where(.svelte-7gk24t) {position:sticky;top:0;z-index:1;background:var(--bg-alt);border-bottom:1px solid var(--border-strong);padding:0;text-align:left;font-weight:600;color:var(--text-muted);}.th-btn.svelte-7gk24t {width:100%;display:flex;align-items:center;gap:4px;padding:7px 8px;text-align:left;font:inherit;font-size:calc(11.5px * var(--ui-scale, 1));color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.th-btn.svelte-7gk24t:hover {background:var(--bg-hover);color:var(--text);}.sort-ind.svelte-7gk24t {color:var(--accent);flex:none;}.col-title.svelte-7gk24t {width:34%;}.col-author.svelte-7gk24t {width:19%;}.col-year.svelte-7gk24t {width:58px;}.col-venue.svelte-7gk24t {width:18%;}.col-kind.svelte-7gk24t {width:10%;}.col-added.svelte-7gk24t {width:88px;}.col-pdf.svelte-7gk24t {width:48px;}.trow.svelte-7gk24t {cursor:pointer;}.trow.svelte-7gk24t td:where(.svelte-7gk24t) {padding:6px 8px;border-bottom:1px solid var(--border);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted);vertical-align:middle;}.trow.svelte-7gk24t:hover td:where(.svelte-7gk24t) {background:var(--bg-hover);}.trow.sel.svelte-7gk24t td:where(.svelte-7gk24t) {background:var(--accent-soft);}.trow.sel.svelte-7gk24t td:where(.svelte-7gk24t):first-child {box-shadow:inset 2px 0 0 var(--accent);}.row-focus.svelte-7gk24t {display:block;width:100%;text-align:left;padding:0;font:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.row-focus.svelte-7gk24t .t:where(.svelte-7gk24t) {display:block;}.c-year.svelte-7gk24t, .c-added.svelte-7gk24t {font-variant-numeric:tabular-nums;}.c-pdf.svelte-7gk24t {text-align:center;}\r\n  /* a service's things, apart from the vault's: a band across the list with the way into the service's own app */.from-head.svelte-7gk24t {grid-column:1 / -1;display:flex;align-items:center;gap:8px;margin:14px 0 2px;padding:8px 10px;border-radius:var(--radius-sm);background:var(--bg-alt);border:1px solid var(--border);color:var(--text-muted);font-size:calc(12px * var(--ui-scale, 1));}.from-head.svelte-7gk24t:first-child {margin-top:0;}.from-head.svelte-7gk24t .fh:where(.svelte-7gk24t) {font-weight:600;letter-spacing:.02em;color:var(--heading);}.from-head.svelte-7gk24t .fc:where(.svelte-7gk24t) {color:var(--text-faint);font-variant-numeric:tabular-nums;}.home.svelte-7gk24t {display:inline-flex;align-items:center;gap:6px;}.from-home.svelte-7gk24t {margin-left:auto;display:inline-flex;align-items:center;gap:5px;}.mine-none.svelte-7gk24t {grid-column:1 / -1;margin:4px 2px 0;color:var(--text-muted);}.row.svelte-7gk24t {display:grid;grid-template-columns:minmax(0, 1fr) auto;gap:2px 10px;width:100%;text-align:left;padding:8px 10px;border-radius:var(--radius-sm);}.row.svelte-7gk24t:hover {background:var(--bg-hover);}.row.sel.svelte-7gk24t {background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent);}.card.svelte-7gk24t {display:flex;flex-direction:column;gap:4px;text-align:left;padding:4px;border-radius:var(--radius-sm);min-width:0;}\r\n  /* a library of thousands: items out of view are not laid out or painted (still in the page, for the marquee and keys) */.row.svelte-7gk24t {content-visibility:auto;contain-intrinsic-size:auto 52px;}\r\n  /* never a card: its height (a cover's 2:3 at the column's width, then two lines) is not one number, and WebKit kept\r\n     the guessed one for cards laid out again after the pane came back (titles drawn over the covers); covers already\r\n     load only near the view (LibraryCover) */.card.svelte-7gk24t:hover {background:var(--bg-hover);}.card.sel.svelte-7gk24t {background:var(--accent-soft);box-shadow:0 0 0 2px var(--accent);}.card.svelte-7gk24t .t:where(.svelte-7gk24t) {font-size:.92em;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;}.card.svelte-7gk24t .m:where(.svelte-7gk24t) {font-size:.8em;}.t.svelte-7gk24t {grid-column:1;color:var(--heading);font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.m.svelte-7gk24t {grid-column:1;color:var(--text-muted);font-size:.9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\r\n  /* how far along: a thin bar, the done part in the accent */.bar.svelte-7gk24t {display:block;height:3px;border-radius:2px;background:linear-gradient(to right, var(--accent) calc(var(--p) * 100%), var(--border) 0);}.row.svelte-7gk24t .bar:where(.svelte-7gk24t) {grid-column:1 / -1;margin-top:3px;}.continue.svelte-7gk24t {flex:none;padding:8px 16px 10px;border-bottom:1px solid var(--border);}.continue.svelte-7gk24t h4:where(.svelte-7gk24t) {margin:0 0 6px;font-size:calc(10.5px * var(--ui-scale, 1));font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);}.strip.svelte-7gk24t {display:flex;gap:12px;overflow-x:auto;scrollbar-width:thin;padding-bottom:2px;}.go.svelte-7gk24t {flex:none;width:104px;display:flex;flex-direction:column;gap:4px;padding:3px;border-radius:var(--radius-sm);text-align:left;}.go.svelte-7gk24t:hover {background:var(--bg-hover);}.go.svelte-7gk24t .t:where(.svelte-7gk24t) {font-size:.82em;font-weight:500;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;}.narrow.svelte-7gk24t .continue:where(.svelte-7gk24t) {padding:6px 12px 8px;}.flags.svelte-7gk24t {grid-column:2;grid-row:1 / span 2;display:flex;gap:4px;align-items:center;}.flag.svelte-7gk24t {font-size:calc(11px * var(--ui-scale, 1));padding:1px 6px;border-radius:999px;background:var(--bg-hover);color:var(--text-muted);}.flag.red.svelte-7gk24t {color:var(--red);background:color-mix(in srgb, var(--red) 14%, transparent);}\r\n  /* a column; the linked mentions follow the item (at the bottom of a short card they stood apart, the column blank) */.detail.svelte-7gk24t {overflow:auto;padding:18px 22px 40px;display:flex;flex-direction:column;container-type:inline-size;}.detail.svelte-7gk24t > * {flex-shrink:0;}.facts.svelte-7gk24t {display:grid;gap:14px;margin:8px 0 4px;}\r\n  /* the picture a fixed, modest width: the fields get the rest (beside a 42 % picture they broke letter by letter) */.facts.pic.svelte-7gk24t {grid-template-columns:120px minmax(0, 1fr);align-items:start;}.facts-pic.svelte-7gk24t .cover.big {width:120px;}.facts-pic.svelte-7gk24t .cover.big {max-height:240px;margin:0;}.facts.svelte-7gk24t dl:where(.svelte-7gk24t) {margin:0;}.narrow.svelte-7gk24t .facts.pic:where(.svelte-7gk24t) {grid-template-columns:96px minmax(0, 1fr);}\r\n  /* a narrow panel (the usual ~300 px column): the picture on its own line, the fields the panel's whole width —\r\n     beside it the values broke inside words */\r\n  @container (max-width: 460px) {.facts.pic.svelte-7gk24t {grid-template-columns:minmax(0, 1fr);}.facts-pic.svelte-7gk24t .cover.big {width:auto;max-width:140px;max-height:190px;}\r\n  }\r\n  /* the mentions follow the item, open (an item's panel is where they matter), never pinned under an empty column */.links-bar.svelte-7gk24t {margin:22px -22px 0;padding-top:4px;display:flex;flex-direction:column;}.abstract.own.svelte-7gk24t {white-space:pre-line;}.more-notes.svelte-7gk24t {align-self:flex-start;margin-top:4px;}.kind.svelte-7gk24t {text-transform:uppercase;letter-spacing:.07em;font-size:calc(11px * var(--ui-scale, 1));color:var(--text-faint);}h2.svelte-7gk24t {margin:4px 0 6px;font-size:calc(19px * var(--ui-scale, 1));color:var(--heading);line-height:1.3;}.authors.svelte-7gk24t {margin:0;color:var(--text);}.venue.svelte-7gk24t {margin:2px 0 0;color:var(--text-muted);font-style:italic;}dl.svelte-7gk24t {display:grid;grid-template-columns:max-content minmax(0, 1fr);gap:3px 12px;font-size:.9em;margin:10px 0;}dt.svelte-7gk24t {color:var(--text-faint);}dd.svelte-7gk24t {margin:0;overflow-wrap:anywhere;}.actions.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 8px;}.choice.svelte-7gk24t {display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 10px;}.choice.svelte-7gk24t span:where(.svelte-7gk24t) {color:var(--text-faint);font-size:.85em;margin-right:2px;}.links.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:14px;margin:6px 0;}.links.svelte-7gk24t a:where(.svelte-7gk24t) {display:inline-flex;gap:5px;align-items:center;color:var(--link, var(--accent));text-decoration:none;font-size:.92em;}.links.svelte-7gk24t a:where(.svelte-7gk24t):hover {text-decoration:underline;}.tags.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}.tag.svelte-7gk24t {font-size:calc(11.5px * var(--ui-scale, 1));padding:2px 9px;border-radius:999px;border:1px solid var(--border-strong);color:var(--text-muted);}.tag.svelte-7gk24t:hover {color:var(--text);border-color:var(--accent);}h3.svelte-7gk24t {margin:18px 0 6px;font-size:calc(11px * var(--ui-scale, 1));text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);}.abstract.svelte-7gk24t {margin:0;line-height:1.6;color:var(--text);}.pad.svelte-7gk24t {padding:12px 16px;}\r\n  /* the covers are a grid: the \"nothing here\" line spans all its columns (on a phone it sat in one, a word a line) */.list.svelte-7gk24t .none:where(.svelte-7gk24t) {grid-column:1 / -1;} /* only the list's: the detail's empty column must stay in its own column */\r\n\r\n  /* narrow: one column; groups as a row of chips; the card as a sheet over the list */.narrow.svelte-7gk24t header:where(.svelte-7gk24t) {padding:10px 12px;gap:8px;}.narrow.svelte-7gk24t .search:where(.svelte-7gk24t) {flex:1 1 100%;min-width:0;order:1;}.narrow.svelte-7gk24t .add:where(.svelte-7gk24t) {flex:1 1 100%;order:2;}.narrow.svelte-7gk24t .add:where(.svelte-7gk24t) input:where(.svelte-7gk24t) {flex:1;width:auto;min-width:0;}.narrow.svelte-7gk24t .types:where(.svelte-7gk24t) {padding:0 12px 8px;flex-wrap:nowrap;overflow-x:auto;}.narrow.svelte-7gk24t .body:where(.svelte-7gk24t), .narrow.svelte-7gk24t .body.bare:where(.svelte-7gk24t) {display:flex;flex-direction:column;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) {flex:none;flex-direction:row;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid var(--border);padding:6px 12px;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) h4:where(.svelte-7gk24t), .narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .h4:where(.svelte-7gk24t) {margin:0 2px 0 6px;flex:none;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .item:where(.svelte-7gk24t) {width:auto;flex:none;max-width:70vw;padding:5px 10px;border-radius:999px;border:1px solid var(--border);}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .item.on:where(.svelte-7gk24t) {box-shadow:none;border-color:color-mix(in srgb, var(--accent) 45%, transparent);}.narrow.svelte-7gk24t .list:where(.svelte-7gk24t) {flex:1;border-right:0;}.narrow.svelte-7gk24t .zot-table:where(.svelte-7gk24t) {min-width:640px;}.narrow.svelte-7gk24t .list.covers:where(.svelte-7gk24t) {grid-template-columns:repeat(auto-fill, minmax(104px, 1fr));gap:12px 10px;padding:10px 12px;}.scrim.svelte-7gk24t {position:absolute;inset:0;z-index:6;background:var(--scrim);border:0;padding:0;cursor:default;}.narrow.svelte-7gk24t .detail:where(.svelte-7gk24t) {position:absolute;left:0;right:0;bottom:0;z-index:7;max-height:80%;padding:18px 16px calc(24px + env(safe-area-inset-bottom, 0px));background:var(--bg-elev);border-top:1px solid var(--border-strong);border-radius:14px 14px 0 0;box-shadow:var(--shadow-pop);}.narrow.svelte-7gk24t .detail:where(.svelte-7gk24t) .cover.big {max-height:180px;}\r\n  /* stays at the sheet's top right while its card scrolls */.close.svelte-7gk24t {position:sticky;top:0;float:right;z-index:1;margin:-8px -6px 0 8px;width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:var(--bg-hover);}"
+	code: ".types.svelte-7gk24t {display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 10px;}.chip.svelte-7gk24t {display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--border);color:var(--text-muted);font-size:calc(12.5px * var(--ui-scale, 1));}.chip.svelte-7gk24t:hover {background:var(--bg-hover);color:var(--text);}.chip.on.svelte-7gk24t {background:var(--accent-soft);border-color:color-mix(in srgb, var(--accent) 45%, transparent);color:var(--accent);}.chip.svelte-7gk24t .c:where(.svelte-7gk24t) {color:var(--text-faint);font-variant-numeric:tabular-nums;}.library.svelte-7gk24t {height:100%;display:flex;flex-direction:column;background:var(--bg);outline:none;position:relative;}.library.dragging.svelte-7gk24t {box-shadow:inset 0 0 0 2px var(--accent);}.drop-hint.svelte-7gk24t {position:absolute;inset:0;z-index:5;display:grid;place-items:center;pointer-events:none;background:color-mix(in srgb, var(--bg) 70%, transparent);color:var(--accent);font-size:calc(16px * var(--ui-scale, 1));font-weight:600;}header.svelte-7gk24t {display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--border);}h1.svelte-7gk24t {display:inline-flex;gap:8px;align-items:center;margin:0 8px 0 0;font-size:calc(17px * var(--ui-scale, 1));color:var(--heading);}.count.svelte-7gk24t {font-size:.7em;font-weight:500;color:var(--text-faint);}input.svelte-7gk24t {font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;}input.svelte-7gk24t:focus {outline:none;border-color:var(--accent);}.search.svelte-7gk24t {flex:1;min-width:220px;}.add.svelte-7gk24t {display:flex;gap:6px;}.add.svelte-7gk24t input:where(.svelte-7gk24t) {width:270px;} /* the placeholder whole (clipped text is a bug) */.seg.svelte-7gk24t {display:inline-flex;border:1px solid var(--border-strong);border-radius:var(--radius-sm);overflow:hidden;}.seg.svelte-7gk24t button:where(.svelte-7gk24t) {padding:4px 10px;color:var(--text-muted);}.seg.svelte-7gk24t button.on:where(.svelte-7gk24t) {background:var(--accent-soft);color:var(--accent);}.btn.svelte-7gk24t {display:inline-flex;gap:6px;align-items:center;border:1px solid var(--border-strong);}.btn.svelte-7gk24t:hover:not(:disabled) {background:var(--bg-hover);}.btn.svelte-7gk24t:disabled {opacity:.45;cursor:default;}.btn.danger.svelte-7gk24t {color:var(--red);}.edit.svelte-7gk24t {display:grid;grid-template-columns:1fr 2fr;gap:8px;margin:0 0 14px;padding:12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--bg-alt);}.edit.svelte-7gk24t label:where(.svelte-7gk24t) {grid-column:1 / -1;display:flex;flex-direction:column;gap:3px;color:var(--text-muted);font-size:calc(12px * var(--ui-scale, 1));}.edit.svelte-7gk24t label.half:where(.svelte-7gk24t) {grid-column:auto;}.edit.svelte-7gk24t .actions:where(.svelte-7gk24t) {grid-column:1 / -1;}.edit.svelte-7gk24t textarea:where(.svelte-7gk24t) {font:inherit;font-size:calc(13px * var(--ui-scale, 1));color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;resize:vertical;}.hint.svelte-7gk24t {color:var(--text-faint);font-weight:400;}.body.svelte-7gk24t {flex:1;min-height:0;display:grid;grid-template-columns:210px minmax(300px, 1.15fr) minmax(280px, 1fr);}.body.bare.svelte-7gk24t {grid-template-columns:minmax(300px, 1.4fr) minmax(280px, 1fr);}.list.empty-list.svelte-7gk24t {grid-column:span 2;} /* nothing to list: its words get the detail's column too */.detail.none.svelte-7gk24t {display:grid;place-content:center;text-align:center;color:var(--text-faint);}.side.svelte-7gk24t {overflow:auto;border-right:1px solid var(--border);padding:8px 6px;background:var(--bg-alt);display:flex;flex-direction:column;gap:1px;}.side.svelte-7gk24t h4:where(.svelte-7gk24t), .side.svelte-7gk24t .h4:where(.svelte-7gk24t) {display:flex;align-items:center;gap:4px;margin:12px 8px 4px;padding:0;font-size:calc(10.5px * var(--ui-scale, 1));font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);text-align:left;}.side.svelte-7gk24t .h4:where(.svelte-7gk24t):hover {color:var(--text);}.item.svelte-7gk24t {display:flex;align-items:center;gap:7px;width:100%;padding:4px 8px;border-radius:var(--radius-sm);color:var(--text);text-align:left;font-size:calc(12.5px * var(--ui-scale, 1));}.item.svelte-7gk24t:hover {background:var(--bg-hover);}.item.on.svelte-7gk24t {background:var(--accent-soft);color:var(--heading);box-shadow:inset 2px 0 0 var(--accent);}.item.drop.svelte-7gk24t {outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft);}.item.svelte-7gk24t .n:where(.svelte-7gk24t) {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.c.svelte-7gk24t {color:var(--text-faint);font-size:.85em;font-variant-numeric:tabular-nums;}.hash.svelte-7gk24t {color:var(--text-faint);width:14px;text-align:center;}.tagitem.svelte-7gk24t {color:var(--text-muted);}.tag.coll.svelte-7gk24t {display:inline-flex;gap:4px;align-items:center;color:var(--text);}.list.svelte-7gk24t {overflow:hidden auto; /* the grid wraps: a horizontal offset only ever hid the first column */border-right:1px solid var(--border);padding:6px;position:relative;user-select:none;-webkit-user-select:none;}.list.svelte-7gk24t .marquee {position:absolute;z-index:2;pointer-events:none;border:1px solid var(--accent);background:color-mix(in srgb, var(--accent) 12%, transparent);border-radius:2px;}.tree-row.svelte-7gk24t {display:flex;align-items:center;min-width:0;}.tree-row.svelte-7gk24t .item:where(.svelte-7gk24t) {flex:1;min-width:0;}.twisty.svelte-7gk24t {flex:none;width:16px;height:22px;display:grid;place-items:center;color:var(--text-faint);padding:0;}.twisty.svelte-7gk24t:hover {color:var(--text);}.picked.svelte-7gk24t {margin:8px 0 12px;padding-left:18px;font-size:.9em;color:var(--text-muted);}.picked.svelte-7gk24t li:where(.svelte-7gk24t) {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.list.covers.svelte-7gk24t {display:grid;grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));gap:16px 14px;align-content:start;padding:14px;}.sr-only.svelte-7gk24t {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0;}.list.table-mode.svelte-7gk24t {padding:0;overflow:auto;}.zot-table.svelte-7gk24t {width:100%;border-collapse:collapse;table-layout:fixed;font-size:calc(12.5px * var(--ui-scale, 1));}.zot-table.svelte-7gk24t thead:where(.svelte-7gk24t) th:where(.svelte-7gk24t) {position:sticky;top:0;z-index:1;background:var(--bg-alt);border-bottom:1px solid var(--border-strong);padding:0;text-align:left;font-weight:600;color:var(--text-muted);}.th-btn.svelte-7gk24t {width:100%;display:flex;align-items:center;gap:4px;padding:7px 8px;text-align:left;font:inherit;font-size:calc(11.5px * var(--ui-scale, 1));color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.th-btn.svelte-7gk24t:hover {background:var(--bg-hover);color:var(--text);}.sort-ind.svelte-7gk24t {color:var(--accent);flex:none;}.col-title.svelte-7gk24t {width:34%;}.col-author.svelte-7gk24t {width:19%;}.col-year.svelte-7gk24t {width:58px;}.col-venue.svelte-7gk24t {width:18%;}.col-kind.svelte-7gk24t {width:10%;}.col-added.svelte-7gk24t {width:88px;}.col-pdf.svelte-7gk24t {width:48px;}.trow.svelte-7gk24t {cursor:pointer;}.trow.svelte-7gk24t td:where(.svelte-7gk24t) {padding:6px 8px;border-bottom:1px solid var(--border);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted);vertical-align:middle;}.trow.svelte-7gk24t:hover td:where(.svelte-7gk24t) {background:var(--bg-hover);}.trow.sel.svelte-7gk24t td:where(.svelte-7gk24t) {background:var(--accent-soft);}.trow.sel.svelte-7gk24t td:where(.svelte-7gk24t):first-child {box-shadow:inset 2px 0 0 var(--accent);}.row-focus.svelte-7gk24t {display:block;width:100%;text-align:left;padding:0;font:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.row-focus.svelte-7gk24t .t:where(.svelte-7gk24t) {display:block;}.c-year.svelte-7gk24t, .c-added.svelte-7gk24t {font-variant-numeric:tabular-nums;}.c-pdf.svelte-7gk24t {text-align:center;}\n  /* a service's things, apart from the vault's: a band across the list with the way into the service's own app */.from-head.svelte-7gk24t {grid-column:1 / -1;display:flex;align-items:center;gap:8px;margin:14px 0 2px;padding:8px 10px;border-radius:var(--radius-sm);background:var(--bg-alt);border:1px solid var(--border);color:var(--text-muted);font-size:calc(12px * var(--ui-scale, 1));}.from-head.svelte-7gk24t:first-child {margin-top:0;}.from-head.svelte-7gk24t .fh:where(.svelte-7gk24t) {font-weight:600;letter-spacing:.02em;color:var(--heading);}.from-head.svelte-7gk24t .fc:where(.svelte-7gk24t) {color:var(--text-faint);font-variant-numeric:tabular-nums;}.home.svelte-7gk24t {display:inline-flex;align-items:center;gap:6px;}.from-home.svelte-7gk24t {margin-left:auto;display:inline-flex;align-items:center;gap:5px;}.mine-none.svelte-7gk24t {grid-column:1 / -1;margin:4px 2px 0;color:var(--text-muted);}.row.svelte-7gk24t {display:grid;grid-template-columns:minmax(0, 1fr) auto;gap:2px 10px;width:100%;text-align:left;padding:8px 10px;border-radius:var(--radius-sm);}.row.svelte-7gk24t:hover {background:var(--bg-hover);}.row.sel.svelte-7gk24t {background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent);}.card.svelte-7gk24t {display:flex;flex-direction:column;gap:4px;text-align:left;padding:4px;border-radius:var(--radius-sm);min-width:0;}\n  /* a library of thousands: items out of view are not laid out or painted (still in the page, for the marquee and keys) */.row.svelte-7gk24t {content-visibility:auto;contain-intrinsic-size:auto 52px;}\n  /* never a card: its height (a cover's 2:3 at the column's width, then two lines) is not one number, and WebKit kept\n     the guessed one for cards laid out again after the pane came back (titles drawn over the covers); covers already\n     load only near the view (LibraryCover) */.card.svelte-7gk24t:hover {background:var(--bg-hover);}.card.sel.svelte-7gk24t {background:var(--accent-soft);box-shadow:0 0 0 2px var(--accent);}.card.svelte-7gk24t .t:where(.svelte-7gk24t) {font-size:.92em;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;}.card.svelte-7gk24t .m:where(.svelte-7gk24t) {font-size:.8em;}.t.svelte-7gk24t {grid-column:1;color:var(--heading);font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.m.svelte-7gk24t {grid-column:1;color:var(--text-muted);font-size:.9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n  /* how far along: a thin bar, the done part in the accent */.bar.svelte-7gk24t {display:block;height:3px;border-radius:2px;background:linear-gradient(to right, var(--accent) calc(var(--p) * 100%), var(--border) 0);}.row.svelte-7gk24t .bar:where(.svelte-7gk24t) {grid-column:1 / -1;margin-top:3px;}.continue.svelte-7gk24t {flex:none;padding:8px 16px 10px;border-bottom:1px solid var(--border);}.continue.svelte-7gk24t h4:where(.svelte-7gk24t) {margin:0 0 6px;font-size:calc(10.5px * var(--ui-scale, 1));font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);}.strip.svelte-7gk24t {display:flex;gap:12px;overflow-x:auto;scrollbar-width:thin;padding-bottom:2px;}.go.svelte-7gk24t {flex:none;width:104px;display:flex;flex-direction:column;gap:4px;padding:3px;border-radius:var(--radius-sm);text-align:left;}.go.svelte-7gk24t:hover {background:var(--bg-hover);}.go.svelte-7gk24t .t:where(.svelte-7gk24t) {font-size:.82em;font-weight:500;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;}.narrow.svelte-7gk24t .continue:where(.svelte-7gk24t) {padding:6px 12px 8px;}.flags.svelte-7gk24t {grid-column:2;grid-row:1 / span 2;display:flex;gap:4px;align-items:center;}.flag.svelte-7gk24t {font-size:calc(11px * var(--ui-scale, 1));padding:1px 6px;border-radius:999px;background:var(--bg-hover);color:var(--text-muted);}.flag.red.svelte-7gk24t {color:var(--red);background:color-mix(in srgb, var(--red) 14%, transparent);}\n  /* a column; the linked mentions follow the item (at the bottom of a short card they stood apart, the column blank) */.detail.svelte-7gk24t {overflow:auto;padding:18px 22px 40px;display:flex;flex-direction:column;container-type:inline-size;}.detail.svelte-7gk24t > * {flex-shrink:0;}.facts.svelte-7gk24t {display:grid;gap:14px;margin:8px 0 4px;}\n  /* the picture a fixed, modest width: the fields get the rest (beside a 42 % picture they broke letter by letter) */.facts.pic.svelte-7gk24t {grid-template-columns:120px minmax(0, 1fr);align-items:start;}.facts-pic.svelte-7gk24t .cover.big {width:120px;}.facts-pic.svelte-7gk24t .cover.big {max-height:240px;margin:0;}.facts.svelte-7gk24t dl:where(.svelte-7gk24t) {margin:0;}.narrow.svelte-7gk24t .facts.pic:where(.svelte-7gk24t) {grid-template-columns:96px minmax(0, 1fr);}\n  /* a narrow panel (the usual ~300 px column): the picture on its own line, the fields the panel's whole width —\n     beside it the values broke inside words */\n  @container (max-width: 460px) {.facts.pic.svelte-7gk24t {grid-template-columns:minmax(0, 1fr);}.facts-pic.svelte-7gk24t .cover.big {width:auto;max-width:140px;max-height:190px;}\n  }\n  /* the mentions follow the item, open (an item's panel is where they matter), never pinned under an empty column */.links-bar.svelte-7gk24t {margin:22px -22px 0;padding-top:4px;display:flex;flex-direction:column;}.abstract.own.svelte-7gk24t {white-space:pre-line;}.more-notes.svelte-7gk24t {align-self:flex-start;margin-top:4px;}.kind.svelte-7gk24t {text-transform:uppercase;letter-spacing:.07em;font-size:calc(11px * var(--ui-scale, 1));color:var(--text-faint);}h2.svelte-7gk24t {margin:4px 0 6px;font-size:calc(19px * var(--ui-scale, 1));color:var(--heading);line-height:1.3;}.authors.svelte-7gk24t {margin:0;color:var(--text);}.venue.svelte-7gk24t {margin:2px 0 0;color:var(--text-muted);font-style:italic;}dl.svelte-7gk24t {display:grid;grid-template-columns:max-content minmax(0, 1fr);gap:3px 12px;font-size:.9em;margin:10px 0;}dt.svelte-7gk24t {color:var(--text-faint);}dd.svelte-7gk24t {margin:0;overflow-wrap:anywhere;}.actions.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 8px;}.choice.svelte-7gk24t {display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 10px;}.choice.svelte-7gk24t span:where(.svelte-7gk24t) {color:var(--text-faint);font-size:.85em;margin-right:2px;}.links.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:14px;margin:6px 0;}.links.svelte-7gk24t a:where(.svelte-7gk24t) {display:inline-flex;gap:5px;align-items:center;color:var(--link, var(--accent));text-decoration:none;font-size:.92em;}.links.svelte-7gk24t a:where(.svelte-7gk24t):hover {text-decoration:underline;}.tags.svelte-7gk24t {display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}.tag.svelte-7gk24t {font-size:calc(11.5px * var(--ui-scale, 1));padding:2px 9px;border-radius:999px;border:1px solid var(--border-strong);color:var(--text-muted);}.tag.svelte-7gk24t:hover {color:var(--text);border-color:var(--accent);}h3.svelte-7gk24t {margin:18px 0 6px;font-size:calc(11px * var(--ui-scale, 1));text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);}.abstract.svelte-7gk24t {margin:0;line-height:1.6;color:var(--text);}.pad.svelte-7gk24t {padding:12px 16px;}\n  /* the covers are a grid: the \"nothing here\" line spans all its columns (on a phone it sat in one, a word a line) */.list.svelte-7gk24t .none:where(.svelte-7gk24t) {grid-column:1 / -1;} /* only the list's: the detail's empty column must stay in its own column */\n\n  /* narrow: one column; groups as a row of chips; the card as a sheet over the list */.narrow.svelte-7gk24t header:where(.svelte-7gk24t) {padding:10px 12px;gap:8px;}.narrow.svelte-7gk24t .search:where(.svelte-7gk24t) {flex:1 1 100%;min-width:0;order:1;}.narrow.svelte-7gk24t .add:where(.svelte-7gk24t) {flex:1 1 100%;order:2;}.narrow.svelte-7gk24t .add:where(.svelte-7gk24t) input:where(.svelte-7gk24t) {flex:1;width:auto;min-width:0;}.narrow.svelte-7gk24t .types:where(.svelte-7gk24t) {padding:0 12px 8px;flex-wrap:nowrap;overflow-x:auto;}.narrow.svelte-7gk24t .body:where(.svelte-7gk24t), .narrow.svelte-7gk24t .body.bare:where(.svelte-7gk24t) {display:flex;flex-direction:column;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) {flex:none;flex-direction:row;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid var(--border);padding:6px 12px;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) h4:where(.svelte-7gk24t), .narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .h4:where(.svelte-7gk24t) {margin:0 2px 0 6px;flex:none;}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .item:where(.svelte-7gk24t) {width:auto;flex:none;max-width:70vw;padding:5px 10px;border-radius:999px;border:1px solid var(--border);}.narrow.svelte-7gk24t .side:where(.svelte-7gk24t) .item.on:where(.svelte-7gk24t) {box-shadow:none;border-color:color-mix(in srgb, var(--accent) 45%, transparent);}.narrow.svelte-7gk24t .list:where(.svelte-7gk24t) {flex:1;border-right:0;}.narrow.svelte-7gk24t .zot-table:where(.svelte-7gk24t) {min-width:640px;}.narrow.svelte-7gk24t .list.covers:where(.svelte-7gk24t) {grid-template-columns:repeat(auto-fill, minmax(104px, 1fr));gap:12px 10px;padding:10px 12px;}.scrim.svelte-7gk24t {position:absolute;inset:0;z-index:6;background:var(--scrim);border:0;padding:0;cursor:default;}.narrow.svelte-7gk24t .detail:where(.svelte-7gk24t) {position:absolute;left:0;right:0;bottom:0;z-index:7;max-height:80%;padding:18px 16px calc(24px + env(safe-area-inset-bottom, 0px));background:var(--bg-elev);border-top:1px solid var(--border-strong);border-radius:14px 14px 0 0;box-shadow:var(--shadow-pop);}.narrow.svelte-7gk24t .detail:where(.svelte-7gk24t) .cover.big {max-height:180px;}\n  /* stays at the sheet's top right while its card scrolls */.close.svelte-7gk24t {position:sticky;top:0;float:right;z-index:1;margin:-8px -6px 0 8px;width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:var(--bg-hover);}"
 };
 function Zo(e, t) {
 	We(t, !0), ii(e, Xo);
