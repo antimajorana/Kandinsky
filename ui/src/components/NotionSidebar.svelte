@@ -38,7 +38,8 @@
   import type { TreeEntry } from "../lib/types";
   import Icon from "./Icon.svelte";
   import FileTree from "./FileTree.svelte";
-  import ContextMenu, { type MenuItem } from "./ContextMenu.svelte";
+  import ContextMenu from "./ContextMenu.svelte";
+  import type { MenuItem } from "../lib/menu";
   import InputDialog from "./InputDialog.svelte";
   import TrashModal from "./TrashModal.svelte";
   import NotificationsModal from "./NotificationsModal.svelte";

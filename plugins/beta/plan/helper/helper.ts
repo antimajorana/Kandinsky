@@ -53,7 +53,8 @@ async function tasks(status: "open" | "all"): Promise<Task[]> {
 }
 
 /** The core's own calendar (`GET /api/calendar`: the vault's dated events, times as local `HH:MM`) as busy time,
- *  for a vault without a calendar plugin. Read only: it cannot time-block, so `calendar` stays false. */
+ *  for a vault without a calendar plugin. The core time-blocks into it too (`POST /api/task/schedule`), so Block is
+ *  offered when it could be read. */
 export async function builtinBusy(today: string): Promise<{ busy: Busy[]; read: boolean; calendar: boolean }> {
   try {
     const r = await kandinsky.get<{ events?: any[] }>("/api/calendar", { from: today, to: addDays(today, 2) });
@@ -64,7 +65,7 @@ export async function builtinBusy(today: string): Promise<{ busy: Busy[]; read: 
       const start = Date.parse(`${e.date}T${e.start}`), end = Date.parse(`${e.end_date || e.date}T${e.end}`);
       if (Number.isFinite(start) && Number.isFinite(end) && end > start) out.push({ start, end });
     }
-    return { busy: out, read: true, calendar: false };
+    return { busy: out, read: true, calendar: true };
   } catch (e) {
     if ((e as { status?: number }).status === 404) return { busy: [], read: true, calendar: false };
     console.error(`plan: the vault's calendar could not be read: ${e instanceof Error ? e.message : e}`);
@@ -300,9 +301,10 @@ export async function pressed(p: Params) {
     if (open && start !== null) {
       const end = start + slot.minutes * 60_000;
       try {
-        const r = await kandinsky.post<{ block?: string; label?: string }>("/api/plugins/@calendar/tools/time_block", {
-          title: open.title, start: slot.start, end: stamp(end, c).replace(" ", "T"),
+        // through the core: the calendar plugin's `time_block` when one is on, else the built-in calendar
+        const r = await kandinsky.post<{ block?: string; label?: string }>("/api/task/schedule", {
           task: { path: open.path, line: open.line, text: open.text },
+          event: { title: open.title, start: slot.start, end: stamp(end, c).replace(" ", "T") },
         });
         const task = { ...name(open), block: r.block ?? open.block };
         writes.push({ entry: { at: now, kind: "snoozed", key: keyOf(task), until: end, detail: `time-blocked${r.label ? ` · ${r.label}` : ""}` }, task });

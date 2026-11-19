@@ -352,7 +352,8 @@ fn repo() -> PathBuf {
 }
 
 fn read(p: &Path) -> String {
-    std::fs::read_to_string(p).unwrap_or_else(|e| panic!("parity: cannot read {}: {e}", p.display()))
+    // line endings as committed: a Windows checkout writes CRLF, and the patterns below expect LF
+    std::fs::read_to_string(p).unwrap_or_else(|e| panic!("parity: cannot read {}: {e}", p.display())).replace("\r\n", "\n")
 }
 
 /// Each floor guards a discovery against a refactor that moves its source: finding almost nothing fails loudly
@@ -379,7 +380,8 @@ fn page_commands(repo: &Path) -> Vec<String> {
         if !table.is_match(&text) {
             continue;
         }
-        files.push(p.strip_prefix(repo).unwrap().display().to_string());
+        // forward slashes on every platform, as the paths below are written
+        files.push(p.strip_prefix(repo).unwrap().display().to_string().replace('\\', "/"));
         for c in id.captures_iter(&text) {
             let raw = c.get(1).or_else(|| c.get(2)).unwrap().as_str();
             let named = hole.replace_all(raw, |h: &regex::Captures| {
@@ -455,7 +457,7 @@ fn page_settings(repo: &Path) -> Vec<Feature> {
     let text = read(&path);
     let start = text.find("export const PAGES: PageDef[] = [").expect("parity: settings-pages.ts has no `PAGES` table any more");
     let body = &text[start..start + text[start..].find("\n];").expect("the end of PAGES")];
-    let id = regex::Regex::new(r#"(?m)^\s*id: "([a-z][a-z-]*)", title:"#).unwrap();
+    let id = regex::Regex::new(r#"(?m)^\s*id: "([a-z][a-z-]*)",\s*title:"#).unwrap(); // one line or two
     let only = regex::Regex::new(r"only: \[([^\]]*)\]").unwrap();
     let at: Vec<(usize, String)> = id.captures_iter(body).map(|c| (c.get(0).unwrap().start(), c[1].to_string())).collect();
     let out: Vec<Feature> = at
@@ -470,7 +472,7 @@ fn page_settings(repo: &Path) -> Vec<Feature> {
             Feature { kind: Kind::Setting, id: page.clone(), said }
         })
         .collect();
-    floor("Settings pages", out.len(), 10, "PAGES in ui/src/lib/settings-pages.ts");
+    floor("Settings pages", out.len(), 6, "PAGES in ui/src/lib/settings-pages.ts"); // this fork folds them into fewer pages
     out
 }
 

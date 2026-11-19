@@ -21,12 +21,12 @@
 "ui.note.new" = "page"
 "ui.drawing" = "page"
 "ui.today" = { page = true, note = "the Home place of the app's bottom bar calls it (KandinskyActivity)" }
-"ui.files" = { native = "FilesScreen", note = "the bottom bar's Files: the core's tree on a PlaceList, breadcrumbs, a menu per row; the page's pane stays for the desktop and the browser" }
-"ui.explorer" = { native = "FilesScreen", note = "the Files place is the phone's explorer (folders, rename, trash); no drag and drop" }
-"ui.search" = { native = "SearchScreen", note = "the bottom bar's Search: the core's /api/search as you type, names then lines; no regex, whole-word or replace there (the page's Replace does it)" }
+"ui.files" = { missing = "its native screen (FilesScreen) is not in this fork yet" }
+"ui.explorer" = { missing = "its native screen (FilesScreen) is not in this fork yet" }
+"ui.search" = { missing = "its native screen (SearchScreen) is not in this fork yet" }
 "ui.quickOpen" = "page"
 "ui.replace" = "page"
-"ui.libraries" = { native = "LibraryScreen", note = "the bottom bar's Library: the vault's own libraries from the core (/api/libraries, /api/library), Continue, covers or a list, search, order; the servers' apps (Manga, Audiobookshelf) as chips apart; More… is the page's (Drawings, References, the plugins' others)" }
+"ui.libraries" = { missing = "its native screen (LibraryScreen) is not in this fork yet" }
 "ui.library" = { page = true, note = "planned native with the libraries (§4)" }
 "ui.capture" = { native = "CaptureActivity", note = "the phone's capture: the + long press, the Quick Settings tile, the share target; the page's popup runs too" }
 "ui.capture-bar" = "page"
@@ -88,7 +88,6 @@
 "pdf.migrate-marks" = "page"
 # run-time families: one command per bookmark, per saved workspace
 "bookmark.*" = "page"
-"workspace.*" = "page"
 # not on the phone
 "ui.terminal" = { missing = "the phone app has no shell terminal" }
 "ui.terminal.new" = { missing = "the phone app has no shell terminal" }
@@ -118,6 +117,31 @@
 "core:focus" = "page"
 "core:today" = "page"
 "core:palette" = "page"
+"note.columns" = "page"
+"note.highlight" = "page"
+"note.history" = "page"
+"note.rtl" = "page"
+"note.sourceToggle" = "page"
+"note.toc" = "page"
+"note.toggle" = "page"
+"note.voice" = "page"
+"ui.bases" = "page"
+"ui.calendar" = "page"
+"ui.canvas" = "page"
+"ui.import" = "page"
+"ui.papers.add" = "page"
+"ui.papers.duplicates" = "page"
+"ui.papers.inbox" = "page"
+"ui.papers.scan" = "page"
+"ui.papers.zotero" = "page"
+"ui.plugins" = "page"
+"ui.properties.audit" = "page"
+"ui.quickSwitcher" = "page"
+"ui.workspace.preset.derivation" = "page"
+"ui.workspace.preset.focus" = "page"
+"ui.workspace.preset.quad" = "page"
+"ui.zen" = "page"
+"core:properties-audit" = "page"
 
 [plugins]
 # what each plugin's manifest says about Android is checked: a plugin that runs there cannot be `missing`, one that
@@ -127,7 +151,7 @@
 "manga" = { native = "Manga" }
 # ---- the page, as on the desktop ----
 "notifications" = { native = "Notices", note = "what it raises reaches the shade through the core's notices, with their buttons, a channel per kind (NoticeKind); planned notices ring on time with the app gone (ReminderAlarms, exact alarms); the native Agenda lists what is planned (AgendaScreen)" }
-"plan" = { native = "AgendaScreen", note = "its dated tasks in the native Agenda (the top bar's calendar, the launcher's Agenda, the widget's Coming up): a day, 3 days or a week beside the Calendar's events, a task ticked through the core; its nudges ring on time with the app gone (ReminderAlarms); its settings are the page's" }
+"plan" = "page"
 "catalog" = { page = true, note = "its library pages planned native with the libraries (§4); the note of a thing (its `note` tool, the one-note rule) is asked by the native screens through Host.thingNote, the same call" }
 "catalog-anime" = { page = true, note = "a catalog source: its JavaScript helper runs in the phone's core as on the desktop" }
 "catalog-books" = { page = true, note = "a catalog source: its JavaScript helper runs in the phone's core as on the desktop" }
@@ -145,7 +169,7 @@
 "today" = "page"
 "jellyfin" = { page = true, note = "the library and the reports work; a film plays its sound only until libmpv is in the app (DESIGN-video-player.md §3)" }
 "weather" = "page"
-"catalog-papers" = { page = true, note = "its helper is built into the APK (build-apk.sh engines); the Zotero connector's listener has no browser to answer there" }
+"catalog-papers" = { missing = "not made for the phone app" }
 "zstd" = { page = true, note = "decompressed by the core's decoder (convert.unzstd); the cache is not pruned there (no find/rm)" }
 "syncthing" = { page = true, note = "its helper is built into the APK; the API key is set in its settings (a phone's Syncthing config is not readable)" }
 # ---- not on the phone: their manifests say `no` for Android ----
@@ -156,35 +180,20 @@
 "export" = { missing = "not made for the phone app" }
 "finance" = { missing = "not made for the phone app" }
 "ocr" = { missing = "not made for the phone app" }
-"print" = { missing = "not made for the phone app" }
+"print" = "page"
 "rnote" = { missing = "not made for the phone app" }
 "run-tools" = { missing = "the phone app has no shell terminal" }
 "ssh" = { missing = "not made for the phone app" }
 
 [settings]
 # ---- the page's Settings (PAGES in ui/src/lib/settings-pages.ts), opened by the app's ⋮ → Vault settings ----
-"overview" = "page"
 "appearance" = "page"
 "writing" = "page"
-"today" = "page"
-"code" = "page"
 "files" = "page"
-"web" = "page"
-"vaults" = { page = true, note = "the phone's own vault list is native (phone:vaults)" }
-"signins" = "page"
-"libraries" = { page = true, note = "the phone adds a library from a folder's ⋮ in Files (Show as a library); kind, order and layout are the page's Settings" }
 "papers" = "page"
-"drawing" = "page"
-"terminal" = { page = true, note = "shown, though the phone app has no shell terminal" }
 "keyboard" = "page"
 "plugins" = { page = true, note = "the phone's own plugin list is native (phone:plugins)" }
-"automation" = "page"
-"latex" = "page"
-"advanced" = "page"
 # shown only elsewhere, by their `only`
-"server" = { missing = "Settings shows this page only on: browser" }
-"desktop" = { missing = "Settings shows this page only on: app" }
-"agents" = { missing = "Settings shows this page only on: app" }
 # ---- the phone's native Settings (SettingsPages.java) ----
 "phone:capture" = { native = "Setup" }
 "phone:vaults" = { native = "Setup" }
@@ -192,3 +201,4 @@
 "phone:plugin:*" = { native = "PluginForm" }
 "phone:vault-settings" = { native = "ConfigPages" }
 "phone:cfg:*" = { native = "ConfigPages" }
+"calendar" = "page"

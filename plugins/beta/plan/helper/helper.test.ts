@@ -57,7 +57,7 @@ function core(files: Record<string, string>, o: { schedules?: boolean; events?: 
       files[body.path] = lines.join("\n");
       return null;
     }
-    if (route === "/api/plugins/@calendar/tools/time_block") {
+    if (route === "/api/task/schedule" && body.event) {
       const lines = files[body.task.path].split("\n");
       lines[body.task.line - 1] += " ⏳ 2026-11-16 ^tnew1";
       files[body.task.path] = lines.join("\n");
@@ -205,7 +205,7 @@ test("Block time-blocks the task through the calendar, and the nudges wait for t
   assert.ok(offered.length && offered.every((x: any) => x.actions.some((a: any) => a.id.startsWith("block:"))), "a calendar is there: Block offered");
   const r = await call("pressed", "10:05", { notice_id: "plan:notes/Home.md|Call the bank", action: "block:2026-11-16T16:30+30" });
   assert.deepEqual(r, { withdraw: ["plan:notes/Home.md|Call the bank"] });
-  assert.deepEqual(c.posted.find((x) => x.path.endsWith("/time_block"))?.body, { title: "Call the bank", start: "2026-11-16T16:30", end: "2026-11-16T17:00", task: { path: "notes/Home.md", line: 1, text: "Call the bank 📅 2026-11-20" } });
+  assert.deepEqual(c.posted.find((x) => x.path === "/api/task/schedule")?.body, { event: { title: "Call the bank", start: "2026-11-16T16:30", end: "2026-11-16T17:00" }, task: { path: "notes/Home.md", line: 1, text: "Call the bank 📅 2026-11-20" } });
   assert.match(c.files[LEDGER], /- 2026-11-16 10:05 · snoozed → 17:00 · \[\[notes\/Home#\^tnew1\|Call the bank\]\] · time-blocked · Mon 16:30/);
   // no calendar plugin: no Block button
   core({ "notes/Home.md": "- [ ] Call the bank 📅 2026-11-20\n" }, { noCalendar: true });
@@ -408,7 +408,7 @@ test("without a calendar plugin, the core's own calendar gives the busy time (ti
     { date: "2026-11-17", end_date: "2026-11-17", start: "09:00", end: "09:30", all_day: false, completed: true },
   ] });
   const r = await builtinBusy("2026-11-16");
-  assert.deepEqual(r, { busy: [{ start: Date.parse("2026-11-16T10:00"), end: Date.parse("2026-11-16T11:30") }], read: true, calendar: false });
+  assert.deepEqual(r, { busy: [{ start: Date.parse("2026-11-16T10:00"), end: Date.parse("2026-11-16T11:30") }], read: true, calendar: true });
   core({}, { noCalendar: true });
   assert.deepEqual(await builtinBusy("2026-11-16"), { busy: [], read: true, calendar: false }, "a core without the route: nothing busy");
 });

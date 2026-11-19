@@ -251,6 +251,7 @@
 	*  `\tag{n}` added — before the closing `$$` when the text has them. */
 	function numberedTex(tex, nums) {
 		let t = tex.replace(LABELS, "");
+		if (typeof nums === "string") return nums ? numberedWhole(t, nums) : t;
 		const rows = rowSpans(t);
 		if (rows && nums?.length) {
 			for (let r = rows.length - 1; r >= 0; r--) {

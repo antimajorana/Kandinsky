@@ -153,7 +153,8 @@ export function referencesSource(): LibrarySource {
             ["DOI", p.doi ?? ""],
             ["arXiv", p.arxiv ?? ""],
             ["ISBN", p.isbn ?? ""],
-            ["PDF", p.pdf ? "" : "none yet — drop one here"],
+            // where the PDF is: for a zero-copy (external) PDF the only place its real location is shown
+            ["PDF", p.pdf ?? "none yet — drop one here"],
             ["Added", (p.added ?? "").slice(0, 10)],
           ] as [string, string][]
         ).filter(([k, v]) => Boolean(v) && !noteFields(props).some(([nk]) => nk.toLowerCase() === k.toLowerCase()))),

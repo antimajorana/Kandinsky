@@ -21,4 +21,14 @@ mirror?: string,
 /**
  * The desktop's one core: already started, so switching to it is only a page load.
  */
-warm: boolean, };
+warm: boolean, 
+/**
+ * Started with the app and kept running whether or not a window shows it: its schedules, plugin rounds, hooks and
+ * notifications go on in the background (docs/design/DESIGN-vaults-together.md). Others start when opened.
+ */
+always_on: boolean, 
+/**
+ * Its notices that came while no page of it was looked at (notify.rs `UnseenList`): the switcher's badge. Said by
+ * the core serving it, never written to the list.
+ */
+unseen?: number, };

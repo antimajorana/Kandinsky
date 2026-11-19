@@ -2,7 +2,7 @@
 // Positioned cleanly via a `view.dom` overlay without perturbing text flow or document content.
 import type { EditorState, Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, type BlockInfo, type ViewUpdate } from "@codemirror/view";
-import type { MenuItem } from "../../components/ContextMenu.svelte";
+import type { MenuItem } from "../menu";
 import { popMenu } from "../menu";
 import { shownName } from "../paths";
 import { toast } from "../state.svelte";

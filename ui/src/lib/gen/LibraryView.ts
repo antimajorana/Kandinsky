@@ -2,4 +2,11 @@
 import type { LibraryInfo } from "./LibraryInfo";
 import type { LibraryThing } from "./LibraryThing";
 
-export type LibraryView = { library: LibraryInfo, continue: Array<LibraryThing>, items: Array<LibraryThing>, };
+/**
+ * A library with its items, sorted, and what you were in the middle of.
+ */
+export type LibraryView = { library: LibraryInfo, 
+/**
+ * Begun, not finished, by when last used, the newest first.
+ */
+continue: Array<LibraryThing>, items: Array<LibraryThing>, };

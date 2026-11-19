@@ -3,4 +3,15 @@ import type { LibraryKind } from "./LibraryKind";
 import type { LibraryLayout } from "./LibraryLayout";
 import type { LibrarySource } from "./LibrarySource";
 
-export type LibraryInfo = { id: string, title: string, kind: LibraryKind, icon: string, source: LibrarySource, folder: string, base: string, sort: string, layout: LibraryLayout, hidden: boolean, };
+/**
+ * One library as the list gives it, resolved: its title and icon filled in.
+ */
+export type LibraryInfo = { id: string, 
+/**
+ * Its own, else the folder's or Base's name; for a given library, its id (the page knows its giver's title).
+ */
+title: string, kind: LibraryKind, 
+/**
+ * One of the app's icon names, by kind (the page's and the phone's sets both have it).
+ */
+icon: string, source: LibrarySource, folder: string, base: string, sort: string, layout: LibraryLayout, hidden: boolean, };

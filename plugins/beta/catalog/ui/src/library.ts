@@ -28,7 +28,7 @@ export const seen = new Map<string, LibraryItem[]>();
 
 /** Where the page was in each source (by its id), for the page's life: what was picked, the tab, the side's scope,
  *  the search, the order, the layout and the list's scroll. */
-export interface Place { scope: { kind: "all" } | { kind: "group"; name: string } | { kind: "tag"; name: string }; tab: string | null; q: string; selId: string | null; sortId: string; layout: "list" | "covers"; scroll: number }
+export interface Place { scope: { kind: "all" } | { kind: "group"; name: string } | { kind: "tag"; name: string }; tab: string | null; q: string; selId: string | null; sortId: string; layout: "list" | "covers" | "table"; scroll: number }
 export const place = new Map<string, Place>();
 
 /** The words of `q` all in the item's text. */

@@ -1325,7 +1325,8 @@
 		return (await kandinsky.get("/api/tasks", { status })).tasks;
 	}
 	/** The core's own calendar (`GET /api/calendar`: the vault's dated events, times as local `HH:MM`) as busy time,
-	*  for a vault without a calendar plugin. Read only: it cannot time-block, so `calendar` stays false. */
+	*  for a vault without a calendar plugin. The core time-blocks into it too (`POST /api/task/schedule`), so Block is
+	*  offered when it could be read. */
 	async function builtinBusy(today) {
 		try {
 			const r = await kandinsky.get("/api/calendar", {
@@ -1344,7 +1345,7 @@
 			return {
 				busy: out,
 				read: true,
-				calendar: false
+				calendar: true
 			};
 		} catch (e) {
 			if (e.status === 404) return {
@@ -1692,14 +1693,16 @@
 			if (open && start !== null) {
 				const end = start + slot.minutes * 6e4;
 				try {
-					const r = await kandinsky.post("/api/plugins/@calendar/tools/time_block", {
-						title: open.title,
-						start: slot.start,
-						end: stamp(end, c).replace(" ", "T"),
+					const r = await kandinsky.post("/api/task/schedule", {
 						task: {
 							path: open.path,
 							line: open.line,
 							text: open.text
+						},
+						event: {
+							title: open.title,
+							start: slot.start,
+							end: stamp(end, c).replace(" ", "T")
 						}
 					});
 					const task = {

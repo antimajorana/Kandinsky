@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Settings → Appearance: whose look this screen draws. Off, each vault's own; on (the default), the theme, the
+  // Settings → Appearance: whose look this screen draws. Off (the default), each vault's own; on, the theme, the
   // colour schemes, the contrast, the shapes, the accent and the text size below are this device's own
   // (device-look.svelte.ts), the same in every vault here, and the vaults' files are left alone. And the theme following the system, as one switch.
   import { deviceChose, deviceLook, setOwnLook } from "../../lib/device-look.svelte";

@@ -28,7 +28,7 @@ import { showSide, sideInBar, sidePanel, SIDE_KINDS, type SideId } from "./side-
 import { toast } from "./state.svelte";
 import { isPinned, setSidebarWidth, tabs, toggleSidebar, unsplit } from "./tabs.svelte";
 import { exists, readText } from "./vault-files";
-import type { MenuItem } from "../components/ContextMenu.svelte";
+import type { MenuItem } from "./menu";
 
 const CURRENT = ".kandinsky/cache/layout.json";
 const SESSION = vaultScoped("kandinsky.session");

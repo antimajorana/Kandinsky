@@ -109,7 +109,7 @@
     const d = draft;
     if (!d || !nameOk(d.name) || !d.expr.trim() || taken(d)) return;
     const name = d.name.trim();
-    onedit({ op: "formula", name, formula: d.expr.trim(), ...(d.was && d.was !== name ? { was: d.was } : {}) }, () => { if (draft === d) draft = null; });
+    onedit({ op: "formula", name, expr: d.expr.trim(), ...(d.was && d.was !== name ? { was: d.was } : {}) }, () => { if (draft === d) draft = null; });
   }
   const keys = (e: KeyboardEvent) => {
     e.stopPropagation();
@@ -230,7 +230,7 @@
         <span class="label" title="formula.{name}">{name}</span>
         <code class="expr" title={expr}>{expr}</code>
         <button type="button" class="icon-btn" aria-label="Edit the formula {name}" title="Edit" onclick={() => (draft = { was: name, name, expr })}><Icon name="edit" size={12} /></button>
-        <button type="button" class="icon-btn" aria-label="Remove the formula {name}" title="Remove (and its column in every view)" onclick={() => onedit({ op: "formula", name, formula: null })}><Icon name="trash" size={12} /></button>
+        <button type="button" class="icon-btn" aria-label="Remove the formula {name}" title="Remove (and its column in every view)" onclick={() => onedit({ op: "formula", name, expr: null })}><Icon name="trash" size={12} /></button>
       </li>
     {/if}
   {:else}
