@@ -22,7 +22,7 @@ test("a broken manifest, a plugin for a newer Kandinsky and a throwing main.js a
   await page.getByText("Finish the GW notes.").waitFor();
   await expect(page.locator('.status [data-cell="future:x"]'), "the plugin for a newer Kandinsky did not run").toHaveCount(0);
   await page.keyboard.press("Meta+,");
-  await page.getByRole("button", { name: /^Extensions( \d+)?$/ }).first().click();
+  await page.getByRole("button", { name: /^Plugins( \d+)?$/ }).first().click();
   const row = (title: string) => page.locator("li", { has: page.locator("b", { hasText: new RegExp(`^${title}$`) }) });
   await expect(row("typo")).toContainText("titel");
   await expect(row("Future")).toContainText("needs Kandinsky 99.0");

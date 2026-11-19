@@ -5,6 +5,7 @@
   import { deviceChose, deviceLook, setOwnLook } from "../../lib/device-look.svelte";
   import { inPhoneApp } from "../../lib/eink";
   import { oracleExplorer, setHidePlumbing } from "../../lib/oracle-explorer.svelte";
+  import { settings } from "../../lib/settings.svelte";
   import { setValue, valueOf } from "../../lib/settings-schema";
   import { app } from "../../lib/state.svelte";
 
@@ -32,13 +33,15 @@
     </div>
     <button id="device-look-system" class="switch" class:on={follows} role="switch" aria-checked={follows} aria-label="Follow the system's theme" onclick={() => follow(!follows)}><span></span></button>
   </div>
-  <div class="row">
-    <div class="what">
-      <label for="oracle-hide-plumbing">Hide agent plumbing in Explorer</label>
-      <p class="desc">Keeps AI agent and index scaffolding (<code>AGENTS.md</code>, <code>CLAUDE.md</code>, <code>zAI</code>, <code>zMeta</code>, <code>zAttachments</code>, <code>genkan</code>, <code>wiki/meta</code>, <code>wiki/hot.md</code>, <code>wiki/index.md</code>, <code>wiki/log.md</code>, <code>wiki/overview.md</code>) out of the file tree while keeping them linkable via <code>[[wikilinks]]</code> and Quick Open.</p>
+  {#if settings.config?.developer_mode}
+    <div class="row">
+      <div class="what">
+        <label for="oracle-hide-plumbing">Hide agent plumbing in Explorer</label>
+        <p class="desc">Keeps AI agent and index scaffolding (<code>AGENTS.md</code>, <code>CLAUDE.md</code>, <code>zAI</code>, <code>zMeta</code>, <code>zAttachments</code>, <code>genkan</code>, <code>wiki/meta</code>, <code>wiki/hot.md</code>, <code>wiki/index.md</code>, <code>wiki/log.md</code>, <code>wiki/overview.md</code>) out of the file tree while keeping them linkable via <code>[[wikilinks]]</code> and Quick Open.</p>
+      </div>
+      <button id="oracle-hide-plumbing" class="switch" class:on={oracleExplorer.hidePlumbing} role="switch" aria-checked={oracleExplorer.hidePlumbing} aria-label="Hide agent plumbing in Explorer" onclick={() => setHidePlumbing(!oracleExplorer.hidePlumbing)}><span></span></button>
     </div>
-    <button id="oracle-hide-plumbing" class="switch" class:on={oracleExplorer.hidePlumbing} role="switch" aria-checked={oracleExplorer.hidePlumbing} aria-label="Hide agent plumbing in Explorer" onclick={() => setHidePlumbing(!oracleExplorer.hidePlumbing)}><span></span></button>
-  </div>
+  {/if}
 </section>
 
 <style>

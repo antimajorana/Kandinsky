@@ -44,12 +44,12 @@ fn mb(b: isize) -> String {
     format!("{:.1} MB", b as f64 / 1e6)
 }
 
+fn rss_now() -> usize {
+    kandinsky_core::platform::proc::rss_bytes().unwrap_or(0)
+}
+
 fn rss() -> String {
-    let pages: isize = std::fs::read_to_string("/proc/self/statm")
-        .ok()
-        .and_then(|s| s.split_whitespace().nth(1)?.parse().ok())
-        .unwrap_or(0);
-    mb(pages * 4096)
+    mb(rss_now() as isize)
 }
 
 /// One call's wall time, live-heap change and peak above the start.
@@ -89,6 +89,9 @@ fn main() {
     let note = args.get(1).cloned().unwrap_or_else(|| "notes/Condensed Matter.md".into());
     let base = args.get(2).cloned().unwrap_or_else(|| "refs/papers/Papers.base".into());
     let cfg = Config::load(&root).unwrap_or_default();
+    if let Ok(out) = std::env::var("INDEX_PROBE_SEARCH_BENCH") {
+        return search_bench(&root, &cfg, Path::new(&out));
+    }
     // `INDEX_PROBE_DUMP=file`: the answers as JSON instead of timings, to compare two builds of the index
     if let Ok(out) = std::env::var("INDEX_PROBE_DUMP") {
         return dump(&root, &cfg, Path::new(&out));
@@ -235,4 +238,113 @@ fn dump(root: &Path, cfg: &Config, out: &Path) {
     j.insert("graph".into(), serde_json::to_value(links::graph(root, cfg)).unwrap());
     #[allow(clippy::disallowed_methods)] // the dump goes to a scratch file, never into a vault
     std::fs::write(out, serde_json::to_string_pretty(&j).unwrap()).unwrap();
+}
+
+/// Structured cold/warm search, names-only, PDF-cache, and 1-file edit re-query benchmark on `root`.
+fn search_bench(root: &Path, cfg: &Config, out: &Path) {
+    use kandinsky_core::search::{self, Opts};
+    let rss_start = rss_now();
+    let (cold_start_ms, kept_links, peak_links, g) = once(|| kandinsky_core::links::graph(root, cfg));
+    let note_count = g.nodes.len();
+    drop(g);
+    let idle_rss = rss_now();
+    let idle_heap = LIVE.load(Relaxed).max(0) as usize;
+
+    let queries = ["hubbard", "hubbardish", "renormalisation", "quantum", "condensed matter"];
+    let mut q_reports = Vec::new();
+    for q in queries {
+        let (cold_ms, _, cold_peak, first) = once(|| search::search_with(root, cfg, q, Opts::default()));
+        let file_hits = first.files.len();
+        let line_hits = first.lines.len();
+        let total_count: u32 = first.counts.values().sum();
+        let mut warm_times = Vec::with_capacity(11);
+        let mut warm_peak = cold_peak;
+        for _ in 0..11 {
+            let (ms, _, p, _) = once(|| search::search_with(root, cfg, q, Opts::default()));
+            warm_times.push(ms);
+            warm_peak = warm_peak.max(p);
+        }
+        warm_times.sort_by(f64::total_cmp);
+        let p50 = warm_times[warm_times.len() / 2];
+        let p95 = warm_times[((warm_times.len() * 95) / 100).min(warm_times.len() - 1)];
+        q_reports.push(serde_json::json!({
+            "query": q,
+            "cold_ms": (cold_ms * 100.0).round() / 100.0,
+            "warm_min_ms": (warm_times[0] * 100.0).round() / 100.0,
+            "warm_p50_ms": (p50 * 100.0).round() / 100.0,
+            "warm_p95_ms": (p95 * 100.0).round() / 100.0,
+            "file_hits": file_hits,
+            "line_hits": line_hits,
+            "total_count": total_count,
+            "peak_heap_delta_bytes": warm_peak.max(0),
+        }));
+    }
+
+    let mut names_times = Vec::with_capacity(11);
+    let mut names_count = 0usize;
+    for _ in 0..11 {
+        let (ms, _, _, res) = once(|| search::names_with(root, cfg, "cond", Opts::default()));
+        names_times.push(ms);
+        names_count = res.len();
+    }
+    names_times.sort_by(f64::total_cmp);
+
+    let pdf_opts = Opts { pdf: true, ..Opts::default() };
+    let (pdf_cold_ms, _, _, pdf_first) = once(|| search::search_with(root, cfg, "renormalisation", pdf_opts));
+    let mut pdf_warm = Vec::with_capacity(9);
+    for _ in 0..9 {
+        let (ms, _, _, _) = once(|| search::search_with(root, cfg, "renormalisation", pdf_opts));
+        pdf_warm.push(ms);
+    }
+    pdf_warm.sort_by(f64::total_cmp);
+
+    // 1-file edit freshness & re-query latency
+    let all_md = search::match_files(root, cfg, ".md", false);
+    let (edit_ms, edit_found) = if let Some(rel) = all_md.first() {
+        let target = root.join(rel);
+        let orig = std::fs::read(&target).unwrap_or_default();
+        let token = "zxqvfreshprobe991";
+        #[allow(clippy::disallowed_methods)]
+        std::fs::write(&target, format!("{}\n{token}\n", String::from_utf8_lossy(&orig))).unwrap();
+        let (ms, _, _, after) = once(|| search::search_with(root, cfg, token, Opts::default()));
+        let found = after.lines.iter().any(|l| l.path == *rel);
+        #[allow(clippy::disallowed_methods)]
+        std::fs::write(&target, orig).unwrap();
+        (ms, found)
+    } else {
+        (0.0, false)
+    };
+
+    let report = serde_json::json!({
+        "vault": root.display().to_string(),
+        "note_count": note_count,
+        "rss_start_bytes": rss_start,
+        "cold_start_ms": (cold_start_ms * 100.0).round() / 100.0,
+        "links_kept_heap_bytes": kept_links.max(0),
+        "links_peak_heap_bytes": peak_links.max(0),
+        "idle_rss_bytes": idle_rss,
+        "idle_live_heap_bytes": idle_heap,
+        "queries": q_reports,
+        "names_only_cond": {
+            "p50_ms": (names_times[names_times.len() / 2] * 100.0).round() / 100.0,
+            "p95_ms": (names_times[((names_times.len() * 95) / 100).min(names_times.len() - 1)] * 100.0).round() / 100.0,
+            "hits": names_count,
+        },
+        "pdf_only_renormalisation": {
+            "cold_ms": (pdf_cold_ms * 100.0).round() / 100.0,
+            "warm_p50_ms": (pdf_warm[pdf_warm.len() / 2] * 100.0).round() / 100.0,
+            "warm_p95_ms": (pdf_warm[((pdf_warm.len() * 95) / 100).min(pdf_warm.len() - 1)] * 100.0).round() / 100.0,
+            "line_hits": pdf_first.lines.len(),
+        },
+        "single_file_edit_requery_ms": (edit_ms * 100.0).round() / 100.0,
+        "single_file_edit_found": edit_found,
+        "rss_end_bytes": rss_now(),
+        "live_heap_end_bytes": LIVE.load(Relaxed).max(0),
+    });
+    if let Some(parent) = out.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    #[allow(clippy::disallowed_methods)]
+    std::fs::write(out, serde_json::to_string_pretty(&report).unwrap()).unwrap();
+    println!("{}", serde_json::to_string_pretty(&report).unwrap());
 }

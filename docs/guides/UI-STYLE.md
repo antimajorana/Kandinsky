@@ -31,7 +31,7 @@ The UI matters, and its rules come from reading on style. What was read: Anthrop
 - **The left bar has one left edge** (`--side-inset`, `base.css`): every heading label, every row's icon and the first tool/footer button start there; headings are the one `.side-head` (28 px in the bar, small caps, faint), icon buttons 28 px. A hint that is only useful during an action ("drop here to pin") appears during that action, floating, never as a standing box.
 
 ### Palettes and shapes (Settings → Appearance)
-- **A palette** (`ui.palette`: `kandinsky`, `ink`, `clay`; `styles/palettes.css`) is a colour family over `tokens.css`, in
+- **A palette** (`ui.palette`: `plain` default, `kandinsky`, `ink`, `clay`, …; `styles/palettes.css`) is a colour family over `tokens.css`, in
   light and dark alike, set as `<html data-palette>`. It only redefines tokens; components never test the palette. E-ink
   keeps its own; an accent set in Settings and a VS Code theme (inline on `<html>`) win over it.
 - **High contrast** (`ui.contrast`; `styles/contrast.css`, `<html data-contrast="high">`) sits over any palette: it

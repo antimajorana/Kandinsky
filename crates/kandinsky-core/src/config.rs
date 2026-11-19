@@ -32,6 +32,8 @@ pub struct Config {
     pub ignore: Vec<String>,
     /// Vim keybindings in the editor. Off by default, as in Obsidian: a newcomer's keys type text.
     pub vim: bool,
+    /// Show developer, terminal, server, language-server, script, and AI agent tools across the workspace and plugin catalog. Off by default.
+    pub developer_mode: bool,
     pub ui: UiConfig,
     pub editor: EditorConfig,
     pub terminal: TerminalConfig,
@@ -454,7 +456,6 @@ pub enum EinkRefresh {
 #[ts(export)]
 pub enum Palette {
     /// Kandinsky's own: cool greys, indigo links and buttons. (`atlas`: its name before the rename.)
-    #[default]
     #[serde(alias = "atlas")]
     Kandinsky,
     /// Warm paper, deep ink-blue links and buttons.
@@ -492,6 +493,7 @@ pub enum Palette {
     /// Navy, gold.
     Midnight,
     /// A white or near-black page, grey side column and selection, one blue for what is primary.
+    #[default]
     Plain,
 }
 
@@ -639,6 +641,10 @@ pub struct EditorConfig {
     /// A bar of formatting buttons above a note (bold, italic, heading, lists, to-do, quote, code,
     /// link, table) — for when the keys are not in the fingers yet.
     pub format_bar: bool,
+    /// Show a compact floating toolbar above selected text in Markdown notes (bold, italic, strikethrough, code, highlight, link, turn into).
+    pub floating_toolbar: bool,
+    /// Convert rich HTML pasted from web pages, Google Docs, or Word into clean Markdown.
+    pub rich_paste: bool,
     /// While the caret is inside a formula — in a note or a .tex file — show it drawn, updated as it is
     /// typed: display math (`$$…$$`, `\[…\]`, equation environments) under it in the text, inline math in a
     /// small box above its line.
@@ -1133,6 +1139,7 @@ impl Default for Config {
             home: "Home.page".into(),
             ignore: ["runs", "lib", "archive", "node_modules", "target", ".git"].map(String::from).to_vec(),
             vim: false,
+            developer_mode: false,
             ui: UiConfig::default(),
             editor: EditorConfig::default(),
             terminal: TerminalConfig::default(),
@@ -1189,6 +1196,8 @@ impl Default for EditorConfig {
             properties: PropertiesView::Inline,
             properties_spec: "templates/properties.yaml".into(),
             format_bar: false,
+            floating_toolbar: true,
+            rich_paste: true,
             code_bar: true,
             git_gutter: true,
             index_exclude: vec!["docs/memory".into()],
@@ -1225,7 +1234,34 @@ impl Default for ActivityConfig {
     }
 }
 
-/// The config files parsed last, per vault: (stamp, config, whether it sets `log_dir`).
+/// Plugins gated behind `Config::developer_mode` (hidden from catalog and effectively off when `developer_mode == false`).
+pub const DEV_GATED_PLUGINS: &[&str] = &[
+    "solver",
+    "antigravity",
+    "oracle-runner",
+    "claude",
+    "ssh",
+    "run-tools",
+    "syncthing",
+    "zstd",
+    "rnote",
+    "kiwix",
+    "copyparty",
+    "finance",
+];
+
+/// Example plugins never shown in the user-facing plugin catalog.
+pub const EXAMPLE_EXCLUDED_PLUGINS: &[&str] = &[
+    "freshrss",
+    "helper-js",
+    "immich",
+    "jellyfin",
+    "paperless",
+    "ttrpg",
+    "wordcount",
+];
+
+/// The config files parsed last, per vault: (stamp, config, (set_log_dir, set_templates, set_attachment_folder)).
 mod parsed {
     use super::Config;
     use crate::file_stamp::FileStamp;
@@ -1233,7 +1269,7 @@ mod parsed {
     use std::path::{Path, PathBuf};
     use std::sync::{Mutex, MutexGuard};
 
-    type Kept = HashMap<PathBuf, (FileStamp, Config, (bool, bool))>;
+    type Kept = HashMap<PathBuf, (FileStamp, Config, (bool, bool, bool))>;
 
     fn kept() -> MutexGuard<'static, Kept> {
         static KEPT: std::sync::LazyLock<Mutex<Kept>> = std::sync::LazyLock::new(Mutex::default);
@@ -1241,11 +1277,11 @@ mod parsed {
         KEPT.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    pub(super) fn get(path: &Path, stamp: &FileStamp) -> Option<(Config, (bool, bool))> {
+    pub(super) fn get(path: &Path, stamp: &FileStamp) -> Option<(Config, (bool, bool, bool))> {
         kept().get(path).filter(|(s, ..)| s == stamp).map(|(_, c, set)| (c.clone(), *set))
     }
 
-    pub(super) fn put(path: &Path, stamp: FileStamp, c: &Config, set: (bool, bool)) {
+    pub(super) fn put(path: &Path, stamp: FileStamp, c: &Config, set: (bool, bool, bool)) {
         kept().insert(path.to_path_buf(), (stamp, c.clone(), set));
     }
 
@@ -1255,6 +1291,35 @@ mod parsed {
 }
 
 impl Config {
+    /// Whether plugin `id` is gated behind `developer_mode`.
+    pub fn is_dev_gated_plugin(id: &str) -> bool {
+        DEV_GATED_PLUGINS.contains(&id)
+    }
+
+    /// Whether plugin `id` is an internal/example plugin excluded from the user catalog.
+    pub fn is_example_plugin(id: &str) -> bool {
+        EXAMPLE_EXCLUDED_PLUGINS.contains(&id)
+    }
+
+    /// Whether plugin `id` is effectively switched off in this vault (`plugins.off`, or dev-gated while `!developer_mode`).
+    /// Never write this back to `config.toml` (`set_off` mutates the raw `plugins.off` list only).
+    pub fn is_plugin_effectively_off(&self, id: &str) -> bool {
+        self.plugins.off.iter().any(|x| x == id) || (!self.developer_mode && Self::is_dev_gated_plugin(id))
+    }
+
+    /// Effective `off` list combining `self.plugins.off` with `DEV_GATED_PLUGINS` when `!self.developer_mode`.
+    pub fn effective_plugins_off(&self) -> Vec<String> {
+        let mut out = self.plugins.off.clone();
+        if !self.developer_mode {
+            for &id in DEV_GATED_PLUGINS {
+                if !out.iter().any(|x| x == id) {
+                    out.push(id.to_string());
+                }
+            }
+        }
+        out
+    }
+
     /// Missing file → defaults. A malformed file is an error so the user sees it, not a silent reset. Nearly every
     /// request asks for it: the parsed file is kept while its size, time and inode stay the same (any write changes
     /// them; `save` forgets it outright).
@@ -1264,7 +1329,7 @@ impl Config {
             crate::file_stamp::Seen::Stamped(s) => Some(s),
             _ => None,
         };
-        let (mut c, (set_log, set_templates)) = match stamp.as_ref().and_then(|s| parsed::get(&path, s)) {
+        let (mut c, (set_log, set_templates, set_attach)) = match stamp.as_ref().and_then(|s| parsed::get(&path, s)) {
             Some(hit) => hit,
             None => {
                 let (c, set_flags) = match std::fs::read_to_string(&path) {
@@ -1272,9 +1337,10 @@ impl Config {
                         let (cfg, doc) = parse(&text).map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
                         let set_log = doc.get("log_dir").is_some();
                         let set_tpl = doc.get("notes").and_then(|t| t.get("templates")).is_some();
-                        (cfg, (set_log, set_tpl))
+                        let set_att = doc.get("editor").and_then(|t| t.get("attachment_folder")).is_some();
+                        (cfg, (set_log, set_tpl, set_att))
                     }
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => (Self::default(), (false, false)),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => (Self::default(), (false, false, false)),
                     Err(e) => return Err(e.into()),
                 };
                 if let Some(s) = stamp {
@@ -1283,11 +1349,11 @@ impl Config {
                 (c, set_flags)
             }
         };
-        Self::apply_vault_defaults(&mut c, root, set_log, set_templates);
+        Self::apply_vault_defaults(&mut c, root, set_log, set_templates, set_attach);
         Ok(c)
     }
 
-    fn apply_vault_defaults(&mut self, root: &Path, set_log: bool, set_templates: bool) {
+    fn apply_vault_defaults(&mut self, root: &Path, set_log: bool, set_templates: bool, set_attach: bool) {
         // a vault from before the log moved under notes/ keeps writing where its logs are
         if !set_log && self.log_dir == DEFAULT_LOG_DIR && root.join("log").is_dir() && !root.join(DEFAULT_LOG_DIR).exists() {
             self.log_dir = "log".into();
@@ -1296,6 +1362,12 @@ impl Config {
         if !set_templates && self.notes.templates == "templates" && !root.join("templates").exists() {
             if let Some(obs) = Self::obsidian_templates_dir(root) {
                 self.notes.templates = obs;
+            }
+        }
+        // a vault with `.obsidian/app.json` `attachmentFolderPath` keeps its Obsidian attachment folder unless configured
+        if !set_attach && self.editor.attachment_folder == "attachments" && !root.join("attachments").exists() {
+            if let Some(obs) = Self::obsidian_attachment_dir(root) {
+                self.editor.attachment_folder = obs;
             }
         }
     }
@@ -1338,6 +1410,7 @@ impl Config {
             root,
             check_doc.get("log_dir").is_some(),
             check_doc.get("notes").and_then(|t| t.get("templates")).is_some(),
+            check_doc.get("editor").and_then(|t| t.get("attachment_folder")).is_some(),
         );
         anyhow::ensure!(&check == new, "config did not round-trip; not written");
         crate::vault_write::write(path, out.as_bytes())?;
@@ -1384,6 +1457,21 @@ impl Config {
             }
         }
         None
+    }
+
+    /// Read-only lookup of Obsidian's `.obsidian/app.json` `attachmentFolderPath` when `attachments/` is absent.
+    pub fn obsidian_attachment_dir(root: &Path) -> Option<String> {
+        let text = std::fs::read_to_string(root.join(".obsidian/app.json")).ok()?;
+        let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+        let raw = v.get("attachmentFolderPath").and_then(serde_json::Value::as_str)?.trim().replace('\\', "/");
+        if raw == "." || raw == "./" {
+            return Some(String::new());
+        }
+        let dir = raw.strip_prefix("./").unwrap_or(&raw).trim_matches('/');
+        if dir.is_empty() || raw.starts_with('/') || dir.contains(':') || dir.split('/').any(|p| p == ".." || p.is_empty()) {
+            return None;
+        }
+        Some(dir.to_string())
     }
 
     /// The vault's effective templates folder: `[notes] templates`, auto-detecting Obsidian's `templates_folder`
@@ -1542,7 +1630,27 @@ mod tests {
         assert_eq!(Config::load(dir.path()).unwrap().log_dir, "notes/log");
         assert_eq!(c.focus, "FOCUS.md");
         assert!(!c.vim, "vim is asked for, never assumed");
+        assert!(!c.developer_mode, "developer mode is off by default");
+        assert_eq!(c.ui.palette, Palette::Plain, "plain palette is the default");
+        assert!(c.editor.floating_toolbar && c.editor.rich_paste);
         assert!(c.ignore.contains(&"node_modules".to_string()));
+    }
+
+    #[test]
+    fn developer_mode_effective_plugins_and_obsidian_attachment_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".obsidian")).unwrap();
+        std::fs::write(dir.path().join(".obsidian/app.json"), "{\"attachmentFolderPath\":\"zAttachments\"}\n").unwrap();
+        let mut c = Config::load(dir.path()).unwrap();
+        assert_eq!(c.editor.attachment_folder, "zAttachments");
+        assert!(c.is_plugin_effectively_off("solver"));
+        assert!(c.is_plugin_effectively_off("claude"));
+        assert!(!c.is_plugin_effectively_off("dataview"));
+        c.developer_mode = true;
+        assert!(!c.is_plugin_effectively_off("solver"));
+        assert!(!c.is_plugin_effectively_off("claude"));
+        c.plugins.off.push("solver".into());
+        assert!(c.is_plugin_effectively_off("solver"));
     }
 
     #[test]

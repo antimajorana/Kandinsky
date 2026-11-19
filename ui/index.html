@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-palette="plain">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -13,8 +13,9 @@
       // Settings kept in this browser before the project was renamed (it is based on Atlas): each `atlas.*` / `atlas-*`
       // key copied once to its current name, before anything reads them; the old keys are left as they are.
       try { const ks = []; for (let i = 0; i < localStorage.length; i++) ks.push(localStorage.key(i)); for (const k of ks) { if (!k || !/^atlas[.-]/.test(k)) continue; const n = "kandinsky" + k.slice(5); if (localStorage.getItem(n) === null) localStorage.setItem(n, localStorage.getItem(k)); } } catch {}
-      // Apply the saved theme before first paint so there is no dark/light flash.
+      // Apply the saved theme and per-vault palette before first paint so there is no startup flash.
       try { const t = localStorage.getItem("kandinsky.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+      try { const scope = (location.pathname.match(/^\/v\/[^/]+/) || [""])[0]; const p = localStorage.getItem("kandinsky.palette:" + scope); if (p && /^[a-z]+$/.test(p)) document.documentElement.dataset.palette = p === "atlas" ? "kandinsky" : p; } catch {}
       // the phone app from before the rename names its bridge AtlasNative
       try { if (!window.KandinskyNative && window.AtlasNative) window.KandinskyNative = window.AtlasNative; } catch {}
       // an e-ink screen in the app: black on white from the first paint, the settings still loading (or unreachable)

@@ -16,16 +16,18 @@ const LABELS: &[(&str, &str)] = &[
     ("ui_font", "Interface font"), ("font_size", "Text size"), ("min_size", "Minimum size"), ("off", "Switched off"),
     ("index_exclude", "Agent files (kept apart from your notes)"), ("side_panel", "Side panel: where it sits"),
     ("restore_layout", "Reopen the last tabs at start"), ("tab_preview", "Preview a tab on hover"), ("link_preview", "Preview a link on hover"),
-    ("tab_switcher", "Ctrl+Tab"), ("libraries", "Libraries shown"), ("apps_order", "Apps: order in the left bar"), ("apps_hidden", "Apps: hidden from the left bar"), ("properties", "Properties"), ("properties_spec", "Property spec (file)"),
+    ("tab_switcher", "Ctrl+Tab"), ("libraries", "Libraries shown"), ("apps_order", "Sidebar shortcuts: order in the left bar"), ("apps_hidden", "Sidebar shortcuts: hidden from the left bar"), ("properties", "Properties"), ("properties_spec", "Property spec (file)"),
     ("dir", "Folder"), ("templates", "Templates folder"), ("template_rules", "Templates by name or folder"),
     ("default_template", "Default template (a plain note starts from it)"), ("strict_line_breaks", "Strict line breaks"),
 ];
 
 /// One field's label, where its key alone is vague or would collide ("dir" is the notes' and the drawings' folder).
 const FIELD_LABELS: &[(&str, &str)] = &[
+    ("developer_mode", "Developer mode"),
     ("log_dir", "Daily log folder"), ("log_folders", "Daily logs filed in (YYYY/MM-MMMM)"), ("log_template", "Daily log template"),
     ("notes.dir", "Notes folder"), ("draw.dir", "Drawings folder"), ("notes.capture", "Capture writes"), ("notes.inbox", "Inbox folder (fleeting notes)"),
     ("notes.capture_template", "Fleeting note template"), ("notes.capture_thumbnail", "Captured pictures in the log, width (px)"),
+    ("editor.floating_toolbar", "Floating toolbar on selected text"), ("editor.rich_paste", "Paste web & Word text as Markdown"),
     ("editor.live", "Live editing between devices"), ("editor.code_bar", "Tool bar above code files"), ("editor.task_chips", "Task dates as chips"),
     ("activity.show_claude", "AI agents' commits"), ("activity.show_housekeeping", "Housekeeping commits"), ("activity.group_threshold", "Group a folder's changes from"),
     ("plugins.oidc_issuer", "Sign-in provider (OpenID Connect)"), ("plugins.oidc_client_id", "Sign-in client id"), ("plugins.oidc_redirect", "Sign-in return address"),

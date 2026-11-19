@@ -69,7 +69,7 @@ test("Settings is generated from the schema and saves to config.toml", async ({ 
   await page.getByText("Finish the GW notes.").waitFor(); // the keymap is attached once the app is up (was flaky)
   await page.keyboard.press("Meta+,");
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Plugins/ }).click();
   const adv = page.getByTestId("settings-advanced");
   await adv.locator("summary").click();
   await expect(adv.getByText("Where the terminal panel docks")).toBeVisible();

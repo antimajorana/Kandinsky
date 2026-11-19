@@ -25,7 +25,7 @@
   import AgentsPanel from "./AgentsPanel.svelte";
   import { allCommands, keysOf } from "../../lib/keymap.svelte";
   import { chordLabel } from "../../lib/keys";
-  import { pageDef, type Placed, type NextRung } from "../../lib/settings-pages";
+  import { pageDef, isDevSettingField, isDevSettingPanel, isDevSettingFeature, type Placed, type NextRung } from "../../lib/settings-pages";
   import { settings, change } from "../../lib/settings.svelte";
   import { openPath } from "../../lib/dock";
   import { newSnippet, newPlugin, newBlock, editHome, copyViewExample } from "../../lib/settings-actions";
@@ -40,13 +40,20 @@
   } = $props();
 
   const def = $derived(pageDef(page.page));
-  const features = $derived((def?.features ?? []).flatMap((id) => { const a = allCommands().find((x) => x.id === id); return a ? [a] : []; }));
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
+  const features = $derived(
+    (def?.features ?? [])
+      .filter((id) => devMode || !isDevSettingFeature(id))
+      .flatMap((id) => { const a = allCommands().find((x) => x.id === id); return a ? [a] : []; }),
+  );
   let naming = $state<null | "snippet" | "plugin" | "block">(null);
   let obsidianThemes = $state<ObsidianThemeInfo[]>([]);
   onMount(() => { void api.obsidianThemes().then((t) => { obsidianThemes = t; }, () => {}); });
   const PRIMARY_PANELS = new Set(["preview", "device", "snippets", "templates", "keys", "plugins", "openwith", "capturekey", "overview"]);
-  const mainPanels = $derived((def?.panels ?? []).filter((p) => PRIMARY_PANELS.has(p)));
-  const advPanels = $derived((def?.panels ?? []).filter((p) => !PRIMARY_PANELS.has(p)));
+  const mainPanels = $derived((def?.panels ?? []).filter((p) => PRIMARY_PANELS.has(p) && (devMode || !isDevSettingPanel(p))));
+  const advPanels = $derived((def?.panels ?? []).filter((p) => !PRIMARY_PANELS.has(p) && (devMode || !isDevSettingPanel(p))));
+  const shownFields = $derived(page.fields.filter((f) => devMode || !isDevSettingField(f)));
+  const shownAdvFields = $derived(page.advancedFields.filter((f) => devMode || !isDevSettingField(f)));
 
   function next(n: NextRung) {
     if (n.run === "settings.newSnippet") naming = "snippet";
@@ -64,7 +71,7 @@
     {#if page.blurb}<p class="blurb">{@html renderInlineMarkdown(page.blurb)}</p>{/if}
   </header>
 
-  {#if page.page === "appearance"}
+  {#if page.page === "appearance" && (obsidianThemes.length > 0 || devMode)}
     <section class="panel shell-panel" aria-label="Workspace display">
       {#if obsidianThemes.length > 0}
         <label class="obs-theme-row">
@@ -76,21 +83,23 @@
               change("Obsidian theme", (c) => { c.ui.obsidian_theme = v; });
             }}
           >
-            <option value="">Default (Kandinsky Bauhaus)</option>
+            <option value="">Default (workspace palette)</option>
             {#each obsidianThemes as t (t.id)}
               <option value={t.id} disabled={!t.valid}>{t.name}{t.valid ? "" : ` — ${t.error ?? "invalid"}`}</option>
             {/each}
           </select>
         </label>
       {/if}
-      <label class="plumbing-check">
-        <input
-          type="checkbox"
-          checked={oracleExplorer.hidePlumbing}
-          onchange={(e) => setHidePlumbing(e.currentTarget.checked)}
-        />
-        <span>Hide agent &amp; metadata folders in sidebar (<code>AGENTS.md</code>, <code>zAI</code>, <code>zMeta</code>…)</span>
-      </label>
+      {#if devMode}
+        <label class="plumbing-check">
+          <input
+            type="checkbox"
+            checked={oracleExplorer.hidePlumbing}
+            onchange={(e) => setHidePlumbing(e.currentTarget.checked)}
+          />
+          <span>Hide agent &amp; metadata folders in sidebar (<code>AGENTS.md</code>, <code>zAI</code>, <code>zMeta</code>…)</span>
+        </label>
+      {/if}
     </section>
   {/if}
 
@@ -122,23 +131,23 @@
     {/if}
   {/each}
 
-  {#if page.fields.length}
+  {#if shownFields.length}
     <section class="fields" aria-label="{page.title} options">
       {#if mainPanels.length || features.length}<h3>Options</h3>{/if}
-      {#each page.fields as path (path)}
+      {#each shownFields as path (path)}
         {@const s = fields.get(path)}
         {#if s}<SettingField {path} schema={s} />{/if}
       {/each}
     </section>
   {/if}
 
-  {#if page.advancedFields.length || advPanels.length}
+  {#if shownAdvFields.length || advPanels.length}
     <details class="adv-box" data-testid="settings-advanced">
-      <summary>Advanced &amp; Server settings</summary>
+      <summary>{devMode ? "Advanced & Server settings" : "Additional workspace options"}</summary>
       <div class="adv-inner">
         {#each advPanels as panel (panel)}
           {#if panel === "apps"}
-            <SwitchList title="Apps" label="Apps" items={ordered(allApps())} hidden={appHidden} setHidden={setAppHidden} move={moveApp} desc="Optional workspace tools." />
+            <SwitchList title="Sidebar shortcuts" label="Sidebar shortcuts" items={ordered(allApps())} hidden={appHidden} setHidden={setAppHidden} move={moveApp} desc="Optional sidebar shortcuts." />
             {#if librariesPage()}
               <SwitchList title="Libraries" label="Libraries" items={libraryChoices().map((e) => ({ key: e.id, title: e.title, icon: isIconName(e.icon) ? e.icon : "library" }))} hidden={libraryHidden} setHidden={setLibraryHidden} move={moveLibrary} movable={(k) => !libraryHidden(k)} desc="Library groups." />
             {/if}
@@ -155,9 +164,9 @@
               <ToolDrafts /></section>
           {/if}
         {/each}
-        {#if page.advancedFields.length}
+        {#if shownAdvFields.length}
           <section class="fields" aria-label="Advanced options">
-            {#each page.advancedFields as path (path)}
+            {#each shownAdvFields as path (path)}
               {@const s = fields.get(path)}
               {#if s}<SettingField {path} schema={s} />{/if}
             {/each}

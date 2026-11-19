@@ -237,6 +237,36 @@ pub fn thread_cpu() -> Option<std::time::Duration> {
     None
 }
 
+/// Resident set / working-set size of this process in bytes, when the OS reports it.
+pub fn rss_bytes() -> Option<usize> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let pages: usize = std::fs::read_to_string("/proc/self/statm")
+            .ok()?
+            .split_whitespace()
+            .nth(1)?
+            .parse()
+            .ok()?;
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+        let step = usize::try_from(page_size).ok().filter(|&n| n > 0).unwrap_or(4096);
+        pages.checked_mul(step)
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+        use windows_sys::Win32::System::Threading::GetCurrentProcess;
+        let mut pmc: PROCESS_MEMORY_COUNTERS = unsafe { std::mem::zeroed() };
+        pmc.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+        // SAFETY: `GetCurrentProcess()` returns a valid pseudo-handle and `pmc` is a valid initialized struct.
+        let ok = unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), &mut pmc, pmc.cb) };
+        (ok != 0).then_some(pmc.WorkingSetSize)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
+    {
+        None
+    }
+}
+
 /// This machine's name ("" when unknown).
 pub fn hostname() -> String {
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -281,5 +311,12 @@ mod tests {
     #[test]
     fn a_hostname_is_known() {
         assert!(!hostname().is_empty());
+    }
+
+    #[test]
+    fn rss_is_positive_on_supported_hosts() {
+        if cfg!(any(target_os = "linux", target_os = "android", windows)) {
+            assert!(rss_bytes().unwrap_or(0) > 0);
+        }
     }
 }

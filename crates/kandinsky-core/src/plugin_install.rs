@@ -411,6 +411,13 @@ pub struct Available {
     #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Permissions declared in `plugin.toml` when known before download.
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<Permissions>,
+    /// Whether the plugin declares a `[helper]` engine or JS helper when known before download.
+    #[serde(default)]
+    pub has_helper: bool,
 }
 
 /// An Obsidian community plugin found in `<vault>/.obsidian/plugins/` (read-only inspection).
@@ -482,6 +489,8 @@ pub fn available(root: &Path, index: &str) -> Result<Vec<Available>> {
             version: e.version,
             tier: e.tier,
             description: None,
+            permissions: None,
+            has_helper: false,
         })
         .collect())
 }
@@ -556,6 +565,8 @@ pub fn catalog(root: &Path, index: &str) -> Result<Vec<Available>> {
                 id,
                 title: sum.title,
                 version: sum.version,
+                permissions: Some(sum.permissions),
+                has_helper: sum.has_helper,
             });
         }
 
@@ -587,6 +598,8 @@ pub fn catalog(root: &Path, index: &str) -> Result<Vec<Available>> {
                             version: e.version,
                             tier: e.tier,
                             description: e.description,
+                            permissions: None,
+                            has_helper: false,
                         });
                     }
                 }

@@ -88,6 +88,14 @@ code_bar: boolean,
  */
 format_bar: boolean, 
 /**
+ * Show a compact floating toolbar above selected text in Markdown notes (bold, italic, strikethrough, code, highlight, link, turn into).
+ */
+floating_toolbar: boolean, 
+/**
+ * Convert rich HTML pasted from web pages, Google Docs, or Word into clean Markdown.
+ */
+rich_paste: boolean, 
+/**
  * While the caret is inside a formula — in a note or a .tex file — show it drawn, updated as it is
  * typed: display math (`$$…$$`, `\[…\]`, equation environments) under it in the text, inline math in a
  * small box above its line.

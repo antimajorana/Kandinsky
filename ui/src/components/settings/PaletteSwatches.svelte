@@ -2,55 +2,81 @@
   // The colour schemes as swatches to pick from, each drawn by the palette's own rules (palettes.css matches
   // `.pal-sample[data-theme][data-palette]` beside the window's): the day's (`ui.palette`) in light, the night's
   // (`ui.palette_dark`) in dark, with "as by day" first for the night.
+  import { settings } from "../../lib/settings.svelte";
   import { leaves, options, choiceLabel, resolve, valueOf, setValue } from "../../lib/settings-schema";
 
+  const CURATED = ["plain", "kandinsky", "graphite", "ink", "sage", "midnight"];
+
   let { path, label }: { path: string; label: string } = $props();
+  let expanded = $state(false);
   const night = $derived(path === "ui.palette_dark");
   const schema = $derived(resolve(leaves().get("ui.palette") ?? {}));
   const names = $derived((options(schema) ?? []).map((o) => o.value));
   const v = $derived((valueOf(path) as string | null) ?? "");
-  const day = $derived((valueOf("ui.palette") as string) ?? "kandinsky");
+  const day = $derived((valueOf("ui.palette") as string) || "plain");
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
 
   const isKandinsky = (name: string | null | undefined) => name === "kandinsky" || name === "atlas";
+  const shownNames = $derived.by(() => {
+    const ordered = [
+      ...CURATED.filter((c) => names.includes(c)),
+      ...names.filter((n) => !CURATED.includes(n)),
+    ];
+    if (devMode || expanded) return ordered;
+    const base = CURATED.filter((c) => names.includes(c));
+    const current = isKandinsky(v) ? "kandinsky" : v;
+    if (current && names.includes(current) && !base.includes(current)) base.push(current);
+    return base;
+  });
   const labelFor = (name: string) => (isKandinsky(name) ? "Kandinsky" : choiceLabel(schema, name));
 </script>
 
-<div class="swatches" role="radiogroup" aria-label={label} id={path}>
-  {#if night}
-    <button role="radio" aria-checked={!v} class:on={!v} title="The day's scheme at night too" onclick={() => setValue(path, null)}>
-      <span class="pal-sample sample" class:kandinsky={isKandinsky(day)} data-theme="dark" data-palette={isKandinsky(day) ? "kandinsky" : day}>
-        {#if isKandinsky(day)}
-          <span class="sc-dots" aria-hidden="true">
-            <i class="sc-cobalt"></i><i class="sc-ochre"></i><i class="sc-vermilion"></i><i class="sc-viridian"></i>
-          </span>
-        {:else}
-          <i></i>
-        {/if}
-        <b>Aa</b>
-      </span>
-      <span class="name">as by day</span>
+<div class="swatch-wrap">
+  <div class="swatches" role="radiogroup" aria-label={label} id={path}>
+    {#if night}
+      <button role="radio" aria-checked={!v} class:on={!v} title="The day's scheme at night too" onclick={() => setValue(path, null)}>
+        <span class="pal-sample sample" class:kandinsky={isKandinsky(day)} data-theme="dark" data-palette={isKandinsky(day) ? "kandinsky" : day}>
+          {#if isKandinsky(day)}
+            <span class="sc-dots" aria-hidden="true">
+              <i class="sc-cobalt"></i><i class="sc-ochre"></i><i class="sc-vermilion"></i><i class="sc-viridian"></i>
+            </span>
+          {:else}
+            <i></i>
+          {/if}
+          <b>Aa</b>
+        </span>
+        <span class="name">as by day</span>
+      </button>
+    {/if}
+    {#each shownNames as n (n)}
+      {@const active = v === n || (isKandinsky(n) && isKandinsky(v))}
+      <button role="radio" aria-checked={active} class:on={active} onclick={() => setValue(path, n)}>
+        <span class="pal-sample sample" class:kandinsky={isKandinsky(n)} data-theme={night ? "dark" : "light"} data-palette={isKandinsky(n) ? "kandinsky" : n}>
+          {#if isKandinsky(n)}
+            <span class="sc-dots" aria-hidden="true">
+              <i class="sc-cobalt"></i><i class="sc-ochre"></i><i class="sc-vermilion"></i><i class="sc-viridian"></i>
+            </span>
+          {:else}
+            <i></i>
+          {/if}
+          <b>Aa</b>
+        </span>
+        <span class="name">{labelFor(n)}</span>
+      </button>
+    {/each}
+  </div>
+  {#if !devMode && names.length > CURATED.length}
+    <button type="button" class="more-palettes" aria-expanded={expanded} onclick={() => (expanded = !expanded)}>
+      {expanded ? "Fewer palettes" : `More palettes (${names.length})`}
     </button>
   {/if}
-  {#each names as n (n)}
-    {@const active = v === n || (isKandinsky(n) && isKandinsky(v))}
-    <button role="radio" aria-checked={active} class:on={active} onclick={() => setValue(path, n)}>
-      <span class="pal-sample sample" class:kandinsky={isKandinsky(n)} data-theme={night ? "dark" : "light"} data-palette={isKandinsky(n) ? "kandinsky" : n}>
-        {#if isKandinsky(n)}
-          <span class="sc-dots" aria-hidden="true">
-            <i class="sc-cobalt"></i><i class="sc-ochre"></i><i class="sc-vermilion"></i><i class="sc-viridian"></i>
-          </span>
-        {:else}
-          <i></i>
-        {/if}
-        <b>Aa</b>
-      </span>
-      <span class="name">{labelFor(n)}</span>
-    </button>
-  {/each}
 </div>
 
 <style>
-  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(64px * var(--ui-scale, 1)), 1fr)); gap: 6px; width: min(100%, 460px); }
+  .swatch-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: min(100%, 460px); }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(64px * var(--ui-scale, 1)), 1fr)); gap: 6px; width: 100%; }
+  .more-palettes { align-self: flex-start; padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-alt); color: var(--text-muted); font-size: calc(11.5px * var(--ui-scale, 1)); cursor: pointer; }
+  .more-palettes:hover { border-color: var(--accent); color: var(--text); }
   button { display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 3px; border: 1px solid transparent; border-radius: var(--radius); background: none; cursor: pointer; font: inherit; color: var(--text-muted); }
   button:hover { border-color: var(--border); color: var(--text); }
   button.on { border-color: var(--accent); color: var(--text); }

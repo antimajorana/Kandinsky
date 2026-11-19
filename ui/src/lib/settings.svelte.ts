@@ -1,7 +1,7 @@
 // Workspace settings (.kandinsky/config.toml via /api/config): loaded at start, reloaded when the
 // file changes on disk, applied live (CSS variables, theme, editors, terminals).
 import { errText } from "./text";
-import { load, save } from "./prefs";
+import { load, loadRaw, save, saveRaw, KEYS } from "./prefs";
 import { einkOn, inPhoneApp, setEinkRefresh } from "./eink";
 import { api } from "./api";
 import type { PropertiesView, WorkspaceConfig } from "./types";
@@ -39,10 +39,14 @@ more?.addEventListener("change", () => settings.config && apply(settings.config)
 onDeviceLook(() => settings.config && apply(settings.config));
 
 const SHAPE_CHOICE_KEY = "kandinsky.shapeChosen";
-// Apply default Kandinsky palette & Bauhaus Paper shape immediately before /api/config resolves (zero startup flash).
+const vaultScope = () => (typeof location !== "undefined" ? location.pathname.match(/^\/v\/[^/]+/)?.[0] ?? "" : "");
+const paletteKey = () => `kandinsky.palette:${vaultScope()}`;
+const resolvePalette = (pal: string | null | undefined): string => (!pal ? "plain" : pal === "atlas" ? "kandinsky" : pal);
+// Apply per-vault saved palette (defaulting to Plain) & Paper shape immediately before /api/config resolves (zero startup flash).
 if (typeof document !== "undefined") {
   const root = document.documentElement;
-  if (!root.dataset.palette || root.dataset.palette === "atlas") root.dataset.palette = "kandinsky";
+  const savedPal = loadRaw(paletteKey());
+  root.dataset.palette = resolvePalette(savedPal || root.dataset.palette);
   if (!deviceChose("ui.shape") && !load<string | null>(SHAPE_CHOICE_KEY, null)) root.dataset.shape = "paper";
 }
 
@@ -68,13 +72,16 @@ function apply(c: WorkspaceConfig): void {
   const theme = eink || (follows ? media?.matches : ui.theme === "light") ? "light" : "dark";
   paintTheme(theme);
   const pal = ((theme === "dark" && ui.palette_dark) || ui.palette) as string | undefined;
-  root.dataset.palette = !pal || pal === "atlas" ? "kandinsky" : pal; // palettes.css: default Kandinsky (also maps legacy "atlas")
+  const effectivePalette = resolvePalette(pal);
+  root.dataset.palette = effectivePalette; // palettes.css: default Plain (maps legacy "atlas" → "kandinsky")
+  saveRaw(paletteKey(), effectivePalette);
   const high = !eink && (ui.contrast === "high" || (ui.contrast === "system" && !!more?.matches));
   if (high) root.dataset.contrast = "high"; // contrast.css
   else delete root.dataset.contrast;
   const effectiveShape = resolveShape(ui.shape);
-  root.dataset.shape = effectiveShape; // shape-paper.css: flush Bauhaus Paper layout by default
+  root.dataset.shape = effectiveShape; // shape-paper.css: flush Paper layout by default
   app.vimEnabled = c.vim;
+  save(KEYS.vim, c.vim);
   const px = (n: number) => `${n}px`;
   const font = (name: string, fallback: string) => (name.trim() ? `"${name.trim()}", ${fallback}` : fallback);
   root.style.setProperty("--ui-scale-set", String(ui.font_size / 14)); // base.css turns it into --ui-scale (larger on a phone)
@@ -169,7 +176,7 @@ function applyAccent(root: HTMLElement, hex: string): void {
 
 // The last settings seen, per vault (a server keeps several under /v/<name>): with no connection the page
 // still opens in its own look (e-ink, theme, fonts) instead of the bare defaults.
-const cacheKey = () => `kandinsky.config:${location.pathname.match(/^\/v\/[^/]+/)?.[0] ?? ""}`;
+const cacheKey = () => `kandinsky.config:${vaultScope()}`;
 
 export async function loadSettings(): Promise<void> {
   let d: Awaited<ReturnType<typeof api.config>>;

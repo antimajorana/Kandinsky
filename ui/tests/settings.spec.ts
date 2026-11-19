@@ -17,11 +17,11 @@ async function openSettings(page: Page) {
 
 test("the 7 streamlined settings categories render cleanly with Advanced folded", async ({ page }) => {
   await openSettings(page);
-  for (const name of ["Appearance", "Editor & Writing", "Calendar & Daily Notes", "Files & Search", "References & PDF", "Keyboard Shortcuts", "Extensions"]) {
+  for (const name of ["Appearance", "Editor & Writing", "Calendar & Daily Notes", "Files & Search", "References & PDF", "Keyboard Shortcuts", "Plugins"]) {
     await nav(page).getByRole("button", { name: new RegExp(`^${name.replace(/[&]/g, "\\$&")}`) }).click();
     await expect(page.locator("main article h2")).toContainText(name);
   }
-  await nav(page).getByRole("button", { name: /^Extensions/ }).click();
+  await nav(page).getByRole("button", { name: /^Plugins/ }).click();
   await page.getByTestId("settings-advanced").locator("summary").click();
   await expect(page.getByText("Where the terminal panel docks")).toBeVisible();
 });
@@ -88,7 +88,7 @@ test("a plugin switched off in Settings saves plugins.off", async ({ page, reque
   await request.put("/api/file", { headers: H, data: { path: ".kandinsky/plugins/offable/plugin.toml", text: 'title = "Offable"\nicon = "table"\n' } });
   await request.put("/api/file", { headers: H, data: { path: ".kandinsky/plugins/offable/view.js", text: "export default (host) => { host.textContent = 'offable'; };\n" } });
   await openSettings(page);
-  await nav(page).getByRole("button", { name: /^Extensions/ }).click();
+  await nav(page).getByRole("button", { name: /^Plugins/ }).click();
   const sw = page.getByRole("switch", { name: "Plugin Offable" });
   await expect(sw).toHaveAttribute("aria-checked", "true");
   await sw.click();
@@ -121,7 +121,7 @@ test("the vim keys, formatting bar, formula preview, code bar and git gutter are
   await openSettings(page);
   await nav(page).getByRole("button", { name: /^Editor & Writing/ }).click();
   for (const name of [/Vim keys/i, /Format bar/i, /Math preview/i, /^Notes folder$/]) await expect(page.getByText(name).first()).toBeVisible();
-  await nav(page).getByRole("button", { name: /^Extensions/ }).click();
+  await nav(page).getByRole("button", { name: /^Plugins/ }).click();
   await page.getByTestId("settings-advanced").locator("summary").click();
   await expect(page.getByText(/Live editing|Terminal|LSP/i).first()).toBeVisible();
 });

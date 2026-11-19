@@ -19,7 +19,7 @@ export type Panel =
 export type Group = "workspace" | "extensions";
 export const GROUPS: { id: Group; title: string }[] = [
   { id: "workspace", title: "Workspace" },
-  { id: "extensions", title: "Extensions" },
+  { id: "extensions", title: "Plugins" },
 ];
 
 export interface NextRung {
@@ -75,7 +75,7 @@ export const PAGES: PageDef[] = [
     icon: "edit",
     blurb: "Markdown writing behavior, links, citations, properties, templates, math preview, and focus mode.",
     fields: [
-      "vim", "editor.vim_keys", "editor.format_bar", "editor.math_preview", "editor.link_preview",
+      "vim", "editor.vim_keys", "editor.floating_toolbar", "editor.rich_paste", "editor.format_bar", "editor.math_preview", "editor.link_preview",
       "editor.task_chips", "editor.task_suggest", "editor.task_short_forms",
       "editor.properties", "editor.properties_spec", "editor.link_completion", "editor.citation_completion",
       "editor.slash_menu", "editor.fold_headings", "editor.typewriter", "editor.live",
@@ -132,16 +132,42 @@ export const PAGES: PageDef[] = [
   },
   {
     id: "plugins",
-    title: "Extensions",
+    title: "Plugins",
     group: "extensions",
     icon: "plugin",
-    blurb: "Manage active workspace extensions, browse optional integrations, and review trusted external binaries.",
-    fields: [],
+    blurb: "Manage active workspace plugins, browse optional integrations, and review trusted helper programs.",
+    fields: ["developer_mode"],
     advancedFields: ["desktop.*", "terminal.*", "automation.*", "lsp.*", "notifications.*"],
     features: ["ui.commands"],
     panels: ["plugins", "apps", "server", "agents", "scripts", "drafts", "file"],
   },
 ];
+
+const DEV_WRITING_FIELDS = new Set([
+  "vim",
+  "editor.vim_keys",
+  "editor.autosave_code",
+  "editor.code_bar",
+  "editor.git_gutter",
+  "editor.line_numbers",
+  "editor.wrap_code",
+  "editor.indent_guides",
+  "editor.minimap",
+  "editor.breadcrumbs",
+]);
+const DEV_ADVANCED_PREFIXES = ["terminal.", "lsp.", "automation."];
+const DEV_PANELS = new Set<Panel>(["server", "agents", "scripts", "drafts", "file"]);
+const DEV_FEATURES = new Set(["ui.vim"]);
+
+export function isDevSettingField(path: string): boolean {
+  return DEV_WRITING_FIELDS.has(path) || DEV_ADVANCED_PREFIXES.some((pre) => path.startsWith(pre));
+}
+export function isDevSettingPanel(panel: Panel): boolean {
+  return DEV_PANELS.has(panel);
+}
+export function isDevSettingFeature(id: string): boolean {
+  return DEV_FEATURES.has(id);
+}
 
 export const HIDDEN = new Set([
   "ui.css_snippets_off", "ui.apps_order", "ui.apps_hidden", "ui.libraries", "plugins.off", "files.open_with",

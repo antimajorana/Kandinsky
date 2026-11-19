@@ -12,7 +12,7 @@ test("drafted tools: one line until opened; sibling folders are one suggestion",
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+,");
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Plugins/ }).click();
   await page.getByTestId("settings-advanced").locator("summary").click();
   const drafts = page.locator(".drafts").first();
   const line = drafts.locator(".summary");

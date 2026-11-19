@@ -33,7 +33,7 @@ test("a subplugin contributes to its meta plugin and is not loaded while the met
   expect(await (await request.get("/api/plugins/meta/contributions", { headers: H })).json()).toEqual({});
 
   await page.keyboard.press("Meta+,");
-  await nav(page).getByRole("button", { name: /^Extensions( \d+)?$/ }).click();
+  await nav(page).getByRole("button", { name: /^Plugins( \d+)?$/ }).click();
   await expect(page.getByText("Not loaded — needs meta: Meta is switched off")).toBeVisible();
   await page.getByRole("switch", { name: "Plugin Meta", exact: true }).click();
   await expect(rail).toBeVisible();
@@ -47,14 +47,14 @@ test("a plugin's page says what it would add to a plugin that is off or not inst
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+,");
-  await nav(page).getByRole("button", { name: /^Extensions( \d+)?$/ }).click();
+  await nav(page).getByRole("button", { name: /^Plugins( \d+)?$/ }).click();
   await page.getByRole("button", { name: "The page of Giver" }).click();
   await expect(page.locator("[data-plugin-gift=meta]")).toHaveText("recognises its links — Meta is off");
   await expect(page.locator("[data-plugin-gift=absent]")).toHaveText("finds PDFs — absent is not installed");
 
   await page.locator("[data-plugin-gift=meta]").getByRole("button", { name: "Meta is off" }).click();
   await page.getByRole("switch", { name: "Plugin Meta on", exact: true }).click(); // on Meta's own page
-  await nav(page).getByRole("button", { name: /^Extensions( \d+)?$/ }).click();
+  await nav(page).getByRole("button", { name: /^Plugins( \d+)?$/ }).click();
   await expect(page.getByText(/recognises its links for Meta/), "on: part of what it adds").toBeVisible();
   await page.getByRole("button", { name: "The page of Giver" }).click();
   await expect(page.locator("[data-plugin-gift=meta]")).toHaveCount(0);

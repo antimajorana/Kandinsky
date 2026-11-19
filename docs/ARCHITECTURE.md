@@ -27,7 +27,8 @@ log_dir   = "log"             # daily capture: <log_dir>/YYYY-MM-DD.md, no front
 focus     = "FOCUS.md"        # user-owned; Kandinsky only displays it
 lectures  = "notes/lectures"  # <lectures>/<course-slug>/YYYY-MM-DD.md
 ignore    = ["runs", "lib", "archive", "node_modules", "target", ".git"]  # for tree/tasks/search walks
-vim       = true
+vim       = false
+developer_mode = false
 ```
 
 ## Discovery for CLI / scripts / Claude
@@ -71,7 +72,7 @@ args sent as JSON on stdin, stdout returned (parsed as JSON if it parses), cwd =
   bottom status bar (workspace, vim mode, server state). Layout JSON persisted in localStorage.
 - Pane kinds: `today`, `editor{path}`, `terminal{preset}`, `files`, `search`, `pdf{path}`
   (Kandinsky's PDFium reader with its marking tools), `image{path}`, `web{url}`.
-- Editor: CodeMirror 6 + `@replit/codemirror-vim` (**on by default**), markdown live preview from
+- Editor: CodeMirror 6 + `@replit/codemirror-vim` (**off by default**), markdown live preview from
   vendored obsidian-web `live-preview.js` with KaTeX as `renderMath`, code languages via
   `@codemirror/language-data`; autosave 600 ms after typing stops (PUT with `base_mtime`); reloads on
   `fs` event when not dirty.

@@ -50,7 +50,7 @@ test("a tile is moved and hidden from its right-click, and shown again from Sett
 
   // Settings → Extensions → Advanced & Server settings lists it, switched off; switching it on brings the tile back
   await page.keyboard.press("Meta+,");
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Plugins/ }).click();
   await page.getByTestId("settings-advanced").locator("summary").click();
   const show = page.getByRole("checkbox", { name: "Show App demo" });
   await expect(show).not.toBeChecked();

@@ -7,7 +7,7 @@
   import { settings, loadSuggestions } from "../lib/settings.svelte";
   import { load, save } from "../lib/prefs";
   import { leaves, sectionDescription, isModified, fieldTitle, shownOn } from "../lib/settings-schema";
-  import { placeFields, GROUPS, hostOf, pageDef, canonicalPage } from "../lib/settings-pages";
+  import { placeFields, GROUPS, hostOf, pageDef, canonicalPage, isDevSettingField, isDevSettingFeature } from "../lib/settings-pages";
   import { nativeShell } from "../lib/native-shell.svelte";
   import { apiBase } from "../lib/api";
   import { me, loadMe } from "../lib/me.svelte";
@@ -79,14 +79,18 @@
     body?.scrollTo({ top: 0 });
   }
 
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
+  const fieldVisible = (path: string) => devMode || !isDevSettingField(path);
   // search: words must all appear in the label, path, description, section or page title
   const words = $derived(filter.toLowerCase().split(/\s+/).filter(Boolean));
   const hits = $derived.by(() => {
     if (!words.length) return [];
     return pages.flatMap((p) => {
-      const feats = (pageDef(p.page)?.features ?? []).flatMap((id) => { const a = actions.find((x) => x.id === id); return a ? [a] : []; })
+      const feats = (pageDef(p.page)?.features ?? [])
+        .filter((id) => devMode || !isDevSettingFeature(id))
+        .flatMap((id) => { const a = actions.find((x) => x.id === id); return a ? [a] : []; })
         .filter((a) => words.every((w) => a.title.toLowerCase().includes(w)));
-      const allPageFields = [...p.fields, ...p.advancedFields];
+      const allPageFields = [...p.fields, ...p.advancedFields].filter(fieldVisible);
       const opts = allPageFields.filter((path) => {
         const s = fields.get(path);
         const hay = `${fieldTitle(path)} ${path} ${s?.description ?? ""} ${sectionDescription(path.split(".")[0])} ${p.title}`.toLowerCase();
@@ -103,7 +107,7 @@
       if (first) { e.preventDefault(); first.focus(); }
     }
   }
-  const changedIn = (fs: string[]) => fs.filter(isModified).length;
+  const changedIn = (fs: string[]) => fs.filter((f) => fieldVisible(f) && isModified(f)).length;
 
   // the accounts' statuses once the plugins are known, for the sidebar's dot
   let asked = false;

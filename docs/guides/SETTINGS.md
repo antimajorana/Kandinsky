@@ -87,8 +87,8 @@ grouped by page, include matching **features** (with Try), and the box is focuse
 ## New config (all optional, defaults unchanged)
 - `[ui] accent = "#rrggbb"`: derives `--accent`, `--accent-strong`, `--accent-soft`, `--accent-sel`, `--link`,
   `--tag-*` with `color-mix`. Clearing it removes Kandinsky's override: the colour scheme's own accent comes back.
-- `[ui] palette`: the colour scheme, built in, light and dark alike — `kandinsky`, `ink`, `clay`, `sage`, `sea`, `dusk`,
-  `graphite`, `phosphor`, `rose`, `honey`, `slate`, `forest`, `coffee`, `ember`, `glacier`, `sand`, `midnight`, `plain`
+- `[ui] palette`: the colour scheme, built in, light and dark alike — `plain` (the default: white or near-black page, neutral grey sidebar and selection, one blue accent), `kandinsky`, `ink`, `clay`, `sage`, `sea`, `dusk`,
+  `graphite`, `phosphor`, `rose`, `honey`, `slate`, `forest`, `coffee`, `ember`, `glacier`, `sand`, `midnight`
   (`ui/src/styles/palettes.css`; `phosphor` is black on white / white on black at full strength with its green, and
   a saved `contrast` — the scheme it replaced — reads as it; the last nine generated with every text colour and accent checked for contrast: text ≥ 7:1,
   muted ≥ 4.5:1, faint ≥ 4:1, links ≥ 4.6:1 on the page). VS Code theme files are no longer read: a scheme is one of
@@ -203,5 +203,6 @@ After a day of features, Settings had fallen behind: many new things were not in
 To keep normal workspaces uncluttered, `ui/src/lib/settings-pages.ts` consolidates Settings into 7 primary workspace categories plus active extensions:
 
 1. **Workspace:** `Appearance`, `Editor & Writing`, `Calendar & Daily Notes`, `Files & Search`, `References & PDF`, and `Keyboard Shortcuts`.
-2. **Extensions:** the `Extensions` page (manage active plugins, browse catalog extensions, review trusted OS binaries) plus navigation entries only for enabled extensions that declare settings (`fields` or custom `registerSettingsSection` panels).
-3. **Folded Advanced & Server Settings:** developer plumbing (`desktop.*`, `terminal.*`, `automation.*`, `lsp.*`, `notifications.*`), `Apps`/`Scripts`, `ServerPanel`, and `AgentsPanel` remain accessible inside a collapsed `<details>` drawer at the bottom of `Extensions`.
+2. **Plugins:** the `Plugins` page (`developer_mode` switch off by default, manage active plugins, browse catalog plugins, review trusted helper programs when `developer_mode` is on) plus navigation entries only for enabled plugins that declare settings (`fields` or custom `registerSettingsSection` panels).
+3. **Folded Advanced & Server Settings:** workspace options (`desktop.*`, `notifications.*`, `Sidebar shortcuts`) remain accessible inside a collapsed `<details>` drawer at the bottom of `Plugins`, while developer plumbing (`terminal.*`, `automation.*`, `lsp.*`, `Scripts`, `ServerPanel`, `AgentsPanel`, settings file) and code-editor toggles on `Editor & Writing` (`vim`, `editor.vim_keys`, `editor.code_bar`, `editor.git_gutter`, `editor.line_numbers`, `editor.wrap_code`, `editor.indent_guides`, `editor.minimap`, `editor.breadcrumbs`, `editor.autosave_code`) appear when `developer_mode = true`.
+4. **Editor defaults:** `editor.floating_toolbar = true` shows a contextual formatting toolbar over selected Markdown prose, and `editor.rich_paste = true` converts pasted HTML from web pages, Google Docs, or Word into Markdown.

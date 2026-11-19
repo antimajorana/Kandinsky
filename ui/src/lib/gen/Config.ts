@@ -54,7 +54,11 @@ ignore: Array<string>,
 /**
  * Vim keybindings in the editor. Off by default, as in Obsidian: a newcomer's keys type text.
  */
-vim: boolean, ui: UiConfig, editor: EditorConfig, terminal: TerminalConfig, files: FilesConfig, activity: ActivityConfig, pdf: PdfConfig, draw: DrawConfig, lsp: LspConfig, 
+vim: boolean, 
+/**
+ * Show developer, terminal, server, language-server, script, and AI agent tools across the workspace and plugin catalog. Off by default.
+ */
+developer_mode: boolean, ui: UiConfig, editor: EditorConfig, terminal: TerminalConfig, files: FilesConfig, activity: ActivityConfig, pdf: PdfConfig, draw: DrawConfig, lsp: LspConfig, 
 /**
  * The LaTeX plugin (built in; switched off with the other plugins): snippets while typing math, `.tex` files.
  */

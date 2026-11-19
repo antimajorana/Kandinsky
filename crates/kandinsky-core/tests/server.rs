@@ -26,10 +26,11 @@ fn seed(root: &Path) {
     copy("docs/SYSTEM.md", "# System\n");
     copy("docs/INDEX.md", "# Index\n");
     // `log_dir` set explicitly: the stand-in has a legacy `log/` folder, which an unset `log_dir` would pick
-    copy(".kandinsky/config.toml", "log_dir = \"notes/log\"\nignore = [\"runs\", \"refs/zotero\"]\n");
+    copy(".kandinsky/config.toml", "developer_mode = true\nlog_dir = \"notes/log\"\nignore = [\"runs\", \"refs/zotero\"]\n");
     // a real vault's list may differ; the folders this test hides are always in it
     let cfg = root.join(".kandinsky/config.toml");
     let mut table: toml::Table = std::fs::read_to_string(&cfg).unwrap().parse().unwrap();
+    table.insert("developer_mode".into(), toml::Value::Boolean(true));
     let ignore = table.entry("ignore").or_insert_with(|| toml::Value::Array(vec![])).as_array_mut().unwrap();
     for must in ["runs", "refs/zotero"] {
         if !ignore.iter().any(|p| p.as_str().is_some_and(|p| p.trim_start_matches('/') == must)) {

@@ -11,7 +11,7 @@ export const app = $state({
   conn: "connecting" as ConnState,
   // raw, not JSON: index.html and capture.html paint it before the app loads
   theme: (loadRaw(KEYS.theme) === "light" ? "light" : "dark") as Theme,
-  vimEnabled: load<boolean>(KEYS.vim, true),
+  vimEnabled: load<boolean>(KEYS.vim, false),
   /** Mode of the most recently focused editor: "NORMAL", "INSERT", … or "" when vim is off. */
   vimMode: "",
   /** Diagnostics of the most recently focused code editor (null: not a code file). */
