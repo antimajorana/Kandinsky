@@ -1,10 +1,13 @@
 // The pane's state, one object every view reads (DESIGN-mail-ui §5): the accounts and folders, the list a view shows,
 // the cursor and the checked rows, the conversation open, the composers, and the actions — optimistic (the list
 // changes at once, the engine is asked behind), each one with an Undo and a rollback with the reason when it fails.
+import { Steps } from "../../../../../ui/src/lib/pane-nav";
 import { askYes, call, setting, snoozeTimes, type Account, type Draft, type Folder, type Moved, type PluginApi, type Row, type Thread } from "./api";
 
 export type ViewName = "inbox" | "unimportant" | "starred" | "snoozed" | "drafts" | "sent" | "scheduled" | "attachments" | "folder" | "all";
 export interface View { name: ViewName; account: string | null; folder: string | null; label: string }
+/** Where the pane is, for Back / Forward: the folder or view, the search, the conversation open. */
+export interface Place { view: View; query: string; open: number | null }
 export type Quick = "" | "unread" | "starred" | "attachments" | "mentions";
 export type Kind = "" | "person" | "newsletter" | "notification";
 export interface Toast { id: number; text: string; kind: "info" | "error" | "success"; undo?: () => Promise<void>; action?: { label: string; run: () => void }; until: number }
@@ -26,6 +29,8 @@ export class Mail {
   total = $state(0);
   unread = $state(0);
   chips = $state<[string, string][]>([]);
+  /** a search's order: the best matches first (relevance with recency, the engine's), or the newest first */
+  byDate = $state(false);
   loading = $state(false);
   error = $state("");
   /** the row the keyboard is on (its message id) */
@@ -47,8 +52,26 @@ export class Mail {
   private asking = new Set<number>();
   private timer: ReturnType<typeof setTimeout> | undefined;
 
+  /** Back / Forward through the folders, searches and conversations visited (the app's Back asks it first) */
+  steps = new Steps<Place>(() => this.place(), (p) => this.goTo(p));
+  /** told after a step, for what the view keeps itself (the search box's text, the narrow layout's screen) */
+  stepped: (p: Place) => void = () => {};
+
   constructor(kandinsky: PluginApi) {
     this.kandinsky = kandinsky;
+  }
+
+  place(): Place { return { view: { ...this.view }, query: this.query, open: this.openId }; }
+
+  /** Back to a place: its list (read again only when it is another), then its conversation or none. */
+  private goTo(p: Place) {
+    const sameList = JSON.stringify(p.view) === JSON.stringify(this.view) && p.query === this.query;
+    if (!sameList) {
+      Object.assign(this, { view: p.view, query: p.query, quick: "", kind: "", checked: [], cursor: null });
+      this.load();
+    }
+    if (p.open !== null) void this.read(p.open); else this.close();
+    this.stepped(p);
   }
 
   call<T>(method: string, params: Record<string, unknown> = {}, timeout = 120) {
@@ -87,7 +110,7 @@ export class Mail {
     const v = this.view;
     return {
       view: v.name === "folder" ? "" : v.name, account: v.account ?? "", folder: v.folder ?? "",
-      query: this.query, quick: this.quick, kind: this.split ? this.kind || "person" : "", pin: this.pinning, ...extra,
+      query: this.query, quick: this.quick, kind: this.split ? this.kind || "person" : "", pin: this.pinning, by_date: this.byDate, ...extra,
     };
   }
 
@@ -162,17 +185,22 @@ export class Mail {
   }
 
   go(v: View) {
+    const was = this.place();
     this.view = v;
     this.query = "";
     this.quick = "";
     this.kind = "";
     this.checked = [];
     this.cursor = null;
+    this.steps.left(was);
     this.load();
   }
 
   search(q: string) {
+    const was = this.place();
     this.query = q;
+    // one step per search, not per letter typed: recorded on starting and on clearing one
+    if (!was.query || !q) this.steps.left(was);
     this.load();
   }
 
@@ -189,8 +217,13 @@ export class Mail {
   }
 
   async read(id: number) {
+    const was = this.place();
     this.cursor = id;
     this.openId = id;
+    this.steps.left(was);
+    // another conversation: the old one leaves the reader at once (the loading view shows), so Archive or Delete
+    // pressed meanwhile never acts on one thing while another is on screen
+    if (this.open && !this.open.messages.some((m) => m.id === id)) this.open = null;
     this.reading = true;
     this.readError = "";
     const row = this.rows.find((r) => r.id === id);
@@ -205,7 +238,7 @@ export class Mail {
     }
   }
 
-  close() { this.openId = null; this.open = null; }
+  close() { const was = this.place(); this.openId = null; this.open = null; this.steps.left(was); }
 
   // ----- what the actions act on: the checked conversations, else the open one, else the cursor's
 
@@ -214,7 +247,8 @@ export class Mail {
     const id = this.openId ?? this.cursor;
     const r = this.rows.find((x) => x.id === id);
     if (r) return [r];
-    if (this.open) return [{ id: this.open.messages.at(-1)!.id, thread: this.open.thread } as Row];
+    const last = this.open?.messages.at(-1);
+    if (this.open && last) return [{ id: last.id, thread: this.open.thread, folder_role: last.folder_role } as Row];
     return [];
   }
 
@@ -262,7 +296,7 @@ export class Mail {
     if (!rows.length) return;
     const ids = rows.map((r) => r.id);
     const threads = new Set(rows.map((r) => r.thread));
-    const before = this.rows;
+    const before = { rows: this.rows, total: this.total, cursor: this.cursor, seq: this.loadSeq };
     const at = Math.max(0, this.index(rows[0].id));
     const wasOpen = this.openId !== null && rows.some((r) => r.id === this.openId || r.thread === this.open?.thread);
     this.rows = this.rows.filter((r) => !threads.has(r.thread));
@@ -271,8 +305,8 @@ export class Mail {
     const next = this.rows[Math.min(at, this.rows.length - 1)] ?? null;
     this.cursor = next?.id ?? null;
     if (wasOpen) {
-      if (next && setting(this.kandinsky, "after_action", "next") === "next") this.read(next.id);
-      else this.close();
+      // the pane moves by itself: no step back to a conversation that left the list
+      this.steps.unrecorded(() => { if (next && setting(this.kandinsky, "after_action", "next") === "next") this.read(next.id); else this.close(); });
     }
     try {
       const r = await run(ids);
@@ -283,7 +317,9 @@ export class Mail {
       this.toast(`${label} ${n === 1 ? "1 conversation" : `${n} conversations`}`, "info", moved.length ? { undo: async () => { this.undos = this.undos.filter((u) => u.run !== undo); await undo(); this.later(); } } : {});
       this.loadCounts();
     } catch (e) {
-      this.rows = before;
+      // the list asked for since (another folder, a refresh) is not put back under the old rows: read it again
+      if (before.seq === this.loadSeq) { this.rows = before.rows; this.total = before.total; this.cursor = before.cursor; }
+      else void this.load(true);
       this.toast(`${label} failed: ${(e as Error).message}`, "error");
     }
   }
@@ -299,7 +335,11 @@ export class Mail {
   async trashMessage(id: number) {
     const t = this.open;
     if (!t) return;
-    if (t.messages.length === 1) { const row = this.rows.find((r) => r.thread === t.thread); if (row) return this.trash([row]); }
+    if (t.messages.length === 1) {
+      // the conversation's last message takes the conversation, listed or not (opened from a note, hidden by a search)
+      const row = this.rows.find((r) => r.thread === t.thread) ?? ({ id, thread: t.thread, folder_role: t.messages[0].folder_role } as Row);
+      return this.trash([row]);
+    }
     const msg = t.messages.find((m) => m.id === id);
     const what = msg?.draft ? "Draft" : "Message";
     t.messages = t.messages.filter((m) => m.id !== id);
@@ -387,6 +427,94 @@ export class Mail {
     } catch (e) { this.toast(`Could not save it: ${(e as Error).message}`, "error"); }
   }
 
+  /** The open conversation as a note (saved first when it is not yet): what a link to the mail points at. */
+  private async noteOfOpen(): Promise<string | null> {
+    const t = this.open;
+    if (!t) return null;
+    if (t.saved) return t.saved;
+    await this.saveNote(t.thread);
+    return this.open?.thread === t.thread ? this.open.saved ?? null : null;
+  }
+
+  /** "Link to an event…": the conversation's note into an event's `links:` — the Calendar's chooser does the rest
+   *  (it listens for `kandinsky-calendar:link`; without the Calendar plugin a toast says so). */
+  async linkToEvent() {
+    const link = await this.noteOfOpen();
+    if (!link) return;
+    let heard = false;
+    const ack = () => (heard = true);
+    window.addEventListener("kandinsky-calendar:heard", ack, { once: true });
+    window.dispatchEvent(new CustomEvent("kandinsky-calendar:link", { detail: { link, ack: true } }));
+    setTimeout(() => { window.removeEventListener("kandinsky-calendar:heard", ack); if (!heard) this.toast("No Calendar plugin to link the event in: turn it on in Settings → Plugins.", "error"); }, 400);
+  }
+
+  /** "Link to a note…": any note — a mail saved as a note too — picked in the palette goes into the `links:` of this
+   *  conversation's note (Email's own note, saved first; re-saving keeps the property), the way an event's note keeps
+   *  its links. The user's notes are not written: the target shows the mail as a backlink. */
+  async linkToNote() {
+    const t = this.open;
+    if (!t) return;
+    if (!this.kandinsky.pickNote) { this.toast("Linking needs a newer Kandinsky: copy the link instead.", "error"); return void this.copyLink(); }
+    const target = await this.kandinsky.pickNote({ placeholder: `Link “${t.subject || "this mail"}” to which note or mail?`, tag: "Link to a note" });
+    if (!target) return;
+    const note = await this.noteOfOpen();
+    if (!note) return;
+    if (target === note) { this.toast("That is this conversation's own note", "error"); return; }
+    try {
+      const props = await this.kandinsky.noteProps(note);
+      const links = (Array.isArray(props.links) ? props.links : props.links ? [props.links] : []).map(String);
+      const link = `[[${target.replace(/\.md$/i, "")}]]`;
+      if (links.some((l) => l.replace(/\|.*\]\]$/, "]]") === link)) { this.toast("Already linked", "success"); return; }
+      await this.kandinsky.writeProperty(note, "links", [...links, link]);
+      this.toast(`Linked to ${target.split("/").pop()?.replace(/\.md$/i, "")}`, "success", { action: { label: "Open", run: () => void this.openLinked(target) } });
+      void this.loadLinked();
+    } catch (e) { this.toast(`Could not link it: ${(e as Error).message}`, "error"); }
+  }
+
+  /** A linked note opened: a mail's note opens as the mail in this pane (its conversation), any other note beside. */
+  async openLinked(path: string, line?: number) {
+    const props = await this.kandinsky.noteProps(path).catch(() => ({} as Record<string, unknown>));
+    if (isMailNote(props)) {
+      try {
+        const r = await this.call<{ id: number | null }>("find", { message_id: props.message_id, account: props.account });
+        if (r.id) { await this.read(r.id); return; }
+      } catch { /* not in the index: the note is what is left of it */ }
+    }
+    this.kandinsky.open(path, line, { beside: true });
+  }
+
+  /** The open conversation's links both ways: what its note links to (`links:`, set by Link) and the notes and events
+   *  that link to it (the core's link index). Empty for a conversation never saved (nothing can link to it yet). */
+  linked = $state<Linked[]>([]);
+  async loadLinked() {
+    const t = this.open;
+    const note = t?.saved;
+    if (!t || !note || !this.kandinsky.backlinks) { this.linked = []; return; }
+    try {
+      const [props, back] = await Promise.all([this.kandinsky.noteProps(note), this.kandinsky.backlinks(note)]);
+      const out = (Array.isArray(props.links) ? props.links : props.links ? [props.links] : []).map(String)
+        .map((l) => /^\[\[([^\]|#]+)/.exec(l)?.[1]).filter((x): x is string => !!x).map((x) => (/\.\w+$/.test(x) ? x : `${x}.md`));
+      const seen = new Set<string>([note]);
+      const rows = [...out.map((source) => ({ source, line: 0, context: "", to: true })), ...back.map((b) => ({ ...b, to: false }))]
+        .filter((r) => !seen.has(r.source) && seen.add(r.source)).slice(0, 16);
+      const kinds = await Promise.all(rows.map(async (r) => {
+        const p = await this.kandinsky.noteProps(r.source).catch(() => ({} as Record<string, unknown>));
+        const kind: Linked["kind"] = p.type === "event" ? "event" : isMailNote(p) ? "mail" : "note";
+        return { ...r, kind };
+      }));
+      if (this.open?.thread === t.thread) this.linked = kinds;
+    } catch { if (this.open?.thread === t.thread) this.linked = []; }
+  }
+
+  /** "Copy a link": `[[the conversation's note]]`, to paste in any note (the note saved first). */
+  async copyLink() {
+    const path = await this.noteOfOpen();
+    if (!path) return;
+    const link = `[[${path.replace(/\.md$/i, "")}]]`;
+    try { await navigator.clipboard.writeText(link); this.toast(`Copied ${link} — paste it in a note`, "success"); }
+    catch { this.toast(`Copy it by hand: ${link}`, "error"); }
+  }
+
   // ----- composing
 
   compose(d: Partial<Draft> = {}, inline = false) {
@@ -442,4 +570,12 @@ export class Mail {
   }
 
   closeComposer(key: number) { this.composers = this.composers.filter((c) => c.key !== key); }
+}
+
+/** A note linked with the open conversation: `to` when its note links there, else it links to the mail. */
+export type Linked = { source: string; line: number; context: string; to: boolean; kind: "note" | "event" | "mail" };
+
+/** A note Email saved a conversation (or one message) as: opened as the mail, not as the note. */
+export function isMailNote(props: Record<string, unknown>): props is Record<string, unknown> & { message_id: string; account: string } {
+  return (props.type === "email-thread" || props.type === "email") && typeof props.message_id === "string";
 }

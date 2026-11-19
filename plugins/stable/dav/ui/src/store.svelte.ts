@@ -1,11 +1,14 @@
 // The Calendar pane's state: the calendars, the events of the range on screen (from the engine's cache, at once),
 // the view and the day it is on, and every change — made on screen first (optimistic), written behind, with an Undo
 // in the toast and a roll-back with the reason when the server refuses (UI-STYLE §4).
-import { addDays, addMonths, call, evEnd, evStart, hourCycle, hueColor, startOfDay, startOfWeek, wall, weekStart, ymd, type Account, type Answer, type Ev, type PluginApi, type Source } from "./api";
+import { Steps } from "../../../../../ui/src/lib/pane-nav";
+import { addDays, addMonths, agendaRange, agendaStep, call, evEnd, evStart, hourCycle, hueColor, isSpan, sameDay, startOfDay, startOfWeek, wall, weekStart, ymd, TASKS, type Account, type Answer, type Ev, type PluginApi, type Source, type Span, type TaskRow } from "./api";
 
 export type View = "day" | "week" | "workweek" | "month" | "agenda" | "year";
 export type Scope = "this" | "following" | "all";
-export interface Toast { id: number; text: string; kind?: "error" | "success"; undo?: () => Promise<void> }
+export interface Toast { id: number; text: string; kind?: "error" | "success"; undo?: () => Promise<void>; action?: { label: string; run: () => unknown } }
+/** An event that moved since its note said (the engine's `moved`): its linked tasks' ⏳ may follow. */
+export interface Moved { note: string; uid: string; title: string; from: string; to: string; links: string[] }
 /** What the editor or a drag changes (engine edit.rs `Change`). */
 export interface Change { summary?: string; start?: string; end?: string; all_day?: boolean; location?: string; description?: string; rrule?: string; from_start?: string; calendar?: string; move_to?: string; attendees?: string[] }
 
@@ -22,6 +25,8 @@ export class Cal {
   accounts = $state<Account[]>([]);
   events = $state<Ev[]>([]);
   view = $state<View>("week");
+  /** How much the Agenda shows (api.ts `Span`), kept on this device as the view is. */
+  span = $state<Span>(isSpan(stored("span")) ? (stored("span") as Span) : "60days");
   cursor = $state(startOfDay(new Date()));
   loading = $state(true);
   syncing = $state(false);
@@ -37,6 +42,10 @@ export class Cal {
   results = $state<Ev[] | null>(null);
   query = $state("");
   now = $state(new Date());
+  /** The Tasks & deadlines layer: the core's `from: deadlines` rows of the range, drawn as all-day items. */
+  tasks = $state<Ev[]>([]);
+  /** A task being time-blocked: the next slot dragged on the hours becomes its event (`timeBlock`). */
+  placing = $state<TaskRow | null>(null);
   /** The pane is phone-narrow: one column, so the week shows as a day and the month as the agenda. */
   narrow = $state(false);
   private seq = 0;
@@ -71,7 +80,7 @@ export class Cal {
       case "week": { const s = startOfWeek(cursor, this.first); return { from: s, to: addDays(s, 6) }; }
       case "workweek": { const s = startOfWeek(cursor, 1); return { from: s, to: addDays(s, 4) }; }
       case "month": { const s = startOfWeek(new Date(cursor.getFullYear(), cursor.getMonth(), 1), this.first); return { from: s, to: addDays(s, 41) }; }
-      case "agenda": return { from: cursor, to: addDays(cursor, 59) };
+      case "agenda": return agendaRange(this.span, cursor, this.first);
       case "year": return { from: new Date(cursor.getFullYear(), 0, 1), to: new Date(cursor.getFullYear(), 11, 31) };
     }
   }
@@ -86,6 +95,7 @@ export class Cal {
   /** A calendar's colour: chosen in the pane, else the server's / the subscription's, else one from its name. */
   colorOf(id: string): string {
     if (id === NOTES) return this.colors[NOTES] ?? this.colors.Notes ?? "var(--accent)";
+    if (id === TASKS) return this.colors[TASKS] ?? "var(--text-muted)";
     const s = this.sources.find((x) => x.id === id);
     return this.colors[id] ?? this.colors[s?.name ?? ""] ?? s?.shown_color ?? s?.color ?? hueColor(id);
   }
@@ -108,15 +118,99 @@ export class Cal {
     if (!quiet) this.loading = true;
     try {
       const ids = this.sources.filter((s) => !this.isHidden(s.id, s.name)).map((s) => s.id);
-      const r = await call<{ events: Ev[] }>(this.kandinsky, "range", { from: ymd(from), to: ymd(to), sources: ids, notes: this.showNotes && !this.isHidden(NOTES, "Notes") }, 60);
+      const [r, tasks] = await Promise.all([
+        call<{ events: Ev[] }>(this.kandinsky, "range", { from: ymd(from), to: ymd(to), sources: ids, notes: this.showNotes && !this.isHidden(NOTES, "Notes") }, 60),
+        this.isHidden(TASKS, "Tasks") ? Promise.resolve([]) : this.deadlines(ymd(from), ymd(to)),
+      ]);
       if (ask !== this.seq) return; // a newer range was asked meanwhile
       this.events = r.events;
+      this.tasks = tasks;
       this.error = "";
     } catch (e) {
       if (ask === this.seq) this.error = (e as Error).message;
     } finally {
       if (ask === this.seq) this.loading = false;
     }
+  }
+
+  /** The core's deadlines between two days (open tasks with 📅 or ⏳, notes with `due:`) as all-day items; the deadline
+   *  calendars' events are already on the grid. A failure leaves the layer empty: the events still show. */
+  private async deadlines(from: string, to: string): Promise<Ev[]> {
+    try {
+      const r = await this.kandinsky.view("type: list\nfrom: deadlines\nscheduled: true\n");
+      return (r.rows as TaskRow[])
+        .filter((x) => x.date && x.date >= from && x.date <= to && x.props.from !== "event" && !x.done && x.path)
+        .map((t) => {
+          const next = new Date(`${t.date}T12:00`);
+          return {
+            uid: `task:${t.path}:${t.line ?? 0}`, summary: t.title, start: t.date, end: ymd(addDays(next, 1)), all_day: true, recurring: false, free: true,
+            calendar: TASKS, calendar_name: t.props.from === "note" ? "Deadline (note)" : "Task", writable: false, task: t,
+          } satisfies Ev;
+        });
+    } catch { return []; }
+  }
+
+  /** A task of the layer ticked through the core (`kandinsky.tickTask`, as Home ticks: its ✅ date, a repeating one's next
+   *  occurrence): gone from the list at once, back with the reason when the core refuses. Null on an Kandinsky older than
+   *  plugin API 31, which has no tick for plugins: the row then has no box. */
+  get canTick(): boolean { return typeof (this.kandinsky as Partial<PluginApi>).tickTask === "function"; }
+  async tick(t: TaskRow): Promise<void> {
+    if (!this.canTick || t.line == null) return;
+    const before = this.tasks;
+    this.tasks = before.filter((e) => !(e.task && e.task.path === t.path && e.task.line === t.line));
+    try {
+      await this.kandinsky.tickTask(t.path, t.line);
+      this.toast(`Done: “${t.title}”`, "success", undefined, { label: "Open the note", run: () => this.kandinsky.open(t.path, t.line ?? undefined) });
+      void this.load(true); // a repeating task's next occurrence
+    } catch (e) {
+      this.tasks = before;
+      this.toast(`Not ticked: ${(e as Error).message}`, "error");
+    }
+  }
+
+  /** Every item of the range: the events, then the layer's tasks. */
+  shownEvents(): Ev[] { return this.tasks.length ? [...this.events, ...this.tasks] : this.events; }
+
+  // ----- tasks into the calendar (DESIGN-calendar-tasks-nudges §2.3)
+
+  /** Time-block a task: the pane waits for a slot dragged on the hours (Esc cancels). */
+  startPlacing(t: TaskRow) {
+    this.placing = t;
+    if (this.shown() === "month" || this.shown() === "agenda" || this.shown() === "year") this.setView("week");
+  }
+
+  /** The slot chosen for the task being placed: the event, its note linking the task, the task's ⏳ and link — in one
+   *  call to the engine (`time_block`). */
+  async timeBlock(start: Date, end: Date): Promise<boolean> {
+    const t = this.placing;
+    this.placing = null;
+    if (!t) return false;
+    const calendar = this.newCalendar() ?? undefined;
+    try {
+      const r = await call<{ note: string; label: string; undo: number }>(this.kandinsky, "time_block", { summary: t.title, start: wall(start), end: wall(end), calendar, task: { path: t.path, line: t.line ?? 0, text: t.title } });
+      this.toast(`Time-blocked “${t.title}” · ${r.label}`, "success", undefined, { label: "Open the note", run: () => this.kandinsky.open(r.note) });
+      return true;
+    } catch (e) {
+      this.toast(`Not time-blocked: ${(e as Error).message}`, "error");
+      return false;
+    } finally { await this.load(true); }
+  }
+
+  /** An event with linked tasks moved (here, or on another device): offer to move their ⏳ — the lines are the user's,
+   *  so it is asked, never done by itself. */
+  offerMove(m: Moved) {
+    if (!m.links.some((l) => l.includes("#^"))) return;
+    const to = new Date(m.to.length > 10 ? m.to : `${m.to}T12:00`);
+    const day = to.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+    this.toast(`“${m.title}” moved to ${day}`, undefined, undefined, {
+      label: "Move ⏳ too",
+      run: async () => {
+        try {
+          const r = await call<{ moved: number; failed: string[] }>(this.kandinsky, "move_tasks", { note: m.note });
+          this.toast(r.failed.length ? `Not moved: ${r.failed.join("; ")}` : `${r.moved === 1 ? "Its task is" : `${r.moved} tasks are`} now ⏳ ${day}`, r.failed.length ? "error" : "success");
+        } catch (e) { this.toast(`Not moved: ${(e as Error).message}`, "error"); }
+      },
+    });
   }
 
   later(ms = 250) { clearTimeout(this.timer); this.timer = setTimeout(() => void this.load(true), ms); }
@@ -134,8 +228,28 @@ export class Cal {
 
   // ----- moving around
 
-  setView(v: View) { this.view = v; store("view", v); this.results = null; void this.load(); }
-  go(d: Date, v?: View) { this.cursor = startOfDay(d); if (v) this.setView(v); else void this.load(); }
+  /** Back / Forward through the views and dates shown (the app's Back asks it first; App.svelte attaches it) */
+  steps = new Steps<{ view: View; day: number }>(() => this.spot(), (p) => {
+    this.cursor = new Date(p.day);
+    this.view = p.view; store("view", p.view); this.results = null; void this.load();
+  });
+  private spot() { return { view: this.view, day: this.cursor.getTime() }; }
+
+  setView(v: View) {
+    const was = this.spot();
+    this.view = v; store("view", v); this.results = null; void this.load();
+    this.steps.left(was);
+  }
+  /** The Agenda's length (a day, 3 days, a week, 60 days): the range read again. */
+  setSpan(s: Span) {
+    this.span = s; store("span", s); void this.load();
+  }
+  go(d: Date, v?: View) {
+    const was = this.spot();
+    this.cursor = startOfDay(d);
+    if (v) this.steps.unrecorded(() => this.setView(v)); else void this.load();
+    this.steps.left(was);
+  }
   today() { this.go(new Date()); }
   step(dir: 1 | -1) {
     const c = this.cursor;
@@ -144,7 +258,7 @@ export class Cal {
       week: () => addDays(c, 7 * dir),
       workweek: () => addDays(c, 7 * dir),
       month: () => addMonths(new Date(c.getFullYear(), c.getMonth(), 1), dir),
-      agenda: () => addDays(c, 30 * dir),
+      agenda: () => addDays(c, agendaStep(this.span) * dir),
       year: () => new Date(c.getFullYear() + dir, c.getMonth(), 1),
     } as Record<View, () => Date>)[this.shown()]();
     this.go(next);
@@ -153,7 +267,7 @@ export class Cal {
   title(narrowView: View = this.shown()): string {
     const { from, to } = this.range(narrowView);
     const c = this.cursor;
-    if (narrowView === "day") return c.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    if (narrowView === "day" || (narrowView === "agenda" && sameDay(from, to))) return c.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
     if (narrowView === "month") return c.toLocaleDateString(undefined, { month: "long", year: "numeric" });
     if (narrowView === "year") return String(c.getFullYear());
     const sameMonth = from.getMonth() === to.getMonth();
@@ -196,10 +310,10 @@ export class Cal {
 
   // ----- changes
 
-  toast(text: string, kind?: Toast["kind"], undo?: () => Promise<void>) {
+  toast(text: string, kind?: Toast["kind"], undo?: () => Promise<void>, action?: Toast["action"]) {
     const id = Date.now() + Math.random();
-    this.toasts = [...this.toasts.slice(-2), { id, text, kind, undo }];
-    setTimeout(() => this.dismiss(id), undo ? 9000 : kind === "error" ? 12000 : 4000);
+    this.toasts = [...this.toasts.slice(-2), { id, text, kind, undo, action }];
+    setTimeout(() => this.dismiss(id), undo || action ? 9000 : kind === "error" ? 12000 : 4000);
   }
   dismiss(id: number) { this.toasts = this.toasts.filter((t) => t.id !== id); }
 
@@ -292,6 +406,15 @@ export class Cal {
     } catch (err) {
       this.toast(`Not deleted: ${(err as Error).message}`, "error");
     } finally { await this.load(true); }
+  }
+
+  /** A copy of `e` at the same time in its own calendar (or the default one when it is read-only), not repeating
+   *  guests: the copy is the user's own event, nobody is invited by duplicating. */
+  duplicate(e: Ev): Promise<boolean> {
+    const s = evStart(e), en = evEnd(e);
+    // an all-day end is already the day after, which is what the engine takes
+    const at = e.all_day ? { start: ymd(s), end: ymd(en) } : { start: wall(s), end: wall(en) };
+    return this.create({ summary: e.summary, ...at, all_day: e.all_day, location: e.location, description: e.description, rrule: e.rrule, calendar: e.writable ? e.calendar : undefined });
   }
 
   async search(q: string) {

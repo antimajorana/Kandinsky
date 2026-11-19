@@ -456,6 +456,9 @@ const IN = {
   paper: "References",
 };
 const libraryOf = (k) => k.library?.in ?? IN[k.name] ?? kindTitle(k);
+/** A kind References writes itself (papers: refs.bib, their folders): never a catalog library's. A kind a vault puts in
+ *  References (`library.in: References`, its books with its papers) is the catalog's, its tab merged into References'. */
+const isPaper = (k) => !k.library?.in && IN[k.name] === "References";
 const slug = (t) => t.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 /** The properties whose values are an item's filters beside its shelf (names, as the side's tags). */
 const FACETS = ["genres", "topics", "tags"];
@@ -471,7 +474,7 @@ function librarySource(kandinsky, title = null) {
   const value = (row, prop) => { const i = data.at(prop); return i >= 0 ? row.cells[i] : null; };
   const titleOfRow = (row) => cellText(value(row, "title")) || row.path.split("/").pop().replace(/\.md$/, "");
   // References' kinds (papers) are written by References only (refs.bib, their folders): never in a catalog library
-  const mine = (k) => (title === null ? libraryOf(k) !== "References" : libraryOf(k) === title);
+  const mine = (k) => !isPaper(k) && (title === null || libraryOf(k) === title);
   // the kind's cover property, else the usual ones or the note's first picture (noteCover)
   const coverOf = (k, row) => async () => {
     const cell = k.library?.cover ? value(row, vaultName(k, k.library.cover)) : null;
@@ -553,7 +556,19 @@ function librarySource(kandinsky, title = null) {
       return {
         kind: kindTitle(k), title: item.title,
         lines: (k.library?.key ?? []).map((p) => cellText(value(row, vaultName(k, p)))).filter(Boolean).length ? [{ text: item.sub ?? "" }] : [],
-        fields: propsOf(k).filter((p) => p !== "title" && p !== cover && !(k.library?.key ?? []).map((x) => vaultName(k, x)).includes(p)).map((p) => [human(p), cellText(value(row, p))]).filter(([, v]) => v),
+        // the kind's own fields first, then whatever else the note says (authors, ISBN, edition, subjects…): every
+        // property with a value, but the title, the picture, the line under the title, the shelf and what is shown
+        // elsewhere (tags, links to services, the note's own bookkeeping)
+        fields: (() => {
+          const key = (k.library?.key ?? []).map((x) => vaultName(k, x));
+          const skip = new Set(["title", cover, ...key, g && vaultName(k, g), "tags", "aliases", "cssclasses", "cover", "image", "poster", "kind", "type", "created", "updated", "modified"].filter(Boolean));
+          const own = propsOf(k).filter((p) => !skip.has(p));
+          // a service's id (IMDb's tt0002023, Wikidata's Q42, Open Library's OL7353617M) is what its link below is
+          // made of, not something to read: left out by its shape whatever the property is called
+          const idLike = (v) => /^[a-z]{0,3}\d{4,}[a-z]?$/i.test(v.trim());
+          const rest = Object.keys(props).filter((p) => !skip.has(p) && !own.includes(p) && !/^https?:/i.test(fieldText(props[p])) && !/(^|_)(url|id|ids)$/i.test(p) && !idLike(fieldText(props[p])));
+          return [...own.map((p) => [human(p), cellText(value(row, p)) || fieldText(props[p])]), ...rest.map((p) => [human(p), fieldText(props[p])])].filter(([, v]) => v && v.length < 400);
+        })(),
         actions: [
           { label: "Open note", icon: "edit", primary: true, run: () => kandinsky.open(item.id) },
           ...links.slice(0, 1).map((l) => ({ label: `Open on ${l.label}`, icon: "link", run: () => (kandinsky.openLink ? kandinsky.openLink(l.url) : window.open(l.url, "_blank", "noopener")) })), // as Kandinsky opens any link
@@ -565,7 +580,7 @@ function librarySource(kandinsky, title = null) {
             ...(kandinsky.trash ? [{ label: "Delete…", danger: true, confirm: { title: `Move ${item.title} to the Trash?`, hint: "Its note goes to .kandinsky/trash/, where it can be taken back.", button: "Delete" }, run: () => kandinsky.trash(item.id) }] : []),
           ] : []),
         ],
-        links: links,
+        links: links.slice(1), // the first is the button above
         // its shelf, changed in place (the kind's `group` property, as a link like the catalog writes it)
         choice: g && (k.library?.shelves ?? []).length
           ? { label: "Shelf", options: k.library.shelves.map((sh) => ({ label: human(sh), on: sh === now, run: () => kandinsky.writeProperty(item.id, vaultName(k, g), `[[${sh}]]`) })) }
@@ -629,7 +644,7 @@ function plainAbout(text) {
 function registerLibraries(kandinsky) {
   let gone = [], shown = "", timer = 0;
   const make = () => kinds(kandinsky).then(async (list) => {
-    const titles = [...new Set(list.map(libraryOf))].filter((t) => t !== "References");
+    const titles = [...new Set(list.filter((k) => !isPaper(k)).map(libraryOf))];
     const sources = titles.map((t) => ({ t, src: librarySource(kandinsky, t) }));
     const held = await Promise.all(sources.map(({ src }) => src.load().then((items) => items.length > 0, () => false)));
     const keep = sources.filter((_, i) => held[i]);

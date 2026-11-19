@@ -1,10 +1,11 @@
 <script lang="ts">
   // The card on a click (Google's): an event's when in local time, where, which calendar, the note it came from,
   // who comes — with Edit (e), Delete (Del) and Open note; Join for an online meeting, and Going? Yes / Maybe / No for
-  // a meeting the user is invited to in an Exchange calendar (Exchange tells the organiser). Or, on empty space, a new event's title box: Enter saves,
-  // "More options" opens the editor.
+  // a meeting the user is invited to in an Exchange calendar (Exchange tells the organiser); the event's note (made on
+  // demand), what that note links (a time-blocked task) and what links to it. A task of the Tasks & deadlines layer
+  // shows its note and Time-block. Or, on empty space, a new event's title box: Enter saves, "More options" opens the editor.
   import { onMount } from "svelte";
-  import { meetingLink, notePath, ruleText, span, timeText, type Answer, type Ev } from "./api";
+  import { call, meetingLink, notePath, ruleText, span, timeText, type Answer, type Ev, type EventInfo, type Linked } from "./api";
   import type { Cal, Draft } from "./store.svelte";
   import CalendarPicker from "./CalendarPicker.svelte";
   import Icon from "./Icon.svelte";
@@ -34,14 +35,73 @@
   onMount(() => { place(); input?.focus(); });
 
   async function save() {
-    if (!draft) return;
+    if (!draft || !target) return; // Enter in the title must not create where the disabled Save would not
     const pad = (n: number) => String(n).padStart(2, "0");
     const w = (x: Date) => `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}T${pad(x.getHours())}:${pad(x.getMinutes())}`;
     const d = (x: Date) => w(x).slice(0, 10);
+    // read before closing: closing drops the card, and its props (draft, e) read as null after
+    const c = { summary: title.trim() || "(no title)", start: draft.all_day ? d(draft.start) : w(draft.start), end: draft.all_day ? d(draft.end) : w(draft.end), all_day: draft.all_day, calendar: target || undefined };
     onclose();
-    await cal.create({ summary: title.trim() || "(no title)", start: draft.all_day ? d(draft.start) : w(draft.start), end: draft.all_day ? d(draft.end) : w(draft.end), all_day: draft.all_day, calendar: target || undefined });
+    await cal.create(c);
   }
-  const note = $derived(e ? notePath(e) : null);
+  // the event's note and links, asked of the engine when the card opens (a task row has none)
+  let info = $state<EventInfo | null>(null);
+  let making = $state(false);
+  onMount(() => {
+    if (!e || e.task || e.uid.startsWith("pending-") || e.calendar === "notes") return;
+    void call<EventInfo>(cal.kandinsky, "event", { uid: e.uid, rid: e.rid, start: e.start }).then((r) => { info = r; setTimeout(place, 0); }, () => {});
+  });
+  const note = $derived(info?.note?.path ?? (e ? notePath(e) : null));
+  const backlinks = $derived((info?.backlinks?.links ?? []).filter((b) => b.source !== note && !(info?.note?.links ?? []).some((l) => l.path === b.source)));
+  /** A linked note opened — a mail saved as a note opens as the mail in Email (`kandinsky-email:open-note`), else the note. */
+  async function openPath(path: string, line?: number) {
+    const props = await cal.kandinsky.noteProps(path).catch(() => ({} as Record<string, unknown>));
+    const mail = (props.type === "email-thread" || props.type === "email") && typeof props.message_id === "string";
+    let heard = false;
+    if (mail) {
+      const ack = () => (heard = true);
+      window.addEventListener("kandinsky-email:heard", ack, { once: true });
+      window.dispatchEvent(new CustomEvent("kandinsky-email:open-note", { detail: { path } }));
+      window.removeEventListener("kandinsky-email:heard", ack);
+    }
+    if (!heard) cal.kandinsky.open(path, line);
+    onclose();
+  }
+  const openLinked = (l: Linked) => void openPath(l.path, l.line);
+  /** "Link a note…" / "Link a mail…" from the card: the chosen note (a mail is saved as its note by Email first) goes
+   *  into this event's note's `links:` (the note made on demand), then the card shows it. */
+  let linking = $state(false);
+  async function linkHere(path: string | null) {
+    if (!e || !path) return;
+    linking = true;
+    try {
+      await call(cal.kandinsky, "link_event", { uid: e.uid, rid: e.rid, start: e.start, link: path }, 60);
+      info = await call<EventInfo>(cal.kandinsky, "event", { uid: e.uid, rid: e.rid, start: e.start });
+      setTimeout(place, 0);
+    } catch (err) { cal.toast(`Not linked: ${(err as Error).message}`, "error"); } finally { linking = false; }
+  }
+  async function linkNote() {
+    if (!cal.kandinsky.pickNote) { cal.toast("Linking from here needs a newer Kandinsky: use “Calendar: link this note to an event…” in the note.", "error"); return; }
+    void linkHere(await cal.kandinsky.pickNote({ placeholder: `Link which note or mail to “${e?.summary ?? "this event"}”?`, tag: "Link to the event" }));
+  }
+  function linkMail() {
+    let heard = false;
+    const ack = () => (heard = true);
+    window.addEventListener("kandinsky-email:heard", ack, { once: true });
+    window.dispatchEvent(new CustomEvent("kandinsky-email:pick", { detail: { seed: e?.summary ?? "", reply: (note: string | null) => void linkHere(note) } }));
+    window.removeEventListener("kandinsky-email:heard", ack);
+    if (!heard) cal.toast("No Email plugin to choose a mail from: turn it on in Settings → Plugins.", "error");
+  }
+  /** "Note": the event's note made (once) and opened. */
+  async function makeNote() {
+    if (!e || making) return;
+    making = true;
+    try {
+      const r = await call<{ note: string }>(cal.kandinsky, "event_note", { uid: e.uid, rid: e.rid, start: e.start });
+      cal.kandinsky.open(r.note);
+      onclose();
+    } catch (err) { cal.toast(`No note made: ${(err as Error).message}`, "error"); } finally { making = false; }
+  }
   const join = $derived(e ? meetingLink(e) : null);
   const ANSWERS: [Answer, string][] = [["ACCEPTED", "Yes"], ["TENTATIVE", "Maybe"], ["DECLINED", "No"]];
   // the card's own copy: `e` is the event as it was when the card opened, the store's list moves on without it
@@ -57,10 +117,24 @@
 </script>
 
 <div class="pop" bind:this={card} style:left="{pos.left}px" style:top="{pos.top}px" role="dialog" aria-label={e ? e.summary : "New event"}>
-  {#if e}
+  {#if e?.task}
+    {@const t = e.task}
+    <div class="bar"><button class="tool" onclick={onclose} title="Close (Esc)"><Icon name="x" size={15} /></button></div>
+    <div class="head">
+      <span class="tsq" aria-hidden="true"></span>
+      <div><h2>{e.summary || "(no title)"}</h2>
+        <p class="when">{t.props.from === "note" ? "Due" : "Task"} · {span(e, cal.h12).replace(" · all day", "")}</p>
+      </div>
+    </div>
+    <p class="line faint"><Icon name="note" size={14} />{t.path.replace(/\.md$/, "")}</p>
+    <div class="acts start">
+      {#if t.props.from !== "note"}<button class="kandinsky-btn primary" onclick={() => { cal.startPlacing(t); onclose(); }}><Icon name="clock" size={14} />Time-block…</button>{/if}
+      <button class="kandinsky-btn" onclick={() => { cal.kandinsky.open(t.path, t.line ?? undefined); onclose(); }}><Icon name="note" size={14} />Open the note</button>
+    </div>
+  {:else if e}
     <div class="bar">
       {#if e.writable}<button class="tool" onclick={onedit} title="Edit (e)"><Icon name="pen" size={15} /></button>
-        <button class="tool" onclick={() => { onclose(); void cal.remove(e); }} title="Delete (Del)"><Icon name="trash" size={15} /></button>{/if}
+        <button class="tool" onclick={() => { const gone = e; onclose(); if (gone) void cal.remove(gone); }} title="Delete (Del)"><Icon name="trash" size={15} /></button>{/if}
       <button class="tool" onclick={onclose} title="Close (Esc)"><Icon name="x" size={15} /></button>
     </div>
     <div class="head">
@@ -93,7 +167,28 @@
     {/if}
     {#if e.description}<p class="line desc"><Icon name="text" size={14} /><span>{e.description}</span></p>{/if}
     <p class="line faint"><Icon name="calendar" size={14} />{e.calendar_name}{e.writable ? "" : " · read-only"}</p>
-    {#if note}<button class="kandinsky-btn" onclick={() => { cal.kandinsky.open(note); onclose(); }}><Icon name="note" size={14} />Open the note</button>{/if}
+    {#if info?.note?.links.length}
+      <div class="line linked"><Icon name="link" size={14} />
+        <ul aria-label="Linked">
+          {#each info.note.links as l, i (l.link + ":" + i)}<li><button class="lk" class:done={l.task === "x"} onclick={() => openLinked(l)} title={l.path}>{#if l.task !== undefined}<span class="tsq small" class:checked={l.task === "x"} aria-hidden="true"></span>{/if}{l.title}</button></li>{/each}
+        </ul>
+      </div>
+    {/if}
+    {#if backlinks.length}
+      <div class="line linked"><Icon name="backlink" size={14} />
+        <ul aria-label="Linked from">
+          {#each backlinks.slice(0, 6) as b, i (b.source + ":" + b.line + ":" + i)}<li><button class="lk" onclick={() => void openPath(b.source, b.line)} title={b.context}>{b.source.split("/").pop()?.replace(/\.md$/, "")}</button></li>{/each}
+        </ul>
+      </div>
+    {/if}
+    {#if e.calendar !== "notes" && !e.uid.startsWith("pending-") && !e.task}
+      <div class="acts start">
+        <button class="kandinsky-btn" onclick={linkNote} disabled={linking} title="Link a note (or a mail saved as a note) to this event"><Icon name="link" size={14} />Link a note…</button>
+        <button class="kandinsky-btn" onclick={linkMail} disabled={linking} title="Search your mail and link a conversation to this event (it is saved as a note)"><Icon name="mail" size={14} />Link a mail…</button>
+      </div>
+    {/if}
+    {#if note}<button class="kandinsky-btn" onclick={() => { cal.kandinsky.open(note); onclose(); }}><Icon name="note" size={14} />Open the note</button>
+    {:else if e.calendar !== "notes" && !e.uid.startsWith("pending-")}<button class="kandinsky-btn" onclick={makeNote} disabled={making} title="A note of its own for this event: its time and place as properties, your writing below"><Icon name="note" size={14} />Make a note</button>{/if}
     {#if e.url}<p class="line"><Icon name="link" size={14} /><a href={e.url} target="_blank" rel="noreferrer">{e.url}</a></p>{/if}
   {:else if draft}
     <div class="bar"><button class="tool" onclick={onclose} title="Close (Esc)"><Icon name="x" size={15} /></button></div>
@@ -140,5 +235,14 @@
   .answer { display: flex; align-items: center; gap: 6px; padding: 6px 0; font-size: 0.9em; }
   .answer span { color: var(--text-muted); margin-right: auto; }
   .answer .chosen { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong, var(--accent)); }
-  .acts { display: flex; justify-content: flex-end; gap: 8px; }
+  .acts { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+  .acts.start { justify-content: flex-start; }
+  .tsq { width: 13px; height: 13px; border: 1.5px solid var(--text-muted); border-radius: 4px; flex: none; margin-top: 5px; box-sizing: border-box; }
+  .tsq.small { width: 10px; height: 10px; margin: 0; border-radius: 3px; }
+  .tsq.checked { background: var(--text-faint); border-color: var(--text-faint); }
+  .linked ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; min-width: 0; }
+  .lk { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; color: var(--accent); overflow-wrap: anywhere; border-radius: var(--radius-sm); }
+  .lk:hover { text-decoration: underline; }
+  .lk:focus-visible { outline: 2px solid var(--accent); }
+  .lk.done { color: var(--text-muted); text-decoration: line-through; }
 </style>

@@ -200,6 +200,14 @@ export function convertInline(text: string, target: "typst" | "html"): string {
       const end = text.indexOf(fence, i + ticks);
       if (end !== -1) {
         const code = text.slice(i + ticks, end);
+        // a raw span (`…`{=typst}, the equation labels and links): kept as is for its own format, dropped for
+        // another, as pandoc does
+        const raw = /^\{=(\w+)\}/.exec(text.slice(end + ticks));
+        if (raw) {
+          if (raw[1] === target) out += code;
+          i = end + ticks + raw[0].length;
+          continue;
+        }
         out += target === "typst" ? `${fence}${code}${fence}` : `<code>${escapeHtml(code)}</code>`;
         i = end + ticks;
         continue;
@@ -400,20 +408,23 @@ export function markdownToTypst(md: string, opts: Options & { typstPreambleText?
 
     // Display math `$$ ... $$`
     if (line.trim().startsWith("$$")) {
-      const single = /^\$\$(.+)\$\$$/.exec(line.trim());
+      // what follows the closing `$$` on its line (an equation's label, `<eq-n>`{=typst}) stays right after it
+      const single = /^\$\$(.+?)\$\$(.*)$/.exec(line.trim());
       if (single) {
-        out.push(`$\n  ${latexMathToTypst(single[1])}\n$`);
+        out.push(`$\n  ${latexMathToTypst(single[1])}\n$` + convertInline(single[2].trim(), "typst"));
         i++;
         continue;
       }
       const mathLines: string[] = [line.trim().slice(2)];
       i++;
       while (i < lines.length && !lines[i].includes("$$")) mathLines.push(lines[i++]);
+      let after = "";
       if (i < lines.length) {
         const tail = lines[i++];
         mathLines.push(tail.slice(0, tail.indexOf("$$")));
+        after = tail.slice(tail.indexOf("$$") + 2).trim();
       }
-      out.push(`$\n  ${latexMathToTypst(mathLines.join("\n"))}\n$`);
+      out.push(`$\n  ${latexMathToTypst(mathLines.join("\n"))}\n$` + convertInline(after, "typst"));
       continue;
     }
 

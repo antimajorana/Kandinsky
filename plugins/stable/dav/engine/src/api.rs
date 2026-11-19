@@ -4,12 +4,14 @@ use crate::caldav::{as_dir, Client, Existing};
 use crate::remote::Remote;
 use crate::conf::{self, Card, Sub};
 use crate::edit::{self, Change, Scope};
+use crate::event_note::{self, Snapshot};
 use crate::ics::{self, Event, When};
 use crate::invite;
 use crate::pull;
 use crate::push;
 use crate::quick;
 use crate::recur::{self, Instance, Range};
+use crate::remind;
 use crate::store::{Kind, Object, Source, Store};
 use crate::sync::{self, Scope as SyncScope};
 use crate::uid;
@@ -43,6 +45,7 @@ pub fn table() -> Vec<(&'static str, Method)> {
         ("test_account", test_account),
         ("migrate", migrate),
         ("events", events),
+        ("deadlines", deadlines),
         ("add_event", add_event),
         ("remove_event", remove_event),
         ("sync", sync_method),
@@ -64,6 +67,14 @@ pub fn table() -> Vec<(&'static str, Method)> {
         ("invite_status", invite_status),
         ("contacts", contacts),
         ("agenda", agenda),
+        // the core's planned notices: events' alerts (remind.rs)
+        ("reminders", reminders),
+        // event notes and links (event_note.rs, DESIGN-calendar-tasks-nudges §2)
+        ("event", event_get),
+        ("event_note", event_note_method),
+        ("link_event", link_event),
+        ("time_block", time_block),
+        ("move_tasks", move_tasks),
     ]
 }
 
@@ -143,10 +154,14 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
-/// Tells the page (when serving) that the cache changed.
+/// Tells the page (when serving) that the cache changed; the event notes follow their events.
 fn changed() {
+    let moved = notes_round();
     if conf::serving() {
         kandinsky_plugin::event("changed", json!({}));
+        if !moved.is_empty() {
+            kandinsky_plugin::event("moved", json!({ "moved": moved }));
+        }
     }
 }
 
@@ -1027,6 +1042,44 @@ fn agenda(p: Value) -> Res {
     Ok(json!({ "from": today.to_string(), "to": to.to_string(), "tz": user.name(), "events": evs }))
 }
 
+/// The coming reminders of the visible calendars (remind.rs) as the core's planned notices: the scheduled tool's
+/// answer replaces the plugin's plan, and the core asks again just before one rings, so a moved or deleted event
+/// moves or drops it. Subscriptions are left out: their alerts are the publisher's, not the user's.
+fn reminders(p: Value) -> Res {
+    let s = conf::settings(&p);
+    if s["reminders"].as_bool() == Some(false) {
+        return Ok(json!({ "summary": "reminders are off in Settings", "planned": [] }));
+    }
+    fresh_enough(&p);
+    let user = conf::user_zone(&p);
+    let now = Utc::now();
+    let horizon = Duration::hours(p["hours"].as_i64().unwrap_or(remind::HORIZON_HOURS).clamp(1, 24 * 14));
+    let twelve = conf::text(&s, "time_format") == "12h";
+    let setting = remind::setting(&s["default_alert"]);
+    let srcs: Vec<Source> = visible(&s).into_iter().filter(|x| x.kind == Kind::Caldav).collect();
+    let ids: Vec<String> = srcs.iter().map(|x| x.id.clone()).collect();
+    let from = (now - remind::LATE - Duration::days(2)).timestamp();
+    let to = (now + horizon + Duration::days(8)).timestamp();
+    let mut rings: Vec<(remind::Ring, String)> = Vec::new();
+    for o in engine().store.in_range(&ids, from, to) {
+        let Some(src) = srcs.iter().find(|x| x.id == o.source) else { continue };
+        let Some(cal) = ics::parse(&o.ics).ok().and_then(|c| c.into_iter().find(|c| c.name == "VCALENDAR")) else { continue };
+        let defaults = remind::Defaults::of(src.alarm.as_deref(), src.alarm_day.as_deref(), setting, &user);
+        rings.extend(remind::coming(&cal, &user, now, horizon, &defaults).into_iter().map(|r| (r, src.name.clone())));
+    }
+    rings.sort_by(|a, b| (a.0.at, a.0.id()).cmp(&(b.0.at, b.0.id())));
+    let planned: Vec<Value> = rings
+        .iter()
+        .map(|(r, cal)| {
+            let mut v = remind::planned(r, &user, twelve);
+            v["calendar"] = json!(cal);
+            v
+        })
+        .collect();
+    let next = rings.first().map(|(r, _)| format!(", next at {}", user.rfc3339(r.at))).unwrap_or_default();
+    Ok(json!({ "summary": format!("{} reminders in the next {} h{next}", planned.len(), horizon.num_hours()), "planned": planned }))
+}
+
 // ----- the first tools
 
 /// Every account's calendars from the cache (read first when stale): ids to pass as `calendar`, which take new
@@ -1179,6 +1232,37 @@ fn events(p: Value) -> Res {
     Ok(json!({ "from": from.to_string(), "to": to.to_string(), "tz": user.name(), "events": evs }))
 }
 
+/// The deadline calendars among `all`, each named the way the other tools take a calendar (`find_source`); a name that
+/// finds none or several is passed over, never guessed.
+fn deadline_sources(s: &Value, all: &[Source]) -> Vec<Source> {
+    let mut out: Vec<Source> = Vec::new();
+    for want in conf::deadline_calendars(s) {
+        if let Ok(Some(x)) = find_source(&want, all) {
+            if !out.iter().any(|o| o.id == x.id) {
+                out.push(x);
+            }
+        }
+    }
+    out
+}
+
+/// The events of the deadline calendars between two days (default: today to 90 days on), from the cache only: no
+/// server is asked and no secret read, so the core's `from: deadlines` view (Home's box, the Deadlines page) stays as
+/// fast as a file read. The background sync keeps the cache fresh. No calendar marked: no events.
+fn deadlines(p: Value) -> Res {
+    let s = conf::settings(&p);
+    let user = conf::user_zone(&p);
+    let today = user.wall(Utc::now()).date();
+    let from = day_param(&p, "from", today)?;
+    let to = day_param(&p, "to", from + Duration::days(90))?;
+    if to < from {
+        return Err(error("to: is before from:"));
+    }
+    let srcs = deadline_sources(&s, &engine().store.sources());
+    let evs = if srcs.is_empty() { Vec::new() } else { instances(&srcs, &s, Range::days(from, to, &user), &user) };
+    Ok(json!({ "from": from.to_string(), "to": to.to_string(), "tz": user.name(), "events": evs }))
+}
+
 fn add_event(p: Value) -> Res {
     let title = param(&p, "title").ok_or_else(|| error("title: required"))?.to_string();
     let raw_start = param(&p, "start").or(param(&p, "date")).ok_or_else(|| error("start: required (2026-11-03, or 2026-11-03T14:00)"))?;
@@ -1287,13 +1371,216 @@ fn sync_method(p: Value) -> Res {
     Ok(json!({ "summary": summary, "calendar": dst.id, "events": reports, "skipped": scan.skipped, "problems": scan.problems }))
 }
 
+// ----- event notes and links (event_note.rs, DESIGN-calendar-tasks-nudges §2)
+
+/// After the cache changed: every event note follows its event (event_note::round); the ones that moved are answered.
+fn notes_round() -> Vec<event_note::Moved> {
+    // the event notes are generated files: written by the one core that runs the vault's schedules
+    // (`[automation] schedules_on`), so two computers never write the same notes for sync to copy
+    if !schedules_here() {
+        return Vec::new();
+    }
+    let p = json!({});
+    let Some(s) = conf::read_settings(&p) else { return Vec::new() };
+    let root = conf::vault_root();
+    let folder = event_note::folder(&s);
+    if !root.join(&folder).is_dir() {
+        return Vec::new();
+    }
+    event_note::round(&engine().store, &root, &folder, &conf::user_zone(&p), &|path, text| {
+        if let Err(e) = kandinsky_plugin::write_file(root.join(path), text.as_bytes()) {
+            eprintln!("dav: {path}: not written ({e})");
+        }
+    })
+}
+
+/// Whether this core runs the vault's schedules (`GET /api/device`); a helper not served by Kandinsky (a test, a run by
+/// hand) is the only writer there is.
+fn schedules_here() -> bool {
+    if !conf::serving() {
+        return true;
+    }
+    kandinsky_plugin::Kandinsky::new().get("/api/device").map_or(true, |d| d["schedules"].as_bool() != Some(false))
+}
+
+/// The day a call names (`start`, as the pane or the note has it), else today: where the occurrence is looked for.
+fn around(p: &Value, user: &Zone) -> NaiveDate {
+    param(p, "start").and_then(|s| NaiveDate::parse_from_str(s.get(..10)?, "%Y-%m-%d").ok()).unwrap_or_else(|| user.wall(Utc::now()).date())
+}
+
+/// `x` as a wikilink: `[[x]]` unless it is one already.
+fn as_link(x: &str) -> String {
+    let x = x.trim();
+    if x.starts_with("[[") { x.to_string() } else { format!("[[{}]]", x.trim_end_matches(".md")) }
+}
+
+/// The event's CalDAV object tied to its note (`edit::tie_note`); false when there was nothing to change.
+fn tie(p: &Value, s: &Value, src: &Source, uid: &str, note: &str, links: &[String]) -> kandinsky_plugin::Result<bool> {
+    let Some(o) = engine().store.by_uid(uid).into_iter().find(|o| o.source == src.id) else { return Ok(false) };
+    let now = Utc::now();
+    if edit::tie_note(&o.ics, uid, note, links, now).map_err(error)?.is_none() {
+        return Ok(false);
+    }
+    let (_, c) = client_for(s, p, &src.id)?;
+    // on the server's newer version when it had one; that one already tied: written back as it is
+    edit_object(&c, &src.id, &o.href, |text| Ok(edit::Written { object: Some(edit::tie_note(text, uid, note, links, now)?.unwrap_or_else(|| text.to_string())), split: None }))?;
+    Ok(true)
+}
+
+/// An event's note, made the first time (`uid`, `rid` for one occurrence's), `add` put in its `links:`; the CalDAV
+/// event tied to it when its calendar may be written. Answers the note's path, whether it was made, its links.
+fn ensure_note(p: &Value, add: &[String]) -> Res {
+    let s = conf::settings(p);
+    let user = conf::user_zone(p);
+    let uid = param(p, "uid").ok_or_else(|| error("uid: required"))?;
+    let rid = param(p, "rid");
+    let (root, folder) = (conf::vault_root(), event_note::folder(&s));
+    let found = event_note::instance_of(&engine().store, uid, rid, around(p, &user), &user);
+    let (path, mut text, made) = match event_note::find(&root, &folder, uid, rid) {
+        Some((path, text)) => (path, text, false),
+        None => {
+            let (i, src) = found.as_ref().ok_or_else(|| error("the event is not in the calendar's cache (sync the calendar first)"))?;
+            let snap = Snapshot::of(i, &src.id, rid);
+            (event_note::free_path(&root, &folder, &snap), event_note::render(&snap, &[]), true)
+        }
+    };
+    let mut dirty = made;
+    for l in add {
+        if let Some(t) = event_note::add_link(&text, l) {
+            text = t;
+            dirty = true;
+        }
+    }
+    if dirty {
+        kandinsky_plugin::write_file(root.join(&path), text.as_bytes()).map_err(fail)?;
+        eprintln!("dav: event note {path}: {}", if made { "made" } else { "linked" });
+    }
+    let links = event_note::links(&text);
+    let tied = match &found {
+        Some((_, src)) if src.writable && src.kind == Kind::Caldav => tie(p, &s, src, uid, &path, &links),
+        _ => Ok(false),
+    };
+    if tied.as_ref().is_ok_and(|t| *t) {
+        changed();
+    }
+    let why = tied.as_ref().err().map(|e| e.to_string());
+    Ok(json!({ "note": path, "made": made, "links": links, "tied": tied.unwrap_or(false), "why": why }))
+}
+
+/// "Note" on an event's card: its note, made on demand (`uid`, `rid`, `start`), with `links` added when given.
+fn event_note_method(p: Value) -> Res {
+    let add: Vec<String> = p["links"].as_array().map(|a| a.iter().filter_map(Value::as_str).map(as_link).collect()).unwrap_or_default();
+    ensure_note(&p, &add)
+}
+
+/// "Link to event…": `link` (a note's path or a `[[wikilink]]`) put in the event's note's `links:`, the note made first.
+fn link_event(p: Value) -> Res {
+    let link = param(&p, "link").map(as_link).ok_or_else(|| error("link: required (a note's path or [[link]])"))?;
+    ensure_note(&p, &[link])
+}
+
+/// One event as its note's block and its card show it (`uid`, `rid`, `start`): the occurrence from the cache with its
+/// calendar, its note (path, links) when it has one, and that note's backlinks (asked of Kandinsky when serving).
+fn event_get(p: Value) -> Res {
+    let s = conf::settings(&p);
+    let user = conf::user_zone(&p);
+    let uid = param(&p, "uid").ok_or_else(|| error("uid: required"))?;
+    let rid = param(&p, "rid");
+    let root = conf::vault_root();
+    let note = event_note::find(&root, &event_note::folder(&s), uid, rid);
+    let backlinks = match (&note, conf::serving()) {
+        (Some((path, _)), true) => kandinsky_plugin::Kandinsky::new().get(&format!("/api/backlinks?path={}", url::form_urlencoded::byte_serialize(path.as_bytes()).collect::<String>())).unwrap_or(Value::Null),
+        _ => Value::Null,
+    };
+    let note = note.map(|(path, text)| {
+        let links: Vec<event_note::Linked> = event_note::links(&text).iter().map(|l| event_note::resolve(&root, l)).collect();
+        json!({ "path": path, "links": links, "cancelled": event_note::written(&text).cancelled })
+    });
+    let Some((i, src)) = event_note::instance_of(&engine().store, uid, rid, around(&p, &user), &user) else {
+        return Ok(json!({ "event": null, "note": note, "backlinks": backlinks }));
+    };
+    let answer = exchange_user(&s, &src).and_then(|m| invited_answer(&i, &m));
+    let href = engine().store.by_uid(uid).into_iter().find(|o| o.source == src.id).map(|o| o.href).unwrap_or_default();
+    let shown = Shown { i, calendar: src.id.clone(), calendar_name: src.name.clone(), color: color_of(&s, &src), href, writable: src.writable, answer };
+    Ok(json!({ "event": shown, "note": note, "backlinks": backlinks }))
+}
+
+/// Time-block a task (DESIGN-calendar-tasks-nudges §2.3), in one action: the task given a block id (the core's
+/// `POST /api/task/block`), an event in the chosen slot (`summary`, `start`, `end`, `calendar`) tied to a new note whose
+/// `links:` is the task, and the task's line given `⏳ <day>` and a link to that note in its description (the core's one
+/// task writer, `POST /api/task/schedule`). `task`: `{ path, line, text, block? }` as Kandinsky lists tasks.
+fn time_block(p: Value) -> Res {
+    let s = conf::settings(&p);
+    let user = conf::user_zone(&p);
+    let task = &p["task"];
+    let tpath = task["path"].as_str().filter(|x| !x.is_empty()).ok_or_else(|| error("task: required ({ path, line, text })"))?.to_string();
+    let kandinsky = kandinsky_plugin::Kandinsky::new();
+    let block = kandinsky.post("/api/task/block", task)?["block"].as_str().map(str::to_string).ok_or_else(|| error("the task is no longer there (moved or edited?)"))?;
+    let link = format!("[[{}#^{block}]]", tpath.trim_end_matches(".md"));
+    let (dst, c) = target(&p, &s)?;
+    let mut ch = change_for(&p, &s, &dst);
+    if ch.summary.as_deref().is_none_or(|t| t.trim().is_empty()) {
+        ch.summary = param(&p, "title").map(str::to_string);
+    }
+    let now = Utc::now();
+    let uid = uid::derive(&format!("kandinsky-calendar:{}", now.timestamp_nanos_opt().unwrap_or_default()), ch.summary.as_deref().unwrap_or(""));
+    let text = edit::create(&uid, &ch, &user, now).map_err(error)?;
+    let day = ch.start.as_deref().and_then(|x| NaiveDate::parse_from_str(x.get(..10)?, "%Y-%m-%d").ok()).ok_or_else(|| error("start: required (2026-11-17T14:00)"))?;
+    let i = event_note::occurrence(&text, &uid, None, day, &user).ok_or_else(|| error("the new event could not be read back"))?;
+    let snap = Snapshot::of(&i, &dst.id, None);
+    let (root, folder) = (conf::vault_root(), event_note::folder(&s));
+    let note = event_note::free_path(&root, &folder, &snap);
+    let text = edit::tie_note(&text, &uid, &note, std::slice::from_ref(&link), now).map_err(error)?.unwrap_or(text);
+    let href = dir_of(&dst)?.join(&uid::resource_name(&uid)).map_err(fail)?;
+    let etag = c.write(&href, &text, None).map_err(fail)?;
+    let _ = engine().store.put(&dst.id, href.as_str(), etag.as_deref(), &text);
+    let undo = remember(vec![Step { source: dst.id.clone(), href: href.to_string(), before: None }]);
+    kandinsky_plugin::write_file(root.join(&note), event_note::render(&snap, std::slice::from_ref(&link)).as_bytes()).map_err(fail)?;
+    let label = event_note::slot_label(&snap, conf::text(&s, "time_format") == "12h");
+    let at = json!({ "path": tpath, "line": task["line"].as_u64().unwrap_or(0), "text": task["text"], "block": block });
+    let line = kandinsky.post("/api/task/schedule", &json!({ "task": at, "scheduled": &snap.start[..10], "link": { "target": note, "label": label } }))?;
+    eprintln!("dav: time-blocked {link} into \"{}\" ({}) in {}", snap.title, snap.start, dst.id);
+    changed();
+    Ok(json!({ "uid": uid, "href": href.as_str(), "calendar": dst.id, "note": note, "block": block, "line": line["line"], "undo": undo, "start": snap.start, "label": label }))
+}
+
+/// "Move ⏳" after an event moved (the page offers it, the user presses it): every task its note links to by a block
+/// id gets ⏳ the event's new day and its link relabelled (the core's `POST /api/task/schedule`). `note`: the event
+/// note's path.
+fn move_tasks(p: Value) -> Res {
+    let s = conf::settings(&p);
+    let root = conf::vault_root();
+    let note = param(&p, "note").ok_or_else(|| error("note: required"))?;
+    let text = std::fs::read_to_string(root.join(note)).map_err(|e| error(format!("{note}: {e}")))?;
+    let snap = event_note::written(&text);
+    let day = snap.day().ok_or_else(|| error("the note has no start"))?;
+    let snap = Snapshot { title: String::new(), ..snap };
+    let label = event_note::slot_label(&snap, conf::text(&s, "time_format") == "12h");
+    let kandinsky = kandinsky_plugin::Kandinsky::new();
+    let mut moved = 0;
+    let mut failed = Vec::new();
+    for l in event_note::links(&text) {
+        let r = event_note::resolve(&root, &l);
+        let Some(block) = l.split("#^").nth(1).map(|b| b.trim_end_matches("]]").split('|').next().unwrap_or_default().to_string()) else { continue };
+        if r.task.as_deref() != Some(" ") {
+            continue; // done, or not a task: left alone
+        }
+        let task = json!({ "path": r.path, "line": r.line.unwrap_or(0), "block": block });
+        match kandinsky.post("/api/task/schedule", &json!({ "task": task, "scheduled": day.to_string(), "link": { "target": note, "label": label } })) {
+            Ok(_) => moved += 1,
+            Err(e) => failed.push(format!("{}: {e}", r.title)),
+        }
+    }
+    Ok(json!({ "moved": moved, "failed": failed, "day": day.to_string(), "label": label }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn cal(account: &str, path: &str, name: &str, writable: bool) -> Source {
         let url = format!("https://{account}.example/dav/{path}/");
-        Source { id: crate::store::calendar_id(account, &url, &[&url]), kind: Kind::Caldav, account: Some(account.into()), url, name: name.into(), color: None, writable, ctag: None, token: None, synced: 0, error: None }
+        Source { id: crate::store::calendar_id(account, &url, &[&url]), kind: Kind::Caldav, account: Some(account.into()), url, name: name.into(), color: None, writable, ctag: None, token: None, synced: 0, error: None, alarm: None, alarm_day: None }
     }
 
     #[test]
@@ -1327,6 +1614,15 @@ mod tests {
         assert_eq!(id("nope"), None);
         let both = find_source("personal", &list).unwrap_err();
         assert!(both.contains("home/personal") && both.contains("work/personal"), "{both}");
+    }
+
+    #[test]
+    fn deadline_calendars_are_the_ones_settings_name_by_id_or_unique_name() {
+        let list = vec![cal("home", "personal", "Personal", true), cal("work", "personal", "Personal", true), cal("work", "deadlines", "Deadlines", false)];
+        let ids = |s: Value| deadline_sources(&s, &list).into_iter().map(|x| x.id).collect::<Vec<_>>();
+        assert_eq!(ids(json!({})), Vec::<String>::new(), "none marked: no events");
+        assert_eq!(ids(json!({ "deadline_calendars": ["deadlines", "home/personal", "Deadlines"] })), ["work/deadlines", "home/personal"], "a name or an id, each once");
+        assert_eq!(ids(json!({ "deadline_calendars": ["personal", "nope", " "] })), Vec::<String>::new(), "a name two calendars share, or none has, is passed over");
     }
 
     #[test]
