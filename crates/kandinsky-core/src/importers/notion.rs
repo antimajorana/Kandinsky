@@ -773,7 +773,7 @@ mod tests {
         assert_eq!(rep.bases_created, 1);
         assert_eq!(rep.notes_created, 3); // Roadmap.md + 2 CSV rows (companion merged, not duplicated!)
         assert_eq!(rep.attachments_saved, 1);
-        assert!(d.path().join("zAttachments/diagram.png").is_file());
+        assert!(d.path().join("attachments/diagram.png").is_file());
 
         let roadmap = std::fs::read_to_string(d.path().join("Imported/Roadmap.md")).unwrap();
         assert!(roadmap.contains("[[Write spec|Task Spec]]"), "{roadmap}");

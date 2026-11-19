@@ -212,6 +212,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     keywords: ["thm", "theorem", "lemma", "proposition", "corollary", "tip", "callout"],
     template: "> [!TIP] Theorem\n> \0",
     isCallout: true,
+    developerOnly: true,
   },
   {
     id: "callout-proof",
@@ -222,6 +223,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     keywords: ["proof", "pf", "note", "def", "definition", "result", "verified", "callout"],
     template: "> [!NOTE] Proof\n> \0",
     isCallout: true,
+    developerOnly: true,
   },
   {
     id: "subpage-link",
@@ -939,7 +941,7 @@ const slashMenuTheme = EditorView.baseTheme({
     background: "var(--bg-elev)",
     border: "1px solid var(--border-strong)",
     borderRadius: "var(--radius, 8px)",
-    boxShadow: "0 10px 30px rgba(0, 0, 0, 0.24), 0 2px 8px rgba(0, 0, 0, 0.12)",
+    boxShadow: "var(--shadow-lg)",
     padding: "4px",
     fontFamily: "var(--font-ui, sans-serif)",
     color: "var(--text)",

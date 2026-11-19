@@ -484,295 +484,7 @@
 		};
 	}
 	//#endregion
-	//#region plugins/beta/export/helper/helper.ts
-	const FORMATS = [
-		"pdf-typst",
-		"pdf-latex",
-		"tex",
-		"typ",
-		"html",
-		"docx"
-	];
-	const EXT = {
-		"pdf-typst": "pdf",
-		"pdf-latex": "pdf",
-		tex: "tex",
-		typ: "typ",
-		html: "html",
-		docx: "docx"
-	};
-	const ENGINES = {
-		lualatex: "-lualatex",
-		xelatex: "-xelatex",
-		pdflatex: "-pdf"
-	};
-	const MARGINS = {
-		narrow: "1.5cm",
-		normal: "2.4cm",
-		wide: "3.2cm"
-	};
-	/** The citation styles offered, in each road's own names. */
-	const STYLES = {
-		numeric: {
-			biblatex: "numeric-comp",
-			typst: "ieee"
-		},
-		"author-year": {
-			biblatex: "authoryear",
-			typst: "chicago-author-date"
-		},
-		alphabetic: {
-			biblatex: "alphabetic",
-			typst: "alphanumeric"
-		},
-		physics: {
-			biblatex: "phys",
-			typst: "american-physics-society"
-		}
-	};
-	const CACHE = ".kandinsky/cache/plugins/export";
-	/** Where the dialog leaves a ```tikz picture drawn by the page's TeX (`kandinsky.tikz.png`), by its key. */
-	const tikzPng = (key) => `${CACHE}/figures/${key}.png`;
-	/** A fence's key: the hash of its source, the same for the dialog (from `describe`) and the road. */
-	const keyOf = (source) => kandinsky.hash.sha256(source).slice(0, 16);
-	const PLUGIN = ".kandinsky/plugins/export";
-	/** The LaTeX road's layouts: `plain` is pandoc's article; `article` a KOMA article set for reading (microtype, a
-	*  little more leading, dark-coloured links, paragraphs spaced, not indented); `chapter` a KOMA report whose top
-	*  headings are chapters, numbered, with a table of contents. */
-	const LAYOUTS = {
-		plain: {
-			meta: {},
-			header: [],
-			args: []
-		},
-		article: {
-			meta: {
-				documentclass: "scrartcl",
-				classoption: ["parskip=half"],
-				linestretch: 1.1,
-				linkcolor: "blue!40!black",
-				urlcolor: "blue!40!black",
-				citecolor: "green!30!black"
-			},
-			header: ["\\usepackage{microtype}", "\\addtokomafont{disposition}{\\rmfamily}"],
-			args: []
-		},
-		chapter: {
-			meta: {
-				documentclass: "scrreprt",
-				classoption: ["parskip=half", "open=any"],
-				linestretch: 1.1,
-				numbersections: true,
-				toc: true,
-				"toc-depth": 2,
-				linkcolor: "blue!40!black",
-				urlcolor: "blue!40!black",
-				citecolor: "green!30!black"
-			},
-			header: ["\\usepackage{microtype}", "\\addtokomafont{disposition}{\\rmfamily}"],
-			args: ["--top-level-division=chapter"]
-		}
-	};
-	const layoutOf = (o) => LAYOUTS[o.layout ?? "plain"] ?? LAYOUTS.plain;
-	const progress = (stage, text) => kandinsky.event("progress", {
-		stage,
-		text
-	});
-	/** Runs a program the manifest names; its output, or why not (with its last error lines). */
-	async function run(program, args, opts = {}) {
-		return await kandinsky.exec(program, args, {
-			...opts,
-			timeout: opts.timeout ?? 120
-		}).catch((e) => {
-			throw new Error(/not installed/.test(e.message) ? `${program} is not installed on the machine running Kandinsky` : e.message);
-		});
-	}
-	/** Whether an external CLI tool is available on PATH. */
-	async function hasProgram(program, flag) {
-		return run(program, [flag], { timeout: 20 }).then((r) => r.status === 0, () => false);
-	}
-	const PANDOC_HINT = "Requires Pandoc 3.0+ (https://pandoc.org/installing.html)";
-	/** Which formats work here: PDF (Typst), Typst source, and Standalone HTML work without Pandoc. */
-	async function formats() {
-		const [pandoc, latexmk] = await Promise.all([hasProgram("pandoc", "--version"), hasProgram("latexmk", "-v")]);
-		return [
-			{
-				id: "pdf-typst",
-				label: "PDF (Typst)",
-				ok: true
-			},
-			{
-				id: "pdf-latex",
-				label: "PDF (LaTeX)",
-				ok: pandoc && latexmk,
-				...pandoc && latexmk ? {} : { needs: pandoc ? "latexmk (a TeX distribution)" : PANDOC_HINT }
-			},
-			{
-				id: "tex",
-				label: "LaTeX source (.tex)",
-				ok: pandoc,
-				...pandoc ? {} : { needs: PANDOC_HINT }
-			},
-			{
-				id: "typ",
-				label: "Typst source (.typ)",
-				ok: true
-			},
-			{
-				id: "html",
-				label: "Standalone HTML",
-				ok: true
-			},
-			{
-				id: "docx",
-				label: "Word (.docx)",
-				ok: pandoc,
-				...pandoc ? {} : { needs: PANDOC_HINT }
-			}
-		];
-	}
-	/** The .bib the citations come from: the setting's, else refs/refs.bib, else the first at the top or in refs/. */
-	function findBib(files, setting) {
-		const s = setting.trim().replace(/^\/+/, "");
-		if (s) return files.includes(s) ? s : null;
-		const bibs = files.filter((f) => f.endsWith(".bib")).sort();
-		return bibs.find((f) => f === "refs/refs.bib") ?? bibs.find((f) => !f.includes("/")) ?? bibs.find((f) => /^refs\/[^/]+$/.test(f)) ?? null;
-	}
-	async function prepare(params, preview) {
-		const rel = String(params.path ?? "").trim().replace(/^\/+/, "");
-		if (!/\.md$/i.test(rel)) throw new Error(`not a note: ${rel}`);
-		const o = {
-			...params.settings ?? {},
-			...params.options ?? {}
-		};
-		const folder = String(o.folder ?? "exports").trim().replace(/^\/+|\/+$/g, "") || "exports";
-		const outDir = [preview ? `${CACHE}/preview` : folder, dirname(rel)].filter(Boolean).join("/");
-		const files = await kandinsky.files();
-		const bib = findBib(files, String(o.bibliography ?? ""));
-		const keys = bib ? bibKeys(await kandinsky.read(bib)) : /* @__PURE__ */ new Set();
-		progress("translate", `reading ${rel}`);
-		const t = await translate({
-			files,
-			read: (p) => kandinsky.read(p)
-		}, rel, outDir, keys);
-		if (t.cited.length && !bib) t.warnings.push("papers are cited but no .bib was found (the Bibliography option)");
-		const stem = rel.slice(rel.lastIndexOf("/") + 1).replace(/\.md$/i, "");
-		const figures = {};
-		for (const [k, w] of Object.entries(params.figures ?? {})) if (/^[0-9a-f]{16}$/.test(k) && Number(w) > 0) figures[k] = Number(w);
-		return {
-			rel,
-			outDir,
-			stem,
-			o,
-			files,
-			bib,
-			t,
-			figures
-		};
-	}
-	/** The pandoc metadata block every road starts from: the title block, the page, the bibliography. */
-	function metadata(j, road, header) {
-		const { o, t } = j;
-		const m = { ...t.meta };
-		for (const k of [
-			"title",
-			"subtitle",
-			"author",
-			"date"
-		]) if (o[k] !== void 0) m[k] = o[k] || void 0;
-		m.lang = o.lang || "en";
-		if (o.font) m.mainfont = o.font;
-		const margin = MARGINS[o.margins ?? "normal"] ?? MARGINS.normal;
-		const paper = o.paper === "letter" ? "letter" : "a4";
-		if (road === "latex") {
-			Object.assign(m, {
-				papersize: paper,
-				fontsize: o.fontsize || "11pt",
-				geometry: `margin=${margin}`,
-				colorlinks: true
-			}, layoutOf(o).meta);
-			if (Number(o.columns) === 2) m.classoption = [...m.classoption ?? [], "twocolumn"];
-		} else if (road === "typst") {
-			m.mainfont ??= "Libertinus Serif";
-			Object.assign(m, {
-				papersize: paper === "letter" ? "us-letter" : "a4",
-				fontsize: o.fontsize || "11pt",
-				margin: {
-					x: margin,
-					y: margin
-				},
-				columns: Number(o.columns) === 2 ? 2 : 1,
-				"page-numbering": "1"
-			});
-		}
-		if (o.toc) Object.assign(m, {
-			toc: true,
-			"toc-depth": 3
-		});
-		if (o.numbered) m[road === "typst" ? "section-numbering" : "numbersections"] = road === "typst" ? "1.1" : true;
-		if (j.bib && t.cited.length) {
-			m.bibliography = road === "docx" ? j.bib : relative(j.outDir, j.bib);
-			const style = STYLES[o.style ?? "numeric"] ?? STYLES.numeric;
-			if (road === "latex") m["biblio-style"] = style.biblatex;
-			if (road === "typst") m.bibliographystyle = style.typst;
-		}
-		if (header.length) m["header-includes"] = header;
-		return `---\n${Object.entries(m).filter(([, v]) => v !== void 0).map(([k, v]) => yamlEntry(k, v)).join("\n")}\n---\n\n${road === "latex" ? "" : `${macroDefinitions("newcommand")}\n\n`}`;
-	}
-	/** One metadata line. JSON is YAML (every value quoted as it is), except text of several lines: pandoc reads a quoted
-	*  scalar as inline Markdown, which turns a ```{=latex} block (the preamble's header-includes) into inline code before
-	*  \begin{document}. Those go as literal block scalars, which pandoc reads as blocks. */
-	function yamlEntry(k, v) {
-		const block = (t, pad) => `|\n${t.split("\n").map((l) => pad + l).join("\n")}`;
-		if (typeof v === "string" && v.includes("\n")) return `${k}: ${block(v, "  ")}`;
-		if (Array.isArray(v) && v.some((x) => typeof x === "string" && x.includes("\n"))) return `${k}:\n${v.map((x) => `- ${typeof x === "string" && x.includes("\n") ? block(x, "    ") : JSON.stringify(x)}`).join("\n")}`;
-		return `${k}: ${JSON.stringify(v)}`;
-	}
-	/** The fences put back for a road: raw source, a compiled picture, or the code with a warning. */
-	async function fences(j, road) {
-		const out = [];
-		for (const [i, f] of j.t.fences.entries()) if (f.lang === "typst" && road === "typst") out[i] = "```{=typst}\n" + f.source + "\n```";
-		else if (f.lang === "tikz" && road === "latex") out[i] = "```tikz\n" + f.source + "\n```";
-		else if (f.lang === "typst" && road === "latex") {
-			const pdf = `${CACHE}/figures/${keyOf(f.source)}.pdf`;
-			kandinsky.convert.typstPdf(`${dirname(j.rel) || "."}/.fence.typ`, pdf, {
-				source: f.source,
-				fence: true
-			});
-			out[i] = `![](<${relative(j.outDir, pdf)}>)`;
-		} else if (f.lang === "tikz" && j.figures[keyOf(f.source)]) out[i] = `![](<${relative(j.outDir, tikzPng(keyOf(f.source)))}>){width=${j.figures[keyOf(f.source)].toFixed(1)}pt}`;
-		else {
-			j.t.warnings.push(`a ${f.lang} picture is left as code: ${f.lang === "tikz" ? "the TeX in the page did not draw it" : `${road === "html" ? "HTML" : "Word"} has no Typst`}`);
-			out[i] = "```" + f.lang + "\n" + f.source + "\n```";
-		}
-		const md = (road === "latex" ? j.t.markdown : j.t.markdown.replace(/\\tag\*?\{([^}]*)\}/g, (_, n) => `\\qquad\\text{(${n})}`)).replace(/<!--fence:(\d+)-->/g, (_, n) => out[Number(n)]);
-		return /^# /m.test(md) || !/^## /m.test(md) ? md : md.replace(/^#(#+ )/gm, "$1");
-	}
-	const MD = "markdown+mark-implicit_figures+implicit_figures";
-	async function pandoc(j, to, input, extra = [], output) {
-		progress("pandoc", `writing ${output ?? to}`);
-		const r = await run("pandoc", [
-			"-f",
-			MD,
-			"-t",
-			to,
-			"-s",
-			...extra,
-			...output ? ["-o", output] : []
-		], { stdin: input });
-		if (r.status !== 0) throw new Error(`pandoc failed: ${(r.stderr || r.stdout).trim().slice(-2e3)}`);
-		return r.stdout;
-	}
-	/** The lines LaTeX marks as errors, with the two after each. */
-	function latexErrors(log) {
-		const lines = log.split("\n");
-		const picked = lines.flatMap((l, i) => l.startsWith("!") || /^\S+\.tex:\d+:/.test(l) ? [i] : []);
-		return [...new Set(picked.flatMap((i) => [
-			i,
-			i + 1,
-			i + 2
-		].filter((k) => k < lines.length)))].sort((a, b) => a - b).map((k) => lines[k]).join("\n").slice(-3e3) || lines.slice(-30).join("\n");
-	}
+	//#region plugins/beta/export/helper/md_typst.ts
 	const escapeTypstText = (s) => s.replace(/([\\#*_$@<>\[\]])/g, "\\$1");
 	const escapeTypstString = (s) => s.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
 	const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -1234,6 +946,8 @@
 		}
 		return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
 	}
+	//#endregion
+	//#region plugins/beta/export/helper/md_html.ts
 	/** Direct Markdown -> standalone self-contained HTML5 converter. */
 	function markdownToHtml(md, opts = {}) {
 		const [fm, rawBody] = splitFrontmatter(md);
@@ -1434,6 +1148,296 @@ ${blocks.join("\n")}
 </html>
 `;
 	}
+	//#endregion
+	//#region plugins/beta/export/helper/helper.ts
+	const FORMATS = [
+		"pdf-typst",
+		"pdf-latex",
+		"tex",
+		"typ",
+		"html",
+		"docx"
+	];
+	const EXT = {
+		"pdf-typst": "pdf",
+		"pdf-latex": "pdf",
+		tex: "tex",
+		typ: "typ",
+		html: "html",
+		docx: "docx"
+	};
+	const ENGINES = {
+		lualatex: "-lualatex",
+		xelatex: "-xelatex",
+		pdflatex: "-pdf"
+	};
+	const MARGINS = {
+		narrow: "1.5cm",
+		normal: "2.4cm",
+		wide: "3.2cm"
+	};
+	/** The citation styles offered, in each road's own names. */
+	const STYLES = {
+		numeric: {
+			biblatex: "numeric-comp",
+			typst: "ieee"
+		},
+		"author-year": {
+			biblatex: "authoryear",
+			typst: "chicago-author-date"
+		},
+		alphabetic: {
+			biblatex: "alphabetic",
+			typst: "alphanumeric"
+		},
+		physics: {
+			biblatex: "phys",
+			typst: "american-physics-society"
+		}
+	};
+	const CACHE = ".kandinsky/cache/plugins/export";
+	/** Where the dialog leaves a ```tikz picture drawn by the page's TeX (`kandinsky.tikz.png`), by its key. */
+	const tikzPng = (key) => `${CACHE}/figures/${key}.png`;
+	/** A fence's key: the hash of its source, the same for the dialog (from `describe`) and the road. */
+	const keyOf = (source) => kandinsky.hash.sha256(source).slice(0, 16);
+	const PLUGIN = ".kandinsky/plugins/export";
+	/** The LaTeX road's layouts: `plain` is pandoc's article; `article` a KOMA article set for reading (microtype, a
+	*  little more leading, dark-coloured links, paragraphs spaced, not indented); `chapter` a KOMA report whose top
+	*  headings are chapters, numbered, with a table of contents. */
+	const LAYOUTS = {
+		plain: {
+			meta: {},
+			header: [],
+			args: []
+		},
+		article: {
+			meta: {
+				documentclass: "scrartcl",
+				classoption: ["parskip=half"],
+				linestretch: 1.1,
+				linkcolor: "blue!40!black",
+				urlcolor: "blue!40!black",
+				citecolor: "green!30!black"
+			},
+			header: ["\\usepackage{microtype}", "\\addtokomafont{disposition}{\\rmfamily}"],
+			args: []
+		},
+		chapter: {
+			meta: {
+				documentclass: "scrreprt",
+				classoption: ["parskip=half", "open=any"],
+				linestretch: 1.1,
+				numbersections: true,
+				toc: true,
+				"toc-depth": 2,
+				linkcolor: "blue!40!black",
+				urlcolor: "blue!40!black",
+				citecolor: "green!30!black"
+			},
+			header: ["\\usepackage{microtype}", "\\addtokomafont{disposition}{\\rmfamily}"],
+			args: ["--top-level-division=chapter"]
+		}
+	};
+	const layoutOf = (o) => LAYOUTS[o.layout ?? "plain"] ?? LAYOUTS.plain;
+	const progress = (stage, text) => kandinsky.event("progress", {
+		stage,
+		text
+	});
+	/** Runs a program the manifest names; its output, or why not (with its last error lines). */
+	async function run(program, args, opts = {}) {
+		return await kandinsky.exec(program, args, {
+			...opts,
+			timeout: opts.timeout ?? 120
+		}).catch((e) => {
+			throw new Error(/not installed/.test(e.message) ? `${program} is not installed on the machine running Kandinsky` : e.message);
+		});
+	}
+	/** Whether an external CLI tool is available on PATH. */
+	async function hasProgram(program, flag) {
+		return run(program, [flag], { timeout: 20 }).then((r) => r.status === 0, () => false);
+	}
+	const PANDOC_HINT = "Requires Pandoc 3.0+ (https://pandoc.org/installing.html)";
+	/** Which formats work here: PDF (Typst), Typst source, and Standalone HTML work without Pandoc. */
+	async function formats() {
+		const [pandoc, latexmk] = await Promise.all([hasProgram("pandoc", "--version"), hasProgram("latexmk", "-v")]);
+		return [
+			{
+				id: "pdf-typst",
+				label: "PDF (Typst)",
+				ok: true
+			},
+			{
+				id: "pdf-latex",
+				label: "PDF (LaTeX)",
+				ok: pandoc && latexmk,
+				...pandoc && latexmk ? {} : { needs: pandoc ? "latexmk (a TeX distribution)" : PANDOC_HINT }
+			},
+			{
+				id: "tex",
+				label: "LaTeX source (.tex)",
+				ok: pandoc,
+				...pandoc ? {} : { needs: PANDOC_HINT }
+			},
+			{
+				id: "typ",
+				label: "Typst source (.typ)",
+				ok: true
+			},
+			{
+				id: "html",
+				label: "Standalone HTML",
+				ok: true
+			},
+			{
+				id: "docx",
+				label: "Word (.docx)",
+				ok: pandoc,
+				...pandoc ? {} : { needs: PANDOC_HINT }
+			}
+		];
+	}
+	/** The .bib the citations come from: the setting's, else refs/refs.bib, else the first at the top or in refs/. */
+	function findBib(files, setting) {
+		const s = setting.trim().replace(/^\/+/, "");
+		if (s) return files.includes(s) ? s : null;
+		const bibs = files.filter((f) => f.endsWith(".bib")).sort();
+		return bibs.find((f) => f === "refs/refs.bib") ?? bibs.find((f) => !f.includes("/")) ?? bibs.find((f) => /^refs\/[^/]+$/.test(f)) ?? null;
+	}
+	async function prepare(params, preview) {
+		const rel = String(params.path ?? "").trim().replace(/^\/+/, "");
+		if (!/\.md$/i.test(rel)) throw new Error(`not a note: ${rel}`);
+		const o = {
+			...params.settings ?? {},
+			...params.options ?? {}
+		};
+		const folder = String(o.folder ?? "exports").trim().replace(/^\/+|\/+$/g, "") || "exports";
+		const outDir = [preview ? `${CACHE}/preview` : folder, dirname(rel)].filter(Boolean).join("/");
+		const files = await kandinsky.files();
+		const bib = findBib(files, String(o.bibliography ?? ""));
+		const keys = bib ? bibKeys(await kandinsky.read(bib)) : /* @__PURE__ */ new Set();
+		progress("translate", `reading ${rel}`);
+		const t = await translate({
+			files,
+			read: (p) => kandinsky.read(p)
+		}, rel, outDir, keys);
+		if (t.cited.length && !bib) t.warnings.push("papers are cited but no .bib was found (the Bibliography option)");
+		const stem = rel.slice(rel.lastIndexOf("/") + 1).replace(/\.md$/i, "");
+		const figures = {};
+		for (const [k, w] of Object.entries(params.figures ?? {})) if (/^[0-9a-f]{16}$/.test(k) && Number(w) > 0) figures[k] = Number(w);
+		return {
+			rel,
+			outDir,
+			stem,
+			o,
+			files,
+			bib,
+			t,
+			figures
+		};
+	}
+	/** The pandoc metadata block every road starts from: the title block, the page, the bibliography. */
+	function metadata(j, road, header) {
+		const { o, t } = j;
+		const m = { ...t.meta };
+		for (const k of [
+			"title",
+			"subtitle",
+			"author",
+			"date"
+		]) if (o[k] !== void 0) m[k] = o[k] || void 0;
+		m.lang = o.lang || "en";
+		if (o.font) m.mainfont = o.font;
+		const margin = MARGINS[o.margins ?? "normal"] ?? MARGINS.normal;
+		const paper = o.paper === "letter" ? "letter" : "a4";
+		if (road === "latex") {
+			Object.assign(m, {
+				papersize: paper,
+				fontsize: o.fontsize || "11pt",
+				geometry: `margin=${margin}`,
+				colorlinks: true
+			}, layoutOf(o).meta);
+			if (Number(o.columns) === 2) m.classoption = [...m.classoption ?? [], "twocolumn"];
+		} else if (road === "typst") {
+			m.mainfont ??= "Libertinus Serif";
+			Object.assign(m, {
+				papersize: paper === "letter" ? "us-letter" : "a4",
+				fontsize: o.fontsize || "11pt",
+				margin: {
+					x: margin,
+					y: margin
+				},
+				columns: Number(o.columns) === 2 ? 2 : 1,
+				"page-numbering": "1"
+			});
+		}
+		if (o.toc) Object.assign(m, {
+			toc: true,
+			"toc-depth": 3
+		});
+		if (o.numbered) m[road === "typst" ? "section-numbering" : "numbersections"] = road === "typst" ? "1.1" : true;
+		if (j.bib && t.cited.length) {
+			m.bibliography = road === "docx" ? j.bib : relative(j.outDir, j.bib);
+			const style = STYLES[o.style ?? "numeric"] ?? STYLES.numeric;
+			if (road === "latex") m["biblio-style"] = style.biblatex;
+			if (road === "typst") m.bibliographystyle = style.typst;
+		}
+		if (header.length) m["header-includes"] = header;
+		return `---\n${Object.entries(m).filter(([, v]) => v !== void 0).map(([k, v]) => yamlEntry(k, v)).join("\n")}\n---\n\n${road === "latex" ? "" : `${macroDefinitions("newcommand")}\n\n`}`;
+	}
+	/** One metadata line. JSON is YAML (every value quoted as it is), except text of several lines: pandoc reads a quoted
+	*  scalar as inline Markdown, which turns a ```{=latex} block (the preamble's header-includes) into inline code before
+	*  \begin{document}. Those go as literal block scalars, which pandoc reads as blocks. */
+	function yamlEntry(k, v) {
+		const block = (t, pad) => `|\n${t.split("\n").map((l) => pad + l).join("\n")}`;
+		if (typeof v === "string" && v.includes("\n")) return `${k}: ${block(v, "  ")}`;
+		if (Array.isArray(v) && v.some((x) => typeof x === "string" && x.includes("\n"))) return `${k}:\n${v.map((x) => `- ${typeof x === "string" && x.includes("\n") ? block(x, "    ") : JSON.stringify(x)}`).join("\n")}`;
+		return `${k}: ${JSON.stringify(v)}`;
+	}
+	/** The fences put back for a road: raw source, a compiled picture, or the code with a warning. */
+	async function fences(j, road) {
+		const out = [];
+		for (const [i, f] of j.t.fences.entries()) if (f.lang === "typst" && road === "typst") out[i] = "```{=typst}\n" + f.source + "\n```";
+		else if (f.lang === "tikz" && road === "latex") out[i] = "```tikz\n" + f.source + "\n```";
+		else if (f.lang === "typst" && road === "latex") {
+			const pdf = `${CACHE}/figures/${keyOf(f.source)}.pdf`;
+			kandinsky.convert.typstPdf(`${dirname(j.rel) || "."}/.fence.typ`, pdf, {
+				source: f.source,
+				fence: true
+			});
+			out[i] = `![](<${relative(j.outDir, pdf)}>)`;
+		} else if (f.lang === "tikz" && j.figures[keyOf(f.source)]) out[i] = `![](<${relative(j.outDir, tikzPng(keyOf(f.source)))}>){width=${j.figures[keyOf(f.source)].toFixed(1)}pt}`;
+		else {
+			j.t.warnings.push(`a ${f.lang} picture is left as code: ${f.lang === "tikz" ? "the TeX in the page did not draw it" : `${road === "html" ? "HTML" : "Word"} has no Typst`}`);
+			out[i] = "```" + f.lang + "\n" + f.source + "\n```";
+		}
+		const md = (road === "latex" ? j.t.markdown : j.t.markdown.replace(/\\tag\*?\{([^}]*)\}/g, (_, n) => `\\qquad\\text{(${n})}`)).replace(/<!--fence:(\d+)-->/g, (_, n) => out[Number(n)]);
+		return /^# /m.test(md) || !/^## /m.test(md) ? md : md.replace(/^#(#+ )/gm, "$1");
+	}
+	const MD = "markdown+mark-implicit_figures+implicit_figures";
+	async function pandoc(j, to, input, extra = [], output) {
+		progress("pandoc", `writing ${output ?? to}`);
+		const r = await run("pandoc", [
+			"-f",
+			MD,
+			"-t",
+			to,
+			"-s",
+			...extra,
+			...output ? ["-o", output] : []
+		], { stdin: input });
+		if (r.status !== 0) throw new Error(`pandoc failed: ${(r.stderr || r.stdout).trim().slice(-2e3)}`);
+		return r.stdout;
+	}
+	/** The lines LaTeX marks as errors, with the two after each. */
+	function latexErrors(log) {
+		const lines = log.split("\n");
+		const picked = lines.flatMap((l, i) => l.startsWith("!") || /^\S+\.tex:\d+:/.test(l) ? [i] : []);
+		return [...new Set(picked.flatMap((i) => [
+			i,
+			i + 1,
+			i + 2
+		].filter((k) => k < lines.length)))].sort((a, b) => a - b).map((k) => lines[k]).join("\n").slice(-3e3) || lines.slice(-30).join("\n");
+	}
 	async function typstRoad(j, format) {
 		const preamble = j.o.typstPreamble ? await kandinsky.read(j.o.typstPreamble).catch(() => {
 			j.t.warnings.push(`Typst preamble not found: ${j.o.typstPreamble}`);
@@ -1578,6 +1582,7 @@ ${blocks.join("\n")}
 	});
 	//#endregion
 	exports.LAYOUTS = LAYOUTS;
+	exports.MARGINS = MARGINS;
 	exports.latexErrors = latexErrors;
 	exports.latexMathToTypst = latexMathToTypst;
 	exports.layoutOf = layoutOf;
