@@ -17,23 +17,26 @@ test("a tab outside the split shows alone; the split row brings the pair back", 
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   for (const n of ["split-a", "split-b", "split-c"]) await openNote(page, n);
-  const side = page.getByTestId("sidebar");
-  await side.locator(".tab", { hasText: "split-c" }).first().click({ button: "right" });
+  const open = openTabs(page);
+  const rowOf = (n: string) => open.locator(".pane-row", { hasText: n }).first();
+  await rowOf("split-c").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Split right" }).click();
-  const row = side.getByTestId("split-row");
-  await expect(row.locator(".tab")).toHaveCount(2);
+  await expect(pairRows(page)).toHaveCount(2);
   const visible = () => page.locator(".editor-pane").filter({ visible: true }).count();
   await expect.poll(visible).toBe(2);
-  const pair = (await row.locator(".tab").allInnerTexts()).join(" ");
-  const outside = ["split-a", "split-b"].find((n) => !pair.includes(n))!;
-  // a tab outside the pair: alone on screen, the pair still a row
-  await side.locator(".tab", { hasText: outside }).first().click();
+  const pairText = (await pairRows(page).allInnerTexts()).join(" ");
+  const pair = ["split-a", "split-b", "split-c"].filter((n) => pairText.includes(n));
+  expect(pair).toHaveLength(2);
+  const outside = ["split-a", "split-b"].find((n) => !pairText.includes(n))!;
+  // a tab outside the pair: alone on screen, the pair's rows still listed
+  await rowOf(outside).locator(".pane-main").click();
   await expect.poll(visible).toBe(1);
   await expect(page.locator(".cm-content").filter({ hasText: `Body of ${outside}` }).filter({ visible: true })).toHaveCount(1);
-  await expect(row.locator(".tab")).toHaveCount(2);
-  expect((await row.locator(".tab").allInnerTexts()).join(" ")).toBe(pair);
-  // the split row: both halves again
-  await row.locator(".tab").first().click();
+  // (a group shown alone is full-window: the sidebar keeps to its icon rail, one button per tab)
+  const mini = (n: string) => page.getByTestId("sidebar").locator(`.pane-mini-btn[aria-label="${n}"]`);
+  for (const n of pair) await expect(mini(n)).toHaveCount(1);
+  // a click on a tab of the pair: both halves again
+  await mini(pair[0]).click();
   await expect.poll(visible).toBe(2);
 });
 
@@ -59,15 +62,15 @@ const shown = (page: Page) => page.locator(".editor-pane").filter({ visible: tru
 
 test("a half's × in the split row closes that half and ends the split", async ({ page }) => {
   await splitThree(page, ["half-a", "half-b", "half-c"]);
-  const side = page.getByTestId("sidebar"), row = side.getByTestId("split-row");
-  const half = row.locator(".tab", { hasText: "half-c" });
+  const open = openTabs(page);
+  const half = open.locator(".pane-row", { hasText: "half-c" });
   await half.hover();
-  await half.getByRole("button", { name: "Close half-c" }).dispatchEvent("mousedown", { button: 0 });
-  await expect(row).toHaveCount(0);
+  await half.getByRole("button", { name: "Close half-c" }).click();
+  await expect(splitBadges(page)).toHaveCount(0); // one editor again: no row names a half
   await expect.poll(() => shown(page)).toBe(1);
-  await expect(side.locator(".tab", { hasText: "half-c" })).toHaveCount(0);
-  await expect(side.locator(".tab", { hasText: "half-a" })).toHaveCount(1); // the other tabs kept
-  await expect(side.locator(".tab", { hasText: "half-b" })).toHaveCount(1);
+  await expect(open.locator(".pane-row", { hasText: "half-c" })).toHaveCount(0);
+  await expect(open.locator(".pane-row", { hasText: "half-a" })).toHaveCount(1); // the other tabs kept
+  await expect(open.locator(".pane-row", { hasText: "half-b" })).toHaveCount(1);
 });
 
 test("the × in a half's corner closes that half and ends the split", async ({ page }) => {
@@ -88,11 +91,11 @@ test("the × in a half's corner closes that half and ends the split", async ({ p
 // and Ctrl+W closes that half — not the other.
 test("a click in a half focuses it: its row is marked, typing and Ctrl+W go to it", async ({ page, request }) => {
   await splitThree(page, ["focus-a", "focus-b", "focus-c"]);
-  const row = page.getByTestId("split-row");
-  const pair = (await row.locator(".tab").allInnerTexts()).map((t) => ["focus-a", "focus-b", "focus-c"].find((n) => t.includes(n))!);
+  const open = openTabs(page);
+  const pair = (await pairRows(page).allInnerTexts()).map((t) => ["focus-a", "focus-b", "focus-c"].find((n) => t.includes(n))!);
   for (const name of [pair[1], pair[0], pair[1]]) {
     await page.locator(".cm-content", { hasText: `Body of ${name}` }).filter({ visible: true }).click();
-    await expect(row.locator(".tab.active")).toHaveText(new RegExp(name));
+    await expect(open.locator(".pane-row.active")).toHaveText(new RegExp(name));
   }
   const [other, focused] = pair;
   await page.keyboard.press("Escape");
@@ -101,7 +104,7 @@ test("a click in a half focuses it: its row is marked, typing and Ctrl+W go to i
   await expect.poll(async () => (await (await request.get(`/api/file?path=notes/${focused}.md`, { headers: H })).json()).text, { timeout: 15_000 }).toContain("typed");
   expect((await (await request.get(`/api/file?path=notes/${other}.md`, { headers: H })).json()).text).not.toContain("typed");
   await page.keyboard.press("Control+w");
-  await expect(row).toHaveCount(0);
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: focused })).toHaveCount(0);
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: other })).toHaveCount(1);
+  await expect(splitBadges(page)).toHaveCount(0);
+  await expect(open.locator(".pane-row", { hasText: focused })).toHaveCount(0);
+  await expect(open.locator(".pane-row", { hasText: other })).toHaveCount(1);
 });

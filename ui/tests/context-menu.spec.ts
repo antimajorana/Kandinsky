@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { openFile } from "./open";
+import { verticalTabs } from "./vertical";
+
+// the sidebar's Open section lists a single tab only with vertical tabs
+verticalTabs(test);
 
 // "improve the right click modals in general, more responsive": the one menu component
 // (components/ContextMenu.svelte) — keys move in it, it stays inside the window, rows have icons.
@@ -8,7 +12,7 @@ test("a tab's menu: arrows and a letter move, it stays in a small window, Esc cl
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "journal.md");
-  const tab = page.getByTestId("sidebar").locator(".tab", { hasText: "journal" });
+  const tab = page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "journal" });
   await tab.click({ button: "right" });
   const menu = page.getByRole("menu"), focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.label ?? "");
   await expect(menu).toBeVisible();
@@ -18,11 +22,11 @@ test("a tab's menu: arrows and a letter move, it stays in a small window, Esc cl
   await page.keyboard.press("ArrowDown");
   expect(await focused()).not.toBe(first);
   await page.keyboard.press("End");
-  expect(await focused()).toBe("Move to Trash…"); // the last row since 0ad8045 (a note's tab deletes it)
+  expect(await focused()).toBe("Close"); // the last row, after "Move to Trash…" (a note's tab deletes it)
   await page.keyboard.press("ArrowDown"); // wraps
   expect(await focused()).toBe(first);
   await page.keyboard.press("r");
-  expect(await focused()).toBe("Reveal in file tree");
+  expect(await focused()).toBe("Reveal in Vault Pages");
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   await expect(tab, "Esc closed the menu and nothing else").toBeVisible();
@@ -37,9 +41,9 @@ test("a tab's menu: arrows and a letter move, it stays in a small window, Esc cl
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.y + box.height).toBeLessThanOrEqual(edge.height);
   expect(box.x + box.width).toBeLessThanOrEqual(edge.width);
-  // Enter runs the row that has the keys ("Copy path": nothing of the shared fixture changes)
-  await page.keyboard.press("c");
-  expect(await focused()).toBe("Copy path");
+  // Enter runs the row that has the keys ("Reveal in Vault Pages": nothing of the shared fixture changes)
+  await page.keyboard.press("r");
+  expect(await focused()).toBe("Reveal in Vault Pages");
   await page.keyboard.press("Enter");
   await expect(menu).toBeHidden();
   await expect(tab, "not pinned, not closed").toBeVisible();

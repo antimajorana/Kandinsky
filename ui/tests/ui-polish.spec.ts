@@ -37,13 +37,12 @@ test("tabs: two files with the same name say which folder; Today survives a tab 
   await page.keyboard.press("Control+p"); await page.keyboard.type("one averages"); await page.waitForTimeout(400); await page.keyboard.press("Enter");
   await page.keyboard.press("Control+p"); await page.keyboard.type("two averages"); await page.waitForTimeout(400); await page.keyboard.press("Enter");
   const sb = page.getByTestId("sidebar");
-  await expect(sb.locator(".tab", { hasText: "averages.tsv" }).locator(".tab-hint")).toHaveText(["one", "two"]);
+  await expect(sb.getByTestId("open-tabs").locator(".pane-row", { hasText: "averages.tsv" }).locator(".pane-hint")).toHaveText(["one", "two"]);
   await sb.getByTestId("apps").getByRole("button", { name: "Home", exact: true }).click(); // Home is an app at the top
   await expect(page.getByText("Finish the GW notes.")).toBeVisible(); // blocks still there after the switch
   await expect(page.getByTestId("capture")).toBeVisible();
-  // the terminal section comes before the tabs
-  await page.keyboard.press("Control+`");
-  await expect(page.locator(".xterm").first()).toBeVisible();
-  const labels = await sb.locator(".group-head > span:first-child").allTextContents();
-  expect(labels.findIndex((l) => /terminal/i.test(l))).toBeLessThan(labels.findIndex((l) => /^tabs$/i.test(l.trim())));
+});
+
+test("the terminal section comes before the tabs", async () => {
+  test.skip(true, "the classic sidebar's Terminal and Tabs group heads are retired: the Notion sidebar has no terminal section (terminals keep the dock's own strip)");
 });

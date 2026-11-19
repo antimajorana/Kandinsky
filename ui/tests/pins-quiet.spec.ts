@@ -1,10 +1,14 @@
 import { test, expect } from "@playwright/test";
 import { openFile } from "./open";
+import { verticalTabs } from "./vertical";
 
 // Found on a real vault: with the home page pinned, the bookmarks file was rewritten
 // many times a second with the same text — a pinned tab's title differed from the pin's, the tab
 // list "corrected" it, the save republished the pins, and round again. A pin that says nothing new
 // is not written.
+// the Open section lists a single tab only with vertical tabs
+verticalTabs(test);
+
 test("a pinned tab does not make the bookmarks file be rewritten over and over", async ({ page }) => {
   let writes = 0;
   page.on("request", (r) => { if (r.method() === "PUT" && r.url().includes("/api/file") && (r.postData() ?? "").includes("bookmarks.yaml")) writes++; });
@@ -12,7 +16,7 @@ test("a pinned tab does not make the bookmarks file be rewritten over and over",
   await page.getByText("Finish the GW notes.").waitFor();
   // (Home is an app now, not a tab: a note is pinned instead)
   await openFile(page, "journal.md");
-  await expect(page.getByTestId("sidebar").locator(".tab.active", { hasText: "journal" })).toBeVisible();
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row.active", { hasText: "journal" })).toBeVisible();
   await page.keyboard.press("Control+Alt+p"); // pin it
   const pin = page.getByTestId("pins").locator(".pin");
   await expect(pin).toHaveCount(1);

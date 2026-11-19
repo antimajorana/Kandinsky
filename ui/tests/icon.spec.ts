@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-// The icon (docs/guides/ICON.md): the tab's icon is served and linked, and the badge atop the sidebar is the vault's initial.
+// The icon (docs/guides/ICON.md): the tab's icon is served and linked, and the sidebar's vault button names the vault.
 test("the browser tab has Kandinsky's icon", async ({ page, request }) => {
   for (const [path, type] of [["/favicon.svg", "image/svg+xml"], ["/favicon.ico", "image/"], ["/apple-touch-icon.png", "image/png"]]) {
     const res = await request.get(path);
@@ -11,12 +11,12 @@ test("the browser tab has Kandinsky's icon", async ({ page, request }) => {
   await expect(page.locator('link[rel="icon"][type="image/svg+xml"]')).toHaveAttribute("href", "/favicon.svg");
 });
 
-test("the badge is the open vault's initial", async ({ page }) => {
+// The Notion sidebar's header button names the open vault (the classic bar's initial badge is retired).
+test("the vault button names the open vault", async ({ page }) => {
   await page.goto("/");
-  const badge = page.getByTestId("sidebar").getByTestId("vault-badge");
-  await expect(badge).toBeVisible();
-  const name = (await badge.getAttribute("title")) ?? "";
+  const btn = page.getByTestId("sidebar").locator(".vault-btn");
+  await expect(btn).toBeVisible();
+  const name = ((await btn.locator(".vault-name").textContent()) ?? "").trim();
   expect(name).not.toBe("");
-  const initial = ([...name].find((c) => /[\p{L}\p{N}]/u.test(c)) ?? name[0]).toLocaleUpperCase();
-  await expect(badge).toHaveText(initial);
+  expect((await btn.getAttribute("title")) ?? "").toContain("switch vault");
 });
