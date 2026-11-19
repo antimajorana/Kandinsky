@@ -6,12 +6,13 @@ test("two Claude sessions are numbered and each keeps its own session id", async
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   for (let i = 0; i < 2; i++) {
-    await page.keyboard.press("F1");
+    await page.keyboard.press("Meta+e"); // Super keys reach the app from a terminal, F1 would go to its shell
     await page.keyboard.type("New AI agent session");
     await page.keyboard.press("Enter");
   }
-  await expect(page.getByRole("option", { name: /^Claude 2/ }).first()).toBeVisible();
-  await expect(page.getByRole("option", { name: /^Claude(?! 2)/ }).first()).toBeVisible();
+  // the terminals are tabs of the dock's terminal group
+  await expect(page.locator(".dv-tab", { hasText: /^Claude 2/ }).first()).toBeVisible();
+  await expect(page.locator(".dv-tab", { hasText: /^Claude(?! 2)/ }).first()).toBeVisible();
   // the saved layout (a file, .kandinsky/cache/layout.json) carries a different session for each tab
   const sessions = async () => {
     const r = await request.get(`/api/file?path=${encodeURIComponent(".kandinsky/cache/layout.json")}`, { headers: { "x-kandinsky": "1" } });

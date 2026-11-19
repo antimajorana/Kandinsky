@@ -70,7 +70,7 @@ test("in a terminal: the pointer previews the note, a click opens it; a missing 
     await page.mouse.move(p.x, p.y);
     await expect(card).toBeVisible({ timeout: 1000 });
   }).toPass();
-  await expect(card.locator(".preview-head")).toHaveText(/hubbard\.md$/);
+  await expect(card.locator(".preview-title")).toHaveText(/hubbard\.md$/);
   await expect(card).toContainText("Energy");
 
   // a look in both themes, by hand: SHOT_DIR=/some/dir npx playwright test terminal-wikilinks
@@ -85,11 +85,11 @@ test("in a terminal: the pointer previews the note, a click opens it; a missing 
   await page.mouse.move(q.x, q.y);
   await expect(card).toContainText("Not in the vault yet");
   if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/terminal-wikilink-missing.png` });
-  await expect(card.locator(".preview-head")).toHaveText("no such note.md");
+  await expect(card.locator(".preview-title")).toHaveText("no such note"); // named as the interface names notes, without the extension
 
   const w = await cellPoint(page, 3, 2); // the wrapped half: "bbard|H]]"
   await page.mouse.move(w.x, w.y);
-  await expect(card.locator(".preview-head")).toHaveText(/hubbard\.md$/);
+  await expect(card.locator(".preview-title")).toHaveText(/hubbard\.md$/);
 
   await page.mouse.click(p.x, p.y);
   await expect(page.locator(".cm-content:visible").first()).toContainText("Energy");

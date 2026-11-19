@@ -5,14 +5,27 @@ import { shownName } from "../src/lib/paths";
 // "ctrl + + magnifies everything not just one of the tabs": Ctrl++ / Ctrl+- / Ctrl+0 zoom the tab
 // that has the keys (lib/pane-zoom.ts). Everything at once is Ctrl+Alt with the same keys: those
 // move the text sizes of the settings, so they are in .kandinsky/config.toml like any other choice.
+const H = { "x-kandinsky": "1" };
+// the sidebar lists a single open tab only with vertical tabs; the config is shared by every spec of the run, so it is put back
+let savedConfig: unknown = null;
+test.afterEach(async ({ request }) => {
+  if (savedConfig) await request.put("/api/config", { headers: H, data: savedConfig });
+  savedConfig = null;
+});
+const verticalTabs = async (request: import("@playwright/test").APIRequestContext) => {
+  const cfg = (await (await request.get("/api/config", { headers: H })).json()).config;
+  savedConfig = cfg;
+  expect((await request.put("/api/config", { headers: H, data: { ...cfg, ui: { ...cfg.ui, tabs: "vertical" } } })).ok()).toBe(true);
+};
 const rootVar = (page: import("@playwright/test").Page, name: string) => page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(n), name);
 
-test("Ctrl++ zooms the tab it is pressed in, not the others; Ctrl+0 puts it back", async ({ page }) => {
+test("Ctrl++ zooms the tab it is pressed in, not the others; Ctrl+0 puts it back", async ({ page, request }) => {
+  await verticalTabs(request);
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   for (const name of ["journal.md", "paste.md"]) {
     await openFile(page, name);
-    await expect(page.getByTestId("sidebar").locator(".tab", { hasText: shownName(name) })).toHaveCount(1);
+    await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: shownName(name) })).toHaveCount(1);
     await page.waitForTimeout(300);
   }
   const size = () => page.locator(".cm-content:visible").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
@@ -22,9 +35,9 @@ test("Ctrl++ zooms the tab it is pressed in, not the others; Ctrl+0 puts it back
   await expect.poll(size).toBeCloseTo(base * 1.21, 1);
   expect(await rootVar(page, "--ui-scale"), "the window's own size is untouched").toBe(scale);
   // the other tab is as it was; coming back, this one is still zoomed
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "journal" }).click();
+  await page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "journal" }).locator(".pane-main").click();
   await expect.poll(size).toBeCloseTo(base, 1);
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "paste" }).click();
+  await page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "paste" }).locator(".pane-main").click();
   await expect.poll(size).toBeCloseTo(base * 1.21, 1);
   await page.keyboard.press("Control+-");
   await expect.poll(size).toBeCloseTo(base * 1.1, 1);
@@ -46,7 +59,7 @@ test("Ctrl+Alt++ and Ctrl+Alt+- zoom everything, Ctrl+Alt+0 resets", async ({ pa
   await page.keyboard.press("Control+Alt++");
   await page.keyboard.press("Control+Alt+0");
   await expect.poll(scale).toBe(1);
-  await expect.poll(() => rootVar(page, "--prose-size"), "set in the same save, painted a moment later").toBe("15px");
+  await expect.poll(() => rootVar(page, "--prose-size"), "set in the same save, painted a moment later").toBe(p0); // the default size, as it was
 });
 
 // zoom is immediate: a key press sets the size at the next frame, never a picture-scale or a glide;

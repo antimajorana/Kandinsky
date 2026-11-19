@@ -13,10 +13,9 @@ test("a restored terminal tab that is not shown does not make the dock taller th
   await page.goto("/");
   await page.keyboard.press("Control+`");
   await expect(page.locator(".xterm").first()).toBeVisible();
-  const plus = page.getByTestId("sidebar").getByRole("button", { name: "New terminal" });
-  await plus.click();
-  await page.getByRole("menuitem", { name: "Shell" }).click();
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: /Shell/ })).toHaveCount(2);
+  // the terminal group's + (its header) starts another shell
+  await page.getByRole("button", { name: "New terminal" }).click();
+  await expect(page.locator(".dv-tab", { hasText: /Shell/ })).toHaveCount(2);
   expect(await overflowing(page), "with both terminals open").toEqual([]);
   await page.waitForTimeout(800); // the layout save is debounced
   await page.reload();
