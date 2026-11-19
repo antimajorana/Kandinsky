@@ -49,6 +49,8 @@ import { completionTab } from "./tab-keys";
 import { citing, mdSymbols } from "./completion-sources";
 import { figureCaptions } from "./figure-captions";
 import { slashMenuExtension } from "./slash-menu";
+import { floatingToolbarExtension } from "./floating-toolbar";
+import { handleRichHtmlPaste } from "./html-paste";
 import { blockGutterExtension } from "./block-gutter";
 import { bidiExtension } from "./bidi";
 import { headingFoldsExtension } from "./heading-folds";
@@ -318,6 +320,7 @@ export function noteExtensions(
       },
     })),
   ];
+  let shiftHeld = false;
   return {
     head: liveKeys,
     liveSlot,
@@ -331,6 +334,7 @@ export function noteExtensions(
       expressions(path),
       mathPreview(() => settings.config?.editor.math_preview ?? true),
       slashMenuExtension(),
+      floatingToolbarExtension(() => settings.config?.editor.floating_toolbar ?? true),
       blockGutterExtension(),
       bidiExtension(),
       headingFoldsExtension(),
@@ -340,8 +344,11 @@ export function noteExtensions(
       noteSuggestions(path),
       // paste / drop files → saved beside the note (editor.attachment_folder) and embedded
       EditorView.domEventHandlers({
+        keydown: (e) => { shiftHeld = e.shiftKey; return false; },
+        keyup: (e) => { shiftHeld = e.shiftKey; return false; },
+        blur: () => { shiftHeld = false; return false; },
         paste: (e, view) => {
-          // a URL pasted over selected text makes a link (Obsidian)
+          // 1. a URL pasted over selected text makes a link (Obsidian)
           const url = e.clipboardData?.getData("text/plain").trim() ?? "";
           const sel = view.state.selection.main;
           if (!sel.empty && /^https?:\/\/\S+$/.test(url)) {
@@ -350,6 +357,11 @@ export function noteExtensions(
             view.dispatch({ changes: { from: sel.from, to: sel.to, insert: `[${text}](${url})` } });
             return true;
           }
+          // 2. rich HTML paste (web, Google Docs, Word), skipping image-only clipboard wrappers
+          if ((settings.config?.editor.rich_paste ?? true) && handleRichHtmlPaste(e, view, shiftHeld)) {
+            return true;
+          }
+          // 3. image / file clipboard paste attaches files beside the note
           const files = takeFiles(e);
           if (!files) return false;
           const at = view.state.selection.main.head;
@@ -389,7 +401,7 @@ export function noteExtensions(
           inlinePropsHost = null;
         },
       })),
-      EditorView.contentAttributes.of({ class: "markdown", spellcheck: "false" }),
+      EditorView.contentAttributes.of({ class: "markdown", spellcheck: "true" }),
       EditorView.editorAttributes.of({ class: "live-cm", "data-note": path }), // data-note: links resolve from here (lib/preview.ts)
     ],
   };
