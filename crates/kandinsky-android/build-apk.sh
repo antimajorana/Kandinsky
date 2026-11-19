@@ -58,7 +58,8 @@ engines() {
     export "CC_${triple//-/_}=$bin/$triple$api-clang" "AR_${triple//-/_}=$bin/llvm-ar" "CARGO_TARGET_${T}_LINKER=$bin/$triple$api-clang"
     mkdir -p "$repo/crates/kandinsky-android/helpers/$abi"
     # crate:binary — the Rust helpers of the phone's plugins (their run lines read $KANDINSKY_PLUGIN_BIN first)
-    for engine in kandinsky-catalog:catalog kandinsky-papers:papers kandinsky-syncthing:syncthing; do
+    # (not catalog-papers: in this fork it is not for the phone, no `phone = true`; parity.toml lists it missing)
+    for engine in kandinsky-catalog:catalog kandinsky-syncthing:syncthing; do
       crate=${engine%%:*} name=${engine#*:}
       cargo build -p "$crate" --target "$triple" $([ $profile = release ] && echo --profile android)
       "$bin/llvm-strip" -o "$repo/crates/kandinsky-android/helpers/$abi/$name" "$repo/target/$triple/$([ $profile = release ] && echo android || echo debug)/$name"
