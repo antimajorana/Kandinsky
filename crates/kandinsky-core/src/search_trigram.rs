@@ -13,7 +13,8 @@ use walkdir::WalkDir;
 
 const MAGIC: &[u8; 4] = b"KDTG";
 /// 3: a note's trigrams are those of its searchable text (search_text.rs), what the search matches.
-const VERSION: u32 = 3;
+/// 4: a note's trigrams are those of its text as written plus its searchable text, so a replace finds it too.
+const VERSION: u32 = 4;
 const SEARCH_IDX: &str = ".kandinsky/cache/search.idx";
 const PDF_IDX: &str = ".kandinsky/cache/search-pdf.idx";
 const WARM_SLOTS: usize = 6;
@@ -485,13 +486,21 @@ fn read_one_file(walked_idx: usize, old_doc_id: Option<u32>, f: &WalkedFile, sni
     })
 }
 
-/// A note is matched as its searchable text (its HTML blanked, entities decoded: search_text.rs), so that is what is
-/// indexed; any other file as it is.
+/// A file's trigrams as it is; a note's also those of its searchable text (its HTML blanked, entities decoded:
+/// search_text.rs), which the search matches, while a replace matches the text as written: a candidate for either.
 fn indexed_trigrams(rel: &str, buf: &[u8]) -> Vec<u32> {
+    let raw = extract_unique_trigrams(buf);
     let note = rel.rsplit_once('.').is_some_and(|(_, e)| e.eq_ignore_ascii_case("md"));
-    match std::str::from_utf8(buf) {
-        Ok(text) if note => extract_unique_trigrams(crate::search_text::searchable(text).as_bytes()),
-        _ => extract_unique_trigrams(buf),
+    let Some(text) = std::str::from_utf8(buf).ok().filter(|_| note) else { return raw };
+    match crate::search_text::searchable(text) {
+        std::borrow::Cow::Borrowed(_) => raw, // no markup: the same text
+        std::borrow::Cow::Owned(shown) => {
+            let mut all = raw;
+            all.extend(extract_unique_trigrams(shown.as_bytes()));
+            all.sort_unstable();
+            all.dedup();
+            all
+        }
     }
 }
 

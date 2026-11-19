@@ -541,7 +541,7 @@ pub fn replace(ws: &Workspace, q: &str, o: Opts, with: &str, only: Option<&[Stri
     let walked = trigram::walk_vault(ws.root(), &cfg);
     let found: Vec<String> = trigram::vault_candidates(ws.root(), &cfg, q, o, &walked, false)
         .into_iter()
-        .filter(|(_, rel)| only.is_none_or(|o| o.iter().any(|p| p == rel)))
+        .filter(|(_, rel)| o.within.reads(rel) && only.is_none_or(|o| o.iter().any(|p| p == rel)))
         .filter(|(abs, _)| {
             let mut hit = false;
             let _ = searcher.search_path(&m, abs, UTF8(|_, _| { hit = true; Ok(false) }));
@@ -902,6 +902,23 @@ mod tests {
         let done = replace(&ws, "lattice", Opts::default(), "chain", None).unwrap();
         assert_eq!(done.files.len(), 2);
         assert_eq!(std::fs::read_to_string(r.join("run.log")).unwrap(), "the lattice\n");
+    }
+
+    /// The trigram index narrows for both readers: the search's (a note's words, its HTML blanked and entities decoded)
+    /// and the replace's (the text as written).
+    #[test]
+    fn a_notes_html_is_found_by_its_words_and_replaced_as_written() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        std::fs::write(r.join("mail.md"), "<p>AT&amp;T <b>lattice</b></p>
+").unwrap();
+        let cfg = Config::default();
+        assert_eq!(search(r, &cfg, "AT&T").lines.len(), 1, "the entity, decoded");
+        assert!(search(r, &cfg, "<b>").lines.is_empty(), "the markup is not searched");
+        let ws = Workspace::open(r).unwrap();
+        assert_eq!(replace(&ws, "<b>", Opts::default(), "<i>", None).unwrap().files, ["mail.md"], "a replace works on the text as written");
+        assert_eq!(std::fs::read_to_string(r.join("mail.md")).unwrap(), "<p>AT&amp;T <i>lattice</b></p>
+");
     }
 
     #[test]
