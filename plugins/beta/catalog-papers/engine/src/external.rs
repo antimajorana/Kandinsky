@@ -6,6 +6,7 @@ use crate::settings::Settings;
 use kandinsky_text::paths::{plain, real, rel_path, safe_join};
 use serde_yaml::{Mapping, Value};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,14 +228,144 @@ pub fn format_pdf_filename(fmt: &str, m: &Mapping, fallback_key: &str) -> String
     sanitize_pdf_filename(&rendered, &key)
 }
 
-/// Writes `bytes` into `external_pdf_roots[0]` (plus optional `subfolder`) with collision-free `Name - 2.pdf` naming,
-/// reusing an existing file with zero writes only when its SHA-256 matches `bytes` identically.
+/// Human-readable root name derived from the last meaningful segment of `ext.prefix` or `ext.root`.
+pub fn root_name_for(ext: &ExternalRoot) -> String {
+    let from_prefix = ext
+        .prefix
+        .split('/')
+        .rev()
+        .find(|seg| !seg.is_empty() && *seg != "." && *seg != "..")
+        .map(str::to_string);
+    from_prefix
+        .or_else(|| ext.root.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "Papers".into())
+}
+
+fn is_pdf_file_name(name: &str) -> bool {
+    name.len() > 4 && name.as_bytes()[name.len() - 4..].eq_ignore_ascii_case(b".pdf")
+}
+
+#[allow(clippy::too_many_arguments)]
+fn walk_find_pdf(
+    ext: &ExternalRoot,
+    ext_real: &Path,
+    dir: &Path,
+    rel_dir: Option<&str>,
+    inbox_real: Option<&Path>,
+    visited: &mut HashSet<PathBuf>,
+    target_len: u64,
+    wanted: &[u8; 32],
+) -> Option<(String, PathBuf)> {
+    let dir_real = real(dir).ok()?;
+    if !dir_real.starts_with(ext_real) || inbox_real.is_some_and(|ib| dir_real == ib || dir_real.starts_with(ib)) {
+        return None;
+    }
+    if !visited.insert(dir_real) {
+        return None;
+    }
+    let rd = std::fs::read_dir(dir).ok()?;
+    let mut children: Vec<(String, PathBuf)> = rd
+        .flatten()
+        .map(|e| (e.file_name().to_string_lossy().into_owned(), e.path()))
+        .collect();
+    children.sort_by(|a, b| a.0.to_ascii_lowercase().cmp(&b.0.to_ascii_lowercase()).then_with(|| a.0.cmp(&b.0)));
+
+    for (name, path) in children {
+        if name.starts_with('.') {
+            continue;
+        }
+        let Ok(resolved) = real(&path) else { continue };
+        if !resolved.starts_with(ext_real) {
+            continue;
+        }
+        if resolved.is_dir() {
+            if name.eq_ignore_ascii_case("output") {
+                continue;
+            }
+            let next_rel = match rel_dir {
+                Some(d) => format!("{d}/{name}"),
+                None => name,
+            };
+            if let Some(found) = walk_find_pdf(ext, ext_real, &resolved, Some(&next_rel), inbox_real, visited, target_len, wanted) {
+                return Some(found);
+            }
+        } else if resolved.is_file()
+            && is_pdf_file_name(&name)
+            && resolved.metadata().is_ok_and(|md| md.len() == target_len)
+            && std::fs::read(&resolved).is_ok_and(|b| <[u8; 32]>::from(Sha256::digest(&b)) == *wanted)
+        {
+            let rel_file = match rel_dir {
+                Some(d) => format!("{d}/{name}"),
+                None => name,
+            };
+            return Some((format!("{}/{rel_file}", ext.prefix), resolved));
+        }
+    }
+    None
+}
+
+/// Searches all `external_pdf_roots` recursively (skipping `.`-dirs, `watch_inbox`, and `output` dirs)
+/// for an existing byte-identical PDF (length pre-filter + SHA-256), returning `(portable_ref, abs_path)` with zero writes.
+pub fn find_existing_external_pdf(vault_root: &Path, cfg: &Settings, bytes: &[u8]) -> Option<(String, PathBuf)> {
+    let roots = external_roots(vault_root, cfg);
+    if roots.is_empty() {
+        return None;
+    }
+    let inbox_real = crate::inbox_dedupe::resolve_inbox_dir(vault_root, cfg)
+        .ok()
+        .map(|p| real(&p).unwrap_or(p));
+    let target_len = bytes.len() as u64;
+    let wanted: [u8; 32] = Sha256::digest(bytes).into();
+    for ext in &roots {
+        if !ext.root.is_dir() {
+            continue;
+        }
+        let ext_real = real(&ext.root).unwrap_or_else(|_| ext.root.clone());
+        let mut visited = HashSet::new();
+        if let Some(found) = walk_find_pdf(ext, &ext_real, &ext_real, None, inbox_real.as_deref(), &mut visited, target_len, &wanted) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn select_root_and_sub<'a>(roots: &'a [ExternalRoot], subfolder: Option<&str>) -> (&'a ExternalRoot, Option<String>) {
+    let raw_sub = subfolder
+        .map(|s| s.trim().replace('\\', "/").trim_matches('/').to_string())
+        .filter(|s| !s.is_empty());
+    if let Some(ref sub) = raw_sub {
+        for ext in roots {
+            let rname = root_name_for(ext);
+            if sub.eq_ignore_ascii_case(&rname) {
+                return (ext, None);
+            }
+            if let Some((head, tail)) = sub.split_once('/') {
+                if head.eq_ignore_ascii_case(&rname) {
+                    let rest = tail.trim_matches('/').to_string();
+                    return (ext, (!rest.is_empty()).then_some(rest));
+                }
+            }
+        }
+    }
+    (&roots[0], raw_sub)
+}
+
+/// Writes `bytes` into an external root (plus optional `subfolder`) with collision-free `Name - 2.pdf` naming,
+/// reusing any existing byte-identical PDF across all `external_pdf_roots` with zero writes and avoiding `<RootName>` doubling.
 pub fn write_external_pdf(vault_root: &Path, cfg: &Settings, subfolder: Option<&str>, filename: &str, bytes: &[u8]) -> Result<(String, PathBuf), String> {
-    let ext = external_roots(vault_root, cfg).into_iter().next().ok_or_else(|| "no external_pdf_roots configured".to_string())?;
+    if let Some(existing) = find_existing_external_pdf(vault_root, cfg, bytes) {
+        return Ok(existing);
+    }
+    let roots = external_roots(vault_root, cfg);
+    if roots.is_empty() {
+        return Err("no external_pdf_roots configured".to_string());
+    }
+    let (ext, effective_sub) = select_root_and_sub(&roots, subfolder);
     std::fs::create_dir_all(&ext.root).map_err(|e| format!("{}: {e}", ext.root.display()))?;
-    let sub = match subfolder.map(|s| s.trim().replace('\\', "/")).filter(|s| !s.trim_matches('/').is_empty()) {
+    let sub = match effective_sub {
         Some(raw_sub) => {
-            let (norm_sub, sub_dir) = safe_sub_in_root(&ext.root, raw_sub.trim_matches('/')).ok_or_else(|| format!("invalid external subfolder: {raw_sub:?}"))?;
+            let (norm_sub, sub_dir) = safe_sub_in_root(&ext.root, &raw_sub).ok_or_else(|| format!("invalid external subfolder: {raw_sub:?}"))?;
             std::fs::create_dir_all(&sub_dir).map_err(|e| format!("{}: {e}", sub_dir.display()))?;
             norm_sub
         }
@@ -284,5 +415,52 @@ mod tests {
         assert_eq!(write_external_pdf(&vault, &cfg, Some("Physics"), &name, b"%PDF-1.4 two").unwrap().0, "../Papers/Physics/Anderson1972 - More Is Different - 2.pdf");
         assert_eq!(path_in_external_roots(&vault, &cfg, &p1).unwrap().0, r1);
         assert_eq!(resolve_pdf_ref(&vault, &cfg, &format!("[[{r1}#page=3]]")).unwrap().0, r1);
+    }
+
+    #[test]
+    fn finds_existing_external_pdf_zero_copy_and_avoids_root_doubling() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = real(tmp.path()).unwrap();
+        let (vault, papers, books, inbox) = (
+            ws.join("vault"),
+            ws.join("Library/Papers"),
+            ws.join("Library/Books"),
+            ws.join("Library/Papers/Sort"),
+        );
+        std::fs::create_dir_all(&vault).unwrap();
+        std::fs::create_dir_all(papers.join("Quantum")).unwrap();
+        std::fs::create_dir_all(papers.join(".hidden")).unwrap();
+        std::fs::create_dir_all(papers.join("output")).unwrap();
+        std::fs::create_dir_all(&inbox).unwrap();
+        std::fs::create_dir_all(&books).unwrap();
+
+        let cfg = Settings {
+            external_pdf_roots: vec!["../Library/Papers".into(), "../Library/Books".into()],
+            watch_inbox: "../Library/Papers/Sort".into(),
+            ..Settings::default()
+        };
+
+        let hidden_bytes = b"%PDF-1.4 hidden";
+        let out_bytes = b"%PDF-1.4 build-output";
+        let inbox_bytes = b"%PDF-1.4 inbox";
+        let real_bytes = b"%PDF-1.4 existing-quantum";
+        std::fs::write(papers.join(".hidden/h.pdf"), hidden_bytes).unwrap();
+        std::fs::write(papers.join("output/main.pdf"), out_bytes).unwrap();
+        std::fs::write(inbox.join("queued.pdf"), inbox_bytes).unwrap();
+        std::fs::write(papers.join("Quantum/Existing.pdf"), real_bytes).unwrap();
+
+        assert!(find_existing_external_pdf(&vault, &cfg, hidden_bytes).is_none());
+        assert!(find_existing_external_pdf(&vault, &cfg, out_bytes).is_none());
+        assert!(find_existing_external_pdf(&vault, &cfg, inbox_bytes).is_none());
+        let (found_ref, _) = find_existing_external_pdf(&vault, &cfg, real_bytes).unwrap();
+        assert_eq!(found_ref, "../Library/Papers/Quantum/Existing.pdf");
+
+        // write_external_pdf returns existing file with zero writes, and strips matching <RootName> prefix.
+        assert_eq!(write_external_pdf(&vault, &cfg, Some("Books"), "NewName.pdf", real_bytes).unwrap().0, found_ref);
+        let (bref, bpath) = write_external_pdf(&vault, &cfg, Some("Books/Algebra"), "Artin.pdf", b"%PDF-1.4 artin").unwrap();
+        assert_eq!(bref, "../Library/Books/Algebra/Artin.pdf");
+        assert!(bpath.is_file() && !books.join("Books").exists());
+        let (pref, _) = write_external_pdf(&vault, &cfg, Some("Papers/Field"), "Weinberg.pdf", b"%PDF-1.4 weinberg").unwrap();
+        assert_eq!(pref, "../Library/Papers/Field/Weinberg.pdf");
     }
 }

@@ -13,6 +13,7 @@ pub mod external;
 pub mod firstpage;
 pub mod inbox_dedupe;
 pub mod net;
+pub mod pdf_meta;
 pub mod refs;
 pub mod remote;
 pub mod scan_roots;

@@ -204,16 +204,26 @@ description = "Scan configured external_pdf_roots recursively for PDFs and index
 input = { dry_run = "boolean?", root = "string?", rate_limit_ms = "integer?", max_lookups = "integer?" }
 timeout_secs = 600
 
+[[tool]]
+name = "enrich_entry"
+description = "Re-read an entry's linked PDF (/Info, XMP, first pages) and query remote indexes to backfill missing or raw-filename metadata, optionally renaming its citekey."
+input = { key = "string", dry_run = "boolean?", rename_citekey = "boolean?" }
+timeout_secs = 120
+
 [contributes.catalog]
 recognize = [
   { pattern = "(?i)\\b(?:doi:\\s*|doi\\.org/)?(10\\.\\d{4,9}/[^\\s\"<>]+[^\\s\"<>.,;)])", kind = "paper", id = "doi" },
   { pattern = "(?i)arxiv\\.org/(?:abs|pdf)/(\\d{4}\\.\\d{4,5})(?:v\\d+)?", kind = "paper", id = "arxiv" },
   { pattern = "(?i)\\barxiv:\\s*(\\d{4}\\.\\d{4,5})(?:v\\d+)?", kind = "paper", id = "arxiv" },
+  { pattern = "(?i)(?:arxiv\\.org/(?:abs|pdf)/|\\barxiv:\\s*|\\b)((?:hep-th|hep-ph|hep-lat|hep-ex|cond-mat(?:\\.[a-z-]+)?|quant-ph|gr-qc|astro-ph|nucl-th|nucl-ex|math-ph|physics(?:\\.[a-z-]+)?|math(?:\\.[a-z]{2})?|cs(?:\\.[a-z]{2})?)/\\d{7})(?:v\\d+)?", kind = "paper", id = "arxiv" },
+  { pattern = "(?i)inspirehep\\.net/literature/(\\d+)", kind = "paper", id = "inspire" },
+  { pattern = "(?i)\\bISBN(?:-1[03])?:?\\s*([\\dX][\\d\\- ]{8,15}[\\dX])\\b", kind = "paper", id = "isbn" },
+  { pattern = "(?is)^\\s*(@(?:article|book|incollection|inbook|inproceedings|phdthesis|mastersthesis|techreport|unpublished|misc)\\s*\\{.+\\})\\s*$", kind = "paper", id = "bibtex" },
   # a link straight to a PDF: in a vault with References, any PDF is one (downloaded, its first pages read for a DOI,
   # arXiv id or ISBN, else named after the file; a long one is a book). A vault without it files PDFs as documents.
   { pattern = "(?i)(https?://[^\\s<>\"]+\\.pdf(?:[?#][^\\s<>\"]*)?)", kind = "paper", id = "pdf" },
 ]
-sources = [{ kind = "paper", tool = "lookup", priority = 70, needs = ["doi", "arxiv"] }]
+sources = [{ kind = "paper", tool = "lookup", priority = 70, needs = ["doi", "arxiv", "inspire", "isbn", "bibtex"] }]
 # with this plugin, every book is a reference book (the science_book kind, beside the papers); without it, books are books
 instead = [{ of = "book", file_as = "science_book" }]
 

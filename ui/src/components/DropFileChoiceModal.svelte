@@ -5,6 +5,7 @@
   import Dialog from "./Dialog.svelte";
   import Icon from "./Icon.svelte";
   import { fileIcon } from "../lib/panes";
+  import { pluginOn, plugins } from "../lib/plugin-registry.svelte";
   import {
     attachmentName,
     dropFilePrompt,
@@ -22,9 +23,14 @@
   const files = $derived(req?.files ?? []);
   const firstName = $derived(files[0] ? (files[0].name || attachmentName(files[0])) : "attachment");
   const totalBytes = $derived(files.reduce((sum, f) => sum + (f.size || 0), 0));
+  const hasPapersPlugin = $derived(
+    !plugins.loaded || plugins.list.some((p) => (p.id === "catalog-papers" || p.provides.includes("references")) && p.has_helper && pluginOn(p)),
+  );
+  const isPdfLibraryDrop = $derived(Boolean(req?.isPdfDrop) && hasPapersPlugin);
 
   let linkMode = $state(false);
   let uriDraft = $state("");
+  let libraryBtn = $state<HTMLButtonElement>();
   let vaultBtn = $state<HTMLButtonElement>();
   let uriInput = $state<HTMLInputElement>();
 
@@ -33,7 +39,10 @@
     if (!active) return;
     linkMode = false;
     uriDraft = active.defaultUri;
-    void tick().then(() => { vaultBtn?.focus(); });
+    void tick().then(() => {
+      if (isPdfLibraryDrop && libraryBtn) libraryBtn.focus();
+      else vaultBtn?.focus();
+    });
   });
 
   function openLinkEditor(): void {
@@ -54,7 +63,15 @@
     if (!req || e.ctrlKey || e.metaKey || e.altKey) return;
     const inField = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
     if (inField) return;
-    if (e.key === "l" || e.key === "L") {
+    if ((e.key === "p" || e.key === "P") && isPdfLibraryDrop) {
+      e.preventDefault();
+      e.stopPropagation();
+      req.choose({ action: "library" });
+    } else if ((e.key === "v" || e.key === "V") && isPdfLibraryDrop) {
+      e.preventDefault();
+      e.stopPropagation();
+      req.choose({ action: "vault" });
+    } else if (e.key === "l" || e.key === "L") {
       e.preventDefault();
       e.stopPropagation();
       openLinkEditor();
@@ -65,7 +82,7 @@
     } else if (e.key === "Enter" && !(e.target instanceof HTMLButtonElement)) {
       e.preventDefault();
       e.stopPropagation();
-      req.choose({ action: "vault" });
+      req.choose({ action: isPdfLibraryDrop ? "library" : "vault" });
     }
   }
 </script>
@@ -99,19 +116,37 @@
       </div>
 
       <div class="choices">
+        {#if isPdfLibraryDrop}
+          <button
+            type="button"
+            class="choice default-choice"
+            bind:this={libraryBtn}
+            data-testid="drop-choice-library"
+            onclick={() => req.choose({ action: "library" })}
+          >
+            <span class="c-icon accent"><Icon name="library" size={16} /></span>
+            <span class="c-body">
+              <span class="c-title">Add to Paper Library (kDrive, no vault copy) &amp; cite <span class="badge">Default</span></span>
+              <span class="c-desc">Files into the References library without duplicating into the vault and inserts <code>[[citekey]]</code></span>
+            </span>
+            <kbd class="keys-only">P</kbd>
+          </button>
+        {/if}
+
         <button
           type="button"
-          class="choice default-choice"
+          class="choice"
+          class:default-choice={!isPdfLibraryDrop}
           bind:this={vaultBtn}
           data-testid="drop-choice-vault"
           onclick={() => req.choose({ action: "vault" })}
         >
-          <span class="c-icon accent"><Icon name="folder-open" size={16} /></span>
+          <span class="c-icon" class:accent={!isPdfLibraryDrop}><Icon name="folder-open" size={16} /></span>
           <span class="c-body">
-            <span class="c-title">Copy into vault (<code>{attachDir}/</code>) <span class="badge">Default</span></span>
+            <span class="c-title">Copy into vault (<code>{attachDir}/</code>) {#if !isPdfLibraryDrop}<span class="badge">Default</span>{/if}</span>
             <span class="c-desc">Uploads cleanly without overwriting existing files and embeds <code>![[{attachDir}/…]]</code></span>
           </span>
-          <kbd class="keys-only">Enter</kbd>
+          <kbd class="keys-only">{isPdfLibraryDrop ? "V" : "Enter"}</kbd>
         </button>
 
         <div class="choice-group" class:expanded={linkMode}>
@@ -167,7 +202,7 @@
       </div>
 
       <footer class="foot">
-        <span class="legend keys-only"><kbd>Enter</kbd> vault · <kbd>L</kbd> external link · <kbd>B</kbd> beside · <kbd>Esc</kbd> cancel</span>
+        <span class="legend keys-only">{#if isPdfLibraryDrop}<kbd>P</kbd>/<kbd>Enter</kbd> library · {:else}<kbd>Enter</kbd> vault · {/if}<kbd>L</kbd> external link · <kbd>B</kbd> beside · <kbd>Esc</kbd> cancel</span>
         <button type="button" class="btn btn-ghost" data-testid="drop-choice-cancel" onclick={() => req.cancel()}>Cancel</button>
       </footer>
     </div>

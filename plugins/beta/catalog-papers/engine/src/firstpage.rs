@@ -32,7 +32,17 @@ fn reads_as_words(l: &str) -> bool {
 fn names_in(l: &str) -> Option<Vec<String>> {
     const PARTICLES: &[&str] = &["de", "van", "von", "der", "den", "da", "di", "du", "la", "le", "del", "dos", "y"];
     const PLACES: &[&str] = &["university", "université", "universität", "institute", "institut", "department", "laboratory", "laboratoire", "school", "college", "center", "centre", "lecture", "abstract", "dated", "physics", "école", "faculty"];
-    let clean: String = l.chars().filter(|c| !c.is_ascii_digit() && !matches!(c, '*' | '†' | '‡' | '§' | '¶' | '(' | ')')).collect();
+    let clean: String = l
+        .chars()
+        .filter(|c| {
+            !c.is_ascii_digit()
+                && !matches!(
+                    c,
+                    '*' | '†' | '‡' | '§' | '¶' | '(' | ')' | '\u{2217}' | '\u{22C6}' | '¹' | '²' | '³' | '\u{2709}'
+                )
+                && !('\u{2070}'..='\u{2079}').contains(c)
+        })
+        .collect();
     let parts: Vec<String> = clean
         .split([',', ';', '&'])
         .flat_map(|p| p.split(" and "))
@@ -58,10 +68,74 @@ fn year_in(s: &str) -> Option<String> {
     })
 }
 
-/// The first page's title, authors and year; None unless a line that reads as a title has a line of names below it. `file`: the PDF's name,
-/// a second place for the year ("Georges 2026_notes.pdf").
-pub fn read(first_page: &str, file: &str) -> Option<FirstPage> {
-    let lines: Vec<&str> = first_page.lines().map(str::trim).filter(|l| !l.is_empty()).take(20).collect();
+fn is_cover_sheet(page: &str) -> bool {
+    let low = page.to_lowercase();
+    [
+        "warwick research archive portal",
+        "wrap.warwick.ac.uk",
+        "hal-",
+        "downloaded from",
+        "accepted manuscript",
+        "ssrn",
+        "researchgate",
+        "institutional repository",
+        "university repository",
+        "this version is available at",
+        "please cite this article as",
+    ]
+    .iter()
+    .any(|m| low.contains(m))
+}
+
+fn has_month_year(low: &str) -> bool {
+    const MONTHS: &[&str] = &[
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december",
+        "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
+    ];
+    let words: Vec<&str> = low.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    words.windows(2).any(|w| {
+        MONTHS.contains(&w[0])
+            && w[1].len() == 4
+            && (w[1].starts_with("19") || w[1].starts_with("20"))
+            && w[1].bytes().all(|b| b.is_ascii_digit())
+    })
+}
+
+fn extract_page_year(lines: &[&str], title_range: std::ops::Range<usize>) -> Option<String> {
+    const SKIP: &[&str] = &["arxiv", "doi", "http", "www.", "issn", "vol.", "volume "];
+    const EXPLICIT_CUES: &[&str] = &[
+        "dated", "date:", "received", "submitted", "published",
+        "last compiled", "compiled:", "summer term", "winter term",
+        "spring term", "autumn term", "fall term",
+    ];
+    const COPYRIGHT_CUES: &[&str] = &["©", "copyright"];
+    lines
+        .iter()
+        .take(20)
+        .enumerate()
+        .find_map(|(idx, l)| {
+            let low = l.to_lowercase();
+            if SKIP.iter().any(|w| low.contains(w)) {
+                return None;
+            }
+            let cue = EXPLICIT_CUES.iter().any(|w| low.contains(w))
+                || (!title_range.contains(&idx) && has_month_year(&low));
+            cue.then(|| year_in(l)).flatten()
+        })
+        .or_else(|| {
+            lines.iter().take(20).find_map(|l| {
+                let low = l.to_lowercase();
+                if SKIP.iter().any(|w| low.contains(w)) {
+                    return None;
+                }
+                COPYRIGHT_CUES.iter().any(|w| low.contains(w)).then(|| year_in(l)).flatten()
+            })
+        })
+}
+
+fn read_single_page(page: &str, file: &str) -> Option<FirstPage> {
+    let lines: Vec<&str> = page.lines().map(str::trim).filter(|l| !l.is_empty()).take(20).collect();
     let at = lines.iter().position(|l| !furniture(l))?;
     let mut title = lines[at].to_string();
     // a title that wraps: its next line goes on in lower case
@@ -76,19 +150,47 @@ pub fn read(first_page: &str, file: &str) -> Option<FirstPage> {
     }
     // no line of names under it: the first line was not a title either (a society's name over an old scan)
     let authors = lines.iter().skip(next).take(5).find_map(|l| names_in(l))?;
-    let dated = lines.iter().take(20).find(|l| {
-        let low = l.to_lowercase();
-        ["dated", "date:", "received", "submitted", "published"].iter().any(|w| low.contains(w))
-    });
-    let year = dated.and_then(|l| year_in(l)).or_else(|| year_in(&kandinsky_text::links::percent_decoded(file)));
+    let year = extract_page_year(&lines, at..next)
+        .or_else(|| year_in(&kandinsky_text::links::percent_decoded(file)));
     Some(FirstPage { title, authors, year })
+}
+
+/// Scans pages `0..5` of `\x0c`-separated PDF text, skipping blank pages and preferring content pages over repository cover sheets.
+pub fn read_pages(text: &str, file: &str) -> Option<FirstPage> {
+    let mut cover_fallback: Option<FirstPage> = None;
+    for page in text.split('\x0c').take(5) {
+        if page.chars().filter(|c| c.is_alphabetic()).count() < 20 {
+            continue;
+        }
+        let is_cover = is_cover_sheet(page);
+        if let Some(fp) = read_single_page(page, file) {
+            if !is_cover {
+                return Some(fp);
+            }
+            if cover_fallback.is_none() {
+                cover_fallback = Some(fp);
+            }
+        }
+    }
+    cover_fallback
+}
+
+/// The first page's title, authors and year; None unless a line that reads as a title has a line of names below it. `file`: the PDF's name,
+/// a second place for the year ("Georges 2026_notes.pdf").
+pub fn read(first_page: &str, file: &str) -> Option<FirstPage> {
+    read_pages(first_page, file)
 }
 
 /// The DOI of the published work with exactly this title (and this first author, when known), from Crossref's
 /// search: a first page read right is upgraded to the full record. Only an exact title match counts — the search
 /// always answers something.
 pub fn crossref_match(net: &dyn Net, p: &FirstPage) -> Option<String> {
-    let norm = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect::<String>();
+    let norm = |s: &str| {
+        crate::pdf_meta::fold_diacritics(s)
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>()
+    };
     let query = format!("{} {}", p.title, p.authors.first().map(String::as_str).unwrap_or(""));
     let v = net.json(&format!("https://api.crossref.org/works?rows=3&select=DOI,title,author&query.bibliographic={}", enc(&query, ""))).ok()?;
     let surname = p.authors.first().and_then(|a| a.split_whitespace().last()).map(norm);
@@ -130,5 +232,26 @@ mod tests {
         // a 1954 scan's text layer: words broken by the OCR; the file's name is used instead
         let page = "Det Kongelige Danske Videnskabernes Selska b\nMatematisk-fysiske Meddelelser, bind 28, nr . 8\nON TH E\nPROPERTIES OFA GAS O F\nCHARGED PARTICLE S\nBY\nJ . LINDIIAß D\n";
         assert_eq!(read(page, "mfm-28-8.pdf"), None);
+    }
+
+    #[test]
+    fn read_pages_skips_blank_and_cover_sheets_strips_symbols_and_extracts_dates() {
+        let blank = "   \n  1  \n";
+        let cover = "Warwick Research Archive Portal (WRAP)\nhttp://wrap.warwick.ac.uk/12345\nThis version is available at https://wrap.warwick.ac.uk\nAccepted Manuscript\nJane Doe\n";
+        let real = "© 2023 Elsevier Ltd.\nQuantum Transport in Disordered Wires\nAlice Smith∗¹, Bob Jones⋆², and Carol Lee✉\nLast compiled: May 2024\narXiv:2401.99999v1 1 Jan 2025\n";
+        let doc = format!("{blank}\x0c{cover}\x0c{real}");
+        let p = read_pages(&doc, "paper.pdf").unwrap();
+        assert_eq!(p.title, "Quantum Transport in Disordered Wires");
+        assert_eq!(p.authors, vec!["Alice Smith", "Bob Jones", "Carol Lee"]);
+        assert_eq!(p.year.as_deref(), Some("2024"));
+
+        let copyright_only = "© 2021 Author\nLectures on Statistical Mechanics\nAda Example\n";
+        let p2 = read_pages(copyright_only, "notes.pdf").unwrap();
+        assert_eq!(p2.title, "Lectures on Statistical Mechanics");
+        assert_eq!(p2.year.as_deref(), Some("2021"));
+
+        let term_only = "Lectures on Statistical Mechanics\nAda Example\nWinter Term 2022\n";
+        let p3 = read_pages(term_only, "notes.pdf").unwrap();
+        assert_eq!(p3.year.as_deref(), Some("2022"));
     }
 }

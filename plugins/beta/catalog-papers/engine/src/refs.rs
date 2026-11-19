@@ -46,6 +46,20 @@ pub struct Paper {
     /// `dateAdded`, "YYYY-MM-DD hh:mm:ss", for sorting.
     pub added: Option<String>,
     pub has_notes: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub isbn: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub volume: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pages: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publisher: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edition: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub series: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -61,6 +75,7 @@ pub struct PaperAdded {
 
 /// The fields the References view edits in place (the note's other properties are kept).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PaperEdit {
     pub key: String,
     pub title: String,
@@ -70,6 +85,14 @@ pub struct PaperEdit {
     pub venue: String,
     pub collections: Vec<String>,
     pub tags: Vec<String>,
+    pub kind: Option<String>,
+    pub doi: Option<String>,
+    pub arxiv: Option<String>,
+    pub isbn: Option<String>,
+    pub volume: Option<String>,
+    pub issue: Option<String>,
+    pub pages: Option<String>,
+    pub publisher: Option<String>,
 }
 
 /// How a PDF is filed by `import_pdf_with` (`import`, the References move): its type (`book`, `thesis`, `manuscript`
@@ -83,6 +106,7 @@ pub struct ImportOpts {
     pub keep_name: bool,
     /// Where the PDF was fetched from (a captured link), kept as the entry's `url`.
     pub url: Option<String>,
+    pub subfolder: Option<String>,
 }
 
 /// What `fold_all` did (or would do): the entries with an `info.yaml` and how many fields each has, and where the
@@ -132,24 +156,18 @@ fn io(path: &Path) -> impl Fn(std::io::Error) -> String + '_ {
 pub fn citekey(authors: &[String], year: Option<&str>, title: &str, taken: &dyn Fn(&str) -> bool) -> String {
     const STOP: &[&str] = &["a", "an", "the", "on", "of", "in", "for", "and", "to", "with", "from", "at", "by", "is", "are"];
     let ascii = |x: &str| -> String {
-        x.chars()
-            .filter_map(|c| match c {
-                'á' | 'à' | 'ä' | 'â' | 'ã' => Some('a'),
-                'é' | 'è' | 'ë' | 'ê' => Some('e'),
-                'í' | 'ì' | 'ï' | 'î' => Some('i'),
-                'ó' | 'ò' | 'ö' | 'ô' | 'õ' => Some('o'),
-                'ú' | 'ù' | 'ü' | 'û' => Some('u'),
-                'ñ' => Some('n'),
-                'ç' => Some('c'),
-                'ß' => Some('s'),
-                c if c.is_ascii_alphanumeric() => Some(c.to_ascii_lowercase()),
-                _ => None,
-            })
+        crate::pdf_meta::fold_diacritics(x)
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
             .collect()
     };
-    let last = authors.first().map(|a| a.split(',').next().unwrap_or(a).split_whitespace().last().unwrap_or("").to_lowercase()).unwrap_or_default();
-    let word = title.split(|c: char| !c.is_alphanumeric()).map(str::to_lowercase).find(|w| w.len() > 2 && !STOP.contains(&w.as_str())).unwrap_or_default();
-    let base = format!("{}{}{}", ascii(&last), year.unwrap_or(""), ascii(&word));
+    let last = authors.first().map(|a| a.split(',').next().unwrap_or(a).split_whitespace().last().unwrap_or("")).unwrap_or_default();
+    let folded_title = crate::pdf_meta::fold_diacritics(title);
+    let word = folded_title
+        .split(|c: char| !c.is_alphanumeric())
+        .find(|w| w.len() > 2 && !STOP.contains(w))
+        .unwrap_or_default();
+    let base = format!("{}{}{}", ascii(last), year.unwrap_or(""), ascii(word));
     let base = if base.is_empty() { "ref".to_string() } else { base };
     if !taken(&base) {
         return base;
@@ -265,7 +283,7 @@ pub fn bibtex_entry(key: &str, m: &Mapping) -> String {
             lines.push(format!("  {role} = {{{}}},", v.join(" and ")));
         }
     }
-    if let Some(y) = s(m, "date").and_then(|d| year_of(&d)) {
+    if let Some(y) = s(m, "date").and_then(|d| year_of(&d)).or_else(|| s(m, "year").and_then(|y| year_of(&y))) {
         lines.push(format!("  year = {{{y}}},"));
     }
     let ax_ver = s(m, "arxivVersion").map(|v| if v.starts_with('v') { v } else { format!("v{v}") });
@@ -290,6 +308,13 @@ pub fn bibtex_entry(key: &str, m: &Mapping) -> String {
             "ISBN" => s(m, "ISBN").or_else(|| s(m, "isbn")),
             _ => s(m, z),
         };
+        if *z == "pages" && kind == "book" {
+            if let Some(ref p) = val {
+                if !p.contains('-') && p.trim().chars().all(|c| c.is_ascii_digit()) {
+                    continue;
+                }
+            }
+        }
         if let Some(mut v) = val {
             if *z == "archiveID" {
                 had_eprint = true;
@@ -391,13 +416,18 @@ impl Lib<'_> {
                     .find(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("pdf")))
                     .and_then(|p| rel_path(self.root, &p))
             });
+        let authors = {
+            let a = list(m, "author");
+            if a.is_empty() { list(m, "authors") } else { a }
+        };
+        let year = s(m, "date").and_then(|d| year_of(&d)).or_else(|| s(m, "year").and_then(|y| year_of(&y)));
         Paper {
             has_notes: entry::has_note(dir, &key),
             dir: self.rel(dir),
             title: s(m, "title").unwrap_or_else(|| key.to_string()),
             kind: s(m, "type").unwrap_or_else(|| "document".into()),
-            authors: list(m, "author"),
-            year: s(m, "date").and_then(|d| year_of(&d)),
+            authors,
+            year,
             venue: s(m, "publicationTitle").or_else(|| s(m, "proceedingsTitle")).or_else(|| s(m, "bookTitle")).or_else(|| s(m, "publisher")).or_else(|| s(m, "university")),
             doi: s(m, "DOI"),
             arxiv: arxiv_of(m),
@@ -408,6 +438,13 @@ impl Lib<'_> {
             pdf,
             added: s(m, "dateAdded"),
             key,
+            isbn: s(m, "ISBN").or_else(|| s(m, "isbn")),
+            volume: s(m, "volume"),
+            issue: s(m, "issue"),
+            pages: s(m, "pages"),
+            publisher: s(m, "publisher"),
+            edition: s(m, "edition"),
+            series: s(m, "series"),
         }
     }
 
@@ -647,28 +684,24 @@ impl Lib<'_> {
 
     /// Add a reference from a DOI, arXiv id/URL (preserving `vN`), ISBN, INSPIRE-HEP URL, BibTeX, or RIS entry.
     pub fn add(&self, input: &str) -> Res<PaperAdded> {
-        let existing = self.list().unwrap_or_default();
-        let find_dup = |doi: Option<&str>, ax: Option<&str>| -> Option<&Paper> {
-            existing.iter().find(|p| {
-                (doi.is_some() && p.doi.as_deref().map(str::to_lowercase) == doi.map(str::to_lowercase))
-                    || (ax.is_some() && p.arxiv.as_deref() == ax)
-            })
-        };
         if let Some((pinned, m)) = crate::enrich::parse_bibtex(input) {
-            if let Some(p) = find_dup(s(&m, "DOI").as_deref(), arxiv_of(&m).as_deref()) {
+            let isbn = s(&m, "ISBN").or_else(|| s(&m, "isbn"));
+            if let Some(p) = self.find_existing_by_ids(s(&m, "DOI").as_deref(), arxiv_of(&m).as_deref(), isbn.as_deref()) {
                 return Ok(PaperAdded { paper: p.clone(), created: false, pdf: p.pdf.is_some(), gate: None });
             }
             return self.file_fetched_entry(m, pinned, None);
         }
         if let Some(m) = crate::enrich::parse_ris(input) {
-            if let Some(p) = find_dup(s(&m, "DOI").as_deref(), arxiv_of(&m).as_deref()) {
+            let isbn = s(&m, "ISBN").or_else(|| s(&m, "isbn"));
+            if let Some(p) = self.find_existing_by_ids(s(&m, "DOI").as_deref(), arxiv_of(&m).as_deref(), isbn.as_deref()) {
                 return Ok(PaperAdded { paper: p.clone(), created: false, pdf: p.pdf.is_some(), gate: None });
             }
             return self.file_fetched_entry(m, None, None);
         }
         if let Some(recid) = crate::enrich::parse_inspire_id(input) {
             let m = crate::enrich::inspire_by_id(self.net, &recid)?;
-            if let Some(p) = find_dup(s(&m, "DOI").as_deref(), arxiv_of(&m).as_deref()) {
+            let isbn = s(&m, "ISBN").or_else(|| s(&m, "isbn"));
+            if let Some(p) = self.find_existing_by_ids(s(&m, "DOI").as_deref(), arxiv_of(&m).as_deref(), isbn.as_deref()) {
                 return Ok(PaperAdded { paper: p.clone(), created: false, pdf: p.pdf.is_some(), gate: None });
             }
             return self.file_fetched_entry(m, None, None);
@@ -676,8 +709,8 @@ impl Lib<'_> {
         let ax_ver = remote::parse_arxiv_versioned(input).filter(|_| input.to_lowercase().contains("arxiv") || parse_doi(input).is_none());
         let ax = ax_ver.as_ref().map(|(a, _)| a.clone());
         let doi = if ax.is_none() { parse_doi(input) } else { None };
-        if let Some(p) = find_dup(doi.as_deref(), ax.as_deref()) {
-            return Ok(PaperAdded { paper: p.clone(), created: false, pdf: false, gate: None });
+        if let Some(p) = self.find_existing_by_ids(doi.as_deref(), ax.as_deref(), None) {
+            return Ok(PaperAdded { paper: p.clone(), created: false, pdf: p.pdf.is_some(), gate: None });
         }
         if let Some((a, ver)) = ax_ver {
             let mut m = match &ver {
@@ -696,19 +729,11 @@ impl Lib<'_> {
             return self.file_fetched_entry(m, None, Some(&fetch_ax));
         }
         if let Some(d) = doi {
-            let m = remote::crossref(self.net, &d)?;
+            let m = remote::crossref_with_openalex(self.net, &d, &self.cfg.email)?;
             return self.file_fetched_entry(m, None, None);
         }
         if let Some(isbn) = parse_isbn(input) {
-            if let Some(p) = existing.iter().find(|p| {
-                safe_join(self.root, &p.dir)
-                    .ok()
-                    .and_then(|d| entry::read(&d))
-                    .and_then(|em| s(&em, "ISBN"))
-                    .and_then(|v| parse_isbn(&v))
-                    .as_deref()
-                    == Some(isbn.as_str())
-            }) {
+            if let Some(p) = self.find_existing_by_ids(None, None, Some(isbn.as_str())) {
                 return Ok(PaperAdded { paper: p.clone(), created: false, pdf: p.pdf.is_some(), gate: None });
             }
             return self.new_entry(remote::isbn_book(self.net, &isbn)?);
@@ -728,7 +753,9 @@ impl Lib<'_> {
         for (url, from) in tries {
             match self.net.pdf(&url) {
                 Ok(b) => {
-                    let stored = if !self.cfg.external_pdf_roots.is_empty() && self.cfg.store_in_external {
+                    let stored = if let Some((portable, _)) = crate::external::find_existing_external_pdf(self.root, self.cfg, &b) {
+                        portable
+                    } else if !self.cfg.external_pdf_roots.is_empty() && self.cfg.store_in_external {
                         let fname = crate::external::format_pdf_filename(&self.cfg.rename_format, m, key);
                         crate::external::write_external_pdf(self.root, self.cfg, None, &fname, &b)?.0
                     } else {
@@ -737,6 +764,7 @@ impl Lib<'_> {
                         name
                     };
                     m.insert("files".into(), Value::Sequence(vec![stored.into()]));
+                    m.insert("pdfSha256".into(), sha_hex(&b).into());
                     m.insert("pdfFrom".into(), format!("{from}: {url}").into());
                     return Ok(Ok(()));
                 }
@@ -747,7 +775,7 @@ impl Lib<'_> {
         Ok(Err(gate))
     }
 
-    fn find_existing_by_ids(&self, doi: Option<&str>, ax: Option<&str>, isbn: Option<&str>) -> Option<Paper> {
+    pub(crate) fn find_existing_by_ids(&self, doi: Option<&str>, ax: Option<&str>, isbn: Option<&str>) -> Option<Paper> {
         let ndoi = doi.map(norm_doi).filter(|d| !d.is_empty());
         let nax = ax.map(|a| a.trim().to_ascii_lowercase()).filter(|a| !a.is_empty());
         let nisbn = isbn.and_then(isbn_core);
@@ -769,6 +797,27 @@ impl Lib<'_> {
         })
     }
 
+    pub(crate) fn find_existing_by_sha(&self, digest: &[u8; 32], bytes_len: usize, existing_ref: Option<&str>) -> Option<Paper> {
+        let hex = bytes_sha_hex(digest);
+        self.list().ok()?.into_iter().find(|p| {
+            if let Some(er) = existing_ref {
+                if p.pdf.as_deref() == Some(er) {
+                    return true;
+                }
+            }
+            let stored_match = safe_join(self.root, &p.dir)
+                .ok()
+                .and_then(|d| entry::read(&d))
+                .and_then(|em| s(&em, "pdfSha256"))
+                .is_some_and(|h| h.eq_ignore_ascii_case(&hex));
+            stored_match
+                || p.pdf
+                    .as_deref()
+                    .and_then(|f| self.pdf_abs_path(f))
+                    .is_some_and(|abs| abs.metadata().is_ok_and(|md| md.len() == bytes_len as u64) && std::fs::read(&abs).is_ok_and(|b| sha(&b) == *digest))
+        })
+    }
+
     /// A PDF dropped on the library: a DOI, arXiv id, or ISBN on its first pages gives the metadata (or a book
     /// lookup for books); without one (or offline), structured filename or first-page metadata names the entry.
     pub fn import_pdf(&self, name: &str, bytes: &[u8]) -> Res<PaperAdded> {
@@ -781,8 +830,18 @@ impl Lib<'_> {
         }
         let file = name.rsplit(['/', '\\']).next().unwrap_or(name).to_string();
         let digest = sha(bytes);
-        // the same file filed already — by its name, or by its content under another name (2026-10-18: 24 loose copies
-        // of a real library's Zotero PDFs were filed twice): that entry, nothing added
+        let existing_external = crate::external::find_existing_external_pdf(self.root, self.cfg, bytes);
+
+        if let Some((ref portable_ref, _)) = existing_external {
+            if let Some(p) = self.find_existing_by_sha(&digest, bytes.len(), Some(portable_ref.as_str())) {
+                return Ok(PaperAdded { paper: p, created: false, pdf: true, gate: None });
+            }
+        }
+
+        let extract = crate::pdf_meta::extract_pdf_doc(bytes);
+        let (text, pages, doc_meta) = (&extract.text, extract.pages, &extract.meta);
+
+        // Deduplicate by filename (when keep_name) or SHA-256 (whenever keep_name, external_pdf_roots, or non-empty PDF).
         if opts.keep_name {
             let same = |p: &Paper| {
                 p.pdf.as_deref().is_some_and(|f| f.rsplit(['/', '\\']).next() == Some(file.as_str()))
@@ -791,14 +850,17 @@ impl Lib<'_> {
             if let Some(p) = self.list()?.into_iter().find(|p| same(p)) {
                 return Ok(PaperAdded { paper: p, created: false, pdf: true, gate: None });
             }
+        } else if !self.cfg.external_pdf_roots.is_empty() || pages > 0 {
+            if let Some(p) = self.find_existing_by_sha(&digest, bytes.len(), None) {
+                return Ok(PaperAdded { paper: p, created: false, pdf: true, gate: None });
+            }
         }
-        let (text, pages) = pdf_text(bytes);
+
         let parsed = parse_filename(name);
-        let first_page = text.split('\x0c').next().unwrap_or("");
-        let first = crate::firstpage::read(first_page, name);
-        let ids = extract_pdf_identifiers(&text, pages, name);
+        let first = crate::firstpage::read_pages(text, name);
+        let ids = extract_pdf_identifiers_with_meta(text, pages, name, Some(doc_meta));
         let class = classify_pdf(&ClassifyInput {
-            text: &text,
+            text,
             pages,
             filename: name,
             rel_dir: None,
@@ -814,13 +876,14 @@ impl Lib<'_> {
             let has_pdf = p.pdf.is_some();
             PaperAdded { paper: p, created: false, pdf: has_pdf, gate: None }
         } else {
-            let remote = lookup_pdf_remote(
+            let remote = lookup_pdf_remote_with_meta(
                 self.net,
                 &self.cfg.email,
                 class,
                 &ids,
                 &parsed,
                 first.as_ref(),
+                Some(doc_meta),
             );
             match remote {
                 Some((mut m, _src)) => {
@@ -831,13 +894,18 @@ impl Lib<'_> {
                         let has_pdf = p.pdf.is_some();
                         PaperAdded { paper: p, created: false, pdf: has_pdf, gate: None }
                     } else {
-                        merge_local_fallbacks(&mut m, &parsed, first.as_ref(), &ids, pages, class);
+                        merge_local_fallbacks_with_meta(&mut m, &parsed, first.as_ref(), Some(doc_meta), &ids, pages, class);
                         self.new_entry(m)?
                     }
                 }
                 None => {
-                    if first.is_some() || parsed.structured || !ids.is_empty() {
-                        let (m, _) = build_local_entry_mapping(&parsed, first.as_ref(), &ids, pages, class);
+                    if first.is_some()
+                        || parsed.structured
+                        || !ids.is_empty()
+                        || doc_meta.title.is_some()
+                        || split_trailing_paren_author(&parsed.title).is_some()
+                    {
+                        let (m, _) = build_local_entry_mapping_with_meta(&parsed, first.as_ref(), Some(doc_meta), &ids, pages, class);
                         self.new_entry(m)?
                     } else {
                         self.entry_named_after(name, pages)?
@@ -846,14 +914,24 @@ impl Lib<'_> {
             }
         };
 
-        // the user's own file: under its own name when asked (first among the files), else `<key>.pdf` when it has none
+        // Link existing external PDF in place (zero writes), else write to external root or entry dir.
         let dir = safe_join(self.root, &added.paper.dir)?;
         let mut m = entry::read(&dir).unwrap_or_default();
         let mut changed = false;
-        if opts.keep_name || added.paper.pdf.is_none() {
-            let stored = if !self.cfg.external_pdf_roots.is_empty() && self.cfg.store_in_external {
+        if let Some((portable_ref, _)) = existing_external {
+            if added.paper.pdf.is_none() {
+                let mut files: Vec<Value> = m.get("files").and_then(Value::as_sequence).cloned().unwrap_or_default();
+                if !files.iter().any(|f| f.as_str() == Some(portable_ref.as_str())) {
+                    files.insert(0, portable_ref.into());
+                }
+                m.insert("files".into(), Value::Sequence(files));
+                m.insert("pdfSha256".into(), bytes_sha_hex(&digest).into());
+                changed = true;
+            }
+        } else if opts.keep_name || added.paper.pdf.is_none() {
+            let stored = if !self.cfg.external_pdf_roots.is_empty() && (self.cfg.store_in_external || opts.subfolder.is_some()) {
                 let target_name = if opts.keep_name { file } else { crate::external::format_pdf_filename(&self.cfg.rename_format, &m, &added.paper.key) };
-                crate::external::write_external_pdf(self.root, self.cfg, None, &target_name, bytes)?.0
+                crate::external::write_external_pdf(self.root, self.cfg, opts.subfolder.as_deref(), &target_name, bytes)?.0
             } else {
                 let file = if opts.keep_name { file } else { format!("{}.pdf", added.paper.key) };
                 if !dir.join(&file).exists() {
@@ -959,7 +1037,9 @@ impl Lib<'_> {
         if !bytes.starts_with(b"%PDF") {
             return Err(format!("{file} is not a PDF"));
         }
-        let stored = if !self.cfg.external_pdf_roots.is_empty() && self.cfg.store_in_external {
+        let stored = if let Some((portable, _)) = crate::external::find_existing_external_pdf(self.root, self.cfg, &bytes) {
+            portable
+        } else if !self.cfg.external_pdf_roots.is_empty() && self.cfg.store_in_external {
             let fname = crate::external::format_pdf_filename(&self.cfg.rename_format, &m, &paper.key);
             crate::external::write_external_pdf(self.root, self.cfg, None, &fname, &bytes)?.0
         } else {
@@ -969,6 +1049,7 @@ impl Lib<'_> {
         };
         let _ = std::fs::remove_file(&src); // moved, not copied: the cache keeps no second one
         m.insert("files".into(), Value::Sequence(vec![stored.into()]));
+        m.insert("pdfSha256".into(), sha_hex(&bytes).into());
         m.insert("pdfFrom".into(), from.trim().to_string().into());
         self.saved(&dir, &paper.key, &m)
     }
@@ -980,13 +1061,30 @@ impl Lib<'_> {
         let paper = self.find(&e.key)?;
         let dir = safe_join(self.root, &paper.dir)?;
         let mut m = entry::read(&dir).unwrap_or_default();
-        // the venue lives in the field the item type uses (journal, proceedings, book, publisher)
-        let venue_key = ["publicationTitle", "proceedingsTitle", "bookTitle", "publisher"].into_iter().find(|k| m.contains_key(*k)).unwrap_or("publicationTitle");
+        // the venue lives in the field the item type uses (journal, proceedings, book, publisher, university)
+        let eff_kind = e.kind.as_deref().map(str::trim).filter(|k| !k.is_empty()).or_else(|| m.get("type").and_then(Value::as_str)).unwrap_or("");
+        let default_venue = match normalized_kind(eff_kind) {
+            "book" => "publisher",
+            "thesis" => "university",
+            _ => "publicationTitle",
+        };
+        let venue_key = ["publicationTitle", "proceedingsTitle", "bookTitle", "publisher", "university"]
+            .into_iter()
+            .find(|k| m.contains_key(*k))
+            .unwrap_or(default_venue);
+        let trimmed_date = e.date.trim();
+        let preserved_date = if is_year_token(trimmed_date) {
+            s(&m, "date")
+                .filter(|cur| cur.len() > 4 && year_of(cur).as_deref() == Some(trimmed_date))
+                .unwrap_or_else(|| trimmed_date.to_string())
+        } else {
+            trimmed_date.to_string()
+        };
         let seq = |xs: &[String]| Value::Sequence(xs.iter().map(|x| x.trim()).filter(|x| !x.is_empty()).map(Value::from).collect());
         for (k, v) in [
             ("title", Value::from(e.title.trim())),
             ("author", seq(&e.authors)),
-            ("date", Value::from(e.date.trim())),
+            ("date", Value::from(preserved_date.as_str())),
             (venue_key, Value::from(e.venue.trim())),
             ("collections", seq(&e.collections)),
             ("tags", seq(&e.tags)),
@@ -998,6 +1096,59 @@ impl Lib<'_> {
                 m.insert(k.into(), v);
             }
         }
+        let set_opt = |m: &mut Mapping, field: &str, opt: Option<&str>| {
+            if let Some(raw) = opt {
+                let t = raw.trim();
+                if t.is_empty() {
+                    m.remove(field);
+                } else {
+                    m.insert(field.into(), t.into());
+                }
+            }
+        };
+        if let Some(ref k) = e.kind {
+            if !k.trim().is_empty() {
+                m.insert("type".into(), k.trim().into());
+            }
+        }
+        if let Some(ref d) = e.doi {
+            let clean = norm_doi(d);
+            if clean.is_empty() {
+                m.remove("DOI");
+            } else {
+                m.insert("DOI".into(), clean.into());
+            }
+        }
+        if let Some(ref ax) = e.arxiv {
+            let t = ax.trim();
+            if t.is_empty() {
+                m.remove("archiveID");
+                m.remove("arxiv");
+                m.remove("arxivVersion");
+            } else if let Some((base, ver)) = remote::parse_arxiv_versioned(t) {
+                let full = format!("arXiv:{base}{}", ver.as_deref().unwrap_or(""));
+                m.insert("archiveID".into(), full.into());
+                if let Some(v) = ver {
+                    m.insert("arxivVersion".into(), v.into());
+                }
+            } else {
+                m.insert("archiveID".into(), t.into());
+            }
+        }
+        if let Some(ref i) = e.isbn {
+            let t = i.trim();
+            if t.is_empty() {
+                m.remove("ISBN");
+                m.remove("isbn");
+            } else {
+                let norm = remote::normalize_isbn(t).unwrap_or_else(|| t.to_string());
+                m.insert("ISBN".into(), norm.into());
+            }
+        }
+        set_opt(&mut m, "volume", e.volume.as_deref());
+        set_opt(&mut m, "issue", e.issue.as_deref());
+        set_opt(&mut m, "pages", e.pages.as_deref());
+        set_opt(&mut m, "publisher", e.publisher.as_deref());
         self.saved(&dir, &paper.key, &m)
     }
 
@@ -1143,7 +1294,7 @@ fn extract_isbn_digits_at(text: &str, start: usize) -> Option<String> {
         } else if (c == 'X' || c == 'x') && digits.len() == 9 {
             prev_space = false;
             digits.push('X');
-        } else if matches!(c, '-' | '\u{2013}' | '\u{2014}') {
+        } else if matches!(c, '-' | '\u{2010}' | '\u{2011}' | '\u{2012}' | '\u{2013}' | '\u{2014}' | '\u{2212}') {
             prev_space = false;
             continue;
         } else if c == ' ' && !digits.is_empty() && !prev_space {
@@ -1187,10 +1338,34 @@ fn extract_isbn_digits_at(text: &str, start: usize) -> Option<String> {
     None
 }
 
+fn doi_spans_in(text: &str) -> Vec<(usize, usize)> {
+    let mut spans = Vec::new();
+    let b = text.as_bytes();
+    let mut i = 0;
+    while i + 8 < b.len() {
+        if &b[i..i + 3] == b"10." && (i == 0 || !b[i - 1].is_ascii_alphanumeric()) {
+            let reg = b[i + 3..].iter().take_while(|c| c.is_ascii_digit()).count();
+            if (4..=9).contains(&reg) && b.get(i + 3 + reg) == Some(&b'/') {
+                let mut end = i + 3 + reg + 1;
+                while end < b.len() && !b[end].is_ascii_whitespace() && !matches!(b[end], b'"' | b'\'' | b'<' | b'>' | b')' | b']' | b'}') {
+                    end += 1;
+                }
+                spans.push((i, end));
+                i = end;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    spans
+}
+
 /// Extracts and validates an ISBN-10 or ISBN-13 from copyright-page text or a filename.
 /// Marked `ISBN` labels (including `ISBN-10`, `ISBN-13`, `e-ISBN`, `ISBN (13)`, spaces/dashes) take precedence
 /// over bare `978`/`979` 13-digit numbers.
 pub fn parse_isbn(text: &str) -> Option<String> {
+    let normalized = crate::pdf_meta::normalize_pdf_unicode(text);
+    let text = normalized.as_str();
     let low = text.to_ascii_lowercase();
     for (idx, _) in low.match_indices("isbn") {
         if idx > 0 {
@@ -1231,11 +1406,15 @@ pub fn parse_isbn(text: &str) -> Option<String> {
         }
     }
 
+    let doi_spans = doi_spans_in(text);
     for (i, _) in text.char_indices() {
         if !(low[i..].starts_with("978") || low[i..].starts_with("979")) {
             continue;
         }
-        if i > 0 && text[..i].ends_with(|c: char| c.is_ascii_digit() || c == '/') {
+        if doi_spans.iter().any(|&(s, e)| i >= s && i < e) {
+            continue;
+        }
+        if i > 0 && text[..i].ends_with(|c: char| c.is_ascii_digit()) {
             continue;
         }
         if let Some(isbn) = extract_isbn_digits_at(text, i) {
@@ -1283,6 +1462,7 @@ fn parse_isbn_for_pdf(text: &str, pages: usize) -> Option<String> {
 }
 
 /// Pages read for identifiers: a book's ISBN and DOI sit on its copyright page, past the title pages (up to p. 10).
+#[cfg(test)]
 const ID_PAGES: usize = 10;
 /// A PDF with no journal/arXiv identifiers and more pages than this is filed as a book.
 const BOOK_PAGES: usize = 100;
@@ -1378,7 +1558,7 @@ fn split_case_insensitive_and(s: &str) -> Vec<&str> {
     out
 }
 
-fn parse_authors_segment(raw: &str) -> Vec<String> {
+pub(crate) fn parse_authors_segment(raw: &str) -> Vec<String> {
     let mut cleaned = raw.replace('_', " ");
     let low = cleaned.to_ascii_lowercase();
     for suf in [" et al.", " et al"] {
@@ -1699,9 +1879,248 @@ fn strip_mirror_tags(stem: &str) -> String {
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+const PUBLISHER_SUFFIXES: &[&str] = &[
+    "cambridge university press", "oxford university press", "princeton university press",
+    "harvard university press", "yale university press", "stanford university press",
+    "university of chicago press", "columbia university press", "cornell university press",
+    "mit press", "clarendon press", "belknap press", "westview press", "polity press",
+    "imperial college press", "crc press", "academic press", "dover publications", "dover",
+    "springer-verlag", "springer verlag", "springer", "routledge", "john wiley & sons", "wiley",
+    "elsevier", "north-holland", "addison-wesley", "addison wesley", "world scientific",
+    "prentice hall", "taylor & francis", "birkhäuser", "birkhauser", "walter de gruyter",
+    "de gruyter", "american mathematical society", "siam", "pearson", "mcgraw-hill",
+    "macmillan", "basic books", "penguin books", "penguin", "w. w. norton", "norton",
+    "blackwell", "verso", "w. h. freeman", "freeman", "éditions du seuil", "editions du seuil",
+    "seuil", "éditions de minuit", "editions de minuit", "les éditions de minuit", "minuit",
+    "gallimard", "presses universitaires de france", "puf", "flammarion", "vrin", "payot",
+    "aubier", "alcan", "suhrkamp", "felix meiner", "klostermann", "c. h. beck",
+];
+
+fn looks_like_libgen_publisher_tail(cand: &str) -> bool {
+    const PUB_WORDS: &[&str] = &[
+        "press", "presses", "publishers", "publisher", "publishing", "publications",
+        "verlag", "editions", "éditions", "editora", "editore", "editorial", "books", "librairie",
+    ];
+    let t = cand.trim();
+    let words: Vec<&str> = t.split_whitespace().collect();
+    if words.is_empty() || words.len() > 6 {
+        return false;
+    }
+    let first_ok = words[0].chars().next().is_some_and(char::is_uppercase);
+    first_ok
+        && words.iter().any(|w| {
+            let clean = w.trim_matches(|c: char| !c.is_alphabetic()).to_lowercase();
+            PUB_WORDS.contains(&clean.as_str())
+        })
+}
+
+fn strip_publisher_suffix(stem: &str) -> (String, Option<String>) {
+    let t = stem.trim();
+    let mut year_out: Option<String> = None;
+    let body = if let Some(stripped) = t.strip_suffix(')') {
+        if let Some((before, inner)) = stripped.rsplit_once('(') {
+            let trimmed_inner = inner.trim();
+            if is_year_token(trimmed_inner) {
+                year_out = Some(trimmed_inner.to_string());
+                before.trim_end()
+            } else {
+                t
+            }
+        } else {
+            t
+        }
+    } else {
+        t
+    };
+    let low = body.to_lowercase();
+    for pub_name in PUBLISHER_SUFFIXES {
+        let pat = format!("-{pub_name}");
+        if low.ends_with(&pat) {
+            let cut = body.len().saturating_sub(pat.len());
+            if body.is_char_boundary(cut) {
+                let prefix = body[..cut].trim_end();
+                if !prefix.is_empty() {
+                    return (prefix.to_string(), year_out);
+                }
+            }
+        }
+    }
+    if year_out.is_some() {
+        if let Some((prefix, cand)) = body.rsplit_once('-') {
+            let p_trim = prefix.trim_end();
+            if !p_trim.is_empty() && !prefix.ends_with(' ') && looks_like_libgen_publisher_tail(cand) {
+                return (p_trim.to_string(), year_out);
+            }
+        }
+    }
+    (stem.to_string(), None)
+}
+
+fn strip_sort_prefix(stem: &str) -> &str {
+    let bytes = stem.as_bytes();
+    if bytes.len() >= 4 && matches!(bytes[0], b'z' | b'Z') && bytes[1] == b'_' {
+        let rest = stem[2..].trim_start();
+        if rest.chars().next().is_some_and(|c| c.is_uppercase() || c.is_ascii_digit()) {
+            return rest;
+        }
+    }
+    if bytes.len() >= 4 && matches!(bytes[0], b'z' | b'Z') && bytes[1] == b'-' {
+        let rest = stem[2..].trim_start();
+        if rest.chars().next().is_some_and(char::is_uppercase)
+            && (split_spaced_dashes(rest).len() >= 2
+                || find_paren_year(rest).is_some()
+                || extract_volume_from_str(rest).1.is_some())
+        {
+            return rest;
+        }
+    }
+    let mut chars = stem.chars();
+    if let (Some('z'), Some(c1), Some(c2)) = (chars.next(), chars.next(), chars.next()) {
+        if c1.is_uppercase() && c2.is_lowercase() {
+            let rest = &stem[1..];
+            if split_spaced_dashes(rest).len() >= 2
+                || find_paren_year(rest).is_some()
+                || split_trailing_paren_author(rest).is_some()
+            {
+                return rest;
+            }
+        }
+    }
+    stem
+}
+
+const TITLE_STOP_AND_NOUNS: &[&str] = &[
+    "the", "an", "a", "on", "of", "in", "for", "to", "with", "from", "by", "into", "over",
+    "between", "under", "toward", "towards", "against", "about", "et", "ou", "sur", "dans",
+    "pour", "avec", "aux", "des", "über", "und", "zur", "vom", "zum", "quantum", "theory",
+    "physics", "mechanics", "introduction", "lectures", "lecture", "notes", "course",
+    "handbook", "principles", "methods", "foundations", "analysis", "algebra", "geometry",
+    "topology", "thermodynamics", "electrodynamics", "statistical", "condensed", "relativity",
+    "gravity", "philosophy", "critique", "history", "phenomenology", "logic", "ethics",
+    "metaphysics", "difference", "différence", "repetition", "répétition", "being", "time",
+    "structure", "revolutions", "scientific", "modern", "classical", "general", "elementary",
+];
+
+fn looks_like_clean_person(seg: &str) -> bool {
+    let t = seg.trim();
+    if t.is_empty()
+        || t.chars().any(|c| c.is_ascii_digit() || matches!(c, ';' | ':' | '(' | ')' | '[' | ']'))
+    {
+        return false;
+    }
+    let low = t.to_lowercase();
+    if ["edition", "ed.", "vol.", "volume"].iter().any(|w| low.contains(w)) {
+        return false;
+    }
+    let check_one = |part: &str| -> bool {
+        let p = part.trim();
+        if let Some((last, first)) = p.split_once(',') {
+            let (lw, fw): (Vec<&str>, Vec<&str>) = (last.split_whitespace().collect(), first.split_whitespace().collect());
+            return !lw.is_empty()
+                && lw.len() <= 2
+                && !fw.is_empty()
+                && fw.len() <= 3
+                && lw.iter().chain(fw.iter()).all(|w| {
+                    let wl = w.trim_matches(|c: char| !c.is_alphabetic()).to_lowercase();
+                    !TITLE_STOP_AND_NOUNS.contains(&wl.as_str())
+                        && (is_surname_particle(w) || w.chars().next().is_some_and(char::is_uppercase))
+                });
+        }
+        let words: Vec<&str> = p.split_whitespace().collect();
+        if !(2..=4).contains(&words.len()) {
+            return false;
+        }
+        let particle_count = words.iter().filter(|w| is_surname_particle(w)).count();
+        particle_count <= 1
+            && words.iter().all(|w| {
+                let wl = w.trim_matches(|c: char| !c.is_alphabetic()).to_lowercase();
+                !TITLE_STOP_AND_NOUNS.contains(&wl.as_str())
+                    && (is_surname_particle(w) || w.chars().next().is_some_and(char::is_uppercase))
+            })
+            && words.last().is_some_and(|w| w.chars().filter(|c| c.is_alphabetic()).count() >= 2)
+    };
+    let pieces: Vec<&str> = t.split('&').flat_map(split_case_insensitive_and).map(str::trim).filter(|s| !s.is_empty()).collect();
+    !pieces.is_empty() && pieces.len() <= 3 && pieces.iter().all(|p| check_one(p))
+}
+
+fn looks_like_title_segment(seg: &str) -> bool {
+    let t = seg.trim();
+    if looks_like_clean_person(t) {
+        return false;
+    }
+    let words: Vec<&str> = t.split_whitespace().collect();
+    if t.contains(':') && words.len() >= 2 && !t.split(':').next().unwrap_or("").contains(',') {
+        return true;
+    }
+    if words.len() >= 2 && !t.contains(',') {
+        let has_cue = words.iter().enumerate().any(|(idx, w)| {
+            let clean = w.trim_matches(|c: char| !c.is_alphabetic()).to_lowercase();
+            TITLE_STOP_AND_NOUNS.contains(&clean.as_str()) || (idx > 0 && clean == "and" && words.len() >= 3)
+        });
+        if has_cue {
+            return true;
+        }
+    }
+    words.len() >= 5 && !t.contains(',') && !t.contains('&') && !t.to_ascii_lowercase().contains(" and ")
+}
+
+/// Extracts `(clean_title, authors)` from an unstructured title ending with `(First Last)`
+/// when the title has `>= 2` words and the trailing `(...)` is a personal name (or `&`/`and` pair).
+pub fn split_trailing_paren_author(title: &str) -> Option<(String, Vec<String>)> {
+    const NON_NAMES: &[&str] = &[
+        "notes", "draft", "part", "vol", "volume", "edition", "ed", "revised", "expanded",
+        "pdf", "scan", "ebook", "book", "press", "university", "publishing", "publications",
+        "springer", "wiley", "elsevier", "cambridge", "oxford", "mit", "lecture", "lectures",
+        "course", "solution", "solutions", "manual", "preprint", "reprint", "translation",
+        "translated", "annotated",
+    ];
+    let t = title.trim();
+    if !t.ends_with(')') {
+        return None;
+    }
+    let (before, inner_raw) = t[..t.len() - 1].rsplit_once('(')?;
+    let clean_title = before.trim();
+    if clean_title.split_whitespace().count() < 2 {
+        return None;
+    }
+    let inner = inner_raw.trim();
+    if inner.is_empty() || inner.chars().any(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let chunks: Vec<&str> = inner
+        .split('&')
+        .flat_map(split_case_insensitive_and)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    if chunks.is_empty() || chunks.len() > 3 {
+        return None;
+    }
+    for ch in &chunks {
+        let words: Vec<&str> = ch.split_whitespace().collect();
+        if !(2..=4).contains(&words.len()) {
+            return None;
+        }
+        for w in &words {
+            let low = w.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+            if low.is_empty() || NON_NAMES.contains(&low.as_str()) {
+                return None;
+            }
+            if !(is_surname_particle(w) || w.chars().next().is_some_and(char::is_uppercase)) {
+                return None;
+            }
+        }
+        if words.last().is_none_or(|w| w.chars().filter(|c| c.is_alphabetic()).count() < 2) {
+            return None;
+        }
+    }
+    let authors = parse_authors_segment(inner);
+    (!authors.is_empty()).then(|| (clean_title.to_string(), authors))
+}
+
 /// Parses structured PDF filenames (`Author - Title - Year.pdf`, `Author - Title (Year).pdf`,
-/// `{Author}{Year} - {Title}.pdf`, `Author - Title, Vol. N.pdf`) while preserving unstructured filename
-/// behavior (`stem.replace(['_', '-'], " ")` with `structured = false`).
+/// `{Author}{Year} - {Title}.pdf`, `Author - Title, Vol. N.pdf`, `Title - Author.pdf`) while preserving
+/// unstructured filename behavior (`stem.replace(['_', '-'], " ")` with `structured = false`).
 pub fn parse_filename(name: &str) -> ParsedFilename {
     let decoded = kandinsky_text::links::percent_decoded(name);
     let fname = decoded.rsplit(['/', '\\']).next().unwrap_or(&decoded);
@@ -1711,7 +2130,10 @@ pub fn parse_filename(name: &str) -> ParsedFilename {
         fname
     };
     let clean_stem = strip_mirror_tags(raw_stem);
-    let stem = if clean_stem.is_empty() { raw_stem } else { clean_stem.as_str() };
+    let stem0 = if clean_stem.is_empty() { raw_stem } else { clean_stem.as_str() };
+    let stem1 = strip_sort_prefix(stem0);
+    let (stem_after_pub, pub_year) = strip_publisher_suffix(stem1);
+    let stem = stem_after_pub.as_str();
     let isbn = parse_isbn(stem);
     let ax = remote::parse_arxiv_anywhere(stem);
     let arxiv = ax.as_ref().map(|(a, _)| a.clone());
@@ -1719,12 +2141,19 @@ pub fn parse_filename(name: &str) -> ParsedFilename {
 
     let segs = split_spaced_dashes(stem);
     let has_spaced_dash = segs.len() >= 2;
-    let has_paren_year = find_paren_year(stem).is_some();
+    let has_paren_year = find_paren_year(stem).is_some() || pub_year.is_some();
     let has_vol = extract_volume_from_str(stem).1.is_some();
     let structured = has_spaced_dash || has_paren_year || has_vol;
 
     if !structured {
-        let title = stem.replace(['_', '-'], " ").split_whitespace().collect::<Vec<_>>().join(" ");
+        let title = if stem.ends_with(')') && split_trailing_paren_author(stem).is_some() {
+            let (before, inner) = stem[..stem.len() - 1].rsplit_once('(').unwrap();
+            let left = before.replace(['_', '-'], " ").split_whitespace().collect::<Vec<_>>().join(" ");
+            let right = inner.replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ");
+            format!("{left} ({right})")
+        } else {
+            stem.replace(['_', '-'], " ").split_whitespace().collect::<Vec<_>>().join(" ")
+        };
         return ParsedFilename {
             structured: false,
             title,
@@ -1738,7 +2167,7 @@ pub fn parse_filename(name: &str) -> ParsedFilename {
         };
     }
 
-    let mut year: Option<String> = None;
+    let mut year: Option<String> = pub_year;
     let mut volume: Option<String> = None;
     let mut edition: Option<String> = None;
     let mut authors: Vec<String> = Vec::new();
@@ -1746,7 +2175,10 @@ pub fn parse_filename(name: &str) -> ParsedFilename {
     let title_raw = if segs.len() >= 2 {
         let mut work = segs;
         if work.len() >= 2 && is_year_token(&work[work.len() - 1]) {
-            year = work.pop();
+            let y = work.pop();
+            if year.is_none() {
+                year = y;
+            }
         }
         if work.len() >= 2 && is_year_token(&work[0]) {
             if year.is_none() {
@@ -1755,7 +2187,21 @@ pub fn parse_filename(name: &str) -> ParsedFilename {
                 work.remove(0);
             }
         }
-        if work.len() >= 2 {
+        let trailing_person = (work.len() == 2 && looks_like_title_segment(&work[0])).then(|| {
+            let (cand_person, py, pe) = extract_paren_tags(&work[1]);
+            let (cand_person, ay) = extract_author_year(&cand_person);
+            looks_like_clean_person(&cand_person).then(|| (cand_person, py.or(ay), pe))
+        }).flatten();
+        if let Some((person_seg, py, pe)) = trailing_person {
+            if year.is_none() {
+                year = py;
+            }
+            if edition.is_none() {
+                edition = pe;
+            }
+            authors = parse_authors_segment(&person_seg);
+            work.remove(0)
+        } else if work.len() >= 2 {
             let first_seg = work.remove(0);
             let (author_part, ay) = extract_author_year(&first_seg);
             if year.is_none() {
@@ -2007,21 +2453,25 @@ pub fn classify_pdf(input: &ClassifyInput<'_>) -> ItemClass {
         return ItemClass::Book;
     }
 
-    let front_low: String = input
-        .text
-        .split('\x0c')
-        .take(3)
-        .collect::<Vec<_>>()
-        .join("\n")
-        .to_ascii_lowercase();
-    let name_low = input.filename.to_ascii_lowercase();
+    let front_low = crate::pdf_meta::normalize_pdf_unicode(
+        &input.text.split('\x0c').take(3).collect::<Vec<_>>().join("\n"),
+    )
+    .to_ascii_lowercase();
+    let name_low = crate::pdf_meta::normalize_pdf_unicode(input.filename).to_ascii_lowercase();
     if front_low.contains("phd thesis")
         || front_low.contains("ph.d. thesis")
         || front_low.contains("doctoral dissertation")
         || front_low.contains("doctoral thesis")
         || front_low.contains("master's thesis")
         || front_low.contains("submitted in partial fulfillment")
+        || front_low.contains("submitted in partial fulfilment")
+        || front_low.contains("in fulfilment of")
+        || front_low.contains("a thesis submitted for the degree of")
+        || front_low.contains("submitted for the degree of doctor")
         || front_low.contains("a dissertation presented")
+        || front_low.contains("diplomarbeit")
+        || front_low.contains("masterarbeit")
+        || front_low.contains("habilitation")
         || front_low.contains("thèse de doctorat")
         || front_low.contains("these de doctorat")
         || name_low.starts_with("these de ")
@@ -2072,14 +2522,27 @@ impl PdfIds {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn extract_pdf_identifiers(text: &str, pages: usize, name: &str) -> PdfIds {
+    extract_pdf_identifiers_with_meta(text, pages, name, None)
+}
+
+pub(crate) fn extract_pdf_identifiers_with_meta(
+    text: &str,
+    pages: usize,
+    name: &str,
+    meta: Option<&crate::pdf_meta::PdfDocMeta>,
+) -> PdfIds {
     let parsed_name = parse_filename(name);
     let page_slices: Vec<&str> = text.split('\x0c').collect();
     let first_page = page_slices.first().copied().unwrap_or("");
-    let isbn = parse_isbn_for_pdf(text, pages).or(parsed_name.isbn);
+    let isbn = parse_isbn_for_pdf(text, pages)
+        .or_else(|| meta.and_then(|mt| mt.isbn.clone()))
+        .or(parsed_name.isbn);
 
     let ax_pair = remote::parse_arxiv_anywhere(first_page)
         .or_else(|| parsed_name.arxiv.clone().map(|a| (a, parsed_name.arxiv_version.clone())))
+        .or_else(|| meta.and_then(|mt| mt.arxiv.clone().map(|a| (a, mt.arxiv_version.clone()))))
         .or_else(|| {
             page_slices
                 .iter()
@@ -2090,6 +2553,9 @@ pub(crate) fn extract_pdf_identifiers(text: &str, pages: usize, name: &str) -> P
         });
 
     let mut doi = page_slices.iter().take(6).find_map(|p| parse_doi(p));
+    if doi.is_none() {
+        doi = meta.and_then(|mt| mt.doi.clone());
+    }
     if doi.is_none() && isbn.is_none() {
         doi = parse_doi(text);
     }
@@ -2124,31 +2590,75 @@ pub(crate) fn fetch_arxiv_mapping(net: &dyn Net, base_id: &str, ver: Option<&str
     Some(m)
 }
 
-pub(crate) fn lookup_pdf_remote(
+fn pick_local_authors(
+    parsed: &ParsedFilename,
+    first: Option<&crate::firstpage::FirstPage>,
+    meta: Option<&crate::pdf_meta::PdfDocMeta>,
+) -> Vec<String> {
+    let fp_authors: Vec<String> = first
+        .map(|f| f.authors.iter().map(|a| format_author_token(a)).filter(|a| !a.is_empty()).collect())
+        .unwrap_or_default();
+    let meta_authors: Vec<String> = meta
+        .map(|mt| mt.authors.iter().map(|a| format_author_token(a)).filter(|a| !a.is_empty()).collect())
+        .unwrap_or_default();
+    if parsed.authors.len() >= 2 {
+        return parsed.authors.clone();
+    }
+    if fp_authors.len() >= 2 {
+        return fp_authors;
+    }
+    if meta_authors.len() >= 2 {
+        return meta_authors;
+    }
+    if !parsed.authors.is_empty() {
+        return parsed.authors.clone();
+    }
+    if !fp_authors.is_empty() {
+        return fp_authors;
+    }
+    if !meta_authors.is_empty() {
+        return meta_authors;
+    }
+    if !parsed.structured && first.is_none() {
+        if let Some((_, inferred)) = split_trailing_paren_author(&parsed.title) {
+            return inferred;
+        }
+    }
+    Vec::new()
+}
+
+pub(crate) fn lookup_pdf_remote_with_meta(
     net: &dyn Net,
     email: &str,
     class: ItemClass,
     ids: &PdfIds,
     parsed: &ParsedFilename,
     first: Option<&crate::firstpage::FirstPage>,
+    meta: Option<&crate::pdf_meta::PdfDocMeta>,
 ) -> Option<(Mapping, &'static str)> {
+    let inferred = if !parsed.structured && first.is_none() {
+        split_trailing_paren_author(&parsed.title)
+    } else {
+        None
+    };
+    let local_authors = pick_local_authors(parsed, first, meta);
+
     if class == ItemClass::Book {
         let title_hint = if parsed.structured && !parsed.title.is_empty() {
-            Some(parsed.title.as_str())
+            Some(parsed.title.clone())
         } else {
-            first.map(|f| f.title.as_str())
+            first
+                .map(|f| f.title.clone())
+                .or_else(|| meta.and_then(|mt| mt.title.clone()))
+                .or_else(|| inferred.as_ref().map(|(t, _)| t.clone()))
         };
-        let author_hint = parsed
-            .authors
-            .first()
-            .map(String::as_str)
-            .or_else(|| first.and_then(|f| f.authors.first().map(String::as_str)));
+        let author_hint = local_authors.first().map(String::as_str);
         if ids.isbn.is_some() || ids.doi.is_some() || title_hint.is_some() {
             if let Some((m, src)) = remote::lookup_book_metadata(
                 net,
                 ids.isbn.as_deref(),
                 ids.doi.as_deref(),
-                title_hint,
+                title_hint.as_deref(),
                 author_hint,
                 email,
             ) {
@@ -2159,7 +2669,7 @@ pub(crate) fn lookup_pdf_remote(
     }
 
     if let Some(d) = ids.doi.as_deref() {
-        if let Ok(m) = remote::crossref(net, d) {
+        if let Ok(m) = remote::crossref_with_openalex(net, d, email) {
             return Some((m, "crossref"));
         }
     }
@@ -2171,9 +2681,26 @@ pub(crate) fn lookup_pdf_remote(
     if class == ItemClass::Paper {
         if let Some(fp) = first {
             if let Some(d) = crate::firstpage::crossref_match(net, fp) {
-                if let Ok(m) = remote::crossref(net, &d) {
+                if let Ok(m) = remote::crossref_with_openalex(net, &d, email) {
                     return Some((m, "crossref"));
                 }
+            }
+        }
+    }
+    if matches!(class, ItemClass::Paper | ItemClass::Thesis | ItemClass::Notes) {
+        let title_hint = first
+            .map(|f| f.title.clone())
+            .or_else(|| meta.and_then(|mt| mt.title.clone()))
+            .or_else(|| (parsed.structured && !parsed.title.is_empty()).then(|| parsed.title.clone()))
+            .or_else(|| inferred.as_ref().map(|(t, _)| t.clone()));
+        if let Some(t) = title_hint {
+            let year_hint = parsed
+                .year
+                .as_deref()
+                .or_else(|| first.and_then(|f| f.year.as_deref()))
+                .or_else(|| meta.and_then(|mt| mt.year.as_deref()));
+            if let Some(hit) = remote::lookup_work_by_title_author(net, email, &t, &local_authors, year_hint) {
+                return Some(hit);
             }
         }
     }
@@ -2185,10 +2712,36 @@ pub(crate) fn lookup_pdf_remote(
     None
 }
 
-pub(crate) fn merge_local_fallbacks(
+/// Returns `true` when `next` provides a strictly richer author list than `cur` (e.g. `cur` is empty,
+/// `cur` is a 1-author filename stub while `next` has multiple co-authors, or `cur` lacks given names while `next` has `"Last, First"`).
+pub(crate) fn should_upgrade_authors(cur: &[String], next: &[String]) -> bool {
+    if next.is_empty() {
+        return false;
+    }
+    if cur.is_empty() {
+        return true;
+    }
+    let lead_surname = |a: &str| {
+        crate::pdf_meta::fold_diacritics(
+            a.split_once(',').map_or_else(|| a.split_whitespace().last().unwrap_or(a), |(l, _)| l.trim()),
+        )
+    };
+    let same_lead = !lead_surname(&cur[0]).is_empty()
+        && next.iter().any(|na| lead_surname(na) == lead_surname(&cur[0]));
+    if cur.len() == 1 && next.len() > 1 && same_lead {
+        return true;
+    }
+    if same_lead && cur.iter().all(|a| !a.contains(',')) && next.iter().any(|a| a.contains(',')) {
+        return true;
+    }
+    false
+}
+
+pub(crate) fn merge_local_fallbacks_with_meta(
     m: &mut Mapping,
     parsed: &ParsedFilename,
     first: Option<&crate::firstpage::FirstPage>,
+    meta: Option<&crate::pdf_meta::PdfDocMeta>,
     ids: &PdfIds,
     pages: usize,
     class: ItemClass,
@@ -2197,10 +2750,19 @@ pub(crate) fn merge_local_fallbacks(
         m.insert("type".into(), class.default_item_type(ids.arxiv.is_some()).into());
     }
     if s(m, "title").is_none() {
+        let inferred_t = if !parsed.structured && first.is_none() {
+            split_trailing_paren_author(&parsed.title).map(|(t, _)| t)
+        } else {
+            None
+        };
         let fallback_title = if parsed.structured && !parsed.title.is_empty() {
             parsed.title.clone()
         } else if let Some(fp) = first {
             fp.title.clone()
+        } else if let Some(t) = meta.and_then(|mt| mt.title.as_deref()) {
+            t.to_string()
+        } else if let Some(t) = inferred_t {
+            t
         } else {
             parsed.title.clone()
         };
@@ -2208,20 +2770,23 @@ pub(crate) fn merge_local_fallbacks(
             m.insert("title".into(), fallback_title.into());
         }
     }
-    if list(m, "author").is_empty() {
-        let authors: Vec<Value> = if !parsed.authors.is_empty() {
-            parsed.authors.iter().cloned().map(Value::from).collect()
-        } else if let Some(fp) = first {
-            fp.authors.iter().map(|a| Value::from(format_author_token(a))).collect()
-        } else {
-            Vec::new()
-        };
-        if !authors.is_empty() {
-            m.insert("author".into(), Value::Sequence(authors));
-        }
+    let cur_authors = list(m, "author");
+    let cand_local_authors = pick_local_authors(parsed, first, meta);
+    let allow_local_upgrade = cur_authors.is_empty()
+        || cur_authors.iter().all(|a| !a.contains(','))
+        || (s(m, "DOI").is_none() && s(m, "archiveID").is_none());
+    if allow_local_upgrade && should_upgrade_authors(&cur_authors, &cand_local_authors) {
+        let authors: Vec<Value> = cand_local_authors.into_iter().map(Value::from).collect();
+        m.insert("author".into(), Value::Sequence(authors));
     }
     if s(m, "date").is_none() {
-        if let Some(y) = parsed.year.as_deref().or_else(|| first.and_then(|fp| fp.year.as_deref())) {
+        if let Some(y) = parsed
+            .year
+            .as_deref()
+            .or_else(|| first.and_then(|fp| fp.year.as_deref()))
+            .or_else(|| meta.and_then(|mt| mt.year.as_deref()))
+            .or_else(|| meta.and_then(|mt| mt.creation_year.as_deref()))
+        {
             m.insert("date".into(), y.to_string().into());
         }
     }
@@ -2247,6 +2812,21 @@ pub(crate) fn merge_local_fallbacks(
             }
         }
     }
+    if s(m, "abstractNote").is_none() {
+        if let Some(abs) = meta.and_then(|mt| mt.abstract_text.as_deref()) {
+            m.insert("abstractNote".into(), abs.into());
+        }
+    }
+    if list(m, "tags").is_empty() {
+        if let Some(kws) = meta.map(|mt| &mt.keywords).filter(|k| !k.is_empty()) {
+            m.insert("tags".into(), Value::Sequence(kws.iter().cloned().map(Value::from).collect()));
+        }
+    }
+    if class != ItemClass::Book && s(m, "publicationTitle").is_none() {
+        if let Some(v) = meta.and_then(|mt| mt.venue.as_deref()) {
+            m.insert("publicationTitle".into(), v.into());
+        }
+    }
     if s(m, "volume").is_none() {
         if let Some(v) = &parsed.volume {
             m.insert("volume".into(), v.clone().into());
@@ -2269,27 +2849,47 @@ pub(crate) fn build_local_entry_mapping(
     pages: usize,
     class: ItemClass,
 ) -> (Mapping, &'static str) {
+    build_local_entry_mapping_with_meta(parsed, first, None, ids, pages, class)
+}
+
+pub(crate) fn build_local_entry_mapping_with_meta(
+    parsed: &ParsedFilename,
+    first: Option<&crate::firstpage::FirstPage>,
+    meta: Option<&crate::pdf_meta::PdfDocMeta>,
+    ids: &PdfIds,
+    pages: usize,
+    class: ItemClass,
+) -> (Mapping, &'static str) {
     let mut m = Mapping::new();
-    let (title, authors, year, source) = if parsed.structured {
+    let authors = pick_local_authors(parsed, first, meta);
+    let (title, year, source) = if parsed.structured {
         let t = if !parsed.title.is_empty() {
             parsed.title.clone()
         } else {
-            first.map(|f| f.title.clone()).unwrap_or_default()
-        };
-        let a = if !parsed.authors.is_empty() {
-            parsed.authors.clone()
-        } else {
             first
-                .map(|f| f.authors.iter().map(|x| format_author_token(x)).collect())
+                .map(|f| f.title.clone())
+                .or_else(|| meta.and_then(|mt| mt.title.clone()))
                 .unwrap_or_default()
         };
-        let y = parsed.year.clone().or_else(|| first.and_then(|f| f.year.clone()));
-        (t, a, y, "filename")
+        let y = parsed
+            .year
+            .clone()
+            .or_else(|| first.and_then(|f| f.year.clone()))
+            .or_else(|| meta.and_then(|mt| mt.year.clone()))
+            .or_else(|| meta.and_then(|mt| mt.creation_year.clone()));
+        (t, y, "filename")
     } else if let Some(fp) = first {
-        let a = fp.authors.iter().map(|x| format_author_token(x)).collect();
-        (fp.title.clone(), a, fp.year.clone(), "firstpage")
+        (
+            fp.title.clone(),
+            fp.year.clone().or_else(|| meta.and_then(|mt| mt.year.clone())).or_else(|| meta.and_then(|mt| mt.creation_year.clone())),
+            "firstpage",
+        )
+    } else if let Some(mt_title) = meta.and_then(|mt| mt.title.clone()) {
+        (mt_title, meta.and_then(|mt| mt.year.clone().or_else(|| mt.creation_year.clone())), "pdf_meta")
+    } else if let Some((inf_t, _)) = split_trailing_paren_author(&parsed.title) {
+        (inf_t, None, "filename")
     } else {
-        (parsed.title.clone(), Vec::new(), None, "filename")
+        (parsed.title.clone(), None, "filename")
     };
 
     m.insert("type".into(), class.default_item_type(ids.arxiv.is_some()).into());
@@ -2302,35 +2902,14 @@ pub(crate) fn build_local_entry_mapping(
     if let Some(y) = year {
         m.insert("date".into(), y.into());
     }
-    merge_local_fallbacks(&mut m, parsed, first, ids, pages, class);
+    merge_local_fallbacks_with_meta(&mut m, parsed, first, meta, ids, pages, class);
     (m, source)
 }
 
-/// Text of a PDF's first [`ID_PAGES`] pages and its page count, read in Rust (pdf_oxide: no poppler needed); empty
-/// and 0 when it cannot be read.
-/// An entry's fields from what a PDF's first page says (firstpage.rs); a long one is a book.
-pub(crate) fn first_page_entry(p: &crate::firstpage::FirstPage, pages: usize) -> Mapping {
-    let mut m = Mapping::new();
-    let is_book = pages > BOOK_PAGES || (pages >= EDITION_BOOK_PAGES && has_book_edition_or_volume_marker(&ParsedFilename::default(), &p.title));
-    m.insert("type".into(), if is_book { "book" } else { "document" }.into());
-    m.insert("title".into(), p.title.clone().into());
-    m.insert("author".into(), Value::Sequence(p.authors.iter().map(|a| Value::from(remote::last_first(a))).collect()));
-    if let Some(y) = &p.year {
-        m.insert("date".into(), y.clone().into());
-    }
-    if pages > 0 {
-        m.insert("numPages".into(), pages.to_string().into());
-    }
-    m
-}
-
+#[cfg(test)]
 pub(crate) fn pdf_text(bytes: &[u8]) -> (String, usize) {
-    let read = || -> Option<(String, usize)> {
-        let doc = pdf_oxide::PdfDocument::from_bytes(bytes.to_vec()).ok()?;
-        let count = doc.page_count().ok()?;
-        Some(((0..count.min(ID_PAGES)).map(|i| doc.extract_text(i).unwrap_or_default()).collect::<Vec<_>>().join("\x0c"), count))
-    };
-    std::panic::catch_unwind(read).ok().flatten().unwrap_or_default() // a malformed PDF never stops an import
+    let ext = crate::pdf_meta::extract_pdf_doc(bytes);
+    (ext.text, ext.pages)
 }
 
 #[cfg(test)]
@@ -2468,6 +3047,7 @@ pub mod tests {
             venue: "Plenum".into(),
             collections: vec!["Books".into()],
             tags: vec![],
+            ..Default::default()
         };
         let p = lib.edit(&ed).unwrap();
         assert_eq!((p.title.as_str(), p.year.as_deref(), p.collections.clone()), ("Spectral functions", Some("2000"), vec!["Books".to_string()]));
@@ -2919,5 +3499,246 @@ pub mod tests {
         assert_eq!(added.paper.title, "Group Theory Applications");
         let md = std::fs::read_to_string(v.root.join(&added.paper.dir).join(format!("{}.md", added.paper.key))).unwrap();
         assert!(md.contains("pdfSha256:"), "{md}");
+    }
+
+    pub(crate) fn pdf_with_info_and_xmp(info_title_hex: &str, info_author: &str, xmp_xml: &str, page_text: &str) -> Vec<u8> {
+        let mut objs = vec![
+            "<< /Type /Catalog /Pages 2 0 R /Metadata 6 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [4 0 R] /Count 1 >>".to_string(),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 5 0 R /Resources << /Font << /F1 3 0 R >> >> >>".to_string(),
+        ];
+        let mut stream = String::from("BT /F1 12 Tf 72 736 Td\n");
+        for line in page_text.lines() {
+            let esc_line = line.replace('\\', r"\\").replace('(', r"\(").replace(')', r"\)");
+            stream.push_str(&format!("0 -16 Td ({esc_line}) Tj\n"));
+        }
+        stream.push_str("ET");
+        objs.push(format!("<< /Length {} >>\nstream\n{}\nendstream", stream.len(), stream));
+        objs.push(format!("<< /Type /Metadata /Subtype /XML /Length {} >>\nstream\n{}\nendstream", xmp_xml.len(), xmp_xml));
+        objs.push(format!("<< /Title <{info_title_hex}> /Author ({info_author}) /CreationDate (D:20230501120000Z) >>"));
+        let mut out = String::from("%PDF-1.4\n");
+        let mut offsets = Vec::with_capacity(objs.len());
+        for (i, obj) in objs.iter().enumerate() {
+            offsets.push(out.len());
+            out.push_str(&format!("{} 0 obj\n{obj}\nendobj\n", i + 1));
+        }
+        let xref = out.len();
+        out.push_str(&format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1));
+        for off in offsets {
+            out.push_str(&format!("{off:010} 00000 n \n"));
+        }
+        out.push_str(&format!("trailer\n<< /Size {} /Root 1 0 R /Info 7 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1));
+        out.into_bytes()
+    }
+
+    #[test]
+    fn zotero_parity_pdf_meta_isbn_filenames_bibtex_and_zero_copy_imports() {
+        // 1. Citekeys fold Slavic/Nordic/Turkish diacritics cleanly.
+        assert_eq!(citekey(&["Cvetković, M.".into()], Some("2024"), "Quantum Spin", &|_| false), "cvetkovic2024quantum");
+        assert_eq!(citekey(&["Łukasiewicz, J.".into()], Some("1951"), "Modal Logic", &|_| false), "lukasiewicz1951modal");
+        assert_eq!(citekey(&["Sørensen, A.".into()], Some("2000"), "Entanglement", &|_| false), "sorensen2000entanglement");
+
+        // 2. Publisher URL ISBNs work while DOI 978 segments are rejected; thesis phrases match.
+        assert_eq!(parse_isbn("https://cambridge.org/9780521843096").as_deref(), Some("9780521843096"));
+        assert_eq!(parse_isbn("https://doi.org/10.1007/978-0-306-40615-7"), None);
+        assert_eq!(parse_isbn("ISBN \u{F739}\u{F737}\u{F738}-0-306-40615-7").as_deref(), Some("9780306406157"));
+        assert_eq!(classify_pdf(&ClassifyInput { text: "A thesis submitted for the degree of Doctor of Philosophy", pages: 120, ..Default::default() }), ItemClass::Thesis);
+        assert_eq!(classify_pdf(&ClassifyInput { text: "Diplomarbeit an der Fakultät", pages: 80, ..Default::default() }), ItemClass::Thesis);
+
+        // 3. Filename parsing enhancements + split_trailing_paren_author.
+        let zpref = parse_filename("z_Sakurai - Quantum Mechanics (2020).pdf");
+        assert!(zpref.structured && zpref.authors == vec!["Sakurai"] && zpref.title == "Quantum Mechanics" && zpref.year.as_deref() == Some("2020"));
+        assert!(!parse_filename("z_notes.pdf").structured);
+
+        let pub_suf = parse_filename("Altland - Condensed Matter-Cambridge University Press (2011).pdf");
+        assert!(pub_suf.structured && pub_suf.title == "Condensed Matter" && pub_suf.year.as_deref() == Some("2011"));
+
+        let t_first = parse_filename("The Principles of Quantum Mechanics - Paul Dirac.pdf");
+        assert!(t_first.structured && t_first.title == "The Principles of Quantum Mechanics" && t_first.authors == vec!["Dirac, Paul"]);
+
+        assert_eq!(split_trailing_paren_author("Différence et Répétition (Gilles Deleuze)"), Some(("Différence et Répétition".into(), vec!["Deleuze, Gilles".into()])));
+        assert_eq!(split_trailing_paren_author("Lecture Notes (draft)"), None);
+        assert_eq!(split_trailing_paren_author("Lecture Notes (part 1)"), None);
+
+        // 4. Multi-author firstpage is never overwritten by 1-author filename.
+        let parsed_one = parse_filename("Georges - Quantum Paper.pdf");
+        let fp_three = crate::firstpage::FirstPage {
+            title: "Dynamical Mean-Field Theory".into(),
+            authors: vec!["A. Georges".into(), "G. Kotliar".into(), "W. Krauth".into()],
+            year: Some("1996".into()),
+        };
+        let (local_m, _) = build_local_entry_mapping(&parsed_one, Some(&fp_three), &PdfIds::default(), 12, ItemClass::Paper);
+        assert_eq!(list(&local_m, "author"), vec!["Georges, A.", "Kotliar, G.", "Krauth, W."]);
+
+        // 5. Real PDF with UTF-16BE junk /Info Title + XMP metadata feeds into extract_pdf_doc and import_pdf_with.
+        let junk_utf16_hex = "FEFF0055006E007400690074006C00650064"; // "Untitled"
+        let xmp = r#"<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:prism="http://prismstandard.org/namespaces/basic/2.0/"><rdf:Description rdf:about=""><dc:title><rdf:Alt><rdf:li xml:lang="x-default">Anyons and Braid Groups</rdf:li></rdf:Alt></dc:title><dc:creator><rdf:Seq><rdf:li>Alice Smith</rdf:li><rdf:li>Bob Jones</rdf:li></rdf:Seq></dc:creator><dc:description>A comprehensive study of topological braiding statistics.</dc:description><dc:subject><rdf:Bag><rdf:li>anyons</rdf:li><rdf:li>braiding</rdf:li></rdf:Bag></dc:subject><prism:doi>10.1000/anyons.xmp</prism:doi><prism:publicationName>J. Math. Phys.</prism:publicationName></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>"#;
+        let xmp_pdf = pdf_with_info_and_xmp(junk_utf16_hex, "Fallback Author", xmp, "Page 1 body text");
+        let ext = crate::pdf_meta::extract_pdf_doc(&xmp_pdf);
+        assert_eq!(ext.meta.title.as_deref(), Some("Anyons and Braid Groups"));
+        assert_eq!(ext.meta.authors, vec!["Smith, Alice", "Jones, Bob"]);
+        assert_eq!(ext.meta.doi.as_deref(), Some("10.1000/anyons.xmp"));
+        assert_eq!(ext.meta.venue.as_deref(), Some("J. Math. Phys."));
+
+        // 6. Zero-duplication import_pdf_with with external_pdf_roots & store_in_external=false, plus extended Paper/PaperEdit & BibTeX.
+        let ws = tempfile::tempdir().unwrap();
+        let ws_real = kandinsky_text::paths::real(ws.path()).unwrap();
+        let (vault_dir, pool_dir) = (ws_real.join("vault"), ws_real.join("Library/Papers"));
+        std::fs::create_dir_all(&vault_dir).unwrap();
+        std::fs::create_dir_all(&pool_dir).unwrap();
+        std::fs::write(pool_dir.join("Anyons.pdf"), &xmp_pdf).unwrap();
+
+        let mut v = Vault::new();
+        v.root = vault_dir;
+        v.trash = TempTrash(v.root.clone());
+        v.cfg.external_pdf_roots = vec!["../Library/Papers".into()];
+        v.cfg.store_in_external = false;
+        let lib = v.lib();
+        let imp = lib.import_pdf("DropCopy.pdf", &xmp_pdf).unwrap();
+        assert!(imp.created);
+        assert_eq!(imp.paper.pdf.as_deref(), Some("../Library/Papers/Anyons.pdf"));
+        assert!(!v.root.join(&imp.paper.dir).join("DropCopy.pdf").exists(), "zero copy into vault");
+        let imp2 = lib.import_pdf("AnotherCopy.pdf", &xmp_pdf).unwrap();
+        assert!(!imp2.created && imp2.paper.key == imp.paper.key);
+
+        let edited = lib.edit(&PaperEdit {
+            key: imp.paper.key.clone(),
+            title: "Anyons and Braid Groups".into(),
+            authors: vec!["Smith, Alice".into()],
+            date: String::new(),
+            venue: "J. Math. Phys.".into(),
+            collections: vec![],
+            tags: vec![],
+            kind: Some("book".into()),
+            volume: Some("4".into()),
+            pages: Some("582".into()),
+            publisher: Some("Cambridge University Press".into()),
+            ..Default::default()
+        }).unwrap();
+        assert_eq!((edited.kind.as_str(), edited.volume.as_deref(), edited.publisher.as_deref()), ("book", Some("4"), Some("Cambridge University Press")));
+        let bib = lib.bibtex(&imp.paper.key).unwrap();
+        assert!(bib.starts_with("@book{") && !bib.contains("pages = {582}"), "{bib}");
+    }
+
+    #[test]
+    fn regression_creation_date_poisoning_title_author_filenames_edit_dates_and_isbn_dedupe() {
+        // 1. Filename edge cases: `Title - Author.pdf`, `Title - Author (Year).pdf`, `z_ `, Unicode `z<Upper>`, Continental LibGen suffixes, multi-author `(A & B)`.
+        let qft = parse_filename("Quantum Field Theory - Mark Srednicki.pdf");
+        assert!(qft.structured && qft.title == "Quantum Field Theory" && qft.authors == vec!["Srednicki, Mark"]);
+
+        let fr = parse_filename("Différence et Répétition - Gilles Deleuze.pdf");
+        assert!(fr.structured && fr.title == "Différence et Répétition" && fr.authors == vec!["Deleuze, Gilles"]);
+
+        let kuhn = parse_filename("The Structure of Scientific Revolutions - Thomas S. Kuhn (1962).pdf");
+        assert!(kuhn.structured && kuhn.title == "The Structure of Scientific Revolutions" && kuhn.authors == vec!["Kuhn, Thomas S."] && kuhn.year.as_deref() == Some("1962"));
+
+        let z_space = parse_filename("z_ Weinberg - The Quantum Theory of Fields (1995).pdf");
+        assert!(z_space.structured && z_space.authors == vec!["Weinberg"] && z_space.year.as_deref() == Some("1995"));
+
+        let z_uni = parse_filename("zÉmile Durkheim - Les formes élémentaires (1912).pdf");
+        assert!(z_uni.structured && z_uni.authors == vec!["Durkheim, Émile"] && z_uni.year.as_deref() == Some("1912"));
+
+        let puf = parse_filename("Deleuze - Différence et Répétition-Presses Universitaires de France (1968).pdf");
+        assert!(puf.structured && puf.title == "Différence et Répétition" && puf.year.as_deref() == Some("1968"));
+
+        let wv = parse_filename("Peskin - Quantum Field Theory-Westview Press (1995).pdf");
+        assert!(wv.structured && wv.title == "Quantum Field Theory" && wv.year.as_deref() == Some("1995"));
+
+        assert_eq!(
+            split_trailing_paren_author("Critique de la raison dialectique (Jean-Paul Sartre)"),
+            Some(("Critique de la raison dialectique".into(), vec!["Sartre, Jean-Paul".into()])),
+        );
+        assert_eq!(
+            split_trailing_paren_author("Quantum Computation and Quantum Information (Michael A. Nielsen & Isaac L. Chuang)"),
+            Some(("Quantum Computation and Quantum Information".into(), vec!["Nielsen, Michael A.".into(), "Chuang, Isaac L.".into()])),
+        );
+
+        // 2. Recompiled classic paper (`CreationDate = 2023`, 3-word title `"More Is Different"`) resolves 1972 Crossref DOI without CreationDate poisoning.
+        let mut v = Vault::new();
+        let cr_search = serde_json::json!({
+            "message": {
+                "items": [{
+                    "DOI": "10.1126/science.177.4047.393",
+                    "type": "journal-article",
+                    "title": ["More Is Different: Broken Symmetry and the Nature of the Hierarchical Structure of Science"],
+                    "author": [{ "family": "Anderson", "given": "P. W." }],
+                    "issued": { "date-parts": [[1972, 8, 4]] },
+                    "container-title": ["Science"]
+                }]
+            }
+        });
+        let cr_work = serde_json::json!({
+            "message": {
+                "DOI": "10.1126/science.177.4047.393",
+                "type": "journal-article",
+                "title": ["More Is Different"],
+                "author": [{ "family": "Anderson", "given": "P. W." }],
+                "issued": { "date-parts": [[1972, 8, 4]] },
+                "container-title": ["Science"]
+            }
+        });
+        let ol_book = serde_json::json!({
+            "ISBN:9780306406157": {
+                "title": "Physics of Many-Body Systems",
+                "authors": [{ "name": "Gerald D. Mahan" }],
+                "publish_date": "2000",
+                "publishers": [{ "name": "Springer" }]
+            }
+        });
+        v.net = Table::default()
+            .on("https://api.crossref.org/works?rows=5&query.bibliographic=", Answer::Json(cr_search))
+            .on("https://api.crossref.org/works/10.1126/science.177.4047.393", Answer::Json(cr_work))
+            .on("https://openlibrary.org/api/books?bibkeys=ISBN:9780306406157", Answer::Json(ol_book));
+
+        let title_hex: String = "More Is Different".bytes().map(|b| format!("{b:02X}")).collect();
+        let recompiled_pdf = pdf_with_info_and_xmp(&title_hex, "P. W. Anderson", "<x:xmpmeta/>", "Broken symmetry in condensed matter");
+        let added = v.lib().import_pdf("scan001.pdf", &recompiled_pdf).unwrap();
+        assert_eq!(added.paper.key, "anderson1972more");
+        assert_eq!(added.paper.doi.as_deref(), Some("10.1126/science.177.4047.393"));
+        assert_eq!(added.paper.year.as_deref(), Some("1972"));
+
+        // 3. Lib::edit (`regroup` path) preserves full `1972-08-04` date when passed `date: "1972"` and writes `university` on theses.
+        v.lib().edit(&PaperEdit {
+            key: "anderson1972more".into(),
+            title: added.paper.title.clone(),
+            authors: added.paper.authors.clone(),
+            date: "1972".into(),
+            venue: "Science".into(),
+            collections: vec!["Foundations/Symmetry".into()],
+            tags: vec![],
+            ..Default::default()
+        }).unwrap();
+        let note_m = entry::read(&v.root.join("refs/papers/anderson1972more")).unwrap();
+        assert_eq!(s(&note_m, "date").as_deref(), Some("1972-08-04"));
+
+        let th_dir = v.root.join("refs/papers/smith2021thesis");
+        std::fs::create_dir_all(&th_dir).unwrap();
+        std::fs::write(
+            th_dir.join("smith2021thesis.md"),
+            "---\ntype: literature\ncitekey: smith2021thesis\nitemType: thesis\ntitle: Topological Defects\nauthors:\n  - Smith, Jane\npublished: 2021-06-15\nuniversity: Oxford University\n---\n",
+        ).unwrap();
+        v.lib().edit(&PaperEdit {
+            key: "smith2021thesis".into(),
+            title: "Topological Defects".into(),
+            authors: vec!["Smith, Jane".into()],
+            date: "2021".into(),
+            venue: "University of Oxford".into(),
+            collections: vec!["Theses".into()],
+            tags: vec![],
+            ..Default::default()
+        }).unwrap();
+        let th_m = entry::read(&th_dir).unwrap();
+        assert_eq!(s(&th_m, "date").as_deref(), Some("2021-06-15"));
+        assert_eq!(s(&th_m, "university").as_deref(), Some("University of Oxford"));
+        assert!(s(&th_m, "publicationTitle").is_none());
+
+        // 4. Lib::add deduplicates ISBN-13, equivalent ISBN-10, and pasted BibTeX carrying that ISBN.
+        let b1 = v.lib().add("ISBN 978-0-306-40615-7").unwrap();
+        assert!(b1.created);
+        let b2 = v.lib().add("ISBN 0-306-40615-2").unwrap();
+        assert!(!b2.created && b2.paper.key == b1.paper.key);
+        let b3 = v.lib().add("@book{mahan2000, title={Physics of Many-Body Systems}, author={Mahan, Gerald D.}, year={2000}, isbn={9780306406157}}").unwrap();
+        assert!(!b3.created && b3.paper.key == b1.paper.key);
     }
 }

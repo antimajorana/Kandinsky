@@ -2,13 +2,15 @@
 //! derives hierarchical collections (`<RootName>/<Topic>`), classifies Books alongside Papers,
 //! and reconciles moves, duplicates, and metadata enrichment with `dry_run` preview support.
 use crate::entry;
-use crate::external::{self, clean_ref_token, ExternalRoot};
+use crate::external::{self, clean_ref_token, root_name_for, ExternalRoot};
 use crate::firstpage::{self, FirstPage};
 use crate::inbox_dedupe;
+use crate::pdf_meta::{extract_pdf_doc, PdfDocMeta};
 use crate::refs::{
-    arxiv_of, bibtex_type_of, build_local_entry_mapping, citekey, classify_pdf,
-    extract_pdf_identifiers, isbn_core, list, lookup_pdf_remote, merge_local_fallbacks, norm_doi,
-    normalized_kind, now_stamp, parse_filename, pdf_text, s, sha_hex, year_of, ClassifyInput,
+    arxiv_of, bibtex_type_of, build_local_entry_mapping_with_meta, citekey, classify_pdf,
+    extract_pdf_identifiers_with_meta, isbn_core, list, lookup_pdf_remote_with_meta,
+    merge_local_fallbacks_with_meta, norm_doi, normalized_kind, now_stamp, parse_filename, s,
+    sha_hex, should_upgrade_authors, split_trailing_paren_author, year_of, ClassifyInput,
     ItemClass, Lib, ParsedFilename, PdfIds, Res,
 };
 use kandinsky_text::paths::{real, safe_join};
@@ -103,6 +105,7 @@ struct DiscoveredPdf {
     pages: usize,
     parsed: ParsedFilename,
     first: Option<FirstPage>,
+    meta: PdfDocMeta,
     ids: PdfIds,
     class: ItemClass,
     read_error: Option<String>,
@@ -114,7 +117,9 @@ impl DiscoveredPdf {
             || self.ids.arxiv.is_some()
             || self.ids.isbn.is_some()
             || self.first.is_some()
+            || self.meta.title.is_some()
             || (self.parsed.structured && !self.parsed.title.is_empty())
+            || split_trailing_paren_author(&self.parsed.title).is_some()
     }
 }
 
@@ -149,19 +154,6 @@ enum ScanMatch {
 
 fn is_pdf_name(name: &str) -> bool {
     name.len() > 4 && name.as_bytes()[name.len() - 4..].eq_ignore_ascii_case(b".pdf")
-}
-
-fn root_name_for(ext: &ExternalRoot) -> String {
-    let from_prefix = ext
-        .prefix
-        .split('/')
-        .rev()
-        .find(|seg| !seg.is_empty() && *seg != "." && *seg != "..")
-        .map(str::to_string);
-    from_prefix
-        .or_else(|| ext.root.file_name().map(|n| n.to_string_lossy().into_owned()))
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "Papers".into())
 }
 
 fn derived_collection(ext: &ExternalRoot, rel_dir: Option<&str>) -> String {
@@ -274,6 +266,9 @@ fn walk_dir(
             continue;
         }
         if resolved.is_dir() {
+            if name.eq_ignore_ascii_case("output") {
+                continue;
+            }
             let next_rel = match rel_dir {
                 Some(d) => format!("{d}/{name}"),
                 None => name,
@@ -309,6 +304,7 @@ fn inspect_discovered_pdf(name: String, pdf_ref: String, real_path: PathBuf, der
                 pages: 0,
                 parsed,
                 first: None,
+                meta: PdfDocMeta::default(),
                 ids: PdfIds::default(),
                 class: ItemClass::Paper,
                 read_error: Some(e.to_string()),
@@ -317,9 +313,11 @@ fn inspect_discovered_pdf(name: String, pdf_ref: String, real_path: PathBuf, der
     };
     let size = bytes.len() as u64;
     let sha256 = sha_hex(&bytes);
-    let (text, pages) = if bytes.starts_with(b"%PDF") { pdf_text(&bytes) } else { (String::new(), 0) };
-    let first = firstpage::read(text.split('\x0c').next().unwrap_or(""), &name);
-    let ids = extract_pdf_identifiers(&text, pages, &name);
+    let is_pdf = bytes.starts_with(b"%PDF");
+    let extract = if is_pdf { extract_pdf_doc(&bytes) } else { Default::default() };
+    let (text, pages, meta) = (extract.text, extract.pages, extract.meta);
+    let first = firstpage::read_pages(&text, &name);
+    let ids = extract_pdf_identifiers_with_meta(&text, pages, &name, Some(&meta));
     let class = classify_pdf(&ClassifyInput {
         text: &text,
         pages,
@@ -343,9 +341,10 @@ fn inspect_discovered_pdf(name: String, pdf_ref: String, real_path: PathBuf, der
         pages,
         parsed,
         first,
+        meta,
         ids,
         class,
-        read_error: (!bytes.starts_with(b"%PDF")).then(|| "not a valid PDF header".into()),
+        read_error: (!is_pdf).then(|| "not a valid PDF header".into()),
     }
 }
 
@@ -642,8 +641,15 @@ fn needs_enrichment(m: &Mapping, disc: &DiscoveredPdf) -> bool {
     let missing_title = s(m, "title").is_none();
     let missing_author = list(m, "author").is_empty() && list(m, "authors").is_empty();
     let missing_year = s(m, "date").and_then(|d| year_of(&d)).is_none()
-        && s(m, "published").and_then(|d| year_of(&d)).is_none();
-    (missing_title || (missing_author && missing_year)) && disc.can_query_remote()
+        && s(m, "published").and_then(|d| year_of(&d)).is_none()
+        && s(m, "year").and_then(|d| year_of(&d)).is_none();
+    let missing_id_or_venue = s(m, "DOI").is_none()
+        && arxiv_of(m).is_none()
+        && s(m, "ISBN").is_none()
+        && s(m, "isbn").is_none()
+        && s(m, "publicationTitle").is_none()
+        && s(m, "publisher").is_none();
+    (missing_title || missing_author || missing_year || missing_id_or_venue) && disc.can_query_remote()
 }
 
 fn merge_missing_fields(dst: &mut Mapping, src: &Mapping) -> bool {
@@ -659,13 +665,24 @@ fn merge_missing_fields(dst: &mut Mapping, src: &Mapping) -> bool {
             }
         }
     }
-    for (k, alt) in [("author", "authors"), ("editor", "editors")] {
-        if list(dst, k).is_empty() && list(dst, alt).is_empty() {
-            let v = list(src, k);
-            if !v.is_empty() {
-                dst.insert(k.into(), Value::Sequence(v.into_iter().map(Value::from).collect()));
-                changed = true;
-            }
+    let cur_authors = {
+        let a = list(dst, "author");
+        if a.is_empty() { list(dst, "authors") } else { a }
+    };
+    let src_authors = list(src, "author");
+    if should_upgrade_authors(&cur_authors, &src_authors) {
+        let seq: Vec<Value> = src_authors.into_iter().map(Value::from).collect();
+        dst.insert("author".into(), Value::Sequence(seq.clone()));
+        if dst.contains_key("authors") {
+            dst.insert("authors".into(), Value::Sequence(seq));
+        }
+        changed = true;
+    }
+    if list(dst, "editor").is_empty() && list(dst, "editors").is_empty() {
+        let v = list(src, "editor");
+        if !v.is_empty() {
+            dst.insert("editor".into(), Value::Sequence(v.into_iter().map(Value::from).collect()));
+            changed = true;
         }
     }
     if s(dst, "type").is_none_or(|t| t == "document") {
@@ -773,7 +790,15 @@ fn maybe_remote_lookup(
         }
     }
     *lookups_used += 1;
-    lookup_pdf_remote(lib.net, &lib.cfg.email, disc.class, &disc.ids, &disc.parsed, disc.first.as_ref())
+    lookup_pdf_remote_with_meta(
+        lib.net,
+        &lib.cfg.email,
+        disc.class,
+        &disc.ids,
+        &disc.parsed,
+        disc.first.as_ref(),
+        Some(&disc.meta),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -931,11 +956,26 @@ fn process_new_entry(
 ) {
     let (mut m, source, did_enrich) = match pre_fetched {
         Some((mut rm, rsrc)) => {
-            merge_local_fallbacks(&mut rm, &disc.parsed, disc.first.as_ref(), &disc.ids, disc.pages, disc.class);
+            merge_local_fallbacks_with_meta(
+                &mut rm,
+                &disc.parsed,
+                disc.first.as_ref(),
+                Some(&disc.meta),
+                &disc.ids,
+                disc.pages,
+                disc.class,
+            );
             (rm, rsrc, true)
         }
         None => {
-            let (lm, lsrc) = build_local_entry_mapping(&disc.parsed, disc.first.as_ref(), &disc.ids, disc.pages, disc.class);
+            let (lm, lsrc) = build_local_entry_mapping_with_meta(
+                &disc.parsed,
+                disc.first.as_ref(),
+                Some(&disc.meta),
+                &disc.ids,
+                disc.pages,
+                disc.class,
+            );
             (lm, lsrc, false)
         }
     };
@@ -1026,7 +1066,7 @@ pub fn scan_external_roots(lib: &Lib, opts: &ScanRootsOpts) -> Res<ScanRootsRepo
             }),
         );
         if let Some(err) = &disc.read_error {
-            let lm = build_local_entry_mapping(&disc.parsed, None, &disc.ids, disc.pages, disc.class).0;
+            let lm = build_local_entry_mapping_with_meta(&disc.parsed, None, Some(&disc.meta), &disc.ids, disc.pages, disc.class).0;
             push_error_item(
                 &mut report,
                 String::new(),
@@ -1270,5 +1310,28 @@ mod tests {
         assert_eq!((res.created, res.updated, res.skipped), (0, 1, 0), "{res:?}");
         assert_eq!(res.items[0].citekey, "customkey2025");
         assert_eq!(res.items[0].action, "update");
+    }
+
+    #[test]
+    fn ignores_latex_output_subfolders_and_enriches_missing_id_or_venue_idempotently() {
+        let (_ws, mut v, papers_dir, _) = ext_vault();
+        let latex_out = papers_dir.join("Notes/output");
+        let topic = papers_dir.join("Notes");
+        std::fs::create_dir_all(&latex_out).unwrap();
+        std::fs::write(latex_out.join("main.pdf"), tiny_pdf(&["Compiled draft"])).unwrap();
+        std::fs::write(topic.join("Smith - Topological Paper.pdf"), tiny_pdf(&["doi:10.1000/enrich.1"])).unwrap();
+
+        let dry = scan_external_roots(&v.lib(), &ScanRootsOpts { dry_run: false, max_lookups: Some(0), ..Default::default() }).unwrap();
+        assert_eq!((dry.total_pdfs, dry.created), (1, 1), "output/main.pdf must be ignored");
+
+        // Now provide Crossref for the entry lacking DOI/venue -> second scan enriches it, third scan is unchanged!
+        v.net = Table::default().on(
+            "https://api.crossref.org/works/10.1000/enrich.1",
+            Answer::Json(serde_json::json!({ "message": { "title": ["Topological Paper"], "type": "journal-article", "container-title": ["Annals of Physics"], "issued": { "date-parts": [[2022]] } } })),
+        );
+        let second = scan_external_roots(&v.lib(), &ScanRootsOpts { dry_run: false, ..Default::default() }).unwrap();
+        assert_eq!((second.updated, second.enriched), (1, 1));
+        let third = scan_external_roots(&v.lib(), &ScanRootsOpts { dry_run: false, ..Default::default() }).unwrap();
+        assert_eq!((third.created, third.updated, third.moved, third.unchanged), (0, 0, 0, 1));
     }
 }

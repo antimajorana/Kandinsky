@@ -4,6 +4,7 @@
 const DEFAULT_EXTERNAL_ROOT = "~/CloudDrive";
 
 let cachedHomeDir = "";
+let cachedVaultDir = "";
 let homeDirPromise = null;
 
 function inferHomeFromVaultPath(rawPath) {
@@ -29,22 +30,27 @@ export function homeFromVaults(data) {
 }
 
 function detectHomeDir() {
-  if (cachedHomeDir) return Promise.resolve(cachedHomeDir);
+  if (cachedHomeDir && cachedVaultDir) return Promise.resolve(cachedHomeDir);
   if (!homeDirPromise) {
     homeDirPromise = (async () => {
-      if (typeof fetch !== "function") return "";
       try {
+        if (typeof fetch !== "function") return "";
         const res = await fetch("/api/vaults", { headers: { "x-kandinsky": "1" } });
         if (!res.ok) return "";
-        const h = homeFromVaults(await res.json());
+        const data = await res.json();
+        const cur = String(data?.current ?? "").replace(/\\/g, "/").replace(/^\/\/\?\//, "").replace(/\/+$/, "");
+        if (cur) cachedVaultDir = cur;
+        const h = homeFromVaults(data);
         if (h) {
           cachedHomeDir = h;
           return h;
         }
       } catch {
         // Offline / Android / mocked test environments without /api/vaults continue cleanly
+      } finally {
+        if (!cachedVaultDir) homeDirPromise = null;
       }
-      return "";
+      return cachedHomeDir;
     })();
   }
   return homeDirPromise;
@@ -228,12 +234,109 @@ function basenameOf(resolvedPath) {
   return (idx >= 0 ? trimmed.slice(idx + 1) : trimmed) || resolvedPath;
 }
 
+function normalizeSlashPath(p) {
+  const s = String(p ?? "").replace(/\\/g, "/").replace(/^\/\/\?\//, "").replace(/\/+$/, "");
+  if (!s) return "";
+  const winDrive = /^([A-Za-z]:)(\/.*)?$/.exec(s);
+  const unc = !winDrive && s.startsWith("//");
+  const abs = !winDrive && !unc && s.startsWith("/");
+  const prefix = winDrive ? winDrive[1] : unc ? "//" : abs ? "/" : "";
+  const body = winDrive ? (winDrive[2] ?? "") : unc ? s.slice(2) : abs ? s.slice(1) : s;
+  const out = [];
+  for (const seg of body.split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") {
+      if (out.length && out[out.length - 1] !== "..") out.pop();
+      else if (!prefix) out.push("..");
+    } else {
+      out.push(seg);
+    }
+  }
+  if (winDrive) return `${prefix}${out.length ? "/" + out.join("/") : "/"}`;
+  if (unc) return `//${out.join("/")}`;
+  if (abs) return `/${out.join("/")}`;
+  return out.join("/");
+}
+
+function relativeBetweenPaths(fromDir, toDir) {
+  if (!fromDir || !toDir) return "";
+  const ci = /^[A-Za-z]:\//.test(fromDir) || /^[A-Za-z]:\//.test(toDir);
+  const norm = (x) => (ci ? x.toLowerCase() : x);
+  const aParts = fromDir.split("/").filter(Boolean);
+  const bParts = toDir.split("/").filter(Boolean);
+  if (!aParts.length || !bParts.length || norm(aParts[0]) !== norm(bParts[0])) return "";
+  let common = 0;
+  while (common < aParts.length && common < bParts.length && norm(aParts[common]) === norm(bParts[common])) {
+    common++;
+  }
+  if (common === 0) return "";
+  const up = Array(aParts.length - common).fill("..");
+  return [...up, ...bParts.slice(common)].join("/");
+}
+
+/** Map a resolved local PDF path inside the vault or `catalog-papers.settings.external_pdf_roots` to its portable path. */
+export function toPortableExternalPdf(resolvedPath, vaultDir, extRoots, homeDir = cachedHomeDir) {
+  const absTarget = normalizeSlashPath(expandTildePath(resolvedPath, homeDir));
+  if (!absTarget) return "";
+  const normVault = normalizeSlashPath(expandTildePath(vaultDir, homeDir));
+  const matchUnder = (absRoot) => {
+    if (!absRoot) return null;
+    const ci = /^[A-Za-z]:\//.test(absTarget) || /^[A-Za-z]:\//.test(absRoot);
+    const cmpTarget = ci ? absTarget.toLowerCase() : absTarget;
+    const cmpRoot = ci ? absRoot.toLowerCase() : absRoot;
+    if (cmpTarget.startsWith(`${cmpRoot}/`)) return absTarget.slice(absRoot.length + 1);
+    return null;
+  };
+  if (normVault) {
+    const insideVault = matchUnder(normVault);
+    if (insideVault !== null) return insideVault;
+  }
+  const rawList = Array.isArray(extRoots)
+    ? extRoots
+    : typeof extRoots === "string"
+      ? extRoots.split(/[\r\n,]+/)
+      : [];
+  for (let idx = 0; idx < rawList.length; idx++) {
+    const raw = String(rawList[idx] ?? "").trim();
+    if (!raw) continue;
+    const cleaned = expandTildePath(raw, homeDir)
+      .replace(/\\/g, "/")
+      .replace(/^\/\/\?\//, "")
+      .replace(/^\.\//, "")
+      .replace(/\/+$/, "");
+    if (!cleaned) continue;
+    const isAbs = /^[A-Za-z]:\//.test(cleaned) || cleaned.startsWith("/") || cleaned.startsWith("//");
+    if (!isAbs && !normVault) continue;
+    const absRoot = isAbs ? normalizeSlashPath(cleaned) : normalizeSlashPath(`${normVault}/${cleaned}`);
+    const sub = matchUnder(absRoot);
+    if (sub !== null) {
+      const prefix = !isAbs ? cleaned : relativeBetweenPaths(normVault, absRoot) || `@ext/${idx}`;
+      return `${prefix.replace(/\/+$/, "")}/${sub}`;
+    }
+  }
+  return "";
+}
+
 async function openInSystemApp(kandinsky, resolvedPath) {
   if (!resolvedPath) return false;
   let target = String(resolvedPath);
   if (target === "~" || target.startsWith("~/")) {
     const h = await detectHomeDir();
     target = expandTildePath(target, h);
+  }
+  if (!/^https?:\/\//i.test(target)) {
+    const hashMatch = /#page=(\d+)/i.exec(target);
+    const pageNum = hashMatch ? Number(hashMatch[1]) : undefined;
+    const cleanTarget = target.split("?")[0].split("#")[0];
+    if (/\.pdf$/i.test(cleanTarget)) {
+      if (!cachedVaultDir) await detectHomeDir();
+      const roots = kandinsky.other?.("catalog-papers")?.settings?.external_pdf_roots;
+      const portable = toPortableExternalPdf(cleanTarget, cachedVaultDir, roots);
+      if (portable && typeof kandinsky.exists === "function" && (await kandinsky.exists(portable))) {
+        kandinsky.open(portable, Number.isFinite(pageNum) && pageNum > 0 ? pageNum : undefined);
+        return true;
+      }
+    }
   }
   // Primary API v28 call required by Kandinsky contract:
   const tookNative = kandinsky.openNative(target);
@@ -245,7 +348,7 @@ async function openInSystemApp(kandinsky, resolvedPath) {
     return true;
   }
   if (typeof kandinsky.openLink === "function") {
-    kandinsky.openLink(toFileUrl(target));
+    kandinsky.openLink(toFileUrl(target), { outside: true });
     return true;
   }
   kandinsky.toast?.("External Files", `Path: ${target}`, "info");
@@ -253,6 +356,8 @@ async function openInSystemApp(kandinsky, resolvedPath) {
 }
 
 export function register(kandinsky) {
+  cachedVaultDir = "";
+  homeDirPromise = null;
   void detectHomeDir();
   const getRoot = () => String(kandinsky.plugin?.settings?.external_root ?? DEFAULT_EXTERNAL_ROOT).trim() || DEFAULT_EXTERNAL_ROOT;
 
@@ -459,8 +564,8 @@ export function register(kandinsky) {
   kandinsky.editor.registerFence("external", renderExternalFence(false));
   kandinsky.editor.registerFence("external-embed", renderExternalFence(true));
 
-  // Inline Live Preview widget for `[Label](file:///...)` external links
-  kandinsky.editor.registerDecoration(/!?\[([^\]]*)\]\((file:\/\/\/[^)\r\n]+)\)/, (match) => {
+  // Inline Live Preview widget for `[Label](file://...)` external links
+  kandinsky.editor.registerDecoration(/!?\[([^\]]*)\]\((file:\/\/[^)\r\n]+)\)/, (match) => {
     const rawLabel = match[1]?.trim() ?? "";
     const rawUrl = match[2]?.trim() ?? "";
     const resolved = resolveExternalPath(rawUrl, getRoot());
@@ -544,4 +649,22 @@ export function register(kandinsky) {
       openInSystemApp(kandinsky, root);
     },
   });
+
+  // Intercept Reading-View `<a href="file://...">` clicks so external PDFs in external_pdf_roots open in Kandinsky's Pdf.svelte reader
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    const onDocClick = (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.shiftKey || e.altKey) return;
+      const anchor = e.target?.closest?.("a[href]");
+      if (!anchor) return;
+      const rawHref = anchor.getAttribute("href") ?? "";
+      if (!/^file:\/\//i.test(rawHref)) return;
+      const resolved = resolveExternalPath(rawHref, getRoot());
+      if (!resolved) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void openInSystemApp(kandinsky, resolved);
+    };
+    document.addEventListener("click", onDocClick, true);
+    return () => document.removeEventListener("click", onDocClick, true);
+  }
 }

@@ -88,6 +88,13 @@ impl CoreApi {
     pub fn tool(&self, plugin: &str, tool: &str, input: &Value) -> Res<Value> {
         self.kandinsky.post(&format!("/api/plugins/{}/tools/{}", q(plugin), q(tool)), input).map_err(why)
     }
+
+    /// Emits `papers:changed` for updated vault paths.
+    pub fn changed(&self, paths: Vec<String>) {
+        if !paths.is_empty() {
+            kandinsky_plugin::event("papers:changed", json!({ "paths": paths }));
+        }
+    }
 }
 
 impl Net for CoreApi {
@@ -171,6 +178,6 @@ impl Host for ConnectorHost {
         self.0.kandinsky.capture(text).map(drop).map_err(why)
     }
     fn changed(&self, paths: Vec<String>) {
-        kandinsky_plugin::event("papers:changed", json!({ "paths": paths }));
+        self.0.changed(paths);
     }
 }

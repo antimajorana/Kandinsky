@@ -15,8 +15,10 @@
 
   const BOOKMARKLET = "javascript:void(open('kandinsky://capture-paper?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)))";
   const SOURCES = [
+    { id: "all", label: "All indexes" },
     { id: "inspire", label: "INSPIRE-HEP" }, { id: "crossref", label: "Crossref" },
     { id: "openalex", label: "OpenAlex" }, { id: "arxiv", label: "arXiv" },
+    { id: "openlibrary", label: "Open Library (Books)" },
   ] as const;
   const COMPARE_FIELDS = [
     { key: "title", label: "Title" }, { key: "authors", label: "Authors" }, { key: "year", label: "Year" },
@@ -27,7 +29,7 @@
   const TAB_ORDER: PaperWorkflowTab[] = ["add", "inbox", "duplicates", "scan"];
 
   interface AddedSummary { key: string; title: string; pdf: string | null; count: number }
-  interface RemoteHit { uid: string; addId: string; title: string; authors: string; year: string; venue: string; doi: string; arxiv: string }
+  interface RemoteHit { uid: string; addId: string; title: string; authors: string; year: string; venue: string; doi: string; arxiv: string; isbn: string; source: string }
   interface InboxItem { id: string; name: string; title: string; authors: string; year: string; doi: string; arxiv: string; targetPath: string; suggestedSubfolder: string; duplicateKey: string }
   interface DupEntry { key: string; title: string; authors: string; year: string; venue: string; doi: string; arxiv: string; pdf: string; collections: string; tags: string }
   interface DupGroup { id: string; signals: string[]; entries: DupEntry[] }
@@ -43,7 +45,7 @@
   }
 
   let addInput = $state(""), addingRef = $state(false), addedSummary = $state<AddedSummary | null>(null);
-  let remoteSource = $state<string>("inspire"), remoteQuery = $state(""), searchingRemote = $state(false);
+  let remoteSource = $state<string>("all"), remoteQuery = $state(""), searchingRemote = $state(false);
   let remoteHits = $state<RemoteHit[]>([]), remoteSearched = $state(false), addingHitUid = $state("");
   let addedHitKeys = $state<Record<string, string>>({});
 
@@ -60,7 +62,7 @@
   let relinkVault = $state(true), trashDuplicatePdf = $state(false);
 
   let scanRoot = $state("");
-  let scanMaxLookups = $state<number | null>(50);
+  let scanMaxLookups = $state<number | null>(null);
   let scanRateLimitMs = $state<number | null>(250);
   let scanBusy = $state(false), scanMode = $state<"preview" | "sync" | "">("");
   let scanProgress = $state<ScanProgress | null>(null);
@@ -104,7 +106,16 @@
       notifyChanged();
       toast(sum && sum.count > 1 ? `Added ${sum.count} references` : `Added ${sum?.key || "reference"}`, sum?.title, "success");
       addInput = "";
-    } catch (err) { errorMsg = errReason(err); }
+    } catch (err) {
+      const msg = errReason(err);
+      if (/not a DOI, arXiv id/i.test(msg)) {
+        remoteQuery = text;
+        remoteSource = "all";
+        await runRemoteSearch();
+      } else {
+        errorMsg = msg;
+      }
+    }
     finally { addingRef = false; }
   }
 
@@ -117,12 +128,15 @@
       const o = asRecord(raw);
       const arr = Array.isArray(raw) ? raw : Array.isArray(o.results) ? o.results : Array.isArray(o.items) ? o.items : [];
       remoteHits = arr.map((item, idx) => {
-        const r = asRecord(item), doi = str(r.doi ?? r.DOI), arxiv = str(r.arxiv ?? r.eprint ?? r.arxiv_id).replace(/^arxiv:/i, "");
-        const addId = arxiv ? `arXiv:${arxiv}` : doi || str(r.bibtex ?? r.id ?? r.url);
+        const r = asRecord(item), doi = str(r.doi ?? r.DOI), arxiv = str(r.arxiv ?? r.eprint ?? r.arxiv_id).replace(/^arxiv:/i, ""), isbn = str(r.isbn ?? r.ISBN);
+        const url = str(r.url);
+        const inspireUrl = /inspirehep\.net\/literature\/\d+/i.test(url) ? url : "";
+        const addId = arxiv ? `arXiv:${arxiv}` : doi || (isbn ? `ISBN ${isbn}` : inspireUrl || str(r.bibtex ?? r.id) || url);
         return {
           uid: `${remoteSource}-${idx}-${addId || str(r.title)}`, addId,
           title: str(r.title) || "Untitled work", authors: joinArr(r.authors ?? r.author),
-          year: str(r.year ?? r.date).slice(0, 4), venue: str(r.venue ?? r.journal ?? r.publication), doi, arxiv,
+          year: str(r.year ?? r.date).slice(0, 4), venue: str(r.venue ?? r.journal ?? r.publication), doi, arxiv, isbn,
+          source: str(r.source),
         };
       });
       remoteSearched = true;
@@ -458,7 +472,18 @@
   $effect(() => {
     if (paperWorkflowModal.open && !wasOpen) {
       wasOpen = true; loadedTab = ""; errorMsg = ""; addedSummary = null; inboxDoneCount = null; scanResult = null; scanProgress = null;
-      if (paperWorkflowModal.initialQuery) { addInput = paperWorkflowModal.initialQuery; remoteQuery = paperWorkflowModal.initialQuery; }
+      const iq = paperWorkflowModal.initialQuery.trim();
+      if (iq) {
+        addInput = iq;
+        remoteQuery = iq;
+        if (
+          paperWorkflowModal.tab === "add" &&
+          !/^(10\.|arxiv:|isbn\b|https?:|@|ty\s+-|\d{4}\.\d{4,5}|[a-z-]+\/\d{7}|97[89][\d -]{10,})/i.test(iq)
+        ) {
+          remoteSource = "all";
+          void runRemoteSearch();
+        }
+      }
     } else if (!paperWorkflowModal.open) {
       wasOpen = false; loadedTab = "";
     }
@@ -549,8 +574,10 @@
                         <strong class="hit-title">{hit.title}</strong>
                         <span class="hit-sub">{[hit.authors, hit.year, hit.venue].filter(Boolean).join(" · ")}</span>
                         <div class="chip-row">
+                          {#if hit.source}<span class="chip">{hit.source}</span>{/if}
                           {#if hit.arxiv}<span class="chip">arXiv:{hit.arxiv}</span>{/if}
                           {#if hit.doi}<span class="chip">doi:{hit.doi}</span>{/if}
+                          {#if hit.isbn}<span class="chip">ISBN {hit.isbn}</span>{/if}
                         </div>
                       </div>
                       {#if addedHitKeys[hit.uid]}
@@ -711,7 +738,7 @@
               </div>
               <div class="field-group">
                 <label class="field-label" for="pw-scan-max-lookups">Max lookups</label>
-                <input id="pw-scan-max-lookups" type="number" min={0} step={1} data-testid="scan-max-lookups" placeholder="50" bind:value={scanMaxLookups} disabled={scanBusy} />
+                <input id="pw-scan-max-lookups" type="number" min={0} step={1} data-testid="scan-max-lookups" placeholder="Unlimited" bind:value={scanMaxLookups} disabled={scanBusy} />
               </div>
               <div class="field-group">
                 <label class="field-label" for="pw-scan-rate-limit">Rate limit (ms)</label>
