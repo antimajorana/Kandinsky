@@ -14,7 +14,7 @@ test.beforeAll(async ({ request }) => {
 });
 test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/sidey/main.js", "export function register() {}\n"); });
 
-test("a plugin's tool opens in the side column, and in the left bar when the panel lives there", async ({ page }) => {
+test("a plugin's tool opens in the side column", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   const run = async (title: string) => { await page.keyboard.press("F1"); await page.keyboard.type(title); await page.keyboard.press("Enter"); };
@@ -23,7 +23,15 @@ test("a plugin's tool opens in the side column, and in the left bar when the pan
   await run("Side panel: Party");
   await expect(page.locator(".party-tool")).toHaveText("Mira, Brok");
   await expect(page.getByTestId("side-head").getByRole("tab", { name: "Party" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: "Party" }), "a tool is not a tab").toHaveCount(0);
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "Party" }), "a tool is not a tab").toHaveCount(0);
+});
+
+test("a plugin's tool shows in the left bar when the panel lives there", async ({ page }) => {
+  test.skip(true, "the Notion-style sidebar has no side panel: the left-bar home of the side panel belongs to the retired classic bar");
+  await page.goto("/");
+  await page.getByText("Finish the GW notes.").waitFor();
+  const run = async (title: string) => { await page.keyboard.press("F1"); await page.keyboard.type(title); await page.keyboard.press("Enter"); };
+  await run("Side panel: Party");
 
   // moved into the left bar: its button sits with the four built-in tools and shows it
   await run("Move side panel");

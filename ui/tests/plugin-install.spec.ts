@@ -30,6 +30,9 @@ test("install from a folder (on, permissions said), switch off and on, update ke
   await page.getByRole("button", { name: "Install from path…" }).click();
   await page.keyboard.type(src);
   await page.keyboard.press("Enter");
+  // a plugin asking for permissions says so first and waits for the go-ahead
+  await expect(page.getByText(/requests elevated permissions: Network: carried\.example\.org/)).toBeVisible();
+  await page.getByRole("button", { name: "Install plugin" }).click();
   await expect(page.getByText("Installed Carried")).toBeVisible();
   await expect(page.getByText(/It is switched on\. It may talk to carried\.example\.org/)).toBeVisible();
   const sw = page.getByRole("switch", { name: "Plugin Carried" });

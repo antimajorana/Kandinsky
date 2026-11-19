@@ -1,5 +1,6 @@
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import { openFile } from "./open";
+import { verticalTabs } from "./vertical-tabs";
 
 // Plugins v4, shell hooks (docs/refactor/REFACTOR-plugins-v4.md, 3.2): `kandinsky.shell.menu(where, fn)` adds rows
 // to the app's right-click menus, after the app's own; a builder that throws loses only its rows.
@@ -23,7 +24,11 @@ test.beforeAll(async ({ request }) => {
 // the vault is shared by the specs: leave no rows behind
 test.afterAll(async ({ request }) => { await put(request, ".kandinsky/plugins/menus/main.js", "export function register() {}\n"); });
 
-test("a plugin's rows in the tab, editor and file menus, and its cell in the status bar", async ({ page }) => {
+test("a plugin's rows in the tab, editor and file menus, and its cell in the status bar", async ({ page, request }) => {
+  const restore = await verticalTabs(request); // journal is the only tab: the Open section lists a lone tab with vertical tabs
+  try { await pluginMenus(page); } finally { await restore(); }
+});
+async function pluginMenus(page: Page) {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "journal.md");
@@ -76,4 +81,4 @@ test("a plugin's rows in the tab, editor and file menus, and its cell in the sta
   await log.locator("summary").click();
   await expect(log).toContainText("boom in a row");
   await expect(log).toContainText("broken builder");
-});
+}

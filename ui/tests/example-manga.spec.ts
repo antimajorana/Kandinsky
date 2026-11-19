@@ -3,6 +3,7 @@ import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSyn
 import { join } from "node:path";
 import { crc32, deflateRawSync, deflateSync } from "node:zlib";
 import { WS } from "../playwright.config";
+import { verticalTabs } from "./vertical-tabs";
 import { createServer, type Server } from "node:http";
 import { execFileSync } from "node:child_process";
 // @ts-expect-error a plugin's module is plain JavaScript, loaded as the page loads it
@@ -50,6 +51,10 @@ test.beforeAll(() => {
   writeFileSync(join(series, "Chapter 10.cbz"), cbz([["p1.png", png(200), true]]));
   writeFileSync(join(series, "Chapter 9.cbz"), cbz([["p10.png", png(30), true], ["p2.png", png(90), false], ["p1.png", png(10), true], ["__MACOSX/p1.png", png(0), false]]));
 });
+// the sidebar's Open section lists a lone tab only with vertical tabs; the shared config is put back after each test
+let restoreTabs: (() => Promise<unknown>) | null = null;
+test.beforeEach(async ({ request }) => { restoreTabs = await verticalTabs(request); });
+test.afterEach(async () => { await restoreTabs?.(); restoreTabs = null; });
 test.afterAll(() => { rmSync(PLUGIN, { recursive: true, force: true }); rmSync(join(WS, "manga"), { recursive: true, force: true }); });
 
 test("manga: the library, a series, a .cbz read in the page, and where you are saved for the phone too", async ({ page }) => {
@@ -98,8 +103,8 @@ test("manga: the library, a series, a .cbz read in the page, and where you are s
   await page.screenshot({ path: test.info().outputPath("series.png") });
   // "Its note": the one note, opened beside — the same note the place went into
   await pane.getByRole("button", { name: "Its note" }).click();
-  // the note's tab (the series pane is the Libraries page, a place of the left bar, not a tab), the series still beside
-  await expect(page.getByTestId("sidebar").locator(".tab", { hasText: "Blue Period" })).toHaveCount(1);
+  // the note's tab beside the series' (the Libraries page is a tab of the Open section too, titled by the series)
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "Blue Period" })).toHaveCount(2);
   await expect(pane.getByRole("button", { name: "Read again" })).toBeVisible();
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme }); // judged in both themes (docs/guides/UI-STYLE.md)

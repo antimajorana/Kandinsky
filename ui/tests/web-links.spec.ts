@@ -27,7 +27,7 @@ test("a web link opens as a tab when the site allows it, else in a window", asyn
   await expect(page.getByTestId("palette").getByText(/web-links/).first()).toBeVisible();
   await page.keyboard.press("Enter");
   // the reading of the link: in the editor a click on a link's text follows it with Ctrl; the reading view by a click
-  const tabs = page.getByTestId("sidebar").locator(".tab");
+  const tabs = page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row");
   await page.evaluate((p) => { const a = document.createElement("a"); a.href = `http://127.0.0.1:${p}/open`; a.textContent = "x"; document.body.append(a); a.click(); a.remove(); }, port);
   await expect(tabs.filter({ hasText: `127.0.0.1:${port}` })).toHaveCount(1, { timeout: 10_000 });
   await expect(page.frameLocator("iframe").first().getByRole("heading", { name: "A web page" })).toBeVisible();
@@ -37,7 +37,13 @@ test("a web link opens as a tab when the site allows it, else in a window", asyn
   expect((await popup).url()).toContain("/closed");
 });
 
-test("Browse the web… opens an address in a tab, and words as a search", async ({ page }) => {
+test("Browse the web… opens an address in a tab, and words as a search", async ({ page, request }) => {
+  // the tab is the only one: the sidebar's Open section lists a lone tab only with vertical tabs
+  const cfg = (await (await request.get("/api/config", { headers: H })).json()).config;
+  expect((await request.put("/api/config", { headers: H, data: { ...cfg, ui: { ...cfg.ui, tabs: "vertical" } } })).ok()).toBe(true);
+  try { await browseTheWeb(page); } finally { await request.put("/api/config", { headers: H, data: cfg }); }
+});
+async function browseTheWeb(page: import("@playwright/test").Page) {
   await asDesktop(page);
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
@@ -47,7 +53,7 @@ test("Browse the web… opens an address in a tab, and words as a search", async
   await page.keyboard.type(`http://127.0.0.1:${port}/open`); // a bare address would be https://, which this site is not
   await expect(page.getByTestId("palette").getByText(`Open http://127.0.0.1:${port}/open`)).toBeVisible();
   await page.keyboard.press("Enter");
-  const tabs = page.getByTestId("sidebar").locator(".tab");
+  const tabs = page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row");
   await expect(tabs.filter({ hasText: `127.0.0.1:${port}` })).toHaveCount(1, { timeout: 10_000 });
   await expect(page.frameLocator("iframe").first().getByRole("heading", { name: "A web page" })).toBeVisible();
   // words: a search, offered as one
@@ -56,7 +62,7 @@ test("Browse the web… opens an address in a tab, and words as a search", async
   await page.getByTestId("palette").getByText(/^Browse the web/).first().click();
   await page.keyboard.type("hubbard model");
   await expect(page.getByTestId("palette").getByText("Search the web for “hubbard model”")).toBeVisible();
-});
+}
 
 test("Shift+click, or a link marked data-outside, opens in the system's browser through the core, not as a tab", async ({ page }) => {
   await page.goto("/");
@@ -71,7 +77,7 @@ test("Shift+click, or a link marked data-outside, opens in the system's browser 
   await click(`http://127.0.0.1:${port}/open?shift`, true);
   await click(`http://127.0.0.1:${port}/open?join`, false, true);
   await expect.poll(() => [...asked].sort()).toEqual([`http://127.0.0.1:${port}/open?join`, `http://127.0.0.1:${port}/open?shift`]); // each opens after its own import: any order
-  await expect(page.getByTestId("sidebar").locator(".tab").filter({ hasText: `127.0.0.1:${port}` })).toHaveCount(0);
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row").filter({ hasText: `127.0.0.1:${port}` })).toHaveCount(0);
 });
 
 test("the core opens only web and mail addresses outside", async ({ request }) => {
@@ -86,5 +92,5 @@ test("Kandinsky in a plain browser (a vault on a server) opens a web link in a n
   const popup = page.waitForEvent("popup", { timeout: 10_000 });
   await page.evaluate((p) => { const a = document.createElement("a"); a.href = `http://127.0.0.1:${p}/open`; a.textContent = "x"; document.body.append(a); a.click(); a.remove(); }, port);
   expect((await popup).url()).toContain("/open");
-  await expect(page.getByTestId("sidebar").locator(".tab").filter({ hasText: `127.0.0.1:${port}` })).toHaveCount(0);
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row").filter({ hasText: `127.0.0.1:${port}` })).toHaveCount(0);
 });
