@@ -181,24 +181,24 @@
   }
 
   function buildAnnotationsMarkdown(existingText: string, pdfName: string, lines: string[]): string {
-    const marksFenceRe = /(?:^|\r?\n)(```pdf-marks\r?\n[\s\S]*?\r?\n```[ \t]*\r?\n?)$/;
-    const fenceMatch = marksFenceRe.exec(existingText);
-    const body = fenceMatch ? existingText.slice(0, existingText.length - fenceMatch[1].length) : existingText;
-    const trailingMarks = fenceMatch ? fenceMatch[1] : "";
+    const normText = existingText.replace(/\r\n/g, "\n");
+    const marksFenceRe = /(?:^|\n)(```pdf-marks[ \t]*\n(?:[\s\S]*?\n)?```[ \t]*(?:\n[ \t]*)*)$/;
+    const fenceMatch = marksFenceRe.exec(normText);
+    const body = fenceMatch ? normText.slice(0, normText.length - fenceMatch[1].length) : normText;
+    const trailingMarks = fenceMatch ? fenceMatch[1].replace(/[ \t\n]+$/, "") : "";
     const section = `<!-- kandinsky:annotations -->\n## Annotations — ${pdfName}\n\n${lines.join("\n") || "_none yet_"}\n<!-- /kandinsky:annotations -->`;
     const annBlockRe = /<!-- (?:kandinsky|atlas):annotations -->[\s\S]*?<!-- \/(?:kandinsky|atlas):annotations -->/;
     let nextBody: string;
     if (annBlockRe.test(body)) {
-      nextBody = body.replace(annBlockRe, () => section);
+      nextBody = body.replace(annBlockRe, () => section).replace(/\s+$/, "");
     } else {
       const trimmedBody = body.replace(/\s+$/, "");
-      nextBody = trimmedBody ? `${trimmedBody}\n\n${section}\n` : `${section}\n`;
+      nextBody = trimmedBody ? `${trimmedBody}\n\n${section}` : section;
     }
     if (trailingMarks) {
-      const sep = nextBody.endsWith("\n\n") ? "" : nextBody.endsWith("\n") ? "\n" : "\n\n";
-      return `${nextBody}${sep}${trailingMarks}`;
+      return `${nextBody}\n\n${trailingMarks}\n`;
     }
-    return nextBody.endsWith("\n") ? nextBody : `${nextBody}\n`;
+    return `${nextBody}\n`;
   }
 
   async function toNotes() {

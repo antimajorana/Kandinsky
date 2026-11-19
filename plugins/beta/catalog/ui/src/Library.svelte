@@ -27,6 +27,7 @@
   // a page's source never changes: its defaults are read once
   let sortId = $state(untrack(() => source.sorts[0]?.id ?? ""));
   let sortDesc = $state<boolean | null>(null);
+  let sortStatus = $state("");
   let layout = $state(untrack(() => source.layouts[0]));
   let tools = $state<LibraryAction[]>([]);
   let list: HTMLDivElement;
@@ -78,13 +79,17 @@
   const sel = $derived(sorted.find((i) => i.id === selId) ?? sorted[0] ?? null);
 
   function toggleTableSort(colId: string) {
+    let nextDesc: boolean;
     if (sortId === colId) {
-      sortDesc = !effectiveDesc;
+      nextDesc = !effectiveDesc;
     } else {
       sortId = colId;
       const def = source.sorts.find((s) => s.id === colId);
-      sortDesc = def?.desc ?? (colId === "year" || colId === "added" || colId === "pdf");
+      nextDesc = def?.desc ?? (colId === "year" || colId === "added" || colId === "pdf");
     }
+    sortDesc = nextDesc;
+    const label = TABLE_COLS.find((c) => c.id === colId)?.label ?? colId;
+    sortStatus = `Sorted by ${label}, ${nextDesc ? "descending" : "ascending"}`;
   }
   // narrow (a phone, a thin pane): one column, the groups a row of chips, the item's card a sheet opened by a tap —
   // never the first item's card by itself, which kept a third of a phone's width
@@ -321,6 +326,7 @@
     {/if}
     <div class="list" class:covers={layout === "covers"} class:table-mode={layout === "table"} class:empty-list={!items.length} bind:this={list} use:marquee={{ pick: dragPick }}>
       {#if layout === "table" && sorted.length}
+        <div class="sr-only" role="status">{sortStatus}</div>
         <table class="zot-table">
           <caption class="sr-only">{source.title}</caption>
           <thead>

@@ -129,7 +129,9 @@
       const arr = Array.isArray(raw) ? raw : Array.isArray(o.results) ? o.results : Array.isArray(o.items) ? o.items : [];
       remoteHits = arr.map((item, idx) => {
         const r = asRecord(item), doi = str(r.doi ?? r.DOI), arxiv = str(r.arxiv ?? r.eprint ?? r.arxiv_id).replace(/^arxiv:/i, ""), isbn = str(r.isbn ?? r.ISBN);
-        const addId = arxiv ? `arXiv:${arxiv}` : doi || (isbn ? `ISBN ${isbn}` : str(r.bibtex ?? r.id ?? r.url));
+        const url = str(r.url);
+        const inspireUrl = /inspirehep\.net\/literature\/\d+/i.test(url) ? url : "";
+        const addId = arxiv ? `arXiv:${arxiv}` : doi || (isbn ? `ISBN ${isbn}` : inspireUrl || str(r.bibtex ?? r.id) || url);
         return {
           uid: `${remoteSource}-${idx}-${addId || str(r.title)}`, addId,
           title: str(r.title) || "Untitled work", authors: joinArr(r.authors ?? r.author),

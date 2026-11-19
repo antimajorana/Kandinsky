@@ -33,8 +33,8 @@ function detectHomeDir() {
   if (cachedHomeDir && cachedVaultDir) return Promise.resolve(cachedHomeDir);
   if (!homeDirPromise) {
     homeDirPromise = (async () => {
-      if (typeof fetch !== "function") return "";
       try {
+        if (typeof fetch !== "function") return "";
         const res = await fetch("/api/vaults", { headers: { "x-kandinsky": "1" } });
         if (!res.ok) return "";
         const data = await res.json();
@@ -47,8 +47,10 @@ function detectHomeDir() {
         }
       } catch {
         // Offline / Android / mocked test environments without /api/vaults continue cleanly
+      } finally {
+        if (!cachedVaultDir) homeDirPromise = null;
       }
-      return "";
+      return cachedHomeDir;
     })();
   }
   return homeDirPromise;
@@ -346,7 +348,7 @@ async function openInSystemApp(kandinsky, resolvedPath) {
     return true;
   }
   if (typeof kandinsky.openLink === "function") {
-    kandinsky.openLink(toFileUrl(target));
+    kandinsky.openLink(toFileUrl(target), { outside: true });
     return true;
   }
   kandinsky.toast?.("External Files", `Path: ${target}`, "info");
@@ -354,6 +356,8 @@ async function openInSystemApp(kandinsky, resolvedPath) {
 }
 
 export function register(kandinsky) {
+  cachedVaultDir = "";
+  homeDirPromise = null;
   void detectHomeDir();
   const getRoot = () => String(kandinsky.plugin?.settings?.external_root ?? DEFAULT_EXTERNAL_ROOT).trim() || DEFAULT_EXTERNAL_ROOT;
 
@@ -560,8 +564,8 @@ export function register(kandinsky) {
   kandinsky.editor.registerFence("external", renderExternalFence(false));
   kandinsky.editor.registerFence("external-embed", renderExternalFence(true));
 
-  // Inline Live Preview widget for `[Label](file:///...)` external links
-  kandinsky.editor.registerDecoration(/!?\[([^\]]*)\]\((file:\/\/\/[^)\r\n]+)\)/, (match) => {
+  // Inline Live Preview widget for `[Label](file://...)` external links
+  kandinsky.editor.registerDecoration(/!?\[([^\]]*)\]\((file:\/\/[^)\r\n]+)\)/, (match) => {
     const rawLabel = match[1]?.trim() ?? "";
     const rawUrl = match[2]?.trim() ?? "";
     const resolved = resolveExternalPath(rawUrl, getRoot());
@@ -645,4 +649,22 @@ export function register(kandinsky) {
       openInSystemApp(kandinsky, root);
     },
   });
+
+  // Intercept Reading-View `<a href="file://...">` clicks so external PDFs in external_pdf_roots open in Kandinsky's Pdf.svelte reader
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    const onDocClick = (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.shiftKey || e.altKey) return;
+      const anchor = e.target?.closest?.("a[href]");
+      if (!anchor) return;
+      const rawHref = anchor.getAttribute("href") ?? "";
+      if (!/^file:\/\//i.test(rawHref)) return;
+      const resolved = resolveExternalPath(rawHref, getRoot());
+      if (!resolved) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void openInSystemApp(kandinsky, resolved);
+    };
+    document.addEventListener("click", onDocClick, true);
+    return () => document.removeEventListener("click", onDocClick, true);
+  }
 }

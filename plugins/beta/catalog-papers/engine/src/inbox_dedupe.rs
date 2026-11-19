@@ -4,9 +4,14 @@ use crate::core_api::CoreApi;
 use crate::entry;
 use crate::external::{self, format_pdf_filename, resolve_dir_from, resolve_pdf_ref, sanitize_pdf_filename, write_external_pdf};
 use crate::firstpage;
-use crate::pdf_meta::extract_pdf_doc;
-use crate::refs::{arxiv_of, bytes_sha_hex, citekey, first_page_entry, list as ylist, now_stamp, s as ys, sha, year_of, Lib, Paper, Res};
-use crate::remote::{self, parse_arxiv_versioned, parse_doi, parse_isbn};
+use crate::pdf_meta::{extract_pdf_doc, PdfDocMeta};
+use crate::refs::{
+    arxiv_of, build_local_entry_mapping_with_meta, bytes_sha_hex, citekey, classify_pdf,
+    extract_pdf_identifiers_with_meta, isbn_core, list as ylist, lookup_pdf_remote_with_meta,
+    merge_local_fallbacks_with_meta, norm_doi, now_stamp, parse_filename, s as ys, sha, year_of,
+    ClassifyInput, ItemClass, Lib, Paper, ParsedFilename, PdfIds, Res,
+};
+use crate::remote;
 use crate::scan_roots::{self, ScanRootsOpts};
 use crate::settings::Settings;
 use kandinsky_text::paths::{real, safe_join};
@@ -90,15 +95,6 @@ fn suggest_subfolder(presets: &[String], hay: &str) -> String {
     }).cloned().unwrap_or_default()
 }
 
-fn norm_doi(d: &str) -> String {
-    d.trim().trim_start_matches("https://doi.org/").trim_start_matches("http://doi.org/").trim_start_matches("doi:").trim().to_lowercase()
-}
-
-fn isbn_core(raw: &str) -> Option<String> {
-    let d: String = parse_isbn(raw).unwrap_or_else(|| raw.chars().filter(|c| c.is_ascii_digit() || matches!(c, 'X' | 'x')).collect()).to_ascii_uppercase();
-    match d.len() { 10 => Some(d[..9].to_string()), 13 if d.starts_with("978") => Some(d[3..12].to_string()), 13 => Some(d[..12].to_string()), _ => None }
-}
-
 fn list_inbox_pdfs(inbox_dir: &Path) -> Res<Vec<PathBuf>> {
     if !inbox_dir.exists() { return Ok(Vec::new()); }
     let mut files: Vec<PathBuf> = std::fs::read_dir(inbox_dir).map_err(|e| format!("{}: {e}", inbox_dir.display()))?.flatten().map(|e| e.path()).filter(|p| p.is_file() && p.extension().is_some_and(|x| x.eq_ignore_ascii_case("pdf"))).collect();
@@ -107,39 +103,45 @@ fn list_inbox_pdfs(inbox_dir: &Path) -> Res<Vec<PathBuf>> {
 }
 
 struct InspectedPdf {
-    digest: [u8; 32], text: String, pages: usize, doi: Option<String>, arxiv: Option<String>, arxiv_ver: Option<String>,
-    isbn: Option<String>, first: Option<firstpage::FirstPage>, existing_key: Option<String>,
+    digest: [u8; 32],
+    text: String,
+    pages: usize,
+    doc_meta: PdfDocMeta,
+    parsed: ParsedFilename,
+    ids: PdfIds,
+    class: ItemClass,
+    first: Option<firstpage::FirstPage>,
+    existing_key: Option<String>,
 }
 
 fn inspect_pdf(lib: &Lib, existing: &[Paper], fname: &str, bytes: &[u8]) -> InspectedPdf {
     let digest = sha(bytes);
+    let hex = bytes_sha_hex(&digest);
     let extract = extract_pdf_doc(bytes);
     let (text, pages, doc_meta) = (extract.text, extract.pages, extract.meta);
-    let doi = parse_doi(&text).or(doc_meta.doi);
-    let (arxiv, arxiv_ver) = match parse_arxiv_versioned(&text) {
-        Some((a, v)) => (Some(a), v),
-        None => match doc_meta.arxiv {
-            Some(a) => (Some(a), doc_meta.arxiv_version),
-            None => (None, None),
-        },
-    };
-    let isbn = parse_isbn(&text).or(doc_meta.isbn);
+    let parsed = parse_filename(fname);
+    let ids = extract_pdf_identifiers_with_meta(&text, pages, fname, Some(&doc_meta));
     let first = firstpage::read_pages(&text, fname);
+    let class = classify_pdf(&ClassifyInput {
+        text: &text,
+        pages,
+        filename: fname,
+        rel_dir: None,
+        parsed: &parsed,
+        isbn: ids.isbn.as_deref(),
+        doi: ids.doi.as_deref(),
+        arxiv: ids.arxiv.as_deref(),
+        remote_type: None,
+        explicit_kind: None,
+    });
     let existing_key = existing.iter().find(|p| {
-        doi.as_deref().zip(p.doi.as_deref()).is_some_and(|(a, b)| norm_doi(a) == norm_doi(b))
-            || (arxiv.is_some() && p.arxiv == arxiv)
-            || isbn.as_deref().and_then(isbn_core).is_some_and(|ic| safe_join(lib.root, &p.dir).ok().and_then(|d| entry::read(&d)).and_then(|m| ys(&m, "ISBN")).and_then(|s| isbn_core(&s)).as_deref() == Some(ic.as_str()))
+        ids.doi.as_deref().zip(p.doi.as_deref()).is_some_and(|(a, b)| norm_doi(a) == norm_doi(b))
+            || ids.arxiv.as_deref().zip(p.arxiv.as_deref()).is_some_and(|(a, b)| a.eq_ignore_ascii_case(b))
+            || ids.isbn.as_deref().and_then(isbn_core).is_some_and(|ic| safe_join(lib.root, &p.dir).ok().and_then(|d| entry::read(&d)).and_then(|m| ys(&m, "ISBN").or_else(|| ys(&m, "isbn"))).and_then(|s| isbn_core(&s)).as_deref() == Some(ic.as_str()))
+            || safe_join(lib.root, &p.dir).ok().and_then(|d| entry::read(&d)).and_then(|m| ys(&m, "pdfSha256")).is_some_and(|h| h.eq_ignore_ascii_case(&hex))
             || p.pdf.as_deref().and_then(|f| lib.pdf_abs_path(f)).is_some_and(|abs| abs.metadata().is_ok_and(|md| md.len() == bytes.len() as u64) && std::fs::read(&abs).is_ok_and(|b| sha(&b) == digest))
     }).map(|p| p.key.clone());
-    InspectedPdf { digest, text, pages, doi, arxiv, arxiv_ver, isbn, first, existing_key }
-}
-
-fn fallback_stem_entry(fname: &str) -> Mapping {
-    let stem = fname.trim_end_matches(".pdf").trim_end_matches(".PDF").replace(['_', '-'], " ");
-    let mut m = Mapping::new();
-    m.insert("title".into(), stem.split_whitespace().collect::<Vec<_>>().join(" ").into());
-    m.insert("type".into(), "document".into());
-    m
+    InspectedPdf { digest, text, pages, doc_meta, parsed, ids, class, first, existing_key }
 }
 
 /// Where a PDF named `name` is filed for entry `key`: the shared folder (and `sub`) when one is set, else the entry's folder.
@@ -179,15 +181,25 @@ pub fn scan_inbox(lib: &Lib) -> Res<InboxScan> {
         let info = inspect_pdf(lib, &existing, &fname, &bytes);
         let m = if let Some(ek) = &info.existing_key {
             safe_join(lib.root, &format!("{}/{ek}", lib.cfg.dir)).ok().and_then(|d| entry::read(&d)).unwrap_or_default()
-        } else if let Some(fp) = &info.first { first_page_entry(fp, info.pages) } else { fallback_stem_entry(&fname) };
+        } else {
+            build_local_entry_mapping_with_meta(
+                &info.parsed,
+                info.first.as_ref(),
+                Some(&info.doc_meta),
+                &info.ids,
+                info.pages,
+                info.class,
+            )
+            .0
+        };
         let (title, authors, year) = (ys(&m, "title").unwrap_or_else(|| fname.clone()), ylist(&m, "author"), ys(&m, "date").and_then(|d| year_of(&d)));
         let key_hint = info.existing_key.clone().unwrap_or_else(|| citekey(&authors, year.as_deref(), &title, &|_| false));
         let suggested_filename = format_pdf_filename(&lib.cfg.rename_format, &m, &key_hint);
         let suggested_subfolder = suggest_subfolder(&lib.cfg.subfolder_presets, &format!("{title} {}", info.text.chars().take(600).collect::<String>()));
         let target_path = filed_path(lib.cfg, &key_hint, &suggested_subfolder, &suggested_filename);
         items.push(InboxItem {
-            file: fname, size: bytes.len() as u64, doi: info.doi, arxiv: info.arxiv, arxiv_version: info.arxiv_ver,
-            isbn: info.isbn, title, authors, year, suggested_filename, suggested_subfolder, existing_key: info.existing_key, target_path,
+            file: fname, size: bytes.len() as u64, doi: info.ids.doi, arxiv: info.ids.arxiv, arxiv_version: info.ids.arxiv_version,
+            isbn: info.ids.isbn, title, authors, year, suggested_filename, suggested_subfolder, existing_key: info.existing_key, target_path,
         });
     }
     Ok(InboxScan {
@@ -221,28 +233,50 @@ pub fn organize_inbox(lib: &Lib, req: &OrganizeInboxReq) -> Res<OrganizeInboxRes
             let m = entry::read(&refs_base.join(&ek)).unwrap_or_default();
             (ek, m, false)
         } else {
-            let fetched = if let Some(d) = &info.doi { remote::crossref_with_openalex(lib.net, d, &lib.cfg.email).ok() } else if let Some(a) = &info.arxiv {
-                let q = info.arxiv_ver.as_ref().map_or_else(|| a.clone(), |ver| format!("{a}{ver}"));
-                remote::arxiv(lib.net, &q).or_else(|_| remote::arxiv(lib.net, a)).ok().map(|mut am| {
-                    if let Some(ver) = &info.arxiv_ver {
-                        am.insert("arxivVersion".into(), ver.clone().into());
-                        am.insert("archiveID".into(), format!("arXiv:{a}{ver}").into());
-                    }
-                    am
-                })
+            let mut m = if let Some((mut rm, _)) = lookup_pdf_remote_with_meta(
+                lib.net,
+                &lib.cfg.email,
+                info.class,
+                &info.ids,
+                &info.parsed,
+                info.first.as_ref(),
+                Some(&info.doc_meta),
+            ) {
+                merge_local_fallbacks_with_meta(
+                    &mut rm,
+                    &info.parsed,
+                    info.first.as_ref(),
+                    Some(&info.doc_meta),
+                    &info.ids,
+                    info.pages,
+                    info.class,
+                );
+                rm
             } else {
-                info.first
-                    .as_ref()
-                    .and_then(|fp| firstpage::crossref_match(lib.net, fp))
-                    .and_then(|d| remote::crossref_with_openalex(lib.net, &d, &lib.cfg.email).ok())
-                    .or_else(|| info.isbn.as_deref().and_then(|i| remote::isbn_book(lib.net, i).ok()))
+                build_local_entry_mapping_with_meta(
+                    &info.parsed,
+                    info.first.as_ref(),
+                    Some(&info.doc_meta),
+                    &info.ids,
+                    info.pages,
+                    info.class,
+                )
+                .0
             };
-            let mut m = fetched.unwrap_or_else(|| info.first.as_ref().map_or_else(|| fallback_stem_entry(&fname), |fp| first_page_entry(fp, info.pages)));
-            let (title, year) = (ys(&m, "title").unwrap_or_else(|| fname.clone()), ys(&m, "date").and_then(|d| year_of(&d)));
-            let k = lib.next_citekey(&ylist(&m, "author"), year.as_deref(), &title)?;
-            m.insert("citekey".into(), k.clone().into());
-            m.insert("dateAdded".into(), now_stamp().into());
-            (k, m, true)
+            if let Some(ep) = lib.find_existing_by_ids(
+                ys(&m, "DOI").as_deref(),
+                arxiv_of(&m).as_deref(),
+                ys(&m, "ISBN").or_else(|| ys(&m, "isbn")).as_deref(),
+            ) {
+                let em = entry::read(&refs_base.join(&ep.key)).unwrap_or_default();
+                (ep.key, em, false)
+            } else {
+                let (title, year) = (ys(&m, "title").unwrap_or_else(|| fname.clone()), ys(&m, "date").and_then(|d| year_of(&d)));
+                let k = lib.next_citekey(&ylist(&m, "author"), year.as_deref(), &title)?;
+                m.insert("citekey".into(), k.clone().into());
+                m.insert("dateAdded".into(), now_stamp().into());
+                (k, m, true)
+            }
         };
 
         let sub = item_opt.and_then(|o| o.subfolder.clone()).or_else(|| req.subfolder.clone()).unwrap_or_else(|| suggest_subfolder(&lib.cfg.subfolder_presets, &ys(&m, "title").unwrap_or_default()));
@@ -452,9 +486,21 @@ fn spawn_inbox_watcher(plugin: String, root: PathBuf, stop: Arc<(Mutex<bool>, Co
                             changed_paths.push(cfg.bib.clone());
                             core.changed(changed_paths);
                         }
+                        let errored_refs: HashSet<&str> = report
+                            .items
+                            .iter()
+                            .filter(|it| it.error.is_some())
+                            .map(|it| it.pdf_ref.as_str())
+                            .collect();
+                        let committed: Vec<(String, u64, u64)> = snap
+                            .into_iter()
+                            .filter(|(pref, _, _)| !errored_refs.contains(pref.as_str()))
+                            .collect();
+                        last_ext = Some(committed);
                     }
+                } else {
+                    last_ext = Some(snap);
                 }
-                last_ext = Some(snap);
             }
         }
     });
@@ -825,5 +871,42 @@ mod tests {
         let snap = collect_external_pdf_snapshot(&vault, &cfg, now + Duration::from_secs(5));
         assert_eq!(snap.len(), 1);
         assert_eq!(snap[0].0, "../Papers/stable.pdf");
+    }
+
+    #[test]
+    fn scan_and_organize_inbox_extract_pdf_info_xmp_and_title_author_filenames() {
+        let (mut v, ws) = (Vault::new(), tempfile::tempdir().unwrap());
+        let ws_real = real(ws.path()).unwrap();
+        let (vault_dir, pool_dir, sort_dir) = (ws_real.join("vault"), ws_real.join("Papers"), ws_real.join("Papers/Sort"));
+        std::fs::create_dir_all(&vault_dir).unwrap();
+        std::fs::create_dir_all(&sort_dir).unwrap();
+        v.root = vault_dir;
+        v.trash = TempTrash(v.root.clone());
+        v.cfg.external_pdf_roots = vec!["../Papers".into()];
+        v.cfg.watch_inbox = "../Papers/Sort".into();
+
+        let xmp = r#"<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:prism="http://prismstandard.org/namespaces/basic/2.0/"><rdf:Description rdf:about=""><dc:title><rdf:Alt><rdf:li xml:lang="x-default">Topological Phases in Driven Matter</rdf:li></rdf:Alt></dc:title><dc:creator><rdf:Seq><rdf:li>Milica Cvetković</rdf:li></rdf:Seq></dc:creator><prism:coverDate>2022-04-10</prism:coverDate><prism:doi>10.1000/inbox.xmp</prism:doi></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>"#;
+        let xmp_pdf = crate::refs::tests::pdf_with_info_and_xmp("FEFF0055006E007400690074006C00650064", "", xmp, "Body without header");
+        std::fs::write(sort_dir.join("raw_scan.pdf"), &xmp_pdf).unwrap();
+        std::fs::write(sort_dir.join("Quantum Field Theory - Mark Srednicki (2007).pdf"), b"%PDF-1.4 qft").unwrap();
+
+        let scan = scan_inbox(&v.lib()).unwrap();
+        assert_eq!(scan.items.len(), 2);
+        let qft = scan.items.iter().find(|i| i.file.starts_with("Quantum Field Theory")).unwrap();
+        assert_eq!(qft.title, "Quantum Field Theory");
+        assert_eq!(qft.authors, vec!["Srednicki, Mark"]);
+        assert_eq!(qft.year.as_deref(), Some("2007"));
+        assert_eq!(qft.suggested_filename, "Srednicki2007 - Quantum Field Theory.pdf");
+
+        let raw = scan.items.iter().find(|i| i.file == "raw_scan.pdf").unwrap();
+        assert_eq!(raw.title, "Topological Phases in Driven Matter");
+        assert_eq!(raw.authors, vec!["Cvetković, Milica"]);
+        assert_eq!(raw.year.as_deref(), Some("2022"));
+        assert_eq!(raw.doi.as_deref(), Some("10.1000/inbox.xmp"));
+
+        let org = organize_inbox(&v.lib(), &OrganizeInboxReq::default()).unwrap();
+        assert_eq!(org.organized.len(), 2);
+        assert!(pool_dir.join("Srednicki2007 - Quantum Field Theory.pdf").is_file());
+        assert!(pool_dir.join("Cvetković2022 - Topological Phases in Driven Matter.pdf").is_file());
     }
 }

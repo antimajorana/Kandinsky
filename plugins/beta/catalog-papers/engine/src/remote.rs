@@ -364,7 +364,8 @@ pub(crate) fn crossref_fields(w: &Json, doi: &str) -> Mapping {
 
 /// Normalizes an ISBN-10 or ISBN-13 by stripping optional `ISBN` labels, hyphens, and spaces, uppercasing `X`.
 pub fn normalize_isbn(raw: &str) -> Option<String> {
-    let mut s = raw.trim().trim_matches(|c: char| matches!(c, '(' | ')' | '[' | ']' | '.' | ',' | ';'));
+    let norm = crate::pdf_meta::normalize_pdf_unicode(raw);
+    let mut s = norm.trim().trim_matches(|c: char| matches!(c, '(' | ')' | '[' | ']' | '.' | ',' | ';'));
     let low = s.to_ascii_lowercase();
     if let Some(after_urn) = low.strip_prefix("urn:isbn:") {
         s = s[s.len() - after_urn.len()..].trim();
@@ -375,9 +376,13 @@ pub fn normalize_isbn(raw: &str) -> Option<String> {
             .into_iter()
             .find(|p| rlow.trim_start().starts_with(p))
             .map_or(0, |p| rest.len() - rest.trim_start().len() + p.len());
-        s = rest[skip..].trim_start_matches([':', ' ', '\t', '-']).trim();
+        s = rest[skip..].trim_start_matches([':', ' ', '\t', '-', '\u{2010}', '\u{2011}', '\u{2012}', '\u{2013}', '\u{2014}']).trim();
     }
-    let clean: String = s.chars().filter(|c| !matches!(c, '-' | ' ' | '\t')).map(|c| c.to_ascii_uppercase()).collect();
+    let clean: String = s
+        .chars()
+        .filter(|c| !matches!(c, '-' | '\u{2010}' | '\u{2011}' | '\u{2012}' | '\u{2013}' | '\u{2014}' | '\u{2212}' | ' ' | '\t'))
+        .map(|c| c.to_ascii_uppercase())
+        .collect();
     let ok = match clean.len() {
         10 => clean[..9].bytes().all(|b| b.is_ascii_digit()) && clean[9..].bytes().all(|b| b.is_ascii_digit() || b == b'X'),
         13 => clean.bytes().all(|b| b.is_ascii_digit()),
@@ -1302,7 +1307,8 @@ fn validate_work_candidate(cand: &Mapping, target_title: &str, target_authors: &
     let t_main = norm_words(target_title.split(':').next().unwrap_or(target_title));
     let c_main = norm_words(cand_title.split(':').next().unwrap_or(cand_title));
     let exact = c_words == t_words;
-    let main_match = t_main.len() >= 4 && (c_main == t_main || c_words == t_main || c_main == t_words);
+    let min_main = if target_authors.is_empty() { 4 } else { 2 };
+    let main_match = t_main.len() >= min_main && (c_main == t_main || c_words == t_main || c_main == t_words);
     let jaccard_ok = if t_words.len() >= 4 && c_words.len() >= 4 {
         let ts: std::collections::BTreeSet<&str> = t_words.iter().map(String::as_str).collect();
         let cs: std::collections::BTreeSet<&str> = c_words.iter().map(String::as_str).collect();
@@ -1343,7 +1349,7 @@ fn validate_work_candidate(cand: &Mapping, target_title: &str, target_authors: &
             .and_then(year_in)
             .and_then(|y| y.parse::<i32>().ok());
         if let Some(cy) = cy {
-            if (ty - cy).abs() > 2 {
+            if (ty - cy).abs() > 5 {
                 return false;
             }
         }
@@ -1479,8 +1485,13 @@ pub fn lookup_work_by_title_author(
     if let Ok(v) = net.json(&format!("https://api.crossref.org/works?rows=5&query.bibliographic={}", enc(&query, ""))) {
         for w in v["message"]["items"].as_array().into_iter().flatten() {
             let doi = w["DOI"].as_str().unwrap_or("");
-            let m = crossref_fields(w, doi);
+            let mut m = crossref_fields(w, doi);
             if validate_work_candidate(&m, clean_title, authors, year) {
+                if !doi.is_empty() {
+                    if let Ok(enriched) = crossref_with_openalex(net, doi, email) {
+                        m = enriched;
+                    }
+                }
                 return Some((m, "crossref"));
             }
         }
@@ -1496,9 +1507,21 @@ pub fn lookup_work_by_title_author(
 
     if let Ok(xml) = net.text(&format!("https://export.arxiv.org/api/query?max_results=5&search_query=all:{}", enc(&query, ""))) {
         for (ax, r) in parse_atom_entries(&xml) {
-            let id_str = ax.unwrap_or_default();
-            let m = arxiv_fields(&r, &id_str);
+            let Some(id_str) = ax.filter(|s| !s.is_empty()) else { continue };
+            let mut m = arxiv_fields(&r, &id_str);
             if validate_work_candidate(&m, clean_title, authors, year) {
+                if let Some(doi) = r.doi.as_deref().map(str::trim).filter(|d| !d.is_empty() && !d.to_ascii_lowercase().starts_with("10.48550/arxiv.")) {
+                    if let Ok(cm) = crossref(net, doi) {
+                        for k in ["publicationTitle", "volume", "issue", "pages", "publisher"] {
+                            if let Some(val) = cm.get(k).and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
+                                m.insert(k.into(), val.into());
+                            }
+                        }
+                        if cm.get("type").and_then(Value::as_str) == Some("journalArticle") || m.contains_key("publicationTitle") {
+                            m.insert("type".into(), "journalArticle".into());
+                        }
+                    }
+                }
                 return Some((m, "arxiv"));
             }
         }
@@ -2122,5 +2145,42 @@ mod tests {
         assert_eq!(wm["DOI"].as_str(), Some("10.21468/scipost.1"));
         assert!(lookup_work_by_title_author(&net_s2, "", "Non-Equilibrium Quantum Criticality", &["Wrongauthor".into()], Some("2020")).is_none());
         assert!(lookup_work_by_title_author(&net_s2, "", "Non-Equilibrium Quantum Criticality", &["Cvetkovic, Milica".into()], Some("2010")).is_none());
+
+        // 5. normalize_isbn handles Adobe PUA digits & Unicode figure-dashes; lookup_work_by_title_author accepts 2-3 word main titles with author validation + OpenAlex backfill.
+        assert_eq!(normalize_isbn("\u{F739}\u{F737}\u{F738}\u{2012}0\u{2011}306\u{2212}40615\u{2010}7").as_deref(), Some("9780306406157"));
+        let cr_qsl = json!({
+            "message": {
+                "items": [{
+                    "DOI": "10.1038/nature08917",
+                    "type": "journal-article",
+                    "title": ["Quantum spin liquids: a review"],
+                    "author": [{ "family": "Balents", "given": "Leon" }],
+                    "issued": { "date-parts": [[2010, 3, 11]] },
+                    "container-title": ["Nature"]
+                }]
+            }
+        });
+        let cr_qsl_single = json!({
+            "message": {
+                "DOI": "10.1038/nature08917",
+                "type": "journal-article",
+                "title": ["Quantum spin liquids: a review"],
+                "author": [{ "family": "Balents", "given": "Leon" }],
+                "issued": { "date-parts": [[2010, 3, 11]] },
+                "container-title": ["Nature"]
+            }
+        });
+        let oa_qsl = json!({
+            "ids": { "doi": "https://doi.org/10.1038/nature08917" },
+            "abstract_inverted_index": { "Spin": [0], "liquids": [1], "fluctuate.": [2] }
+        });
+        let net_qsl = Table::default()
+            .on("https://api.crossref.org/works?rows=5&query.bibliographic=", Answer::Json(cr_qsl))
+            .on("https://api.crossref.org/works/10.1038/nature08917", Answer::Json(cr_qsl_single))
+            .on("https://api.openalex.org/works/doi:10.1038/nature08917", Answer::Json(oa_qsl));
+        let (qm, qsrc) = lookup_work_by_title_author(&net_qsl, "", "Quantum Spin Liquids", &["Balents, Leon".into()], None).unwrap();
+        assert_eq!(qsrc, "crossref");
+        assert_eq!(qm["DOI"].as_str(), Some("10.1038/nature08917"));
+        assert_eq!(qm["abstractNote"].as_str(), Some("Spin liquids fluctuate."));
     }
 }

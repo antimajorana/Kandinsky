@@ -6,9 +6,10 @@ use crate::firstpage::{self, FirstPage};
 use crate::net::Net;
 use crate::pdf_meta::{extract_pdf_doc, is_junk_pdf_title, PdfDocExtract};
 use crate::refs::{
-    arxiv_of, citekey, classify_pdf, extract_pdf_identifiers_with_meta, fetch_arxiv_mapping,
-    list as ylist, merge_local_fallbacks_with_meta, norm_doi, parse_filename, s as ys, year_of,
-    ClassifyInput, ItemClass, Lib, Paper, ParsedFilename, PdfIds, Res,
+    arxiv_of, bibtex_entry, citekey, classify_pdf, extract_pdf_identifiers_with_meta,
+    fetch_arxiv_mapping, list as ylist, merge_local_fallbacks_with_meta, norm_doi, parse_filename,
+    s as ys, should_upgrade_authors, split_trailing_paren_author, year_of, ClassifyInput,
+    ItemClass, Lib, Paper, ParsedFilename, PdfIds, Res,
 };
 use crate::remote::{self, enc, last_first, openalex_doi, parse_arxiv_versioned};
 use flate2::read::GzDecoder;
@@ -24,6 +25,10 @@ use std::path::{Component, Path, PathBuf};
 pub struct RemoteCandidate {
     pub title: String, pub authors: Vec<String>, pub year: Option<String>, pub venue: Option<String>,
     pub doi: Option<String>, pub arxiv: Option<String>, pub isbn: Option<String>, pub source: String, pub citekey_hint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bibtex: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -249,6 +254,7 @@ fn candidate_from_mapping(m: &Mapping, source: &str) -> Option<RemoteCandidate> 
     let year = ys(m, "date").and_then(|d| year_of(&d)).or_else(|| ys(m, "year").and_then(|d| year_of(&d)));
     let venue = ys(m, "publicationTitle").or_else(|| ys(m, "bookTitle")).or_else(|| ys(m, "publisher"));
     let citekey_hint = citekey(&authors, year.as_deref(), &title, &|_| false);
+    let bibtex = Some(bibtex_entry(&citekey_hint, m));
     Some(RemoteCandidate {
         title,
         authors,
@@ -259,6 +265,8 @@ fn candidate_from_mapping(m: &Mapping, source: &str) -> Option<RemoteCandidate> 
         isbn: ys(m, "ISBN").or_else(|| ys(m, "isbn")),
         source: source.into(),
         citekey_hint,
+        url: ys(m, "url"),
+        bibtex,
     })
 }
 
@@ -280,7 +288,19 @@ pub fn search_remote(net: &dyn Net, query: &str, source: &str, email: &str) -> R
                 for (ax, r) in remote::parse_atom_entries(&xml) {
                     let year = r.published.as_deref().and_then(year_of);
                     let citekey_hint = citekey(&r.authors, year.as_deref(), &r.title, &|_| false);
-                    out.push(RemoteCandidate { title: r.title, authors: r.authors, year, venue: r.journal_ref, doi: r.doi, arxiv: ax, isbn: None, source: "arxiv".into(), citekey_hint });
+                    let url = ax.as_ref().map(|a| format!("https://arxiv.org/abs/{a}"));
+                    let mut am = Mapping::new();
+                    am.insert("title".into(), r.title.clone().into());
+                    am.insert("type".into(), "preprint".into());
+                    if !r.authors.is_empty() {
+                        am.insert("author".into(), Value::Sequence(r.authors.iter().cloned().map(Value::from).collect()));
+                    }
+                    if let Some(ref d) = r.published { am.insert("date".into(), d.clone().into()); }
+                    if let Some(ref j) = r.journal_ref { am.insert("publicationTitle".into(), j.clone().into()); }
+                    if let Some(ref d) = r.doi { am.insert("DOI".into(), d.clone().into()); }
+                    if let Some(ref a) = ax { am.insert("archiveID".into(), format!("arXiv:{a}").into()); }
+                    let bibtex = Some(bibtex_entry(&citekey_hint, &am));
+                    out.push(RemoteCandidate { title: r.title, authors: r.authors, year, venue: r.journal_ref, doi: r.doi, arxiv: ax, isbn: None, source: "arxiv".into(), citekey_hint, url, bibtex });
                 }
             }
             Err(e) => errs.push(format!("arxiv: {e}")),
@@ -304,7 +324,20 @@ pub fn search_remote(net: &dyn Net, query: &str, source: &str, email: &str) -> R
                     let raw_doi = openalex_doi(w);
                     let (doi, arxiv) = match raw_doi.strip_prefix("10.48550/arxiv.") { Some(a) => (None, Some(a.to_string())), None => ((!raw_doi.is_empty()).then_some(raw_doi), None) };
                     let citekey_hint = citekey(&authors, year.as_deref(), &title, &|_| false);
-                    out.push(RemoteCandidate { title, authors, year, venue, doi, arxiv, isbn: None, source: "openalex".into(), citekey_hint });
+                    let url = w["primary_location"]["landing_page_url"].as_str().or_else(|| w["id"].as_str()).map(String::from);
+                    let mut om = Mapping::new();
+                    om.insert("title".into(), title.clone().into());
+                    om.insert("type".into(), if venue.is_some() { "journalArticle" } else { "document" }.into());
+                    if !authors.is_empty() {
+                        om.insert("author".into(), Value::Sequence(authors.iter().cloned().map(Value::from).collect()));
+                    }
+                    if let Some(ref y) = year { om.insert("date".into(), y.clone().into()); }
+                    if let Some(ref vn) = venue { om.insert("publicationTitle".into(), vn.clone().into()); }
+                    if let Some(ref d) = doi { om.insert("DOI".into(), d.clone().into()); }
+                    if let Some(ref a) = arxiv { om.insert("archiveID".into(), format!("arXiv:{a}").into()); }
+                    if let Some(ref u) = url { om.insert("url".into(), u.clone().into()); }
+                    let bibtex = Some(bibtex_entry(&citekey_hint, &om));
+                    out.push(RemoteCandidate { title, authors, year, venue, doi, arxiv, isbn: None, source: "openalex".into(), citekey_hint, url, bibtex });
                 }
             }
             Err(e) => errs.push(format!("openalex: {e}")),
@@ -338,9 +371,29 @@ pub fn is_book_entry(m: &Mapping) -> bool {
 pub fn enrich_book_mapping(net: &dyn Net, m: &mut Mapping, email: &str) -> Option<&'static str> {
     let isbn = ys(m, "ISBN").or_else(|| ys(m, "isbn"));
     let doi = ys(m, "DOI").or_else(|| ys(m, "doi"));
-    let title = ys(m, "title");
-    let author = ylist(m, "author").into_iter().chain(ylist(m, "authors")).next();
-    let (found, src) = remote::lookup_book_metadata(net, isbn.as_deref(), doi.as_deref(), title.as_deref(), author.as_deref(), email)?;
+    let raw_title = ys(m, "title");
+    let mut cur_authors: Vec<String> = ylist(m, "author").into_iter().chain(ylist(m, "authors")).collect();
+    let mut split_title_override: Option<String> = None;
+    let query_title = if cur_authors.is_empty() {
+        if let Some((ct, inf_a)) = raw_title.as_deref().and_then(split_trailing_paren_author) {
+            m.insert("title".into(), ct.clone().into());
+            m.insert("author".into(), Value::Sequence(inf_a.iter().cloned().map(Value::from).collect()));
+            cur_authors = inf_a;
+            split_title_override = Some(ct.clone());
+            Some(ct)
+        } else {
+            raw_title
+        }
+    } else {
+        raw_title
+    };
+    let author = cur_authors.first().cloned();
+    let (found, src) = remote::lookup_book_metadata(net, isbn.as_deref(), doi.as_deref(), query_title.as_deref(), author.as_deref(), email)?;
+    if split_title_override.is_some() {
+        if let Some(rt) = ys(&found, "title").filter(|t| !is_junk_pdf_title(t)) {
+            m.insert("title".into(), rt.into());
+        }
+    }
 
     let existing_type = ys(m, "type");
     let existing_kind = ys(m, "kind");
@@ -362,12 +415,16 @@ pub fn enrich_book_mapping(net: &dyn Net, m: &mut Mapping, email: &str) -> Optio
         m.insert("bibtexType".into(), target_bib.into());
     }
 
-    if ylist(m, "author").is_empty() && ylist(m, "authors").is_empty() {
-        if let Some(seq) = found.get("author").and_then(Value::as_sequence).filter(|a| !a.is_empty()) {
-            m.insert("author".into(), Value::Sequence(seq.clone()));
-            if m.contains_key("authors") {
-                m.insert("authors".into(), Value::Sequence(seq.clone()));
-            }
+    let stored_authors = {
+        let a = ylist(m, "author");
+        if a.is_empty() { ylist(m, "authors") } else { a }
+    };
+    let found_authors = ylist(&found, "author");
+    if should_upgrade_authors(&stored_authors, &found_authors) {
+        let seq: Vec<Value> = found_authors.into_iter().map(Value::from).collect();
+        m.insert("author".into(), Value::Sequence(seq.clone()));
+        if m.contains_key("authors") {
+            m.insert("authors".into(), Value::Sequence(seq));
         }
     }
     if ylist(m, "editor").is_empty() && ylist(m, "editors").is_empty() {
@@ -526,11 +583,13 @@ fn is_placeholder_title(cur: Option<&str>, pdf_stem: Option<&str>, key: &str) ->
 }
 
 fn merge_enriched_remote(m: &mut Mapping, rm: &Mapping, pdf_stem: Option<&str>, key: &str) {
+    let cur_title = ys(m, "title");
     let unverified_local = ylist(m, "author").is_empty()
         && ylist(m, "authors").is_empty()
         && ys(m, "publicationTitle").is_none()
         && ys(m, "publisher").is_none();
-    if unverified_local || is_placeholder_title(ys(m, "title").as_deref(), pdf_stem, key) {
+    let trailing_paren_title = cur_title.as_deref().and_then(split_trailing_paren_author).is_some();
+    if unverified_local || trailing_paren_title || is_placeholder_title(cur_title.as_deref(), pdf_stem, key) {
         if let Some(rt) = ys(rm, "title").filter(|t| !is_junk_pdf_title(t)) {
             m.insert("title".into(), rt.into());
         }
@@ -543,13 +602,19 @@ fn merge_enriched_remote(m: &mut Mapping, rm: &Mapping, pdf_stem: Option<&str>, 
             }
         }
     }
-    if ylist(m, "author").is_empty() && ylist(m, "authors").is_empty() {
-        let ra = ylist(rm, "author");
-        if !ra.is_empty() {
-            m.insert("author".into(), Value::Sequence(ra.into_iter().map(Value::from).collect()));
+    let cur_authors = {
+        let a = ylist(m, "author");
+        if a.is_empty() { ylist(m, "authors") } else { a }
+    };
+    let ra = ylist(rm, "author");
+    if should_upgrade_authors(&cur_authors, &ra) {
+        let seq: Vec<Value> = ra.into_iter().map(Value::from).collect();
+        m.insert("author".into(), Value::Sequence(seq.clone()));
+        if m.contains_key("authors") {
+            m.insert("authors".into(), Value::Sequence(seq));
         }
     }
-    if ylist(m, "editor").is_empty() && ylist(rm, "editors").is_empty() {
+    if ylist(m, "editor").is_empty() && ylist(m, "editors").is_empty() {
         let re = ylist(rm, "editor");
         if !re.is_empty() {
             m.insert("editor".into(), Value::Sequence(re.into_iter().map(Value::from).collect()));
@@ -587,10 +652,12 @@ pub fn enrich_entry(lib: &Lib, opts: &EnrichEntryOpts) -> Res<EnrichEntryResult>
     let mut parsed = ParsedFilename::default();
     let mut first: Option<FirstPage> = None;
     let mut pdf_stem: Option<String> = None;
+    let mut pdf_fname: Option<String> = None;
     if let Some(abs) = cur_paper.pdf.as_deref().and_then(|r| lib.pdf_abs_path(r)) {
         if let Ok(bytes) = std::fs::read(&abs) {
             if bytes.starts_with(b"%PDF") {
                 let fname = abs.file_name().and_then(|n| n.to_str()).unwrap_or("paper.pdf");
+                pdf_fname = Some(fname.to_string());
                 pdf_stem = abs.file_stem().and_then(|n| n.to_str()).map(String::from);
                 parsed = parse_filename(fname);
                 pdf_extract = extract_pdf_doc(&bytes);
@@ -599,10 +666,11 @@ pub fn enrich_entry(lib: &Lib, opts: &EnrichEntryOpts) -> Res<EnrichEntryResult>
         }
     }
 
+    let name_for_ids = pdf_fname.as_deref().or(pdf_stem.as_deref()).unwrap_or("");
     let pdf_ids = extract_pdf_identifiers_with_meta(
         &pdf_extract.text,
         pdf_extract.pages,
-        pdf_stem.as_deref().unwrap_or(""),
+        name_for_ids,
         Some(&pdf_extract.meta),
     );
     let ids = PdfIds {
@@ -614,7 +682,7 @@ pub fn enrich_entry(lib: &Lib, opts: &EnrichEntryOpts) -> Res<EnrichEntryResult>
     let class = classify_pdf(&ClassifyInput {
         text: &pdf_extract.text,
         pages: pdf_extract.pages,
-        filename: pdf_stem.as_deref().unwrap_or(""),
+        filename: name_for_ids,
         rel_dir: None,
         parsed: &parsed,
         isbn: ids.isbn.as_deref(),
@@ -660,10 +728,19 @@ pub fn enrich_entry(lib: &Lib, opts: &EnrichEntryOpts) -> Res<EnrichEntryResult>
         }
     }
     if remote_hit.is_none() {
+        let mut stored_split = None;
+        if ylist(&m, "author").is_empty() && ylist(&m, "authors").is_empty() {
+            if let Some((ct, inf_a)) = ys(&m, "title").as_deref().and_then(split_trailing_paren_author) {
+                m.insert("title".into(), ct.clone().into());
+                m.insert("author".into(), Value::Sequence(inf_a.iter().cloned().map(Value::from).collect()));
+                stored_split = Some((ct, inf_a));
+            }
+        }
         let title_hint = first
             .as_ref()
             .map(|f| f.title.clone())
             .or_else(|| pdf_extract.meta.title.clone())
+            .or_else(|| stored_split.as_ref().map(|(ct, _)| ct.clone()))
             .or_else(|| ys(&m, "title").filter(|t| !is_junk_pdf_title(t)))
             .or_else(|| (parsed.structured && !parsed.title.is_empty()).then(|| parsed.title.clone()));
         let mut authors_hint = ylist(&m, "author");
@@ -672,8 +749,10 @@ pub fn enrich_entry(lib: &Lib, opts: &EnrichEntryOpts) -> Res<EnrichEntryResult>
                 authors_hint = fp.authors.clone();
             } else if !pdf_extract.meta.authors.is_empty() {
                 authors_hint = pdf_extract.meta.authors.clone();
-            } else {
+            } else if !parsed.authors.is_empty() {
                 authors_hint = parsed.authors.clone();
+            } else if let Some((_, inf_a)) = stored_split {
+                authors_hint = inf_a;
             }
         }
         let year_hint = ys(&m, "date")
@@ -683,6 +762,18 @@ pub fn enrich_entry(lib: &Lib, opts: &EnrichEntryOpts) -> Res<EnrichEntryResult>
             .or_else(|| pdf_extract.meta.year.clone());
         if let Some(t) = title_hint {
             remote_hit = remote::lookup_work_by_title_author(lib.net, &lib.cfg.email, &t, &authors_hint, year_hint.as_deref());
+            if remote_hit.is_none() && ids.doi.is_none() && ids.arxiv.is_none() && matches!(ys(&m, "type").as_deref(), None | Some("document")) {
+                if let Some((bm, bsrc)) = remote::lookup_book_metadata(
+                    lib.net,
+                    ids.isbn.as_deref(),
+                    None,
+                    Some(&t),
+                    authors_hint.first().map(String::as_str),
+                    &lib.cfg.email,
+                ) {
+                    remote_hit = Some((bm, bsrc));
+                }
+            }
         }
     }
 
@@ -1064,5 +1155,83 @@ mod tests {
         let linked = std::fs::read_to_string(v.root.join("notes.md")).unwrap();
         assert!(linked.contains("[[lovelace2024topological]]") && linked.contains("\\cite{lovelace2024topological}"), "{linked}");
         assert!(std::fs::read_to_string(v.root.join("refs/refs.bib")).unwrap().contains("lovelace2024topological"));
+    }
+
+    #[test]
+    fn regression_enrich_entry_upgrades_single_author_stub_legacy_paren_author_book_editors_and_remote_search_bibtex() {
+        let mut v = Vault::new();
+
+        // 1. 1-author stub `["Georges"]` upgrades to full 4-author Crossref list on `enrich_entry`.
+        let dir1 = v.root.join("refs/papers/georges1996dmft");
+        std::fs::create_dir_all(&dir1).unwrap();
+        std::fs::write(
+            dir1.join("georges1996dmft.md"),
+            "---\ncitekey: georges1996dmft\ntype: journalArticle\ntitle: Dynamical mean-field theory of strongly correlated fermion systems\nauthor:\n  - Georges\ndate: '1996'\nDOI: 10.1103/RevModPhys.68.13\n---\n",
+        ).unwrap();
+
+        // 2. Legacy `Title (Author)` book entry splits author & copies `editor` cleanly without `ylist(rm, "editors")` bug.
+        let dir2 = v.root.join("refs/papers/sartre_etre");
+        std::fs::create_dir_all(&dir2).unwrap();
+        std::fs::write(
+            dir2.join("sartre_etre.md"),
+            "---\ncitekey: sartre_etre\ntype: book\ntitle: L'Être et le Néant (Jean-Paul Sartre)\n---\n",
+        ).unwrap();
+
+        let cr_dmft = json!({
+            "message": {
+                "DOI": "10.1103/RevModPhys.68.13",
+                "type": "journal-article",
+                "title": ["Dynamical mean-field theory of strongly correlated fermion systems and the limit of infinite dimensions"],
+                "author": [
+                    { "family": "Georges", "given": "Antoine" },
+                    { "family": "Kotliar", "given": "Gabriel" },
+                    { "family": "Krauth", "given": "Werner" },
+                    { "family": "Rozenberg", "given": "Marcelo J." }
+                ],
+                "issued": { "date-parts": [[1996, 1, 1]] },
+                "container-title": ["Reviews of Modern Physics"]
+            }
+        });
+        let ol_sartre = json!({
+            "docs": [{
+                "title": "L'Être et le Néant",
+                "author_name": ["Jean-Paul Sartre"],
+                "first_publish_year": 1943,
+                "publisher": ["Gallimard"]
+            }]
+        });
+        v.net = Table::default()
+            .on("https://api.crossref.org/works/10.1103/RevModPhys.68.13", Answer::Json(cr_dmft))
+            .on("https://openlibrary.org/search.json?", Answer::Json(ol_sartre));
+
+        let r1 = enrich_entry(&v.lib(), &EnrichEntryOpts { key: "georges1996dmft".into(), dry_run: false, rename_citekey: false }).unwrap();
+        assert!(r1.upgraded);
+        assert_eq!(r1.paper.authors.len(), 4);
+        assert_eq!(r1.paper.authors[0], "Georges, Antoine");
+        assert_eq!(r1.paper.authors[3], "Rozenberg, Marcelo J.");
+
+        let r2 = enrich_entry(&v.lib(), &EnrichEntryOpts { key: "sartre_etre".into(), dry_run: false, rename_citekey: true }).unwrap();
+        assert!(r2.upgraded);
+        assert_eq!(r2.key, "sartre1943etre");
+        assert_eq!(r2.paper.title, "L'Être et le Néant");
+        assert_eq!(r2.paper.authors, vec!["Sartre, Jean-Paul"]);
+        assert_eq!(r2.paper.publisher.as_deref(), Some("Gallimard"));
+
+        // Verify `merge_enriched_remote` copies `editor` when `m` has no editors.
+        let mut target_m = Mapping::new();
+        target_m.insert("title".into(), "Collected Lectures".into());
+        let mut remote_m = Mapping::new();
+        remote_m.insert("editor".into(), Value::Sequence(vec!["Witten, Edward".into()]));
+        merge_enriched_remote(&mut target_m, &remote_m, None, "collected");
+        assert_eq!(ylist(&target_m, "editor"), vec!["Witten, Edward"]);
+
+        // 3. `search_remote` populates `bibtex` and `url` so OpenLibrary hits without ISBN can be added directly via `Lib::add`.
+        let hits = search_remote(&v.net, "L'Être et le Néant", "openlibrary", "").unwrap();
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].isbn.is_none() && hits[0].doi.is_none() && hits[0].arxiv.is_none());
+        let bib = hits[0].bibtex.as_deref().expect("bibtex fallback must be populated");
+        assert!(bib.starts_with("@book{") && bib.contains("Gallimard"), "{bib}");
+        let added_from_hit = v.lib().add(bib).unwrap();
+        assert_eq!(added_from_hit.paper.authors, vec!["Sartre, Jean-Paul"]);
     }
 }

@@ -8,9 +8,9 @@
 use crate::entry::{self, Companion};
 use crate::net::Net;
 use crate::refs::{
-    arxiv_of, citekey, classify_pdf, extract_pdf_identifiers_with_meta, isbn_core, list as ylist,
-    lookup_pdf_remote_with_meta, merge_local_fallbacks_with_meta, norm_doi, parse_filename,
-    s as ys, sha, sha_hex, ClassifyInput, Lib, Res, Trash,
+    arxiv_of, citekey, classify_pdf, extract_pdf_identifiers_with_meta, list as ylist,
+    lookup_pdf_remote_with_meta, merge_local_fallbacks_with_meta, parse_filename, s as ys, sha,
+    sha_hex, should_upgrade_authors, ClassifyInput, Lib, Res, Trash,
 };
 use crate::settings::Settings;
 use serde_json::{json, Value};
@@ -254,29 +254,11 @@ impl<H: Host> Connector<H> {
     fn create_entry(&self, cfg: &Settings, item: &Value) -> Res<PathBuf> {
         let lib = self.lib(cfg);
         let mut m = item_meta(item);
-        let existing = lib.list()?;
-        if let Some(d) = ys(&m, "DOI").map(|v| norm_doi(&v)).filter(|d| !d.is_empty()) {
-            if let Some(p) = existing.iter().find(|p| p.doi.as_deref().map(norm_doi).as_deref() == Some(d.as_str())) {
-                return Ok(self.root.join(&p.dir));
-            }
-        }
-        if let Some(ax) = arxiv_of(&m).map(|a| a.to_ascii_lowercase()) {
-            if let Some(p) = existing.iter().find(|p| p.arxiv.as_deref().map(str::to_ascii_lowercase).as_deref() == Some(ax.as_str())) {
-                return Ok(self.root.join(&p.dir));
-            }
-        }
-        if let Some(ic) = ys(&m, "ISBN").or_else(|| ys(&m, "isbn")).and_then(|x| isbn_core(&x)) {
-            if let Some(p) = existing.iter().find(|p| {
-                kandinsky_text::paths::safe_join(&self.root, &p.dir)
-                    .ok()
-                    .and_then(|d| entry::read(&d))
-                    .and_then(|em| ys(&em, "ISBN").or_else(|| ys(&em, "isbn")))
-                    .and_then(|v| isbn_core(&v))
-                    .as_deref()
-                    == Some(ic.as_str())
-            }) {
-                return Ok(self.root.join(&p.dir));
-            }
+        let doi = ys(&m, "DOI").or_else(|| ys(&m, "doi"));
+        let ax = arxiv_of(&m);
+        let isbn = ys(&m, "ISBN").or_else(|| ys(&m, "isbn"));
+        if let Some(p) = lib.find_existing_by_ids(doi.as_deref(), ax.as_deref(), isbn.as_deref()) {
+            return Ok(self.root.join(&p.dir));
         }
         let base = kandinsky_text::paths::safe_join(&self.root, &cfg.dir)?;
         let year = m.get("date").and_then(|v| v.as_str()).and_then(year_in);
@@ -336,6 +318,37 @@ impl<H: Host> Connector<H> {
         Response::json(201, json!({}))
     }
 
+    fn store_pdf_bytes(
+        &self,
+        cfg: &Settings,
+        dir: &std::path::Path,
+        m: &Mapping,
+        key: &str,
+        body: &[u8],
+        existing_portable: Option<&str>,
+    ) -> Result<String, Response> {
+        if let Some(portable) = existing_portable {
+            return Ok(portable.to_string());
+        }
+        if let Some((portable, _)) = crate::external::find_existing_external_pdf(&self.root, cfg, body) {
+            return Ok(portable);
+        }
+        if !cfg.external_pdf_roots.is_empty() && cfg.store_in_external {
+            let fname = crate::external::format_pdf_filename(&cfg.rename_format, m, key);
+            return crate::external::write_external_pdf(&self.root, cfg, None, &fname, body)
+                .map(|(portable, _)| portable)
+                .map_err(|e| Response::text(500, e));
+        }
+        let mut name = format!("{key}.pdf");
+        let mut n = 1;
+        while dir.join(&name).exists() {
+            n += 1;
+            name = format!("{key}-{n}.pdf");
+        }
+        kandinsky_plugin::write_file(dir.join(&name), body).map_err(|e| Response::text(500, e.to_string()))?;
+        Ok(name)
+    }
+
     /// A PDF (or other file) for an item of the session; the body is the file, `X-Metadata` says whose.
     fn save_attachment(&self, meta: Option<Value>, ctype: &str, body: &[u8]) -> Response {
         let Some(meta) = meta else { return Response::json(400, json!({ "error": "METADATA_NOT_PROVIDED" })) };
@@ -348,69 +361,32 @@ impl<H: Host> Connector<H> {
             }
             session.and_then(|s| s.items.get(parent).cloned())
         };
-        let Some(dir) = dir else { return Response::json(400, json!({ "error": "SESSION_NOT_FOUND" })) };
+        let Some(mut dir) = dir else { return Response::json(400, json!({ "error": "SESSION_NOT_FOUND" })) };
         let ext = if ctype.contains("pdf") || body.starts_with(b"%PDF") { "pdf" } else if ctype.contains("html") { "html" } else { "bin" };
-        let key = entry::key_of(&dir);
+        let mut key = entry::key_of(&dir);
         let cfg = self.host.settings();
         let mut m = entry::read(&dir).unwrap_or_default();
-        if ext == "pdf" && ylist(&m, "files").is_empty() {
+        if ext == "pdf" {
             let existing_ext = crate::external::find_existing_external_pdf(&self.root, &cfg, body);
-            let lib = self.lib(&cfg);
-            if let Some(existing_p) = lib.find_existing_by_sha(&sha(body), body.len(), existing_ext.as_ref().map(|(p, _)| p.as_str())) {
-                if let Ok(existing_dir) = kandinsky_text::paths::safe_join(&self.root, &existing_p.dir) {
-                    if existing_dir != dir {
-                        if let Some(s) = self.sessions().get_mut(sid) {
-                            s.items.insert(parent.to_string(), existing_dir.clone());
+            let no_files_yet = ylist(&m, "files").is_empty();
+            if no_files_yet {
+                let lib = self.lib(&cfg);
+                if let Some(existing_p) = lib.find_existing_by_sha(&sha(body), body.len(), existing_ext.as_ref().map(|(p, _)| p.as_str())) {
+                    if let Ok(existing_dir) = kandinsky_text::paths::safe_join(&self.root, &existing_p.dir) {
+                        if existing_dir != dir {
+                            if let Some(s) = self.sessions().get_mut(sid) {
+                                s.items.insert(parent.to_string(), existing_dir.clone());
+                            }
+                            if let Some(rel) = kandinsky_text::paths::rel_path(&self.root, &dir) {
+                                let _ = self.host.trash().trash(&rel);
+                            }
+                            self.finish(&cfg, &[existing_dir]);
+                            return Response::empty(201);
                         }
-                        if let Some(rel) = kandinsky_text::paths::rel_path(&self.root, &dir) {
-                            let _ = self.host.trash().trash(&rel);
-                        }
-                        self.finish(&cfg, &[existing_dir]);
-                        return Response::empty(201);
                     }
                 }
             }
-        }
-        let stored = if ext == "pdf" {
-            if let Some((portable, _)) = crate::external::find_existing_external_pdf(&self.root, &cfg, body) {
-                portable
-            } else if !cfg.external_pdf_roots.is_empty() && cfg.store_in_external {
-                let fname = crate::external::format_pdf_filename(&cfg.rename_format, &m, &key);
-                match crate::external::write_external_pdf(&self.root, &cfg, None, &fname, body) {
-                    Ok((portable, _)) => portable,
-                    Err(e) => return Response::text(500, e),
-                }
-            } else {
-                let mut name = format!("{key}.{ext}");
-                let mut n = 1;
-                while dir.join(&name).exists() {
-                    n += 1;
-                    name = format!("{key}-{n}.{ext}");
-                }
-                if let Err(e) = kandinsky_plugin::write_file(dir.join(&name), body) {
-                    return Response::text(500, e.to_string());
-                }
-                name
-            }
-        } else {
-            let mut name = format!("{key}.{ext}");
-            let mut n = 1;
-            while dir.join(&name).exists() {
-                n += 1;
-                name = format!("{key}-{n}.{ext}");
-            }
-            if let Err(e) = kandinsky_plugin::write_file(dir.join(&name), body) {
-                return Response::text(500, e.to_string());
-            }
-            name
-        };
-        if let serde_yaml::Value::Sequence(v) = m.entry("files".into()).or_insert_with(|| serde_yaml::Value::Sequence(vec![])) {
-            if !v.iter().any(|x| x.as_str() == Some(stored.as_str())) {
-                v.push(stored.clone().into());
-            }
-        }
-        if ext == "pdf" {
-            m.insert("pdfSha256".into(), sha_hex(body).into());
+
             let cur_title = ys(&m, "title");
             let generic_title = cur_title.as_deref().is_none_or(|t| {
                 let low = t.trim().to_ascii_lowercase();
@@ -422,14 +398,16 @@ impl<H: Host> Connector<H> {
                 let fname = meta["title"]
                     .as_str()
                     .filter(|t| t.to_ascii_lowercase().ends_with(".pdf"))
-                    .unwrap_or_else(|| stored.rsplit(['/', '\\']).next().unwrap_or(&stored));
-                let parsed = parse_filename(fname);
-                let first = crate::firstpage::read_pages(&extract.text, fname);
-                let ids = extract_pdf_identifiers_with_meta(&extract.text, extract.pages, fname, Some(&extract.meta));
+                    .map(String::from)
+                    .or_else(|| existing_ext.as_ref().and_then(|(p, _)| p.rsplit(['/', '\\']).next().map(String::from)))
+                    .unwrap_or_else(|| format!("{key}.pdf"));
+                let parsed = parse_filename(&fname);
+                let first = crate::firstpage::read_pages(&extract.text, &fname);
+                let ids = extract_pdf_identifiers_with_meta(&extract.text, extract.pages, &fname, Some(&extract.meta));
                 let class = classify_pdf(&ClassifyInput {
                     text: &extract.text,
                     pages: extract.pages,
-                    filename: fname,
+                    filename: &fname,
                     rel_dir: None,
                     parsed: &parsed,
                     isbn: ids.isbn.as_deref(),
@@ -438,10 +416,7 @@ impl<H: Host> Connector<H> {
                     remote_type: ys(&m, "type").as_deref(),
                     explicit_kind: None,
                 });
-                if generic_title {
-                    m.remove("title");
-                }
-                if let Some((rm, _)) = lookup_pdf_remote_with_meta(
+                let remote_hit = lookup_pdf_remote_with_meta(
                     self.host.net(),
                     &cfg.email,
                     class,
@@ -449,7 +424,48 @@ impl<H: Host> Connector<H> {
                     &parsed,
                     first.as_ref(),
                     Some(&extract.meta),
-                ) {
+                );
+                let eff_doi = remote_hit.as_ref().and_then(|(rm, _)| ys(rm, "DOI")).or_else(|| ids.doi.clone());
+                let eff_ax = remote_hit.as_ref().and_then(|(rm, _)| arxiv_of(rm)).or_else(|| ids.arxiv.clone());
+                let eff_isbn = remote_hit.as_ref().and_then(|(rm, _)| ys(rm, "ISBN")).or_else(|| ids.isbn.clone());
+                if no_files_yet {
+                    let lib = self.lib(&cfg);
+                    if let Some(existing_p) = lib.find_existing_by_ids(eff_doi.as_deref(), eff_ax.as_deref(), eff_isbn.as_deref()) {
+                        if let Ok(existing_dir) = kandinsky_text::paths::safe_join(&self.root, &existing_p.dir) {
+                            if existing_dir != dir {
+                                if existing_p.pdf.is_none() {
+                                    let mut em = entry::read(&existing_dir).unwrap_or_default();
+                                    let ekey = entry::key_of(&existing_dir);
+                                    let estored = match self.store_pdf_bytes(&cfg, &existing_dir, &em, &ekey, body, existing_ext.as_ref().map(|(p, _)| p.as_str())) {
+                                        Ok(s) => s,
+                                        Err(r) => return r,
+                                    };
+                                    if let serde_yaml::Value::Sequence(v) = em.entry("files".into()).or_insert_with(|| serde_yaml::Value::Sequence(vec![])) {
+                                        if !v.iter().any(|x| x.as_str() == Some(estored.as_str())) {
+                                            v.push(estored.into());
+                                        }
+                                    }
+                                    em.insert("pdfSha256".into(), sha_hex(body).into());
+                                    if let Err(e) = entry::write(self.host.companion(), &existing_dir, &em) {
+                                        return Response::text(500, e);
+                                    }
+                                }
+                                if let Some(s) = self.sessions().get_mut(sid) {
+                                    s.items.insert(parent.to_string(), existing_dir.clone());
+                                }
+                                if let Some(rel) = kandinsky_text::paths::rel_path(&self.root, &dir) {
+                                    let _ = self.host.trash().trash(&rel);
+                                }
+                                self.finish(&cfg, &[existing_dir]);
+                                return Response::empty(201);
+                            }
+                        }
+                    }
+                }
+                if generic_title {
+                    m.remove("title");
+                }
+                if let Some((rm, _)) = remote_hit {
                     for k in [
                         "title", "type", "date", "publicationTitle", "publisher", "volume",
                         "issue", "pages", "DOI", "archiveID", "arxivVersion", "ISBN", "abstractNote",
@@ -460,11 +476,9 @@ impl<H: Host> Connector<H> {
                             }
                         }
                     }
-                    if ylist(&m, "author").is_empty() {
-                        let ra = ylist(&rm, "author");
-                        if !ra.is_empty() {
-                            m.insert("author".into(), serde_yaml::Value::Sequence(ra.into_iter().map(serde_yaml::Value::from).collect()));
-                        }
+                    let ra = ylist(&rm, "author");
+                    if should_upgrade_authors(&ylist(&m, "author"), &ra) {
+                        m.insert("author".into(), serde_yaml::Value::Sequence(ra.into_iter().map(serde_yaml::Value::from).collect()));
                     }
                 }
                 merge_local_fallbacks_with_meta(
@@ -480,6 +494,58 @@ impl<H: Host> Connector<H> {
                     if let Some(t) = cur_title {
                         m.insert("title".into(), t.into());
                     }
+                }
+                if generic_title && no_files_yet {
+                    if let Ok(base) = kandinsky_text::paths::safe_join(&self.root, &cfg.dir) {
+                        let new_year = m.get("date").and_then(|v| v.as_str()).and_then(year_in);
+                        let new_title = ys(&m, "title").unwrap_or_else(|| "untitled".into());
+                        let cand_key = citekey(&strings(m.get("author")), new_year.as_deref(), &new_title, &|k| k != key && base.join(k).exists());
+                        if !cand_key.is_empty() && cand_key != key && !base.join(&cand_key).exists() {
+                            let old_note = dir.join(entry::note_file(&key));
+                            let new_note_in_old = dir.join(entry::note_file(&cand_key));
+                            let note_ok = !old_note.is_file() || kandinsky_plugin::move_path(&old_note, &new_note_in_old).is_ok();
+                            let new_dir = base.join(&cand_key);
+                            if note_ok && kandinsky_plugin::move_path(&dir, &new_dir).is_ok() {
+                                let mut aliases = ylist(&m, "aliases");
+                                if !aliases.iter().any(|a| a == &key) {
+                                    aliases.push(key.clone());
+                                    m.insert("aliases".into(), serde_yaml::Value::Sequence(aliases.into_iter().map(Into::into).collect()));
+                                }
+                                key = cand_key;
+                                dir = new_dir;
+                                m.insert("citekey".into(), key.clone().into());
+                                if let Some(s) = self.sessions().get_mut(sid) {
+                                    s.items.insert(parent.to_string(), dir.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let stored = match self.store_pdf_bytes(&cfg, &dir, &m, &key, body, existing_ext.as_ref().map(|(p, _)| p.as_str())) {
+                Ok(s) => s,
+                Err(r) => return r,
+            };
+            if let serde_yaml::Value::Sequence(v) = m.entry("files".into()).or_insert_with(|| serde_yaml::Value::Sequence(vec![])) {
+                if !v.iter().any(|x| x.as_str() == Some(stored.as_str())) {
+                    v.push(stored.into());
+                }
+            }
+            m.insert("pdfSha256".into(), sha_hex(body).into());
+        } else {
+            let mut name = format!("{key}.{ext}");
+            let mut n = 1;
+            while dir.join(&name).exists() {
+                n += 1;
+                name = format!("{key}-{n}.{ext}");
+            }
+            if let Err(e) = kandinsky_plugin::write_file(dir.join(&name), body) {
+                return Response::text(500, e.to_string());
+            }
+            if let serde_yaml::Value::Sequence(v) = m.entry("files".into()).or_insert_with(|| serde_yaml::Value::Sequence(vec![])) {
+                if !v.iter().any(|x| x.as_str() == Some(name.as_str())) {
+                    v.push(name.into());
                 }
             }
         }
@@ -928,10 +994,15 @@ mod tests {
             fn capture(&self, _text: &str) -> Res<()> { Ok(()) }
         }
 
-        let net = Table::default().on(
-            "https://api.crossref.org/works/10.1000/conn.1",
-            Answer::Json(json!({ "message": { "title": ["Anyons on a Lattice"], "type": "journal-article", "author": [{ "family": "Smith", "given": "Alice" }], "container-title": ["PRB"], "issued": { "date-parts": [[2023]] } } })),
-        );
+        let net = Table::default()
+            .on(
+                "https://api.crossref.org/works/10.1000/conn.1",
+                Answer::Json(json!({ "message": { "DOI": "10.1000/conn.1", "title": ["Anyons on a Lattice"], "type": "journal-article", "author": [{ "family": "Smith", "given": "Alice" }], "container-title": ["PRB"], "issued": { "date-parts": [[2023]] } } })),
+            )
+            .on(
+                "https://api.crossref.org/works/10.1000/conn.2",
+                Answer::Json(json!({ "message": { "DOI": "10.1000/conn.2", "title": ["Braiding Majorana Modes"], "type": "journal-article", "author": [{ "family": "Kitaev", "given": "Alexei" }], "container-title": ["Annals of Physics"], "issued": { "date-parts": [[2006]] } } })),
+            );
         let c = Connector::new(ExtHost { net, trash: TempTrash(root.clone()) }, root.clone());
 
         // Deduplicates arXiv & ISBN in create_entry.
@@ -946,13 +1017,15 @@ mod tests {
         assert_eq!(c.handle(&req("/connector/saveItems", json!({ "sessionID": "sD", "items": [book_dup] }), false)).status, 201);
         assert_eq!(std::fs::read_dir(root.join("refs/papers")).unwrap().count(), 2);
 
-        // Generic title entry + saveAttachment reuses existing external PDF with zero writes and enriches from PDF/Crossref.
+        // Generic title entry + saveAttachment reuses existing external PDF with zero writes, enriches from PDF/Crossref, and upgrades citekey from `full` -> `smith2023anyons`.
         let bare_item = json!({ "id": "raw1", "itemType": "document", "title": "Full Text PDF" });
         assert_eq!(c.handle(&req("/connector/saveItems", json!({ "sessionID": "sE", "items": [bare_item] }), false)).status, 201);
         let att = attachment(json!({ "sessionID": "sE", "parentItemID": "raw1", "title": "paper.pdf" }), "application/pdf", &existing_pdf);
         assert_eq!(c.handle(&att).status, 201);
-        let note_dir = root.join("refs/papers/full");
+        assert!(!root.join("refs/papers/full").exists(), "placeholder citekey folder should be upgraded");
+        let note_dir = root.join("refs/papers/smith2023anyons");
         let m = entry::read(&note_dir).unwrap();
+        assert_eq!(m["citekey"].as_str(), Some("smith2023anyons"));
         assert_eq!(m["files"][0].as_str(), Some("../Papers/ExistingConn.pdf"));
         assert_eq!(m["title"].as_str(), Some("Anyons on a Lattice"));
         assert_eq!(m["publicationTitle"].as_str(), Some("PRB"));
@@ -964,5 +1037,24 @@ mod tests {
         let att_dup = attachment(json!({ "sessionID": "sF", "parentItemID": "raw2", "title": "copy.pdf" }), "application/pdf", &existing_pdf);
         assert_eq!(c.handle(&att_dup).status, 201);
         assert_eq!(std::fs::read_dir(root.join("refs/papers")).unwrap().count(), 3);
+
+        // Saving a brand-new bare PDF writes the enriched filename (`Kitaev2006 - Braiding Majorana Modes.pdf`), NEVER `Full Text PDF.pdf`, into external_pdf_roots, and deduplicates subsequent PDFs sharing the same extracted DOI!
+        let new_pdf = crate::refs::tests::tiny_pdf(&["Braiding Majorana Modes", "doi:10.1000/conn.2"]);
+        let bare_new = json!({ "id": "raw3", "itemType": "document", "title": "Full Text PDF" });
+        assert_eq!(c.handle(&req("/connector/saveItems", json!({ "sessionID": "sG", "items": [bare_new] }), false)).status, 201);
+        let att_new = attachment(json!({ "sessionID": "sG", "parentItemID": "raw3", "title": "download.pdf" }), "application/pdf", &new_pdf);
+        assert_eq!(c.handle(&att_new).status, 201);
+        assert!(!pool.join("Full Text PDF.pdf").exists(), "must never write Full Text PDF.pdf to kDrive");
+        assert!(pool.join("Kitaev2006 - Braiding Majorana Modes.pdf").is_file(), "must write enriched filename to kDrive");
+        let kitaev_m = entry::read(&root.join("refs/papers/kitaev2006braiding")).unwrap();
+        assert_eq!(kitaev_m["files"][0].as_str(), Some("../Papers/Kitaev2006 - Braiding Majorana Modes.pdf"));
+        assert_eq!(std::fs::read_dir(root.join("refs/papers")).unwrap().count(), 4);
+
+        let reprint_pdf = crate::refs::tests::tiny_pdf(&["Braiding Majorana Modes (Reprint)", "doi:10.1000/conn.2"]);
+        let bare_doi_dup = json!({ "id": "raw4", "itemType": "document", "title": "Full Text PDF" });
+        assert_eq!(c.handle(&req("/connector/saveItems", json!({ "sessionID": "sH", "items": [bare_doi_dup] }), false)).status, 201);
+        let att_doi_dup = attachment(json!({ "sessionID": "sH", "parentItemID": "raw4", "title": "reprint.pdf" }), "application/pdf", &reprint_pdf);
+        assert_eq!(c.handle(&att_doi_dup).status, 201);
+        assert_eq!(std::fs::read_dir(root.join("refs/papers")).unwrap().count(), 4, "bare PDF with already-filed DOI must deduplicate");
     }
 }

@@ -12,7 +12,10 @@ const ID_PAGES: usize = 10;
 pub struct PdfDocMeta {
     pub title: Option<String>,
     pub authors: Vec<String>,
+    /// Genuine publication year from XMP (`prism:coverDate`, `prism:publicationDate`, `dc:date`).
     pub year: Option<String>,
+    /// File creation year from PDF `/Info` (`CreationDate`, `ModDate`) or XMP `xmp:CreateDate` (never used to reject remote matches).
+    pub creation_year: Option<String>,
     pub abstract_text: Option<String>,
     pub keywords: Vec<String>,
     pub doi: Option<String>,
@@ -43,20 +46,16 @@ pub fn normalize_pdf_unicode(s: &str) -> String {
             '\u{FB04}' => out.push_str("ffl"),
             '\u{FB05}' => out.push_str("ft"),
             '\u{FB06}' => out.push_str("st"),
-            '\u{F730}'..='\u{F739}' => {
-                if let Some(d) = char::from_u32(c as u32 - 0xF730 + b'0' as u32) {
-                    out.push(d);
+            '\u{F721}'..='\u{F77E}' if c != '\u{F760}' => {
+                if let Some(ascii) = char::from_u32(c as u32 - 0xF700) {
+                    out.push(ascii);
                 }
             }
-            '\u{F761}'..='\u{F77A}' => {
-                if let Some(a) = char::from_u32(c as u32 - 0xF761 + b'a' as u32) {
-                    out.push(a);
+            '\u{FF01}'..='\u{FF5E}' => {
+                if let Some(ascii) = char::from_u32(c as u32 - 0xFEE0) {
+                    out.push(ascii);
                 }
             }
-            '\u{F721}' => out.push('!'),
-            '\u{F724}' => out.push('$'),
-            '\u{F726}' => out.push('&'),
-            '\u{F73F}' => out.push('?'),
             '\u{00A0}' | '\u{2000}'..='\u{200A}' | '\u{202F}' => out.push(' '),
             '\u{00AD}' => {}
             _ => out.push(c),
@@ -296,7 +295,7 @@ fn apply_xmp(xmp: &XmpMetadata, meta: &mut PdfDocMeta) {
         meta.authors = creators;
     }
     if let Some(d) = xmp.xmp_create_date.as_deref().and_then(parse_pdf_date_year) {
-        meta.year = Some(d);
+        meta.creation_year = Some(d);
     }
     if let Some(desc) = xmp.dc_description.as_deref().map(normalize_pdf_unicode) {
         let desc = desc.trim();
@@ -339,6 +338,10 @@ fn apply_xmp(xmp: &XmpMetadata, meta: &mut PdfDocMeta) {
             if meta.venue.is_none() {
                 meta.venue = Some(vt.to_string());
             }
+        } else if matches!(kl.as_str(), "prism:coverdate" | "prism:publicationdate" | "dc:date") {
+            if meta.year.is_none() {
+                meta.year = parse_pdf_date_year(vt);
+            }
         } else if kl.contains("arxiv") {
             extract_ids_from_text(vt, meta);
         }
@@ -369,7 +372,7 @@ pub fn extract_pdf_doc(bytes: &[u8]) -> PdfDocExtract {
                         meta.authors = split_authors(&a);
                     }
                     if let Some(d) = info_str(&doc, info, "CreationDate").and_then(|s| parse_pdf_date_year(&s)) {
-                        meta.year = Some(d);
+                        meta.creation_year = Some(d);
                     }
                     if let Some(subj) = info_str(&doc, info, "Subject") {
                         extract_ids_from_text(&subj, &mut meta);
@@ -408,6 +411,8 @@ mod tests {
     fn normalizes_ligatures_pua_spaces_and_diacritics() {
         assert_eq!(normalize_pdf_unicode("ﬁeld ﬂow ﬃ ﬄ ﬅ ﬆ ﬀ"), "field flow ffi ffl ft st ff");
         assert_eq!(normalize_pdf_unicode("\u{F731}\u{F739}\u{F761}\u{F77A}\u{F721}\u{F724}\u{F726}\u{F73F}"), "19az!$&?");
+        assert_eq!(normalize_pdf_unicode("\u{F741}\u{F75A}\u{F72D}\u{F72F}\u{F73A}"), "AZ-/:");
+        assert_eq!(normalize_pdf_unicode("ＩＳＢＮ ９７８－０－３０６－４０６１５－７"), "ISBN 978-0-306-40615-7");
         assert_eq!(normalize_pdf_unicode("soft\u{00AD}hyphen\u{00A0}space\u{2009}thin\u{202F}nbsp"), "softhyphen space thin nbsp");
         assert_eq!(fold_diacritics("Cvetković Łukasiewicz Sørensen Différence İnce"), "cvetkovic lukasiewicz sorensen difference ince");
         assert_eq!(fold_diacritics("e\u{0301}tude Groß Æther Œuvre Þór ð"), "etude gross aether oeuvre thor d");

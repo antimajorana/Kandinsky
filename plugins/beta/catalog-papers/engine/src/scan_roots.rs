@@ -10,8 +10,8 @@ use crate::refs::{
     arxiv_of, bibtex_type_of, build_local_entry_mapping_with_meta, citekey, classify_pdf,
     extract_pdf_identifiers_with_meta, isbn_core, list, lookup_pdf_remote_with_meta,
     merge_local_fallbacks_with_meta, norm_doi, normalized_kind, now_stamp, parse_filename, s,
-    sha_hex, split_trailing_paren_author, year_of, ClassifyInput, ItemClass, Lib, ParsedFilename,
-    PdfIds, Res,
+    sha_hex, should_upgrade_authors, split_trailing_paren_author, year_of, ClassifyInput,
+    ItemClass, Lib, ParsedFilename, PdfIds, Res,
 };
 use kandinsky_text::paths::{real, safe_join};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -665,13 +665,24 @@ fn merge_missing_fields(dst: &mut Mapping, src: &Mapping) -> bool {
             }
         }
     }
-    for (k, alt) in [("author", "authors"), ("editor", "editors")] {
-        if list(dst, k).is_empty() && list(dst, alt).is_empty() {
-            let v = list(src, k);
-            if !v.is_empty() {
-                dst.insert(k.into(), Value::Sequence(v.into_iter().map(Value::from).collect()));
-                changed = true;
-            }
+    let cur_authors = {
+        let a = list(dst, "author");
+        if a.is_empty() { list(dst, "authors") } else { a }
+    };
+    let src_authors = list(src, "author");
+    if should_upgrade_authors(&cur_authors, &src_authors) {
+        let seq: Vec<Value> = src_authors.into_iter().map(Value::from).collect();
+        dst.insert("author".into(), Value::Sequence(seq.clone()));
+        if dst.contains_key("authors") {
+            dst.insert("authors".into(), Value::Sequence(seq));
+        }
+        changed = true;
+    }
+    if list(dst, "editor").is_empty() && list(dst, "editors").is_empty() {
+        let v = list(src, "editor");
+        if !v.is_empty() {
+            dst.insert("editor".into(), Value::Sequence(v.into_iter().map(Value::from).collect()));
+            changed = true;
         }
     }
     if s(dst, "type").is_none_or(|t| t == "document") {
