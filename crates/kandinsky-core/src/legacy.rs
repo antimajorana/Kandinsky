@@ -32,6 +32,9 @@ pub const PHONE_BOOX_SCHEME: &str = "org.atlas.boox";
 /// a closing one (`<!-- /atlas:drawing -->`).
 pub const MARKER: &str = "<!-- atlas:";
 pub const MARKER_END: &str = "<!-- /atlas:";
+/// The prefix of the core's own notification buttons before the rename (`atlas:open`, `atlas:snooze:10`): a
+/// notification still shown answers with it.
+pub const ACTION_PREFIX: &str = "atlas:";
 /// The value of the stroke-recogniser setting before the rename (`shapes = "atlas"`).
 pub const SHAPES: &str = "atlas";
 /// The Windows `Run` value that started the app with the session.

@@ -13,6 +13,11 @@ edit frontmatter safely against the vault schema with kandinsky_set_property, va
 create notes with kandinsky_new_note, read mail with email_*, run the vault's commands with kandinsky_run — \
 a tool keeps the vault's templates, properties, indexes and the open editors right; edit a file directly only for what no tool does. \
 Use kandinsky_context to see the file/selection they are looking at, kandinsky_open to show them a file, kandinsky_notify when a long task finishes. \
+What the user does with a key or the command palette, kandinsky_ui_command does (kandinsky_ui_commands lists them); a command that \
+deletes or sends still asks the user in the window. Read the vault's structure with kandinsky_backlinks, kandinsky_tags, kandinsky_properties, \
+kandinsky_query and kandinsky_view (the same queries its Bases and view blocks run); set a note's property with kandinsky_set_property. \
+Move or rename a file with kandinsky_move (its links follow; never `mv`); file the user's captures with kandinsky_captures and kandinsky_triage; \
+read the settings with kandinsky_settings; see what the user missed with kandinsky_notices. \
 To create a note, use kandinsky_new_note with a template from kandinsky_templates rather than writing the file yourself: the note then has the properties the vault's templates define. \
 Tools marked [plugin x] come from the vault's plugins and run in the same helper the user's Kandinsky window uses (a signed-in \
 mailbox, an ssh connection the user already logged in to): prefer them to doing the same thing yourself.";
@@ -55,12 +60,33 @@ fn builtin_tools() -> Value {
             "limit": {"type": "integer", "description": "default 200"}
         }), &[])},
         {"name": "kandinsky_task_done", "description": "Tick one task as done, as the user's checkbox does (the Tasks plugin's ✅ date; a recurring task gets its next occurrence). Give path, line and text as kandinsky_tasks listed them; a line that changed since is refused. To add a task, use kandinsky_capture with `[] text @date`.", "inputSchema": s(json!({
-            "path": {"type": "string"}, "line": {"type": "integer", "description": "1-based, from kandinsky_tasks"}, "text": {"type": "string", "description": "the task's text from kandinsky_tasks"}
+            "path": {"type": "string"}, "line": {"type": "integer", "description": "1-based, from kandinsky_tasks"}, "text": {"type": "string", "description": "the task's text from kandinsky_tasks"},
+            "block": {"type": "string", "description": "the task's block id from kandinsky_tasks, when it has one: found by it even after its line moved"}
         }), &["path", "line", "text"])},
         {"name": "kandinsky_search", "description": "Search workspace file names and contents (ripgrep, honors the Kandinsky ignore list).", "inputSchema": s(json!({"query": {"type": "string"}}), &["query"])},
         {"name": "kandinsky_commands", "description": "List Kandinsky commands (built-ins and the workspace's .kandinsky/commands scripts).", "inputSchema": s(json!({}), &[])},
-        {"name": "kandinsky_run", "description": "Run an Kandinsky command by id with JSON args (see kandinsky_commands).", "inputSchema": s(json!({"id": {"type": "string"}, "args": {"type": "object"}}), &["id"])},
+        {"name": "kandinsky_run", "description": "Run a Kandinsky command by id with JSON args (see kandinsky_commands).", "inputSchema": s(json!({"id": {"type": "string"}, "args": {"type": "object"}}), &["id"])},
         {"name": "kandinsky_templates", "description": "The vault's note templates (what kandinsky_new_note takes): each one's name, the folder its notes are filed in, the properties its frontmatter defines, and the questions it asks (`prompts`, answered through kandinsky_new_note's `fields`).", "inputSchema": s(json!({}), &[])},
+        {"name": "kandinsky_ui_commands", "description": "The commands of the user's Kandinsky window — the command palette's: the app's (`ui.*`) and the plugins' (`plugin.<id>.<command>`), each id and title. Run one with kandinsky_ui_command. Needs the Kandinsky window.", "inputSchema": s(json!({"query": {"type": "string", "description": "words the title or id must contain (case-insensitive)"}}), &[])},
+        {"name": "kandinsky_ui_command", "description": "Run one of the window's commands by id (from kandinsky_ui_commands), as the user's key or the palette would: open a pane, toggle a panel, start a plugin's dialog. It acts on what the user is looking at (kandinsky_context). A command that deletes, sends or asks something shows its question to the user in the window; you cannot answer it. Only when the user asked for what it does. Needs the Kandinsky window.", "inputSchema": s(json!({"id": {"type": "string"}}), &["id"])},
+        {"name": "kandinsky_tags", "description": "Every #tag of the vault's notes (inline and in properties) with how many notes use it.", "inputSchema": s(json!({}), &[])},
+        {"name": "kandinsky_properties", "description": "The properties the vault's notes use (frontmatter keys), each with its type and commonest values: which names and values to use with kandinsky_set_property or kandinsky_new_note's fields.", "inputSchema": s(json!({}), &[])},
+        {"name": "kandinsky_view", "description": "Run a ```view block (the vault's views: tasks, notes, deadlines, a plugin's rows such as `from: plugin:dav/events`) as a note shows it: its rows. `src` is the block's text, `path` the note it lives in.", "inputSchema": s(json!({"src": {"type": "string"}, "path": {"type": "string", "description": "the note the block is in (relative paths and `this` resolve from it)"}}), &["src", "path"])},
+        {"name": "kandinsky_captures", "description": "What was captured (the capture box, the phone, the share sheet): each capture with its text, where it was written and whether it is triaged yet.", "inputSchema": s(json!({}), &[])},
+        {"name": "kandinsky_triage", "description": "Triage one capture from kandinsky_captures, as the Captures block's buttons do: `task` (an open task), `done`, `dismiss`, `reopen`, `file` (its text added to the note `note`, made when missing, and the capture linked to it), `link` (linked to the existing note `note`, not copied), `delete` (taken out of the log; kept in .kandinsky/trash/). Give path, line and source exactly as kandinsky_captures listed them: a line edited since is refused. Only when the user asked; `delete` only when they asked for that capture to go.", "inputSchema": s(json!({
+            "path": {"type": "string"}, "line": {"type": "integer", "description": "from kandinsky_captures (0 for a note of the inbox)"},
+            "source": {"type": "string", "description": "the capture's `source` from kandinsky_captures"},
+            "action": {"type": "string", "enum": ["task", "done", "dismiss", "reopen", "file", "link", "delete"]},
+            "note": {"type": "string", "description": "for file and link: the note's vault path"}
+        }), &["path", "line", "action"])},
+        {"name": "kandinsky_move", "description": "Move or rename a file or folder in the vault as the file explorer does: every [[wikilink]] and Markdown link to it (and a moved note's own relative links) rewritten for its new place. Never replaces anything: a `to` that exists is refused. Use it instead of `mv`, which breaks the links. Only when the user asked.", "inputSchema": s(json!({
+            "from": {"type": "string", "description": "workspace-relative"}, "to": {"type": "string", "description": "workspace-relative, the new path itself (not a folder to move into)"}
+        }), &["from", "to"])},
+        {"name": "kandinsky_settings", "description": "The vault's settings as Kandinsky reads them (.kandinsky/config.toml merged with the defaults; no secrets live there). Read-only: a change is the user's, in Settings (kandinsky_ui_command can open it).", "inputSchema": s(json!({"section": {"type": "string", "description": "one top-level key (e.g. editor, notifications); default: all"}}), &[])},
+        {"name": "kandinsky_notices", "description": "The notices (toasts, system notifications) that came while the user was not looking at Kandinsky and that they have not seen since, newest first: title, body, source, id, subject, the note it opens. Needs Kandinsky running.", "inputSchema": s(json!({}), &[])},
+        {"name": "kandinsky_notice_withdraw", "description": "Take notices away (the system's notification, the tray's list, the toasts) because they are no longer news: by a notice's `id` or its `subject` from kandinsky_notices (a subject takes every notice about that thing). Only when the user asked, or the thing it announced is done. Needs Kandinsky running.", "inputSchema": s(json!({"id": {"type": "string", "description": "a notice's id or subject"}}), &["id"])},
+        {"name": "kandinsky_activity", "description": "One day's activity in the vault: the notes and files made or changed, the commits. Default: today.", "inputSchema": s(json!({"day": {"type": "string", "description": "YYYY-MM-DD"}}), &[])},
+        {"name": "kandinsky_sync", "description": "The vault's sync state in plain words (Syncthing, the mirror, git) and the conflict copies left to settle.", "inputSchema": s(json!({}), &[])},
         {"name": "kandinsky_new_note", "description": "Create a note from one of the vault's templates (see kandinsky_templates), the way the user's \"New note from a template\" does: its {{…}} filled in (docs/guides/TEMPLATES.md: dates, values, prompts, includes, if/each), the template's properties there, `fields` set (they also answer its {{prompt:…}} questions). Prefer this to writing a new note by hand. Refuses a path that exists (never overwrites); returns the path, the caret line, and `added`: fields the template does not define.", "inputSchema": s(json!({
             "path": {"type": "string", "description": "workspace-relative file path, e.g. notes/physics/Mott.md (.md added when missing); use the template's folder unless the user said otherwise"},
             "template": {"type": "string", "description": "a template name from kandinsky_templates; without it the note starts empty"},
@@ -68,9 +94,10 @@ fn builtin_tools() -> Value {
             "fields": {"type": "object", "description": "properties to set: {name: text | number | boolean | list | null}", "additionalProperties": true},
             "text": {"type": "string", "description": "the body, appended after the template's text"}
         }), &["path"])},
-        {"name": "kandinsky_query", "description": "Evaluate an Obsidian .base database view (from a vault .base `path` or inline `yaml`), including formulas, rollups and file.upstreamStatus.", "inputSchema": s(json!({
+        {"name": "kandinsky_query", "description": "Run a Bases query (Obsidian's .base format: filters, formulas, rollups, file.upstreamStatus, views) as the vault's Base panes do: the rows (each note's path and its columns) of each view. Give the path of a .base file, or its YAML text in `yaml` (or `src`).", "inputSchema": s(json!({
             "path": {"type": "string", "description": "workspace-relative .base file path (provide `path` or `yaml`)"},
             "yaml": {"type": "string", "description": "inline .base YAML query source (provide `yaml` or `path`)"},
+            "src": {"type": "string", "description": "the same as `yaml`"},
             "this": {"type": "string", "description": "optional note path bound to `this.*`"},
             "view": {"type": "string", "description": "optional view name to narrow the returned views"}
         }), &[])},
@@ -95,7 +122,84 @@ async fn call(ws: &Workspace, local: &kandinsky_core::helper::Helpers, server: O
     let need = || server.ok_or_else(|| anyhow!("the Kandinsky window is not running for {}", ws.root().display()));
     let str_arg = |k: &str| a[k].as_str().map(str::to_owned).ok_or_else(|| anyhow!("missing argument `{k}`"));
     Ok(match name {
-        "kandinsky_context" => need()?.get("/api/ui/state").await?,
+        "kandinsky_context" => {
+            let mut state = need()?.get("/api/ui/state").await?;
+            if let Some(m) = state.as_object_mut() {
+                m.remove("commands"); // kandinsky_ui_commands lists them
+            }
+            state
+        }
+        "kandinsky_ui_commands" => ui_commands(need()?, a["query"].as_str()).await?,
+        "kandinsky_ui_command" => {
+            let (s, id) = (need()?, str_arg("id")?);
+            // a window that lists its commands refuses one it does not have (a guessed id), saying so
+            if let Some(list) = ui_commands(s, None).await.ok().and_then(|k| k["commands"].as_array().cloned()) {
+                if !list.iter().any(|c| c["id"] == id.as_str()) {
+                    return Err(anyhow!("the window has no command `{id}` (see kandinsky_ui_commands)"));
+                }
+            }
+            s.cmd("palette", json!({"command": id})).await?
+        }
+        "kandinsky_tags" => serde_json::to_value(kandinsky_core::tags::all(ws.root(), &ws.config()?))?,
+        "kandinsky_properties" => serde_json::to_value(kandinsky_core::property_spec::known(ws.root(), &ws.config()?))?,
+        "kandinsky_view" => {
+            let (src, path) = (str_arg("src")?, str_arg("path")?);
+            // a plugin's rows run its tool: in the window's helper when it is open, else in this process's own
+            match server {
+                Some(s) => s.post("/api/view", &json!({"path": path, "src": src}), std::time::Duration::from_secs(60)).await?,
+                None => match kandinsky_core::views::from_plugin(ws, local, &path, &src).await {
+                    Some(r) => serde_json::to_value(r?)?,
+                    None => serde_json::to_value(kandinsky_core::views::evaluate(ws, &path, &src)?)?,
+                },
+            }
+        }
+        "kandinsky_captures" => serde_json::to_value(kandinsky_core::captures::list(ws.root(), &ws.config()?))?,
+        "kandinsky_triage" => {
+            let req = triage_request(a)?;
+            // through the window's server when it is open (its editors follow), else the same core function here
+            match server {
+                Some(s) => drop(s.post("/api/captures/triage", &serde_json::to_value(&req)?, std::time::Duration::from_secs(30)).await?),
+                None => drop(kandinsky_core::captures::triage(ws.root(), &ws.config()?, &req, chrono::Local::now().naive_local())?),
+            }
+            json!({"path": req.path, "action": a["action"]})
+        }
+        "kandinsky_move" => {
+            let (from, to) = (str_arg("from")?, str_arg("to")?);
+            match server {
+                Some(s) => s.post("/api/fs/move", &json!({"from": from, "to": to}), std::time::Duration::from_secs(60)).await?,
+                None => {
+                    let r = kandinsky_core::relink::move_with_links(ws, &from, &to)?;
+                    json!({"links": r.links, "notes": r.notes})
+                }
+            }
+        }
+        "kandinsky_settings" => {
+            let all = serde_json::to_value(ws.config()?)?;
+            match a["section"].as_str() {
+                None => json!({"path": kandinsky_core::config::CONFIG_FILE, "settings": all}),
+                Some(k) => match all.get(k) {
+                    Some(v) => json!({"path": kandinsky_core::config::CONFIG_FILE, "settings": {k: v}}),
+                    None => return Err(anyhow!("no setting `{k}`; the sections are: {}", all.as_object().map(|m| m.keys().cloned().collect::<Vec<_>>().join(", ")).unwrap_or_default())),
+                },
+            }
+        }
+        "kandinsky_notices" => need()?.get("/api/notices").await?,
+        "kandinsky_notice_withdraw" => {
+            let id = str_arg("id")?;
+            need()?.post("/api/notices/withdraw", &json!({"id": id}), std::time::Duration::from_secs(10)).await?;
+            json!({"withdrawn": id})
+        }
+        "kandinsky_activity" => {
+            let day = match a["day"].as_str() {
+                Some(d) => chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| anyhow!("`day` is YYYY-MM-DD"))?,
+                None => chrono::Local::now().date_naive(),
+            };
+            serde_json::to_value(today::day_activity(ws.root(), &ws.config()?, day))?
+        }
+        "kandinsky_sync" => json!({
+            "state": kandinsky_core::sync_state::status(ws.root()),
+            "conflicts": kandinsky_core::sync_merge::left_copies(ws.root(), None),
+        }),
         "kandinsky_open" => need()?.cmd("open", json!({"path": str_arg("path")?, "line": a.get("line")})).await?,
         "kandinsky_notify" => need()?.cmd("notify", json!({"title": str_arg("title")?, "body": a.get("body")})).await?,
         "kandinsky_capture" => run(ws, server, "capture", json!({"text": str_arg("text")?})).await?,
@@ -106,7 +210,7 @@ async fn call(ws: &Workspace, local: &kandinsky_core::helper::Helpers, server: O
         "kandinsky_tasks" => tasks_listed(ws, a)?,
         "kandinsky_task_done" => {
             let line = a["line"].as_u64().and_then(|l| u32::try_from(l).ok()).ok_or_else(|| anyhow!("missing argument `line`"))?;
-            let t = kandinsky_core::api::TaskRef { path: str_arg("path")?, line, text: Some(str_arg("text")?) };
+            let t = kandinsky_core::api::TaskRef { path: str_arg("path")?, line, text: Some(str_arg("text")?), block: a["block"].as_str().map(str::to_string) };
             match server {
                 Some(s) => s.post("/api/task/tick", &serde_json::to_value(&t)?, std::time::Duration::from_secs(30)).await?,
                 None => {
@@ -150,10 +254,10 @@ async fn call(ws: &Workspace, local: &kandinsky_core::helper::Helpers, server: O
 
 fn query_base(ws: &Workspace, a: &Value) -> Result<Value> {
     let cfg = ws.config()?;
-    let src = match (a["yaml"].as_str().or_else(|| a["query"].as_str()), a["path"].as_str()) {
+    let src = match (a["yaml"].as_str().or_else(|| a["src"].as_str()).or_else(|| a["query"].as_str()), a["path"].as_str()) {
         (Some(y), _) => y.to_string(),
         (None, Some(p)) => std::fs::read_to_string(ws.resolve(p)?)?,
-        (None, None) => return Err(anyhow!("provide `path` (a .base file) or `yaml` (inline .base query)")),
+        (None, None) => return Err(anyhow!("provide `path` (a .base file) or `yaml` / `src` (inline .base query)")),
     };
     let mut res = kandinsky_core::bases::evaluate(ws.root(), &cfg, &src, a["this"].as_str());
     if let Some(view_name) = a["view"].as_str().filter(|s| !s.trim().is_empty()) {
@@ -220,33 +324,65 @@ async fn set_note_property(ws: &Workspace, server: Option<&Server>, a: &Value) -
 }
 
 /// `kandinsky_tasks`: the vault's tasks, read from the files (the same scan as Home's), filtered as asked.
+/// `kandinsky_ui_commands`: the window's command list (it sends it with its state), filtered by words.
+async fn ui_commands(s: &Server, query: Option<&str>) -> Result<Value> {
+    let state = s.get("/api/ui/state").await?;
+    let words: Vec<String> = query.unwrap_or("").to_lowercase().split_whitespace().map(String::from).collect();
+    let all = state["commands"].as_array().cloned().ok_or_else(|| anyhow!("the window has not listed its commands (a Kandinsky window older than this tool: reload it)"))?;
+    let hit = |c: &Value| {
+        let hay = format!("{} {}", c["id"].as_str().unwrap_or(""), c["title"].as_str().unwrap_or("")).to_lowercase();
+        words.iter().all(|w| hay.contains(w.as_str()))
+    };
+    Ok(json!({ "commands": all.into_iter().filter(hit).collect::<Vec<_>>() }))
+}
+
+/// `kandinsky_triage`'s arguments as the core's triage request (`action` + `note` → the tagged action).
+fn triage_request(a: &Value) -> Result<kandinsky_core::api::TriageRequest> {
+    use kandinsky_core::api::TriageAction;
+    let path = a["path"].as_str().ok_or_else(|| anyhow!("missing argument `path`"))?.to_string();
+    let line = a["line"].as_u64().and_then(|l| u32::try_from(l).ok()).ok_or_else(|| anyhow!("missing argument `line`"))?;
+    let note = || a["note"].as_str().filter(|n| !n.trim().is_empty()).map(str::to_string).ok_or_else(|| anyhow!("`file` and `link` need `note`, the note's vault path"));
+    let action = match a["action"].as_str().unwrap_or("") {
+        "task" => TriageAction::Task,
+        "done" => TriageAction::Done,
+        "dismiss" => TriageAction::Dismiss,
+        "reopen" => TriageAction::Reopen,
+        "file" => TriageAction::File { note: note()? },
+        "link" => TriageAction::Link { note: note()? },
+        "delete" => TriageAction::Delete,
+        other => return Err(anyhow!("unknown action `{other}`: task, done, dismiss, reopen, file, link or delete")),
+    };
+    // a log's line is written only while it is still what was read (`source`); a note of the inbox (line 0) has none
+    let source = match (line, a["source"].as_str()) {
+        (0, s) => s.unwrap_or("").to_string(),
+        (_, Some(s)) => s.to_string(),
+        (_, None) => return Err(anyhow!("missing argument `source`: the capture's line as kandinsky_captures listed it")),
+    };
+    Ok(kandinsky_core::api::TriageRequest { path, line, source, action })
+}
+
+/// `kandinsky_tasks`: the vault's tasks as `GET /api/tasks` lists them (`today::listed`), filtered as asked.
 fn tasks_listed(ws: &Workspace, a: &Value) -> Result<Value> {
-    let status = a["status"].as_str().unwrap_or("open");
+    let status = match a["status"].as_str() {
+        Some("done") => today::Status::Done,
+        Some("all") => today::Status::All,
+        _ => today::Status::Open,
+    };
     let words: Vec<String> = a["query"].as_str().unwrap_or("").to_lowercase().split_whitespace().map(String::from).collect();
     let by = match a["due_by"].as_str() {
-        Some(d) => Some(chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| anyhow!("`due_by` is YYYY-MM-DD"))?),
+        Some(d) => Some(chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| anyhow!("`due_by` is YYYY-MM-DD"))?.to_string()),
         None => None,
     };
     let limit = a["limit"].as_u64().unwrap_or(200) as usize;
-    let out: Vec<Value> = today::all_tasks(ws.root(), &ws.config()?)
+    let out: Vec<today::Listed> = today::listed(ws.root(), &ws.config()?, status)
         .into_iter()
-        .filter(|(_, done)| match status {
-            "done" => *done,
-            "all" => true,
-            _ => !*done,
-        })
-        .filter(|(h, _)| {
-            let low = h.text.to_lowercase();
+        .filter(|t| {
+            let low = t.text.to_lowercase();
             words.iter().all(|w| low.contains(w.as_str()))
         })
-        .map(|(h, done)| (kandinsky_core::tasks::parse(&h.text), h, done))
-        .filter(|(t, _, _)| by.is_none_or(|by| t.due.or(t.scheduled).is_some_and(|d| d <= by)))
+        // `YYYY-MM-DD` compares as text
+        .filter(|t| by.as_ref().is_none_or(|by| t.due.as_ref().or(t.scheduled.as_ref()).is_some_and(|d| d <= by)))
         .take(limit)
-        .map(|(t, h, done)| {
-            let day = |d: Option<chrono::NaiveDate>| d.map(|d| d.to_string());
-            json!({ "path": h.path, "line": h.line, "text": h.text, "done": done, "title": t.title, "due": day(t.due), "scheduled": day(t.scheduled),
-                    "start": day(t.start), "priority": format!("{:?}", t.priority).to_lowercase(), "tags": t.tags, "recurrence": t.recurrence })
-        })
         .collect();
     Ok(json!({ "tasks": out }))
 }

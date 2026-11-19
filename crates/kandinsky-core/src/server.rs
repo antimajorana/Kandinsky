@@ -54,6 +54,8 @@ struct AppState {
     live: Arc<crate::live::Rooms>,
     /// The plugins' media addresses, their secrets filled in and kept here (plugin_media.rs).
     media: crate::plugin_media::Media,
+    /// The player's video engine (mpv.rs): only the desktop's own core runs it.
+    mpv: crate::mpv::Mpv,
     /// The desktop's one core for every local vault (server_desktop.rs), when this vault is served by it.
     desktop: desktop::DesktopLink,
     /// A server's write leases for the devices mirroring this vault (mirror_guard.rs); its own writes take them once a
@@ -151,6 +153,43 @@ async fn files_get(State(st): S, Query(q): Query<FilesQuery>) -> Result<Json<Vec
 async fn exists_get(State(st): S, Query(q): Query<PathQuery>) -> Result<Json<bool>> {
     let rel = required_path(q)?;
     Ok(Json(with_ws(&st, move |ws| Ok(ws.resolve_readable(&rel)?.exists())).await?))
+}
+
+/// When a file was made and last changed (today.rs `made`): a note's date beside its breadcrumbs.
+async fn file_made_get(State(st): S, Query(q): Query<PathQuery>) -> Result<Json<Option<crate::api::Made>>> {
+    let rel = required_path(q)?;
+    Ok(Json(with_ws(&st, move |ws| { ws.resolve(&rel)?; Ok(crate::today::made(ws.root(), &rel)) }).await?))
+}
+
+/// The Syncthing conflict copies left for the user (sync_merge.rs `left_copies`): every one, or with `?path=` the copies
+/// of that file. The Sync conflicts view lists them, a note's banner shows its own, a count of them comes from here.
+async fn sync_conflicts_get(State(st): S, Query(q): Query<PathQuery>) -> Result<Json<Vec<crate::sync_merge::ConflictCopy>>> {
+    let of = q.path.filter(|p| !p.is_empty());
+    Ok(Json(with_ws(&st, move |ws| {
+        if let Some(p) = &of {
+            ws.resolve(p)?; // in the vault
+        }
+        Ok(crate::sync_merge::left_copies(ws.root(), of.as_deref()))
+    }).await?))
+}
+
+/// `GET /api/sync/state` (sync_state.rs): this vault's sync state in plain words, or with `?path=` that of another vault
+/// on this device's list (Settings → Vaults & sync shows one line per vault). A path not on the list is refused.
+async fn sync_state_get(State(st): S, Query(q): Query<PathQuery>) -> Result<Json<crate::sync_state::SyncStatus>> {
+    let root = st.ws.root().to_path_buf();
+    let asked = q.path.filter(|p| !p.is_empty());
+    Ok(Json(
+        blocking(move || {
+            let Some(p) = asked else { return Ok(crate::sync_state::status(&root)) };
+            let real = std::path::Path::new(&p).canonicalize().map_err(|e| Error::BadRequest(format!("{p}: {e}")))?;
+            let listed = real == root || crate::vaults::list(&crate::vaults::list_file()).iter().any(|v| std::path::Path::new(&v.path).canonicalize().ok().as_ref() == Some(&real));
+            if !listed {
+                return Err(Error::BadRequest(format!("{p} is not a vault on this device's list")));
+            }
+            Ok(crate::sync_state::status(&real))
+        })
+        .await?,
+    ))
 }
 
 fn required_path(q: PathQuery) -> Result<String> {
@@ -378,11 +417,55 @@ async fn plugin_settings_put(State(st): S, UrlPath(id): UrlPath<String>, Json(va
 
 /// `kandinsky.fetch`: a request made by the core for a plugin, to a host its manifest lists.
 /// A sign-in met on the way is also told to the page, which offers it — a helper's fetch too.
+/// A report of the app's player (`kandinsky.player`: the desktop's shell player, the phone's MediaService) to the plugin
+/// whose media it plays: its helper's `[media] progress` method answers (plugin_media.rs `progress_call`), e.g. with a
+/// new `key` when it had to open a new session on its server.
+async fn plugin_media_progress_post(State(st): S, UrlPath(id): UrlPath<String>, Json(report): Json<serde_json::Value>) -> Result<Json<serde_json::Value>> {
+    let id = plugin_on(&st, id).await?;
+    let (ws, id2) = (st.ws.clone(), id.clone());
+    let (method, params) = blocking(move || crate::plugin_media::progress_call(ws.root(), &ws.config()?, &crate::secrets::Store::for_vault(ws.root()), &id2, report)).await?;
+    let answer = st.helpers.call(&id, &method, params, crate::helper::CALL_TIMEOUT).await?;
+    // a report's answer never carries secrets out: `_secrets` kept (when allowed), as for any helper call
+    let ws = st.ws.clone();
+    let answer = blocking(move || {
+        let allowed = crate::plugins::permissions(ws.root(), &id)?.secrets;
+        crate::plugin_tools::keep_secrets(&crate::secrets::Store::for_vault(ws.root()), &id, allowed, answer)
+    })
+    .await?;
+    Ok(Json(answer))
+}
+
 /// A plugin's media to play (plugin_media.rs): the page's address for it, the secret kept here.
 async fn plugin_media_post(State(st): S, UrlPath(id): UrlPath<String>, Json(req): Json<crate::plugin_media::MediaRequest>) -> Result<Json<crate::plugin_media::MediaAddress>> {
     let st2 = st.clone();
     let ticket = with_ws(&st, move |ws| st2.media.prepare(ws.root(), &crate::secrets::Store::for_vault(ws.root()), &id, &req)).await?;
     Ok(Json(crate::plugin_media::MediaAddress { src: format!("{}/media/{ticket}", st.prefix), ticket }))
+}
+
+/// The video engine's state (mpv.rs), polled by the page while it plays.
+async fn mpv_state(State(st): S) -> Json<crate::mpv::State> {
+    let st2 = st.clone();
+    Json(tokio::task::spawn_blocking(move || st2.mpv.state()).await.unwrap_or_default())
+}
+
+/// A command to the video engine: mpv opens its window on this machine, so only the desktop's core asked from it
+/// (the file manager's guard).
+async fn mpv_post(State(st): S, axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>, Json(cmd): Json<crate::mpv::Command>) -> Response {
+    if !may_reveal_outside(st.auth.is_some(), peer.ip()) {
+        return forbidden("mpv plays where you are: only on the desktop's own core");
+    }
+    let st2 = st.clone();
+    match blocking(move || st2.mpv.run(st2.ws.root(), cmd)).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => e.into_response(),
+    }
+}
+
+/// The frame mpv shows now, as a PNG (the page attaches it to the note).
+async fn mpv_frame(State(st): S) -> Result<Response> {
+    let st2 = st.clone();
+    let png = blocking(move || st2.mpv.frame()).await?;
+    Ok(([(header::CONTENT_TYPE, HeaderValue::from_static("image/png")), (header::CACHE_CONTROL, HeaderValue::from_static("no-store"))], png).into_response())
 }
 
 /// `<audio src>`'s request (no `x-kandinsky` header can be set there: outside /api, the ticket its own key), streamed.
@@ -443,6 +526,28 @@ async fn signin_doors_get(State(st): S) -> Result<Json<Vec<crate::service_signin
         crate::service_signin::with_users(&crate::secrets::Store::for_vault(ws.root()), &plugins)
     })
     .await?))
+}
+
+/// A gate's bypass keys (service_signin.rs): listed by their hosts and header, never their values.
+async fn signin_bypass_get(State(st): S) -> Result<Json<Vec<crate::service_signin::Bypass>>> {
+    Ok(Json(with_ws(&st, |ws| crate::service_signin::bypass_list(&crate::secrets::Store::for_vault(ws.root()))).await?))
+}
+
+#[derive(serde::Deserialize)]
+struct BypassPut {
+    #[serde(flatten)]
+    rule: crate::service_signin::Bypass,
+    /// the key; empty keeps the one kept for the same header and hosts
+    #[serde(default)]
+    value: String,
+}
+
+async fn signin_bypass_put(State(st): S, Json(b): Json<BypassPut>) -> Result<Json<bool>> {
+    Ok(Json(with_ws(&st, move |ws| crate::service_signin::bypass_set(&crate::secrets::Store::for_vault(ws.root()), &b.rule, &b.value).map(|_| true)).await?))
+}
+
+async fn signin_bypass_delete(State(st): S, Json(rule): Json<crate::service_signin::Bypass>) -> Result<Json<bool>> {
+    Ok(Json(with_ws(&st, move |ws| crate::service_signin::bypass_forget(&crate::secrets::Store::for_vault(ws.root()), &rule)).await?))
 }
 
 async fn signin_door_delete(State(st): S, UrlPath(host): UrlPath<String>) -> Result<Json<bool>> {
@@ -552,6 +657,18 @@ async fn plugin_named(st: &AppState, named: String) -> Result<String> {
     with_ws(st, move |ws| crate::plugins::resolve(ws.root(), &ws.config()?.effective_plugins_off(), &named)).await
 }
 
+/// Plugin `id` as a route for it may use it: none while it is switched off, or needs Developer mode while that is off
+/// (`Config::is_plugin_effectively_off`) — the route then answers as if the plugin were not there.
+async fn plugin_on(st: &AppState, id: String) -> Result<String> {
+    let id = plugin_named(st, id).await?;
+    let check = id.clone();
+    let off = with_ws(st, move |ws| Ok(ws.config()?.is_plugin_effectively_off(&check))).await?;
+    if off {
+        return Err(Error::NotFound(format!("plugin {id} is switched off or requires Developer mode")));
+    }
+    Ok(id)
+}
+
 async fn plugin_helper_post(State(st): S, UrlPath(id): UrlPath<String>, Json(c): Json<HelperCall>) -> Result<Json<serde_json::Value>> {
     let id = plugin_named(&st, id).await?;
     let timeout = c.timeout_secs.map(std::time::Duration::from_secs).unwrap_or(crate::helper::CALL_TIMEOUT);
@@ -582,6 +699,48 @@ async fn plugin_tool_post(State(st): S, UrlPath((id, name)): UrlPath<(String, St
     let cfg = with_ws(&st, |ws| ws.config()).await?;
     let store = crate::secrets::Store::for_vault(st.ws.root());
     Ok(Json(crate::plugin_tools::call(st.ws.root(), &cfg, &st.helpers, &store, &id, &name, args).await?))
+}
+
+/// A token for one of the plugin's hooks and the address to call it at (hooks.rs). Only the plugin itself (its helper,
+/// helper_api.rs `may`) or a signed-in page asks.
+async fn plugin_hook_sign(State(st): S, UrlPath(id): UrlPath<String>, Json(ask): Json<crate::hooks::SignAsk>) -> Result<Json<crate::hooks::Signed>> {
+    let id = plugin_on(&st, id).await?;
+    let (root, prefix) = (st.ws.root().to_path_buf(), st.prefix.clone());
+    let now = chrono::Utc::now().timestamp();
+    Ok(Json(blocking(move || crate::hooks::signed(&crate::secrets::Store::for_vault(&root), &prefix, &id, ask, now)).await?))
+}
+
+/// A hook called from outside, with no sign-in: its token admits it (signed by this vault for this plugin and hook,
+/// in time); the plugin's `on = "hook"` tool of that name answers `{ data, body }`, and what its answer says about
+/// notices is said.
+async fn plugin_hook_call(State(st): S, UrlPath((id, name)): UrlPath<(String, String)>, Query(q): Query<std::collections::HashMap<String, String>>, body: Bytes) -> Response {
+    let refuse = |code: StatusCode, why: String| (code, Json(ApiError { error: why, mtime: None })).into_response();
+    let root = st.ws.root().to_path_buf();
+    let (token, now) = (q.get("t").cloned().unwrap_or_default(), chrono::Utc::now().timestamp());
+    let (id_, name_) = (id.clone(), name.clone());
+    let checked = blocking(move || crate::hooks::verify(&crate::secrets::Store::for_vault(&root), &id_, &name_, &token, now)).await;
+    let data = match checked {
+        Ok(Ok(d)) => d,
+        Ok(Err(r)) => return refuse(StatusCode::FORBIDDEN, r.why().into()),
+        Err(e) => return e.into_response(),
+    };
+    let Ok(cfg) = with_ws(&st, |ws| ws.config()).await else { return refuse(StatusCode::INTERNAL_SERVER_ERROR, "the vault's settings unreadable".into()) };
+    // a valid token does not wake a plugin switched off, or one that needs Developer mode while that is off
+    if cfg.is_plugin_effectively_off(&id) {
+        return refuse(StatusCode::FORBIDDEN, format!("plugin {id} is switched off or requires Developer mode"));
+    }
+    if !crate::plugin_tools::listening(st.ws.root(), &cfg, crate::hooks::EVENT).iter().any(|(p, t)| *p == id && *t == name) {
+        return refuse(StatusCode::NOT_FOUND, format!("plugin {id} has no hook {name} here"));
+    }
+    let store = crate::secrets::Store::for_vault(st.ws.root());
+    let input = serde_json::json!({ "data": data, "body": crate::hooks::body_of(&body) });
+    match crate::plugin_tools::call(st.ws.root(), &cfg, &st.helpers, &store, &id, &name, input).await {
+        Ok(v) => {
+            crate::notice_actions::say(&st.bus, &id, &v);
+            Json(serde_json::json!({ "ok": true })).into_response()
+        }
+        Err(e) => e.into_response(),
+    }
 }
 
 async fn plugin_helper_get(State(st): S, UrlPath(id): UrlPath<String>) -> Json<serde_json::Value> {
@@ -1027,19 +1186,33 @@ async fn note_templates(State(st): S) -> Result<Json<Vec<crate::notes::TemplateI
 }
 
 async fn replace_post(State(st): S, Json(r): Json<ReplaceRequest>) -> Result<Json<ReplaceResult>> {
-    let o = search::Opts { case: r.case, word: r.word, regex: r.regex, agent: r.agent, pdf: false };
+    let o = search::Opts { case: r.case, word: r.word, regex: r.regex, agent: r.agent, pdf: false, within: search::Within::from_all(r.all) };
     Ok(Json(with_ws(&st, move |ws| search::replace(&ws, &r.q, o, &r.with, r.only.as_deref())).await?))
 }
 
 async fn search_get(State(st): S, Query(q): Query<SearchQuery>) -> Result<Json<SearchResults>> {
-    let o = search::Opts { case: q.case, word: q.word, regex: q.regex, agent: q.agent, pdf: q.pdf };
+    let o = search::Opts { case: q.case, word: q.word, regex: q.regex, agent: q.agent, pdf: q.pdf, within: search::Within::from_all(q.all) };
     Ok(Json(
         with_ws(&st, move |ws| {
             let cfg = ws.config()?;
-            Ok(if q.names { SearchResults { files: search::names_with(ws.root(), &cfg, &q.q, o), ..Default::default() } } else { search::search_with(ws.root(), &cfg, &q.q, o) })
+            Ok(if q.names { SearchResults { files: search::names_with(ws.root(), &cfg, &q.q, o), ..Default::default() } } else { search::search_in_lane(ws.root(), &cfg, &q.q, o, q.lane.as_deref()) })
         })
         .await?,
     ))
+}
+
+/// The plugins' answers to a search of the vault (mail from the Email plugin…), asked apart from the files' search so
+/// the pane shows those first and the plugins' groups when they come.
+async fn search_plugins_get(State(st): S, Query(q): Query<SearchQuery>) -> Result<Json<Vec<crate::api::PluginHits>>> {
+    if q.q.trim().chars().count() < 2 {
+        return Ok(Json(Vec::new()));
+    }
+    let cfg = with_ws(&st, |ws| ws.config()).await?;
+    let store = crate::secrets::Store::for_vault(st.ws.root());
+    let mut hits = crate::plugin_tools::search(st.ws.root(), &cfg, &st.helpers, &store, q.q.trim(), 8).await;
+    // only plugins that may run: none switched off, none that needs Developer mode while that is off
+    hits.retain(|h| !cfg.is_plugin_effectively_off(&h.plugin));
+    Ok(Json(hits))
 }
 
 /// Append-only, capped at ~1 MB (then restarted), so a looping error cannot fill the disk.
@@ -1059,8 +1232,12 @@ async fn ui_state_get(State(st): S) -> Json<UiState> {
     Json(st.ui.read().map(|g| g.clone()).unwrap_or_default())
 }
 
-async fn ui_state_put(State(st): S, Json(state): Json<UiState>) -> StatusCode {
+async fn ui_state_put(State(st): S, Json(mut state): Json<UiState>) -> StatusCode {
     if let Ok(mut g) = st.ui.write() {
+        // the window sends its command list only when it changed
+        if state.commands.is_none() {
+            state.commands = g.commands.take();
+        }
         *g = state;
     }
     StatusCode::NO_CONTENT
@@ -1218,6 +1395,30 @@ struct PdfExportQuery {
 
 /// "Export with marks": a copy beside the PDF, its marks as real annotations or (`mode=flat`) drawn into the pages
 /// (crate::pdf_export).
+/// A page's character boxes and a point (pdf_columns.rs): the page reads them with its own engine.
+#[derive(serde::Deserialize)]
+struct ColumnAsk {
+    /// Left, top, right, bottom in shown points, four numbers a character.
+    boxes: Vec<f32>,
+    #[serde(default)]
+    x: f32,
+    #[serde(default)]
+    y: f32,
+    /// Instead of the point: the column read after this one (a zoomed column's end), null after the last.
+    #[serde(default)]
+    after: Option<crate::pdf_columns::Rect>,
+}
+
+/// The text column under the point (double-click zooms to it), or the one after `after`, or null; the phone asks the
+/// same functions over JNI.
+async fn pdf_column_post(Json(q): Json<ColumnAsk>) -> Json<Option<crate::pdf_columns::Rect>> {
+    let rects: Vec<crate::pdf_columns::Rect> = q.boxes.as_chunks::<4>().0.to_vec(); // a trailing partial box is dropped
+    Json(match q.after {
+        Some(col) => crate::pdf_columns::column_after(&rects, col),
+        None => crate::pdf_columns::column_at(&rects, q.x, q.y),
+    })
+}
+
 async fn pdf_export_post(State(st): S, Query(q): Query<PdfExportQuery>) -> Result<Json<crate::pdf_export::Exported>> {
     let r = with_ws(&st, move |ws| crate::pdf_export::export(&ws, &q.pdf, q.mode)).await?;
     st.bus.publish(Event::Fs { paths: vec![r.path.clone()] });
@@ -1392,12 +1593,7 @@ async fn fs_upload(State(st): S, Query(q): Query<UploadQuery>, body: Bytes) -> R
 /// changed.
 async fn fs_move(State(st): S, Json(m): Json<MoveRequest>) -> Result<Json<Moved>> {
     let mut paths = vec![m.from.clone(), m.to.clone()];
-    let relinked = with_ws(&st, move |ws| {
-        let plan = crate::relink::plan(ws.root(), &ws.config()?, &m.from, &m.to);
-        files::move_path(&ws, &m.from, &m.to)?;
-        crate::relink::apply(&ws, &plan)
-    })
-    .await?;
+    let relinked = with_ws(&st, move |ws| crate::relink::move_with_links(&ws, &m.from, &m.to)).await?;
     paths.extend(relinked.notes.iter().cloned());
     st.bus.publish(Event::Fs { paths });
     Ok(Json(Moved { links: relinked.links as u32, notes: relinked.notes }))
@@ -1494,19 +1690,198 @@ fn may_reveal_outside(signed_in_server: bool, peer: std::net::IpAddr) -> bool {
 
 async fn task_tick(State(st): S, Json(t): Json<TaskRef>) -> Result<StatusCode> {
     let path = t.path.clone();
-    with_ws(&st, move |ws| crate::today::tick_ref(&ws, &t)).await?;
-    st.bus.publish(Event::Fs { paths: vec![path] });
+    let was = with_ws(&st, move |ws| crate::today::tick_ref(&ws, &t)).await?;
+    st.bus.publish(Event::Fs { paths: vec![path.clone()] });
+    crate::notice_actions::task_done(&st.bus, &path, &was);
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn task_line(Json(t): Json<TaskTick>) -> Result<Json<TaskTicked>> {
+#[derive(serde::Deserialize)]
+struct TasksQuery {
+    #[serde(default)]
+    status: today::Status,
+}
+
+/// The vault's tasks with their fields (`today::listed`): `{ tasks: [...] }`, open ones unless `status` says.
+async fn tasks_get(State(st): S, Query(q): Query<TasksQuery>) -> Result<Json<serde_json::Value>> {
+    let tasks = with_ws(&st, move |ws| Ok(today::listed(ws.root(), &ws.config()?, q.status))).await?;
+    Ok(Json(serde_json::json!({ "tasks": tasks })))
+}
+
+/// The task's block id, given one at the end of its line when it has none (`today::block_of`): for an action the
+/// user took on it (a nudge's Snooze, a link).
+async fn task_block(State(st): S, Json(t): Json<TaskRef>) -> Result<Json<serde_json::Value>> {
+    let path = t.path.clone();
+    let block = with_ws(&st, move |ws| today::block_of(&ws, &t)).await?;
+    st.bus.publish(Event::Fs { paths: vec![path] });
+    Ok(Json(serde_json::json!({ "block": block })))
+}
+
+#[derive(serde::Deserialize)]
+struct TaskSchedule {
+    task: TaskRef,
+    /// `YYYY-MM-DD`: the task's new ⏳ (with `event`: its start's day when left out)
+    #[serde(default)]
+    scheduled: String,
+    #[serde(default)]
+    link: Option<today::PlanLink>,
+    /// Time-block the task (the Time-block… dialog): an event made for it in this slot, the task planned into it.
+    #[serde(default)]
+    event: Option<TimeBlock>,
+}
+
+/// The slot a task is time-blocked into.
+#[derive(serde::Deserialize)]
+struct TimeBlock {
+    title: String,
+    /// `YYYY-MM-DDTHH:MM`, local time
+    start: String,
+    /// `YYYY-MM-DDTHH:MM` (default: an hour after `start`)
+    #[serde(default)]
+    end: Option<String>,
+    /// The calendar plugin's calendar to put it on (its default otherwise); the built-in calendar has one
+    #[serde(default)]
+    calendar: Option<String>,
+}
+
+/// A task planned into an event (time-blocked, or moved with its event): its ⏳, a link to the event's note in its
+/// description, its block id (`today::schedule_ref`). Answers `{ block, line }`. With `event`, the event is made first
+/// ([`time_block`]).
+async fn task_schedule(State(st): S, Json(q): Json<TaskSchedule>) -> Result<Json<serde_json::Value>> {
+    if let Some(event) = q.event {
+        return Ok(Json(time_block(&st, q.task, event).await?));
+    }
+    let day = chrono::NaiveDate::parse_from_str(q.scheduled.trim(), "%Y-%m-%d").map_err(|_| Error::BadRequest(format!("scheduled is not YYYY-MM-DD: {}", q.scheduled)))?;
+    let path = q.task.path.clone();
+    let (block, line) = with_ws(&st, move |ws| today::schedule_ref(&ws, &q.task, day, q.link.as_ref())).await?;
+    st.bus.publish(Event::Fs { paths: vec![path] });
+    Ok(Json(serde_json::json!({ "block": block, "line": line })))
+}
+
+/// Time-blocks `task` into `slot`: through the calendar plugin (the one that `provides = ["calendar"]` with a `time_block`
+/// tool, switched on and allowed here), which puts the event on the person's calendar and plans the task through
+/// `POST /api/task/schedule`; with none, as an event of the built-in calendar (calendar.rs), kept as a page that links
+/// the task, the task planned into it. Answers the plugin's answer (`via` its id) or `{ block, line, note, label, event }`.
+async fn time_block(st: &AppState, task: TaskRef, slot: TimeBlock) -> Result<serde_json::Value> {
+    let parse = |s: &str| chrono::NaiveDateTime::parse_from_str(s.trim(), "%Y-%m-%dT%H:%M").map_err(|_| Error::BadRequest(format!("not YYYY-MM-DDTHH:MM: {s}")));
+    let start = parse(&slot.start)?;
+    let end = match slot.end.as_deref().filter(|e| !e.trim().is_empty()) {
+        Some(e) => parse(e)?,
+        None => start + chrono::Duration::hours(1),
+    };
+    if end <= start {
+        return Err(Error::BadRequest("the slot ends before it starts".into()));
+    }
+    let cfg = with_ws(st, |ws| ws.config()).await?;
+    let (root, off) = (st.ws.root().to_path_buf(), cfg.effective_plugins_off());
+    let plugin = tokio::task::spawn_blocking(move || {
+        let all = crate::plugins::list(&root);
+        let id = crate::plugins::provider(&all, &off, "calendar")?.id.clone();
+        let has = crate::plugins::tool_parts(&root, &id).ok()?.0.iter().any(|t| t.name == "time_block");
+        has.then_some(id)
+    })
+    .await
+    .ok()
+    .flatten()
+    .filter(|id| !cfg.is_plugin_effectively_off(id));
+    if let Some(id) = plugin {
+        let args = serde_json::json!({
+            "title": slot.title, "start": start.format("%Y-%m-%dT%H:%M").to_string(), "end": end.format("%Y-%m-%dT%H:%M").to_string(),
+            "calendar": slot.calendar, "task": { "path": task.path, "line": task.line, "text": task.text },
+        });
+        let store = crate::secrets::Store::for_vault(st.ws.root());
+        let mut answer = crate::plugin_tools::call(st.ws.root(), &cfg, &st.helpers, &store, &id, "time_block", args).await?;
+        if let Some(m) = answer.as_object_mut() {
+            m.insert("via".into(), id.into());
+        }
+        return Ok(answer);
+    }
+    let task_path = task.path.clone();
+    let (answer, note) = with_ws(st, move |ws| {
+        let block = today::block_of(&ws, &task)?;
+        let up = crate::calendar::CalendarEventUpsert {
+            id: None,
+            storage: Some("page".into()),
+            title: slot.title.trim().to_string(),
+            date: start.date().format("%Y-%m-%d").to_string(),
+            end_date: Some(end.date().format("%Y-%m-%d").to_string()),
+            start: Some(start.format("%H:%M").to_string()),
+            end: Some(end.format("%H:%M").to_string()),
+            all_day: false,
+            color: String::new(),
+            location: String::new(),
+            repeat: Default::default(),
+            interval: None,
+            until: None,
+            except: None,
+            links: vec![format!("[[{}#^{block}]]", task.path.trim_end_matches(".md"))],
+            notes: None,
+        };
+        let made = crate::calendar::upsert_event(ws.root(), &ws.config()?, &up)?;
+        let label = start.format("%a %H:%M").to_string();
+        let link = made.path.as_deref().map(|p| today::PlanLink { target: p.trim_end_matches(".md").to_string(), label: label.clone() });
+        let planned = TaskRef { block: Some(block), ..task };
+        let (block, line) = today::schedule_ref(&ws, &planned, start.date(), link.as_ref())?;
+        let note = made.path.clone();
+        Ok((serde_json::json!({ "block": block, "line": line, "note": note, "label": label, "event": made }), note))
+    })
+    .await?;
+    st.bus.publish(Event::Fs { paths: std::iter::once(task_path).chain(note).collect() });
+    Ok(answer)
+}
+
+/// This core's computer: its name and whether the vault's schedules run here (`[automation] schedules_on`) — what a
+/// plugin that must act on one device only (the Plan plugin's nudges) asks — and when the person last used it
+/// (`active_at`, ms since the epoch, null while unknown: notify.rs `Presence`).
+async fn device_get(State(st): S) -> Result<Json<serde_json::Value>> {
+    let host = crate::platform::proc::hostname();
+    let cfg = with_ws(&st, |ws| ws.config()).await?;
+    let active_at = crate::notify::Presence::global().active_at();
+    // the devices of a mirrored vault (their reports through the server), or, on the server, those that reported to it
+    // (none known: no device id made for a vault that is not mirrored)
+    let all = crate::devices::Table::global().all();
+    let devices = if all.is_empty() { vec![] } else { crate::devices::with_here(all, crate::mirror_guard::this_device()) };
+    // `person`: this core shows notices to someone (a desktop's, the phone's); a server's has no one at it
+    Ok(Json(serde_json::json!({ "name": host, "schedules": cfg.automation.schedules_here(&host), "person": st.served.is_none(), "active_at": active_at, "devices": devices })))
+}
+
+/// A notice's button pressed on a page (its toast): answered by the same router as a press on the system's
+/// notification (notice_actions.rs), so Open, Snooze and a plugin's own buttons do the same from both.
+async fn notice_press(State(st): S, Json(p): Json<crate::api::NoticePress>) -> Result<StatusCode> {
+    let chosen = crate::events::Chosen { action: p.action, source: p.source, notice: p.notice, open: p.open };
+    crate::notice_actions::answer(&st.ws, &st.bus, &st.helpers, chosen, chrono::Utc::now()).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// The notices that came while no page of this vault was looked at (notify.rs `UnseenList`), newest first.
+async fn notices_get(State(st): S) -> Json<crate::notify::UnseenList> {
+    Json(crate::notify::unseen_of(st.ws.root()).lock().unwrap_or_else(|e| e.into_inner()).clone())
+}
+
+/// The notices of this id or about this subject are no longer news: `Event::Withdraw`, as a done task's are.
+async fn notices_withdraw(State(st): S, Json(w): Json<crate::notify::Withdrawal>) -> StatusCode {
+    st.bus.publish(Event::Withdraw { id: w.id });
+    StatusCode::NO_CONTENT
+}
+
+async fn task_line(State(st): S, Json(t): Json<TaskTick>) -> Result<Json<TaskTicked>> {
     let lines = if t.done {
         crate::today::tick_line(&t.text, chrono::Local::now().date_naive())
     } else {
         crate::today::untick_line(&t.text).map(|l| vec![l])
     };
     let lines = lines.ok_or_else(|| Error::BadRequest(format!("not a {} task line: {}", if t.done { "open" } else { "done" }, t.text)))?;
+    if let (true, Some(path)) = (t.done, &t.path) {
+        crate::notice_actions::task_done(&st.bus, path, &t.text);
+    }
     Ok(Json(TaskTicked { lines }))
+}
+
+/// The task dialog's form → its line, by the core's one task writer; no file is read or written (the editor holds
+/// the line, as with `task/line`).
+async fn task_render(Json(f): Json<crate::api::TaskFields>) -> Result<Json<crate::api::TaskRendered>> {
+    let line = crate::tasks::Line::from_fields(&f, chrono::Local::now().date_naive()).map_err(Error::BadRequest)?;
+    Ok(Json(crate::api::TaskRendered { line: crate::tasks::render_line(&line) }))
 }
 
 async fn graph_get(State(st): S) -> Result<Json<Graph>> {
@@ -1570,7 +1945,7 @@ async fn vaults_get(State(st): S) -> Result<Json<crate::vaults::VaultList>> {
     if let Some(served) = &st.served {
         // a server: its own vaults, each at its address (the picker goes there)
         let url = |name: &str| if served.len() == 1 { "/".to_string() } else { format!("/v/{name}/") };
-        let vaults = served.iter().map(|v| crate::vaults::Vault { name: v.name.clone(), path: v.root.to_string_lossy().into_owned(), last_opened: 0, missing: false, url: Some(url(&v.name)), mirror: None, warm: true }).collect();
+        let vaults = served.iter().map(|v| crate::vaults::Vault { name: v.name.clone(), path: v.root.to_string_lossy().into_owned(), last_opened: 0, missing: false, url: Some(url(&v.name)), mirror: None, warm: true, always_on: true, unseen: None }).collect();
         return Ok(Json(crate::vaults::VaultList { current: st.ws.root().to_string_lossy().into_owned(), vaults, manage: false }));
     }
     let current = st.ws.root().to_string_lossy().into_owned();
@@ -1584,6 +1959,13 @@ async fn vaults_get(State(st): S) -> Result<Json<crate::vaults::VaultList>> {
                     v.url = Some(d.url_of(std::path::Path::new(&v.path)));
                     v.warm = d.warm(std::path::Path::new(&v.path));
                 }
+            }
+            // each vault's unseen notices, as the core serving it keeps them (the switcher's badge): a vault this core
+            // does not serve has none here
+            for v in vaults.iter_mut().filter(|v| v.url.as_deref().is_none_or(|u| u.starts_with('/'))) {
+                let root = std::path::Path::new(&v.path).canonicalize().unwrap_or_else(|_| v.path.clone().into());
+                let n = crate::notify::unseen_of(&root).lock().unwrap_or_else(|e| e.into_inner()).count;
+                v.unseen = (n > 0).then_some(n as u32);
             }
             // `current` in the list's own spelling of it (a symlink, a trailing slash, another form of the same folder),
             // so the page finds this window's entry: its mirror button acted on nothing otherwise
@@ -1645,6 +2027,21 @@ async fn vaults_mirror_post(State(st): S, Json(q): Json<crate::vaults::MirrorReq
         Ok(())
     })
     .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /api/vaults/always-on`: a local vault started with the app and kept running (its background work goes on),
+/// or not; marked on, it starts now. Marked off, it keeps running until the app restarts.
+async fn vaults_always_on_post(State(st): S, Json(q): Json<crate::vaults::AlwaysOnRequest>) -> Result<StatusCode> {
+    if st.served.is_some() {
+        return Err(Error::BadRequest("a server runs every vault it serves: \"always on\" is a desktop's choice".into()));
+    }
+    let (path, on) = (q.path.clone(), q.on);
+    blocking(move || crate::vaults::set_always_on(&crate::vaults::list_file(), &path, on)).await?;
+    if let (true, Some(d)) = (q.on, desktop::of(&st)) {
+        let root = std::path::PathBuf::from(&q.path);
+        tokio::spawn(async move { d.start(&root).await });
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1710,6 +2107,19 @@ async fn lease_versions(State(st): S, Json(q): Json<crate::mirror_guard::FileBod
     Ok(Json(recent))
 }
 
+/// `POST /api/lease/presence` (crate::devices): a device's presence kept in memory; everyone's back.
+async fn lease_presence(State(st): S, Json(d): Json<crate::devices::Device>) -> Result<Json<Vec<crate::devices::Device>>> {
+    leased_path(&st, ".", &d.id)?;
+    Ok(Json(crate::devices::Table::global().report(d, chrono::Utc::now().timestamp_millis())))
+}
+
+/// `POST /api/lease/notices` (crate::notice_relay): a device's notices into the vault's ring, the others' back.
+async fn lease_notices(State(st): S, Json(q): Json<crate::notice_relay::Exchange>) -> Result<Json<crate::notice_relay::Answer>> {
+    leased_path(&st, ".", &q.holder)?;
+    st.leasing.call_once(|| crate::mirror_guard::install_on_server(&st.ws, st.leases.clone()));
+    Ok(Json(crate::notice_relay::exchange(st.ws.root(), q)))
+}
+
 /// A lease is asked of a server only, for a path inside the vault, by a device other than the server's own core; the
 /// first ask makes this core's own writes take leases too.
 fn leased_path(st: &AppState, path: &str, holder: &str) -> Result<(PathBuf, String)> {
@@ -1739,6 +2149,21 @@ async fn vaults_active_post(State(st): S) -> Result<StatusCode> {
 /// `GET /api/guest`: this window's guest folder, `null` for a vault (guest.rs).
 async fn guest_get(State(st): S) -> Json<Option<crate::guest::GuestInfo>> {
     Json(crate::guest::info(st.ws.root()))
+}
+
+/// `GET /api/guests`: the guest folders open in this desktop's core (Settings → Vaults).
+async fn guests_get() -> Json<Vec<crate::guest::GuestInfo>> {
+    Json(crate::guest::open_guests())
+}
+
+/// `POST /api/guests/close {folder}`: a guest closed without a restart — no longer served (its tasks and watcher
+/// stopped), its `.kandinsky` link and state removed, its files kept. Its window closes itself when it finds it gone.
+async fn guests_close_post(State(st): S, Json(q): Json<crate::guest::GuestClose>) -> Result<Json<()>> {
+    let d = desktop::of(&st).ok_or_else(|| Error::BadRequest("a guest folder is closed in the desktop app".into()))?;
+    let root = crate::guest::root_of(&q.folder).ok_or_else(|| Error::NotFound(format!("no guest folder {} is open", q.folder)))?;
+    d.close(&root).await;
+    blocking(move || crate::guest::forget(&root)).await?;
+    Ok(Json(()))
 }
 
 /// `POST /api/guest/edit`: the guest window's Edit switch.
@@ -1774,8 +2199,9 @@ async fn css_snippets_get(State(st): S) -> Result<Json<Vec<CssSnippet>>> {
 }
 
 async fn view_post(State(st): S, Json(q): Json<ViewBlock>) -> Result<Json<ViewResult>> {
-    // A plugin's rows (`from: plugin:dav/events`) need its tool, called here; every other source reads files.
-    if let Some(r) = crate::views::from_plugin(&st.ws, &st.helpers, &q.src).await {
+    // A plugin's rows (`from: plugin:dav/events`, the calendar's part of `from: deadlines`) need its tool, called here;
+    // every other source reads files.
+    if let Some(r) = crate::views::from_plugin(&st.ws, &st.helpers, &q.path, &q.src).await {
         return Ok(Json(r?));
     }
     Ok(Json(with_ws(&st, move |ws| crate::views::evaluate(&ws, &q.path, &q.src)).await?))
@@ -2160,13 +2586,51 @@ async fn live_ws(State(st): S, Query(mut q): Query<LiveQuery>, upgrade: WebSocke
     }))
 }
 
+/// `GET /api/where`: who is where — each device in the `where` room and the file it shows (live.rs `Rooms::places`), for
+/// a client that has no socket in it (the phone app's native screens). A local vault with a copy on a server has its
+/// rooms there (`live_ws`), so the server is asked (signed in as the live socket is, none of this request's headers
+/// passed on but `x-kandinsky`); it not answering, this core's own room.
+/// The vault's libraries (libraries.rs): the list, one with its items, a folder or Base added.
+async fn libraries_get(State(st): S) -> Result<Json<Vec<crate::libraries::LibraryInfo>>> {
+    Ok(Json(with_ws(&st, |ws| Ok(crate::libraries::list(&ws.config()?))).await?))
+}
+
+#[derive(serde::Deserialize)]
+struct LibraryQuery {
+    id: String,
+    sort: Option<String>,
+}
+
+async fn library_get(State(st): S, Query(q): Query<LibraryQuery>) -> Result<Json<crate::libraries::LibraryView>> {
+    Ok(Json(with_ws(&st, move |ws| crate::libraries::view(&ws, &q.id, q.sort.as_deref())).await?))
+}
+
+async fn libraries_add(State(st): S, Json(req): Json<crate::libraries::LibraryAdd>) -> Result<Json<crate::config::LibrarySpec>> {
+    let spec = with_ws(&st, move |ws| crate::libraries::add(&ws, &req)).await?;
+    st.bus.publish(Event::Fs { paths: vec![crate::config::CONFIG_FILE.into()] });
+    Ok(Json(spec))
+}
+
+async fn where_get(State(st): S) -> Response {
+    if let Some(m) = st.served.is_none().then(|| crate::mirror_guard::mirror_of(st.ws.root())).flatten() {
+        let store = crate::secrets::Store::for_vault(st.ws.root());
+        let headers = HeaderMap::from_iter([(header::HeaderName::from_static("x-kandinsky"), HeaderValue::from_static("1"))]);
+        let asked = crate::remote_bridge::forward(&store, m.trim_end_matches('/'), "api/where", None, axum::http::Method::GET, &headers, Default::default()).await;
+        if asked.status().is_success() {
+            return asked;
+        }
+    }
+    Json(serde_json::json!({ "devices": st.live.places() })).into_response()
+}
+
 async fn events_ws(State(st): S, upgrade: WebSocketUpgrade) -> Response {
     let rx = st.bus.subscribe();
     let root = st.ws.root().to_path_buf();
+    let (vault, unseen) = (crate::notify::Presence::of_vault(st.ws.root()), crate::notify::unseen_of(st.ws.root()));
     upgrade.on_upgrade(move |socket| {
         // a window listens now: the helpers that waited for one to ask its approval start (once)
         st.helpers.window_seen();
-        forward_events(socket, rx, root)
+        forward_events(socket, rx, root, vault, unseen)
     })
 }
 
@@ -2181,10 +2645,19 @@ fn told(ev: Event, root: &std::path::Path) -> Event {
     }
 }
 
-/// The bus to one page; the page says on it whether it is looked at (`{"seen": …}`, notify.rs).
-async fn forward_events(mut socket: WebSocket, mut rx: tokio::sync::broadcast::Receiver<Event>, root: std::path::PathBuf) {
+/// The bus to one page; the page says on it whether it is looked at (`{"seen": …}`, notify.rs). It counts among the
+/// process's pages and its vault's (`vault`: a vault no page shows slows its background work). Looked at, the vault's
+/// unseen notices are seen.
+async fn forward_events(
+    mut socket: WebSocket,
+    mut rx: tokio::sync::broadcast::Receiver<Event>,
+    root: std::path::PathBuf,
+    vault: Arc<crate::notify::Presence>,
+    unseen: Arc<std::sync::Mutex<crate::notify::UnseenList>>,
+) {
     use tokio::sync::broadcast::error::RecvError;
     let page = crate::notify::Presence::global().join();
+    let shown = vault.join();
     loop {
         tokio::select! {
             ev = rx.recv() => match ev {
@@ -2204,6 +2677,10 @@ async fn forward_events(mut socket: WebSocket, mut rx: tokio::sync::broadcast::R
                 Some(Ok(Message::Text(t))) => {
                     if let Ok(s) = serde_json::from_str::<crate::notify::Seen>(&t) {
                         page.seen(s.seen);
+                        shown.seen(s.seen);
+                        if s.seen {
+                            unseen.lock().unwrap_or_else(|e| e.into_inner()).clear();
+                        }
                     }
                 }
                 Some(Ok(_)) => {}
@@ -2418,6 +2895,11 @@ async fn guard(State(st): S, mut req: Request, next: Next) -> Response {
         }
         return next.run(req).await;
     }
+    // a hook's call from outside (an ntfy button on a phone): no sign-in, no header — its signed token is checked by
+    // the handler (hooks.rs)
+    if crate::hooks::is_call(req.method(), vault_path(req.uri().path())) {
+        return next.run(req).await;
+    }
     if let Some(auth) = st.auth.clone() {
         return guard_server(&auth, req, next).await;
     }
@@ -2508,6 +2990,17 @@ async fn shell_show(State(st): S, body: Option<Json<crate::shell::ShowRequest>>)
     }
 }
 
+/// "Web tabs: forget sign-ins and site data" (shell.rs): the desktop app forgets every website's data, Kandinsky's own
+/// kept; 404 from a core with no such shell around it.
+async fn shell_forget_web_data() -> Result<Json<serde_json::Value>> {
+    let (tx, rx) = oneshot::channel();
+    if !crate::shell::forget_web_data(Box::new(move |r| drop(tx.send(r)))) {
+        return Err(Error::NotFound("only the desktop app on Linux keeps web tabs' site data apart to forget".into()));
+    }
+    let sites = rx.await.map_err(|_| Error::BadRequest("the window went away before the data was forgotten".into()))?.map_err(Error::BadRequest)?;
+    Ok(Json(serde_json::json!({ "sites": sites })))
+}
+
 /// Settings → Agents (agents.rs): this machine's agents, for a local core; a server's agents use device tokens.
 fn agents_of(st: &AppState) -> Result<crate::agents::Agents> {
     if st.auth.is_some() {
@@ -2563,6 +3056,13 @@ async fn guard_server(auth: &crate::auth::Auth, mut req: Request, next: Next) ->
         return next.run(req).await;
     }
     let h = req.headers();
+    // the gate key is this request's credential: checked by the handler (device_by_gate_key), not as a sign-in
+    if path == "/api/auth/device" && req.method() == axum::http::Method::POST {
+        if !crate::auth::has_api_header(h) {
+            return forbidden("missing header x-kandinsky: 1");
+        }
+        return next.run(req).await;
+    }
     if crate::auth::header(h, crate::auth::CLIENT_HEADER).is_some_and(|v| v == "mcp") && !auth.settings().mcp {
         return forbidden("AI agents (kandinsky mcp) are off on this server: Settings → Server");
     }
@@ -2588,6 +3088,7 @@ async fn guard_server(auth: &crate::auth::Auth, mut req: Request, next: Next) ->
             return forbidden("missing header x-kandinsky: 1");
         }
     }
+    crate::hooks::seen(h); // the address the person's devices reach this server by, for hooks' links
     req.extensions_mut().insert(who);
     next.run(req).await
 }
@@ -2676,6 +3177,7 @@ async fn login_post(State(st): S, axum::extract::ConnectInfo(peer): axum::extrac
         }
         Ok(Err(Refused::NoPassword)) => login_page(&st, &next, Some("This server signs in through its proxy only."), StatusCode::FORBIDDEN),
         Ok(Err(Refused::PlainHttp)) => login_page(&st, &next, Some("Not over plain HTTP: open this server through HTTPS (allow_plain_http in its server.toml allows it on a trusted network)."), StatusCode::FORBIDDEN),
+        Ok(Err(Refused::NoGateKey)) => login_page(&st, &next, Some("Wrong password."), StatusCode::UNAUTHORIZED), // (said by the gate key's path only)
         Err(e) => login_page(&st, &next, Some(&e.to_string()), StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
@@ -2725,11 +3227,11 @@ async fn server_get(State(st): S) -> Result<Json<ServerState>> {
             mcp: s.mcp,
         },
         has_password: s.password_hash.is_some(),
+        gate_key_header: s.gate_key.as_ref().map(|g| g.header.clone()),
         tokens: a.tokens().iter().map(|t| IssuedToken::of(t, true)).collect(),
         sessions: a.session_count(),
         files: ServerFiles { settings: crate::auth::settings_file().display().to_string(), state: crate::auth::state_file().display().to_string() },
         not_ready: a.not_ready(),
-        gate_key_header: None,
     }))
 }
 
@@ -2737,7 +3239,7 @@ async fn server_options_put(State(st): S, Json(o): Json<ServerOptions>) -> Resul
     let proxies = o.trusted_proxies.iter().map(|p| p.trim()).filter(|p| !p.is_empty()).map(|p| p.parse().map_err(Error::BadRequest)).collect::<Result<Vec<_>>>()?;
     let header = Some(o.remote_user_header.trim().to_string()).filter(|h| !h.is_empty() && h != "Remote-User");
     let a = auth_of(&st)?;
-    let new = crate::auth::ServerSettings { auth: o.auth, trusted_proxies: proxies, remote_user_header: header, allow_plain_http: o.allow_plain_http, mcp: o.mcp, password_hash: None };
+    let new = crate::auth::ServerSettings { auth: o.auth, trusted_proxies: proxies, remote_user_header: header, allow_plain_http: o.allow_plain_http, mcp: o.mcp, password_hash: None, gate_key: None };
     tokio::task::spawn_blocking(move || a.set_options(new)).await.map_err(|e| Error::Other(e.into()))?.map_err(Error::Other)?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -2751,6 +3253,22 @@ struct PasswordChange {
 async fn server_password_post(State(st): S, Json(p): Json<PasswordChange>) -> Result<StatusCode> {
     let a = auth_of(&st)?;
     tokio::task::spawn_blocking(move || a.set_password(p.current.as_deref(), &p.new))
+        .await
+        .map_err(|e| Error::Other(e.into()))?
+        .map_err(|e| Error::BadRequest(e.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(serde::Deserialize)]
+struct GateKeySet {
+    header: String,
+    /// `None` forgets the key
+    key: Option<String>,
+}
+
+async fn server_gate_key_put(State(st): S, Json(g): Json<GateKeySet>) -> Result<StatusCode> {
+    let a = auth_of(&st)?;
+    tokio::task::spawn_blocking(move || a.set_gate_key(&g.header, g.key.as_deref()))
         .await
         .map_err(|e| Error::Other(e.into()))?
         .map_err(|e| Error::BadRequest(e.to_string()))?;
@@ -2795,6 +3313,38 @@ struct AppQuery {
 
 /// A refusal of the sign-in step: its status and why.
 type Refused = (StatusCode, String);
+
+#[derive(serde::Deserialize)]
+struct DeviceAsk {
+    /// `kandinsky` (the phone), `boox`, `capture` or `desktop` (a desktop opening a vault of this server)
+    app: String,
+    #[serde(default)]
+    name: String,
+}
+
+/// `POST /api/auth/device`: an app holding the gate's bypass key (in the header the gate checks, set on this server with
+/// `kandinsky server gate-key`) gets its device token — the sign-in of Kandinsky's own apps when the gate lets them past
+/// without its page. Before the guard asks who it is (the key is the credential), `x-kandinsky: 1` still required.
+async fn device_by_gate_key(State(st): S, axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>, h: HeaderMap, Json(ask): Json<DeviceAsk>) -> Response {
+    use crate::auth::{Refused as No, Scope};
+    let Some(auth) = st.auth.clone() else { return forbidden("not a server") };
+    let (label, scope) = match APPS.iter().find(|a| a.0 == ask.app) {
+        Some(a) => (a.1, a.3),
+        None if ask.app == "desktop" => ("Kandinsky desktop", Scope::Full),
+        None => return (StatusCode::BAD_REQUEST, Json(ApiError { error: format!("no app called {}", ask.app), mtime: None })).into_response(),
+    };
+    let base = if ask.name.trim().is_empty() { label.to_string() } else { format!("{} ({label})", ask.name.trim()) };
+    let name = format!("{base} · {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
+    let said = |status: StatusCode, why: String| (status, Json(ApiError { error: why, mtime: None })).into_response();
+    match tokio::task::spawn_blocking(move || auth.device_by_gate_key(peer, &h, &name, scope)).await {
+        Ok(Ok(token)) => (StatusCode::OK, [(header::CACHE_CONTROL, "no-store")], Json(serde_json::json!({ "token": token, "scope": scope_word(scope) }))).into_response(),
+        Ok(Err(No::Wait(d))) => said(StatusCode::TOO_MANY_REQUESTS, format!("too many wrong keys: try again in {} s", d.as_secs().max(1))),
+        Ok(Err(No::PlainHttp)) => said(StatusCode::FORBIDDEN, "the gate's key only over HTTPS".into()),
+        Ok(Err(No::NoGateKey)) => said(StatusCode::NOT_FOUND, "this server takes no gate key (kandinsky server gate-key sets one)".into()),
+        Ok(Err(No::Wrong | No::NoPassword)) => said(StatusCode::UNAUTHORIZED, "not the gate's key".into()),
+        Err(e) => said(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
 
 fn refused(r: Refused) -> Response {
     (r.0, Json(ApiError { error: r.1, mtime: None })).into_response()
@@ -2877,6 +3427,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/tree", get(tree))
         .route("/api/files", get(files_get))
         .route("/api/exists", get(exists_get))
+        .route("/api/file/made", get(file_made_get))
         // a drawing's pictures travel inside it: files.rs `text_limit` says what each kind may be
         .route("/api/file", get(file_get).put(file_put).layer(DefaultBodyLimit::max(files::MAX_DRAWING_BYTES as usize + 1024 * 1024)))
         // PDFs can exceed the global JSON limit; 512 MB covers scanned books.
@@ -2897,7 +3448,10 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/plugins/{id}/remove", post(plugin_remove_post))
         .route("/api/plugins/{id}/fetch", post(plugin_fetch_post))
         .route("/api/plugins/{id}/media", post(plugin_media_post))
+        .route("/api/plugins/{id}/media/progress", post(plugin_media_progress_post))
         .route("/media/{ticket}", get(media_get))
+        .route("/api/player/mpv", get(mpv_state).post(mpv_post))
+        .route("/api/player/mpv/frame", get(mpv_frame))
         .route("/plugin-files/{rev}/{*path}", get(plugin_file_get))
         .route("/api/plugins/{id}/contributions", get(plugin_contributions_get))
         .route("/api/plugins/{id}/helper", get(plugin_helper_get).post(plugin_helper_post))
@@ -2905,6 +3459,8 @@ fn router(state: Arc<AppState>) -> Router {
         // an older one killed them, and the page then asks before reloading
         .route("/api/ui/build", get(|| async { Json(serde_json::json!({ "build": crate::ui_files::build(), "terminals_survive": true })) }))
         .route("/api/plugins/{id}/tools/{name}", post(plugin_tool_post))
+        .route("/api/plugins/{id}/hooks/sign", post(plugin_hook_sign))
+        .route("/api/plugins/{id}/hook/{name}", post(plugin_hook_call))
         .route("/api/plugins/{id}/helper/stop", post(plugin_helper_stop))
         .route("/api/plugins/{id}/secrets", get(plugin_secrets_get))
         .route("/api/plugins/{id}/secrets/{name}", get(plugin_secret_get).put(plugin_secret_put).delete(plugin_secret_delete))
@@ -2934,6 +3490,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/security/binaries/decide", post(security_binaries_decide_post))
         .route("/api/note/templates", get(note_templates))
         .route("/api/search", get(search_get))
+        .route("/api/search/plugins", get(search_plugins_get))
         .route("/api/replace", post(replace_post))
         .route("/api/commands", get(commands_get).post(commands_post))
         .route("/api/keys", get(keys_get).put(keys_put))
@@ -2942,15 +3499,22 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/signin/door", post(signin_door_post))
         .route("/api/signin/doors", get(signin_doors_get))
         .route("/api/signin/doors/{host}", delete(signin_door_delete))
+        .route("/api/signin/bypass", get(signin_bypass_get).put(signin_bypass_put).delete(signin_bypass_delete))
         .route("/api/signin/tokens", get(signin_tokens_get))
         .route("/api/signin/tokens/{key}", delete(signin_token_delete))
         .route("/signin/door", get(signin_door_page))
         .route("/api/events", get(events_ws))
         .route("/api/live", get(live_ws))
+        .route("/api/where", get(where_get))
+        .route("/api/libraries", get(libraries_get))
+        .route("/api/libraries/add", post(libraries_add))
+        .route("/api/library", get(library_get))
         .route("/api/lease/ask", post(lease_ask))
         .route("/api/lease/done", post(lease_done).layer(DefaultBodyLimit::max(crate::mirror_guard::CARRY_MAX as usize * 4 / 3 + 64 * 1024)))
         .route("/api/lease/file", post(lease_file))
         .route("/api/lease/versions", post(lease_versions))
+        .route("/api/lease/presence", post(lease_presence))
+        .route("/api/lease/notices", post(lease_notices))
         .route("/api/web/frameable", get(web_frameable_get))
         .route("/remote/{host}/{*rest}", axum::routing::any(remote_any))
         .route("/api/pty", get(pty_ws))
@@ -2969,6 +3533,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/pdf-of-note", get(pdf_of_note_get))
         .route("/api/pdf-export", post(pdf_export_post))
         .route("/api/refs/relink", post(refs_relink_post))
+        .route("/api/pdf-column", post(pdf_column_post))
         .route("/api/typst/svg", post(typst_svg_post))
         .route("/api/backlinks", get(backlinks_get))
         .route("/api/link-targets", get(link_targets_get))
@@ -2987,9 +3552,12 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/vaults/forget", post(vaults_forget_post))
         .route("/api/vaults/pick", post(vaults_pick_post))
         .route("/api/vaults/mirror", post(vaults_mirror_post))
+        .route("/api/vaults/always-on", post(vaults_always_on_post))
         .route("/api/vaults/active", post(vaults_active_post))
         .route("/api/guest", get(guest_get))
         .route("/api/guest/edit", post(guest_edit_post))
+        .route("/api/guests", get(guests_get))
+        .route("/api/guests/close", post(guests_close_post))
         .route("/api/usage", post(usage_post))
         .route("/api/tools/suggestions", get(tools_suggestions_get))
         .route("/api/tools/keep", post(tools_keep_post))
@@ -2998,12 +3566,22 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/graph", get(graph_get))
         .route("/api/tags", get(tags_get))
         .route("/api/tags/rename", post(tags_rename))
+        .route("/api/tasks", get(tasks_get))
+        .route("/api/task/block", post(task_block))
+        .route("/api/task/schedule", post(task_schedule))
+        .route("/api/device", get(device_get))
         .route("/api/task/tick", post(task_tick))
         .route("/api/task/line", post(task_line))
+        .route("/api/notices", get(notices_get))
+        .route("/api/notices/action", post(notice_press))
+        .route("/api/notices/withdraw", post(notices_withdraw))
+        .route("/api/task/render", post(task_render))
         .route("/api/fs/mkdir", post(fs_mkdir))
         .route("/api/fs/upload", post(fs_upload).layer(DefaultBodyLimit::max(1024 * 1024 * 1024)))
         .route("/api/fs/move", post(fs_move))
         .route("/api/fs/trash", post(fs_trash))
+        .route("/api/sync/conflicts", get(sync_conflicts_get))
+        .route("/api/sync/state", get(sync_state_get))
         .route("/api/fs/reveal-outside", post(fs_reveal_outside))
         .route("/api/open-outside", post(open_outside_post))
         .route("/api/desktop/capture-key", get(capture_key_get).post(capture_key_post))
@@ -3036,9 +3614,11 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/ui/log", post(ui_log_post))
         .route("/login", get(login_get).post(login_post))
         .route("/api/auth/me", get(auth_me))
+        .route("/api/auth/device", post(device_by_gate_key))
         .route("/api/version", get(|| async { Json(version_info()) }))
         .route("/api/local/link", post(local_link))
         .route("/api/shell/show", post(shell_show))
+        .route("/api/shell/forget-web-data", post(shell_forget_web_data))
         .route("/api/words/{lang}", get(words_get))
         .route("/api/agents", get(agents_get).post(agents_post))
         .route("/api/agents/terminals", put(agents_terminals_put))
@@ -3048,6 +3628,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/server", get(server_get))
         .route("/api/server/options", put(server_options_put))
         .route("/api/server/password", post(server_password_post))
+        .route("/api/server/gate-key", put(server_gate_key_put))
         .route("/api/server/tokens", post(server_token_post))
         .route("/api/server/tokens/{name}", axum::routing::delete(server_token_delete))
         .route("/api/server/signout-all", post(server_signout_all))
@@ -3107,17 +3688,20 @@ struct VaultRun {
     notices: Option<tokio::task::JoinHandle<()>>,
     pdf_refresh: tokio::task::JoinHandle<()>,
     keep_alive: tokio::task::JoinHandle<()>,
+    /// Its planned notices (planned.rs: events' reminders), fired where notices reach a person.
+    planned: Option<tokio::task::JoinHandle<()>>,
+    /// The buttons pressed on its notifications (notice_actions.rs), answered where they are shown.
+    pressed: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl VaultRun {
     fn abort_tasks(&self) {
-        self.scheduler.abort();
-        self.hooks.abort();
-        self.merges.abort();
-        if let Some(n) = &self.notices {
-            n.abort();
+        for t in [&self.scheduler, &self.hooks, &self.merges, &self.pdf_refresh] {
+            t.abort();
         }
-        self.pdf_refresh.abort();
+        for t in [&self.notices, &self.planned, &self.pressed].into_iter().flatten() {
+            t.abort();
+        }
         self.keep_alive.abort();
     }
 
@@ -3304,7 +3888,7 @@ pub async fn serve_vaults(vaults: Vaults, listen: Listen) -> anyhow::Result<Serv
             let names: Vec<String> = list.iter().map(|v| v.name.clone()).collect();
             let st = first_state.expect("at least one vault");
             // `/` → the first vault; the sign-in and the app's files (scripts, styles) are shared by all
-            let signin = Router::new().route("/login", get(login_get).post(login_post)).with_state(st.clone());
+            let signin = Router::new().route("/login", get(login_get).post(login_post)).route("/api/auth/device", post(device_by_gate_key)).with_state(st.clone());
             let top = top
                 .route("/", get(move || async move { axum::response::Redirect::to(&format!("/v/{first}/")) }))
                 .merge(signin)
@@ -3375,6 +3959,10 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
     if let Err(e) = crate::vault_write::ignored_folder(&ws.cache_dir(), "Kandinsky's caches, rebuilt from the vault") {
         eprintln!("kandinsky: {}: {e}", ws.cache_dir().display());
     }
+    // a vault Syncthing shares keeps this device's state to itself on every device that serves it (phone, server)
+    if let Err(e) = crate::sync_ignore::ensure(ws.root()) {
+        eprintln!("kandinsky: {}: Syncthing's ignore patterns not added: {e}", ws.root().display());
+    }
     let server_file = ws.cache_dir().join("server.json");
     let sf = ServerFile { port, pid: std::process::id(), root: ws.root().to_string_lossy().into_owned(), path: prefix.to_string() };
     vault_write::cache::write(&server_file, serde_json::to_string_pretty(&sf)?.as_bytes())?;
@@ -3405,7 +3993,12 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
     let scheduler = crate::schedule::spawn(ws.clone(), bus.clone(), helpers.clone());
     let hooks = crate::capture_hooks::spawn(ws.clone(), bus.clone(), helpers.clone());
     let merges = crate::sync_merge::spawn(ws.clone(), bus.clone()); // Syncthing's conflict copies merged (DESIGN-mirror-v2 §4)
+    if served.is_none() {
+        crate::notify::Presence::global().watch(); // a server has no person at it: its presence is its devices' (slice 7)
+    }
     let notices = served.is_none().then(|| crate::notify::spawn(ws.clone(), bus.clone(), crate::notify::Presence::global(), crate::notify::platform(&bus)));
+    let planned = served.is_none().then(|| crate::planned::spawn(ws.clone(), bus.clone(), helpers.clone()));
+    let pressed = served.is_none().then(|| crate::notice_actions::spawn(ws.clone(), bus.clone(), helpers.clone()));
     // a server's lease table outlives a restart (lease.rs `kept_in`); a desktop's core keeps none
     let leases = Arc::new(if served.is_some() { crate::lease::Leases::kept_in(ws.cache_dir().join("leases.json")) } else { Default::default() });
     // the sign-ins kept for plugins visited now and then, so a gate's idle limit never ends them between uses
@@ -3423,10 +4016,13 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
         served,
         live: Default::default(),
         media: Default::default(),
+        mpv: Default::default(),
         desktop: Default::default(),
         leases,
         leasing: std::sync::Once::new(),
     });
+    // the mirror guard's refused leases and failed catch-ups become this vault's notices (sync_state.rs)
+    crate::sync_state::SyncState::of(state.ws.root()).attach(state.bus.clone());
     if state.served.is_none() {
         crate::mirror_guard::install_for_mirror(&state.ws); // a local vault with a copy on a server asks it before writing
         crate::guest::install(&state.ws); // a guest folder: read-only until its window's Edit switch
@@ -3444,7 +4040,7 @@ fn start_vault(root: &std::path::Path, port: u16, auth: Option<Arc<crate::auth::
     crate::plugins::hide_legacy_rails(state.ws.root());
     // no window is connected yet: a helper whose program awaits approval starts when the first one is (events_ws)
     state.helpers.start_with_vault(crate::plugins::helpers_started_with_vault(state.ws.root(), &off));
-    Ok((routes, VaultRun { server_file, _watcher: watcher, helpers, scheduler, hooks, merges, notices, pdf_refresh, keep_alive }, state))
+    Ok((routes, VaultRun { server_file, _watcher: watcher, helpers, scheduler, hooks, merges, notices, pdf_refresh, keep_alive, planned, pressed }, state))
 }
 
 /// Builds an in-process vault router for offline helper callbacks (`kandinsky mcp`, CLI helper calls)
@@ -3464,6 +4060,7 @@ pub fn standalone_helper_router(ws: Workspace, bus: EventBus, helpers: crate::he
         served: None,
         live: Default::default(),
         media: Default::default(),
+        mpv: Default::default(),
         desktop: Default::default(),
         leases: Default::default(),
         leasing: std::sync::Once::new(),

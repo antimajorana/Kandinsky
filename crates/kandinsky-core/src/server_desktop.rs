@@ -45,6 +45,8 @@ impl DesktopVaults {
     pub(super) fn new(first: &Path, port: u16, lock: Option<Arc<crate::local_lock::LocalLock>>, list: PathBuf) -> Arc<Self> {
         let d = Arc::new(DesktopVaults { port, lock, list, names: Mutex::new(Vec::new()), started: Default::default() });
         d.name_for(first);
+        // the window comes back to its own vault after any time in another: its note index is never dropped
+        crate::links::keep_warm(&canonical(first));
         d.refresh();
         d
     }
@@ -94,18 +96,32 @@ impl DesktopVaults {
         self.started.try_lock().is_ok_and(|s| s.contains_key(&name))
     }
 
-    /// The other local vaults on the list, started one after another a while after the window's own: the first switch to
-    /// one is then a page load, not a vault's start (its index, watcher and plugins). One that will not start, or that
-    /// another Kandinsky serves, is left for its first request to say why. A test's core starts nothing ahead.
+    /// The other local vaults marked "always on" ([`ahead_of`]), started one after another a while after the window's own: the
+    /// first switch to one is then a page load, not a vault's start (its watcher, plugins and scheduler). Each one's note
+    /// index is then built in the background at the lowest priority, so the switch's first graph, backlinks or Bases
+    /// find it built too. One that will not start, or that another Kandinsky serves, is left for its first request to say
+    /// why. A test's core starts nothing ahead.
     pub(super) async fn start_ahead(self: Arc<Self>, after: std::time::Duration) {
         if crate::env::var_os("NO_SCHEDULE").is_some() {
             return;
         }
         tokio::time::sleep(after).await;
         self.refresh();
-        let names: Vec<String> = self.names.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|(n, _)| n.clone()).collect();
-        for name in names {
-            let _ = self.router(&name).await;
+        let first = self.names.lock().unwrap_or_else(|e| e.into_inner())[0].1.clone(); // kept canonical
+        for root in ahead_of(&crate::vaults::list(&self.list), &first) {
+            self.start(&root).await;
+        }
+    }
+
+    /// Starts the vault at `root` now (its watcher, plugins, scheduler) and builds its note index in the background:
+    /// one marked "always on", at the app's start or the moment it is marked.
+    pub(super) async fn start(self: &Arc<Self>, root: &Path) {
+        let name = self.name_for(root);
+        if self.router(&name).await.is_ok() {
+            match crate::workspace::Workspace::open(root).and_then(|ws| Ok((ws.config()?, ws))) {
+                Ok((cfg, ws)) => crate::links::warm_in_background(ws.root(), &cfg),
+                Err(e) => eprintln!("kandinsky: note index of {} not built ahead: {e}", root.display()),
+            }
         }
     }
 
@@ -170,6 +186,18 @@ impl DesktopVaults {
         }
     }
 
+    /// The vault at `root` no longer served: its tasks stopped, its name forgotten (a guest closed; opened again, it starts
+    /// afresh under a name of its own). Requests already inside its router finish; the watcher goes with the last of them.
+    pub(super) async fn close(&self, root: &Path) {
+        let root = canonical(root);
+        let name = self.names.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(_, r)| *r == root).map(|(n, _)| n.clone());
+        let Some(name) = name else { return };
+        if let Some(s) = self.started.lock().await.remove(&name) {
+            s.run.stop();
+        }
+        self.names.lock().unwrap_or_else(|e| e.into_inner()).retain(|(n, _)| *n != name);
+    }
+
     /// For a clean stop: what runs for each started vault.
     pub(super) async fn runs(&self) -> Vec<Arc<Started>> {
         self.started.lock().await.values().cloned().collect()
@@ -196,6 +224,14 @@ impl Started {
     }
 }
 
+/// The vaults `start_ahead` starts: local ones on the list marked "always on" that exist and are not `first` (the window's
+/// own, already started). The others start on their first request (a few tens of ms on a vault of thousands of notes,
+/// docs/decisions/PERFORMANCE.md "Two vaults open") and until then cost nothing: no watcher, no threads, no scheduler.
+/// The owner chooses which run in the background (each ≈ 6–9 MB and ≈ 10 ms of CPU a minute idle, measured).
+fn ahead_of(list: &[crate::vaults::Vault], first: &Path) -> Vec<PathBuf> {
+    list.iter().filter(|v| v.always_on && v.url.is_none() && !v.missing).map(|v| canonical(Path::new(&v.path))).filter(|root| root != first).collect()
+}
+
 fn not_here(name: &str) -> Response {
     (StatusCode::NOT_FOUND, axum::response::Html(format!("<!doctype html><meta charset=utf-8><title>Kandinsky</title><p>No vault called <b>{}</b> on this computer's list. <a href=\"/\">Back</a></p>", esc(name)))).into_response()
 }
@@ -219,4 +255,33 @@ pub(super) type DesktopLink = std::sync::OnceLock<std::sync::Weak<DesktopVaults>
 
 pub(super) fn of(st: &AppState) -> Option<Arc<DesktopVaults>> {
     st.desktop.get().and_then(std::sync::Weak::upgrade)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn vault(path: &Path, last_opened: i64) -> crate::vaults::Vault {
+        crate::vaults::Vault { name: String::new(), path: path.to_string_lossy().into_owned(), last_opened, missing: false, url: None, mirror: None, warm: false, always_on: true, unseen: None }
+    }
+
+    /// Only the vaults marked "always on" start with the app, however recently the others were opened; never the
+    /// window's own (already started), a missing folder or a server's vault.
+    #[test]
+    fn only_the_vaults_marked_always_on_start_with_the_app() {
+        let dir = tempfile::tempdir().unwrap();
+        let [own, on, off] = ["own", "on", "off"].map(|n| {
+            std::fs::create_dir(dir.path().join(n)).unwrap();
+            canonical(&dir.path().join(n))
+        });
+        let mut not_marked = vault(&off, 0);
+        not_marked.always_on = false;
+        let list = vec![vault(&own, 0), vault(&on, 0), not_marked];
+        assert_eq!(ahead_of(&list, &own), vec![on.clone()], "the marked one; not the one opened lately but unmarked");
+        let mut gone = vault(&on, 0);
+        gone.missing = true;
+        let mut remote = vault(&off, 0);
+        remote.url = Some("https://notes.example.org/v/work/".into());
+        assert!(ahead_of(&[gone, remote], &own).is_empty(), "a missing folder or a server's vault is never started here");
+    }
 }

@@ -55,28 +55,31 @@ fn said(status: StatusCode, json: serde_json::Value) -> Response {
 }
 
 /// One request to the server, answered as it answers — but a redirect (the gate's portal: not signed in, or the session
-/// ran out) is said as JSON the app understands (`signin`), never followed into its HTML.
+/// ran out) is said as JSON the app understands (`signin`), never followed into its HTML. Behind a gate whose key this
+/// device keeps, the server's own "sign in first" is answered here: a device token got with the key, and the request
+/// sent once more.
 pub async fn forward(store: &Store, base: &str, rest: &str, query: Option<&str>, method: Method, headers: &HeaderMap, body: Bytes) -> Response {
     let host = base.split("://").nth(1).unwrap_or(base);
     let Ok(url) = reqwest::Url::parse(&format!("{base}/{rest}{}", query.map(|q| format!("?{q}")).unwrap_or_default())) else {
         return said(StatusCode::BAD_REQUEST, serde_json::json!({ "error": "not an address" }));
     };
-    let mut req = client().request(method, url.clone()).header("accept-encoding", "identity");
-    for (k, v) in headers {
-        if !DROP.contains(&k.as_str()) && k != "accept-encoding" {
-            req = req.header(k, v);
+    if crate::service_signin::kandinsky_token(store, &url).ok().flatten().is_none() {
+        sign_in_by_key(store, base).await;
+    }
+    let mut res = match send(store, &url, &method, headers, body.clone()).await {
+        Ok(r) => r,
+        Err(e) => return *e,
+    };
+    if res.status() == reqwest::StatusCode::UNAUTHORIZED {
+        // a token the server no longer knows (revoked there), or none yet: a new one, if the key gets one
+        let _ = crate::service_signin::forget_kandinsky_token(store, &url);
+        if sign_in_by_key(store, base).await {
+            res = match send(store, &url, &method, headers, body).await {
+                Ok(r) => r,
+                Err(e) => return *e,
+            };
         }
     }
-    if let Ok(Some(c)) = crate::service_signin::cookie_header(store, &url) {
-        req = req.header("cookie", c);
-    }
-    let res = match req.body(body).send().await {
-        Ok(r) => r,
-        // `unsent`: the server never had the request (no connection), so the page may do it here instead; after a
-        // timeout it may have been done there — 504, never redone elsewhere
-        Err(e) if e.is_timeout() && !e.is_connect() => return said(StatusCode::GATEWAY_TIMEOUT, serde_json::json!({ "error": format!("{host} took too long: {e}") })),
-        Err(e) => return said(StatusCode::BAD_GATEWAY, serde_json::json!({ "error": format!("{host} did not answer: {e}"), "unsent": e.is_connect() })),
-    };
     if res.status().is_redirection() {
         return said(StatusCode::UNAUTHORIZED, serde_json::json!({ "error": format!("sign in to {host}"), "signin": { "url": format!("{base}/") } }));
     }
@@ -87,6 +90,58 @@ pub async fn forward(store: &Store, base: &str, rest: &str, query: Option<&str>,
         }
     }
     out.body(Body::from_stream(res.bytes_stream())).unwrap_or_else(|_| StatusCode::BAD_GATEWAY.into_response())
+}
+
+/// The request sent with the page's headers and what this device keeps for the server (the gate's session or key,
+/// Kandinsky's token; this client follows no redirect: none leaves the host); a failure already said as the answer.
+async fn send(store: &Store, url: &reqwest::Url, method: &Method, headers: &HeaderMap, body: Bytes) -> Result<reqwest::Response, Box<Response>> {
+    let host = url.host_str().unwrap_or_default();
+    let mut req = client().request(method.clone(), url.clone()).header("accept-encoding", "identity");
+    for (k, v) in headers {
+        if !DROP.contains(&k.as_str()) && k != "accept-encoding" && k != crate::auth::TOKEN_HEADER {
+            req = req.header(k, v);
+        }
+    }
+    if let Ok(kept) = crate::service_signin::site_headers(store, url) {
+        for (k, v) in kept.headers {
+            req = req.header(k, v);
+        }
+    }
+    req.body(body).send().await.map_err(|e| -> Box<Response> {
+        // `unsent`: the server never had the request (no connection), so the page may do it here instead; after a
+        // timeout it may have been done there — 504, never redone elsewhere
+        if e.is_timeout() && !e.is_connect() {
+            Box::new(said(StatusCode::GATEWAY_TIMEOUT, serde_json::json!({ "error": format!("{host} took too long: {e}") })))
+        } else {
+            Box::new(said(StatusCode::BAD_GATEWAY, serde_json::json!({ "error": format!("{host} did not answer: {e}"), "unsent": e.is_connect() })))
+        }
+    })
+}
+
+/// A device token from the server at `base` with the gate's key this device keeps for it
+/// (service_signin::kandinsky_token_by_gate_key): whether one was got. A server that refused, or a device without the
+/// key, is not asked again for a minute (every request of the page would ask it).
+pub async fn sign_in_by_key(store: &Store, base: &str) -> bool {
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+    static REFUSED: Mutex<Vec<(String, Instant)>> = Mutex::new(Vec::new());
+    {
+        let mut r = REFUSED.lock().unwrap_or_else(|e| e.into_inner());
+        r.retain(|(_, at)| at.elapsed() < Duration::from_secs(60));
+        if r.iter().any(|(b, _)| b == base) {
+            return false;
+        }
+    }
+    match crate::service_signin::kandinsky_token_by_gate_key(store, base, "desktop", &crate::platform::proc::hostname()).await {
+        Ok(_) => true,
+        Err(why) => {
+            if !matches!(why, crate::service_signin::NoToken::NoKey) {
+                eprintln!("kandinsky: no device token from {base} with the gate's key: {why:?}");
+            }
+            REFUSED.lock().unwrap_or_else(|e| e.into_inner()).push((base.to_string(), Instant::now()));
+            false
+        }
+    }
 }
 
 /// A WebSocket of the page piped to the same place on the server, both ways, until either side closes.
@@ -105,9 +160,16 @@ pub async fn connect(store: &Store, http: &str) -> Option<Upstream> {
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;
     let url = http.replacen("https://", "wss://", 1).replacen("http://", "ws://", 1);
     let mut req = url.as_str().into_client_request().ok()?;
-    let cookie = reqwest::Url::parse(http).ok().and_then(|u| crate::service_signin::cookie_header(store, &u).ok().flatten());
-    if let Some(c) = cookie.and_then(|c| c.parse().ok()) {
-        req.headers_mut().insert("cookie", c);
+    if let Ok(u) = reqwest::Url::parse(http) {
+        if crate::service_signin::kandinsky_token(store, &u).ok().flatten().is_none() {
+            sign_in_by_key(store, &u.origin().ascii_serialization()).await;
+        }
+    }
+    let kept = reqwest::Url::parse(http).ok().and_then(|u| crate::service_signin::site_headers(store, &u).ok());
+    for (k, v) in kept.map(|k| k.headers).unwrap_or_default() {
+        if let (Ok(k), Ok(v)) = (axum::http::HeaderName::from_bytes(k.as_bytes()), v.parse()) {
+            req.headers_mut().insert(k, v);
+        }
     }
     req.headers_mut().insert("x-kandinsky", axum::http::HeaderValue::from_static("1"));
     let connecting = tokio_tungstenite::connect_async(req);
@@ -151,7 +213,7 @@ mod tests {
     #[test]
     fn the_bridge_goes_to_the_listed_servers_and_the_mirrors_of_folders_only() {
         let v = |path: &str, url: Option<&str>, mirror: Option<&str>| crate::vaults::Vault {
-            name: "x".into(), path: path.into(), last_opened: 0, missing: false, url: url.map(Into::into), mirror: mirror.map(Into::into), warm: false,
+            name: "x".into(), path: path.into(), last_opened: 0, missing: false, url: url.map(Into::into), mirror: mirror.map(Into::into), warm: false, always_on: false, unseen: None,
         };
         let list = [v("/home/u/Work", None, Some("https://mirror.example.org/v/work/")), v("https://notes.example.org:8443/", Some("https://notes.example.org:8443/"), None)];
         assert_eq!(base_in(&list, "mirror.example.org").as_deref(), Some("https://mirror.example.org"));

@@ -292,6 +292,22 @@ async fn a_guest_folder_is_served_beside_the_vault_read_only_until_edit_and_neve
     std::fs::create_dir_all(other.join(".kandinsky")).unwrap();
     let as_vault: serde_json::Value = post("/v/Work/api/vaults/open", serde_json::json!({ "path": other, "guest": true })).await.unwrap().json().await.unwrap();
     assert!(as_vault["guest"].is_null(), "{as_vault}");
+
+    // listed from the vault's window, and closed from there without a restart: no longer served, its link gone, its
+    // files kept; opened again it is served afresh
+    let listed: serde_json::Value = get("/v/Work/api/guests").await.unwrap().json().await.unwrap();
+    let folder = listed[0]["folder"].as_str().unwrap().to_string();
+    assert_eq!(listed.as_array().map(Vec::len), Some(1), "{listed}");
+    assert!(post("/v/Work/api/guests/close", serde_json::json!({ "folder": folder })).await.unwrap().status().is_success());
+    assert_eq!(get(&format!("{at}/api/guest")).await.unwrap().status(), StatusCode::NOT_FOUND, "no longer served");
+    assert!(docs.join(".kandinsky").symlink_metadata().is_err() && docs.join("readme.md").is_file());
+    assert!(get("/v/Work/api/guests").await.unwrap().json::<serde_json::Value>().await.unwrap().as_array().unwrap().is_empty());
+    assert_eq!(post("/v/Work/api/guests/close", serde_json::json!({ "folder": folder })).await.unwrap().status(), StatusCode::NOT_FOUND);
+    let again: serde_json::Value = post("/v/Work/api/vaults/open", serde_json::json!({ "path": docs, "guest": true })).await.unwrap().json().await.unwrap();
+    let at = again["url"].as_str().unwrap().trim_end_matches('/').to_string();
+    let info: serde_json::Value = get(&format!("{at}/api/guest")).await.unwrap().json().await.unwrap();
+    assert_eq!(info["editing"], false, "read-only again: {info}");
+
     srv.shutdown().await.unwrap();
     assert_eq!(kandinsky_core::guest::sweep(), 1);
     assert!(docs.join(".kandinsky").symlink_metadata().is_err() && docs.join("readme.md").is_file());
@@ -349,4 +365,37 @@ async fn a_plugins_own_files_by_url_signed_in_and_inside_its_folder() {
     let r = http.get(format!("http://127.0.0.1:{}/plugin-files/0/.kandinsky/plugins/books/view.js", local.port())).send().await.unwrap();
     assert_eq!(r.status(), StatusCode::OK);
     local.shutdown().await.unwrap();
+}
+
+// Behind a gate that lets Kandinsky's apps past with its bypass key: the key alone gets a device token (no page), the
+// token then signs the app in; the key itself is no sign-in, a wrong one gets nothing, and the request needs x-kandinsky.
+#[tokio::test]
+async fn the_gates_key_gets_an_app_a_device_token_and_only_the_token_signs_in() {
+    let vault = tempfile::tempdir().unwrap();
+    std::fs::write(vault.path().join("note.md"), "# Note\n").unwrap();
+    let keys = tempfile::tempdir().unwrap();
+    let settings = ServerSettings { auth: AuthMode::Proxy, trusted_proxies: vec!["10.0.0.2".parse().unwrap()], ..Default::default() };
+    let auth = Auth::new(settings, keys.path().join("server.json"));
+    let key = "the-gate-bypass-key-0123456789";
+    auth.set_gate_key("X-Api-Key", Some(key)).unwrap();
+    let srv = serve_on(vault.path().to_path_buf(), Listen::Server { addr: "127.0.0.1:0".parse().unwrap(), auth: Box::new(auth) }).await.unwrap();
+    let base = format!("http://127.0.0.1:{}", srv.port());
+    let http = reqwest::Client::builder().redirect(redirect::Policy::none()).build().unwrap();
+    let ask = |k: &str| http.post(format!("{base}/api/auth/device")).header("x-kandinsky", "1").header("x-api-key", k).json(&serde_json::json!({ "app": "desktop", "name": "laptop" }));
+
+    assert_eq!(http.post(format!("{base}/api/auth/device")).header("x-api-key", key).json(&serde_json::json!({ "app": "desktop" })).send().await.unwrap().status(), StatusCode::FORBIDDEN, "x-kandinsky: 1 needed");
+    assert_eq!(ask("not-the-key-0123456789abcdef").send().await.unwrap().status(), StatusCode::UNAUTHORIZED);
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await; // the wait after a wrong key
+    let r = ask(key).send().await.unwrap();
+    assert_eq!(r.status(), StatusCode::OK);
+    let got: serde_json::Value = r.json().await.unwrap();
+    let token = got["token"].as_str().unwrap().to_string();
+    assert!(token.starts_with("atl_") && got["scope"] == "full", "{got}");
+    // the key is no sign-in; the token is
+    let file = |h: (&str, &str)| http.get(format!("{base}/api/file?path=note.md")).header("x-kandinsky", "1").header(h.0, h.1).send();
+    assert_eq!(file(("x-api-key", key)).await.unwrap().status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(file(("x-kandinsky-token", &token)).await.unwrap().status(), StatusCode::OK);
+    // an app the server does not know gets nothing
+    let odd = http.post(format!("{base}/api/auth/device")).header("x-kandinsky", "1").header("x-api-key", key).json(&serde_json::json!({ "app": "other" })).send().await.unwrap();
+    assert_eq!(odd.status(), StatusCode::BAD_REQUEST);
 }

@@ -13,9 +13,22 @@ use std::time::{Duration, Instant};
 /// How long a one-off write holds its lease: plenty for one write, short enough that a vanished device frees it soon.
 pub const HOLD: Duration = Duration::from_secs(30);
 
-/// The server could not be asked (no network, signed out, an old server without `/api/lease`).
+/// The server could not be asked (no network, signed out, an old server without `/api/lease`): why, and whether its
+/// sign-in gate turned the request away (a sign-in helps; waiting does not).
 #[derive(Debug)]
-pub struct Unreachable(pub String);
+pub struct Unreachable {
+    pub why: String,
+    pub signin: bool,
+}
+
+impl Unreachable {
+    pub fn new(why: impl Into<String>) -> Self {
+        Self { why: why.into(), signin: false }
+    }
+    fn signin(why: impl Into<String>) -> Self {
+        Self { why: why.into(), signin: true }
+    }
+}
 
 /// Where the leases are kept.
 pub trait LeaseLink: Send + Sync {
@@ -31,11 +44,24 @@ pub trait LeaseLink: Send + Sync {
     }
     /// The server's copy of `path` (`None`: it has none), to bring this copy up to the last version.
     fn fetch(&self, path: &str) -> std::result::Result<Option<Vec<u8>>, Unreachable> {
-        Err(Unreachable(format!("{path}: this link carries no files")))
+        Err(Unreachable::new(format!("{path}: this link carries no files")))
+    }
+    /// Whether the server answers, for a link that carries nothing (its catch-up has nothing to ask): the sync state
+    /// (sync_state.rs) says so. The server's own link and the tests' doubles always answer.
+    fn ping(&self) -> std::result::Result<(), Unreachable> {
+        Ok(())
     }
     /// The server's recent versions, `path → (last, the versions it replaced)`: what a catch-up compares this copy with.
     fn versions(&self) -> std::result::Result<Vec<Recent>, Unreachable> {
-        Err(Unreachable("this link carries no files".into()))
+        Err(Unreachable::new("this link carries no files"))
+    }
+    /// This device's presence told to the server; everyone's back (crate::devices). Only a device's link reports.
+    fn report(&self, _me: &crate::devices::Device) -> std::result::Result<Vec<crate::devices::Device>, Unreachable> {
+        Err(Unreachable::new("this link reports no presence"))
+    }
+    /// This device's notices handed to the server, everyone else's back (crate::notice_relay). Only a device's link.
+    fn notices(&self, _q: crate::notice_relay::Exchange) -> std::result::Result<crate::notice_relay::Answer, Unreachable> {
+        Err(Unreachable::new("this link relays no notices"))
     }
 }
 
@@ -83,6 +109,10 @@ pub struct LeaseGuard<L> {
     /// Until when the server is taken as unreachable: writes meanwhile are made here only without asking (each ask
     /// would wait for its timeout, seconds per autosave, on a network that drops the server's packets).
     offline_until: Mutex<Option<Instant>>,
+    /// What the asks and catch-ups saw, for `GET /api/sync/state` and the notices (sync_state.rs).
+    state: Arc<crate::sync_state::SyncState>,
+    /// The server as the notices name it (`notes.example.org`).
+    server: String,
 }
 
 /// How long a server that did not answer is left alone.
@@ -118,7 +148,15 @@ impl<L: LeaseLink> LeaseGuard<L> {
             poll: Duration::from_millis(250),
             granted: Mutex::default(),
             offline_until: Mutex::default(),
+            state: crate::sync_state::SyncState::of(root),
+            server: "the server".into(),
         }
+    }
+
+    /// The server's name in the notices.
+    pub fn naming(mut self, server: &str) -> Self {
+        self.server = server.to_string();
+        self
     }
 
     #[cfg(test)]
@@ -144,10 +182,12 @@ impl<L: LeaseLink> LeaseGuard<L> {
                 return Err(Error::Conflict { current: None });
             }
             if self.offline_until.lock().unwrap_or_else(|e| e.into_inner()).is_some_and(|t| Instant::now() < t) {
+                self.state.written_here_only();
                 return Ok(()); // the server just failed to answer: written here only, at once
             }
             let why = match self.link.ask(rel, have) {
                 Ok(Answer::Granted) => {
+                    self.state.answered();
                     let mut g = self.granted.lock().unwrap_or_else(|e| e.into_inner());
                     let held = g.entry(rel.to_string()).or_default();
                     held.writes += 1;
@@ -155,27 +195,44 @@ impl<L: LeaseLink> LeaseGuard<L> {
                     MINE.with(|m| m.borrow_mut().push(self.root.join(rel)));
                     return Ok(());
                 }
-                Err(Unreachable(e)) => {
-                    eprintln!("kandinsky: mirror: no lease for {rel} ({e}); written here only, without asking for {}s", OFFLINE_FOR.as_secs());
+                Err(e) => {
+                    eprintln!("kandinsky: mirror: no lease for {rel} ({}); written here only, without asking for {}s", e.why, OFFLINE_FOR.as_secs());
+                    self.state.unreachable(&self.server, &e.why, e.signin);
+                    self.state.written_here_only();
                     *self.offline_until.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now() + OFFLINE_FOR);
                     return Ok(());
                 }
-                Ok(Answer::Wait(why)) => why,
+                Ok(Answer::Wait(why)) => {
+                    self.state.answered();
+                    why
+                }
             };
             // behind: the server's copy brought here at once (no Syncthing needed); a change computed from the old copy
             // then fails as before (the caller reads again, now the last version), an addition goes on top of it
+            let mut newer = crate::sync_state::Newer::Syncthing;
             if let Why::Behind { last } = &why {
-                if self.pull(rel, last) && adds {
-                    continue;
+                if self.pull(rel, last) {
+                    if adds {
+                        continue;
+                    }
+                    newer = crate::sync_state::Newer::Here;
+                } else if self.link.carries() {
+                    newer = crate::sync_state::Newer::ServerDisk;
                 }
             }
             match &why {
-                Why::Behind { .. } if !adds => return Err(Error::Conflict { current: None }),
+                Why::Behind { .. } if !adds => {
+                    self.state.refused(rel, crate::sync_state::Refused::Behind { newer });
+                    return Err(Error::Conflict { current: None });
+                }
                 _ if Instant::now() >= until => {
-                    return Err(Error::Other(anyhow::anyhow!(match why {
-                        Why::HeldBy(h) => format!("{rel} is being written by {h}; try again in a moment"),
-                        Why::Behind { .. } => format!("{rel}: Syncthing has not brought the server's newer copy yet"),
-                    })))
+                    let refused = match &why {
+                        Why::HeldBy(h) => crate::sync_state::Refused::Held { by: h.clone() },
+                        Why::Behind { .. } => crate::sync_state::Refused::Behind { newer },
+                    };
+                    self.state.refused(rel, refused.clone());
+                    // the writer's error says the same as the notice: what happened, what to do
+                    return Err(Error::Other(anyhow::anyhow!("{rel} was not saved. {}", crate::sync_state::refusal_words(&refused))));
                 }
                 _ => std::thread::sleep(self.poll),
             }
@@ -246,8 +303,9 @@ impl<L: LeaseLink> LeaseGuard<L> {
         }
         let got = match self.link.fetch(rel) {
             Ok(got) => got,
-            Err(Unreachable(e)) => {
-                eprintln!("kandinsky: mirror: could not bring {rel} from the server ({e})");
+            Err(e) => {
+                eprintln!("kandinsky: mirror: could not bring {rel} from the server ({})", e.why);
+                self.state.unreachable(&self.server, &e.why, e.signin);
                 return false;
             }
         };
@@ -275,11 +333,22 @@ impl<L: LeaseLink> LeaseGuard<L> {
     /// A catch-up (at start, then now and then): every path the server wrote lately that this copy has an older
     /// version of — one it held before (its base), one the table saw replaced, or none — brought here. A path changed
     /// here meanwhile (offline) is left alone: its next write is behind, and merged (§4).
+    /// What it found goes into the sync state; a link that carries nothing only learns whether the server answers.
     pub fn catch_up(&self) -> usize {
-        if !self.link.carries() {
-            return 0;
-        }
-        let Ok(recent) = self.link.versions() else { return 0 };
+        let asked = if self.link.carries() { self.link.versions() } else { self.link.ping().map(|()| vec![]) };
+        let recent = match asked {
+            Ok(r) => {
+                self.state.answered();
+                r
+            }
+            Err(e) => {
+                self.state.unreachable(&self.server, &e.why, e.signin);
+                if self.link.carries() {
+                    self.state.caught_up(Err(e.why));
+                }
+                return 0;
+            }
+        };
         let mut brought = 0;
         for r in recent {
             if in_state(&r.path, "cache/")
@@ -297,6 +366,9 @@ impl<L: LeaseLink> LeaseGuard<L> {
             if older && self.pull(&r.path, &r.version) {
                 brought += 1;
             }
+        }
+        if self.link.carries() {
+            self.state.caught_up(Ok(brought));
         }
         brought
     }
@@ -480,7 +552,7 @@ impl AnswerBody {
             (true, None, false) => Ok(Answer::Granted),
             (false, Some(h), false) => Ok(Answer::Wait(Why::HeldBy(h))),
             (false, None, true) => Ok(Answer::Wait(Why::Behind { last: self.last })),
-            _ => Err(Unreachable("the server's lease answer makes no sense".into())),
+            _ => Err(Unreachable::new("the server's lease answer makes no sense")),
         }
     }
 }
@@ -495,7 +567,9 @@ pub struct Remote {
 }
 
 /// Who moves a mirrored vault's bytes between this copy and the server's. The lease is the same either way.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, ts_rs::TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum Bytes {
     /// No Syncthing here: the lease carries each write's content, a copy behind is pulled (step 7).
     Mirror,
@@ -516,9 +590,17 @@ impl Remote {
     /// One blocking call. Run on its own thread: the guard is called from inside the core's async runtime, where a
     /// blocking client may not start its own.
     fn post<B: serde::Serialize + Send + 'static>(&self, what: &str, body: B) -> std::result::Result<String, Unreachable> {
-        let url = reqwest::Url::parse(&format!("{}api/lease/{what}", self.mirror)).map_err(|e| Unreachable(e.to_string()))?;
-        let cookie = crate::service_signin::cookie_header(&self.store, &url).ok().flatten();
+        let url = reqwest::Url::parse(&format!("{}api/lease/{what}", self.mirror)).map_err(|e| Unreachable::new(e.to_string()))?;
+        let (store, origin) = (self.store.clone(), url.origin().ascii_serialization());
         std::thread::spawn(move || {
+            // behind a gate whose key this device keeps: Kandinsky's device token got with it first (remote_bridge)
+            if crate::service_signin::kandinsky_token(&store, &url).ok().flatten().is_none() && crate::service_signin::bypass_header(&store, &url).ok().flatten().is_some() {
+                if let Ok(rt) = tokio::runtime::Builder::new_current_thread().enable_all().build() {
+                    rt.block_on(crate::remote_bridge::sign_in_by_key(&store, &origin));
+                }
+            }
+            // the gate's session and its bypass key, Kandinsky's token (this client follows no redirect)
+            let kept = crate::service_signin::site_headers(&store, &url).map(|k| k.headers).unwrap_or_default();
             // one client for every call: its kept connection spares each write two TCP + TLS handshakes; made (and, being
             // static, never dropped) off the async runtime, where a blocking client may not start or end
             static CLIENT: std::sync::OnceLock<std::result::Result<reqwest::blocking::Client, String>> = std::sync::OnceLock::new();
@@ -528,31 +610,53 @@ impl Remote {
                         .redirect(reqwest::redirect::Policy::none())
                         .connect_timeout(Duration::from_secs(3))
                         .timeout(Duration::from_secs(8))
+                        // a kept connection let go before the proxy in front of the server closes it on its side
+                        // (reused after that, it fails as "error sending request"); probed while it is kept
+                        .pool_idle_timeout(Duration::from_secs(20))
+                        .tcp_keepalive(Duration::from_secs(15))
                         .build()
                         .map_err(|e| e.to_string())
                 })
                 .as_ref()
-                .map_err(|e| Unreachable(e.clone()))?;
-            let mut req = client.post(url).header("x-kandinsky", "1").json(&body);
-            if let Some(c) = cookie {
-                req = req.header("cookie", c);
+                .map_err(|e| Unreachable::new(e.clone()))?;
+            let send = || {
+                let mut req = client.post(url.clone()).header("x-kandinsky", "1").json(&body);
+                for (k, v) in &kept {
+                    req = req.header(k, v);
+                }
+                req.send()
+            };
+            // a request that never got through (a connection the server had closed, a network that just came back) is
+            // sent once more on a fresh one; a timeout is not (a save waits on it). Asking again is harmless: the same
+            // device renewing its lease is granted, a `done` twice is the same `done`.
+            let res = match send() {
+                Err(e) if !e.is_timeout() && (e.is_connect() || e.is_request()) => {
+                    std::thread::sleep(Duration::from_millis(300));
+                    send()
+                }
+                other => other,
             }
-            let res = req.send().map_err(|e| Unreachable(e.to_string()))?;
-            // a redirect is the gate's sign-in page: signed out counts as not answering (the write stays here)
-            if !res.status().is_success() {
-                return Err(Unreachable(format!("lease: {}", res.status())));
+            .map_err(|e| Unreachable::new(e.to_string()))?;
+            // a redirect is the gate's sign-in page (a 401/403 its refusal): signed out counts as not answering (the
+            // write stays here), told apart so the state can say a sign-in helps
+            let status = res.status();
+            if status.is_redirection() || status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+                return Err(Unreachable::signin(format!("lease: {status}")));
             }
-            res.text().map_err(|e| Unreachable(e.to_string()))
+            if !status.is_success() {
+                return Err(Unreachable::new(format!("lease: {status}")));
+            }
+            res.text().map_err(|e| Unreachable::new(e.to_string()))
         })
         .join()
-        .unwrap_or_else(|_| Err(Unreachable("the lease call panicked".into())))
+        .unwrap_or_else(|_| Err(Unreachable::new("the lease call panicked")))
     }
 }
 
 impl LeaseLink for Remote {
     fn ask(&self, path: &str, have: Option<ContentHash>) -> std::result::Result<Answer<ContentHash>, Unreachable> {
         let text = self.post("ask", AskBody { path: path.into(), holder: self.holder.clone(), have })?;
-        serde_json::from_str::<AnswerBody>(&text).map_err(|e| Unreachable(e.to_string()))?.answer()
+        serde_json::from_str::<AnswerBody>(&text).map_err(|e| Unreachable::new(e.to_string()))?.answer()
     }
     fn done(&self, path: &str, version: Option<ContentHash>) {
         self.done_with(path, version, Carry::Nothing)
@@ -562,19 +666,30 @@ impl LeaseLink for Remote {
     }
     fn done_with(&self, path: &str, version: Option<ContentHash>, carry: Carry) {
         let carry = (carry != Carry::Nothing).then_some(carry);
-        if let Err(Unreachable(e)) = self.post("done", DoneBody { path: path.into(), holder: self.holder.clone(), version, carry }) {
-            eprintln!("kandinsky: mirror: could not hand back the lease of {path} ({e}); it runs out by itself");
+        if let Err(e) = self.post("done", DoneBody { path: path.into(), holder: self.holder.clone(), version, carry }) {
+            eprintln!("kandinsky: mirror: could not hand back the lease of {path} ({}); it runs out by itself", e.why);
         }
     }
     fn fetch(&self, path: &str) -> std::result::Result<Option<Vec<u8>>, Unreachable> {
         use base64::Engine;
         let text = self.post("file", FileBody { path: path.into(), holder: self.holder.clone() })?;
-        let a: FileAnswer = serde_json::from_str(&text).map_err(|e| Unreachable(e.to_string()))?;
-        a.content.map(|c| base64::engine::general_purpose::STANDARD.decode(c).map_err(|e| Unreachable(e.to_string()))).transpose()
+        let a: FileAnswer = serde_json::from_str(&text).map_err(|e| Unreachable::new(e.to_string()))?;
+        a.content.map(|c| base64::engine::general_purpose::STANDARD.decode(c).map_err(|e| Unreachable::new(e.to_string()))).transpose()
     }
     fn versions(&self) -> std::result::Result<Vec<Recent>, Unreachable> {
         let text = self.post("versions", FileBody { path: String::new(), holder: self.holder.clone() })?;
-        serde_json::from_str(&text).map_err(|e| Unreachable(e.to_string()))
+        serde_json::from_str(&text).map_err(|e| Unreachable::new(e.to_string()))
+    }
+    fn ping(&self) -> std::result::Result<(), Unreachable> {
+        self.post("versions", FileBody { path: String::new(), holder: self.holder.clone() }).map(drop)
+    }
+    fn report(&self, me: &crate::devices::Device) -> std::result::Result<Vec<crate::devices::Device>, Unreachable> {
+        let text = self.post("presence", me.clone())?;
+        serde_json::from_str(&text).map_err(|e| Unreachable::new(e.to_string()))
+    }
+    fn notices(&self, q: crate::notice_relay::Exchange) -> std::result::Result<crate::notice_relay::Answer, Unreachable> {
+        let text = self.post("notices", q)?;
+        serde_json::from_str(&text).map_err(|e| Unreachable::new(e.to_string()))
     }
 }
 
@@ -583,6 +698,7 @@ pub const SERVER: &str = "server";
 
 /// A server's vault: its own writes take the lease in `leases` (asked of it by the devices mirroring it).
 pub fn install_on_server(ws: &crate::Workspace, leases: Arc<Leases<ContentHash>>) {
+    crate::notice_relay::serve(ws.root()); // the vault's notices meet here (notice_relay.rs)
     let link = Local { leases, root: ws.root().to_path_buf(), holder: SERVER.into() };
     ws.set_write_guard(Arc::new(LeaseGuard::new(ws.root(), link)));
     eprintln!("kandinsky: mirror: {} is mirrored by a device; its writes take leases", ws.root().display());
@@ -608,9 +724,11 @@ pub fn install_for_mirror(ws: &crate::Workspace) {
                 eprintln!("kandinsky: mirror: {} is shared by Syncthing: writes take leases, Syncthing alone carries the files", ws.root().display());
             }
             let link = Remote { mirror, holder: device_id(), store: crate::secrets::Store::for_vault(ws.root()), bytes };
-            let guard = Arc::new(LeaseGuard::new(ws.root(), link));
+            let host = reqwest::Url::parse(&link.mirror).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_else(|| link.mirror.clone());
+            let guard = Arc::new(LeaseGuard::new(ws.root(), link).naming(&host));
             ws.set_write_guard(guard.clone());
             catch_up_now_and_then(Arc::downgrade(&guard));
+            report_now_and_then(Arc::downgrade(&guard));
         }
         None => ws.clear_write_guard(),
     }
@@ -618,9 +736,18 @@ pub fn install_for_mirror(ws: &crate::Workspace) {
 
 /// How often a device brings what the server wrote lately (a write of a path behind brings it at once anyway).
 const CATCH_UP_EVERY: Duration = Duration::from_secs(60);
+/// The same for a vault no window shows (a second vault started ahead on the desktop, the phone's vault not in use):
+/// one request to the server every ten minutes instead of every minute (DESIGN-server-role.md, "Two vaults").
+const CATCH_UP_UNSHOWN: Duration = Duration::from_secs(600);
 
-/// A thread that catches this copy up at once, then every [`CATCH_UP_EVERY`], while the guard lives (a vault closed or
-/// unmirrored drops it, and the thread ends).
+/// Whether a catch-up is due `since` the last one, a page showing the vault or not.
+fn catch_up_due(since: Duration, shown: bool) -> bool {
+    since >= if shown { CATCH_UP_EVERY } else { CATCH_UP_UNSHOWN }
+}
+
+/// A thread that catches this copy up at once, then every [`CATCH_UP_EVERY`] while a page shows the vault and every
+/// [`CATCH_UP_UNSHOWN`] while none does (looked at each minute, so a window opened catches up within one), while the
+/// guard lives (a vault closed or unmirrored drops it, and the thread ends).
 fn catch_up_now_and_then<L: LeaseLink + 'static>(guard: std::sync::Weak<LeaseGuard<L>>) {
     let spawned = std::thread::Builder::new().name("mirror-catch-up".into()).spawn(move || loop {
         let Some(g) = guard.upgrade() else { return };
@@ -628,13 +755,80 @@ fn catch_up_now_and_then<L: LeaseLink + 'static>(guard: std::sync::Weak<LeaseGua
         if n > 0 {
             eprintln!("kandinsky: mirror: brought {n} file(s) the server wrote");
         }
+        let pages = crate::notify::Presence::of_vault(&g.root);
         drop(g);
-        std::thread::sleep(CATCH_UP_EVERY);
+        let last = Instant::now();
+        loop {
+            std::thread::sleep(CATCH_UP_EVERY);
+            if catch_up_due(last.elapsed(), pages.connected()) {
+                break;
+            }
+        }
     });
     if let Err(e) = spawned {
         eprintln!("kandinsky: mirror: no catch-up thread: {e}");
     }
 }
+
+/// This device as `crate::devices` lists it, its presence now.
+pub fn this_device() -> crate::devices::Device {
+    crate::devices::Device {
+        id: device_id(),
+        name: crate::platform::proc::hostname(),
+        kind: crate::devices::Kind::here(),
+        active_at: crate::notify::Presence::global().active_at(),
+        reported_at: chrono::Utc::now().timestamp_millis(),
+        alarms: None,
+    }
+}
+
+/// A thread that tells the server this device's presence at once and then every minute, keeping everyone's answer in
+/// `devices::Table::global()`, while the guard lives. Each minute, shown or not: a desktop in use with no Kandinsky
+/// window is still the device the person is at (DESIGN-calendar-tasks-nudges §3.7's five minutes).
+fn report_now_and_then<L: LeaseLink + 'static>(guard: std::sync::Weak<LeaseGuard<L>>) {
+    let spawned = std::thread::Builder::new().name("mirror-presence".into()).spawn(move || {
+        let mut said = None; // a failure is said once, not each minute
+        let mut reported: Option<std::time::Instant> = None;
+        loop {
+            let Some(g) = guard.upgrade() else { return };
+            let me = crate::devices::Device { alarms: crate::devices::Alarms::of_vault(&g.root), ..this_device() };
+            // presence once a minute; a phone's report carries the alarms its app set for this vault (none on a desktop)
+            if reported.is_none_or(|at| at.elapsed() >= CATCH_UP_EVERY) {
+                reported = Some(std::time::Instant::now());
+                match g.link.report(&me) {
+                    Ok(all) => {
+                        crate::devices::Table::global().replace(all);
+                        said = None;
+                    }
+                    Err(e) if said.as_ref() != Some(&e.why) => {
+                        // an older server answers 404: it keeps no presence
+                        eprintln!("kandinsky: mirror: presence not reported ({})", e.why);
+                        said = Some(e.why);
+                    }
+                    Err(_) => {}
+                }
+            }
+            // the vault's notices more often (crate::notice_relay): this device's handed over, the others' shown here
+            let (out, since) = crate::notice_relay::outgoing(&g.root);
+            match g.link.notices(crate::notice_relay::Exchange { holder: me.id.clone(), since, out: out.clone() }) {
+                Ok(answer) => crate::notice_relay::received(&g.root, answer),
+                Err(_) => crate::notice_relay::failed(&g.root, out), // an older server or none: kept, tried again
+            }
+            // the next turn in a while — sooner while a page shows the vault (a phone in a pocket asks once a minute) —
+            // or at once when a notice of this device waits to be sent
+            let shown = crate::notify::Presence::of_vault(&g.root).connected();
+            drop(g);
+            crate::notice_relay::wait(if shown { NOTICES_EVERY } else { CATCH_UP_EVERY });
+        }
+    });
+    if let Err(e) = spawned {
+        eprintln!("kandinsky: mirror: no presence thread: {e}");
+    }
+}
+
+/// How often a device asks its server for the other devices' notices while a page shows the vault (else once a
+/// minute, with its presence); its own go at once.
+const NOTICES_EVERY: Duration = Duration::from_secs(15);
 
 /// This device's name in the lease table: stable across restarts (`~/.local/state/kandinsky/device-id`), made once.
 pub fn device_id() -> Holder {
@@ -669,12 +863,21 @@ mod tests {
         assert_eq!(leased(".atlas/config.toml", &WriteKind::Write).len(), 1, "the rest of the state folder is leased");
     }
 
+    #[test]
+    fn a_vault_no_window_shows_catches_up_ten_times_less_often() {
+        let min = Duration::from_secs(60);
+        assert!(catch_up_due(min, true), "a shown vault: every minute");
+        assert!(!catch_up_due(min, false) && !catch_up_due(min * 9, false), "unshown: not every minute");
+        assert!(catch_up_due(min * 10, false));
+        assert!(catch_up_due(min * 3, true), "a window opened meanwhile: at once, at the next minute's look");
+    }
+
     /// Two devices on one table: the server's `Local`, and a "desktop" whose own disk is a second folder.
     struct Shared(Arc<Leases<ContentHash>>, PathBuf, &'static str, Arc<Mutex<bool>>);
     impl LeaseLink for Shared {
         fn ask(&self, path: &str, have: Option<ContentHash>) -> std::result::Result<Answer<ContentHash>, Unreachable> {
             if *self.3.lock().unwrap() {
-                return Err(Unreachable("offline".into()));
+                return Err(Unreachable::new("offline"));
             }
             let disk = || std::fs::read(self.1.join(path)).ok().map(|b| ContentHash::of(&b));
             Ok(self.0.ask(path, self.2, have, disk, HOLD, Instant::now()))
@@ -725,7 +928,7 @@ mod tests {
         let desk = LeaseGuard::new(desktop.path(), Shared(leases.clone(), server.path().into(), "desktop", offline.clone())).quick();
         desk.before("log.md", &WriteKind::Write, now(desktop.path(), "log.md")).unwrap(); // held, never handed back
         let e = srv.before("log.md", &WriteKind::Append, None).unwrap_err().to_string();
-        assert!(e.contains("being written by desktop"), "{e}");
+        assert!(e.contains("log.md was not saved. desktop was writing it"), "{e}");
         *offline.lock().unwrap() = true;
         srv.before("log.md", &WriteKind::Write, now(server.path(), "log.md")).expect("no server: written here only");
     }
@@ -830,7 +1033,7 @@ mod tests {
         impl LeaseLink for Down {
             fn ask(&self, _: &str, _: Option<ContentHash>) -> std::result::Result<Answer<ContentHash>, Unreachable> {
                 *self.0.lock().unwrap() += 1;
-                Err(Unreachable("offline".into()))
+                Err(Unreachable::new("offline"))
             }
             fn done(&self, _: &str, _: Option<ContentHash>) {
                 *self.0.lock().unwrap() += 1;

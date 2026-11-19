@@ -1,11 +1,19 @@
-// Runs in every frame of Kandinsky's window (main.rs, `initialization_script_for_all_frames`), and acts only in a web tab's
-// frame (a direct child of Kandinsky's page): what the native view's page script does (webtab.rs KEYS), through
-// postMessage — the page's address, title and history to the pane (ui/src/panes/Web.svelte), the pane's back /
-// forward / reload / find to the page, Kandinsky's keys back to Kandinsky, Shift+click to the system's browser, the
-// hovered link's address.
+// Runs in every frame of Kandinsky's window (main.rs `frame_script`) and acts only in a web tab's frame (a direct child of
+// Kandinsky's page), through postMessage — the page's address, title and history to the pane (ui/src/panes/Web.svelte), the
+// pane's back / forward / reload / find to the page, Kandinsky's keys back to Kandinsky, Shift+click to the system's browser,
+// the hovered link's address. Every message carries this run's token, which the pane checks: a framed site can post
+// to Kandinsky's page too, and must not open tabs or run commands. The script runs in a world of its own where the
+// platform offers one (Linux and macOS: a WebKit script world; Windows: the content script of the app's WebView2
+// extension), so the site never sees the token; elsewhere it shares the site's world and keeps what it calls from
+// before the site's scripts run. It speaks only to a parent served from this machine (Kandinsky's own page): on Windows the
+// extension reaches the browsing windows too, whose sites must never be told the token.
 (() => {
   if (window === window.top || window.parent !== window.top) return;
-  const say = (m) => window.parent.postMessage({ kandinskyFrame: m }, "*");
+  const above = location.ancestorOrigins && location.ancestorOrigins[0];
+  if (!above || !/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(above)) return;
+  const token = "__KANDINSKY_FRAME_TOKEN__";
+  const parentWin = window.parent, post = parentWin.postMessage.bind(parentWin);
+  const say = (m) => post({ kandinskyFrame: m, token }, above);
   let last = "";
   const where = () => {
     const now = JSON.stringify([location.href, document.title, history.length]);
@@ -16,11 +24,13 @@
     const f = history[k];
     history[k] = function (...a) { const r = f.apply(this, a); setTimeout(where); return r; };
   }
+  // an isolated world's wrapped history is not the site's: the Navigation API tells of the site's own pushState
+  if (window.navigation) navigation.addEventListener("currententrychange", () => setTimeout(where));
   setInterval(where, 1000); // a title set by script (a chat's unread count): nothing else tells
   // the pane's requests (only from Kandinsky's page, the parent)
   let hits = [];
   addEventListener("message", (e) => {
-    const d = e.source === window.parent && e.data && e.data.kandinskyFrameDo;
+    const d = e.source === parentWin && e.data && e.data.kandinskyFrameDo;
     if (!d) return;
     if (d.op === "back") history.back();
     else if (d.op === "forward") history.forward();
@@ -35,7 +45,7 @@
       say({ found: n });
     } else if (d.op === "findend") { hits = []; const s = getSelection(); if (s) s.removeAllRanges(); }
   });
-  // Kandinsky's keys in the page, as webtab.rs KEYS
+  // Kandinsky's keys in the page
   let sup = false;
   const isSup = (e) => /^(Meta|OS|Super|Hyper)(Left|Right)?$/.test(e.key) || /^(Meta|OS|Super|Hyper)(Left|Right)?$/.test(e.code);
   addEventListener("keyup", (e) => { if (isSup(e)) sup = false; }, true);

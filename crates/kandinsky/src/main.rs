@@ -36,6 +36,16 @@ enum ServerAction {
     Revoke { name: String },
     /// End every browser's session (device tokens stay).
     SignOutAll,
+    /// The sign-in gate's bypass key (asked on the terminal, or read from stdin): Kandinsky's apps that hold it get their
+    /// device token with it, without the gate's page or Kandinsky's password.
+    GateKey {
+        /// The header the gate checks the key in.
+        #[arg(long, default_value = "X-Api-Key")]
+        header: String,
+        /// Forget the key: the apps sign in on a page again.
+        #[arg(long)]
+        forget: bool,
+    },
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -98,13 +108,6 @@ enum Action {
     /// Drawings made small (docs/design/DESIGN-drawing-size.md): compact JSON, pen points rounded, pictures at most
     /// 2000 px (opaque ones as JPEG). Says what it would do; `--apply` does it, originals copied to .kandinsky/trash/ first.
     Drawings {
-        #[arg(long)]
-        apply: bool,
-    },
-    /// One note per thing (docs/design/DESIGN-shared-notes.md §4): the notes earlier versions left beside a PDF or a
-    /// book (a note of its ink, a reader's note beside the paper's) and drawings' SVG exports. Says what it would do;
-    /// `--apply` merges the reading places into the owning notes and moves the extras to the Trash (copies first).
-    Companions {
         #[arg(long)]
         apply: bool,
     },
@@ -416,6 +419,7 @@ fn server_action(action: &ServerAction) -> Result<()> {
     match action {
         ServerAction::Status => {
             let s = auth.settings();
+            println!("gate key: {}", s.gate_key.as_ref().map_or("not set".to_string(), |g| format!("set, in {}", g.header)));
             println!("sign-in: {:?}; password: {}; trusted proxies: [{}]; plain HTTP from others: {}; AI agents: {}", s.auth, if s.password_hash.is_some() { "set" } else { "not set" }, s.trusted_proxies.iter().map(ToString::to_string).collect::<Vec<_>>().join(", "), s.allow_plain_http, if s.mcp { "on" } else { "off" });
             for t in auth.tokens() {
                 println!("  token {:<16} {:?}, last used {}", t.name, t.scope, t.last_used.map_or("never".into(), |u| chrono::DateTime::from_timestamp(u as i64, 0).map_or(u.to_string(), |d| d.with_timezone(&chrono::Local).format("%Y-%m-%d").to_string())));
@@ -448,6 +452,14 @@ fn server_action(action: &ServerAction) -> Result<()> {
             println!("revoked “{name}”");
         }
         ServerAction::SignOutAll => println!("{} session(s) ended", auth.sign_out_everywhere()),
+        ServerAction::GateKey { header, forget: true } => {
+            auth.set_gate_key(header, None)?;
+            println!("gate key forgotten");
+        }
+        ServerAction::GateKey { header, forget: false } => {
+            auth.set_gate_key(header, Some(&ask("The gate's bypass key: ")?))?;
+            println!("gate key set: apps sending it in {header} get their token ({})", kandinsky_core::auth::settings_file().display());
+        }
     }
     Ok(())
 }
@@ -569,7 +581,7 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     let ws = Workspace::open(workspace_root(cli.workspace)?)?;
-    // this process writes the vault too (drawings, companions, plugins, a capture with no core running, MCP): a mirrored
+    // this process writes the vault too (drawings, plugins, a capture with no core running, MCP): a mirrored
     // vault's writes take the server's lease here as they do in the serving core
     kandinsky_core::mirror_guard::install_for_mirror(&ws);
     if let Action::Mcp = cli.action {
@@ -586,21 +598,6 @@ async fn main() -> Result<()> {
             Some(s) => println!("{} drawings, {:.1} MB → {:.1} MB; the originals: {s}", r.drawings.len(), mb(b), mb(a)),
             None if apply => println!("nothing to compact"),
             None => println!("{} drawings, {:.1} MB → {:.1} MB — run again with --apply", r.drawings.len(), mb(b), mb(a)),
-        }
-        return Ok(());
-    }
-    if let Action::Companions { apply } = cli.action {
-        let plan = kandinsky_core::companion_tidy::plan(ws.root(), &ws.config()?)?;
-        for t in &plan {
-            println!("{} {}", if apply { "done:" } else { "would tidy" }, t.what());
-        }
-        match (apply, plan.is_empty()) {
-            (_, true) => println!("nothing to tidy: one note per thing"),
-            (false, false) => println!("{} to tidy — run again with --apply", plan.len()),
-            (true, false) => {
-                let snap = tokio::task::block_in_place(|| kandinsky_core::companion_tidy::apply(&ws, &plan))?;
-                println!("{} tidied; copies of everything touched: {}", plan.len(), snap.unwrap_or_default());
-            }
         }
         return Ok(());
     }
@@ -756,7 +753,7 @@ async fn main() -> Result<()> {
     }
     let server = Server::find(&ws).await;
     match cli.action {
-        Action::Serve { .. } | Action::Server { .. } | Action::Mcp | Action::Guide { .. } | Action::Plugin { .. } | Action::PaperNotes | Action::Drawings { .. } | Action::Companions { .. } | Action::PropertiesAudit { .. } | Action::ImportZotero { .. } | Action::ScanExternalRoots { .. } | Action::CapturePaper { .. } => unreachable!("handled above"),
+        Action::Serve { .. } | Action::Server { .. } | Action::Mcp | Action::Guide { .. } | Action::Plugin { .. } | Action::PaperNotes | Action::Drawings { .. } | Action::PropertiesAudit { .. } | Action::ImportZotero { .. } | Action::ScanExternalRoots { .. } | Action::CapturePaper { .. } => unreachable!("handled above"),
         Action::Capture { text } => {
             let text = if text.is_empty() { std::io::read_to_string(std::io::stdin())? } else { text.join(" ") };
             let r: CaptureResult = match &server {
