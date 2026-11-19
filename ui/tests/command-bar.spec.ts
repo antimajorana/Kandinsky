@@ -14,7 +14,18 @@ test.beforeAll(async ({ request }) => {
   await put(request, "notes/bar-note.md", "# Bar note\n\nthe zyqqa spectral function is discussed here\n\nlast\n");
 });
 
-test("the command bar finds text inside notes and opens the line; Super+E opens it", async ({ page }) => {
+test("the command bar finds text inside notes and opens the line; Super+E opens it", async ({ page, request }) => {
+  // the tabs are the rows of the sidebar's Open section: vertical tabs list it for a single open tab too
+  const cfg = (await (await request.get("/api/config", { headers: H })).json()).config;
+  expect((await request.put("/api/config", { headers: H, data: { ...cfg, ui: { ...cfg.ui, tabs: "vertical" } } })).ok()).toBe(true);
+  try {
+    await commandBarFindsText(page);
+  } finally {
+    await request.put("/api/config", { headers: H, data: cfg });
+  }
+});
+
+async function commandBarFindsText(page: Page) {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   const palette = page.getByTestId("palette");
@@ -26,17 +37,18 @@ test("the command bar finds text inside notes and opens the line; Super+E opens 
   await expect(hit).toBeVisible();
   await expect(hit).toContainText("bar-note:3");
   await hit.click();
-  await expect(page.getByTestId("sidebar").locator(".tab.active", { hasText: "bar-note" })).toBeVisible();
+  await expect(page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row.active", { hasText: "bar-note" })).toBeVisible();
   await expect(page.locator(".cm-activeLine")).toContainText("zyqqa spectral function");
 
   // commands still come first, and Super+E is the bar from inside a note too
   await page.locator(".cm-content").click();
   await page.keyboard.press("Meta+e");
   await expect(palette.getByRole("textbox")).toBeFocused();
-  await page.keyboard.type("Graph of notes");
+  await page.keyboard.type("Graph view");
   await page.keyboard.press("Enter");
-  await expect(page.getByTestId("sidebar").locator(".tab.active", { hasText: "Graph" })).toBeVisible();
-});
+  // the graph is an app of the sidebar: its row there lights up
+  await expect(page.getByTestId("sidebar").locator('.nav-row.active[aria-label="Graph"]')).toBeVisible();
+}
 
 test("from inside a terminal the shell keeps every non-Super key, and the bar still opens with F1 and Super+E", async ({ page }) => {
   await page.goto("/");

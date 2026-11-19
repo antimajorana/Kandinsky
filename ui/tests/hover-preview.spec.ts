@@ -66,13 +66,13 @@ test("a tab of any kind previews itself: Settings from the background", async ({
   await page.keyboard.press("F1");
   await page.keyboard.type("Settings");
   await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click();
-  await expect(page.getByText("What Kandinsky can do").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Workspace", exact: true })).toBeVisible(); // the Settings page
   await openNote(page, "hubbard.md"); // Settings goes to the background
   await expect(page.locator(".cm-content:visible").first()).toContainText("Energy");
   const card = page.getByTestId("hover-preview");
-  await page.getByTestId("sidebar").locator(".tab", { hasText: "Settings" }).hover();
+  await page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row", { hasText: "Settings" }).locator(".pane-main").hover();
   await expect(card.locator(".preview-mini")).toBeVisible();
-  await expect(card).toContainText("What Kandinsky can do");
+  await expect(card).toContainText("Workspace");
   // the copy is inert and carries no test ids or tab ids of its own
   await expect(card.locator("[data-testid], [data-tab-id]")).toHaveCount(0);
   await page.mouse.move(900, 880);

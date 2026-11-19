@@ -24,7 +24,7 @@ const countText = (n) => (n ? `${n} ${n === 1 ? "entry" : "entries"}` : "nothing
 
 const CSS = `
 .daily-head .daily-template { flex-basis: 100%; margin: 0; font-size: .78em; color: var(--text-faint); }
-.daily-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 8px 12px; margin: 2px 0 8px;
+.daily-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 8px 150px 8px 12px; margin: 2px 0 8px; /* clear of the block's hover Configure button, top right */
   border: 1px solid var(--card-border, transparent); border-radius: var(--radius-lg, 8px); background: var(--card-bg, var(--bg-elev));
   box-shadow: var(--shadow-card, none); }
 .daily-head .day { font-weight: 600; color: var(--heading, var(--text)); text-transform: capitalize; }

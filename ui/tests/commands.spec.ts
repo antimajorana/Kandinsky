@@ -55,10 +55,10 @@ test("a new command can get a schedule; a nonsense schedule is refused with the 
   await pane.getByRole("button", { name: "New command", exact: true }).click();
   await pane.getByLabel("Title", { exact: true }).fill("Nightly tidy");
   await pane.getByLabel("Command line").fill("echo tidy");
-  await pane.getByLabel("Schedule").fill("nightly");
+  await pane.getByRole("textbox", { name: "Schedule" }).fill("nightly");
   await pane.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.locator(".toast", { hasText: "daily HH:MM" })).toBeVisible();
-  await pane.getByLabel("Schedule").fill("daily 03:00");
+  await pane.getByRole("textbox", { name: "Schedule" }).fill("daily 03:00");
   await pane.getByRole("button", { name: "Create", exact: true }).click();
   const row = pane.locator(".cmd", { hasText: "Nightly tidy" });
   await expect(row.locator(".sched")).toContainText("daily 03:00");

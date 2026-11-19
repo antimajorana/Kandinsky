@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 
-// Settings → Desktop app's "Capture key" (CaptureKeyPanel.svelte, platform/capture_key.rs): it reads the desktop's
+// Settings → Keyboard Shortcuts's "Capture key" (CaptureKeyPanel.svelte, platform/capture_key.rs): it reads the desktop's
 // key and says where it lives. Nothing is set here: setting writes the desktop's own shortcut settings.
-test("the Desktop app page shows the capture key and where it lives", async ({ page }) => {
+test("the Keyboard Shortcuts page shows the capture key and where it lives", async ({ page }) => {
   await page.goto("/");
   await expect(async () => {
     if (await page.getByTestId("palette").isVisible()) await page.keyboard.press("Escape");
@@ -11,7 +11,7 @@ test("the Desktop app page shows the capture key and where it lives", async ({ p
     await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click({ timeout: 1000 });
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10_000 });
-  await page.getByText("Desktop app", { exact: true }).first().click();
+  await page.getByText("Keyboard Shortcuts", { exact: true }).first().click();
   const panel = page.locator(".settings-panel.capture-key");
   await expect(panel.getByRole("heading", { name: "Capture key" })).toBeVisible();
   await expect(panel.locator(".row .label")).toHaveText("Now");
