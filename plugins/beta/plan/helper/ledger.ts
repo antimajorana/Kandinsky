@@ -55,7 +55,9 @@ export function linkOf(t: TaskName): string {
 
 /** A link back to the task's key and title key. */
 function fromLink(link: string): { key: string; titleKey: string } | null {
-  const m = /^\[\[([^\]|#]+)(?:#\^([\w-]+))?(?:\|([^\]]*))?\]\]$/.exec(link.trim());
+  // the alias may hold single brackets (a title with a link or a pasted picture: `Ver [Chungking Express]`): taken up
+  // to the closing `]]` — `[^\]]*` read no such line back, the nudge was never seen, and it rang every five minutes
+  const m = /^\[\[([^\]|#]+)(?:#\^([\w-]+))?(?:\|(.*))?\]\]$/.exec(link.trim());
   if (!m) return null;
   const path = /\.\w+$/.test(m[1]) ? m[1] : `${m[1]}.md`;
   const t = { path, title: m[3] ?? "", block: m[2] };
@@ -90,7 +92,9 @@ export function parseLine(line: string, c: Clock): Entry | null {
 
 /** A day's hours in use (0–23) as a `used` line says them: `08:00–12:00, 14:00–15:00` (each range's end excluded). */
 export function hoursText(hours: Iterable<number>): string {
-  const hs = [...new Set(hours)].filter((h) => h >= 0 && h < 24).sort((a, b) => a - b);
+  // whole hours only: a fraction (an hour kept by something else in the day's cache) wrote "1.9:00–2.9:00", which no
+  // reader of the line understands
+  const hs = [...new Set(hours)].filter((h) => Number.isInteger(h) && h >= 0 && h < 24).sort((a, b) => a - b);
   const out: string[] = [];
   const two = (h: number) => `${String(h).padStart(2, "0")}:00`;
   for (let i = 0; i < hs.length; ) {
