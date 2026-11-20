@@ -285,6 +285,9 @@ function matchTextSpanAtCol(
 /** Resolves Ctrl/Cmd-hover at viewport `(x, y)`, checking CodeMirror `posAtCoords`, DOM links, and rendered prose text. */
 function resolveCtrlHover(x: number, y: number, el: Element | null): { target: PreviewTarget; anchor: Anchor } | null {
   if (!el) return null;
+  // Ctrl over a picture shows it large (image-peek.ts): a card of its own link on top of that would cover it, and the
+  // card's picture would then be taken for the one being looked at
+  if (el.closest("img.cm-embed-image, .cm-img-frame")) return null;
 
   // 1. Raw or live-preview CodeMirror text via `posAtCoords`
   const cmDom = el.closest<HTMLElement>(".cm-editor");
