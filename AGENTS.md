@@ -60,8 +60,6 @@ The repository is published. Everything you write here can be read by anyone.
 
 ## Before you call it done
 
-- `bash scripts/dev/gate.sh` passes. Its verdict is the printed table, not an exit code that went through a pipe.
-- A visible change has been looked at in a screenshot, in the light and the dark theme
-  ([docs/guides/UI-STYLE.md](docs/guides/UI-STYLE.md)).
+- Run the narrowest checks that cover your change (such as `cargo check`/`cargo test` on touched crates, `npm run check` for UI edits, and `bash scripts/dev/gate.sh` before integration or release).
 - A new setting is on its Settings page, and a new mechanism is described in `docs/guides/DEVELOPING.md`.
 - `git status` shows only what you meant to change.
