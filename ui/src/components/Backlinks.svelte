@@ -16,8 +16,10 @@
   // `open`: shown unfolded until folded here — an item's panel (the Library), where the mentions are the point; its
   // choice is remembered apart from the one under notes (folded until asked)
   let { path, open = false }: { path: string; open?: boolean } = $props();
+  type RelatedNote = { path: string; title: string; reason: string; score: number };
   let links = $state<Backlink[]>([]);
   let unlinked = $state<Backlink[]>([]);
+  let related = $state<RelatedNote[]>([]);
   // svelte-ignore state_referenced_locally
   const KEY = open ? "kandinsky.backlinks.open.panel" : "kandinsky.backlinks.open";
   let expanded = $state(readOpen());
@@ -32,13 +34,34 @@
   }
 
   async function load() {
-    try { const b = await api.backlinks(path); links = b.links; unlinked = b.unlinked; } catch { links = []; unlinked = []; }
+    try {
+      const b = await api.backlinks(path);
+      links = b.links;
+      unlinked = b.unlinked;
+      const rel = (b as { related?: RelatedNote[] }).related;
+      related = Array.isArray(rel) ? rel : [];
+    } catch {
+      links = [];
+      unlinked = [];
+      related = [];
+    }
   }
 
   /** Turn the mention into `[[name]]` in its note (the core edits that one line). */
   async function link(u: Backlink) {
     try { await api.linkMention({ source: u.source, line: u.line, target: path }); await load(); }
     catch (e) { toast("Could not link the mention", errText(e), "error"); }
+  }
+
+  async function copyWikilink(targetPath: string, title?: string) {
+    const linkName = stem(targetPath) || title || shownName(targetPath);
+    const snippet = `[[${linkName}]]`;
+    try {
+      await navigator.clipboard.writeText(snippet);
+      toast("Wikilink copied", snippet);
+    } catch {
+      toast("Could not copy wikilink", "", "error");
+    }
   }
 
   const groups = $derived.by(() => {
@@ -67,14 +90,15 @@
   });
 </script>
 
-{#if links.length || unlinked.length}
-  <section class="backlinks" class:open={expanded} bind:this={box}>
+{#if links.length || unlinked.length || related.length}
+  <section class="backlinks" class:open={expanded} bind:this={box} data-testid="backlinks-section">
     <button class="head" onclick={toggle} aria-expanded={expanded}>
       <Icon name={expanded ? "chevron-down" : "chevron"} size={12} />
       <Icon name="link" size={13} />
       Linked mentions <span class="n">{links.length}</span>
       <span class="from">from {groups.length} note{groups.length === 1 ? "" : "s"}</span>
       {#if unlinked.length}<span class="from">· unlinked <span class="n soft">{unlinked.length}</span></span>{/if}
+      {#if related.length}<span class="from">· related <span class="n soft">{related.length}</span></span>{/if}
     </button>
     {#if expanded}
       <div class="list">
@@ -104,6 +128,22 @@
               <button class="linkbtn" onclick={() => link(u)} title="Turn this mention into [[{stem(path)}]]">Link</button>
             </div>
           {/each}
+        {/if}
+        {#if related.length}
+          <div class="related-block" data-testid="related-notes">
+            <h4 class="sub">Related <span class="n soft">{related.length}</span> <span class="hint">— suggested by tags, folders, or shared links</span></h4>
+            {#each related as r (r.path)}
+              <div class="rrow" data-testid="related-note-row">
+                <button type="button" class="src rsrc" onclick={() => openPath(r.path)} title={r.path}>
+                  <Icon name="file-text" size={13} />
+                  <span class="name">{r.title || shownName(r.path)}</span>
+                  {#if folder(r.path)}<span class="dir">{folder(r.path)}</span>{/if}
+                </button>
+                {#if r.reason}<span class="reason-chip">{r.reason}</span>{/if}
+                <button type="button" class="linkbtn" onclick={() => void copyWikilink(r.path, r.title)} title="Copy [[{stem(r.path)}]]">Copy [[link]]</button>
+              </div>
+            {/each}
+          </div>
         {/if}
       </div>
     {/if}
@@ -138,6 +178,11 @@
   .urow { display: flex; align-items: center; gap: 6px; }
   .urow .ctx { flex: 1; min-width: 0; margin-left: 6px; }
   .usrc { color: var(--heading); font-weight: 550; margin-right: 4px; }
+  .related-block { display: flex; flex-direction: column; gap: 3px; }
+  .rrow { display: flex; align-items: center; gap: 6px; padding: 0 2px; }
+  .rsrc { flex: 1; min-width: 0; }
+  .rsrc .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reason-chip { flex: none; padding: 1px 7px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); color: var(--text-faint); font-size: calc(11px * var(--ui-scale, 1)); white-space: nowrap; }
   .linkbtn { flex: none; font-size: calc(11.5px * var(--ui-scale, 1)); padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border-strong); color: var(--text-muted); }
   .linkbtn:hover { border-color: var(--accent); color: var(--accent); }
 </style>

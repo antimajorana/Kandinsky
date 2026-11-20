@@ -1,10 +1,10 @@
 //! Link index over the workspace's markdown: `[[wikilinks]]`, `![[embeds]]` and relative
 //! `[text](path)` links, resolved Obsidian-style. Feeds backlinks (and later the graph).
 //! Parsed links are cached per file by mtime, so a request re-reads only what changed.
-use crate::api::{Backlink, Backlinks};
+use crate::api::{Backlink, Backlinks, RelatedNote};
 use crate::config::Config;
 use crate::walk;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use crate::vault_changes::Stamp;
@@ -795,7 +795,111 @@ pub fn backlinks(root: &Path, cfg: &Config, path: &str) -> Backlinks {
         .collect();
     links.sort_by(|a, b| a.source.cmp(&b.source).then(a.line.cmp(&b.line)));
     let unlinked = unlinked(root, &index, path);
-    Backlinks { path: path.to_string(), links, unlinked }
+    let related = related_notes(cfg, &index, path);
+    Backlinks { path: path.to_string(), links, unlinked, related }
+}
+
+/// Suggests up to 8 notes related to `target` from shared outgoing/incoming links, shared `#tags`,
+/// and title token overlap, excluding `target`, agent files, and notes already directly linked to/from `target`.
+fn related_notes(cfg: &Config, index: &Index, target: &str) -> Vec<RelatedNote> {
+    let Some(target_parsed) = index.parsed.get(target) else {
+        return Vec::new();
+    };
+
+    let target_out: HashSet<&str> = index.links_of(target).filter_map(|(_, t)| t).collect();
+    let target_tags: HashSet<&str> = target_parsed.tags.iter().map(String::as_str).collect();
+    let target_title = note_title(target, target_parsed);
+    let target_tokens = title_tokens(&target_title);
+
+    // Precompute incoming links per note once over the cached resolved link index.
+    let mut incoming_by: HashMap<&str, HashSet<&str>> = HashMap::new();
+    let mut outgoing_by: HashMap<&str, HashSet<&str>> = HashMap::new();
+    for src in index.parsed.keys() {
+        let mut outs = HashSet::new();
+        for t in index.links_of(src).filter_map(|(_, t)| t) {
+            if t != src.as_str() {
+                outs.insert(t);
+                incoming_by.entry(t).or_default().insert(src.as_str());
+            }
+        }
+        outgoing_by.insert(src.as_str(), outs);
+    }
+
+    let target_in: HashSet<&str> = incoming_by.get(target).cloned().unwrap_or_default();
+
+    let mut candidates: Vec<RelatedNote> = Vec::new();
+    for (cand, cand_parsed) in &index.parsed {
+        let cand_s = cand.as_str();
+        if cand_s == target || cfg.is_agent_file(cand_s) {
+            continue;
+        }
+        if target_out.contains(cand_s) || target_in.contains(cand_s) {
+            continue;
+        }
+
+        let cand_out = outgoing_by.get(cand_s);
+        let shared_out = cand_out.map_or(0u32, |set| target_out.intersection(set).count() as u32);
+
+        let cand_in = incoming_by.get(cand_s);
+        let shared_in = cand_in.map_or(0u32, |set| target_in.intersection(set).count() as u32);
+
+        let shared_links = shared_out + shared_in;
+
+        let cand_tags: HashSet<&str> = cand_parsed.tags.iter().map(String::as_str).collect();
+        let mut common_tags: Vec<&str> = target_tags.intersection(&cand_tags).copied().collect();
+        common_tags.sort_unstable();
+        let shared_tag_count = common_tags.len() as u32;
+
+        let cand_title = note_title(cand_s, cand_parsed);
+        let cand_tokens = title_tokens(&cand_title);
+        let title_overlap = target_tokens.intersection(&cand_tokens).count() as u32;
+
+        let score = shared_out * 3 + shared_in * 3 + shared_tag_count * 2 + title_overlap;
+        if score == 0 {
+            continue;
+        }
+
+        let mut parts: Vec<String> = Vec::new();
+        if shared_links > 0 {
+            parts.push(format!("{shared_links} shared {}", if shared_links == 1 { "link" } else { "links" }));
+        }
+        for t in common_tags.iter().take(2) {
+            parts.push(format!("#{t}"));
+        }
+        if common_tags.len() > 2 {
+            parts.push(format!("+{} tags", common_tags.len() - 2));
+        }
+        if title_overlap > 0 && (parts.is_empty() || shared_links == 0) {
+            parts.push(if title_overlap == 1 { "similar title".into() } else { format!("{title_overlap} title words") });
+        }
+
+        candidates.push(RelatedNote {
+            path: cand.clone(),
+            title: cand_title,
+            reason: parts.join(" · "),
+            score,
+        });
+    }
+
+    candidates.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.title.cmp(&b.title)).then_with(|| a.path.cmp(&b.path)));
+    candidates.truncate(8);
+    candidates
+}
+
+fn note_title(rel: &str, parsed: &Parsed) -> String {
+    if let Some(t) = parsed.props.get("title").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()) {
+        return t.to_string();
+    }
+    rel.rsplit('/').next().unwrap_or(rel).trim_end_matches(".md").to_string()
+}
+
+fn title_tokens(title: &str) -> HashSet<String> {
+    const STOP: &[&str] = &["the", "and", "for", "with", "from", "into", "about", "notes", "note", "on", "of", "in", "to", "a", "an"];
+    title
+        .split(|c: char| !c.is_alphanumeric())
+        .map(str::to_lowercase)
+        .filter(|w| w.chars().count() >= 3 && !STOP.contains(&w.as_str()) && !w.chars().all(|c| c.is_ascii_digit()))
+        .collect()
 }
 
 /// Lines in other notes that NAME `path` (its file name, whole words, any case) without linking to
@@ -1358,6 +1462,41 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(20));
         w("notes/a.md", "no link any more\n");
         assert_eq!(backlinks(d.path(), &cfg, "notes/target.md").links.len(), 2);
+    }
+
+    #[test]
+    fn related_notes_scores_shared_links_tags_and_titles_excluding_direct_neighbors() {
+        let d = tempfile::tempdir().unwrap();
+        let w = |p: &str, s: &str| {
+            let p = d.path().join(p);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, s).unwrap();
+        };
+        w("hub1.md", "[[target]]\n");
+        w("hub2.md", "# Hub 2\n");
+        w("target.md", "# Quantum Optics\n[[hub2]] [[direct_out]] #quantum\n");
+        w("direct_out.md", "[[hub2]] #quantum\n");
+        w("direct_in.md", "[[target]] [[hub2]] #quantum\n");
+        w("strong_match.md", "---\ntitle: Quantum Electrodynamics\n---\n[[hub2]] #quantum\n");
+        w("tag_only.md", "# Tag Match\n#quantum\n");
+        w("docs/memory/agent_note.md", "[[hub2]] #quantum Quantum\n");
+
+        // Also make hub1 link to strong_match so they share an incoming link.
+        w("hub1.md", "[[target]] and [[strong_match]]\n");
+
+        let cfg = Config::default();
+        let bl = backlinks(d.path(), &cfg, "target.md");
+        let paths: Vec<&str> = bl.related.iter().map(|r| r.path.as_str()).collect();
+        assert!(!paths.contains(&"target.md"));
+        assert!(!paths.contains(&"direct_out.md"), "direct outgoing links excluded: {paths:?}");
+        assert!(!paths.contains(&"direct_in.md"), "direct incoming links excluded: {paths:?}");
+        assert!(!paths.contains(&"docs/memory/agent_note.md"), "agent files excluded: {paths:?}");
+        assert_eq!(paths.first().copied(), Some("strong_match.md"), "highest combined score first: {:?}", bl.related);
+        let top = &bl.related[0];
+        assert_eq!(top.title, "Quantum Electrodynamics");
+        assert!(top.score >= 8, "{top:?}");
+        assert!(top.reason.contains("shared link") && top.reason.contains("#quantum"), "{top:?}");
+        assert!(paths.contains(&"tag_only.md"));
     }
 }
 

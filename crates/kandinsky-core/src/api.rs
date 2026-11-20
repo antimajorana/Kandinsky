@@ -178,6 +178,13 @@ pub struct MergeTemplate {
     pub at_cursor: bool,
 }
 
+/// `POST /api/note/export-pdf`: export a Markdown note to PDF bytes.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct NoteExportPdfRequest {
+    pub path: String,
+}
+
 /// Body of every non-2xx `/api` response. `mtime` is set on 409 (current on-disk mtime, if any).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -2111,6 +2118,16 @@ pub struct Backlink {
     pub relation: Option<String>,
 }
 
+/// One suggested related note computed from shared links, tags, and title overlap.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RelatedNote {
+    pub path: String,
+    pub title: String,
+    pub reason: String,
+    pub score: u32,
+}
+
 /// `GET /api/backlinks?path=` — notes linking to `path`, sorted by source then line.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -2119,6 +2136,9 @@ pub struct Backlinks {
     pub links: Vec<Backlink>,
     /// Lines naming the note without linking to it (Obsidian's "unlinked mentions"), max 200.
     pub unlinked: Vec<Backlink>,
+    /// Related notes discovered from shared links, tags, and title keywords.
+    #[serde(default)]
+    pub related: Vec<RelatedNote>,
 }
 
 /// `POST /api/link-mention`: turn the mention of `target` on `line` of `source` into a link.

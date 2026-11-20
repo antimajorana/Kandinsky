@@ -917,38 +917,117 @@ async fn calendar_get(State(st): S, Query(q): Query<CalendarRangeQuery>) -> Resu
         )
         .await
         {
-            if let Some(arr) = val.as_array() {
-                for (i, item) in arr.iter().enumerate() {
-                    let Some(title) = item.get("title").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()) else {
-                        continue;
-                    };
-                    let Some(date) = item.get("date").or_else(|| item.get("start")).and_then(|v| v.as_str()).and_then(|s| s.get(..10)) else {
-                        continue;
-                    };
-                    resp.events.push(crate::calendar::CalendarEvent {
-                        id: format!("dav:{i}"),
-                        occurrence_id: format!("dav:{i}@{date}"),
-                        title: title.to_string(),
-                        date: date.to_string(),
-                        end_date: item.get("end_date").and_then(|v| v.as_str()).unwrap_or(date).to_string(),
-                        start: item.get("start_time").and_then(|v| v.as_str()).map(str::to_string),
-                        end: item.get("end_time").and_then(|v| v.as_str()).map(str::to_string),
-                        all_day: item.get("all_day").and_then(|v| v.as_bool()).unwrap_or(true),
-                        color: "purple".into(),
-                        location: item.get("location").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-                        repeat: crate::calendar::CalendarRecurrence::None,
-                        links: Vec::new(),
-                        source: crate::calendar::CalendarSource::Dav,
-                        path: None,
-                        line: None,
-                        completed: false,
-                        editable: false,
-                    });
-                }
-            }
+            append_dav_events(&val, &mut resp.events);
         }
     }
     Ok(Json(resp))
+}
+
+fn parse_dav_datetime(raw: &str) -> Option<(String, Option<String>)> {
+    let s = raw.trim();
+    let date = s.get(..10)?;
+    chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
+    let time = if s.len() >= 16 && matches!(s.as_bytes().get(10), Some(b'T' | b't' | b' ')) {
+        let hhmm = &s[11..16];
+        let (h, m) = hhmm.split_once(':')?;
+        let hh: u8 = h.parse().ok()?;
+        let mm: u8 = m.parse().ok()?;
+        (hh < 24 && mm < 60).then(|| format!("{hh:02}:{mm:02}"))
+    } else {
+        None
+    };
+    Some((date.to_string(), time))
+}
+
+fn append_dav_events(val: &serde_json::Value, out: &mut Vec<crate::calendar::CalendarEvent>) {
+    let Some(arr) = val.get("events").and_then(|v| v.as_array()).or_else(|| val.as_array()) else {
+        return;
+    };
+    for (i, item) in arr.iter().enumerate() {
+        let Some(title) = item
+            .get("summary")
+            .or_else(|| item.get("title"))
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+        let start_str = item.get("start").or_else(|| item.get("date")).and_then(|v| v.as_str());
+        let Some((date, parsed_start_time)) = start_str.and_then(parse_dav_datetime) else {
+            continue;
+        };
+        let all_day = item
+            .get("all_day")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(parsed_start_time.is_none());
+        let end_parsed = item.get("end").and_then(|v| v.as_str()).and_then(parse_dav_datetime);
+        let mut end_date = item
+            .get("end_date")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.get(..10))
+            .map(str::to_string)
+            .or_else(|| {
+                end_parsed.as_ref().map(|(ed, _)| {
+                    if all_day {
+                        // CalDAV/iCalendar all-day DTEND is exclusive (next day); convert to inclusive end_date.
+                        if let (Ok(sd), Ok(ed_d)) = (
+                            chrono::NaiveDate::parse_from_str(&date, "%Y-%m-%d"),
+                            chrono::NaiveDate::parse_from_str(ed, "%Y-%m-%d"),
+                        ) {
+                            if ed_d > sd {
+                                return (ed_d - chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+                            }
+                        }
+                    }
+                    ed.clone()
+                })
+            })
+            .unwrap_or_else(|| date.clone());
+        if end_date < date {
+            end_date = date.clone();
+        }
+        let start = if all_day {
+            None
+        } else {
+            item.get("start_time")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .or(parsed_start_time)
+        };
+        let end = if all_day {
+            None
+        } else {
+            item.get("end_time")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .or_else(|| end_parsed.and_then(|(_, t)| t))
+        };
+        let uid = item.get("uid").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty());
+        let id = match uid {
+            Some(u) => format!("dav:{u}"),
+            None => format!("dav:{i}"),
+        };
+        out.push(crate::calendar::CalendarEvent {
+            occurrence_id: format!("{id}@{date}"),
+            id,
+            title: title.to_string(),
+            date,
+            end_date,
+            start,
+            end,
+            all_day,
+            color: "purple".into(),
+            location: item.get("location").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            repeat: crate::calendar::CalendarRecurrence::None,
+            links: Vec::new(),
+            source: crate::calendar::CalendarSource::Dav,
+            path: None,
+            line: None,
+            completed: false,
+            editable: false,
+        });
+    }
 }
 
 async fn calendar_event_post(State(st): S, Json(req): Json<crate::calendar::CalendarEventUpsert>) -> Result<Json<crate::calendar::CalendarEvent>> {
@@ -1001,8 +1080,20 @@ async fn calendar_ics_import_post(State(st): S, Json(req): Json<crate::calendar:
     Ok(Json(res))
 }
 
-async fn calendar_ics_export_get(State(st): S) -> Result<Response> {
-    let body = with_ws(&st, |ws| Ok(crate::calendar::export_ics(ws.root(), &ws.config()?))).await?;
+#[derive(serde::Deserialize)]
+struct CalendarIcsExportQuery {
+    bases: Option<String>,
+}
+
+async fn calendar_ics_export_get(State(st): S, Query(q): Query<CalendarIcsExportQuery>) -> Result<Response> {
+    let bases_filter: Option<Vec<String>> = q.bases.as_deref().map(|raw| {
+        raw.split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect()
+    });
+    let body = with_ws(&st, move |ws| Ok(crate::calendar::export_ics_with_bases(ws.root(), &ws.config()?, bases_filter.as_deref()))).await?;
     Ok((
         [
             (header::CONTENT_TYPE, "text/calendar; charset=utf-8"),
@@ -1098,6 +1189,38 @@ async fn note_new(State(st): S, Json(mut req): Json<NewNote>) -> Result<Json<New
     .await?;
     st.bus.publish(Event::Fs { paths: std::iter::once(r.path.clone()).chain(extra).collect() });
     Ok(Json(r))
+}
+
+async fn note_export_pdf_post(State(st): S, Json(req): Json<NoteExportPdfRequest>) -> Result<Response> {
+    let rel = req.path.trim().to_string();
+    if rel.is_empty() {
+        return Err(Error::BadRequest("missing path".into()));
+    }
+    let (pdf_bytes, filename) = with_ws(&st, move |ws| {
+        let doc = files::read_text(&ws, &rel)?;
+        let pdf = crate::typst_doc::markdown_note_to_pdf(ws.root(), &rel, &doc.text)
+            .map_err(Error::Other)?;
+        let stem = std::path::Path::new(&rel)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("note");
+        let clean: String = stem
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ' ' | '.') { c } else { '_' })
+            .collect();
+        Ok((pdf, format!("{clean}.pdf")))
+    })
+    .await?;
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "application/pdf".to_string()),
+            (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{filename}\"")),
+        ],
+        pdf_bytes,
+    )
+        .into_response())
 }
 
 async fn synced_block_post(State(st): S, Json(req): Json<crate::notes::SyncedBlockWrite>) -> Result<Json<crate::notes::SyncedBlockResult>> {
@@ -3482,6 +3605,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/calendar/ics/import", post(calendar_ics_import_post))
         .route("/api/calendar/ics/export", get(calendar_ics_export_get))
         .route("/api/note/new", post(note_new))
+        .route("/api/note/export-pdf", post(note_export_pdf_post))
         .route("/api/note/synced-block", post(synced_block_post))
         .route("/api/comments", get(comments_get).post(comments_post))
         .route("/api/obsidian-themes", get(obsidian_themes_get))
@@ -4499,5 +4623,74 @@ fn main() {
         let dev_json: serde_json::Value = serde_json::from_slice(&dev_bytes).unwrap();
         let dev_ids: Vec<&str> = dev_json.as_array().unwrap().iter().filter_map(|p| p["id"].as_str()).collect();
         assert!(dev_ids.contains(&"solver") && dev_ids.contains(&"hello"), "{dev_ids:?}");
+    }
+
+    #[test]
+    fn dav_events_accept_object_wrapper_and_array_shapes() {
+        let wrapped = serde_json::json!({
+            "from": "2026-11-18",
+            "to": "2026-11-25",
+            "tz": "UTC",
+            "events": [
+                {
+                    "uid": "cal-1",
+                    "summary": "Faculty Seminar",
+                    "start": "2026-11-20T14:30:00+01:00",
+                    "end": "2026-11-20T16:00:00+01:00",
+                    "all_day": false,
+                    "location": "Room 301"
+                },
+                {
+                    "uid": "cal-2",
+                    "summary": "Conference",
+                    "start": "2026-11-22",
+                    "end": "2026-11-24",
+                    "all_day": true
+                }
+            ]
+        });
+        let mut out = Vec::new();
+        append_dav_events(&wrapped, &mut out);
+        assert_eq!(out.len(), 2);
+        assert_eq!((out[0].id.as_str(), out[0].title.as_str(), out[0].date.as_str()), ("dav:cal-1", "Faculty Seminar", "2026-11-20"));
+        assert_eq!((out[0].start.as_deref(), out[0].end.as_deref(), out[0].all_day), (Some("14:30"), Some("16:00"), false));
+        assert_eq!((out[1].date.as_str(), out[1].end_date.as_str(), out[1].all_day), ("2026-11-22", "2026-11-23", true));
+
+        let legacy = serde_json::json!([
+            {
+                "title": "Legacy Sync",
+                "date": "2026-11-21",
+                "start_time": "09:00",
+                "end_time": "09:30",
+                "all_day": false
+            }
+        ]);
+        let mut legacy_out = Vec::new();
+        append_dav_events(&legacy, &mut legacy_out);
+        assert_eq!(legacy_out.len(), 1);
+        assert_eq!((legacy_out[0].title.as_str(), legacy_out[0].start.as_deref()), ("Legacy Sync", Some("09:00")));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn note_export_pdf_route_returns_pdf_bytes() {
+        use tower::ServiceExt;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("notes")).unwrap();
+        std::fs::write(root.join("notes/sample.md"), "---\ntitle: Sample Note\n---\n# Sample Note\n\nHello **Typst** $x + y$.\n").unwrap();
+
+        let (routes, _run, _state) = start_vault(root, 0, None, None, None, "").unwrap();
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/note/export-pdf")
+            .header("x-kandinsky", "1")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(r#"{"path":"notes/sample.md"}"#))
+            .unwrap();
+        let res = routes.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(res.headers().get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()), Some("application/pdf"));
+        let bytes = axum::body::to_bytes(res.into_body(), 10 * 1024 * 1024).await.unwrap();
+        assert!(bytes.starts_with(b"%PDF-"), "expected PDF response body");
     }
 }
