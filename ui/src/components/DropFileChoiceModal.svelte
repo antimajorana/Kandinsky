@@ -4,6 +4,7 @@
   import { tick } from "svelte";
   import Dialog from "./Dialog.svelte";
   import Icon from "./Icon.svelte";
+  import { api } from "../lib/api";
   import { fileIcon } from "../lib/panes";
   import { pluginOn, plugins } from "../lib/plugin-registry.svelte";
   import {
@@ -23,10 +24,48 @@
   const files = $derived(req?.files ?? []);
   const firstName = $derived(files[0] ? (files[0].name || attachmentName(files[0])) : "attachment");
   const totalBytes = $derived(files.reduce((sum, f) => sum + (f.size || 0), 0));
-  const hasPapersPlugin = $derived(
-    !plugins.loaded || plugins.list.some((p) => (p.id === "catalog-papers" || p.provides.includes("references")) && p.has_helper && pluginOn(p)),
+  const referencesPlugin = $derived(
+    plugins.list.find((p) => (p.provides.includes("references") || p.id === "catalog-papers") && p.has_helper && pluginOn(p)) ?? null,
   );
+  const hasPapersPlugin = $derived(!plugins.loaded || referencesPlugin !== null);
   const isPdfLibraryDrop = $derived(Boolean(req?.isPdfDrop) && hasPapersPlugin);
+
+  let pluginSettings = $state<Record<string, unknown> | null>(null);
+  $effect(() => {
+    const plugin = referencesPlugin;
+    if (plugin?.settings && Object.keys(plugin.settings).length > 0) {
+      pluginSettings = plugin.settings;
+      return;
+    }
+    if (!req?.isPdfDrop || !hasPapersPlugin) return;
+    let live = true;
+    const apiAny = api as unknown as { pluginSettings?: (id: string) => Promise<Record<string, unknown>> };
+    void api.plugins().then((list) => {
+      if (!live) return;
+      const found = list.find((p) => (p.provides.includes("references") || p.id === "catalog-papers") && p.has_helper && !p.blocked);
+      if (found?.settings) pluginSettings = found.settings;
+      else if (found && typeof apiAny.pluginSettings === "function") {
+        void apiAny.pluginSettings(found.id).then((s) => { if (live && s) pluginSettings = s; }, () => {});
+      }
+    }, () => {});
+    return () => { live = false; };
+  });
+
+  const externalPdfRoots = $derived.by(() => {
+    const raw = (referencesPlugin?.settings ?? pluginSettings)?.external_pdf_roots;
+    return Array.isArray(raw) ? raw.filter((r): r is string => typeof r === "string" && r.trim().length > 0) : [];
+  });
+  const usesExternalFolder = $derived(
+    (referencesPlugin?.settings ?? pluginSettings)?.store_in_external === true && externalPdfRoots.length > 0,
+  );
+  const libraryChoiceTitle = $derived(
+    usesExternalFolder ? "Add to Paper Library (external folder, no vault copy) & cite" : "Add to Paper Library & cite",
+  );
+  const libraryChoiceDesc = $derived(
+    usesExternalFolder
+      ? "Files into your configured external folder without duplicating into the vault and inserts"
+      : "Files into the References library and inserts",
+  );
 
   let linkMode = $state(false);
   let uriDraft = $state("");
@@ -126,8 +165,8 @@
           >
             <span class="c-icon accent"><Icon name="library" size={16} /></span>
             <span class="c-body">
-              <span class="c-title">Add to Paper Library (kDrive, no vault copy) &amp; cite <span class="badge">Default</span></span>
-              <span class="c-desc">Files into the References library without duplicating into the vault and inserts <code>[[citekey]]</code></span>
+              <span class="c-title">{libraryChoiceTitle} <span class="badge">Default</span></span>
+              <span class="c-desc">{libraryChoiceDesc} <code>[[citekey]]</code></span>
             </span>
             <kbd class="keys-only">P</kbd>
           </button>

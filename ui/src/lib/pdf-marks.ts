@@ -188,9 +188,10 @@ export function attachPdfMarks(reader: Reader, pdf: string, changed: (marks: rea
   };
   void load();
   const offDrawn = reader.on("drawn", (n) => void place(n));
-  // the note's own saves (another device, the note edited); before it exists, any note made beside the PDF
+  // the note's own saves (another device, the note edited); before it exists, any note made beside the PDF (or in vault for external PDFs)
+  const isExternal = pdf.startsWith("../") || pdf.startsWith("@ext/");
   const offFs = on("fs", (e) => {
-    if (touches(e.paths, (p) => (state.note ? p === state.note : p.endsWith(".md") && p.startsWith(dir)))) void load();
+    if (touches(e.paths, (p) => (state.note ? p === state.note : p.endsWith(".md") && (isExternal || p.startsWith(dir))))) void load();
   });
   return {
     marks: () => state.marks,

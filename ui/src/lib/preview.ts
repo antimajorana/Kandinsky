@@ -133,8 +133,14 @@ function resolveWikiString(raw: string, fromNote: string, includeMissing: boolea
     if (!subpath || !fromNote) return null;
     return { kind: "file", path: fromNote, subpath };
   }
+  const pageMatch = subpath ? /(?:^|&)page=(\d+)/i.exec(subpath) : null;
+  const page = pageMatch ? Number(pageMatch[1]) : undefined;
   const path = resolveLink(notePart, dirOf(fromNote));
-  if (path) return { kind: "file", path, subpath };
+  if (path) return { kind: "file", path, subpath, ...(page ? { page } : {}) };
+  const norm = notePart.replaceAll("\\", "/");
+  if ((norm.startsWith("../") || norm.startsWith("@ext/")) && /\.[a-z0-9]+$/i.test(norm)) {
+    return { kind: "file", path: norm, subpath, ...(page ? { page } : {}) };
+  }
   return includeMissing ? { kind: "missing", path: notePart } : null;
 }
 

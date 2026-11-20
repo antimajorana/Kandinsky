@@ -675,6 +675,37 @@ fn openlibrary_text(v: &Json) -> Option<String> {
         .map(String::from)
 }
 
+fn openlibrary_publisher_of(arr: &Json) -> Option<String> {
+    const PUB_WORDS: &[&str] = &[
+        "press",
+        "publish",
+        "education",
+        "verlag",
+        "editions",
+        "éditions",
+        "books",
+        "academic",
+        "university",
+    ];
+    let names: Vec<String> = arr
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|x| x.as_str().or_else(|| x["name"].as_str()))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+    names
+        .iter()
+        .find(|n| {
+            let low = n.to_ascii_lowercase();
+            PUB_WORDS.iter().any(|w| low.contains(w))
+        })
+        .cloned()
+        .or_else(|| names.into_iter().next())
+}
+
 fn openlibrary_data_mapping(b: &Json, isbn: &str) -> Option<Mapping> {
     let raw_title = b["title"].as_str()?.trim();
     if raw_title.is_empty() {
@@ -693,10 +724,7 @@ fn openlibrary_data_mapping(b: &Json, isbn: &str) -> Option<Mapping> {
             .filter(|n| !n.is_empty())
             .collect()
     };
-    let publisher = b["publishers"][0]["name"]
-        .as_str()
-        .or_else(|| b["publishers"][0].as_str())
-        .map(String::from);
+    let publisher = openlibrary_publisher_of(&b["publishers"]);
     let series = b["series"][0]["name"]
         .as_str()
         .or_else(|| b["series"][0].as_str())
@@ -755,7 +783,7 @@ fn openlibrary_doc_mapping(doc: &Json, fallback_isbn: Option<&str>) -> Option<Ma
         .map(|y| y.to_string())
         .or_else(|| doc["publish_year"].as_array().and_then(|a| a.first()).and_then(Json::as_u64).map(|y| y.to_string()))
         .or_else(|| doc["publish_date"].as_array().and_then(|a| a.first()).and_then(Json::as_str).and_then(year_in).map(String::from));
-    let publisher = doc["publisher"].as_array().and_then(|a| a.first()).and_then(Json::as_str).map(String::from);
+    let publisher = openlibrary_publisher_of(&doc["publisher"]);
     let doc_isbns: Vec<String> = doc["isbn"].as_array().into_iter().flatten().filter_map(Json::as_str).filter_map(normalize_isbn).collect();
     let isbn = fallback_isbn
         .and_then(normalize_isbn)
@@ -2182,5 +2210,47 @@ mod tests {
         assert_eq!(qsrc, "crossref");
         assert_eq!(qm["DOI"].as_str(), Some("10.1038/nature08917"));
         assert_eq!(qm["abstractNote"].as_str(), Some("Spin liquids fluctuate."));
+    }
+
+    #[test]
+    fn openlibrary_publisher_of_prefers_publishing_house_over_bogus_first_imprint() {
+        let ol = json!({
+            "ISBN:9780521843096": {
+                "title": "Condensed Matter Field Theory",
+                "authors": [{ "name": "Alexander Altland" }],
+                "publish_date": "2010",
+                "publishers": [
+                    { "name": "Some Unrelated Imprint" },
+                    { "name": "Cambridge University Press" }
+                ],
+                "url": "https://openlibrary.org/books/OL99M"
+            }
+        });
+        let net = Table::default().on("https://openlibrary.org/api/books?bibkeys=ISBN:9780521843096", Answer::Json(ol));
+        let (m, src) = lookup_book_metadata(&net, Some("9780521843096"), None, None, None, "").unwrap();
+        assert_eq!(src, "openlibrary");
+        assert_eq!(m["publisher"].as_str(), Some("Cambridge University Press"));
+
+        let ol_fallback = json!({
+            "ISBN:9780306406157": {
+                "title": "Synthetic Monograph",
+                "authors": [{ "name": "Ada Example" }],
+                "publish_date": "2015",
+                "publishers": [{ "name": "Dover" }]
+            }
+        });
+        let net_fb = Table::default().on("https://openlibrary.org/api/books?bibkeys=ISBN:9780306406157", Answer::Json(ol_fallback));
+        let (m_fb, _) = lookup_book_metadata(&net_fb, Some("9780306406157"), None, None, None, "").unwrap();
+        assert_eq!(m_fb["publisher"].as_str(), Some("Dover"));
+
+        let doc = json!({
+            "title": "Introduction to Quantum Mechanics",
+            "author_name": ["David J. Griffiths"],
+            "first_publish_year": 2018,
+            "publisher": ["Unverified Reprint", "Cambridge University Press"],
+            "isbn": ["9781107189638"]
+        });
+        let doc_map = openlibrary_doc_mapping(&doc, Some("9781107189638")).unwrap();
+        assert_eq!(doc_map["publisher"].as_str(), Some("Cambridge University Press"));
     }
 }

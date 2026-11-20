@@ -12,7 +12,7 @@ import type { LibrarySpec } from "./gen/LibrarySpec";
 import type { LibraryInfo } from "./gen/LibraryInfo";
 import type { LibraryAdd } from "./gen/LibraryAdd";
 import { settings, change } from "./settings.svelte";
-import { plugins, pluginOn } from "./plugin-registry.svelte";
+import { plugins, pluginOn, setPluginOn } from "./plugin-registry.svelte";
 import { open } from "./dock";
 import { toast } from "./state.svelte";
 import { api } from "./api";
@@ -160,20 +160,54 @@ export async function addLibrary(req: Partial<LibraryAdd>): Promise<LibrarySpec 
   }
 }
 
+/** The plugin providing the Libraries page (whether currently enabled or switched off). */
+export const librariesPlugin = () => plugins.list.find((p) => p.provides.includes(LIBRARIES_ROLE) && p.view) ?? plugins.list.find((p) => p.id === SHIPPED && p.view) ?? null;
+
 /** The plugin whose pane is the Libraries page, while one is on. */
 export const librariesPage = () => plugins.list.find((p) => p.provides.includes(LIBRARIES_ROLE) && p.view && pluginOn(p)) ?? null;
 
 /** The Libraries page as a pane, at library `at`: one tab whatever the library (`anchor` is not part of its id; an open
  *  page goes to it, `kandinsky.pane.onAnchor`). Before the plugin list is loaded, the plugin Kandinsky ships it in. */
 export function librariesSpec(at?: string): PaneSpec {
-  return { kind: "plugin", id: librariesPage()?.id ?? SHIPPED, title: "Library", icon: "library", ...(at ? { anchor: at } : {}) };
+  return { kind: "plugin", id: librariesPage()?.id ?? librariesPlugin()?.id ?? SHIPPED, title: "Library", icon: "library", ...(at ? { anchor: at } : {}) };
 }
 
-/** Opens the Libraries page (at library `at`); with no plugin giving it, says which to switch on. */
+/** Opens the Libraries page (at library `at`); if the Catalog plugin is toggled off or not yet loaded, handles it cleanly. */
 export function openLibraries(at?: string): void {
-  if (plugins.loaded && !librariesPage()) {
-    toast("No Libraries page", "The Libraries page is the Catalog plugin's: switch it on in Settings → Plugins.", "info");
+  if (!plugins.loaded || librariesPage()) {
+    open(librariesSpec(at));
     return;
   }
-  open(librariesSpec(at));
+  const offCatalog = librariesPlugin();
+  if (offCatalog && !offCatalog.error && !offCatalog.not_here) {
+    toast(
+      "Catalog plugin is switched off",
+      `Enable ${offCatalog.title} to view References and Libraries.`,
+      "info",
+      9000,
+      [
+        {
+          label: `Enable ${offCatalog.title}`,
+          run: () => {
+            void setPluginOn(offCatalog.id, true)
+              .then(() => import("./plugins.svelte").then((m) => m.loadPlugins()))
+              .then(() => open(librariesSpec(at)))
+              .catch((e) => toast("Could not enable Catalog", errText(e), "error"));
+          },
+        },
+        {
+          label: "Plugins",
+          run: () => void import("./settings-nav.svelte").then((m) => m.openSettingsAt("plugins")),
+        },
+      ],
+    );
+    return;
+  }
+  toast(
+    "No Libraries page",
+    "The Libraries page is the Catalog plugin's: switch it on in Settings → Plugins.",
+    "info",
+    9000,
+    { label: "Open Plugins", run: () => void import("./settings-nav.svelte").then((m) => m.openSettingsAt("plugins")) },
+  );
 }

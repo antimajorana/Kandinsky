@@ -93,6 +93,11 @@ pub struct PaperEdit {
     pub issue: Option<String>,
     pub pages: Option<String>,
     pub publisher: Option<String>,
+    pub edition: Option<String>,
+    pub series: Option<String>,
+    pub url: Option<String>,
+    #[serde(rename = "abstractNote")]
+    pub abstract_note: Option<String>,
 }
 
 /// How a PDF is filed by `import_pdf_with` (`import`, the References move): its type (`book`, `thesis`, `manuscript`
@@ -379,6 +384,25 @@ impl Lib<'_> {
         safe_join(self.root, cleaned).ok().filter(|p| p.is_file())
     }
 
+    pub(crate) fn shared_sidecar_path(&self, raw_ref: &str, pdf_abs: &Path) -> Option<PathBuf> {
+        let sidecar_dir = self.cfg.sidecar_dir.trim().replace('\\', "/").trim_matches('/').to_string();
+        if sidecar_dir.is_empty() {
+            return Some(PathBuf::from(format!("{}.kandinsky-marks", pdf_abs.display())));
+        }
+        if let Some((ext_root, sub)) = crate::external::resolve_pdf_root_and_sub(self.root, self.cfg, raw_ref) {
+            if !sub.is_empty() {
+                let rel = format!("{sidecar_dir}/{sub}.kandinsky-marks");
+                if let Ok(joined) = safe_join(&ext_root, &rel) {
+                    return Some(joined);
+                }
+            }
+        }
+        crate::external::resolve_pdf_ref(self.root, self.cfg, &self.cfg.sidecar_dir)
+            .map(|(_, d)| d)
+            .or_else(|| safe_join(self.root, &sidecar_dir).ok())
+            .map(|d| d.join(format!("{}.kandinsky-marks", pdf_abs.file_name().unwrap_or_default().to_string_lossy())))
+    }
+
     pub fn paper_of(&self, dir: &Path, key: &str, m: &Mapping) -> Paper {
         let key = s(m, "citekey").unwrap_or_else(|| key.to_string());
         let pdf = list(m, "pdf")
@@ -629,15 +653,11 @@ impl Lib<'_> {
         let (_, mut mark_lines) = entry::split_pdf_marks(&note_text);
         if self.cfg.annotations_mode == "shared_sidecar" {
             if let Some(pdf_abs) = p.pdf.as_deref().and_then(|r| self.pdf_abs_path(r)) {
-                let sidecar = if self.cfg.sidecar_dir.trim().is_empty() {
-                    PathBuf::from(format!("{}.kandinsky-marks", pdf_abs.display()))
-                } else {
-                    crate::external::resolve_pdf_ref(self.root, self.cfg, &self.cfg.sidecar_dir)
-                        .map(|(_, d)| d)
-                        .or_else(|| safe_join(self.root, &self.cfg.sidecar_dir).ok())
-                        .map(|d| d.join(format!("{}.kandinsky-marks", pdf_abs.file_name().unwrap_or_default().to_string_lossy())))
-                        .unwrap_or_else(|| PathBuf::from(format!("{}.kandinsky-marks", pdf_abs.display())))
-                };
+                let sidecar = p
+                    .pdf
+                    .as_deref()
+                    .and_then(|r| self.shared_sidecar_path(r, &pdf_abs))
+                    .unwrap_or_else(|| PathBuf::from(format!("{}.kandinsky-marks", pdf_abs.display())));
                 if let Ok(sc_text) = std::fs::read_to_string(&sidecar) {
                     let merged = entry::merge_pdf_marks(&entry::attach_pdf_marks("", &mark_lines), &sc_text.lines().map(String::from).collect::<Vec<_>>());
                     mark_lines = entry::split_pdf_marks(&merged).1;
@@ -1063,15 +1083,25 @@ impl Lib<'_> {
         let mut m = entry::read(&dir).unwrap_or_default();
         // the venue lives in the field the item type uses (journal, proceedings, book, publisher, university)
         let eff_kind = e.kind.as_deref().map(str::trim).filter(|k| !k.is_empty()).or_else(|| m.get("type").and_then(Value::as_str)).unwrap_or("");
-        let default_venue = match normalized_kind(eff_kind) {
-            "book" => "publisher",
-            "thesis" => "university",
-            _ => "publicationTitle",
+        let is_book_section = matches!(eff_kind.trim().to_ascii_lowercase().as_str(), "booksection" | "incollection" | "inbook");
+        let is_book = normalized_kind(eff_kind) == "book" && !is_book_section;
+        let default_venue = if is_book_section {
+            "bookTitle"
+        } else if is_book {
+            "publisher"
+        } else if normalized_kind(eff_kind) == "thesis" {
+            "university"
+        } else {
+            "publicationTitle"
         };
-        let venue_key = ["publicationTitle", "proceedingsTitle", "bookTitle", "publisher", "university"]
-            .into_iter()
-            .find(|k| m.contains_key(*k))
-            .unwrap_or(default_venue);
+        let venue_key = if is_book_section {
+            "bookTitle"
+        } else {
+            ["publicationTitle", "proceedingsTitle", "bookTitle", "publisher", "university"]
+                .into_iter()
+                .find(|k| m.contains_key(*k) && !(is_book && *k == "publisher" && e.publisher.is_some()))
+                .unwrap_or(default_venue)
+        };
         let trimmed_date = e.date.trim();
         let preserved_date = if is_year_token(trimmed_date) {
             s(&m, "date")
@@ -1081,11 +1111,11 @@ impl Lib<'_> {
             trimmed_date.to_string()
         };
         let seq = |xs: &[String]| Value::Sequence(xs.iter().map(|x| x.trim()).filter(|x| !x.is_empty()).map(Value::from).collect());
+        let write_venue = !(venue_key == "publisher" && e.publisher.is_some());
         for (k, v) in [
             ("title", Value::from(e.title.trim())),
             ("author", seq(&e.authors)),
             ("date", Value::from(preserved_date.as_str())),
-            (venue_key, Value::from(e.venue.trim())),
             ("collections", seq(&e.collections)),
             ("tags", seq(&e.tags)),
         ] {
@@ -1094,6 +1124,14 @@ impl Lib<'_> {
                 m.remove(k);
             } else {
                 m.insert(k.into(), v);
+            }
+        }
+        if write_venue {
+            let v = e.venue.trim();
+            if v.is_empty() {
+                m.remove(venue_key);
+            } else {
+                m.insert(venue_key.into(), Value::from(v));
             }
         }
         let set_opt = |m: &mut Mapping, field: &str, opt: Option<&str>| {
@@ -1149,6 +1187,10 @@ impl Lib<'_> {
         set_opt(&mut m, "issue", e.issue.as_deref());
         set_opt(&mut m, "pages", e.pages.as_deref());
         set_opt(&mut m, "publisher", e.publisher.as_deref());
+        set_opt(&mut m, "edition", e.edition.as_deref());
+        set_opt(&mut m, "series", e.series.as_deref());
+        set_opt(&mut m, "url", e.url.as_deref());
+        set_opt(&mut m, "abstractNote", e.abstract_note.as_deref());
         self.saved(&dir, &paper.key, &m)
     }
 
@@ -3740,5 +3782,97 @@ pub mod tests {
         assert!(!b2.created && b2.paper.key == b1.paper.key);
         let b3 = v.lib().add("@book{mahan2000, title={Physics of Many-Body Systems}, author={Mahan, Gerald D.}, year={2000}, isbn={9780306406157}}").unwrap();
         assert!(!b3.created && b3.paper.key == b1.paper.key);
+    }
+
+    #[test]
+    fn edit_preserves_book_publisher_maps_book_section_booktitle_and_updates_extended_fields() {
+        let v = Vault::new();
+        let lib = v.lib();
+
+        // 1. Book with both publicationTitle/series and publisher keeps publisher dedicated to e.publisher
+        let book_dir = v.root.join("refs/papers/altland2010");
+        std::fs::create_dir_all(&book_dir).unwrap();
+        std::fs::write(
+            book_dir.join("altland2010.md"),
+            "---\ntype: literature\ncitekey: altland2010\nitemType: book\ntitle: Condensed Matter\nauthors:\n  - Altland, Alexander\npublished: 2010\nseries: Graduate Texts\npublisher: Cambridge University Press\n---\n",
+        ).unwrap();
+        let edited_book = lib.edit(&PaperEdit {
+            key: "altland2010".into(),
+            title: "Condensed Matter Field Theory".into(),
+            authors: vec!["Altland, Alexander".into()],
+            date: "2010".into(),
+            venue: "Ignored Book Venue".into(),
+            publisher: Some("Cambridge University Press".into()),
+            edition: Some("2nd ed.".into()),
+            series: Some("Cambridge Monographs".into()),
+            url: Some("https://example.org/altland".into()),
+            abstract_note: Some("Updated book abstract.".into()),
+            collections: vec!["Books".into()],
+            tags: vec!["qft".into()],
+            ..Default::default()
+        }).unwrap();
+        assert_eq!(edited_book.publisher.as_deref(), Some("Cambridge University Press"));
+        assert_eq!(edited_book.edition.as_deref(), Some("2nd ed."));
+        assert_eq!(edited_book.series.as_deref(), Some("Cambridge Monographs"));
+        assert_eq!(edited_book.url.as_deref(), Some("https://example.org/altland"));
+        assert_eq!(edited_book.abstract_text.as_deref(), Some("Updated book abstract."));
+        let book_m = entry::read(&book_dir).unwrap();
+        assert_eq!(s(&book_m, "publisher").as_deref(), Some("Cambridge University Press"));
+
+        // 2. bookSection maps venue to bookTitle while preserving publisher
+        let sec_dir = v.root.join("refs/papers/example2021ch");
+        std::fs::create_dir_all(&sec_dir).unwrap();
+        std::fs::write(
+            sec_dir.join("example2021ch.md"),
+            "---\ntype: literature\ncitekey: example2021ch\nitemType: bookSection\ntitle: Chapter One\nauthors:\n  - Example, Ada\npublished: 2021\nbookTitle: Old Handbook\npublisher: Old Press\n---\n",
+        ).unwrap();
+        let edited_sec = lib.edit(&PaperEdit {
+            key: "example2021ch".into(),
+            title: "Chapter One".into(),
+            authors: vec!["Example, Ada".into()],
+            date: "2021".into(),
+            venue: "New Handbook of Physics".into(),
+            publisher: Some("Academic House".into()),
+            collections: vec![],
+            tags: vec![],
+            ..Default::default()
+        }).unwrap();
+        assert_eq!(edited_sec.venue.as_deref(), Some("New Handbook of Physics"));
+        assert_eq!(edited_sec.publisher.as_deref(), Some("Academic House"));
+        let sec_m = entry::read(&sec_dir).unwrap();
+        assert_eq!(s(&sec_m, "bookTitle").as_deref(), Some("New Handbook of Physics"));
+        assert_eq!(s(&sec_m, "publisher").as_deref(), Some("Academic House"));
+    }
+
+    #[test]
+    fn annotations_resolves_relative_sidecar_dir_preserving_external_subfolder() {
+        let ws = tempfile::tempdir().unwrap();
+        let ws_real = kandinsky_text::paths::real(ws.path()).unwrap();
+        let vault_dir = ws_real.join("vault");
+        let pool_dir = ws_real.join("Papers");
+        std::fs::create_dir_all(vault_dir.join("refs/papers/maier2005")).unwrap();
+        std::fs::create_dir_all(pool_dir.join("CondMat")).unwrap();
+        std::fs::create_dir_all(pool_dir.join(".sidecars/CondMat")).unwrap();
+        std::fs::write(pool_dir.join("CondMat/Maier2005.pdf"), b"%PDF-1.4").unwrap();
+        std::fs::write(
+            pool_dir.join(".sidecars/CondMat/Maier2005.pdf.kandinsky-marks"),
+            "```pdf-marks\nm-11112222 highlight p3 {\"version\":1,\"color\":\"#FFE066\",\"quads\":[[10,20,100,32]],\"quote\":{\"exact\":\"Shared mark\"}}\n```\n",
+        ).unwrap();
+        std::fs::write(
+            vault_dir.join("refs/papers/maier2005/maier2005.md"),
+            "---\ntype: literature\ncitekey: maier2005\nitemType: journalArticle\ntitle: Maier Study\npdf: ../Papers/CondMat/Maier2005.pdf\n---\n# Maier Study\n",
+        ).unwrap();
+
+        let mut v = Vault::new();
+        v.root = vault_dir;
+        v.trash = TempTrash(v.root.clone());
+        v.cfg.external_pdf_roots = vec!["../Papers".into()];
+        v.cfg.annotations_mode = "shared_sidecar".into();
+        v.cfg.sidecar_dir = ".sidecars".into();
+
+        let ann = v.lib().annotations("maier2005").unwrap();
+        assert_eq!(ann["count"], 1);
+        assert_eq!(ann["annotations"][0]["id"], "m-11112222");
+        assert_eq!(ann["annotations"][0]["quote"]["exact"], "Shared mark");
     }
 }

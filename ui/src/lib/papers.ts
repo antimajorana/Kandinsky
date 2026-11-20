@@ -46,9 +46,13 @@ export async function ensureNoteOf(path: string): Promise<void> {
 /** From any file of a paper (its PDF, usually): the paper's notes, beside. `path`: that file (default: the active one). */
 export async function notesBeside(path = context.active?.path ?? ""): Promise<void> {
   const paper = await paperOf(path);
-  if (!paper) { toast("Not a paper", "Open a paper from the Library first: this opens its notes beside the PDF."); return; }
-  const note = await readingNote(paper.key);
-  if (note) open({ kind: "editor", path: note }, { beside: path !== note });
+  let note = paper ? await readingNote(paper.key) : null;
+  if (!note && path && /\.pdf$/i.test(path)) {
+    const pm = await api.pdfMarks(path).catch(() => null);
+    note = pm?.note ?? (await api.companion({ path, title: null, properties: {}, block: null, find: false }).catch(() => null))?.path ?? null;
+  }
+  if (!note) { toast("Not a paper", "Open a paper from the Library first: this opens its notes beside the PDF."); return; }
+  open({ kind: "editor", path: note }, { beside: path !== note });
 }
 
 export const paperActions: Action[] = [

@@ -11,4 +11,4 @@ authors: Array<string>,
 /**
  * A year or a full date.
  */
-date: string, venue: string, collections: Array<string>, tags: Array<string>, };
+date: string, venue: string, collections: Array<string>, tags: Array<string>, kind?: string, doi?: string, arxiv?: string, isbn?: string, volume?: string, issue?: string, pages?: string, publisher?: string, edition?: string, series?: string, url?: string, abstractNote?: string, };

@@ -32,4 +32,4 @@ pdf: string | null,
 /**
  * When the entry joined the library (`dateAdded`, "YYYY-MM-DD hh:mm:ss"), for sorting.
  */
-added: string | null, has_notes: boolean, };
+added: string | null, has_notes: boolean, isbn?: string, volume?: string, issue?: string, pages?: string, publisher?: string, edition?: string, series?: string, };

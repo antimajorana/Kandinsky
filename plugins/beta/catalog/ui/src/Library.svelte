@@ -8,11 +8,12 @@
   import { marquee } from "../../../../../ui/src/lib/marquee";
   import Select from "../../../../../ui/src/components/Select.svelte";
   import type { LibraryAction, LibraryDetail, LibraryForm, LibraryItem, LibrarySource, PluginApi } from "../../../../../ui/src/lib/plugin-api";
-  import { continueRow, counted, groupTree, inGroup, GROUP_SEP, matches, place, seen, sortItems } from "./library";
+  import { continueRow, counted, groupTree, inGroup, GROUP_SEP, matches, place, seen, sortItems, type LibraryItemExt, type LibrarySourceExt, type TableColumnSpec } from "./library";
   import Icon from "./Icon.svelte";
   import LibraryCover from "./LibraryCover.svelte";
 
   let { kandinsky, source }: { kandinsky: PluginApi; source: LibrarySource } = $props();
+  const extSource = $derived(source as LibrarySourceExt);
   /** Items in the Continue row at most. */
   const CONTINUE = 8;
   const toast = (title: string, body?: string, kind: "info" | "error" = "info", timeout?: number) => kandinsky.toast(title, body, kind, { timeout });
@@ -29,25 +30,53 @@
   const was = untrack(() => place.get(source.id));
   let scope = $state<Scope>(was?.scope ?? { kind: "all" });
   let tab = $state<string | null>(was?.tab ?? null);
-  let tagsOpen = $state(false);
+  let tagsOpen = $state(Boolean(was?.tagsOpen));
   let selId = $state<string | null>(untrack(() => place.get(source.id)?.selId ?? null));
   // a page's source never changes: its defaults are read once
   let sortId = $state(untrack(() => place.get(source.id)?.sortId ?? source.sorts[0]?.id ?? ""));
-  let sortDesc = $state<boolean | null>(null);
+  let sortDesc = $state<boolean | null>(untrack(() => place.get(source.id)?.sortDesc ?? null));
   let sortStatus = $state("");
   let layout = $state(untrack(() => place.get(source.id)?.layout ?? source.layouts[0]));
   let tools = $state<LibraryAction[]>([]);
   let list: HTMLDivElement;
 
-  const TABLE_COLS = [
+  const GENERIC_TABLE_COLS: TableColumnSpec[] = [
     { id: "title", label: "Title" },
-    { id: "author", label: "Creators" },
+    { id: "subtitle", label: "Subtitle" },
     { id: "year", label: "Year" },
-    { id: "venue", label: "Publication" },
-    { id: "kind", label: "Type" },
+    { id: "type", label: "Type" },
     { id: "added", label: "Added" },
-    { id: "pdf", label: "PDF" },
-  ] as const;
+  ];
+  const tableCols = $derived<TableColumnSpec[]>(
+    extSource.tableColumns?.length ? extSource.tableColumns : GENERIC_TABLE_COLS,
+  );
+
+  function colValue(rawItem: LibraryItem, col: TableColumnSpec): string {
+    const i = rawItem as LibraryItemExt;
+    const c = i.columns;
+    const k = col.key ?? col.id;
+    switch (k) {
+      case "title": return i.title;
+      case "creators": case "author": return c?.creators ?? i.sub ?? "";
+      case "subtitle": return c?.subtitle ?? i.sub ?? "";
+      case "year": return c?.year ?? "";
+      case "venue": return c?.venue ?? "";
+      case "publisher": return c?.publisher ?? "";
+      case "citekey": return c?.citekey ?? i.id;
+      case "kind": case "type": return c?.kind ?? c?.type ?? "";
+      case "added": return c?.added ?? "";
+      default: {
+        const v = c?.[k];
+        return typeof v === "string" ? v : "";
+      }
+    }
+  }
+
+  function hasPdfOf(i: LibraryItem): boolean {
+    if (i.columns?.hasPdf !== undefined) return i.columns.hasPdf;
+    if (i.flags?.some((f) => f.label === "no PDF")) return false;
+    return Boolean(i.flags?.some((f) => f.label === "PDF"));
+  }
 
   async function load() {
     try {
@@ -107,7 +136,7 @@
       nextDesc = def?.desc ?? (colId === "year" || colId === "added" || colId === "pdf");
     }
     sortDesc = nextDesc;
-    const label = TABLE_COLS.find((c) => c.id === colId)?.label ?? colId;
+    const label = tableCols.find((c) => c.id === colId)?.label ?? colId;
     sortStatus = `Sorted by ${label}, ${nextDesc ? "descending" : "ascending"}`;
   }
   // what you were reading or listening to: the tab's unfinished items by when they were last used (not while searching
@@ -309,7 +338,7 @@
     return { destroy: off };
   }
 
-  $effect(() => { place.set(source.id, { scope, tab, q, selId, sortId, layout, scroll: untrack(() => place.get(source.id)?.scroll ?? 0) }); });
+  $effect(() => { place.set(source.id, { scope, tab, q, selId, sortId, sortDesc, tagsOpen, layout, scroll: untrack(() => place.get(source.id)?.scroll ?? 0) }); });
   const keepScroll = () => { const p = place.get(source.id); if (p && list) p.scroll = list.scrollTop; };
 
   onMount(() => {
@@ -420,7 +449,7 @@
           <caption class="sr-only">{source.title}</caption>
           <thead>
             <tr>
-              {#each TABLE_COLS as col (col.id)}
+              {#each tableCols as col (col.id)}
                 <th scope="col" class="col-{col.id}" aria-sort={sortId === col.id ? (effectiveDesc ? "descending" : "ascending") : undefined}>
                   <button type="button" class="th-btn" onclick={() => toggleTableSort(col.id)}>
                     <span>{col.label}</span><span class="sort-ind" aria-hidden="true">{sortId === col.id ? (effectiveDesc ? " ↓" : " ↑") : ""}</span>
@@ -433,21 +462,28 @@
             {#each sorted as i (i.id)}
               <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
               <tr class="trow" class:sel={isPicked(i)} data-pick={i.id} draggable={source.regroup ? "true" : undefined} ondragstart={(e) => dragItem(e, i)} onclick={(e) => click(e, i)} ondblclick={() => source.open?.(i)} oncontextmenu={(e) => void menu(e, i)}>
-                <td class="c-title" title={i.title}>
-                  <button type="button" class="row-focus" onclick={(e) => { e.stopPropagation(); click(e, i); }} ondblclick={(e) => { e.stopPropagation(); source.open?.(i); }}>
-                    <span class="t">{@html richTitle(i.title)}</span>
-                  </button>
-                </td>
-                <td class="c-author" title={i.columns?.creators ?? i.sub ?? ""}>{i.columns?.creators ?? i.sub ?? ""}</td>
-                <td class="c-year">{i.columns?.year ?? ""}</td>
-                <td class="c-venue" title={i.columns?.venue ?? ""}>{i.columns?.venue ?? ""}</td>
-                <td class="c-kind">{i.columns?.kind ?? ""}</td>
-                <td class="c-added">{i.columns?.added ?? ""}</td>
-                <td class="c-pdf">
-                  {#if i.columns?.hasPdf ?? i.flags?.some((f) => f.label === "PDF")}
-                    <span class="flag red">PDF</span>
+                {#each tableCols as col (col.id)}
+                  {#if col.id === "title"}
+                    <td class="c-title" title={i.title}>
+                      <button type="button" class="row-focus" onclick={(e) => { e.stopPropagation(); click(e, i); }} ondblclick={(e) => { e.stopPropagation(); source.open?.(i); }}>
+                        <span class="t">{@html richTitle(i.title)}</span>
+                      </button>
+                    </td>
+                  {:else if col.id === "pdf"}
+                    <td class="c-pdf">
+                      {#if hasPdfOf(i)}
+                        <span class="flag green">PDF</span>
+                      {:else if i.flags?.some((f) => f.label === "no PDF")}
+                        <span class="flag red">no PDF</span>
+                      {:else}
+                        <span class="muted">—</span>
+                      {/if}
+                    </td>
+                  {:else}
+                    {@const val = colValue(i, col)}
+                    <td class="c-{col.id}" title={val || undefined}>{val}</td>
                   {/if}
-                </td>
+                {/each}
               </tr>
             {/each}
           </tbody>
@@ -477,9 +513,16 @@
               {#if i.progress}<span class="bar" style:--p={i.progress} aria-label="{Math.round(i.progress * 100)} %"></span>{/if}
             </button>
           {/if}
-  >>>>>>> theirs
         {:else}
-          <p class="muted pad none">{items.length ? "Nothing matches." : source.homes?.length ? `Nothing of yours yet. What is on ${source.homes.map((h) => h.from).join(" or ")} is in its own tab (the button above); a thing comes here once you read it or write about it.` : source.empty}{#if !items.length && source.setup} <button class="btn primary" onclick={() => void run(async () => { await source.setup?.run(); await load(); })}>{source.setup.label}</button>{/if}</p>
+          <div class="empty-state pad none">
+            <p class="muted">{items.length ? "Nothing matches." : source.homes?.length ? `Nothing of yours yet. What is on ${source.homes.map((h) => h.from).join(" or ")} is in its own tab (the button above); a thing comes here once you read it or write about it.` : source.empty}</p>
+            {#if !items.length && (source.setup || extSource.emptyActions?.length)}
+              <div class="empty-actions">
+                {#if source.setup}<button class="btn primary" onclick={() => void run(async () => { await source.setup?.run(); await load(); })}>{source.setup.label}</button>{/if}
+                {#each extSource.emptyActions ?? [] as a (a.label)}{@render button(a)}{/each}
+              </div>
+            {/if}
+          </div>
         {/each}
       {/if}
     </div>
@@ -571,7 +614,7 @@
   .seg button { padding: 4px 10px; color: var(--text-muted); }
   .seg button.on { background: var(--accent-soft); color: var(--accent); }
   .btn { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--border-strong); }
-  .btn:hover:not(:disabled) { background: var(--bg-hover); }
+  .btn:hover:not(:disabled):not(.primary) { background: var(--bg-hover); }
   .btn:disabled { opacity: .45; cursor: default; }
   .btn.danger { color: var(--red); }
   .edit { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin: 0 0 14px; padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-alt); }
@@ -612,13 +655,16 @@
   .th-btn { width: 100%; display: flex; align-items: center; gap: 4px; padding: 7px 8px; text-align: left; font: inherit; font-size: calc(11.5px * var(--ui-scale, 1)); color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .th-btn:hover { background: var(--bg-hover); color: var(--text); }
   .sort-ind { color: var(--accent); flex: none; }
-  .col-title { width: 34%; }
-  .col-author { width: 19%; }
-  .col-year { width: 58px; }
-  .col-venue { width: 18%; }
-  .col-kind { width: 10%; }
+  .col-title { width: 28%; }
+  .col-author { width: 17%; }
+  .col-subtitle { width: 24%; }
+  .col-year { width: 56px; }
+  .col-venue { width: 16%; }
+  .col-publisher { width: 14%; }
+  .col-citekey { width: 12%; font-family: var(--font-mono); }
+  .col-kind, .col-type { width: 10%; }
   .col-added { width: 88px; }
-  .col-pdf { width: 48px; }
+  .col-pdf { width: 54px; }
   .trow { cursor: pointer; }
   .trow td { padding: 6px 8px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); vertical-align: middle; }
   .trow:hover td { background: var(--bg-hover); }
@@ -627,6 +673,7 @@
   .row-focus { display: block; width: 100%; text-align: left; padding: 0; font: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row-focus .t { display: block; }
   .c-year, .c-added { font-variant-numeric: tabular-nums; }
+  .c-citekey { font-family: var(--font-mono); font-size: calc(11.5px * var(--ui-scale, 1)); }
   .c-pdf { text-align: center; }
   /* a service's things, apart from the vault's: a band across the list with the way into the service's own app */
   .from-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin: 14px 0 2px; padding: 8px 10px; border-radius: var(--radius-sm);
@@ -665,6 +712,10 @@
   .flags { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 4px; align-items: center; }
   .flag { font-size: calc(11px * var(--ui-scale, 1)); padding: 1px 6px; border-radius: 999px; background: var(--bg-hover); color: var(--text-muted); }
   .flag.red { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
+  .flag.green { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+  .empty-state { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+  .empty-state p { margin: 0; }
+  .empty-actions { display: flex; flex-wrap: wrap; gap: 8px; }
   /* a column; the linked mentions follow the item (at the bottom of a short card they stood apart, the column blank) */
   .detail { overflow: auto; padding: 18px 22px 40px; display: flex; flex-direction: column; container-type: inline-size; }
   .detail > :global(*) { flex-shrink: 0; }

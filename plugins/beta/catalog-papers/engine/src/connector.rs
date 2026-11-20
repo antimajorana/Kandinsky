@@ -1044,8 +1044,8 @@ mod tests {
         assert_eq!(c.handle(&req("/connector/saveItems", json!({ "sessionID": "sG", "items": [bare_new] }), false)).status, 201);
         let att_new = attachment(json!({ "sessionID": "sG", "parentItemID": "raw3", "title": "download.pdf" }), "application/pdf", &new_pdf);
         assert_eq!(c.handle(&att_new).status, 201);
-        assert!(!pool.join("Full Text PDF.pdf").exists(), "must never write Full Text PDF.pdf to kDrive");
-        assert!(pool.join("Kitaev2006 - Braiding Majorana Modes.pdf").is_file(), "must write enriched filename to kDrive");
+        assert!(!pool.join("Full Text PDF.pdf").exists(), "must never write Full Text PDF.pdf to external folder");
+        assert!(pool.join("Kitaev2006 - Braiding Majorana Modes.pdf").is_file(), "must write enriched filename to external folder");
         let kitaev_m = entry::read(&root.join("refs/papers/kitaev2006braiding")).unwrap();
         assert_eq!(kitaev_m["files"][0].as_str(), Some("../Papers/Kitaev2006 - Braiding Majorana Modes.pdf"));
         assert_eq!(std::fs::read_dir(root.join("refs/papers")).unwrap().count(), 4);
