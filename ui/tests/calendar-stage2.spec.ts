@@ -60,6 +60,8 @@ test("click-a-day stays lazy until typing, anchored + Add event writes plain mar
   const lastCell = pane.locator(".cell[data-date]").last();
   const emptyDay = (await lastCell.getAttribute("data-date"))!;
   expect(emptyDay).toBeTruthy();
+  // a retry starts as the first run did: without the log an earlier attempt wrote (a first run checks browsing wrote none)
+  if (test.info().retry > 0) await request.post(`/api/fs/trash?path=${encodeURIComponent(`log/${emptyDay}.md`)}`, { headers: H }).catch(() => {});
 
   await lastCell.click();
   const ws = page.getByTestId("day-workspace");

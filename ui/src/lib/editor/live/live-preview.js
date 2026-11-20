@@ -292,8 +292,10 @@ class ImageWidget extends KeyedWidget {
     this.opts = opts;
     this.span = span;
   }
-  ignoreEvent() {
-    return true;
+  // the resize handles and alignment buttons are the widget's own; the picture itself still reaches the editor's
+  // handlers (Ctrl+click opens it in a tab, link-clicks.ts)
+  ignoreEvent(e) {
+    return !!e.target?.closest?.(".cm-img-align-bar, .cm-img-handle");
   }
   toDOM(view) {
     const align = this.opts.align ?? (this.opts.center ? "center" : "");

@@ -96,7 +96,10 @@ test("vertical tabs: open, find, pin, middle-click close, split, collapse + hove
   await page.keyboard.press("Meta+s"); // expand again
   await expect(pins.locator(".pin", { hasText: "hubbard" })).toBeVisible();
   await expect(page.locator(".dv-groupview")).toHaveCount(2);
-  await expect(open(page).locator(".pane-row.active, .pane-row.split-shown")).toHaveCount(2);
+  // Home is opened on every start (App.svelte): the left split shows it (an app, not a row), the right one FOCUS.md
+  await expect(homeOn(page)).toHaveCount(1);
+  await expect(row(page, "FOCUS.md")).toHaveClass(/split-shown/);
+  await expect(open(page).locator(".pane-row.active, .pane-row.split-shown")).toHaveCount(1);
   await expect(row(page, "FOCUS.md")).toHaveCount(1);
   await expect(row(page, "run.py")).toHaveCount(1);
   await shot(page, "08-restored");

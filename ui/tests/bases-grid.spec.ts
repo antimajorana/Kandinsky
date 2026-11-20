@@ -68,7 +68,8 @@ test("a board card opens with Enter and moves a lane over with Alt+arrows, the f
   await card.focus();
   await page.keyboard.press(from === 0 ? "Alt+ArrowRight" : "Alt+ArrowLeft");
   await expect.poll(() => text(request, "db/kb/a.md")).toContain(`status: ${other}`);
-  await expect(lanes.nth(1 - from).locator('.card[data-path="db/kb/a.md"]')).toBeFocused();
+  // the lane by its name: status lanes sort To do before Done, and the lane the card left is empty and gone
+  await expect(lanes.filter({ has: page.locator(".lane-name", { hasText: other }) }).locator('.card[data-path="db/kb/a.md"]')).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator(".dv-tab.dv-active-tab")).toContainText("a");
 });

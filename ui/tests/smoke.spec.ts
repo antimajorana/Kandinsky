@@ -71,7 +71,7 @@ test("Settings is generated from the schema and saves to config.toml", async ({ 
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
   await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions/ }).click();
   const adv = page.getByTestId("settings-advanced");
-  await adv.locator("summary").click();
+  await adv.locator("> summary").click(); // the box's own summary: its panels have folds of their own
   await expect(adv.getByText("Where the terminal panel docks")).toBeVisible();
   // a two-way choice is a segmented control
   const pos = adv.locator('[id="terminal.position"]');

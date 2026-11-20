@@ -38,9 +38,13 @@
   let host: HTMLElement;
   let width = $state(0);
 
+  // loads overlap (an edit's reload and the file watcher's): only the latest one's answer is kept, or an older
+  // answer arriving last would put back columns just changed
+  let loadSeq = 0;
   async function load() {
-    try { res = await api.base(path, thisPath); error = res.error ?? ""; }
-    catch (e) { error = errText(e); }
+    const seq = ++loadSeq;
+    try { const r = await api.base(path, thisPath); if (seq !== loadSeq) return; res = r; error = r.error ?? ""; }
+    catch (e) { if (seq === loadSeq) error = errText(e); }
   }
 
   /** An embed that names its view (`![[x.base#View]]`, a page's `{view: base, table: …}`) shows that view alone. */

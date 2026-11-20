@@ -17,9 +17,13 @@ test("native Calendar navigates views, keeps future Daily Notes lazy, and promot
   await pane.getByTestId("cal-mode-month").click();
 
   // Pick a cell in Month view that does not yet have a daily log -> opens Unified Day Workspace
-  const cell = pane.locator(".cell[data-date]").last();
+  // (the day before the grid's last: the last one is calendar-stage2.spec.ts's, and the tests share one vault)
+  const cells = pane.locator(".cell[data-date]");
+  const cell = cells.nth((await cells.count()) - 2);
   const cellIso = (await cell.getAttribute("data-date"))!;
   expect(cellIso).toBeTruthy();
+  // a retry starts as the first run did: without the log an earlier attempt typed (a first run checks browsing wrote none)
+  if (test.info().retry > 0) await request.post(`/api/fs/trash?path=${encodeURIComponent(`log/${cellIso}.md`)}`, { headers: H }).catch(() => {});
 
   await cell.click();
   const ws = page.getByTestId("day-workspace");
