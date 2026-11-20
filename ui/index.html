@@ -9,6 +9,18 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- the page's background and a quiet "opening" line from the first paint, before the styles and the app load: the
+         window is never an empty black or white (the colours are --bg-app of palettes.css `plain` and of tokens.css);
+         :where() keeps them below every rule of the app's own styles once those load -->
+    <style>
+      :where(html, body) { margin: 0; height: 100%; background: #121317; color: #9a9ca3; }
+      :where(html[data-theme="light"], html[data-theme="light"] body) { background: #eae6de; color: #6b6760; }
+      :where(html[data-palette="plain"], html[data-palette="plain"] body) { background: #202020; color: #9b9b9b; }
+      :where(html[data-palette="plain"][data-theme="light"], html[data-palette="plain"][data-theme="light"] body) { background: #f7f7f5; color: #787774; }
+      :where(html.eink, html.eink body) { background: #fff; color: #000; }
+      #boot { position: fixed; inset: 0; display: grid; place-items: center; font: 13px system-ui, sans-serif; }
+      #app:not(:empty) + #boot { display: none; }
+    </style>
     <script>
       // Settings kept in this browser before the project was renamed (it is based on Atlas): each `atlas.*` / `atlas-*`
       // key copied once to its current name, before anything reads them; the old keys are left as they are.
@@ -24,6 +36,7 @@
   </head>
   <body>
     <div id="app"></div>
+    <div id="boot" data-testid="boot" aria-live="polite">Opening Kandinsky…</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

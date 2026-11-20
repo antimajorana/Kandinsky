@@ -317,16 +317,48 @@ fn fit_to_screen(window: &tauri::WebviewWindow) {
     let _ = window.center();
 }
 
+/// Windows: a touchpad pinch reaches the page as a Ctrl+wheel, which the graph, a PDF and pane-zoom.ts zoom with (and
+/// stop, so WebView2 never scales the whole window). wry turns WebView2's pinch zoom off together with its zoom keys
+/// (Tauri's `zoom_hotkeys_enabled`), and WebView2 then drops the gesture before the page sees it: a pinch did nothing.
+/// Only the pinch is turned on: Ctrl+plus and Ctrl+minus stay the app's own (pane-zoom.ts).
+#[cfg(windows)]
+fn pinch_reaches_page(window: &tauri::WebviewWindow) {
+    let _ = window.with_webview(|w| unsafe {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings5;
+        use windows_core::Interface;
+        let Ok(core) = w.controller().CoreWebView2() else { return };
+        let Ok(settings) = core.Settings() else { return };
+        if let Ok(s5) = settings.cast::<ICoreWebView2Settings5>() {
+            let _ = s5.SetIsPinchZoomEnabled(true);
+        }
+    });
+}
+
 /// The window in the theme's background (tokens.css `--bg-app`) until the page paints: no white flash at start.
 fn paint_before_page(window: &tauri::WebviewWindow, vault: &std::path::Path) {
     use kandinsky_core::config::{Config, Theme};
-    let dark = match Config::load(vault).map(|c| c.ui.theme).unwrap_or(Theme::System) {
+    let ui = Config::load(vault).map(|c| c.ui).ok();
+    let dark = match ui.as_ref().map_or(Theme::System, |u| u.theme) {
         Theme::Dark => true,
         Theme::Light => false,
         Theme::System => window.theme().map_or(true, |t| t == tauri::Theme::Dark),
     };
-    let color = if dark { tauri::window::Color(0x10, 0x12, 0x16, 255) } else { tauri::window::Color(0xec, 0xee, 0xf2, 255) };
-    let _ = window.set_background_color(Some(color));
+    let plain = ui.as_ref().is_some_and(|u| {
+        let p = if dark { u.palette_dark.unwrap_or(u.palette) } else { u.palette };
+        p == kandinsky_core::config::Palette::Plain
+    });
+    let (r, g, b) = page_background(dark, plain);
+    let _ = window.set_background_color(Some(tauri::window::Color(r, g, b, 255)));
+}
+
+/// `--bg-app` of the palette (palettes.css `plain`, else tokens.css), as ui/index.html paints it before its styles load.
+fn page_background(dark: bool, plain: bool) -> (u8, u8, u8) {
+    match (dark, plain) {
+        (true, true) => (0x20, 0x20, 0x20),
+        (false, true) => (0xf7, 0xf7, 0xf5),
+        (true, false) => (0x12, 0x13, 0x17),
+        (false, false) => (0xea, 0xe6, 0xde),
+    }
 }
 
 /// Web pages as tabs on Windows: WebView2 is Chromium, so an extension of the app's own (`webview2/frame-any`, its
@@ -904,6 +936,8 @@ impl MainSpec {
             .build()?;
         fit_to_screen(&main);
         paint_before_page(&main, &vault_bg);
+        #[cfg(windows)]
+        pinch_reaches_page(&main);
         // WebKitGTK silently drops a window.open that no fresh click started — and a plugin's sign-in
         // opens its page only after its helper has answered. Every request still goes through on_new_window.
         #[cfg(target_os = "linux")]
@@ -1279,11 +1313,21 @@ fn watch_for_update(base: String) {
     });
 }
 
+/// WebView2's arguments: wry's own (no mini menu, no SmartScreen, media may play unasked) and the proxy found by the
+/// Windows WinHTTP service. Chromium's own discovery ("Automatically detect settings", WPAD) blocks the first request —
+/// the core's page on 127.0.0.1 too — until it gives up, about 20 s where no proxy answers: the window stayed empty that
+/// long at every start. WinHTTP's service finds the same proxy and remembers the answer, so proxies keep working.
+#[cfg(any(windows, test))]
+const WEBVIEW2_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required --winhttp-proxy-resolver";
+
 /// A window's builder, on the WebView data folder every window of this run shares: the old identifier's while it holds
 /// the only profile (dirs_migrate.rs `webview_dir`), else Tauri's default. Every window is made through this, or the
 /// first one made otherwise would start an empty profile under the new identifier, which then wins at every start.
 pub(crate) fn window<'a, R: tauri::Runtime, M: tauri::Manager<R>>(app: &'a M, label: impl Into<String>, url: WebviewUrl) -> WebviewWindowBuilder<'a, R, M> {
     let built = WebviewWindowBuilder::new(app, label, url);
+    // the same arguments for every window: WebView2 will not open two with different ones on one data folder
+    #[cfg(windows)]
+    let built = built.additional_browser_args(WEBVIEW2_ARGS);
     match kandinsky_core::platform::dirs_migrate::webview_dir() {
         Some(dir) => built.data_directory(dir),
         None => built,
@@ -1354,6 +1398,23 @@ fn dev_ui(core: &str, key: Option<&str>) -> anyhow::Result<DevUi> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn webview_finds_its_proxy_through_winhttp_and_keeps_wrys_defaults() {
+        // Chromium's own proxy discovery held the first request (the core's page) ~20 s: the window stayed empty
+        assert!(WEBVIEW2_ARGS.split(' ').any(|a| a == "--winhttp-proxy-resolver"));
+        assert!(WEBVIEW2_ARGS.contains("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"));
+        assert!(!WEBVIEW2_ARGS.contains("--no-proxy-server"), "a proxy the system names must keep working");
+    }
+
+    #[test]
+    fn the_window_before_its_page_is_the_pages_background() {
+        // palettes.css `plain` and tokens.css `--bg-app`, as ui/index.html paints them
+        assert_eq!(page_background(true, true), (0x20, 0x20, 0x20));
+        assert_eq!(page_background(false, true), (0xf7, 0xf7, 0xf5));
+        assert_eq!(page_background(true, false), (0x12, 0x13, 0x17));
+        assert_eq!(page_background(false, false), (0xea, 0xe6, 0xde));
+    }
 
     #[test]
     fn a_vaults_address_splits_into_its_host_and_its_prefix() {
