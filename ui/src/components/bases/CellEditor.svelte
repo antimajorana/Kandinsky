@@ -1,11 +1,12 @@
 <script lang="ts">
   // A Bases cell being edited, by the property's kind and column format: text, number (incl. progress/%/currency), date,
-  // floating Notion-style status picker with 1-click presets + cycle + custom input, or a list as chips.
+  // floating Notion-style status picker with grouped To do / In progress / Done options + cycle + custom input, or a list as chips.
   import Icon from "../Icon.svelte";
   import type { BaseColumn } from "../../lib/gen/BaseColumn";
   import type { PropertyKind } from "../../lib/gen/PropertyKind";
-  import { effectiveColumnFormat, nextStatusValue, STATUS_PRESETS } from "../../lib/base-format";
+  import { effectiveColumnFormat, groupStatusOptions, nextStatusValue } from "../../lib/base-format";
   import { asLink, asNumber, asTag, fromInput, isListKind, linkLabel, listOf, scalarText, toInput } from "../../lib/property-model";
+  import { propertySpec } from "../../lib/property-spec.svelte";
 
   let { kind, value, label, column, oncommit, onclose }: {
     kind: PropertyKind;
@@ -16,9 +17,15 @@
     onclose: () => void;
   } = $props();
 
+  const colSpec = $derived.by(() => {
+    if (!column) return undefined;
+    const key = column.key ?? (/^(file|formula)\./.test(column.id) ? null : column.id.replace(/^note\./, ""));
+    return key ? propertySpec.spec?.properties[key] : undefined;
+  });
+
   const list = $derived(isListKind(kind));
   const isDate = $derived(kind === "date" || kind === "datetime");
-  const colFmt = $derived(effectiveColumnFormat(column));
+  const colFmt = $derived(effectiveColumnFormat(column, undefined, colSpec));
   const isStatus = $derived(!list && !isDate && (kind === "status" || colFmt === "status"));
   const isRating = $derived(!list && !isDate && kind === "rating");
   const isNum = $derived(kind === "number" || (!list && !isDate && !isRating && (colFmt === "progress" || colFmt === "percent" || colFmt === "currency")));
@@ -30,6 +37,10 @@
   let draft = $state("");
   let root = $state<HTMLElement>();
   let done = false;
+
+  const statusSections = $derived(
+    isStatus ? groupStatusOptions(colSpec?.values, colSpec?.groups, text.trim() || null) : [],
+  );
 
   // The rating editor has no input, so its root takes focus: Escape and click-away then reach it.
   $effect(() => { (root?.querySelector<HTMLElement>("input") ?? (isRating ? root : null))?.focus(); });
@@ -89,23 +100,32 @@
     {/each}
     <input class="cell-edit" aria-label="Add to {label}" placeholder={items.length ? "" : "Add…"} bind:value={draft} spellcheck="false" />
   {:else if isStatus}
-    <div class="status-presets">
-      {#each STATUS_PRESETS as preset (preset.value)}
-        <button
-          type="button"
-          class="preset tone-{preset.tone}"
-          class:active={text.trim().toLowerCase() === preset.value.toLowerCase()}
-          onmousedown={(e) => e.preventDefault()}
-          onclick={() => pickStatus(preset.value)}
-        >
-          <span class="dot"></span>{preset.label}
-        </button>
+    <div class="status-groups">
+      {#each statusSections as sec (sec.key)}
+        <div class="status-group">
+          <div class="status-group-head">{sec.label}</div>
+          <div class="status-presets">
+            {#each sec.items as opt (opt.value)}
+              <button
+                type="button"
+                class="preset tone-{opt.tone}"
+                class:active={text.trim().toLowerCase() === opt.value.toLowerCase()}
+                onmousedown={(e) => e.preventDefault()}
+                onclick={() => pickStatus(opt.value)}
+              >
+                <span class="dot"></span>{opt.label}
+              </button>
+            {/each}
+          </div>
+        </div>
       {/each}
-      <button type="button" class="cycle-btn" title="Cycle status" onmousedown={(e) => e.preventDefault()} onclick={() => pickStatus(nextStatusValue(text))}>
+    </div>
+    <div class="status-foot">
+      <input class="cell-edit" placeholder="Custom status…" aria-label="Edit {label}" bind:value={text} spellcheck="false" />
+      <button type="button" class="cycle-btn" title="Cycle status" onmousedown={(e) => e.preventDefault()} onclick={() => pickStatus(nextStatusValue(text, colSpec?.values, colSpec?.groups))}>
         <Icon name="refresh" size={11} /> Cycle
       </button>
     </div>
-    <input class="cell-edit" placeholder="Custom status…" aria-label="Edit {label}" bind:value={text} spellcheck="false" />
   {:else if isRating}
     {@const cur = Math.max(0, Math.min(5, Math.round(Number(text) || 0)))}
     <div class="rating-row" role="radiogroup" aria-label={label}>
@@ -130,8 +150,12 @@
   .cell-editor.list, .cell-editor.status-pop { position: absolute; top: 0; left: 0; z-index: 4; min-width: 100%; width: max-content; max-width: 340px; min-height: 100%;
     padding: 5px 6px; background: var(--bg-elev); border: 1px solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow-pop); }
   .cell-editor.list { flex-wrap: wrap; }
-  .cell-editor.status-pop { flex-direction: column; align-items: stretch; gap: 6px; min-width: max(100%, 240px); }
+  .cell-editor.status-pop { flex-direction: column; align-items: stretch; gap: 6px; min-width: max(100%, 248px); }
+  .status-groups { display: flex; flex-direction: column; gap: 5px; }
+  .status-group { display: flex; flex-direction: column; gap: 3px; }
+  .status-group-head { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); padding: 0 2px; }
   .status-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .status-foot { display: flex; align-items: center; gap: 4px; padding-top: 2px; border-top: 1px solid var(--border); }
   .preset { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px; border-radius: 999px; font: inherit; font-size: .85em; font-weight: 500; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); cursor: pointer; }
   .preset .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   .preset.active { box-shadow: 0 0 0 1.5px var(--accent); }
@@ -139,13 +163,16 @@
   .preset.tone-progress { background: var(--accent-soft); color: var(--accent); }
   .preset.tone-blocked { background: var(--red-soft, color-mix(in srgb, var(--red) 12%, transparent)); color: var(--red); }
   .preset.tone-done { background: var(--green-soft, color-mix(in srgb, var(--green) 12%, transparent)); color: var(--green); }
+  .preset.tone-review { background: var(--yellow-soft, color-mix(in srgb, var(--yellow) 12%, transparent)); color: var(--yellow); }
+  .preset.tone-other { background: var(--bg-side); color: var(--text); border-color: var(--border); }
+  .preset.tone-other .dot { background: var(--accent); }
   .preset:hover { filter: brightness(1.08); }
-  .cycle-btn { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; margin-left: auto; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); font: inherit; font-size: .84em; cursor: pointer; }
+  .cycle-btn { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 7px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); font: inherit; font-size: .84em; cursor: pointer; }
   .cycle-btn:hover { background: var(--bg-hover); color: var(--text); border-color: var(--border-strong); }
 
   .cell-edit { flex: 1; min-width: 60px; width: 100%; height: 24px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--accent); border-radius: var(--radius-sm); padding: 0 6px; }
   .list .cell-edit { border: 0; background: transparent; padding: 0 2px; }
-  .status-pop .cell-edit { flex: none; border-color: var(--border-strong); }
+  .status-pop .cell-edit { border-color: var(--border-strong); }
   .status-pop .cell-edit:focus { border-color: var(--accent); }
   .cell-edit:focus, .cell-editor:focus { outline: none; }
   .num { font-variant-numeric: tabular-nums; text-align: right; }

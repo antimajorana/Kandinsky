@@ -11,6 +11,8 @@
   import { api } from "../lib/api";
   import { arxivOf, doiOf, filedSource, isSource, openSource } from "../lib/doi-links";
   import { classifyPigment } from "../lib/editor/pigment-pills";
+  import { classifyStatus, groupStatusOptions } from "../lib/base-format";
+  import { closable } from "../lib/back";
 
   let { name, kind, value, spec, onset, onopen, values = [] }: {
     name: string; kind: PropertyKind; value: unknown; spec?: PropertySpec;
@@ -88,6 +90,51 @@
     if (cur && !vals.includes(cur)) vals.push(cur); // a value outside the spec stays choosable (and visible)
     return [{ value: "", label: "Empty" }, ...vals.map((v) => ({ value: v, label: v.replace(/^\[\[|\]\]$/g, ""), note: spec?.values.includes(v) ? undefined : "not in the spec" }))];
   });
+  const statusSections = $derived.by(() => {
+    if (kind !== "status") return [];
+    const cur = scalarText(value).trim();
+    return groupStatusOptions(spec?.values, spec?.groups, cur || null);
+  });
+  const flatStatusOptions = $derived(["", ...statusSections.flatMap((s) => s.items.map((it) => it.value))]);
+  let statusOpen = $state(false);
+  let statusActive = $state(0);
+  let statusWrap = $state<HTMLDivElement>();
+  let statusMenu = $state<HTMLDivElement>();
+  $effect(() => { if (statusOpen) return closable(() => (statusOpen = false)); });
+  function openStatusMenu() {
+    const cur = scalarText(value).trim().toLowerCase();
+    const idx = flatStatusOptions.findIndex((v) => v.toLowerCase() === cur);
+    statusActive = idx >= 0 ? idx : 0;
+    statusOpen = true;
+    requestAnimationFrame(() => statusMenu?.querySelector(".on")?.scrollIntoView({ block: "nearest" }));
+  }
+  function pickStatusOption(next: string) {
+    statusOpen = false;
+    const cur = scalarText(value);
+    if (next !== cur) onset(next || null);
+    statusWrap?.querySelector("button")?.focus();
+  }
+  function onStatusKeydown(e: KeyboardEvent) {
+    if (!statusOpen) {
+      if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(e.key)) { e.preventDefault(); openStatusMenu(); }
+      return;
+    }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); statusOpen = false; }
+    else if (e.key === "ArrowDown") { e.preventDefault(); statusActive = Math.min(flatStatusOptions.length - 1, statusActive + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); statusActive = Math.max(0, statusActive - 1); }
+    else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      const val = flatStatusOptions[statusActive];
+      if (val !== undefined) pickStatusOption(val);
+    } else if (e.key.length === 1) {
+      const i = flatStatusOptions.findIndex((v) => (v || "empty").toLowerCase().startsWith(e.key.toLowerCase()));
+      if (i >= 0) statusActive = i;
+    } else return;
+    requestAnimationFrame(() => statusMenu?.querySelector(".on")?.scrollIntoView({ block: "nearest" }));
+  }
+  function onStatusFocusout(e: FocusEvent) {
+    if (!statusWrap?.contains(e.relatedTarget as Node)) statusOpen = false;
+  }
   // what a value points at:
   // a [[link]] or a file name (`paper.pdf`, found as links are) opens in Kandinsky, an address in the browser
   const isUrl = (v: string) => /^https?:\/\//i.test(v.trim());
@@ -143,7 +190,63 @@
   </div>
 {:else if kind === "bool"}
   <label class="check"><input type="checkbox" aria-label={label} checked={value === true} onchange={(e) => onset((e.currentTarget as HTMLInputElement).checked)} /><span>{value === true ? "Yes" : "No"}</span></label>
-{:else if kind === "enum" || kind === "status"}
+{:else if kind === "status"}
+  {@const curText = scalarText(value)}
+  {@const st = curText ? classifyStatus(curText, spec?.groups) : null}
+  <div class="status-select" bind:this={statusWrap} onfocusout={onStatusFocusout}>
+    <button
+      type="button"
+      class="status-trigger {st ? `tone-${st.tone}` : 'is-empty'}"
+      aria-haspopup="listbox"
+      aria-expanded={statusOpen}
+      aria-label={label}
+      onclick={() => (statusOpen ? (statusOpen = false) : openStatusMenu())}
+      onkeydown={onStatusKeydown}
+    >
+      {#if st}<span class="status-dot" aria-hidden="true"></span>{/if}
+      <span class="cur">{st ? st.label : "Empty"}</span>
+      <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+    </button>
+    {#if statusOpen}
+      <div class="status-menu" role="listbox" aria-label={label} bind:this={statusMenu} tabindex="-1">
+        <button
+          type="button"
+          role="option"
+          class="status-opt empty-opt"
+          class:on={statusActive === 0}
+          class:cur={!curText}
+          aria-selected={!curText}
+          onmousedown={(e) => { e.preventDefault(); pickStatusOption(""); }}
+          onmousemove={() => (statusActive = 0)}
+        >
+          <span>Empty</span>
+        </button>
+        {#each statusSections as sec (sec.key)}
+          <div class="status-sec-lbl">{sec.label}</div>
+          {#each sec.items as opt (opt.value)}
+            {@const idx = flatStatusOptions.indexOf(opt.value)}
+            <button
+              type="button"
+              role="option"
+              class="status-opt"
+              class:on={idx === statusActive}
+              class:cur={curText.trim().toLowerCase() === opt.value.toLowerCase()}
+              aria-selected={curText.trim().toLowerCase() === opt.value.toLowerCase()}
+              onmousedown={(e) => { e.preventDefault(); pickStatusOption(opt.value); }}
+              onmousemove={() => (statusActive = idx)}
+            >
+              <span class="status-pill tone-{opt.tone}">
+                <span class="status-dot" aria-hidden="true"></span>
+                <span>{opt.label}</span>
+              </span>
+              {#if !opt.inSpec}<span class="status-note">not in spec</span>{/if}
+            </button>
+          {/each}
+        {/each}
+      </div>
+    {/if}
+  </div>
+{:else if kind === "enum"}
   {@const curText = scalarText(value)}
   {@const selPig = classifyPigment(name, curText, 0)}
   <div
@@ -217,6 +320,38 @@
   .select-wrap[data-tone="ochre"] :global(.trigger) { background: color-mix(in srgb, var(--yellow) 15%, transparent); border-color: color-mix(in srgb, var(--yellow) 28%, transparent); color: var(--yellow); }
   .select-wrap[data-tone="mauve"] :global(.trigger) { background: color-mix(in srgb, var(--purple) 15%, transparent); border-color: color-mix(in srgb, var(--purple) 28%, transparent); color: var(--purple); }
   .select-wrap[data-tone="vermilion"] :global(.trigger) { background: color-mix(in srgb, var(--red) 14%, transparent); border-color: color-mix(in srgb, var(--red) 26%, transparent); color: var(--red); }
+  .status-select { position: relative; display: flex; align-items: center; min-width: 0; width: 100%; min-height: calc(26px * var(--ui-scale, 1)); }
+  .status-trigger {
+    display: inline-flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; min-height: calc(22px * var(--ui-scale, 1));
+    padding: 2px 8px; border-radius: 999px; border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    background: var(--bg-alt); color: var(--text); font-size: calc(12px * var(--ui-scale, 1)); font-weight: 500;
+  }
+  .status-trigger.is-empty { background: transparent; border-color: transparent; border-radius: var(--radius-sm); color: var(--text-faint); font-style: italic; font-weight: 400; padding-left: 7px; }
+  .status-select:hover .status-trigger, .status-trigger:hover { border-color: var(--border); }
+  .status-trigger:focus-visible, .status-trigger[aria-expanded="true"] { outline: none; border-color: var(--accent); }
+  .status-trigger .cur { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status-trigger svg { flex: none; opacity: 0; transition: opacity .12s; }
+  .status-select:hover .status-trigger svg, .status-trigger:focus-visible svg, .status-trigger[aria-expanded="true"] svg { opacity: 1; }
+  .status-trigger .status-dot, .status-pill .status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+  .status-trigger.tone-todo, .status-pill.tone-todo { background: var(--bg-hover); color: var(--text-muted); border-color: var(--border-strong); }
+  .status-trigger.tone-progress, .status-pill.tone-progress { background: var(--accent-soft); color: var(--accent); }
+  .status-trigger.tone-blocked, .status-pill.tone-blocked { background: var(--red-soft); color: var(--red); }
+  .status-trigger.tone-done, .status-pill.tone-done { background: var(--green-soft); color: var(--green); }
+  .status-trigger.tone-review, .status-pill.tone-review { background: var(--yellow-soft); color: var(--yellow); }
+  .status-trigger.tone-other, .status-pill.tone-other { background: var(--accent-soft); color: var(--text); border-color: var(--border); }
+  .status-trigger.tone-other .status-dot, .status-pill.tone-other .status-dot { background: var(--accent); }
+  .status-menu {
+    position: absolute; z-index: 50; top: calc(100% + 4px); left: 0; min-width: 190px; max-width: 320px; max-height: 280px; overflow: auto;
+    padding: 4px; background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-pop);
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  .status-sec-lbl { padding: 5px 8px 2px; font-size: calc(10px * var(--ui-scale, 1)); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); }
+  .status-opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 4px 7px; border-radius: 4px; text-align: left; color: var(--text); font-size: calc(12.5px * var(--ui-scale, 1)); }
+  .status-opt.on { background: var(--bg-hover); }
+  .status-opt.cur { background: var(--accent-soft); }
+  .status-opt.empty-opt { color: var(--text-muted); font-style: italic; }
+  .status-pill { display: inline-flex; align-items: center; gap: 6px; height: 21px; padding: 0 8px 0 6px; border-radius: 999px; font-size: .92em; font-weight: 500; line-height: 1; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); }
+  .status-note { color: var(--text-faint); font-size: .84em; }
   .check { display: inline-flex; align-items: center; gap: 7px; min-height: calc(26px * var(--ui-scale, 1)); padding: 0 7px; color: var(--text-muted); font-size: calc(12.5px * var(--ui-scale, 1)); cursor: pointer; }
   .check input { accent-color: var(--accent); width: calc(14px * var(--ui-scale, 1)); height: calc(14px * var(--ui-scale, 1)); }
   .rating-row { display: inline-flex; align-items: center; gap: 2px; min-height: calc(26px * var(--ui-scale, 1)); padding: 0 4px; }

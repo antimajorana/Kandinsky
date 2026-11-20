@@ -6,7 +6,10 @@
   import { classifyStatus, effectiveColumnFormat, nextStatusValue, type StatusTone } from "../../lib/base-format";
   import { context, setHover } from "../../lib/context.svelte";
   import { groupRows, NO_VALUE as NONE } from "../../lib/base-groups";
+  import { propertySpec } from "../../lib/property-spec.svelte";
+  import type { BaseColumn } from "../../lib/gen/BaseColumn";
   import type { BaseView } from "../../lib/gen/BaseView";
+  import type { PropertySpec } from "../../lib/gen/PropertySpec";
 
   let { view, onwrite }: { view: BaseView; onwrite: (path: string, key: string, value: unknown) => void } = $props();
 
@@ -14,17 +17,35 @@
   const hoverOut = () => { if (context.hover?.source === "base") setHover(null); };
   const lit = (p: string) => context.hover?.path === p && context.hover.source !== "base";
 
-  const lanes = $derived(groupRows(view).map((g) => [g.title ?? NONE, g.rows] as const));
+  const norm = (s: string) => s.replace(/^note\./, "");
+  function specForCol(col?: { id: string; key?: string | null } | null): PropertySpec | undefined {
+    if (!col) return undefined;
+    const key = col.key ?? (/^(file|formula)\./.test(col.id) ? null : norm(col.id));
+    return key ? propertySpec.spec?.properties[key] : undefined;
+  }
+
   const groupCol = $derived(
     view.group_by
-      ? view.columns.find((c) => c.id === view.group_by || c.id.replace(/^note\./, "") === view.group_by!.replace(/^note\./, "")) ?? { id: view.group_by }
+      ? view.columns.find((c) => c.id === view.group_by || norm(c.id) === norm(view.group_by!)) ?? { id: view.group_by }
       : null,
+  );
+  const groupSpec = $derived(specForCol(groupCol));
+  const lanes = $derived(
+    groupRows(view, {
+      groups: groupSpec?.groups ?? null,
+      values: groupSpec?.values ?? null,
+      isStatus: groupSpec?.kind === "status" || effectiveColumnFormat(groupCol, undefined, groupSpec) === "status",
+    }).map((g) => [g.title ?? NONE, g.rows] as const),
   );
   function laneTone(lane: string): StatusTone | null {
     if (lane === NONE) return null;
-    const t = classifyStatus(lane).tone;
-    return effectiveColumnFormat(groupCol) === "status" || t !== "other" ? t : null;
+    const t = classifyStatus(lane, groupSpec?.groups).tone;
+    return effectiveColumnFormat(groupCol, undefined, groupSpec) === "status" || t !== "other" ? t : null;
   }
+  const canCycleCol = (col: BaseColumn, c: BaseView["rows"][number]["cells"][number], editVal: string | null) => {
+    const colSpec = specForCol(col);
+    return !!col.key && editVal != null && (colSpec?.kind === "status" || effectiveColumnFormat(col, c, colSpec) === "status");
+  };
   let dragging = $state<string | null>(null);
   let overLane = $state<string | null>(null);
   function dropOn(lane: string) {
@@ -85,10 +106,11 @@
             {@const col = view.columns[i]}
             {#if col.id === "file.name"}<div class="card-title"><CellValue cell={c} column={col} /></div>
             {:else if c.t !== "null" && col.id !== view.group_by && col.key !== view.group_key}
-              {@const canCycle = !!col.key && r.edit[i] != null && effectiveColumnFormat(col, c) === "status"}
+              {@const colSpec = specForCol(col)}
+              {@const canCycle = canCycleCol(col, c, r.edit[i])}
               <div class="card-prop">
                 <span class="k">{col.label}</span>
-                <span class="v"><CellValue cell={c} column={col} oncycle={canCycle ? () => onwrite(r.path, col.key!, nextStatusValue(String(r.values[i] ?? ""))) : undefined} /></span>
+                <span class="v"><CellValue cell={c} column={col} kind={colSpec?.kind} oncycle={canCycle ? () => onwrite(r.path, col.key!, nextStatusValue(String(r.values[i] ?? ""), colSpec?.values, colSpec?.groups)) : undefined} /></span>
               </div>{/if}
           {/each}
         </div>

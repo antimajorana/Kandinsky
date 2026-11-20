@@ -1,6 +1,7 @@
 <script lang="ts">
   // Toolbar Group popover: search properties, ungroup (disabled on boards, which require lanes), or pick a group property.
   import Icon from "../Icon.svelte";
+  import Select from "../Select.svelte";
 
   let { group, board, subItemsBy = null, props, ongroup, onsubitems }: {
     group: string | null;
@@ -25,6 +26,10 @@
     }),
   );
   const showNone = $derived(!q.trim() || "none ungrouped".includes(q.trim().toLowerCase()));
+  const subOptions = $derived([
+    { value: "", label: "Off (flat rows)" },
+    ...props.filter((p) => !p.id.startsWith("file.")).map((p) => ({ value: norm(p.id), label: p.label })),
+  ]);
 </script>
 
 <input
@@ -73,15 +78,15 @@
 
 {#if !board && onsubitems}
   <div class="sep"></div>
-  <label class="sub-row">
+  <div class="sub-row">
     <span>Sub-items (parent link)</span>
-    <select value={subItemsBy ?? ""} onchange={(e) => onsubitems(e.currentTarget.value || null)}>
-      <option value="">Off (flat rows)</option>
-      {#each props.filter((p) => !p.id.startsWith("file.")) as p (p.id)}
-        <option value={norm(p.id)}>{p.label}</option>
-      {/each}
-    </select>
-  </label>
+    <Select
+      label="Sub-items (parent link)"
+      value={subItemsBy ?? ""}
+      options={subOptions}
+      onchange={(v) => onsubitems(v || null)}
+    />
+  </div>
 {/if}
 
 <style>
@@ -98,6 +103,8 @@
   .board-note { margin: 2px 6px 4px 27px; color: var(--text-faint); font-size: .86em; line-height: 1.3; }
   .sep { height: 1px; background: var(--border); margin: 4px 2px; }
   .sub-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; font-size: .9em; color: var(--text-muted); }
-  .sub-row select { max-width: 150px; padding: 3px 6px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; }
+  .sub-row :global(.select) { min-width: 136px; max-width: 160px; }
+  .sub-row :global(.trigger) { padding: 3px 8px; font-size: inherit; background: var(--bg); border-color: var(--border); }
+  .sub-row :global(.menu) { top: auto; bottom: calc(100% + 4px); left: auto; right: 0; }
   .empty { padding: 6px 8px; color: var(--text-faint); font-size: .92em; }
 </style>

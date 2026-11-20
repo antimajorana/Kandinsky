@@ -26,11 +26,13 @@
   } from "../../lib/base-format";
   import { context, setHover } from "../../lib/context.svelte";
   import { groupRows, NO_VALUE } from "../../lib/base-groups";
+  import { propertySpec } from "../../lib/property-spec.svelte";
   import { RowWindow } from "../../lib/windowed.svelte";
   import type { BaseView } from "../../lib/gen/BaseView";
   import type { BaseRow } from "../../lib/gen/BaseRow";
   import type { BaseCell } from "../../lib/gen/BaseCell";
   import type { PropertyKind } from "../../lib/gen/PropertyKind";
+  import type { PropertySpec } from "../../lib/gen/PropertySpec";
   import type { ViewEdit } from "../../lib/gen/ViewEdit";
   import type { SummaryKind } from "../../lib/gen/SummaryKind";
 
@@ -219,7 +221,13 @@
     if (c.summary) items.push("sep", { label: "No summary", icon: "close", run: () => onedit({ op: "summary", column: c.id, summary: null }) });
     menu = below(e, items);
   }
-  const groups = $derived(groupRows(view));
+  const normCol = (s: string) => s.replace(/^note\./, "");
+  function specForCol(col?: { id: string; key?: string | null } | null): PropertySpec | undefined {
+    if (!col) return undefined;
+    const key = col.key ?? (/^(file|formula)\./.test(col.id) ? null : normCol(col.id));
+    return key ? propertySpec.spec?.properties[key] : undefined;
+  }
+
   const collapsedGroups = new SvelteSet<string>();
   function toggleGroup(title: string) {
     if (collapsedGroups.has(title)) collapsedGroups.delete(title);
@@ -227,26 +235,42 @@
   }
   const groupCol = $derived(
     view.group_by
-      ? view.columns.find((c) => c.id === view.group_by || c.id.replace(/^note\./, "") === view.group_by!.replace(/^note\./, "")) ?? { id: view.group_by }
+      ? view.columns.find((c) => c.id === view.group_by || normCol(c.id) === normCol(view.group_by!)) ?? { id: view.group_by }
       : null,
+  );
+  const groupSpec = $derived(specForCol(groupCol));
+  const isStatusGrouped = $derived(
+    !!groupCol && (groupSpec?.kind === "status" || effectiveColumnFormat(groupCol, undefined, groupSpec) === "status" || kindOf(groupCol.id) === "status"),
+  );
+  const groups = $derived(
+    groupRows(view, {
+      groups: groupSpec?.groups ?? null,
+      values: groupSpec?.values ?? null,
+      isStatus: isStatusGrouped,
+    }),
   );
   function groupTone(title: string): StatusTone | null {
     if (title === NO_VALUE) return null;
-    const t = classifyStatus(title).tone;
-    return effectiveColumnFormat(groupCol) === "status" || t !== "other" ? t : null;
+    const t = classifyStatus(title, groupSpec?.groups).tone;
+    return isStatusGrouped || t !== "other" ? t : null;
   }
 
-  const statusColIdx = $derived(view.columns.findIndex((c) => effectiveColumnFormat(c) === "status" || kindOf(c.id) === "status"));
-  const isStatusGrouped = $derived(!!groupCol && (effectiveColumnFormat(groupCol) === "status" || kindOf(groupCol.id) === "status"));
+  const statusColIdx = $derived(
+    view.columns.findIndex((c) => {
+      const s = specForCol(c);
+      return s?.kind === "status" || effectiveColumnFormat(c, undefined, s) === "status" || kindOf(c.id) === "status";
+    }),
+  );
+  const statusColSpec = $derived(statusColIdx >= 0 ? specForCol(view.columns[statusColIdx]) : undefined);
   function groupMetaLabel(title: string): string | null {
     if (!isStatusGrouped || title === NO_VALUE) return null;
-    const t = classifyStatus(title).tone;
-    return t === "done" ? "Complete" : t === "todo" ? "To-do" : "In progress";
+    const t = classifyStatus(title, groupSpec?.groups).tone;
+    return t === "done" ? "Done" : t === "todo" ? "To do" : t === "progress" || t === "review" || t === "blocked" ? "In progress" : null;
   }
   function isRowDone(r: BaseRow): boolean {
     if (statusColIdx < 0) return false;
     const c = r.cells[statusColIdx];
-    return c?.t === "text" && classifyStatus(c.value).tone === "done";
+    return c?.t === "text" && classifyStatus(c.value, statusColSpec?.groups).tone === "done";
   }
 
   // --- sub-items hierarchy --------------------------------------------------------------------------------------------
@@ -435,7 +459,8 @@
         <tr class:lit={lit(r.path)} onmouseenter={() => hoverIn(r.path)} onmouseleave={hoverOut}>
           {#each r.cells as c, i (i)}
             {@const col = view.columns[i]}
-            {@const fmt = effectiveColumnFormat(col, c)}
+            {@const colSpec = specForCol(col)}
+            {@const fmt = effectiveColumnFormat(col, c, colSpec)}
             {@const k = cellKind(r, i)}
             {@const kind = editable(r, i) ? k : null}
             <td class:first={col.id === "file.name"} class:editable={!!kind} class:bool={kind === "bool"} class:num={(c.t === "num" || fmt === "percent" || fmt === "currency") && fmt !== "progress"} class:progress={fmt === "progress"} class:editing={isEditing(r, i)}
@@ -457,7 +482,7 @@
                 <CellValue cell={asBool(c)} column={col} kind={k} />
               {:else}
                 <CellValue cell={c} column={col} kind={k}
-                  oncycle={kind && fmt === "status" ? () => onwrite(r.path, col.key!, nextStatusValue(String(r.values[i] ?? ""))) : undefined}
+                  oncycle={kind && fmt === "status" ? () => onwrite(r.path, col.key!, nextStatusValue(String(r.values[i] ?? ""), colSpec?.values, colSpec?.groups)) : undefined}
                   onrate={kind && k === "rating" ? (v) => onwrite(r.path, col.key!, v) : undefined} />
               {/if}
             </td>

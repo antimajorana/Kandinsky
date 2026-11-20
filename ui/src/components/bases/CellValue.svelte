@@ -17,6 +17,7 @@
   import { openPath } from "../../lib/dock";
   import { dateTip, readDate, showDate } from "../../lib/dates";
   import { basename, IMAGE_RE } from "../../lib/paths";
+  import { propertySpec } from "../../lib/property-spec.svelte";
   import { resolveLink } from "../../lib/vault";
   import { openOutside } from "../../lib/web-links";
 
@@ -28,11 +29,17 @@
     onrate?: (value: number) => void;
   } = $props();
 
+  const colSpec = $derived.by(() => {
+    if (!column) return undefined;
+    const key = column.key ?? (/^(file|formula)\./.test(column.id) ? null : column.id.replace(/^note\./, ""));
+    return key ? propertySpec.spec?.properties[key] : undefined;
+  });
+
   const fmt = $derived(
     kind === "status" ? "status"
     : kind === "rating" ? "rating"
     : kind === "auto_id" ? "auto_id"
-    : effectiveColumnFormat(column, cell),
+    : effectiveColumnFormat(column, cell, colSpec),
   );
   const num = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(Math.abs(n) < 1 ? 3 : 2));
   /** A text that is a date reads as one (lib/dates.ts, the same everywhere). */
@@ -59,7 +66,7 @@
   }
 
   const selfStyled = (it: BaseCell) => {
-    const f = effectiveColumnFormat(column, it);
+    const f = effectiveColumnFormat(column, it, colSpec);
     return f === "status" || f === "file" || f === "url" || f === "email" || f === "phone";
   };
 </script>
@@ -84,13 +91,13 @@
     {/each}
   </span>
 {:else if fmt === "status" && cell.t === "text" && cell.value.trim()}
-  {@const st = classifyStatus(cell.value)}
+  {@const st = classifyStatus(cell.value, colSpec?.groups)}
   <span class="status-pill tone-{st.tone}">
     {#if oncycle}
       <button
         type="button"
         class="status-dot cycle"
-        title="Cycle status ({st.label} → {nextStatusValue(cell.value)})"
+        title="Cycle status ({st.label} → {nextStatusValue(cell.value, colSpec?.values, colSpec?.groups)})"
         aria-label="Cycle status from {st.label}"
         onclick={(e) => { e.stopPropagation(); oncycle(); }}
       ></button>
