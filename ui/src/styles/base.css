@@ -155,3 +155,59 @@ body.kandinsky-resizing iframe, body.kandinsky-resizing .xterm { pointer-events:
 .eink-flash { position: fixed; inset: 0; z-index: 2147483647; background: #000000; pointer-events: none; } /* literal: the e-ink refresh flash */
 /* a hover that paints a fill is a refresh of its own, and on a pen or a finger it stays behind */
 :root.eink *:hover { box-shadow: none !important; }
+
+/* Print layout: hide app chrome so notes print cleanly across pages */
+@media print {
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important; /* literal: print paper is white */
+    color: #000 !important; /* literal: print paper ink is black */
+  }
+  .notion-sidebar,
+  .topbar,
+  footer.status,
+  .floating-toolbar,
+  .block-cfg-slot,
+  .hero-actions,
+  .cover-controls,
+  .phone-top,
+  .phone-bar,
+  .fab,
+  .dv-tabs-and-actions-container,
+  .live-chip,
+  .note-view-switch,
+  .cm-gutters,
+  .cm-img-handle,
+  .cm-img-align-bar,
+  .cm-img-width-badge {
+    display: none !important;
+  }
+  .editor-pane,
+  .editor-row,
+  .editor-col,
+  .editor-body,
+  .editor-host,
+  .cm-editor,
+  .cm-scroller,
+  .note-view,
+  .markdown {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: #fff !important; /* literal: print paper is white */
+  }
+  .live-cm .cm-content {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .cm-line,
+  .markdown pre,
+  .markdown blockquote,
+  .markdown .callout,
+  .markdown table,
+  .markdown img {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

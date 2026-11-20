@@ -142,14 +142,52 @@ html.phone .live-cm .cm-scroller:has(> .cm-note-hero-slot) > .cm-content { paddi
 .markdown .cm-properties-n { letter-spacing: 0; font-variant-numeric: tabular-nums; opacity: .8; }
 .markdown .cm-embed-chip { display: inline-flex; padding: .1em .5em; border: 1px solid var(--border-strong); border-radius: 6px; font-size: .9em; }
 .markdown .cm-embed-missing { opacity: .6; text-decoration: line-through; }
-.markdown .cm-embed-image-host { display: block; }
+.markdown .cm-embed-image-host { display: block; text-align: left; }
+.markdown .cm-embed-image-host.is-centered { text-align: center; }
+.markdown .cm-embed-image-host.is-right { text-align: right; }
+.markdown .cm-embed-image-host.is-left { text-align: left; }
 /* a figure's caption under its picture (editor/figure-captions.ts), as the reading view's .figure-caption */
 .markdown .cm-figure-caption { display: block; font-size: .9em; color: var(--text-muted); margin: .2em 0 .6em; text-indent: 0; }
 .markdown .cm-embed-image-host.is-centered + .cm-figure-caption { text-align: center; }
+.markdown .cm-embed-image-host.is-right + .cm-figure-caption { text-align: right; }
 /* the caret's buffers between the picture and its caption would each take a line (the caret is never there) */
 .markdown .cm-line:has(> .cm-figure-caption) > .cm-widgetBuffer { display: none; }
-.markdown .cm-embed-image { display: block; margin: .5em 0; max-width: 100%; border-radius: 6px; }
-.markdown .cm-embed-image-host.is-centered .cm-embed-image { margin-inline: auto; }
+.markdown .cm-img-frame { position: relative; display: inline-block; max-width: 100%; margin: .5em 0; vertical-align: top; }
+.markdown .cm-embed-image { display: block; margin: 0; max-width: 100%; border-radius: 6px; }
+.markdown .cm-img-handle {
+  position: absolute; top: 50%; transform: translateY(-50%); width: 8px; height: 42px; max-height: 60%;
+  border-radius: 99px; background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+  border: 1.5px solid var(--border-strong); box-shadow: var(--shadow-sm);
+  cursor: ew-resize; opacity: 0; transition: opacity .12s, background .12s, border-color .12s; touch-action: none; z-index: 4;
+}
+.markdown .cm-img-handle-left { left: 6px; }
+.markdown .cm-img-handle-right { right: 6px; }
+.markdown .cm-img-frame:hover .cm-img-handle,
+.markdown .cm-embed-image-host.is-resizing .cm-img-handle { opacity: 1; }
+.markdown .cm-img-handle:hover,
+.markdown .cm-embed-image-host.is-resizing .cm-img-handle { border-color: var(--accent); background: var(--accent); }
+.markdown .cm-img-width-badge {
+  position: absolute; right: 10px; bottom: 10px; padding: 1px 6px; border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-elev) 90%, transparent); border: 1px solid var(--border);
+  color: var(--heading); font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums;
+  pointer-events: none; opacity: 0; transition: opacity .12s; z-index: 4;
+}
+.markdown .cm-embed-image-host.is-resizing .cm-img-width-badge,
+.markdown .cm-img-frame:hover .cm-img-width-badge:not(:empty) { opacity: 1; }
+.markdown .cm-img-align-bar {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); display: inline-flex; gap: 2px;
+  padding: 2px; border-radius: 6px; background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  border: 1px solid var(--border-strong); box-shadow: var(--shadow-sm); backdrop-filter: blur(6px);
+  opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 5;
+}
+.markdown .cm-img-frame:hover .cm-img-align-bar,
+.markdown .cm-img-frame:focus-within .cm-img-align-bar { opacity: 1; pointer-events: auto; }
+.markdown .cm-img-align-btn {
+  padding: 2px 7px; border-radius: 4px; border: 0; background: transparent;
+  color: var(--text-muted); font-family: var(--font-ui); font-size: 11px; font-weight: 500; cursor: pointer;
+}
+.markdown .cm-img-align-btn:hover { color: var(--text); background: var(--bg-hover); }
+.markdown .cm-img-align-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .markdown .cm-embed-link { display: inline-block; margin: .3em 0; color: var(--accent); }
 .markdown .cm-html-tag { color: var(--text-faint); }
 .markdown .cm-inline-html img { max-width: 100%; vertical-align: middle; }
@@ -188,8 +226,10 @@ html.phone .live-cm .cm-scroller:has(> .cm-note-hero-slot) > .cm-content { paddi
   display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 7px;
   background: var(--accent-soft); color: var(--accent); font-family: var(--font-ui); font-size: 16px;
   font-weight: 600; line-height: 1; padding: 0; margin-right: 12px; vertical-align: 0.08em;
-  cursor: pointer; border: 0; text-indent: 0; flex-shrink: 0; transition: transform .12s, background .12s;
+  cursor: pointer; border: 0; text-indent: 0; flex-shrink: 0; transition: transform .12s, background .12s; overflow: hidden;
 }
+.page-emblem.is-image-emblem { background: transparent; }
+.page-emblem-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 6px; }
 .page-emblem:hover { transform: scale(1.05); background: color-mix(in srgb, var(--accent) 20%, transparent); }
 .inline-title-wrap { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 12px; padding: 0 0 .35em; }
 .inline-title-wrap .page-emblem { margin-right: 0; margin-top: 0.28em; }

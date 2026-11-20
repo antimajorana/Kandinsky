@@ -3,6 +3,8 @@
 // the editor does not (editor/mentions.ts draws the chips).
 import { api } from "./api";
 import { on, touches } from "./bus";
+import { open } from "./dock";
+import { readDate, formatDate, dateTip } from "./dates";
 import { openReadingNote } from "./papers";
 import type { Paper } from "./gen/Paper";
 
@@ -56,7 +58,31 @@ export function registerEntities(p: EntityProvider): () => void {
   providers.sort((a, b) => b.prefix.length - a.prefix.length);
   return () => { const i = providers.indexOf(p); if (i >= 0) providers.splice(i, 1); };
 }
+const DATE_MENTION_RE = /^(\d{4}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2}))?$/;
+
+/** Resolves `@YYYY-MM-DD` and `@YYYY-MM-DD HH:MM` as built-in calendar date entities. */
+export function resolveDateEntity(id: string): Entity | null {
+  const m = DATE_MENTION_RE.exec(id.trim());
+  if (!m) return null;
+  const iso = m[1];
+  const time = m[2];
+  const when = readDate(time ? `${iso} ${time}` : iso);
+  if (!when) return null;
+  const dateLabel = formatDate(when.d, "MMM D, YYYY");
+  const title = time ? `${dateLabel} · ${time}` : dateLabel;
+  return {
+    title,
+    subtitle: dateTip(when.d),
+    props: { date: iso, ...(time ? { time } : {}) },
+    open: () => {
+      open({ kind: "calendar", date: iso });
+    },
+  };
+}
+
 export async function resolveEntity(id: string): Promise<Entity | null> {
+  const dateEnt = resolveDateEntity(id);
+  if (dateEnt) return dateEnt;
   const p = providers.find((x) => id.startsWith(x.prefix));
   return p ? p.get(id.slice(p.prefix.length)) : null;
 }

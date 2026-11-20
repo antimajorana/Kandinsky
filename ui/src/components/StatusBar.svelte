@@ -425,6 +425,7 @@
       .filter(Boolean).length;
     return { words, hasVerification, verifyClean, rawVerify };
   });
+  let showReadingTime = $state(true);
 
   /** The cell whose panel is open, and its button (the popover's anchor). */
   let opened = $state<{ cell: StatusCell; anchor: HTMLElement } | null>(null);
@@ -527,7 +528,14 @@
     </button>
   {/if}
   {#if isNotionShell() && activeMdInfo}
-    <span class="sb-words">{plural(activeMdInfo.words, "word")}</span>
+    {@const mins = Math.max(1, Math.ceil(activeMdInfo.words / 220))}
+    <button
+      type="button"
+      class="sb-words"
+      data-testid="sb-words"
+      title={activeMdInfo.words > 0 ? `Estimated reading time (~${mins} min at 220 wpm) — click to toggle` : "Word count"}
+      onclick={() => { showReadingTime = !showReadingTime; }}
+    >{plural(activeMdInfo.words, "word")}{#if activeMdInfo.words > 0 && showReadingTime} · {mins} min read{/if}</button>
   {/if}
   {#if devMode && app.problems}
     <button class="problems" class:bad={app.problems.errors > 0} onclick={showProblems} title={tipFor("Problems in this file", "ui.problems")}
@@ -672,7 +680,8 @@
   .sb-verify { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); white-space: nowrap; }
   .sb-verify .v-dot { font-size: 9.5px; line-height: 1; color: var(--yellow); }
   .sb-verify .v-dot.clean { color: var(--green); }
-  .sb-words { color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sb-words { color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; padding: 1px 6px; border-radius: 5px; }
+  .sb-words:hover { background: var(--bg-hover); color: var(--text); }
   .grow { flex: 1; }
   /* a plugin's cell: quiet text; a button only shows it on hover */
   .cell { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -5,10 +5,12 @@
 // next cell at a cell's edge, Escape gives up. "+" adds a row or a column, "−" removes one, a right-click inserts,
 // moves, aligns, sorts or deletes. The note's text stays the one source: every edit is a change of its table lines,
 // which the live preview then draws again (ui/src/lib/editor/live/live-preview.js).
-import type { EditorView } from "@codemirror/view";
+import { closeCompletion, completionStatus } from "@codemirror/autocomplete";
+import { Prec, type Extension } from "@codemirror/state";
+import { keymap, type EditorView } from "@codemirror/view";
 import type { MenuItem } from "../menu";
 import { atPointer, popMenu } from "../menu";
-import { alignOf, caretIn, linesOf, tableAt, tableOps, clean, type Align, type Table } from "./table-md";
+import { alignOf, caretIn, cellRangesInLine, formatTableLines, linesOf, tableAt, tableOps, clean, type Align, type Table } from "./table-md";
 
 /** What in a drawn cell is clicked for itself, not to edit the cell. */
 const LIVE_IN_CELL = "a, button, input, label, summary";
@@ -273,4 +275,144 @@ function controls(view: EditorView, table: HTMLElement) {
   box.className = "table-edit-box";
   framed.before(box);
   box.append(framed, minusRow, minusCol, wrap);
+}
+
+function currentSourceCell(lineText: string, colOffset: number): number {
+  const ranges = cellRangesInLine(lineText);
+  if (!ranges.length) return 0;
+  for (let i = 0; i < ranges.length; i++) {
+    const r = ranges[i];
+    const nextStart = i + 1 < ranges.length ? ranges[i + 1].from - 2 : lineText.length;
+    if (colOffset <= r.to || colOffset <= nextStart) return i;
+  }
+  return ranges.length - 1;
+}
+
+function sourceTabMove(view: EditorView, forward: boolean): boolean {
+  const sel = view.state.selection.main;
+  if (!sel.empty) return false;
+  const doc = view.state.doc;
+  const line = doc.lineAt(sel.head);
+  if (!/^\s*\|.*\|\s*$/.test(line.text)) return false;
+  const compStatus = completionStatus(view.state);
+  if (compStatus === "active" || compStatus === "pending") {
+    const before = doc.sliceString(line.from, sel.head);
+    if (/(?:\[\[|@)\S*$/.test(before)) return false;
+    closeCompletion(view);
+  }
+  const t = tableAt(doc, sel.head);
+  if (!t) return false;
+
+  const docLineIdx = line.number - t.first; // 0 = header, 1 = separator, 2.. = body
+  const colCount = t.rows[0]?.length ?? 1;
+  const curCol = Math.min(colCount - 1, currentSourceCell(line.text, sel.head - line.from));
+
+  // Total navigable rows in formatted lines: header (0), separator (1), body (2..last-first)
+  // Skip separator row when tabbing so Tab lands directly in data cells.
+  let targetDocRow = docLineIdx;
+  let targetCol = curCol + (forward ? 1 : -1);
+
+  if (targetCol >= colCount) {
+    targetCol = 0;
+    targetDocRow = docLineIdx === 0 ? 2 : docLineIdx + 1;
+  } else if (targetCol < 0) {
+    targetCol = colCount - 1;
+    targetDocRow = docLineIdx === 2 ? 0 : docLineIdx - 1;
+  } else if (docLineIdx === 1) {
+    targetDocRow = forward ? 2 : 0;
+    targetCol = forward ? 0 : colCount - 1;
+  }
+
+  let insertNewRow = false;
+  if (targetDocRow > t.last - t.first) {
+    tableOps.insertRow(t, t.rows.length);
+    targetDocRow = t.rows.length; // 1 separator + (rows.length - 1) body = rows.length in docLineIdx
+    insertNewRow = true;
+  } else if (targetDocRow < 0) {
+    return false;
+  }
+
+  const formatted = formatTableLines(t);
+  const from = doc.line(t.first).from;
+  const to = doc.line(t.last).to;
+  const nextText = formatted.lines.join("\n");
+
+  const offsetInLines = formatted.lines
+    .slice(0, targetDocRow)
+    .reduce((acc, s) => acc + s.length + 1, 0);
+  const span = formatted.cellOffsets[targetDocRow]?.[targetCol] ?? { from: 2, to: 2 };
+  const anchor = from + offsetInLines + (insertNewRow ? span.from : span.to);
+
+  view.dispatch({
+    changes: { from, to, insert: nextText },
+    selection: { anchor },
+    scrollIntoView: true,
+    userEvent: "input.table",
+  });
+  return true;
+}
+
+function sourceTableEnter(view: EditorView): boolean {
+  if (completionStatus(view.state) === "active") return false;
+  const sel = view.state.selection.main;
+  if (!sel.empty) return false;
+  const doc = view.state.doc;
+  const line = doc.lineAt(sel.head);
+  if (!/^\s*\|.*\|\s*$/.test(line.text)) return false;
+  const t = tableAt(doc, sel.head);
+  if (!t) return false;
+
+  const docLineIdx = line.number - t.first;
+  const colCount = t.rows[0]?.length ?? 1;
+  const curCol = Math.min(colCount - 1, currentSourceCell(line.text, sel.head - line.from));
+
+  // If currently on an empty body row at the bottom of the table, Enter exits the table cleanly.
+  const dataRowIdx = docLineIdx === 0 ? 0 : docLineIdx - 1;
+  if (docLineIdx >= 2 && docLineIdx === t.last - t.first && t.rows[dataRowIdx]?.every((c) => c === "")) {
+    tableOps.removeRow(t, dataRowIdx);
+    const formatted = formatTableLines(t);
+    const from = doc.line(t.first).from;
+    const to = doc.line(t.last).to;
+    const nextText = `${formatted.lines.join("\n")}\n`;
+    view.dispatch({
+      changes: { from, to, insert: nextText },
+      selection: { anchor: from + nextText.length },
+      scrollIntoView: true,
+      userEvent: "input.table",
+    });
+    return true;
+  }
+
+  // Insert a new row right below the current row (or below header separator if on header/sep).
+  const insertAt = docLineIdx <= 1 ? 1 : docLineIdx;
+  tableOps.insertRow(t, insertAt);
+  const targetDocRow = insertAt + 1;
+
+  const formatted = formatTableLines(t);
+  const from = doc.line(t.first).from;
+  const to = doc.line(t.last).to;
+  const nextText = formatted.lines.join("\n");
+  const offsetInLines = formatted.lines
+    .slice(0, targetDocRow)
+    .reduce((acc, s) => acc + s.length + 1, 0);
+  const span = formatted.cellOffsets[targetDocRow]?.[curCol] ?? { from: 2, to: 2 };
+  const anchor = from + offsetInLines + span.from;
+
+  view.dispatch({
+    changes: { from, to, insert: nextText },
+    selection: { anchor },
+    scrollIntoView: true,
+    userEvent: "input.table",
+  });
+  return true;
+}
+
+/** Source-mode & raw-line pipe table keyboard navigation (Tab / Shift-Tab cell jumping, Enter row continuation). */
+export function tableSourceKeymap(): Extension {
+  return Prec.highest(
+    keymap.of([
+      { key: "Tab", run: (v) => sourceTabMove(v, true), shift: (v) => sourceTabMove(v, false) },
+      { key: "Enter", run: sourceTableEnter },
+    ]),
+  );
 }

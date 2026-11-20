@@ -120,7 +120,9 @@ html.phone .markdown a::after, html.phone .markdown .cm-link::after, html.phone 
 
 .markdown img { max-width: 100%; border-radius: 6px; }
 .markdown img.embed-img { display: block; margin: .6em 0; }
+.markdown img.embed-img.is-left { margin-right: auto; margin-left: 0; }
 .markdown img.embed-img.is-centered { margin-inline: auto; }
+.markdown img.embed-img.is-right { margin-left: auto; margin-right: 0; }
 /* a figure's caption (lib/equations.ts): "Figure 2. …" under the picture */
 .markdown .figure-caption { font-size: .9em; color: var(--text-muted); margin: -.3em 0 .8em; }
 .markdown img.is-missing { min-width: 120px; min-height: 40px; border: 1px dashed var(--border-strong); }

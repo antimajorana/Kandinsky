@@ -269,8 +269,8 @@ const SLASH_BLOCKS: SlashBlock[] = [
     badge: "◇",
     tone: "green",
     title: "Mermaid Diagram",
-    hint: "mermaid",
-    keywords: ["mermaid", "diagram", "flowchart", "sequence", "graph", "chart"],
+    hint: "mermaid · diagram",
+    keywords: ["diagram", "mermaid", "flowchart", "sequence", "graph", "chart"],
     template: "```mermaid\nflowchart LR\n  A[Start] --> B[Result]\n```\n\0",
   },
   {
