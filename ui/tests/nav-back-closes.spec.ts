@@ -22,6 +22,7 @@ test("back closes the tab it leaves; forward opens it again", async ({ page, req
   await put(request, "notes/back-a.md", "# a\n");
   await put(request, "notes/back-b.md", "# b\n");
   await page.goto("/");
+  await page.getByText("Finish the GW notes.").waitFor(); // the keymap is attached once the app is up: keys before it are lost
   await openFile(page, "back-a");
   await openFile(page, "back-b");
   await back(page);
