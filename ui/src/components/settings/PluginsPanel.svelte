@@ -238,7 +238,7 @@
             {#if pluginOn(p) && p.view}<button class="icon-btn" title="Open" aria-label="Open {p.title}" onclick={() => open(pluginSpec(p))}><Icon name="panel-right" size={13} /></button>{/if}
             {#if p.fields.length}<button class="btn small" aria-label="Settings of {p.title}" onclick={() => void openPluginSettings(p.id)}>Settings…</button>{/if}
             {#if p.from}<button class="icon-btn" title="Update from {p.from}" aria-label="Update {p.title}" onclick={() => void updatePlugin(p).then(refreshCatalog)}><Icon name="refresh" size={13} /></button>{/if}
-            {#if p.fields.length}<button class="icon-btn" title="Its settings file (.kandinsky/plugin-settings/{p.id}.toml)" aria-label="Edit {p.title} settings file" onclick={() => void openPluginSettingsText(p)}><Icon name="file-text" size={13} /></button>{/if}
+            {#if devMode && p.fields.length}<button class="icon-btn" title="Its settings file (.kandinsky/plugin-settings/{p.id}.toml)" aria-label="Edit {p.title} settings file" onclick={() => void openPluginSettingsText(p)}><Icon name="file-text" size={13} /></button>{/if}
             <button class="icon-btn" title="Remove from this vault (to .kandinsky/trash/)" aria-label="Remove {p.title}" onclick={() => void handleRemove(p.id)}><Icon name="close" size={13} /></button>
           </span>
         </li>
@@ -389,7 +389,7 @@
     </ul>
   {/if}
 
-  {#if devMode && trustedBins.length > 0 && tab === "installed"}
+  {#if trustedBins.length > 0 && tab === "installed"}
     <div class="group-head spaced">
       <h3>Trusted External Binaries <span class="n">{trustedBins.length}</span></h3>
     </div>
@@ -409,7 +409,16 @@
     </ul>
   {/if}
 </section>
-<PluginStore />
+{#if devMode}
+  <PluginStore />
+{:else}
+  <details class="optional-ext-gallery" data-testid="browse-optional-extensions">
+    <summary>Browse optional extensions</summary>
+    <div class="optional-ext-body">
+      <PluginStore />
+    </div>
+  </details>
+{/if}
 
 <style>
   .hub-bar { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 12px; }
@@ -420,7 +429,7 @@
   .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
   .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--border-strong); font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-muted); background: var(--bg); }
   .pill:hover { background: var(--bg-hover); color: var(--text); }
-  .pill.active { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+  .pill.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
   .pill .cnt { opacity: .8; font-size: calc(11px * var(--ui-scale, 1)); }
   .group-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 4px; }
   .group-head.spaced { margin-top: 22px; padding-top: 12px; border-top: 2px solid var(--border); }
@@ -455,7 +464,7 @@
   .btn { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: calc(12px * var(--ui-scale, 1)); }
   .btn.small { padding: 2px 9px; }
   .btn:hover { background: var(--bg-hover); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
   .btn.primary:hover { opacity: .92; }
   .btn.accent-btn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
   .btn:disabled { opacity: .5; pointer-events: none; }
@@ -464,4 +473,7 @@
   .problems { color: var(--red); text-align: left; padding: 0; }
   .problems:hover { text-decoration: underline; }
   .prune-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--bg-hover); color: var(--text-muted); font-size: calc(12px * var(--ui-scale, 1)); }
+  .optional-ext-gallery { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-side); padding: 6px 12px; }
+  .optional-ext-gallery > summary { cursor: pointer; font-size: calc(12.5px * var(--ui-scale, 1)); font-weight: 600; color: var(--text-muted); padding: 4px 0; }
+  .optional-ext-body { margin-top: 10px; }
 </style>

@@ -19,12 +19,12 @@ async function openSettings(page: Page) {
 test.beforeEach(({ page }) => vaultLook(page)); // these change the vault's look and expect the page to follow
 test("the 7 streamlined settings categories render cleanly with Advanced folded", async ({ page }) => {
   await openSettings(page);
-  for (const name of ["Appearance", "Editor & Writing", "Calendar & Daily Notes", "Files & Search", "References & PDF", "Keyboard Shortcuts", "Plugins"]) {
+  for (const name of ["Appearance", "Editor & Notes", "Calendar & Daily Notes", "Files & Links", "PDF & Citations", "Shortcuts", "Extensions"]) {
     await nav(page).getByRole("button", { name: new RegExp(`^${name.replace(/[&]/g, "\\$&")}`) }).click();
     await expect(page.locator("main article h2")).toContainText(name);
   }
-  await nav(page).getByRole("button", { name: /^Plugins/ }).click();
-  await page.getByTestId("settings-advanced").locator("summary").click();
+  await nav(page).getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByTestId("settings-advanced").locator("> summary").click();
   await expect(page.getByText("Where the terminal panel docks")).toBeVisible();
 });
 
@@ -71,7 +71,7 @@ test("colour schemes are swatches, by day and by night; an empty accent shows th
 
 test("the keyboard page lists every command with a rebindable shortcut", async ({ page }) => {
   await openSettings(page);
-  await nav(page).getByRole("button", { name: /^Keyboard Shortcuts/ }).click();
+  await nav(page).getByRole("button", { name: /^Shortcuts/ }).click();
   await page.getByLabel("Filter shortcuts").fill("command palette");
   await expect(page.getByRole("button", { name: "Shortcut for Command palette" })).toContainText("Super");
 });
@@ -81,7 +81,7 @@ test("a settings page is a block in a .page file", async ({ page, request }) => 
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await openFile(page, "tune.page");
-  await page.locator(".settings-block").getByTestId("settings-advanced").locator("summary").click();
+  await page.locator(".settings-block").getByTestId("settings-advanced").locator("> summary").click();
   await expect(page.locator(".settings-block").getByText("Where the terminal panel docks")).toBeVisible();
   await request.put("/api/file", { headers: H, data: { path: "notes/tune.page", text: "" } });
 });
@@ -90,7 +90,7 @@ test("a plugin switched off in Settings saves plugins.off", async ({ page, reque
   await request.put("/api/file", { headers: H, data: { path: ".kandinsky/plugins/offable/plugin.toml", text: 'title = "Offable"\nicon = "table"\n' } });
   await request.put("/api/file", { headers: H, data: { path: ".kandinsky/plugins/offable/view.js", text: "export default (host) => { host.textContent = 'offable'; };\n" } });
   await openSettings(page);
-  await nav(page).getByRole("button", { name: /^Plugins/ }).click();
+  await nav(page).getByRole("button", { name: /^Extensions/ }).click();
   const sw = page.getByRole("switch", { name: "Plugin Offable" });
   await expect(sw).toHaveAttribute("aria-checked", "true");
   await sw.click();
@@ -121,17 +121,17 @@ test("the detected-choice lists open without an error", async ({ page }) => {
 
 test("the vim keys, formatting bar, formula preview, code bar and git gutter are on their pages", async ({ page }) => {
   await openSettings(page);
-  await nav(page).getByRole("button", { name: /^Editor & Writing/ }).click();
+  await nav(page).getByRole("button", { name: /^Editor & Notes/ }).click();
   for (const name of [/Vim keys/i, /Format bar/i, /Math preview/i, /^Notes folder$/]) await expect(page.getByText(name).first()).toBeVisible();
-  await nav(page).getByRole("button", { name: /^Plugins/ }).click();
-  await page.getByTestId("settings-advanced").locator("summary").click();
+  await nav(page).getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByTestId("settings-advanced").locator("> summary").click();
   await expect(page.getByText(/Live editing|Terminal|LSP/i).first()).toBeVisible();
 });
 
 test("the options of the main features are on their pages, named so they read", async ({ page, request }) => {
   await openSettings(page);
   const labels: [RegExp, string[]][] = [
-    [/^Editor & Writing/, ["Default template (a plain note starts from it)", "Notes folder"]],
+    [/^Editor & Notes/, ["Default template (a plain note starts from it)", "Notes folder"]],
     [/^Calendar & Daily Notes/, ["Daily log folder", "Daily log template"]],
   ];
   for (const [p, names] of labels) {

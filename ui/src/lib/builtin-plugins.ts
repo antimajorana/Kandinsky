@@ -7,7 +7,8 @@
 import type { IconName, PaneSpec } from "./panes";
 import type { PageId } from "./settings-pages";
 import { settings } from "./settings.svelte";
-import { librariesPage, librariesSpec } from "./libraries.svelte";
+import { plugins } from "./plugin-registry.svelte";
+import { librariesPage, librariesPlugin, librariesSpec } from "./libraries.svelte";
 
 /** The built-in plugins' ids — the core's `BuiltinPlugin` (config.rs) has the same; a typo is a type error. */
 export type BuiltinId = "library" | "latex" | "graph" | "bases";
@@ -30,8 +31,9 @@ export interface Builtin {
 export const BUILTINS: Builtin[] = [
   {
     // id "library" kept: vaults switch it off by that name. Its button opens the Libraries page (the Catalog plugin's
-    // pane, libraries.svelte.ts) at References, the library it adds; without that page, no button.
-    id: "library", title: "Library", icon: "library", button: { command: "ui.library", pane: () => (librariesPage() ? librariesSpec(builtinOn("library") ? "references" : undefined) : null) },
+    // pane, libraries.svelte.ts) at References, the library it adds; never hides while plugins load or while the
+    // built-in library or a libraries plugin exists.
+    id: "library", title: "Library", icon: "library", button: { command: "ui.library", pane: () => (!plugins.loaded || librariesPage() || librariesPlugin() || builtinOn("library") ? librariesSpec(builtinOn("library") ? "references" : undefined) : null) },
     description: "References (your papers, books, theses and lecture notes) as the first library of the Library page — the Catalog plugin's — \\cite completion and the PDF reader's paper actions. The references themselves — their notes, refs.bib, the Zotero connector, PDF sources — are the Catalog · Science plugin's.",
     parts: "References in the Library page · commands · \\cite completion",
   },

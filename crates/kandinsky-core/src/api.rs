@@ -178,6 +178,13 @@ pub struct MergeTemplate {
     pub at_cursor: bool,
 }
 
+/// `POST /api/note/export-pdf`: export a Markdown note to PDF bytes.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct NoteExportPdfRequest {
+    pub path: String,
+}
+
 /// Body of every non-2xx `/api` response. `mtime` is set on 409 (current on-disk mtime, if any).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -1251,6 +1258,27 @@ pub struct Paper {
     /// When the entry joined the library (`dateAdded`, "YYYY-MM-DD hh:mm:ss"), for sorting.
     pub added: Option<String>,
     pub has_notes: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub isbn: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub volume: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub issue: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub pages: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub publisher: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub edition: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub series: Option<String>,
 }
 
 /// catalog-papers' `edit`: the fields the Library edits in place (the note's other properties are kept).
@@ -1266,6 +1294,43 @@ pub struct PaperEdit {
     pub venue: String,
     pub collections: Vec<String>,
     pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub doi: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub arxiv: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub isbn: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub volume: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub issue: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub pages: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub publisher: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub edition: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub series: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "abstractNote")]
+    #[ts(optional, rename = "abstractNote")]
+    pub abstract_note: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -2053,6 +2118,16 @@ pub struct Backlink {
     pub relation: Option<String>,
 }
 
+/// One suggested related note computed from shared links, tags, and title overlap.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RelatedNote {
+    pub path: String,
+    pub title: String,
+    pub reason: String,
+    pub score: u32,
+}
+
 /// `GET /api/backlinks?path=` — notes linking to `path`, sorted by source then line.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -2061,6 +2136,9 @@ pub struct Backlinks {
     pub links: Vec<Backlink>,
     /// Lines naming the note without linking to it (Obsidian's "unlinked mentions"), max 200.
     pub unlinked: Vec<Backlink>,
+    /// Related notes discovered from shared links, tags, and title keywords.
+    #[serde(default)]
+    pub related: Vec<RelatedNote>,
 }
 
 /// `POST /api/link-mention`: turn the mention of `target` on `line` of `source` into a link.

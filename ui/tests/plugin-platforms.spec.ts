@@ -31,7 +31,7 @@ test("a plugin's row shows each platform; one that says no here does not run, an
   await page.keyboard.press("F1");
   await page.keyboard.type("Settings");
   await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click();
-  await page.getByRole("button", { name: /^Plugins( \d+)?$/ }).first().click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions( \d+)?$/ }).click();
 
   const here = page.locator("li", { has: page.locator('[data-plugin-platforms="plat-here"]') });
   const chips = here.locator(".chip");

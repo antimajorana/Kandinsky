@@ -36,7 +36,7 @@ import { propertiesChip, propertiesElement } from "../properties";
 import { propertySpec, watchPropertySpec } from "../property-spec.svelte";
 import { blobUrlNow, warm, PLACEHOLDER } from "../raw";
 import { hydrateRendered } from "../hydrate";
-import { hydrateTables } from "./table-edit";
+import { hydrateTables, tableSourceKeymap } from "./table-edit";
 import { followLinksIn } from "../rendered-links";
 import { hoverSync } from "./hover-sync";
 import { mentions, entitySource } from "./mentions";
@@ -335,6 +335,7 @@ export function noteExtensions(
     body: [
       markdown({ base: markdownLanguage, extensions: [...obsidianMarkdown, obsidianFolds, AnyTaskStatus], addKeymap: false, htmlTagLanguage: noteHtml() }),
       Prec.high(keymap.of([{ key: "Enter", run: (v) => closeDisplayMath(v) || continueList(v) }, { key: "Backspace", run: backspaceMarkup }])),
+      tableSourceKeymap(),
       taskShortForms,
       liveSlot.of(live),
       hoverSync(dir),
@@ -346,7 +347,6 @@ export function noteExtensions(
       floatingToolbarExtension(() => settings.config?.editor.floating_toolbar ?? true),
       blockGutterExtension(),
       bidiExtension(),
-      headingFoldsExtension(),
       zenScrollExtension(),
       codeFenceChromeExtension(),
       mentions,
@@ -436,7 +436,7 @@ async function dropAt(view: EditorView, notePath: string, files: File[], at: num
 /** Settings-driven markdown options (heading folds); reconfigured live like codeOptions. */
 export function mdOptions(c: WorkspaceConfig | null): Extension {
   return [
-    (c?.editor.fold_headings ?? true) ? [foldGutter({ openText: "▾", closedText: "▸" }), keymap.of(foldKeymap)] : [],
+    (c?.editor.fold_headings ?? true) ? [foldGutter({ openText: "▾", closedText: "▸" }), keymap.of(foldKeymap), headingFoldsExtension()] : [],
     c?.editor.typewriter ? typewriter : [], // zen-scroll.ts; the page menu's toggle uses the same extension
   ];
 }

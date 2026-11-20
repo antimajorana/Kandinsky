@@ -2,7 +2,9 @@
   // NoteHero: mounted above `.cm-content` inside `ed.view.scrollDOM` so cover banners and hero actions
   // scroll naturally with the note without shifting CodeMirror document offsets.
   import type { EditorView } from "@codemirror/view";
+  import EmojiIconPicker from "./EmojiIconPicker.svelte";
   import Popover, { type VirtualAnchor } from "./Popover.svelte";
+  import { cleanImageIconPath, isImageIcon } from "../lib/emoji-data";
   import { editFrontmatter } from "../lib/frontmatter-edit";
   import { setCachedNoteIcon } from "../lib/folder-colors.svelte";
   import { dirOf } from "../lib/paths";
@@ -35,13 +37,6 @@
     onToggleProperties?: () => void;
   } = $props();
 
-  const ICON_CHOICES = [
-    "◎", "●", "▲", "■", "◆", "✦",
-    "∑", "∫", "∂", "∇", "⊗", "⊕",
-    "ℏ", "λ", "Ω", "Φ", "Ψ", "∞",
-    "📖", "🧪", "📐", "🗂️", "⭐", "🔬",
-  ] as const;
-
   const COVER_PRESETS = [
     { id: "several-circles", label: "Several Circles" },
     { id: "velvet-cosmos", label: "Velvet Cosmos" },
@@ -52,10 +47,12 @@
 
   const rawIcon = $derived(typeof noteProps?.icon === "string" ? noteProps.icon.trim() : "");
   const hasExplicitIcon = $derived(Boolean(rawIcon) && rawIcon.toLowerCase() !== "none");
+  const iconIsImage = $derived(hasExplicitIcon && isImageIcon(rawIcon));
   const coverValue = $derived(typeof noteProps?.cover === "string" ? noteProps.cover.trim() : "");
   const isPresetCover = $derived(COVER_PRESETS.some((p) => p.id === coverValue));
 
   let resolvedCoverUrl = $state<string | null>(null);
+  let resolvedIconUrl = $state<string | null>(null);
   let gutterWidth = $state(18);
   let iconAnchor = $state<HTMLElement | VirtualAnchor | null>(null);
   let coverAnchor = $state<HTMLElement | null>(null);
@@ -66,6 +63,64 @@
   // Sync per-note icon cache so Sidebar FileTree updates immediately when `icon:` changes
   $effect(() => {
     setCachedNoteIcon(path, hasExplicitIcon ? rawIcon : null);
+  });
+
+  // Resolve custom image page icon URL (vault attachment or remote URL) and hydrate inline `.page-emblem` buttons
+  $effect(() => {
+    if (!iconIsImage) {
+      resolvedIconUrl = null;
+      return;
+    }
+    const clean = cleanImageIconPath(rawIcon);
+    if (/^(https?:|data:|blob:)/i.test(clean)) {
+      resolvedIconUrl = clean;
+      return;
+    }
+    const dir = dirOf(path);
+    const target = resolveLink(clean, dir) ?? clean;
+    const now = blobUrlNow(target);
+    if (now) {
+      resolvedIconUrl = now;
+      return;
+    }
+    let cancelled = false;
+    void vaultReady()
+      .then(() => warm(resolveOrBeside(clean, dir)))
+      .then((url) => { if (!cancelled) resolvedIconUrl = url; })
+      .catch(() => { if (!cancelled) resolvedIconUrl = null; });
+    return () => { cancelled = true; };
+  });
+
+  // Hydrate `.page-emblem` DOM button inside CodeMirror or Page host whenever `icon:` is an image path/URL
+  $effect(() => {
+    const v = view();
+    const root = v ? v.dom : emblemHost?.();
+    const imgUrl = iconIsImage ? resolvedIconUrl : null;
+    if (!root) return;
+    const syncEmblems = () => {
+      root.querySelectorAll<HTMLElement>(".page-emblem").forEach((btn) => {
+        if (imgUrl) {
+          btn.classList.add("is-image-emblem");
+          let img = btn.querySelector<HTMLImageElement>("img.page-emblem-img");
+          if (!img) {
+            img = document.createElement("img");
+            img.className = "page-emblem-img";
+            img.alt = "";
+            btn.replaceChildren(img);
+          }
+          if (img.src !== imgUrl) img.src = imgUrl;
+        } else if (iconIsImage) {
+          btn.classList.add("is-image-emblem");
+        } else if (btn.classList.contains("is-image-emblem")) {
+          btn.classList.remove("is-image-emblem");
+          btn.textContent = hasExplicitIcon ? rawIcon : (isNotionShell() ? "◎" : "");
+        }
+      });
+    };
+    syncEmblems();
+    const mo = new MutationObserver(syncEmblems);
+    mo.observe(root, { childList: true, subtree: true });
+    return () => mo.disconnect();
   });
 
   // Measure `.cm-gutters` width so `.hero-measure` aligns to the exact pixel column of `.cm-content`
@@ -174,11 +229,22 @@
     if (trimmed) chooseCover(trimmed);
   }
 
-  const handleProperties = () => (onToggleProperties ? onToggleProperties() : toggleProperties());
+  const handleProperties = () => {
+    if (onToggleProperties) {
+      onToggleProperties();
+      return;
+    }
+    const v = view();
+    if (v) {
+      window.dispatchEvent(new CustomEvent("kandinsky-inline-add-property", { detail: { view: v } }));
+      return;
+    }
+    toggleProperties();
+  };
   const handleWidth = () => (onToggleWidth ? onToggleWidth() : void writeFrontmatterProp("width", isFullWidth ? null : "full"));
 </script>
 
-<div class="note-hero" class:has-cover={Boolean(coverValue)} class:page-layout={pageLayout} class:full-width={isFullWidth}>
+<div class="note-hero" class:has-cover={Boolean(coverValue)} class:page-layout={pageLayout} class:full-width={isFullWidth} class:pop-open={Boolean(iconAnchor || coverAnchor)}>
   {#if coverValue}
     <div class="note-cover {isPresetCover ? `preset-${coverValue}` : 'preset-image'}" data-testid="note-cover">
       {#if !isPresetCover && resolvedCoverUrl}
@@ -201,7 +267,9 @@
         <button type="button" class="hero-act" bind:this={coverBtnEl} onclick={() => openCoverPicker(coverBtnEl)}>
           {coverValue ? "Change cover" : "Add cover"}
         </button>
-        <button type="button" class="hero-act" onclick={handleProperties}>Properties</button>
+        <button type="button" class="hero-act" data-testid="hero-add-property" onclick={handleProperties}>
+          {pageLayout ? "Properties" : "+ Add property"}
+        </button>
         <button type="button" class="hero-act hero-width-btn" class:active={isFullWidth} onclick={handleWidth}
           title={isFullWidth ? (pageLayout ? "Switch to standard 1080px page width" : "Switch to standard 740px reading width") : (pageLayout ? "Expand page to full width" : "Expand note to full width")}>
           {isFullWidth ? "Standard width" : "Full width"}
@@ -212,23 +280,14 @@
 </div>
 
 {#if iconAnchor}
-  <Popover anchor={iconAnchor} label="Choose page icon" width={284} onclose={() => (iconAnchor = null)}>
-    <div class="hero-pop" data-testid="icon-picker">
-      <div class="pop-head">
-        <span class="pop-title">Bauhaus &amp; Physics Emblem</span>
-        <div class="pop-head-actions">
-          <button type="button" class="mini-act" onclick={resetDefaultIcon} title="Use default ◎ emblem">Default ◎</button>
-          <button type="button" class="mini-act" onclick={removeIcon}>Remove icon</button>
-        </div>
-      </div>
-      <div class="icon-grid">
-        {#each ICON_CHOICES as g (g)}
-          <button type="button" class="icon-cell"
-            class:selected={rawIcon === g || (!rawIcon && g === "◎" && isNotionShell())}
-            onclick={() => chooseIcon(g)} title="Set icon {g}">{g}</button>
-        {/each}
-      </div>
-    </div>
+  <Popover anchor={iconAnchor} label="Choose page icon" width={368} onclose={() => (iconAnchor = null)}>
+    <EmojiIconPicker
+      {path}
+      currentIcon={rawIcon}
+      onSelect={chooseIcon}
+      onResetDefault={resetDefaultIcon}
+      onRemove={removeIcon}
+    />
   </Popover>
 {/if}
 
@@ -320,25 +379,35 @@
   @container (max-width: 760px) { .page-layout .hero-measure { padding: 18px 18px 4px; } }
   :global(html.phone) .hero-measure { padding: 16px 16px 4px; }
   .hero-actions {
-    display: flex; align-items: center; gap: 14px; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint);
+    display: flex; align-items: center; flex-wrap: wrap; gap: 14px; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint);
+    opacity: 0; transition: opacity 120ms ease;
   }
+  .note-hero:hover .hero-actions,
+  .note-hero:focus-within .hero-actions,
+  .note-hero.pop-open .hero-actions,
+  :global(.cm-scroller:has(> .cm-note-hero-slot:hover)) .hero-actions,
+  :global(.cm-scroller:has(.inline-title-wrap:hover, .inline-title:hover, .cm-page-title-h1:hover)) .hero-actions,
+  :global(.page-scroll:has(.page-head:hover)) .hero-actions,
+  :global(:root[data-touch]) .hero-actions,
+  :global(html.phone) .hero-actions { opacity: 1; }
 
   .hero-act { padding: 1px 0; border-radius: 4px; color: var(--text-faint); font: inherit; background: transparent; border: 0; cursor: pointer; transition: color 120ms ease, opacity 120ms ease; }
   .hero-act:hover, .hero-act:focus-visible { color: var(--text); outline: none; }
   .hero-width-btn { opacity: 0; }
-  .note-hero:hover .hero-width-btn, .hero-width-btn:focus-visible, .hero-width-btn.active { opacity: 1; }
+  .note-hero:hover .hero-width-btn,
+  .note-hero:focus-within .hero-width-btn,
+  .note-hero.pop-open .hero-width-btn,
+  :global(.cm-scroller:has(.inline-title-wrap:hover, .inline-title:hover, .cm-page-title-h1:hover)) .hero-width-btn,
+  :global(:root[data-touch]) .hero-width-btn,
+  .hero-width-btn:focus-visible,
+  .hero-width-btn.active { opacity: 1; }
+  :global(html.phone) .hero-width-btn { display: none; }
 
   .hero-pop { display: flex; flex-direction: column; gap: 8px; padding: 2px; }
   .pop-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
   .pop-title { font-size: 11px; font-weight: 600; color: var(--text-muted); }
-  .pop-head-actions { display: flex; gap: 4px; }
   .mini-act { padding: 2px 6px; border-radius: 4px; font-size: 11px; color: var(--text-muted); border: 1px solid var(--border); background: var(--bg); cursor: pointer; }
   .mini-act:hover { color: var(--text); border-color: var(--border-strong); }
-
-  .icon-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
-  .icon-cell { height: 34px; display: grid; place-items: center; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--heading); font-size: 16px; cursor: pointer; transition: background 100ms, border-color 100ms; }
-  .icon-cell:hover { background: var(--bg-hover); border-color: var(--border-strong); }
-  .icon-cell.selected { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
   .cover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .cover-swatch { display: flex; flex-direction: column; gap: 4px; padding: 4px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); text-align: left; cursor: pointer; }

@@ -7,6 +7,8 @@
   import { context } from "../lib/context.svelte";
   import { open, openPath } from "../lib/dock";
   import { homeDoc, openHome, openWith } from "../lib/actions";
+  import { openLibraries } from "../lib/libraries.svelte";
+  import { builtinOn } from "../lib/builtin-plugins";
   import { openPalette } from "../lib/palette.svelte";
   import { openCaptures, openQuickCapture } from "../lib/quick-capture.svelte";
   import { openSettingsAt } from "../lib/settings-nav.svelte";
@@ -77,11 +79,15 @@
   const vaultKey = $derived(keysOf("ui.vault") ?? keysOf("ui.vault.next"));
   const devMode = $derived(Boolean(settings.config?.developer_mode));
   const homeTile = $derived(appLaunchers().find((a) => a.key === "home"));
-  const extraApps = $derived(appLaunchers().filter((a) => !["home", "calendar", "graph", "bases"].includes(a.key)));
-  const visibleExtraApps = $derived(extraApps);
-  const openAppId = (a: AppTile): string | null =>
-    (a.ids.includes(tabs.active ?? "") ? tabs.active : a.ids.find((id) => tabs.apps.some((t) => t.id === id))) ?? null;
+  const libraryTile = $derived(allApps().find((a) => a.key === "library"));
+  function openAppId(a: AppTile): string | null {
+    return (a.ids.includes(tabs.active ?? "") ? tabs.active : a.ids.find((id) => tabs.apps.some((t) => t.id === id))) ?? null;
+  }
   const isAppActive = (a: AppTile): boolean => a.ids.includes(tabs.active ?? "");
+  const libraryOpen = $derived(libraryTile ? Boolean(openAppId(libraryTile)) : tabs.apps.some((t) => t.kind === "plugin" && t.title === "Library"));
+  const libraryActive = $derived(libraryTile ? isAppActive(libraryTile) : false);
+  const extraApps = $derived(appLaunchers().filter((a) => !["home", "library", "calendar", "graph", "bases"].includes(a.key)));
+  const visibleExtraApps = $derived(extraApps);
   function launchApp(a: AppTile): void {
     const id = openAppId(a);
     if (id) activate(id);
@@ -145,16 +151,18 @@
   }
 
   // The editor zone has no tab strip in this shell, so open tabs are listed here: whenever more than one is open or one
-  // sits behind another view (always with vertical tabs). Apps with their own nav row and pins are not repeated.
-  const navAppIds = $derived(new Set(extraApps.flatMap((a) => a.ids)));
+  // sits behind another view (or with vertical tabs / collapsed sidebar peek). Apps with their own nav row and pins are not repeated.
+  const navAppIds = $derived(new Set([
+    ...extraApps.flatMap((a) => a.ids),
+    ...(libraryTile && !appHidden("library") ? libraryTile.ids : []),
+  ]));
   const mainGroups = $derived(tabs.groups.filter((g) => g.zone === "main"));
   const openPanes = $derived([
     ...tabs.apps
-      .filter((t) => !navAppIds.has(t.id) && !isPinned(t.id) && !homeTile?.ids.includes(t.id) && t.kind !== "today" && (!homePath || t.path !== homePath))
-      .map((t) => ({ ...t, split: 0 })),
-    ...mainGroups.flatMap((g, gi) => g.tabs.map((t) => ({ ...t, split: mainGroups.length > 1 ? gi + 1 : 0 }))),
+      .filter((t) => !navAppIds.has(t.id) && !isPinned(t.id) && !homeTile?.ids.includes(t.id) && t.kind !== "today" && (!homePath || t.path !== homePath)),
+    ...mainGroups.flatMap((g) => g.tabs),
   ]);
-  const showPanes = $derived(openPanes.length > 1 || openPanes.some((t) => !t.shown) || (tabs.layout === "vertical" && openPanes.length > 0));
+  const showPanes = $derived(openPanes.length > 1 || openPanes.some((t) => !t.shown) || ((settings.config?.ui.tabs === "vertical" || !wide) && openPanes.length > 0));
 
   function onPaneMenu(e: MouseEvent, t: { id: string; path?: string; kind?: string }) {
     e.preventDefault();
@@ -438,10 +446,19 @@
           aria-label="Home" title={tipFor("Home", "ui.today")} data-app-id="today" onclick={() => void openHome()}>
           <span class="nav-left"><Icon name="home" size={14} />{#if wide}<span>Home</span>{/if}</span>
         </button>
-        {#if devMode}
-          <button class="nav-row" class:active={tabs.active === "calendar"} aria-label="Calendar" title="Calendar" onclick={() => open({ kind: "calendar" })} data-testid="nav-calendar">
-            <span class="nav-left"><Icon name="calendar" size={14} />{#if wide}<span>Calendar</span>{/if}</span>
+        <button class="nav-row" class:active={tabs.active === "calendar"} aria-label="Calendar" title={tipFor("Calendar", "ui.calendar")} onclick={() => open({ kind: "calendar" })} data-testid="nav-calendar">
+          <span class="nav-left"><Icon name="calendar" size={14} />{#if wide}<span>Calendar</span>{/if}</span>
+        </button>
+        {#if !appHidden("library")}
+          <button class="nav-row app" class:active={libraryActive} class:open={libraryOpen}
+            aria-label="Library" title={tipFor("Library", "ui.library")} data-app-id={libraryTile?.ids[0] ?? "plugin:catalog"}
+            onclick={() => (libraryTile ? launchApp(libraryTile) : openLibraries(builtinOn("library") ? "references" : undefined))}
+            oncontextmenu={(e) => { if (libraryTile) onAppMenu(e, libraryTile); }}
+            data-testid="nav-library">
+            <span class="nav-left"><Icon name="library" size={14} />{#if wide}<span>Library</span>{/if}</span>
           </button>
+        {/if}
+        {#if devMode}
           <button class="nav-row" class:active={notificationsInbox.modalOpen} aria-label="Notifications" title="Notifications" onclick={() => openNotificationsModal()} oncontextmenu={onNotificationsMenu}>
             <span class="nav-left"><Icon name="bell" size={14} />{#if wide}<span>Notifications</span>{/if}</span>
             {#if wide && notificationsInbox.totalBadgeCount > 0}<span class="nav-badge">{notificationsInbox.totalBadgeCount}</span>{/if}
@@ -516,13 +533,11 @@
               <span class="panes-count">{openPanes.length}</span>
               <span class="sec-chev" class:open={panesOpen}><Icon name="chevron" size={11} /></span>
             </button>
-            <span class="panes-head-actions">
-              {#if mainGroups.length > 1}
+            {#if mainGroups.length > 1}
+              <span class="panes-head-actions">
                 <button type="button" class="sec-btn" title="Unsplit" aria-label="Unsplit" onclick={() => unsplit("main")}><Icon name="maximize" size={11} /></button>
-              {/if}
-              <button type="button" class="kbd panes-kbd" title={searchKey ? `Find an open tab (${searchKey}, then %)` : "Find an open tab (%)"}
-                onclick={() => openPalette("all", "%")}>%</button>
-            </span>
+              </span>
+            {/if}
           </div>
           {#if panesOpen}
             <div class="panes-list">
@@ -541,7 +556,6 @@
                       <span class="trunc pane-title">{t.title}</span>
                       {#if t.hint}<span class="pane-hint">{t.hint}</span>{/if}<!-- two tabs of one name say which folder -->
                     </span>
-                    {#if t.split > 0}<span class="split-badge">Split {t.split}</span>{/if}
                   </button>
                   <button type="button" class="pane-close" aria-label="Close {t.title}" title="Close tab"
                     onclick={(e) => { e.stopPropagation(); closeTab(t.id); }}>
@@ -605,9 +619,6 @@
     </div>
 
     <footer class="side-foot">
-      {#if devMode}
-        <button class="nav-row" data-testid="sidebar-import" aria-label="Import" title="Import notes…" onclick={() => openImportModal()}><span class="nav-left"><Icon name="move-in" size={14} />{#if wide}<span>Import</span>{/if}</span></button>
-      {/if}
       <button class="nav-row" aria-label="Trash" title="Trash" onclick={() => (trashOpen = true)}><span class="nav-left"><Icon name="trash" size={14} />{#if wide}<span>Trash</span>{/if}</span></button>
       {#if devMode}
         <button class="nav-row" aria-label="Plugins" title="Plugins" onclick={() => openSettingsAt("plugins")}><span class="nav-left"><Icon name="plugin" size={14} />{#if wide}<span>Plugins</span>{/if}</span></button>
@@ -685,8 +696,6 @@
   .panes-toggle:hover .sec-chev { opacity: 1; }
   .panes-head-actions { display: inline-flex; align-items: center; gap: 4px; }
   .panes-count { font-size: calc(10px * var(--ui-scale, 1)); font-weight: 600; padding: 0 5px; border-radius: 999px; background: var(--bg-hover); color: var(--text-muted); font-variant-numeric: tabular-nums; }
-  .panes-kbd { opacity: 0.72; transition: opacity .12s, color .12s; }
-  .panes-kbd:hover { opacity: 1; color: var(--text); background: var(--bg-hover); }
   .panes-mini { display: flex; flex-direction: column; align-items: center; gap: 2px; max-height: 150px; overflow-y: auto; scrollbar-width: none; width: 100%; }
   .pane-mini-btn { width: 32px; height: 28px; border-radius: 6px; display: grid; place-items: center; color: var(--text-muted); flex: none; }
   .pane-mini-btn:hover { background: var(--bg-hover); color: var(--text); }
@@ -698,7 +707,6 @@
   .pane-hint { flex: none; color: var(--text-faint); font-size: .88em; }
   .pane-main { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 0; font-size: calc(12.5px * var(--ui-scale, 1)); color: inherit; text-align: left; }
   .pane-row:hover .nav-left :global(.icon), .pane-row.active .nav-left :global(.icon) { color: currentColor; }
-  .split-badge { flex: none; font-size: calc(9.5px * var(--ui-scale, 1)); font-weight: 600; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-faint); font-family: var(--font-mono); }
   .panes-list { max-height: 160px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 1px; }
   .fav-list { max-height: 136px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 1px; }
   .pane-close { flex: none; width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; color: var(--text-faint); opacity: 0; transition: opacity .1s, background .1s, color .1s; }

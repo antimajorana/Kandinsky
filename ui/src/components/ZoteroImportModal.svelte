@@ -5,9 +5,17 @@
   import { api } from "../lib/api";
   import { openLibraries } from "../lib/libraries.svelte";
   import { closeZoteroImportModal, zoteroModal } from "../lib/paper-modals.svelte";
+  import { pluginOn, plugins } from "../lib/plugin-registry.svelte";
   import { toast } from "../lib/state.svelte";
   import { errReason } from "../lib/text";
   import { refreshVault } from "../lib/vault";
+
+  const referencesPlugin = (): string =>
+    (
+      plugins.list.find((p) => p.provides.includes("references") && p.has_helper && pluginOn(p)) ??
+      plugins.list.find((p) => p.provides.includes("references") && p.has_helper) ??
+      plugins.list.find((p) => p.id === "catalog-papers")
+    )?.id ?? "catalog-papers";
 
   let { onclose }: { onclose?: () => void } = $props();
 
@@ -107,7 +115,7 @@
   async function discover(): Promise<void> {
     discovering = true;
     try {
-      const d = parseDiscovery(await api.pluginHelper("catalog-papers", "discover_zotero", {}, 30));
+      const d = parseDiscovery(await api.pluginHelper(referencesPlugin(), "discover_zotero", {}, 30));
       discovery = d;
       if (!dataDir && d.dataDir) dataDir = d.dataDir;
       if (!baseAttachmentPath && (d.baseAttachmentPath || d.zotmoovFolder)) {
@@ -127,7 +135,7 @@
     errorMsg = "";
     try {
       const raw = await api.pluginHelper(
-        "catalog-papers",
+        referencesPlugin(),
         "import_zotero",
         {
           data_dir: dataDir.trim() || undefined,

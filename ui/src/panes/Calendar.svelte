@@ -4,12 +4,12 @@
   import Icon from "../components/Icon.svelte";
   import AgendaList from "../components/calendar/AgendaList.svelte";
   import DayWorkspace from "../components/calendar/DayWorkspace.svelte";
-  import EventPopover from "../components/calendar/EventPopover.svelte";
+  import EventPopover, { type AnchorRect } from "../components/calendar/EventPopover.svelte";
   import MonthGrid from "../components/calendar/MonthGrid.svelte";
   import WeekGrid from "../components/calendar/WeekGrid.svelte";
   import { addDays, addMonths, daysBetween, formatMonthHeading, monthGridDays, parseIso, todayIso, weekDays } from "../components/calendar/calendar-dates";
   import { confirmMoveSeries } from "../components/calendar/series";
-  import { api } from "../lib/api";
+  import { api, apiBase } from "../lib/api";
   import type { PaneProps } from "../lib/dock";
   import { openPath } from "../lib/dock";
   import { calendarGo } from "../lib/registry";
@@ -33,6 +33,7 @@
   let error = $state("");
   let host: HTMLElement;
   let editingEvent = $state<CalendarEvent | null | "new">(null);
+  let anchorRect = $state<AnchorRect | null>(null);
   let baseChoices = $state<string[]>([]);
   // svelte-ignore state_referenced_locally
   let selectedBases = $state<string[]>(calCfg?.bases ? [...calCfg.bases] : []);
@@ -131,9 +132,28 @@
     mode = "day";
   }
 
-  function editEvent(ev: CalendarEvent): void {
-    if (ev.editable) editingEvent = ev;
-    else if (ev.path) openPath(ev.path, ev.line ?? undefined);
+  function rectOf(el: HTMLElement): AnchorRect {
+    const r = el.getBoundingClientRect();
+    return { top: r.top, left: r.left, bottom: r.bottom, right: r.right };
+  }
+
+  function editEvent(ev: CalendarEvent, triggerRect?: AnchorRect): void {
+    if (ev.editable) {
+      anchorRect = triggerRect ?? null;
+      editingEvent = ev;
+    } else if (ev.path) {
+      openPath(ev.path, ev.line ?? undefined);
+    }
+  }
+
+  async function toggleTask(ev: CalendarEvent): Promise<void> {
+    if (ev.source !== "task" || ev.completed || !ev.path || !ev.line) return;
+    try {
+      await api.tickTask(ev.path, ev.line);
+      await loadCalendar();
+    } catch (err) {
+      toast("Could not complete task", errText(err), "error");
+    }
   }
 
   async function reschedule(ev: CalendarEvent, date: string, start?: string, end?: string): Promise<void> {
@@ -184,7 +204,19 @@
     if (exporting) return;
     exporting = true;
     try {
-      const blob = await api.exportCalendarIcs();
+      const bases = basesCustomized || calCfg?.bases !== undefined ? selectedBases : undefined;
+      let blob: Blob;
+      if (bases !== undefined) {
+        const qs = new URLSearchParams({ bases: bases.join(",") }).toString();
+        const res = await fetch(`${apiBase()}/api/calendar/ics/export?${qs}`, {
+          headers: { "x-kandinsky": "1" },
+          credentials: "same-origin",
+        });
+        if (!res.ok) throw new Error(`GET /api/calendar/ics/export: ${res.status} ${await res.text()}`);
+        blob = await res.blob();
+      } else {
+        blob = await api.exportCalendarIcs();
+      }
       const href = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = href;
@@ -287,8 +319,8 @@
       <input type="file" accept=".ics,text/calendar" bind:this={icsInput} onchange={(e) => void handleIcsFile(e)} hidden />
       <button type="button" class="pill-btn" onclick={() => icsInput?.click()} title="Import .ics calendar file">Import .ics</button>
       <button type="button" class="pill-btn" disabled={exporting} onclick={() => void exportIcs()} title="Export local events as .ics">Export .ics</button>
-      <button type="button" class="primary-btn" onclick={() => (editingEvent = "new")} data-testid="cal-new-event">
-        <Icon name="plus" size={13} /> New event
+      <button type="button" class="primary-btn" onclick={(e) => { anchorRect = rectOf(e.currentTarget as HTMLElement); editingEvent = "new"; }} data-testid="cal-new-event">
+        <Icon name="plus" size={13} /> Add event
       </button>
     </div>
   </header>
@@ -306,6 +338,7 @@
       onselectday={selectDay}
       oneditevent={editEvent}
       onmoveevent={(ev, d) => void reschedule(ev, d)}
+      ontoggle={(ev) => void toggleTask(ev)}
     />
   {:else if mode === "week"}
     <WeekGrid
@@ -314,8 +347,9 @@
       days={rangeData?.days ?? []}
       events={rangeData?.events ?? []}
       onselectday={selectDay}
-      oncreatetimed={(d, s, en) => {
+      oncreatetimed={(d, s, en, rect) => {
         selectedDate = d;
+        anchorRect = rect ?? null;
         editingEvent = {
           id: "", occurrence_id: "", title: "", date: d, end_date: d, start: s, end: en, all_day: false,
           color: "blue", location: "", repeat: "none", links: [], source: "daily_frontmatter", completed: false, editable: true,
@@ -323,9 +357,16 @@
       }}
       oneditevent={editEvent}
       onreschedule={(ev, d, s, en) => void reschedule(ev, d, s, en)}
+      ontoggle={(ev) => void toggleTask(ev)}
     />
   {:else if mode === "agenda"}
-    <AgendaList days={rangeData?.days ?? []} events={rangeData?.events ?? []} onselectday={selectDay} oneditevent={editEvent} />
+    <AgendaList
+      days={rangeData?.days ?? []}
+      events={rangeData?.events ?? []}
+      onselectday={selectDay}
+      oneditevent={editEvent}
+      ontoggle={(ev) => void toggleTask(ev)}
+    />
   {:else}
     <DayWorkspace
       date={selectedDate}
@@ -333,6 +374,7 @@
       {weekStart}
       ondatechange={(d) => (selectedDate = d)}
       onrefresh={() => void loadCalendar()}
+      ontoggle={(ev) => toggleTask(ev)}
     />
   {/if}
 
@@ -343,7 +385,8 @@
   <EventPopover
     initial={editingEvent === "new" ? null : editingEvent}
     defaultDate={selectedDate}
-    onclose={() => (editingEvent = null)}
+    {anchorRect}
+    onclose={() => { editingEvent = null; anchorRect = null; }}
     onsaved={() => void loadCalendar()}
   />
 {/if}

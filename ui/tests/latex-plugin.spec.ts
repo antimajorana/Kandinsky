@@ -42,7 +42,7 @@ test("switched off, LaTeX has no snippets and no route; its switch is in Plugins
   const nav = page.getByRole("navigation", { name: "Settings pages" });
   // snippets have one page, the Snippets plugin's: no LaTeX page beside it
   await expect(nav.getByRole("button", { name: /^LaTeX/ })).toHaveCount(0);
-  await nav.getByRole("button", { name: /^Plugins( \d+)?$/ }).click();
+  await nav.getByRole("button", { name: /^Extensions( \d+)?$/ }).click();
   const sw = page.getByRole("switch", { name: "Plugin LaTeX" });
   await expect(sw).not.toBeChecked();
   await sw.click();

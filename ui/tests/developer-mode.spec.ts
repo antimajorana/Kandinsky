@@ -75,10 +75,12 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
     await page.goto("/");
     await page.getByText("Finish the GW notes.").waitFor();
 
-    // 1. Calm NotionSidebar: strictly Search, Home, Pages, Trash, Settings (and Favorites when bookmarked)
+    // 1. Calm NotionSidebar: Search, Home, Calendar, Library, Pages, Trash, Settings (and Favorites when bookmarked)
     const sb = side(page);
     await expect(sb.getByRole("button", { name: "Search", exact: true })).toBeVisible();
     await expect(sb.getByTestId("apps").getByRole("button", { name: "Home", exact: true })).toBeVisible();
+    await expect(sb.getByTestId("nav-calendar")).toBeVisible();
+    await expect(sb.getByTestId("nav-library")).toBeVisible();
     // Consumer rail plugins remain visible in calm mode, while dev-gated plugins (`solver`) are hidden
     await expect(sb.getByTestId("apps").getByRole("button", { name: "Consumer Mail", exact: true })).toBeVisible();
     await expect(sb.getByTestId("apps").getByRole("button", { name: "Solver", exact: true })).toHaveCount(0);
@@ -87,12 +89,11 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
     await expect(sb.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
 
     await expect(sb.getByRole("button", { name: "Quick capture", exact: true })).toHaveCount(0);
-    await expect(sb.getByTestId("nav-calendar")).toHaveCount(0);
     await expect(sb.getByRole("button", { name: "Notifications", exact: true })).toHaveCount(0);
     await expect(sb.getByRole("button", { name: "All pages", exact: true })).toHaveCount(0);
     await expect(sb.getByRole("button", { name: "Graph", exact: true })).toHaveCount(0);
-    await expect(sb.getByTestId("sidebar-import")).toHaveCount(0);
     await expect(sb.getByRole("button", { name: "Plugins", exact: true })).toHaveCount(0);
+    await expect(sb.getByTestId("sidebar-import")).toHaveCount(0);
 
     // 2. StatusBar: no Nootion Paper, no Σ Solver, no agy, no c_lint, no VIM chip when vim = false
     const status = page.locator("footer.status");
@@ -102,11 +103,11 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
     await expect(status.getByTestId("agy-chip")).toHaveCount(0);
     await expect(status.getByTestId("vim-mode")).toHaveCount(0);
 
-    // 3. Settings: 7 streamlined pages + Accounts; dev fields/panels hidden; 6 curated palettes
+    // 3. Settings: 7 clean pages (Accounts gated behind developer_mode); dev fields/panels hidden; 6 curated palettes
     await page.keyboard.press("Meta+,");
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-    await expect(nav(page).getByRole("button", { name: "Accounts" })).toBeVisible();
-    for (const label of ["Appearance", "Editor & Writing", "Calendar & Daily Notes", "Files & Search", "References & PDF", "Keyboard Shortcuts", "Plugins"]) {
+    await expect(nav(page).getByRole("button", { name: "Accounts" })).toHaveCount(0);
+    for (const label of ["Appearance", "Editor & Notes", "Calendar & Daily Notes", "Files & Links", "PDF & Citations", "Shortcuts", "Extensions"]) {
       await expect(nav(page).getByRole("button", { name: new RegExp(`^${label.replace(/[&]/g, "\\$&")}`) })).toBeVisible();
     }
 
@@ -119,17 +120,21 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
     await expect(page.getByRole("heading", { name: "CSS snippets" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Custom CSS snippet/i })).toHaveCount(0);
 
-    await nav(page).getByRole("button", { name: /^Editor & Writing/ }).click();
+    await nav(page).getByRole("button", { name: /^Editor & Notes/ }).click();
     await expect(page.locator('.row[data-path="vim"]')).toHaveCount(0);
     await expect(page.locator('.row[data-path="editor.code_bar"]')).toHaveCount(0);
 
-    // 4. Settings → Plugins: no Solver/Antigravity promos, no dev buttons, read-only .obsidian summary
-    await nav(page).getByRole("button", { name: /^Plugins/ }).click();
+    // 4. Settings → Extensions: no Solver/Antigravity promos, no dev buttons, optional store tucked in details, read-only .obsidian summary
+    await nav(page).getByRole("button", { name: /^Extensions/ }).click();
     await expect(page.getByText("Solver App", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Google Antigravity", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Install from path…" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "New plugin" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "New block" })).toHaveCount(0);
+    const optionalGallery = page.getByTestId("browse-optional-extensions");
+    await expect(optionalGallery).toBeVisible();
+    await optionalGallery.locator("summary").click();
+    await expect(optionalGallery.locator(".store")).toBeVisible();
 
     await expect(page.getByTestId("browse-extensions-tab")).toContainText("Browse Plugins");
     await page.getByTestId("browse-extensions-tab").click();
@@ -140,15 +145,21 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
     await expect(page.getByTestId("obsidian-readonly-summary")).toContainText(".obsidian/");
     await expect(page.getByRole("button", { name: /to Trash/i })).toHaveCount(0);
 
-    // 5. Toggle Developer mode ON in Settings → Plugins and verify immediate reveal
+    // 5. Toggle Developer mode ON in Settings → Extensions and verify immediate reveal
     const devSwitch = page.getByRole("switch", { name: "Developer mode" });
     await expect(devSwitch).toHaveAttribute("aria-checked", "false");
     await devSwitch.click();
     await expect(devSwitch).toHaveAttribute("aria-checked", "true");
 
     await expect(status.getByTestId("agy-chip")).toBeVisible();
-    await expect(sb.getByTestId("sidebar-import")).toBeVisible();
+    await expect(nav(page).getByRole("button", { name: "Accounts" })).toBeVisible();
+    await expect(sb.getByTestId("nav-calendar")).toBeVisible();
+    await expect(sb.getByTestId("nav-library")).toBeVisible();
+    await expect(sb.getByRole("button", { name: "Notifications", exact: true })).toBeVisible();
+    await expect(sb.getByRole("button", { name: "All pages", exact: true })).toBeVisible();
+    await expect(sb.getByRole("button", { name: "Graph", exact: true })).toBeVisible();
     await expect(sb.getByRole("button", { name: "Plugins", exact: true })).toBeVisible();
+    await expect(sb.getByTestId("sidebar-import")).toHaveCount(0);
     // Toggling Developer mode ON immediately loads installed dev-gated plugins without a manual reload
     await expect(sb.getByTestId("apps").getByRole("button", { name: "Solver", exact: true })).toBeVisible();
 
@@ -158,11 +169,11 @@ test("calm default (developer_mode = false) hides developer chrome and reveals i
     await expect(page.getByRole("button", { name: "New plugin" })).toBeVisible();
     await expect(page.getByRole("button", { name: "New block" })).toBeVisible();
 
-    await page.getByTestId("settings-advanced").locator("summary").click();
+    await page.getByTestId("settings-advanced").locator("> summary").click();
     await expect(page.getByText("Where the terminal panel docks")).toBeVisible();
     await expect(page.getByTestId("agents-panel")).toBeVisible();
 
-    await nav(page).getByRole("button", { name: /^Editor & Writing/ }).click();
+    await nav(page).getByRole("button", { name: /^Editor & Notes/ }).click();
     await expect(page.locator('.row[data-path="vim"]')).toBeVisible();
   } finally {
     await page.unroute("**/api/plugins/available");
@@ -181,7 +192,7 @@ test("R4 error toast strips raw HTTP prefixes and offers Copy details; R5 render
 
     // R5: visual notes.template_rules editor & string[] chip editor
     await page.keyboard.press("Meta+,");
-    await nav(page).getByRole("button", { name: /^Editor & Writing/ }).click();
+    await nav(page).getByRole("button", { name: /^Editor & Notes/ }).click();
     const rulesEditor = page.getByTestId("template-rules-editor");
     await expect(rulesEditor).toBeVisible();
     await rulesEditor.getByRole("button", { name: "+ Add rule" }).click();
@@ -193,7 +204,7 @@ test("R4 error toast strips raw HTTP prefixes and offers Copy details; R5 render
     await rulesEditor.getByLabel("Rule 1 template").press("Tab");
     await expect.poll(async () => (await cfg(request)).notes.template_rules).toMatchObject([{ folder: "labs", template: "lab-note" }]);
 
-    await nav(page).getByRole("button", { name: /^Files & Search/ }).click();
+    await nav(page).getByRole("button", { name: /^Files & Links/ }).click();
     const ignoreEditor = page.getByTestId("list-editor-ignore");
     await expect(ignoreEditor).toBeVisible();
     await ignoreEditor.getByPlaceholder("Add item…").fill("scratch-tmp");

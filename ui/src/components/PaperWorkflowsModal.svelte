@@ -7,11 +7,20 @@
   import { openPath } from "../lib/dock";
   import { openReadingNote } from "../lib/papers";
   import { closePaperWorkflowModal, paperWorkflowModal, type PaperWorkflowTab } from "../lib/paper-modals.svelte";
+  import { pluginOn, plugins } from "../lib/plugin-registry.svelte";
   import { toast } from "../lib/state.svelte";
   import { errReason } from "../lib/text";
   import { refreshVault } from "../lib/vault";
 
   let { onclose }: { onclose?: () => void } = $props();
+
+  function referencesPlugin(): string {
+    const found =
+      plugins.list.find((p) => p.provides.includes("references") && p.has_helper && pluginOn(p)) ??
+      plugins.list.find((p) => p.provides.includes("references") && p.has_helper) ??
+      plugins.list.find((p) => p.id === "catalog-papers");
+    return found?.id ?? "catalog-papers";
+  }
 
   const BOOKMARKLET = "javascript:void(open('kandinsky://capture-paper?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)))";
   const SOURCES = [
@@ -101,7 +110,7 @@
     if (!text || addingRef) return;
     addingRef = true; errorMsg = ""; addedSummary = null;
     try {
-      const sum = parseAdded(await api.pluginHelper("catalog-papers", "add", { id: text }, 300));
+      const sum = parseAdded(await api.pluginHelper(referencesPlugin(), "add", { id: text }, 300));
       addedSummary = sum;
       notifyChanged();
       toast(sum && sum.count > 1 ? `Added ${sum.count} references` : `Added ${sum?.key || "reference"}`, sum?.title, "success");
@@ -124,7 +133,7 @@
     if (!q || searchingRemote) return;
     searchingRemote = true; errorMsg = "";
     try {
-      const raw = await api.pluginHelper("catalog-papers", "search_remote", { query: q, source: remoteSource }, 60);
+      const raw = await api.pluginHelper(referencesPlugin(), "search_remote", { query: q, source: remoteSource }, 60);
       const o = asRecord(raw);
       const arr = Array.isArray(raw) ? raw : Array.isArray(o.results) ? o.results : Array.isArray(o.items) ? o.items : [];
       remoteHits = arr.map((item, idx) => {
@@ -148,7 +157,7 @@
     if (!hit.addId || addingHitUid) return;
     addingHitUid = hit.uid; errorMsg = "";
     try {
-      const sum = parseAdded(await api.pluginHelper("catalog-papers", "add", { id: hit.addId }, 300));
+      const sum = parseAdded(await api.pluginHelper(referencesPlugin(), "add", { id: hit.addId }, 300));
       const key = sum?.key || "added";
       addedHitKeys[hit.uid] = key;
       notifyChanged();
@@ -166,7 +175,7 @@
     if (inboxLoading) return;
     inboxLoading = true; errorMsg = ""; inboxDoneCount = null;
     try {
-      const raw = await api.pluginHelper("catalog-papers", "scan_inbox", {}, 60);
+      const raw = await api.pluginHelper(referencesPlugin(), "scan_inbox", {}, 60);
       const o = asRecord(raw);
       const rawDir = str(o.inbox_dir ?? o.watch_inbox);
       const isConfigured = typeof o.configured === "boolean" ? o.configured : Boolean(rawDir);
@@ -228,7 +237,7 @@
     const typed = inboxSubfolder.trim();
     const items = filesIntoVault ? [] : chosen.map((it) => ({ file: it.id, subfolder: typed || it.suggestedSubfolder }));
     try {
-      const o = asRecord(await api.pluginHelper("catalog-papers", "organize_inbox", { files, items, subfolder: filesIntoVault ? undefined : typed || undefined }, 300));
+      const o = asRecord(await api.pluginHelper(referencesPlugin(), "organize_inbox", { files, items, subfolder: filesIntoVault ? undefined : typed || undefined }, 300));
       const n = typeof o.organized === "number" ? o.organized : Array.isArray(o.organized) ? o.organized.length : typeof o.count === "number" ? o.count : files.length;
       notifyChanged();
       toast(`Organized ${n} PDF${n === 1 ? "" : "s"}`, undefined, "success");
@@ -252,7 +261,7 @@
     if (dupsLoading) return;
     dupsLoading = true; errorMsg = "";
     try {
-      const raw = await api.pluginHelper("catalog-papers", "find_duplicates", {}, 90);
+      const raw = await api.pluginHelper(referencesPlugin(), "find_duplicates", {}, 90);
       const ro = asRecord(raw);
       const arr = Array.isArray(raw) ? raw : Array.isArray(ro.groups) ? ro.groups : [];
       const prim: Record<string, string> = {};
@@ -288,7 +297,7 @@
     mergingGroupId = group.id; errorMsg = "";
     try {
       for (const d of dups) {
-        await api.pluginHelper("catalog-papers", "merge", { dup: d.key, into, relink_vault: relinkVault, trash_duplicate_pdf: trashDuplicatePdf }, 120);
+        await api.pluginHelper(referencesPlugin(), "merge", { dup: d.key, into, relink_vault: relinkVault, trash_duplicate_pdf: trashDuplicatePdf }, 120);
       }
       notifyChanged();
       toast(`Merged into ${into}`, `${dups.map((d) => d.key).join(", ")} kept in aliases`, "success");
@@ -380,7 +389,7 @@
       if (maxLookupsVal !== undefined) params.max_lookups = maxLookupsVal;
       const rateLimitVal = parseOptInt(scanRateLimitMs);
       if (rateLimitVal !== undefined) params.rate_limit_ms = rateLimitVal;
-      const raw = await api.pluginHelper("catalog-papers", "scan_external_roots", params, 300);
+      const raw = await api.pluginHelper(referencesPlugin(), "scan_external_roots", params, 300);
       const parsed = parseScanReport(raw, dryRun);
       scanResult = parsed;
       scanProgress = { current: parsed.total_pdfs, total: parsed.total_pdfs, pdf_ref: "", dry_run: parsed.dry_run };
@@ -458,7 +467,7 @@
 
   $effect(() => {
     return on("plugin", (e) => {
-      if (!scanBusy || e.plugin !== "catalog-papers" || e.event !== "papers:scan-progress") return;
+      if (!scanBusy || e.plugin !== referencesPlugin() || e.event !== "papers:scan-progress") return;
       const d = asRecord(e.data);
       scanProgress = {
         current: Math.max(0, num(d.current)),

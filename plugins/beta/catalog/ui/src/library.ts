@@ -1,6 +1,26 @@
 // The page's own logic over the sources Kandinsky lists (kandinsky.libraries; their shapes are the plugin API's, ui/src/lib/
 // plugin-api.ts): sorting, search, the group tree, the side's counts, and libraries of one subject made one page.
-import type { LibraryEntry, LibraryItem, LibrarySource, LibraryTab } from "../../../../../ui/src/lib/plugin-api";
+import type { LibraryAction, LibraryEntry, LibraryItem, LibrarySource, LibraryTab } from "../../../../../ui/src/lib/plugin-api";
+
+export interface TableColumnSpec {
+  id: string;
+  label: string;
+  key?: string;
+}
+
+export type LibraryItemExt = LibraryItem & {
+  columns?: NonNullable<LibraryItem["columns"]> & {
+    publisher?: string;
+    subtitle?: string;
+    type?: string;
+    [k: string]: string | boolean | undefined;
+  };
+};
+
+export type LibrarySourceExt = LibrarySource & {
+  tableColumns?: TableColumnSpec[];
+  emptyActions?: LibraryAction[];
+};
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
@@ -28,7 +48,17 @@ export const seen = new Map<string, LibraryItem[]>();
 
 /** Where the page was in each source (by its id), for the page's life: what was picked, the tab, the side's scope,
  *  the search, the order, the layout and the list's scroll. */
-export interface Place { scope: { kind: "all" } | { kind: "group"; name: string } | { kind: "tag"; name: string }; tab: string | null; q: string; selId: string | null; sortId: string; layout: "list" | "covers" | "table"; scroll: number }
+export interface Place {
+  scope: { kind: "all" } | { kind: "group"; name: string } | { kind: "tag"; name: string };
+  tab: string | null;
+  q: string;
+  selId: string | null;
+  sortId: string;
+  sortDesc?: boolean | null;
+  tagsOpen?: boolean;
+  layout: "list" | "covers" | "table";
+  scroll: number;
+}
 export const place = new Map<string, Place>();
 
 /** The words of `q` all in the item's text. */
@@ -71,7 +101,7 @@ export function counted(items: LibraryItem[], pick: (i: LibraryItem) => string[]
 /** One library made of several sources about the same thing (the catalog's book notes and the e-books read here): each
  *  source's tabs become tabs of the one page (a source without tabs, one tab under its own title), its items keep
  *  their own detail, opening and moving; what is about the page (add, drop, tools) comes from the sources that have it. */
-export function mergeSources(id: string, title: string, icon: string, parts: LibrarySource[]): LibrarySource {
+export function mergeSources(id: string, title: string, icon: string, parts: LibrarySource[]): LibrarySourceExt {
   const own = new Map<string, { part: LibrarySource; item: LibraryItem }>();
   const sep = "␟";
   const owner = (item: LibraryItem) => own.get(item.id);
@@ -87,7 +117,7 @@ export function mergeSources(id: string, title: string, icon: string, parts: Lib
     return m;
   };
   const union = <T>(xs: T[][], key: (x: T) => string) => { const seen = new Set<string>(); return xs.flat().filter((x) => !seen.has(key(x)) && !!seen.add(key(x))); };
-  const with_ = <K extends keyof LibrarySource>(k: K) => parts.find((p) => p[k]);
+  const with_ = <K extends keyof LibrarySourceExt>(k: K) => (parts as LibrarySourceExt[]).find((p) => p[k]);
   const dropSource = with_("drop")?.drop;
   return {
     id, title, icon,
@@ -109,11 +139,13 @@ export function mergeSources(id: string, title: string, icon: string, parts: Lib
     groupOrder: union(parts.map((p) => p.groupOrder ?? []), (x) => x),
     regroup: parts.some((p) => p.regroup) ? async (items, group) => { for (const [p, xs] of byPart(items)) await p.regroup?.(xs, group); } : undefined,
     layouts: union(parts.map((p) => p.layouts), (x) => x),
+    tableColumns: with_("tableColumns")?.tableColumns,
     from: parts.every((p) => p.from) ? parts[0].from : undefined,
     homes: union(parts.map((p) => p.homes ?? []), (h) => h.from),
     sorts: union(parts.map((p) => p.sorts), (s) => s.id),
     search: parts[0].search,
     empty: parts.map((p) => p.empty).join(" "),
+    emptyActions: with_("emptyActions")?.emptyActions,
     detail: (item) => { const o = owner(item); return o ? o.part.detail(o.item) : { title: item.title, actions: [] }; },
     add: with_("add")?.add,
     drop: dropSource ? { hint: dropSource.hint, accept: dropSource.accept, run: (files, group) => dropSource.run(files, group) } : undefined,

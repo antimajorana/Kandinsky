@@ -360,7 +360,9 @@ function build() {
       // the rest of the fence's first line (```pdf-marks ch 1.cbz) for a fence that reads it (lib/fences.ts `info`)
       const info = attrs?.trim() ? ` data-info="${esc(attrs.trim())}"` : "";
       const label = lang ? `<span class="code-lang"${info}>${esc(lang)}</span>` : "";
-      return `<pre class="hljs">${label}<code>${html ?? esc(code)}</code></pre>`;
+      const langToken = lang.trim().split(/\s+/)[0];
+      const cls = langToken ? ` class="language-${esc(langToken)}"` : "";
+      return `<pre class="hljs">${label}<code${cls}>${html ?? esc(code)}</code></pre>`;
     },
   });
   // indented code off, as in the editor (obsidian-syntax.js): tab-indented prose is text here

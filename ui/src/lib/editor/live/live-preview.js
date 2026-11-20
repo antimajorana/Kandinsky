@@ -83,6 +83,44 @@ export function markBrackets(source, at, mark, caret = -1) {
 // --- reveal rule ------------------------------------------------------------
 
 /**
+ * Explicitly source-opened fences (e.g. ```view blocks whose "Edit Markdown source" button was clicked):
+ * stored as [from, to] ranges mapped through edits and cleared as soon as the selection leaves that fence.
+ */
+export const showSourceFence = StateEffect.define();
+export const sourceFences = StateField.define({
+  create: () => [],
+  update(ranges, tr) {
+    let next = tr.docChanged
+      ? ranges
+          .map((r) => ({ from: tr.changes.mapPos(r.from, 1), to: tr.changes.mapPos(r.to, -1) }))
+          .filter((r) => r.from <= r.to)
+      : ranges;
+    for (const e of tr.effects) {
+      if (e.is(showSourceFence)) {
+        next = e.value ? [e.value] : [];
+      }
+    }
+    if (tr.selection && next.length) {
+      next = next.filter((r) => tr.state.selection.ranges.some((sr) => sr.from <= r.to && sr.to >= r.from));
+    }
+    return next;
+  },
+});
+
+function fenceOpenedAsSource(state, from, to) {
+  const ranges = state.field(sourceFences, false) || [];
+  return ranges.some((r) => r.from <= to && r.to >= from);
+}
+
+function isViewFence(state, node, chunk) {
+  if (node.name !== "FencedCode") return false;
+  const info = node.node.getChild("CodeInfo");
+  if (info && state.doc.sliceString(info.from, info.to).trim() === "view") return true;
+  const firstLine = state.doc.lineAt(chunk.from).text;
+  return /^[ \t]*(?:`{3,}|~{3,})[ \t]*view(?:[ \t]*$)/.test(firstLine);
+}
+
+/**
  * Should this construct show its raw source?
  *
  * True when any selection range touches [from, to] -- inclusive at both edges,
@@ -203,28 +241,168 @@ class InlineHtmlWidget extends KeyedWidget {
  * So the root is a stable wrapper and the fallback is swapped INSIDE it. A
  * mutation inside a widget's own DOM is one CodeMirror expects and ignores.
  */
+/**
+ * Update an image embed's alignment (`left` | `center` | `right`) and/or pixel width inside the Markdown source.
+ * Supports both wikilink embeds (`![[fig.png|center|420]]`) and standard Markdown images (`![alt|420](url)`).
+ */
+function rewriteImageSyntax(raw, patch) {
+  const wiki = /^!\[\[([^\]]*)\]\]$/.exec(raw);
+  if (wiki) {
+    const parts = wiki[1].split("|").map((p) => p.trim()).filter((p, idx) => idx === 0 || p !== "");
+    const target = parts[0] ?? "";
+    const opts = embedOptions(wiki[1]);
+    const rest = parts.slice(1).filter((p) => !/^(\d+)(?:x\d+)?$/.test(p) && p !== "left" && p !== "center" && p !== "right");
+    const align = patch.align !== undefined ? patch.align : opts.align;
+    const width = patch.width !== undefined ? patch.width : opts.width;
+    const out = [target, ...rest];
+    if (align) out.push(align);
+    if (width) out.push(String(Math.round(width)));
+    return `![[${out.join("|")}]]`;
+  }
+  const md = /^!\[([^\]]*)\]\(([^)]*)\)$/.exec(raw);
+  if (md) {
+    const altRaw = md[1];
+    const urlPart = md[2];
+    const parts = altRaw.split("|").map((p) => p.trim());
+    const opts = mdImageOptions(altRaw);
+    const baseParts = parts.filter((p, idx) => {
+      if (idx === 0) return true;
+      return !/^(\d+)(?:x\d+)?$/.test(p) && p !== "left" && p !== "center" && p !== "right";
+    });
+    const baseAlt = baseParts[0] ?? "";
+    const extra = baseParts.slice(1).filter(Boolean);
+    const align = patch.align !== undefined ? patch.align : opts.align;
+    const width = patch.width !== undefined ? patch.width : opts.width;
+    const out = [baseAlt, ...extra];
+    if (align) out.push(align);
+    if (width) out.push(String(Math.round(width)));
+    const nextAlt = out.length === 1 ? baseAlt : out.join("|");
+    return `![${nextAlt}](${urlPart})`;
+  }
+  return raw;
+}
+
 class ImageWidget extends KeyedWidget {
-  /** `opts`: Obsidian's `|600` / `|600x400` size and the vault's `|center` (from its CSS snippet). */
-  constructor(src, resolve, opts = {}) {
-    super(src + "\u0000" + (opts.width ?? "") + (opts.center ? "c" : ""));
+  /** `opts`: Obsidian's `|600` / `|600x400` size and alignment (`|left`, `|center`, `|right`). */
+  constructor(src, resolve, opts = {}, span = null) {
+    const align = opts.align ?? (opts.center ? "center" : "");
+    super(src + "\u0000" + (opts.width ?? "") + "\u0000" + align + "\u0000" + (span ? `${span.from}:${span.to}` : ""));
     this.src = src;
     this.resolve = resolve;
     this.opts = opts;
+    this.span = span;
+  }
+  ignoreEvent() {
+    return true;
   }
   toDOM(view) {
+    const align = this.opts.align ?? (this.opts.center ? "center" : "");
+    const alignCls = align === "center" ? " is-centered" : align === "right" ? " is-right" : align === "left" ? " is-left" : "";
     const host = document.createElement("span");
-    host.className = "cm-embed-image-host" + (this.opts.center ? " is-centered" : "");
-    // The picture arrives after the editor measured its lines: without a new measure the
-    // gutter (fold arrows, line numbers) below it stays where the lines used to be.
+    host.className = "cm-embed-image-host" + alignCls;
     const remeasure = () => view?.requestMeasure();
+
+    const frame = document.createElement("span");
+    frame.className = "cm-img-frame";
+
     const img = document.createElement("img");
     img.className = "cm-embed-image";
     img.src = this.resolve(this.src);
     img.alt = this.src;
     if (this.opts.width) img.style.width = `${this.opts.width}px`;
-    // A broken embed must not collapse to an invisible 0x0 box, or the line
-    // looks empty and unclickable -- but the swap happens one level down.
-    // A remote URL that is not an image (a video page) becomes a link instead.
+
+    const badge = document.createElement("span");
+    badge.className = "cm-img-width-badge";
+    badge.textContent = this.opts.width ? `${this.opts.width}px` : "";
+
+    const applyPatch = (patch) => {
+      if (!view || !this.span) return;
+      if (view.state.readOnly) return;
+      const docLen = view.state.doc.length;
+      const from = Math.max(0, Math.min(this.span.from, docLen));
+      const to = Math.max(from, Math.min(this.span.to, docLen));
+      const raw = view.state.doc.sliceString(from, to);
+      const next = rewriteImageSyntax(raw, patch);
+      if (next !== raw) {
+        view.dispatch({ changes: { from, to, insert: next }, userEvent: "input.image" });
+      }
+    };
+
+    const toolbar = document.createElement("span");
+    toolbar.className = "cm-img-align-bar";
+    toolbar.setAttribute("role", "group");
+    toolbar.setAttribute("aria-label", "Image alignment");
+    for (const [mode, label] of [["left", "Left"], ["center", "Center"], ["right", "Right"]]) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cm-img-align-btn" + (align === mode ? " active" : "");
+      btn.textContent = label;
+      btn.title = `Align image ${label.toLowerCase()}`;
+      btn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const nextAlign = align === mode ? null : mode;
+        applyPatch({ align: nextAlign });
+      });
+      toolbar.appendChild(btn);
+    }
+
+    const makeHandle = (side) => {
+      const handle = document.createElement("span");
+      handle.className = `cm-img-handle cm-img-handle-${side}`;
+      handle.title = "Drag to resize image";
+      handle.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 || view?.state.readOnly) return;
+        e.preventDefault();
+        e.stopPropagation();
+        try { handle.setPointerCapture(e.pointerId); } catch { /* synthetic events may lack pointerId */ }
+        const startX = e.clientX;
+        const startW = Math.max(80, Math.round(img.getBoundingClientRect().width || this.opts.width || 320));
+        const maxW = Math.max(240, Math.round(view?.contentDOM.getBoundingClientRect().width || 900));
+        let currentW = startW;
+        host.classList.add("is-resizing");
+        badge.textContent = `${currentW}px`;
+
+        const onMove = (ev) => {
+          const delta = ev.clientX - startX;
+          const signed = side === "left" ? -delta : delta;
+          currentW = Math.max(80, Math.min(maxW, Math.round(startW + signed)));
+          img.style.width = `${currentW}px`;
+          badge.textContent = `${currentW}px`;
+        };
+        const onUp = () => {
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+          window.removeEventListener("pointercancel", onUp);
+          host.classList.remove("is-resizing");
+          if (currentW !== this.opts.width) {
+            applyPatch({ width: currentW });
+          }
+          remeasure();
+        };
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
+      });
+      return handle;
+    };
+
+    const leftHandle = makeHandle("left");
+    const rightHandle = makeHandle("right");
+
+    // Clicking the image itself (outside controls) focuses the Markdown source if editable
+    img.addEventListener("click", (e) => {
+      if (!view || !this.span) return;
+      e.preventDefault();
+      const pos = Math.min(this.span.from, view.state.doc.length);
+      view.dispatch({ selection: { anchor: pos } });
+      view.focus();
+    });
+
     img.addEventListener("load", remeasure);
     img.addEventListener("error", () => {
       remeasure();
@@ -238,7 +416,9 @@ class ImageWidget extends KeyedWidget {
         host.replaceChildren(a);
       } else host.replaceChildren(chip("cm-embed-missing", this.src));
     });
-    host.appendChild(img);
+
+    frame.append(img, leftHandle, rightHandle, badge, toolbar);
+    host.appendChild(frame);
     return host;
   }
 }
@@ -249,9 +429,18 @@ function embedOptions(text) {
   for (const part of text.split("|").slice(1).map((p) => p.trim())) {
     const m = /^(\d+)(?:x\d+)?$/.exec(part);
     if (m) opts.width = Number(m[1]);
-    else if (part === "center") opts.center = true;
+    else if (part === "left" || part === "center" || part === "right") {
+      opts.align = part;
+      if (part === "center") opts.center = true;
+    }
   }
   return opts;
+}
+
+/** `![alt | center | 420](url)` → size/placement options inside Markdown image alt text. */
+function mdImageOptions(altText) {
+  if (!altText || !altText.includes("|")) return {};
+  return embedOptions(altText);
 }
 
 /** A non-image embed (a transcluded note), shown as a chip until opened. */
@@ -927,7 +1116,7 @@ function remeasure(host, view, settled) {
 function enterOnClick(host, view) {
   if (!view) return; // headless tests build widgets without a view
   host.addEventListener("mousedown", (event) => {
-    if (event.button !== 0 || event.target.closest(INTERACTIVE)) return;
+    if (event.button !== 0 || event.target.closest(INTERACTIVE) || host.querySelector(".view-block") || event.target.closest(".view-block")) return;
     const pos = view.posAtDOM(host);
     if (pos == null) return;
     event.preventDefault();
@@ -1156,21 +1345,22 @@ export function buildDecorations(state, ranges, options = {}) {
         from: state.doc.lineAt(node.from).from,
         to: state.doc.lineAt(node.to).to,
       };
-      if (revealed(state, chunk.from, chunk.to)) return false; // being edited
+      const isView = isViewFence(state, node, chunk);
+      if (isView ? fenceOpenedAsSource(state, chunk.from, chunk.to) : revealed(state, chunk.from, chunk.to)) return false; // being edited
       const source = state.doc.sliceString(chunk.from, chunk.to);
       const html = opts.blockHtml(source, state);
       // a raw block of closing tags only (`</div>` after a blank line inside a `<div>`) renders to nothing, as in
       // Obsidian: not its source as text
       const closers = node.name === "HTMLBlock" && /^(\s*<\/[A-Za-z][\w-]*\s*>)+\s*$/.test(source);
       if (!html && !closers) return undefined; // unknown to the renderer: decorate as markdown
-      rendered.push({ ...chunk, source, html: html || "" });
+      rendered.push({ ...chunk, source, html: html || "", isView });
       return false;
     },
   });
 
   for (const chunk of rendered) {
     const widget = new RenderedBlockWidget(chunk.source, chunk.html, opts.hydrateBlock, opts.releaseBlock);
-    add(chunk.from, chunk.to, Decoration.replace({ widget, block: true }));
+    add(chunk.from, chunk.to, Decoration.replace({ widget, block: true, ...(chunk.isView ? { skipEntry: true } : {}) }));
   }
 
   // Both walks run in document order, so one moving cursor answers "is this
@@ -1343,13 +1533,15 @@ export function buildDecorations(state, ranges, options = {}) {
           const target = node.node.getChild("WikilinkTarget");
           if (!target) return;
           const path = state.doc.sliceString(target.from, target.to).trim();
+          const imgOpts = embedOptions(state.doc.sliceString(node.from + 3, node.to - 2));
+          const span = { from: node.from, to: node.to };
           // the caret inside: the link stays text to edit, the picture shows right after it
           if (revealed(state, node.from, node.to)) {
-            if (IMAGE_EXT.test(path)) add(node.to, node.to, Decoration.widget({ widget: new ImageWidget(path, opts.resolveAttachment, embedOptions(state.doc.sliceString(node.from + 3, node.to - 2))), side: 1 }));
+            if (IMAGE_EXT.test(path)) add(node.to, node.to, Decoration.widget({ widget: new ImageWidget(path, opts.resolveAttachment, imgOpts, span), side: 1 }));
             return;
           }
           const widget = IMAGE_EXT.test(path)
-            ? new ImageWidget(path, opts.resolveAttachment, embedOptions(state.doc.sliceString(node.from + 3, node.to - 2)))
+            ? new ImageWidget(path, opts.resolveAttachment, imgOpts, span)
             : new EmbedChipWidget(path);
           add(node.from, node.to, Decoration.replace({ widget }));
           return false;
@@ -1360,14 +1552,18 @@ export function buildDecorations(state, ranges, options = {}) {
           const url = node.node.getChild("URL");
           if (!url) return;
           const src = state.doc.sliceString(url.from, url.to);
+          const rawImg = state.doc.sliceString(node.from, node.to);
+          const altMatch = /^!\[([^\]]*)\]/.exec(rawImg);
+          const imgOpts = altMatch ? mdImageOptions(altMatch[1]) : {};
+          const span = { from: node.from, to: node.to };
           if (revealed(state, node.from, node.to)) {
-            add(node.to, node.to, Decoration.widget({ widget: new ImageWidget(src, opts.resolveAttachment), side: 1 }));
+            add(node.to, node.to, Decoration.widget({ widget: new ImageWidget(src, opts.resolveAttachment, imgOpts, span), side: 1 }));
             return;
           }
           add(
             node.from,
             node.to,
-            Decoration.replace({ widget: new ImageWidget(src, opts.resolveAttachment) })
+            Decoration.replace({ widget: new ImageWidget(src, opts.resolveAttachment, imgOpts, span) })
           );
           return false;
         }
@@ -1726,7 +1922,7 @@ export function livePreview(options = {}) {
       if (
         !tr.docChanged &&
         !tr.selection &&
-        !tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(redecorate)) &&
+        !tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(redecorate) || e.is(showSourceFence)) &&
         syntaxTree(tr.startState) === syntaxTree(tr.state)
       ) {
         return {
@@ -1753,7 +1949,7 @@ export function livePreview(options = {}) {
     ],
   });
 
-  return [[calloutFolds, rawProperties, keepCaretOutOfProperties, field], blockEntryKeymap(field)];
+  return [[calloutFolds, rawProperties, sourceFences, keepCaretOutOfProperties, field], blockEntryKeymap(field)];
 }
 
 /**
@@ -1835,7 +2031,8 @@ function decorate(state, opts) {
  */
 const STRUCTURAL = /```|~~~|\$\$|<|^---|^\s*\|/m;
 function redecorate_(value, tr, opts) {
-  if (tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(redecorate))) return null;
+  if (tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(redecorate) || e.is(showSourceFence))) return null;
+  if (tr.startState.field(sourceFences, false)?.length !== tr.state.field(sourceFences, false)?.length) return null;
   const state = tr.state, tree = syntaxTree(state), oldTreeFull = syntaxTree(tr.startState);
   // the parser moved on with no edit (a big note is parsed in slices, more of it on a slow machine): only what it
   // changed is drawn again

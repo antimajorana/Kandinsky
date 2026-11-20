@@ -20,7 +20,7 @@ export type Panel =
 export type Group = "workspace" | "extensions";
 export const GROUPS: { id: Group; title: string }[] = [
   { id: "workspace", title: "Workspace" },
-  { id: "extensions", title: "Plugins" },
+  { id: "extensions", title: "Extensions" },
 ];
 
 export interface NextRung {
@@ -57,21 +57,21 @@ export const PAGES: PageDef[] = [
     title: "Appearance",
     group: "workspace",
     icon: "sun",
-    blurb: keyText("Theme, accent palette, typography, reading measure, and optional Obsidian community themes."),
+    blurb: keyText("Theme, accent palette, typography, and reading measure."),
     fields: [
       "ui.theme", "ui.palette", "ui.palette_dark", "ui.contrast", "ui.shape", "ui.accent",
       "ui.font_size", "ui.ui_font", "ui.motion", "ui.notices", "ui.obsidian_theme",
       "editor.prose_font", "editor.prose_font_size", "editor.prose_line_height", "editor.prose_width",
       "editor.code_font", "editor.code_font_size", "editor.inline_title",
     ],
-    advancedFields: ["ui.eink", "ui.eink_refresh", "ui.gpu_rendering", "ui.tabs", "ui.one_tab", "ui.share_place", "ui.side_panel", "ui.restore_layout", "ui.tab_preview", "ui.tab_switcher", "ui.sleep_after_min", "ui.awake_tabs"],
+    advancedFields: ["ui.eink", "ui.eink_refresh", "ui.gpu_rendering", "ui.one_tab", "ui.new_tabs_first", "ui.share_place", "ui.restore_layout", "ui.tab_preview", "ui.tab_switcher", "ui.sleep_after_min", "ui.awake_tabs"],
     features: ["ui.theme", "ui.zoomIn", "ui.zoomOut", "ui.zoomReset", "ui.resetLayout"],
     panels: ["device", "preview", "snippets"],
     next: [{ label: "Custom CSS snippet", why: "Restyle any element in .kandinsky/snippets/.", run: "settings.newSnippet" }],
   },
   {
     id: "writing",
-    title: "Editor & Writing",
+    title: "Editor & Notes",
     group: "workspace",
     icon: "edit",
     blurb: "Markdown writing behavior, links, citations, properties, templates, math preview, and focus mode.",
@@ -105,7 +105,7 @@ export const PAGES: PageDef[] = [
   },
   {
     id: "files",
-    title: "Files & Search",
+    title: "Files & Links",
     group: "workspace",
     icon: "files",
     blurb: "Folders, excluded paths, search indexing, web links, and default file openers.",
@@ -115,7 +115,7 @@ export const PAGES: PageDef[] = [
   },
   {
     id: "papers",
-    title: "References & PDF",
+    title: "PDF & Citations",
     group: "workspace",
     icon: "library",
     blurb: "PDF viewer preferences, handwriting/drawing canvas options, and academic LaTeX helpers.",
@@ -124,7 +124,7 @@ export const PAGES: PageDef[] = [
   },
   {
     id: "keyboard",
-    title: "Keyboard Shortcuts",
+    title: "Shortcuts",
     group: "workspace",
     icon: "command",
     blurb: "Customize shortcuts across the workspace and Quick Capture global hotkey.",
@@ -134,10 +134,10 @@ export const PAGES: PageDef[] = [
   },
   {
     id: "plugins",
-    title: "Plugins",
+    title: "Extensions",
     group: "extensions",
     icon: "plugin",
-    blurb: "Manage active workspace plugins, browse optional integrations, and review trusted helper programs.",
+    blurb: "Manage active workspace extensions, browse optional integrations, and review trusted helper programs.",
     fields: ["developer_mode"],
     advancedFields: ["desktop.*", "terminal.*", "automation.*", "lsp.*", "notifications.*"],
     features: ["ui.commands"],

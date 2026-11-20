@@ -39,7 +39,21 @@
   import { toast } from "../lib/state.svelte";
 
   let { spec, panel }: PaneProps<"pdf"> = $props();
-  const arxivId = $derived(extractArxivId(spec.path));
+  let paperArxiv = $state<string | null>(null);
+  const pathArxiv = $derived(extractArxivId(spec.path));
+  const arxivId = $derived(pathArxiv ?? paperArxiv);
+  $effect(() => {
+    const p = spec.path.replaceAll("\\", "/");
+    if (extractArxivId(p)) { paperArxiv = null; return; }
+    let live = true;
+    const dir = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+    void api.refs().then((list) => {
+      if (!live) return;
+      const match = list.find((x) => x.pdf?.replaceAll("\\", "/") === p || (dir !== "" && x.dir === dir));
+      paperArxiv = match?.arxiv ?? null;
+    }, () => {});
+    return () => { live = false; };
+  });
   const devMode = $derived(Boolean(settings.config?.developer_mode));
   let selPassage = $state(""), selPage = $state(1), selAt = $state<{ left: number; top: number } | null>(null);
   let toolbarSendOpen = $state(false);

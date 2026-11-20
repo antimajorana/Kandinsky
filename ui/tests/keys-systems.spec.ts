@@ -41,7 +41,7 @@ for (const [sys, ua] of Object.entries(UA)) {
     const { ctx, page } = await keyboardPage(browser, ua, baseURL!);
     await page.keyboard.press(sys === "mac" ? "Control+Meta+Comma" : "Control+Alt+Comma"); // Super+, : Settings
     const nav = page.getByRole("navigation", { name: "Settings pages" });
-    await nav.getByRole("button", { name: /^Keyboard/ }).click();
+    await nav.getByRole("button", { name: /^Shortcuts/ }).click();
     const row = (id: string) => page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${id.replace(/\./g, "\\.")}$`) }) });
     await expect(row("ui.vault.next")).toContainText(sys === "mac" ? /Ctrl\s*Cmd\s*V/ : /Ctrl\s*Alt\s*V/);
     if (sys === "windows") await expect(row("ui.tabs.pin")).toContainText(/Ctrl\s*Alt\s*Shift\s*P/); // moved: Super+P took Ctrl+Alt+P

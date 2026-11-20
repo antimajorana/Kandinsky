@@ -3,17 +3,20 @@
   import Icon from "../Icon.svelte";
   import type { CalendarDaySummary, CalendarEvent } from "../../lib/types";
   import { addDays, colorSpec, formatDayHeading, isVideoMeetingUrl, todayIso } from "./calendar-dates";
+  import type { AnchorRect } from "./EventPopover.svelte";
 
   let {
     days = [],
     events = [],
     onselectday,
     oneditevent,
+    ontoggle,
   }: {
     days?: CalendarDaySummary[];
     events?: CalendarEvent[];
     onselectday: (iso: string) => void;
-    oneditevent: (ev: CalendarEvent) => void;
+    oneditevent: (ev: CalendarEvent, anchorRect?: AnchorRect) => void;
+    ontoggle?: (ev: CalendarEvent) => void;
   } = $props();
 
   const today = todayIso();
@@ -34,6 +37,11 @@
     }
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
   });
+
+  function rectOf(el: HTMLElement): AnchorRect {
+    const r = el.getBoundingClientRect();
+    return { top: r.top, left: r.left, bottom: r.bottom, right: r.right };
+  }
 </script>
 
 <div class="agenda">
@@ -53,9 +61,21 @@
         <div class="list">
           {#each list as ev (ev.occurrence_id)}
             {@const c = colorSpec(ev.color)}
-            <div class="row" role="button" tabindex="0" onclick={() => oneditevent(ev)}
-              onkeydown={(e) => { if (e.key === "Enter") oneditevent(ev); }}>
+            <div class="row" role="button" tabindex="0" onclick={(e) => oneditevent(ev, rectOf(e.currentTarget as HTMLElement))}
+              onkeydown={(e) => { if (e.key === "Enter") oneditevent(ev, rectOf(e.currentTarget as HTMLElement)); }}>
               <span class="bar" style:background={c.dot}></span>
+              {#if ev.source === "task" && ontoggle}
+                <input
+                  type="checkbox"
+                  class="kandinsky-check row-tick"
+                  checked={ev.completed}
+                  disabled={ev.completed}
+                  aria-label="Done: {ev.title}"
+                  onclick={(e) => e.stopPropagation()}
+                  onkeydown={(e) => e.stopPropagation()}
+                  onchange={() => { if (!ev.completed) ontoggle(ev); }}
+                />
+              {/if}
               <span class="when">{ev.all_day ? "All day" : `${ev.start ?? ""}${ev.end ? ` – ${ev.end}` : ""}`}</span>
               <span class="title" class:done={ev.completed}>{ev.title}</span>
               {#if ev.location && isVideoMeetingUrl(ev.location)}
@@ -86,6 +106,7 @@
   .row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius); background: var(--card-bg); border: 1px solid var(--border); cursor: pointer; font-size: 13px; }
   .row:hover { border-color: var(--border-strong); background: var(--bg-hover); }
   .bar { width: 4px; height: 18px; border-radius: 2px; flex: none; }
+  .row-tick { flex: none; cursor: pointer; }
   .when { min-width: 96px; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; flex: none; }
   .title { flex: 1; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .title.done { text-decoration: line-through; color: var(--text-faint); }

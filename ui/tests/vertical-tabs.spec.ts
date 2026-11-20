@@ -45,9 +45,10 @@ test("vertical tabs: open, find, pin, middle-click close, split, collapse + hove
   await expect(activeRow(page)).toHaveText(/FOCUS/);
   await shot(page, "01-open");
 
-  // find a tab: the Open section's % takes the palette to the open tabs, typing filters, Enter opens
-  await open(page).getByRole("button", { name: "%" }).click();
-  await page.keyboard.type("jour");
+  // find a tab: `%` in the command palette filters open tabs, Enter opens
+  await page.keyboard.press("Meta+e");
+  await expect(page.getByTestId("palette").getByRole("textbox")).toBeFocused();
+  await page.keyboard.type("%jour");
   await shot(page, "02-find");
   await page.keyboard.press("Enter");
   await expect(activeRow(page)).toHaveText(/journal/);
@@ -66,10 +67,10 @@ test("vertical tabs: open, find, pin, middle-click close, split, collapse + hove
   await row(page, "journal.md").click({ button: "middle" });
   await expect(row(page, "journal.md")).toHaveCount(0);
 
-  // split right from the menu: the two halves are named in the list
+  // split right from the menu: both halves show in Dockview and in the list
   await row(page, "FOCUS.md").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Split right" }).click();
-  await expect(open(page).locator(".split-badge")).toHaveCount(2);
+  await expect(open(page).locator(".pane-row.active, .pane-row.split-shown")).toHaveCount(2);
   await expect(page.locator(".dv-groupview")).toHaveCount(2);
   await shot(page, "05-split");
 
@@ -94,7 +95,8 @@ test("vertical tabs: open, find, pin, middle-click close, split, collapse + hove
   await expect(side(page).locator(".pin")).toHaveCount(1);
   await page.keyboard.press("Meta+s"); // expand again
   await expect(pins.locator(".pin", { hasText: "hubbard" })).toBeVisible();
-  await expect(open(page).locator(".split-badge")).toHaveCount(2);
+  await expect(page.locator(".dv-groupview")).toHaveCount(2);
+  await expect(open(page).locator(".pane-row.active, .pane-row.split-shown")).toHaveCount(2);
   await expect(row(page, "FOCUS.md")).toHaveCount(1);
   await expect(row(page, "run.py")).toHaveCount(1);
   await shot(page, "08-restored");

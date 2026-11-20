@@ -19,11 +19,53 @@ let replaying = false;
 // Tab as in Obsidian (notes) and VS Code (code): a selection's lines, or a list item, are indented; anywhere
 // else a tab (a note) or the way to the next indent stop (code) is typed at the caret. CodeMirror's indentWithTab indented the
 // whole line from anywhere in it, instead of typing a tab character.
-const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/;
+const LIST_ITEM = /^\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s/;
+const BLOCKQUOTE_LINE = /^(\s*)(>\s*)/;
+
+function nestBlockquotes(v: EditorView, more: boolean): boolean {
+  const { state } = v;
+  const seen = new Set<number>();
+  const lineNums: number[] = [];
+  for (const r of state.selection.ranges) {
+    const a = state.doc.lineAt(r.from).number;
+    const b = state.doc.lineAt(r.to).number;
+    for (let n = a; n <= b; n++) {
+      if (!seen.has(n)) {
+        seen.add(n);
+        lineNums.push(n);
+      }
+    }
+  }
+  if (!lineNums.length || !lineNums.every((n) => BLOCKQUOTE_LINE.test(state.doc.line(n).text))) return false;
+  const changes: { from: number; to: number; insert: string }[] = [];
+  for (const n of lineNums) {
+    const line = state.doc.line(n);
+    const m = BLOCKQUOTE_LINE.exec(line.text);
+    if (!m) continue;
+    const at = line.from + m[1].length;
+    if (more) {
+      changes.push({ from: at, to: at, insert: "> " });
+    } else {
+      const len = m[2].length;
+      changes.push({ from: at, to: at + len, insert: "" });
+    }
+  }
+  if (!changes.length) return false;
+  const set = state.changes(changes);
+  v.dispatch({
+    changes: set,
+    selection: state.selection.map(set, 1),
+    scrollIntoView: true,
+    userEvent: more ? "input.indent" : "delete.dedent",
+  });
+  return true;
+}
+
 export const tabKey = (md: boolean): KeyBinding => ({
   key: "Tab",
   run: (v) => {
     const { ranges } = v.state.selection;
+    if (md && ranges.every((r) => BLOCKQUOTE_LINE.test(v.state.doc.lineAt(r.head).text)) && nestBlockquotes(v, true)) return true;
     if (ranges.some((r) => !r.empty) || (md && ranges.every((r) => LIST_ITEM.test(v.state.doc.lineAt(r.head).text)))) return indentMore(v);
     if (md) return insertTab(v);
     // to the next multiple of the unit, as VS Code: from column 2 of a four-space file, two spaces, not four
@@ -36,7 +78,11 @@ export const tabKey = (md: boolean): KeyBinding => ({
     v.dispatch(change, { scrollIntoView: true, userEvent: "input" });
     return true;
   },
-  shift: indentLess,
+  shift: (v) => {
+    const { ranges } = v.state.selection;
+    if (md && ranges.every((r) => BLOCKQUOTE_LINE.test(v.state.doc.lineAt(r.head).text)) && nestBlockquotes(v, false)) return true;
+    return indentLess(v);
+  },
 });
 
 // every task field, offered because nothing typed matched one (Obsidian Tasks' list): Tab there indents

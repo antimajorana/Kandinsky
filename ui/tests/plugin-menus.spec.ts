@@ -73,7 +73,7 @@ async function pluginMenus(page: Page) {
   await page.keyboard.press("F1");
   await page.keyboard.type("Settings");
   await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click();
-  await page.getByRole("button", { name: /^Plugins( \d+)?$/ }).first().click();
+  await page.getByRole("button", { name: /^Extensions( \d+)?$/ }).first().click();
   // the list counts them; the plugin's own page lists them
   await page.getByRole("button", { name: "2 problems since Kandinsky started" }).click();
   const log = page.locator('[data-plugin-log="menus"]');

@@ -94,3 +94,86 @@ export function caretIn(source: string, drawn: string, k: number): number | null
   }
   return k === 0 ? 0 : i; // a click at the very start: before any markup (`|[[x|alias]]`, not `[[x||alias]]`)
 }
+
+/** Character offsets (relative to `line`) of each cell's trimmed content in a pipe table row. */
+export function cellRangesInLine(line: string): Array<{ from: number; to: number }> {
+  const leadSpaces = line.length - line.trimStart().length;
+  const trimmedEnd = line.trimEnd().length;
+  const firstPipe = line[leadSpaces] === "|" ? leadSpaces : -1;
+  const lastPipe = trimmedEnd > firstPipe + 1 && line[trimmedEnd - 1] === "|" ? trimmedEnd - 1 : trimmedEnd;
+  const start = firstPipe >= 0 ? firstPipe + 1 : leadSpaces;
+  const pipes: number[] = [];
+  for (let i = start; i < lastPipe; i++) {
+    if (line[i] === "\\" && i + 1 < lastPipe && line[i + 1] === "|") {
+      i++;
+      continue;
+    }
+    if (line[i] === "|") pipes.push(i);
+  }
+  const bounds = [start, ...pipes, lastPipe];
+  const out: Array<{ from: number; to: number }> = [];
+  for (let idx = 0; idx < bounds.length - 1; idx++) {
+    const rawFrom = idx === 0 ? bounds[idx] : bounds[idx] + 1;
+    const rawTo = bounds[idx + 1];
+    const seg = line.slice(rawFrom, rawTo);
+    const lTrim = seg.length - seg.trimStart().length;
+    const rTrim = seg.trimEnd().length;
+    if (rTrim <= lTrim) {
+      const mid = rawFrom + (seg.startsWith(" ") ? 1 : 0);
+      out.push({ from: mid, to: mid });
+    } else {
+      out.push({ from: rawFrom + lTrim, to: rawFrom + rTrim });
+    }
+  }
+  return out;
+}
+
+/** Formats a pipe table with aligned column padding for Source-mode editing, returning the formatted lines
+ *  plus each row's normalized cell content spans relative to the line start. */
+export function formatTableLines(t: Pick<Table, "rows" | "aligns">): { lines: string[]; cellOffsets: Array<Array<{ from: number; to: number }>> } {
+  const cols = t.rows[0]?.length ?? 0;
+  const widths = Array.from({ length: cols }, (_, c) => {
+    let w = Math.max(3, t.aligns[c]?.length ?? 3);
+    for (const row of t.rows) w = Math.max(w, (row[c] ?? "").length);
+    return w;
+  });
+
+  const formatRow = (cells: string[], isSep = false) => {
+    let line = "|";
+    const spans: Array<{ from: number; to: number }> = [];
+    for (let c = 0; c < cols; c++) {
+      const raw = cells[c] ?? "";
+      const w = widths[c];
+      let padded: string;
+      if (isSep) {
+        const align = alignOf(raw);
+        if (align === "center") padded = `:${"-".repeat(Math.max(1, w - 2))}:`;
+        else if (align === "right") padded = `${"-".repeat(Math.max(2, w - 1))}:`;
+        else if (align === "left") padded = `:${"-".repeat(Math.max(2, w - 1))}`;
+        else padded = "-".repeat(w);
+      } else {
+        padded = raw.padEnd(w, " ");
+      }
+      const from = line.length + 1;
+      const to = from + raw.length;
+      spans.push({ from, to });
+      line += ` ${padded} |`;
+    }
+    return { line, spans };
+  };
+
+  const lines: string[] = [];
+  const cellOffsets: Array<Array<{ from: number; to: number }>> = [];
+  const head = formatRow(t.rows[0] ?? []);
+  lines.push(head.line);
+  cellOffsets.push(head.spans);
+  const sep = formatRow(t.aligns, true);
+  lines.push(sep.line);
+  cellOffsets.push(sep.spans);
+  for (const row of t.rows.slice(1)) {
+    const r = formatRow(row);
+    lines.push(r.line);
+    cellOffsets.push(r.spans);
+  }
+  return { lines, cellOffsets };
+}

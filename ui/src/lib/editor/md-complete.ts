@@ -21,17 +21,81 @@ import { splitFrontmatter } from "../property-model";
 import type { GatedSource } from "./completion-gate";
 
 
-/** Enter in a list: the next item's marker; on an empty item, the list ends (Obsidian). CodeMirror's
- *  default turned an empty second item into a blank line plus a new `- [ ]`, then every later Enter
- *  added a blank line too. */
-export const continueList = insertNewlineContinueMarkupCommand({ nonTightLists: false });
+const baseContinueList = insertNewlineContinueMarkupCommand({ nonTightLists: false });
+
+/** Enter in a list: handles custom Obsidian task statuses (`- [-]`, `- [/]`, `- [>]`, `- [?]`, `- [!]`)
+ *  and blockquote-nested tasks/lists cleanly before delegating to CodeMirror's list continuation. */
+export const continueList: Command = (view) => {
+  const { state } = view;
+  const r = state.selection.main;
+  if (!r.empty) return baseContinueList(view);
+
+  const line = state.doc.lineAt(r.head);
+  const before = line.text.slice(0, r.head - line.from);
+  const after = line.text.slice(r.head - line.from);
+
+  // Match optional blockquote prefix (`> `, `> > `) + list/task item marker.
+  const bqTask = /^((?:\s*>\s*)+)((?:[-*+]|\d+[.)])\s+)(?:\[([^\]\n\\])\]\s+)?(.*)$/.exec(before);
+  if (bqTask) {
+    const [, quotePrefix, listMarker, taskChar, content] = bqTask;
+    if (content.trim() === "" && after.trim() === "") {
+      // Exit empty blockquote list/task line down to blockquote prefix (or plain line).
+      view.dispatch({
+        changes: { from: line.from, to: line.to, insert: quotePrefix },
+        selection: { anchor: line.from + quotePrefix.length },
+        scrollIntoView: true,
+        userEvent: "input",
+      });
+      return true;
+    }
+    const nextMarker = /^\d+([.)])\s+/.test(listMarker)
+      ? `${Number(listMarker.match(/^\d+/)![0]) + 1}${listMarker.match(/[.)]/)![0]} `
+      : listMarker;
+    const nextPrefix = taskChar !== undefined ? `${quotePrefix}${nextMarker}[ ] ` : `${quotePrefix}${nextMarker}`;
+    view.dispatch({
+      changes: { from: r.head, to: r.head, insert: `\n${nextPrefix}` },
+      selection: { anchor: r.head + 1 + nextPrefix.length },
+      scrollIntoView: true,
+      userEvent: "input",
+    });
+    return true;
+  }
+
+  // Match custom Obsidian task status (`- [-]`, `- [/]`, `- [>]`, etc., anything except `[ ]` / `[x]` / `[X]`).
+  const customTask = /^(\s*)([-*+]|\d+[.)])(\s+)\[([^ xX\]\n\\])\](?:\s+(.*)|\s*)$/.exec(before);
+  if (customTask) {
+    const [, indent, bullet, space, , content = ""] = customTask;
+    if (content.trim() === "" && after.trim() === "") {
+      view.dispatch({
+        changes: { from: line.from, to: line.to, insert: indent },
+        selection: { anchor: line.from + indent.length },
+        scrollIntoView: true,
+        userEvent: "input",
+      });
+      return true;
+    }
+    const ord = /^(\d+)([.)])$/.exec(bullet);
+    const nextBullet = ord ? `${Number(ord[1]) + 1}${ord[2]}` : bullet;
+    const insert = `\n${indent}${nextBullet}${space}[ ] `;
+    view.dispatch({
+      changes: { from: r.head, to: r.head, insert },
+      selection: { anchor: r.head + insert.length },
+      scrollIntoView: true,
+      userEvent: "input",
+    });
+    return true;
+  }
+
+  return baseContinueList(view);
+};
+
 /** Backspace right after a task's box takes one step back: `- [ ] ` → `- ` → nothing (Obsidian). CodeMirror's
  *  `deleteMarkupBackward` removed the whole `- [ ] ` at once. */
 export const backspaceMarkup: Command = (view) => {
   const r = view.state.selection.main;
   if (!r.empty) return false;
   const line = view.state.doc.lineAt(r.head);
-  const box = /^(\s*(?:[-*+]|\d+[.)])\s+)\[.\] ?$/.exec(line.text.slice(0, r.head - line.from));
+  const box = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[.\] ?$/.exec(line.text.slice(0, r.head - line.from));
   if (box) {
     view.dispatch({ changes: { from: line.from + box[1].length, to: r.head }, userEvent: "delete.backward" });
     return true;
@@ -242,7 +306,7 @@ export function citeSource(_md: boolean) {
 // A word that starts a field's name (due, high, repeats…) lists the fields under a first "new line"
 // row, so Enter after an ordinary word still makes a new line; Tab or ↓ go to the fields. After a
 // date field (or `@`) the days come, as typed ("next fri", "in 3 days"), written as YYYY-MM-DD.
-const TASK_LINE = /^\s*(?:[-*+]|\d+[.)])\s+\[.\]\s/;
+const TASK_LINE = /^\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+\[.\]\s/;
 /** A task row carries its suggestion: the list draws its icon (`taskIcon` in create.ts). */
 export type TaskCompletion = Completion & { task: TaskSuggestion; browsing: boolean };
 export const taskSource: GatedSource = {

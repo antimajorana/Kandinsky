@@ -142,7 +142,7 @@
   .note.up { color: var(--accent); }
   .btn { display: inline-flex; gap: 6px; align-items: center; padding: 3px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
   .btn:hover:not(:disabled) { background: var(--bg-hover); }
-  .btn.primary { background: var(--accent); color: var(--accent-fg, #fff); border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
   .btn:disabled { opacity: .6; }
   .link { color: var(--accent); padding: 0; }
 </style>

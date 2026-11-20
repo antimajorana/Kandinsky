@@ -1,6 +1,7 @@
 <script lang="ts">
   // Guided Notion-style Automations & Recurring Note Templates popover for .base views.
   import Icon from "../Icon.svelte";
+  import Select from "../Select.svelte";
   import { api } from "../../lib/api";
   import { toast } from "../../lib/state.svelte";
   import { errText } from "../../lib/text";
@@ -44,6 +45,20 @@
   let recTemplate = $state("");
 
   const propChoices = $derived(props.filter((p) => !p.id.startsWith("file.")).map((p) => p.id.replace(/^note\./, "")));
+
+  const TRIGGER_OPTIONS: { value: "property_changed" | "note_created"; label: string }[] = [
+    { value: "property_changed", label: "Property changes" },
+    { value: "note_created", label: "Note created" },
+  ];
+  const ACTION_OPTIONS: { value: "set_property" | "append_log"; label: string }[] = [
+    { value: "set_property", label: "Set property" },
+    { value: "append_log", label: "Append to Daily Note" },
+  ];
+  const CADENCE_OPTIONS: { value: RecurringCadence; label: string }[] = [
+    { value: "daily", label: "Daily" },
+    { value: "weekly", label: "Weekly" },
+    { value: "monthly", label: "Monthly" },
+  ];
 
   function addRule(e: SubmitEvent): void {
     e.preventDefault();
@@ -144,13 +159,10 @@
     <form class="add-box" onsubmit={addRule}>
       <div class="row-2">
         <label class="fld"><span>Name</span><input bind:value={rName} required /></label>
-        <label class="fld">
+        <div class="fld">
           <span>Trigger</span>
-          <select bind:value={rTrigKind}>
-            <option value="property_changed">Property changes</option>
-            <option value="note_created">Note created</option>
-          </select>
-        </label>
+          <Select label="Trigger" value={rTrigKind} options={TRIGGER_OPTIONS} onchange={(v) => (rTrigKind = v)} />
+        </div>
       </div>
       {#if rTrigKind === "property_changed"}
         <div class="row-2">
@@ -162,13 +174,10 @@
         </div>
       {/if}
       <div class="row-2">
-        <label class="fld">
+        <div class="fld">
           <span>Action</span>
-          <select bind:value={rActKind}>
-            <option value="set_property">Set property</option>
-            <option value="append_log">Append to Daily Note</option>
-          </select>
-        </label>
+          <Select label="Action" value={rActKind} options={ACTION_OPTIONS} onchange={(v) => (rActKind = v)} />
+        </div>
         {#if rActKind === "set_property"}
           <label class="fld"><span>Target property</span><input list="auto-props-list" bind:value={rActProp} placeholder="done_date" /></label>
         {/if}
@@ -200,14 +209,10 @@
     <form class="add-box" onsubmit={addRecurring}>
       <div class="row-2">
         <label class="fld"><span>Name</span><input bind:value={recName} required /></label>
-        <label class="fld">
+        <div class="fld">
           <span>Cadence</span>
-          <select bind:value={recCadence}>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-          </select>
-        </label>
+          <Select label="Cadence" value={recCadence} options={CADENCE_OPTIONS} onchange={(v) => (recCadence = v)} />
+        </div>
       </div>
       <div class="row-2">
         <label class="fld"><span>Folder</span><input bind:value={recFolder} placeholder="tasks" /></label>
@@ -246,11 +251,13 @@
   .empty { margin: 0; color: var(--text-faint); padding: 6px 2px; }
   .add-box { display: flex; flex-direction: column; gap: 7px; padding-top: 6px; border-top: 1px solid var(--border); }
   .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .fld { display: flex; flex-direction: column; gap: 3px; color: var(--text-muted); }
-  .fld input, .fld select { padding: 5px 7px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); font: inherit; }
+  .fld { display: flex; flex-direction: column; gap: 3px; color: var(--text-muted); min-width: 0; }
+  .fld input { padding: 5px 7px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); font: inherit; }
+  .fld :global(.select) { width: 100%; min-width: 0; }
+  .fld :global(.trigger) { padding: 5px 7px; font-size: inherit; background: var(--bg); border-color: var(--border-strong); }
   .foot-end { display: flex; justify-content: flex-end; }
   .foot-split { display: flex; justify-content: space-between; align-items: center; }
   .ghost { padding: 5px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); color: var(--text); background: var(--bg); }
   .ghost:hover { background: var(--bg-hover); }
-  .save { padding: 5px 12px; border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-fg, #fff); font-weight: 600; }
+  .save { padding: 5px 12px; border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-fg); font-weight: 600; }
 </style>

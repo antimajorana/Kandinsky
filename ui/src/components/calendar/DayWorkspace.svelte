@@ -8,7 +8,7 @@
   // Unified Day Workspace: pairs chronological Day Events & Tasks with that day's lazy Daily Note editor (`@container` responsive).
   import { onDestroy, onMount } from "svelte";
   import Icon from "../Icon.svelte";
-  import EventPopover from "./EventPopover.svelte";
+  import EventPopover, { type AnchorRect } from "./EventPopover.svelte";
   import { api, ApiError } from "../../lib/api";
   import { diff } from "../../lib/frontmatter-edit";
   import { openPath } from "../../lib/dock";
@@ -26,12 +26,14 @@
     weekStart = "monday",
     ondatechange,
     onrefresh,
+    ontoggle,
   }: {
     date: string;
     events: CalendarEvent[];
     weekStart?: WeekStart;
     ondatechange: (iso: string) => void;
     onrefresh: () => void;
+    ontoggle?: (ev: CalendarEvent) => void | Promise<void>;
   } = $props();
 
   const today = todayIso();
@@ -45,6 +47,7 @@
   let scheduleOpen = $state(true);
   let pickerOpen = $state(false);
   let editingEvent = $state<CalendarEvent | null | "new">(null);
+  let anchorRect = $state<AnchorRect | null>(null);
   let editorHost = $state<HTMLElement>();
 
   let editor: KandinskyEditor | null = null;
@@ -376,13 +379,39 @@
     openPath(dayInfo.path);
   }
 
-  function openScheduleItem(ev: CalendarEvent): void {
-    setEditing(ev);
+  function rectOf(el: HTMLElement): AnchorRect {
+    const r = el.getBoundingClientRect();
+    return { top: r.top, left: r.left, bottom: r.bottom, right: r.right };
   }
 
-  function setEditing(ev: CalendarEvent): void {
-    if (ev.editable) editingEvent = ev;
-    else if (ev.path) openPath(ev.path, ev.line ?? undefined);
+  function openScheduleItem(ev: CalendarEvent, trigger?: HTMLElement): void {
+    setEditing(ev, trigger ? rectOf(trigger) : null);
+  }
+
+  function setEditing(ev: CalendarEvent, rect: AnchorRect | null = null): void {
+    if (ev.editable) {
+      anchorRect = rect;
+      editingEvent = ev;
+    } else if (ev.path) {
+      openPath(ev.path, ev.line ?? undefined);
+    }
+  }
+
+  async function toggleDayTask(ev: CalendarEvent): Promise<void> {
+    if (ev.completed) return;
+    if (ontoggle) {
+      await ontoggle(ev);
+      await refreshCurrentDayMetadata();
+      return;
+    }
+    if (!ev.path || !ev.line) return;
+    try {
+      await api.tickTask(ev.path, ev.line);
+      onrefresh();
+      await refreshCurrentDayMetadata();
+    } catch (err) {
+      toast("Could not complete task", errText(err), "error");
+    }
   }
 
   const miniDays = $derived(monthGridDays(pickYear, pickMonth0, weekStart));
@@ -432,8 +461,8 @@
       <button type="button" class="schedule-toggle" onclick={() => (scheduleOpen = !scheduleOpen)}>
         {scheduleOpen ? "Hide schedule" : `Schedule (${dayEvents.length})`}
       </button>
-      <button type="button" class="new-ev-btn" data-testid="day-new-event" onclick={() => (editingEvent = "new")}>
-        <Icon name="plus" size={13} /> New event
+      <button type="button" class="new-ev-btn" data-testid="day-new-event" onclick={(e) => { anchorRect = rectOf(e.currentTarget as HTMLElement); editingEvent = "new"; }}>
+        <Icon name="plus" size={13} /> Add event
       </button>
       <button type="button" class="ghost-btn" onclick={() => void openInFullPane()} title="Open Daily Note tab">
         <Icon name="external-link" size={13} /> Open note
@@ -455,8 +484,19 @@
             {#each dayEvents as ev (ev.occurrence_id)}
               {@const c = colorSpec(ev.color)}
               <li class="ev-item">
-                <span class="ev-dot" style:background={c.dot}></span>
-                <button type="button" class="ev-main" onclick={() => openScheduleItem(ev)}>
+                {#if ev.source === "task"}
+                  <input
+                    type="checkbox"
+                    class="kandinsky-check ev-tick"
+                    checked={ev.completed}
+                    disabled={ev.completed}
+                    aria-label="Done: {ev.title}"
+                    onchange={() => void toggleDayTask(ev)}
+                  />
+                {:else}
+                  <span class="ev-dot" style:background={c.dot}></span>
+                {/if}
+                <button type="button" class="ev-main" onclick={(e) => openScheduleItem(ev, e.currentTarget as HTMLElement)}>
                   <span class="ev-time">{ev.all_day ? "All day" : `${ev.start ?? ""}${ev.end ? `–${ev.end}` : ""}`}</span>
                   <span class="ev-title" class:done={ev.completed}>{ev.title}</span>
                   {#if ev.location && !isVideoMeetingUrl(ev.location)}<span class="ev-loc">{ev.location}</span>{/if}
@@ -501,7 +541,8 @@
   <EventPopover
     initial={editingEvent === "new" ? null : editingEvent}
     defaultDate={date}
-    onclose={() => (editingEvent = null)}
+    {anchorRect}
+    onclose={() => { editingEvent = null; anchorRect = null; }}
     onsaved={() => { onrefresh(); void refreshCurrentDayMetadata(); }}
   />
 {/if}
@@ -538,6 +579,7 @@
   .sched-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
   .ev-item { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: var(--radius); background: var(--card-bg); border: 1px solid var(--border); }
   .ev-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .ev-tick { flex: none; cursor: pointer; }
   .ev-main { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
   .ev-time { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
   .ev-title { font-size: 13px; font-weight: 500; color: var(--heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }

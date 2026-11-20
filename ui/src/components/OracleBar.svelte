@@ -486,7 +486,7 @@
   .feedback.error { color: var(--red, #d94e41); background: color-mix(in srgb, var(--red, #d94e41) 11%, transparent); border: 1px solid color-mix(in srgb, var(--red, #d94e41) 34%, transparent); white-space: pre-wrap; }
   .feedback.success { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--green, #3ca395); background: color-mix(in srgb, var(--green, #3ca395) 12%, transparent); border: 1px solid color-mix(in srgb, var(--green, #3ca395) 32%, transparent); }
   .stdout-line { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-  .open-dest-btn { padding: 4px 10px; border-radius: 6px; background: var(--green); color: #fff; font-weight: 500; white-space: nowrap; cursor: pointer; } /* literal: white ink on saturated viridian button */
+  .open-dest-btn { padding: 4px 10px; border-radius: 6px; background: var(--green); color: var(--accent-fg); font-weight: 500; white-space: nowrap; cursor: pointer; }
 
   .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
   .btn-cancel { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; }

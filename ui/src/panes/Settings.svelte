@@ -57,8 +57,8 @@
   const showLit = () => requestAnimationFrame(() => requestAnimationFrame(() => navEl?.querySelector(".nav.on")?.scrollIntoView({ block: "nearest" })));
   $effect(() => { void [plugin, page, pluginPages]; showLit(); });
   $effect(() => { if (!navEl) return; const ro = new ResizeObserver(showLit); ro.observe(navEl); return () => ro.disconnect(); });
-  // a plugin with no settings has no entry of its own: the Extensions page it is opened from stays lit
-  const navOn = (id: string): boolean => !words.length && (id === page?.page || (id === "plugins" && !!plugin && !plugin.fields.length && !(sections[plugin.id]?.length)));
+  // a plugin with no settings or when calm mode hides per-plugin sidebar rows: keep Extensions lit
+  const navOn = (id: string): boolean => !words.length && (id === page?.page || (id === "plugins" && !!plugin && (!devMode || (!plugin.fields.length && !(sections[plugin.id]?.length)))));
   const accountCount = $derived(accountLists().reduce((n, l) => n + (Array.isArray(l.plugin.settings?.[l.setting.key]) ? (l.plugin.settings[l.setting.key] as unknown[]).length : 0), 0));
   // an account in trouble shows on the Accounts entry: a red dot, without opening the page
   const accountTrouble = $derived(Object.values(statuses).some((m) => Object.values(m).some((x) => x.state === "error")));
@@ -126,22 +126,23 @@
   <nav aria-label="Settings pages" bind:this={navEl}>
     <h1>Settings</h1>
     <input class="filter" placeholder="Search settings…" bind:this={search} bind:value={filter} onkeydown={searchKeys} spellcheck="false" aria-label="Search settings" />
-    <button class="nav accounts" class:on={!words.length && accounts} onclick={() => go(ACCOUNTS)} aria-current={!words.length && accounts ? "page" : undefined}>
-      <span class="ico acc"><Icon name="user" size={14} /></span> <span>Accounts</span>{#if accountTrouble}<b class="bad" title="An account has a problem"></b>{:else if accountCount}<i>{accountCount}</i>{/if}
-    </button>
-    <!-- the groups in their order (settings-pages.ts GROUPS); under Plugins the list and Automation, then each plugin's
-         own page: the built-ins' first (their fields come from the config schema like the core's) -->
+    {#if devMode}
+      <button class="nav accounts" class:on={!words.length && accounts} onclick={() => go(ACCOUNTS)} aria-current={!words.length && accounts ? "page" : undefined}>
+        <span class="ico acc"><Icon name="user" size={14} /></span> <span>Accounts</span>{#if accountTrouble}<b class="bad" title="An account has a problem"></b>{:else if accountCount}<i>{accountCount}</i>{/if}
+      </button>
+    {/if}
+    <!-- the groups in their order (settings-pages.ts GROUPS); under Extensions, the Extensions hub plus developer-mode per-plugin pages -->
     {#each GROUPS as g (g.id)}
       {@const own = pages.filter((p) => !p.plugin && p.group === g.id)}
-      {#if own.length || g.id === "extensions"}
-      <h2 class="group">{g.title}</h2>
+      {#if own.length || (devMode && g.id === "extensions")}
+      {#if devMode}<h2 class="group">{g.title}</h2>{/if}
       {#each own as p (p.page)}
         {@const n = changedIn([...p.fields, ...p.advancedFields])}
         <button class="nav" class:on={navOn(p.page)} onclick={() => go(p.page)} aria-current={navOn(p.page) ? "page" : undefined} data-testid="settings-nav-{p.page}">
           <span class="ico"><Icon name={p.icon} size={14} /></span> <span>{p.title}</span>{#if n}<i title="{n} changed">{n}</i>{/if}
         </button>
       {/each}
-      {#if g.id === "extensions"}
+      {#if devMode && g.id === "extensions"}
       {#each builtinPages as p (p.page)}
         {@const n = changedIn(p.fields)}
         <button class="nav plugin" class:on={navOn(p.page)} onclick={() => go(p.page)} aria-current={navOn(p.page) ? "page" : undefined}>
@@ -173,8 +174,14 @@
         </section>
       {:else}<p class="muted">No option matches “{filter}”. Try other words — descriptions are searched too.</p>{/each}
     {:else if accounts}
+      {#if !devMode}
+        <button type="button" class="back-ext" onclick={() => go("plugins")}><Icon name="arrow-left" size={14} /> Back to Extensions</button>
+      {/if}
       <AccountsPage />
     {:else if plugin}
+      {#if !devMode}
+        <button type="button" class="back-ext" onclick={() => go("plugins")}><Icon name="arrow-left" size={14} /> Back to Extensions</button>
+      {/if}
       {#key plugin.id}<PluginPage {plugin} />{/key}
     {:else if page}
       <SettingsPage {page} {fields} {pages} {go} />
@@ -202,6 +209,8 @@
   .group { margin: 14px 10px 4px; font-size: calc(10.5px * var(--ui-scale, 1)); letter-spacing: .07em; text-transform: uppercase; color: var(--text-faint); font-weight: 600; }
   .nav i { font-style: normal; font-size: calc(10.5px * var(--ui-scale, 1)); color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 0 6px; }
   main { flex: 1; min-width: 0; overflow-y: auto; padding: 28px max(24px, calc(50% - 420px)) 80px; }
+  .back-ext { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 12px; padding: 4px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg); color: var(--text-muted); font-size: calc(12.5px * var(--ui-scale, 1)); cursor: pointer; }
+  .back-ext:hover { background: var(--bg-hover); color: var(--text); }
   h1 { margin: 0 10px 10px; font-size: calc(17px * var(--ui-scale, 1)); color: var(--heading); letter-spacing: -.01em; }
   .muted { color: var(--text-muted); }
   .where { margin-top: 18px; color: var(--text-faint); font-size: calc(12px * var(--ui-scale, 1)); }

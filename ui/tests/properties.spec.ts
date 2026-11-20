@@ -58,14 +58,30 @@ test("by default a note's properties are clickable inline under NoteHero with ra
   expect(await read(page, "props/hidden.md"), "display keeps the file frontmatter untouched").toBe(before);
 });
 
-test("inline: the properties show clickable controls under the title with the spec's kinds", async ({ page }) => {
-  const ed = await note(page, "props/hidden.md", "inline");
-  const props = page.getByTestId("inline-properties");
-  await expect(props.locator(".prop-row")).toHaveCount(3);
-  await expect(props.locator(".k-name", { hasText: "date" })).toBeVisible();
-  await expect(props).toContainText("Concept");
-  await expect(ed.locator(".cm-properties")).toHaveCount(0);
-  await expect(page.getByTestId("properties-panel")).toHaveCount(0);
+test("inline: the properties show clickable controls under the title with the spec's kinds", async ({ page, request }) => {
+  await request.put("/api/file", { headers: H, data: { path: "props/empty.md", text: "# Empty\n\nNo properties yet.\n" } });
+  try {
+    const ed = await note(page, "props/hidden.md", "inline");
+    const props = page.getByTestId("inline-properties");
+    await expect(props.locator(".prop-row")).toHaveCount(3);
+    await expect(props.locator(".k-name", { hasText: "date" })).toBeVisible();
+    await expect(props).toContainText("Concept");
+    await expect(ed.locator(".cm-properties")).toHaveCount(0);
+    await expect(page.getByTestId("properties-panel")).toHaveCount(0);
+
+    // On a 0-property note, inline-properties stays hidden until hovering NoteHero and clicking + Add property
+    await page.unroute("**/api/config");
+    await note(page, "props/empty.md", "inline");
+    await expect(page.getByTestId("inline-properties")).toHaveCount(0);
+    const heroAdd = page.getByTestId("hero-add-property");
+    await heroAdd.hover();
+    await heroAdd.click();
+    await expect(page.getByTestId("inline-properties")).toBeVisible();
+    await expect(page.getByTestId("inline-properties").getByPlaceholder("Property name…")).toBeFocused();
+  } finally {
+    await page.unroute("**/api/config");
+    await request.post(`/api/fs/trash?path=${encodeURIComponent("props/empty.md")}`, { headers: H }).catch(() => {});
+  }
 });
 
 test("panel: a date, a tag and a link are edited with controls; only the frontmatter changes, and undo is the editor's", async ({ page, request }) => {

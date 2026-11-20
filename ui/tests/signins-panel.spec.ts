@@ -3,36 +3,54 @@ import { test, expect } from "@playwright/test";
 // Settings → Sign-ins (components/settings/SigninsPanel.svelte, core service_signin.rs): each
 // kept sign-in with the plugins it is sent for, a sign-in started ahead of any plugin from a typed address, and the
 // OpenID providers signed in (plugin_oauth.rs), one shared by the plugins that use it.
-test("a kept sign-in says which plugins it is sent for; one can be started from an address", async ({ page }) => {
-  await page.route("**/api/signin/doors", (route) => route.fulfill({ json: [
-    { host: "links.example.org", at: 1761354000, cookies: 2, renewed: 1761400000, ended: false, plugins: ["linkwarden", "jellyfin"] },
-    { host: "old.example.net", at: 1761354000, cookies: 1, ended: true, plugins: [] },
-  ] }));
-  await page.route("**/api/signin/tokens", (route) => route.fulfill({ json: [
-    { key: "oidc.0123456789abcdef", issuer: "https://auth.example.org", expires: 1761357600, renews: true, renewed: 1761354000, plugins: ["immich", "paperless"] },
-  ] }));
-  await page.addInitScript(() => { (window as unknown as { opened: string[] }).opened = []; window.open = ((u: string) => { (window as unknown as { opened: string[] }).opened.push(u); return null; }) as typeof window.open; });
-  await page.goto("/");
-  await page.getByText("Finish the GW notes.").waitFor();
-  await page.keyboard.press("F1");
-  await page.keyboard.type("Settings");
-  await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click();
-  const nav = page.getByRole("navigation", { name: "Settings pages" });
-  const signinsBtn = nav.getByRole("button", { name: "Sign-ins", exact: true });
-  if (await signinsBtn.count()) await signinsBtn.click();
-  else {
-    await nav.getByRole("button", { name: /^Plugins/ }).click();
-    await page.getByTestId("settings-advanced").locator("summary").click();
+const H = { "x-kandinsky": "1" };
+
+test("a kept sign-in says which plugins it is sent for; one can be started from an address", async ({ page, request }) => {
+  const cfg = (await (await request.get("/api/config", { headers: H })).json()).config;
+  const wasDev = cfg.developer_mode;
+  if (!wasDev) {
+    cfg.developer_mode = true;
+    await request.put("/api/config", { headers: H, data: cfg });
   }
-  const panel = page.getByTestId("signins-panel");
-  const gate = panel.getByRole("list", { name: "Gate sessions" }).locator("li");
-  await expect(gate.nth(0)).toContainText("Used by linkwarden, jellyfin");
-  await expect(gate.nth(1)).toContainText("ended");
-  await expect(gate.nth(1)).toContainText("No plugin names this host yet");
-  const provider = panel.locator("li", { hasText: "auth.example.org" });
-  await expect(provider).toContainText("Renews itself");
-  await expect(provider).toContainText("Used by immich, paperless");
-  await panel.getByLabel("Sign in at a service's address").fill("media.example.org");
-  await panel.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { opened: string[] }).opened)).toEqual([expect.stringContaining("/signin/door?url=https%3A%2F%2Fmedia.example.org")]);
+  try {
+    await page.route("**/api/signin/doors", (route) => route.fulfill({ json: [
+      { host: "links.example.org", at: 1761354000, cookies: 2, renewed: 1761400000, ended: false, plugins: ["linkwarden", "jellyfin"] },
+      { host: "old.example.net", at: 1761354000, cookies: 1, ended: true, plugins: [] },
+    ] }));
+    await page.route("**/api/signin/tokens", (route) => route.fulfill({ json: [
+      { key: "oidc.0123456789abcdef", issuer: "https://auth.example.org", expires: 1761357600, renews: true, renewed: 1761354000, plugins: ["immich", "paperless"] },
+    ] }));
+    await page.addInitScript(() => { (window as unknown as { opened: string[] }).opened = []; window.open = ((u: string) => { (window as unknown as { opened: string[] }).opened.push(u); return null; }) as typeof window.open; });
+    await page.goto("/");
+    await page.getByText("Finish the GW notes.").waitFor();
+    await page.keyboard.press("F1");
+    await page.keyboard.type("Settings");
+    await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click();
+    const nav = page.getByRole("navigation", { name: "Settings pages" });
+    const signinsBtn = nav.getByRole("button", { name: "Sign-ins", exact: true });
+    if (await signinsBtn.count()) await signinsBtn.click();
+    else {
+      await nav.getByRole("button", { name: /^Extensions/ }).click();
+      await page.getByTestId("settings-advanced").locator("> summary").click();
+    }
+    const panel = page.getByTestId("signins-panel");
+    const gate = panel.getByRole("list", { name: "Gate sessions" }).locator("li");
+    await expect(gate.nth(0)).toContainText("Used by linkwarden, jellyfin");
+    await expect(gate.nth(1)).toContainText("ended");
+    await expect(gate.nth(1)).toContainText("No plugin names this host yet");
+    await panel.getByText(/^Advanced:/).click();
+    const provider = panel.locator("li", { hasText: "auth.example.org" });
+    await expect(provider).toContainText("Renews itself");
+    await expect(provider).toContainText("Used by immich, paperless");
+    await panel.getByText("Sign in at another address").click();
+    await panel.getByLabel("Sign in at a service's address").fill("media.example.org");
+    await panel.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { opened: string[] }).opened)).toEqual([expect.stringContaining("/signin/door?url=https%3A%2F%2Fmedia.example.org")]);
+  } finally {
+    if (!wasDev) {
+      const back = (await (await request.get("/api/config", { headers: H })).json()).config;
+      back.developer_mode = wasDev;
+      await request.put("/api/config", { headers: H, data: back });
+    }
+  }
 });

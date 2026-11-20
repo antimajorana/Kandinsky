@@ -12,11 +12,9 @@
   import { fileIcon } from "../lib/panes";
   import Icon from "../components/Icon.svelte";
   import { mount, onMount, unmount } from "svelte";
-  import type { EditorView } from "@codemirror/view";
-  import { api, ApiError } from "../lib/api";
-  import { rel } from "../lib/time";
-  import { dateTip, showDate } from "../lib/dates";
-  import { localDay } from "../lib/local-day";
+  import { EditorView } from "@codemirror/view";
+  import { Compartment, EditorState, StateEffect, type Text } from "@codemirror/state";
+  import { api, apiBase, ApiError } from "../lib/api";
   import { diff, editFrontmatter } from "../lib/frontmatter-edit";
   import { on, touches } from "../lib/bus";
   import { app, toast } from "../lib/state.svelte";
@@ -53,7 +51,6 @@
   import { below, popMenu } from "../lib/menu";
   import { chooseVault } from "../lib/vaults";
   import { readText } from "../lib/vault-files";
-  import type { Text } from "@codemirror/state";
   import type { Problems } from "../lib/state.svelte";
   import { noteHeadings } from "../lib/note-anchor";
   import { mapHeadings } from "../lib/editor/heading-map";
@@ -72,18 +69,6 @@
   // the last headings() answer and the text it was read from (one scan per version of the text)
   let headCache: { doc: Text; heads: { level: number; text: string; line: number }[] } | null = null;
   let status = $state<"loading" | "ready" | "error">("loading");
-  // the note's date beside the header actions: when it was made (its `created:`/`date:`, first commit or birth: the
-  // core's one rule, today.rs `made`); asked again on hover so "changed" is current
-  let made = $state<import("../lib/gen/Made").Made | null>(null);
-  const askMade = () => { const p = path; void api.fileMade(p).then((m) => { if (p === path) made = m; }, () => { made = null; }); };
-  $effect(() => { if (status === "ready") askMade(); });
-  // the day it was made (lib/dates.ts's form); the hour in the tooltip when known
-  const madeDay = (m: import("../lib/gen/Made").Made) => showDate(localDay(new Date(m.made)));
-  const madeTip = (m: import("../lib/gen/Made").Made) => {
-    const at = dateTip(m.day_only ? localDay(new Date(m.made)) : m.made);
-    const from = { property: "its created/date property", git: "its first commit", disk: "the file's creation" }[m.by];
-    return `Made ${at} (${from})\nLast changed ${rel(m.changed)}`;
-  };
   let loadError = $state("");
   let conflict = $state(false);
   let isNew = $state(false);
@@ -331,6 +316,16 @@
   const devMode = $derived(Boolean(settings.config?.developer_mode));
   const noteProps = $derived(isMarkdown(path) && status === "ready" ? frontmatterOf(docText)?.data : null);
   const isFullWidth = $derived(isMarkdown(path) ? (localFullWidth ?? (noteProps?.width === "full")) : Boolean(localFullWidth));
+  const isPageLocked = $derived(
+    isMarkdown(path) && (noteProps?.locked === true || String(noteProps?.locked ?? "").toLowerCase() === "true"),
+  );
+  const lockSlot = new Compartment();
+  const lockExt = (locked: boolean) => (locked ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []);
+  $effect(() => {
+    const locked = isPageLocked;
+    if (!ed) return;
+    ed.view.dispatch({ effects: lockSlot.reconfigure(lockExt(locked)) });
+  });
   const isResearchNote = $derived(
     devMode && (
       /(?:^|\/)(?:research|derivations|computations|papers|runs)\//i.test(path) ||
@@ -361,6 +356,51 @@
     rawSource = ed.toggleSourceMode();
   }
 
+  async function togglePageLock(): Promise<void> {
+    if (!ed || !isMarkdown(path)) return;
+    const next = !isPageLocked;
+    try {
+      await editFrontmatter(ed.view, next ? { op: "set", key: "locked", value: true } : { op: "remove", key: "locked" });
+      toast(next ? "Page locked" : "Page unlocked", next ? "Read-only editing enabled" : "Editing re-enabled");
+    } catch (err) {
+      toast("Could not update page lock", errText(err), "error");
+    }
+  }
+
+  let exportingPdf = $state(false);
+  async function exportNotePdf(): Promise<void> {
+    if (exportingPdf) return;
+    exportingPdf = true;
+    try {
+      if (autosave() && current() !== saved) await save(false);
+      const res = await fetch(`${apiBase()}/api/note/export-pdf`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-kandinsky": "1" },
+        body: JSON.stringify({ path }),
+      });
+      if (!res.ok) {
+        const msg = await res.text().catch(() => res.statusText);
+        throw new Error(msg || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const stem = shownName(path) || "note";
+      const filename = `${stem}.pdf`;
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 2000);
+      toast("PDF exported", filename, "success");
+    } catch (err) {
+      toast("Could not export PDF", errText(err), "error");
+    } finally {
+      exportingPdf = false;
+    }
+  }
+
   async function toggleFullWidth(): Promise<void> {
     const next = !isFullWidth;
     localFullWidth = next;
@@ -382,6 +422,17 @@
     } else {
       toggleProperties();
     }
+  }
+
+  function handleHeroAddProperty(): void {
+    if (!isMarkdown(path) || !ed) return;
+    if (settings.config?.editor.properties === "panel" || settings.config?.editor.properties === "hidden") {
+      setPropertiesView("inline");
+    }
+    if (propsPanel.open) toggleProperties(false);
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent("kandinsky-inline-add-property", { detail: { view: ed?.view ?? null } }));
+    });
   }
 
   $effect(() => {
@@ -494,6 +545,7 @@
       below(e, [
         ...(isMarkdown(path)
           ? [
+              { label: isPageLocked ? "Unlock page" : "Lock page", icon: "key" as const, run: () => void togglePageLock() },
               { label: smallText ? "Standard text size" : "Small text", icon: "text" as const, run: () => { smallText = !smallText; } },
               { label: isFullWidth ? "Standard reading width (740px)" : "Full width page", icon: "maximize" as const, run: () => void toggleFullWidth() },
               { label: typewriterOn ? "Typewriter mode: On" : "Typewriter mode", icon: "rows" as const, run: () => { typewriterOn = !typewriterOn; applyTypewriter(); } },
@@ -505,6 +557,7 @@
               { label: "Record voice note (/voice)…", icon: "headphones" as const, run: () => { window.dispatchEvent(new CustomEvent("kandinsky:voice-record", { detail: { view: ed?.view ?? null, path } })); } },
             ]
           : []),
+        { label: "Split right", icon: "panel-right" as const, run: () => open({ kind: "editor", path }, { beside: true }) },
         { label: "Outline", icon: "outline" as const, run: () => open({ kind: "outline" }) },
         { label: "Local Graph", icon: "graph" as const, run: () => open({ kind: "graph" }) },
         { label: "Zen mode (distraction-free)", hint: "F11", icon: "maximize" as const, run: () => { window.dispatchEvent(new CustomEvent("kandinsky:toggle-zen")); } },
@@ -536,7 +589,8 @@
         { label: isMarkdown(path) ? "Copy Markdown" : "Copy file contents", icon: "copy", run: () => void copyText(current(), isMarkdown(path) ? "Markdown copied" : "Contents copied") },
         ...(isMarkdown(path) ? [{ label: "Copy [[wikilink]]", icon: "link" as const, run: () => void copyText(`[[${shownName(path)}]]`, "Wikilink copied") }] : []),
         { label: "Copy file path", icon: "file-text", run: () => void copyPath(path) },
-        { label: "Export / Print…", icon: "external-link", run: () => window.print() },
+        ...(isMarkdown(path) ? [{ label: exportingPdf ? "Exporting PDF…" : "Export to PDF", icon: "download" as const, disabled: exportingPdf, run: () => void exportNotePdf() }] : []),
+        { label: "Print…", icon: "external-link", run: () => window.print() },
       ], 4),
     );
   }
@@ -547,7 +601,7 @@
     view: (): EditorView | null => ed?.view ?? null,
     isFullWidth: false,
     onToggleWidth: () => void toggleFullWidth(),
-    onToggleProperties: () => handleToggleProperties(),
+    onToggleProperties: () => handleHeroAddProperty(),
   });
 
   $effect(() => {
@@ -610,6 +664,8 @@
         onQuit: () => void closePanel(panel),
         onOpenLink: openLink,
       });
+      const initialLocked = isMarkdown(path) && (frontmatterOf(text)?.data?.locked === true || String(frontmatterOf(text)?.data?.locked ?? "").toLowerCase() === "true");
+      ed.view.dispatch({ effects: StateEffect.appendConfig.of(lockSlot.of(lockExt(initialLocked))) });
       if (typewriterOn) applyTypewriter();
       if (isMarkdown(path)) {
         heroSlot = document.createElement("div");
@@ -767,7 +823,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="editor-pane" class:is-md={isMarkdown(path)} class:full-width={isFullWidth} class:small-text={smallText} class:drawn ondragover={handlePaneDragOver} ondrop={handlePaneDrop}>
+<div class="editor-pane" class:is-md={isMarkdown(path)} class:full-width={isFullWidth} class:small-text={smallText} class:is-locked={isPageLocked} class:drawn ondragover={handlePaneDragOver} ondrop={handlePaneDrop}>
   {#if noteView}
     <button class="note-view-switch" onclick={() => (drawn ? shownAsNote.add(path) : shownAsNote.delete(path))}
       title={drawn ? "The note's markdown, to edit" : `Drawn as ${noteView.title.toLowerCase()}`}>{drawn ? "Show as note" : `Show as ${noteView.title.toLowerCase()}`}</button>
@@ -801,9 +857,15 @@
         {#if rawSource}
           <button type="button" class="source-chip" onclick={toggleSource} title="Switch back to Live Preview (Ctrl+E)">SOURCE</button>
         {/if}
+        {#if isPageLocked}
+          <button type="button" class="locked-chip" data-testid="page-locked-pill" onclick={() => void togglePageLock()} title="Page is read-only — click to unlock">
+            <Icon name="key" size={11} />
+            Locked
+          </button>
+        {/if}
       </div>
       <div class="top-actions">
-        {#if upstream}
+        {#if devMode && upstream}
           <button type="button" class="upstream-chip" class:stale={upstream.state === "stale"} data-testid="upstream-health-pill"
             onclick={openUpstreamMenu}
             title={upstream.reasons.map((r) => `${r.target} (${r.relation}): ${r.detail}`).join("\n")}>
@@ -811,7 +873,6 @@
           </button>
         {/if}
         {#if editedLabel}<span class="edited-lbl">{editedLabel}</span>{/if}
-        {#if made}<span class="edited-lbl made-lbl" title={madeTip(made)} onmouseenter={askMade} role="note">{madeDay(made)}</span>{/if}
         {#if isMarkdown(path) && status === "ready" && isResearchNote}
           <span class="oracle-slot" class:notion-quiet={isNotionShell()} bind:this={oracleSlotEl}>
             <OracleBar {path} flush={() => save(false)} gotoLine={(line) => ed?.gotoLine(line)} />
@@ -823,10 +884,6 @@
           onclick={() => toggleFileStar(path, shownName(path))}>
           {starred ? "★" : "☆"}
         </button>
-        <button type="button" class="icon-btn" title="Split right" aria-label="Split right"
-          onclick={() => open(isMarkdown(path) ? { kind: "editor", path } : { kind: "editor", path }, { beside: true })}>
-          <Icon name="panel-right" size={14} />
-        </button>
         <button type="button" class="top-pill" onclick={openShareMenu} title="Copy or export note">Share</button>
         <button type="button" class="top-more" data-testid="editor-more-btn" aria-label="Page actions" title="Page actions" onclick={openPageMenu}>···</button>
       </div>
@@ -834,7 +891,7 @@
   {:else if isMarkdown(path) && status === "ready" && isResearchNote}
     <header class="topbar compact">
       <div class="top-actions" style="margin-left: auto;">
-        {#if upstream}
+        {#if devMode && upstream}
           <button type="button" class="upstream-chip" class:stale={upstream.state === "stale"} data-testid="upstream-health-pill"
             onclick={openUpstreamMenu}
             title={upstream.reasons.map((r) => `${r.target} (${r.relation}): ${r.detail}`).join("\n")}>
@@ -945,6 +1002,8 @@
   .breadcrumbs .doc-crumb { display: inline-flex; align-items: center; gap: 5px; color: var(--heading); font-weight: 500; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
   .source-chip { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .04em; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); margin-left: 4px; cursor: pointer; }
   .source-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  .locked-chip { display: inline-flex; align-items: center; gap: 4px; font-size: calc(11px * var(--ui-scale, 1)); font-weight: 500; padding: 1px 7px; border-radius: 999px; background: var(--yellow-soft); color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 36%, transparent); margin-left: 4px; cursor: pointer; flex: none; }
+  .locked-chip:hover { background: color-mix(in srgb, var(--yellow) 18%, transparent); }
 
   .top-actions { display: inline-flex; align-items: center; gap: 10px; flex: none; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint); }
   .top-actions :global(.oracle-bar) { margin-left: 0; }
@@ -1031,6 +1090,8 @@
     .topbar { padding: 0 12px; }
     .top-actions { gap: 6px; }
   }
+  :global(html.phone) .topbar .breadcrumbs { display: none; }
+  :global(html.phone) .topbar { justify-content: flex-end; height: 36px; padding: 0 10px; }
 
   .editor-host :global(.cm-editor) { height: 100%; }
   .new-file-hint { font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint); padding: 6px 16px 0; text-align: center; }

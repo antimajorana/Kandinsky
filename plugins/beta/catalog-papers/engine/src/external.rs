@@ -145,14 +145,47 @@ pub fn resolve_pdf_ref(vault_root: &Path, cfg: &Settings, raw_ref: &str) -> Opti
     let cleaned = clean_ref_token(raw_ref);
     if cleaned.is_empty() || cleaned.contains('\0') { return None; }
     let norm = cleaned.replace('\\', "/");
-    for ext in external_roots(vault_root, cfg) {
-        if norm == ext.prefix { return Some((ext.prefix, ext.root)); }
-        if let Some(sub) = norm.strip_prefix(&format!("{}/", ext.prefix)) {
+    for (idx, ext) in external_roots(vault_root, cfg).into_iter().enumerate() {
+        let ext_alias = format!("@ext/{idx}");
+        if norm == ext.prefix || norm == ext_alias { return Some((ext.prefix, ext.root)); }
+        if let Some(sub) = norm.strip_prefix(&format!("{}/", ext.prefix)).or_else(|| norm.strip_prefix(&format!("{ext_alias}/"))) {
             let (norm_sub, abs) = safe_sub_in_root(&ext.root, sub)?;
             return Some((format!("{}/{norm_sub}", ext.prefix), abs));
         }
     }
     if Path::new(cleaned).is_absolute() || Path::new(&norm).is_absolute() { path_in_external_roots(vault_root, cfg, Path::new(cleaned)) } else { None }
+}
+
+/// Resolves an external PDF reference to `(ext.root, sub_rel)` for sidecar placement matching `sidecar_path_for`.
+pub fn resolve_pdf_root_and_sub(vault_root: &Path, cfg: &Settings, raw_ref: &str) -> Option<(PathBuf, String)> {
+    let cleaned = clean_ref_token(raw_ref);
+    if cleaned.is_empty() || cleaned.contains('\0') {
+        return None;
+    }
+    let norm = cleaned.replace('\\', "/");
+    for (idx, ext) in external_roots(vault_root, cfg).into_iter().enumerate() {
+        let ext_alias = format!("@ext/{idx}");
+        if norm == ext.prefix || norm == ext_alias {
+            return Some((ext.root, String::new()));
+        }
+        if let Some(sub) = norm.strip_prefix(&format!("{}/", ext.prefix)).or_else(|| norm.strip_prefix(&format!("{ext_alias}/"))) {
+            let (norm_sub, _) = safe_sub_in_root(&ext.root, sub)?;
+            return Some((ext.root, norm_sub));
+        }
+    }
+    if Path::new(cleaned).is_absolute() || Path::new(&norm).is_absolute() {
+        let resolved = canonical_or_ancestor(Path::new(cleaned))?;
+        for ext in external_roots(vault_root, cfg) {
+            if let Some(rel) = rel_path(&ext.root, &resolved) {
+                if rel.is_empty() {
+                    return Some((ext.root, String::new()));
+                }
+                let (norm_sub, _) = safe_sub_in_root(&ext.root, &rel)?;
+                return Some((ext.root, norm_sub));
+            }
+        }
+    }
+    None
 }
 
 fn str_val(m: &Mapping, k: &str) -> Option<String> {

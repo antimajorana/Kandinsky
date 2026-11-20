@@ -40,13 +40,13 @@ test("a tab outside the split shows alone; the split row brings the pair back", 
   await expect.poll(visible).toBe(2);
 });
 
-// The sidebar's Open section lists the open tabs; in a split each row says its half ("Split 1", "Split 2"), and
-// the pair on screen is the active row and the other half's shown one.
+// The sidebar's Open section lists the open tabs; in a split the pair on screen is the
+// active row (.pane-row.active) and the other half's shown row (.pane-row.split-shown).
 const openTabs = (page: Page) => page.getByTestId("sidebar").getByTestId("open-tabs");
-const splitBadges = (page: Page) => openTabs(page).locator(".split-badge");
+const splitGroups = (page: Page) => page.locator(".dv-groupview");
 const pairRows = (page: Page) => openTabs(page).locator(".pane-row.active, .pane-row.split-shown");
 
-// An × on each half closes that half and ends the split: the half's × in the split row, and the one in
+// An × on each half closes that half and ends the split: the half's × in the open row, and the one in
 // the corner of each half on screen, close that half's tab; the tabs behind it join the other half, one editor again.
 async function splitThree(page: Page, names: string[]): Promise<void> {
   for (const n of names) await page.request.put("/api/file", { headers: H, data: { path: `notes/${n}.md`, text: `# ${n}\n\nBody of ${n}\n` } });
@@ -55,7 +55,7 @@ async function splitThree(page: Page, names: string[]): Promise<void> {
   for (const n of names) await openNote(page, n);
   await openTabs(page).locator(".pane-row", { hasText: names[2] }).first().click({ button: "right" });
   await page.getByRole("menuitem", { name: "Split right" }).click();
-  await expect(splitBadges(page).filter({ hasText: "Split 2" })).toHaveCount(1);
+  await expect(splitGroups(page)).toHaveCount(2);
   await expect(pairRows(page)).toHaveCount(2);
 }
 const shown = (page: Page) => page.locator(".editor-pane").filter({ visible: true }).count();
@@ -66,7 +66,8 @@ test("a half's × in the split row closes that half and ends the split", async (
   const half = open.locator(".pane-row", { hasText: "half-c" });
   await half.hover();
   await half.getByRole("button", { name: "Close half-c" }).click();
-  await expect(splitBadges(page)).toHaveCount(0); // one editor again: no row names a half
+  await expect(splitGroups(page)).toHaveCount(1); // one editor again
+  await expect(open.locator(".pane-row.split-shown")).toHaveCount(0);
   await expect.poll(() => shown(page)).toBe(1);
   await expect(open.locator(".pane-row", { hasText: "half-c" })).toHaveCount(0);
   await expect(open.locator(".pane-row", { hasText: "half-a" })).toHaveCount(1); // the other tabs kept
@@ -80,14 +81,15 @@ test("the × in a half's corner closes that half and ends the split", async ({ p
   const right = page.locator(".dv-groupview", { has: page.locator(".cm-content", { hasText: "Body of corner-c" }) });
   await right.hover();
   await right.locator("> .half-close").click();
-  await expect(splitBadges(page)).toHaveCount(0); // one editor again: no row names a half
+  await expect(splitGroups(page)).toHaveCount(1); // one editor again
+  await expect(openTabs(page).locator(".pane-row.split-shown")).toHaveCount(0);
   await expect.poll(() => shown(page)).toBe(1);
   await expect(closes).toHaveCount(0);
   await expect(openTabs(page).locator(".pane-row", { hasText: "corner-a" })).toHaveCount(1); // the list is there…
   await expect(openTabs(page).locator(".pane-row", { hasText: "corner-c" })).toHaveCount(0); // …without the closed half
 });
 
-// The focus inside a split: a click in a half makes it the active tab (marked in the split row), the keys go there,
+// The focus inside a split: a click in a half makes it the active tab (marked in the open list), the keys go there,
 // and Ctrl+W closes that half — not the other.
 test("a click in a half focuses it: its row is marked, typing and Ctrl+W go to it", async ({ page, request }) => {
   await splitThree(page, ["focus-a", "focus-b", "focus-c"]);
@@ -104,7 +106,8 @@ test("a click in a half focuses it: its row is marked, typing and Ctrl+W go to i
   await expect.poll(async () => (await (await request.get(`/api/file?path=notes/${focused}.md`, { headers: H })).json()).text, { timeout: 15_000 }).toContain("typed");
   expect((await (await request.get(`/api/file?path=notes/${other}.md`, { headers: H })).json()).text).not.toContain("typed");
   await page.keyboard.press("Control+w");
-  await expect(splitBadges(page)).toHaveCount(0);
+  await expect(splitGroups(page)).toHaveCount(1);
+  await expect(open.locator(".pane-row.split-shown")).toHaveCount(0);
   await expect(open.locator(".pane-row", { hasText: focused })).toHaveCount(0);
   await expect(open.locator(".pane-row", { hasText: other })).toHaveCount(1);
 });

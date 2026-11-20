@@ -4,11 +4,13 @@
 import { api } from "./api";
 import { on, touches } from "./bus";
 import { openPath } from "./dock";
+import { openExplorer } from "./file-sources.svelte";
 import { errText } from "./text";
 import { openReadingNote, readPaper } from "./papers";
 import { openPaperWorkflowModal, openZoteroImportModal } from "./paper-modals.svelte";
+import { pluginOn, plugins } from "./plugin-registry.svelte";
+import { frontmatterOf } from "./property-model";
 import { toast } from "./state.svelte";
-import { noteProps } from "./plugin-host-api.svelte";
 import type { Paper, PaperAdded } from "./types";
 import type { LibraryItem, LibrarySource } from "./plugin-api";
 
@@ -22,10 +24,36 @@ type ZoteroPaper = Paper & {
   series?: string | null;
 };
 
+type ReferencesTableColumn = { id: string; label: string; key?: string };
+
+type ReferencesLibrarySource = LibrarySource & {
+  tableColumns?: ReferencesTableColumn[];
+  emptyActions?: { label: string; icon?: string; title?: string; primary?: boolean; run: () => unknown }[];
+};
+
+/** Active plugin implementing the `references` role (cached per plugin list, falling back to `"catalog-papers"`). */
+function referencesPlugin(): string {
+  const found =
+    plugins.list.find((p) => p.provides.includes("references") && p.has_helper && pluginOn(p)) ??
+    plugins.list.find((p) => p.provides.includes("references") && p.has_helper) ??
+    plugins.list.find((p) => p.id === "catalog-papers");
+  return found?.id ?? "catalog-papers";
+}
+
+function referencesDirSetting(): string {
+  const id = referencesPlugin();
+  const plug = plugins.list.find((p) => p.id === id);
+  const raw = plug?.settings?.dir;
+  if (typeof raw === "string" && raw.trim()) {
+    return raw.trim().replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
+  }
+  return "refs/papers";
+}
+
 const toGroup = (c: string) => c.split("/").map((s) => s.trim()).filter(Boolean).join(" › ");
 const fromGroup = (g: string) => g.split(" › ").map((s) => s.trim()).filter(Boolean).join("/");
 
-// Zotero's item types grouped as a reader thinks of them (2026-10-18: books, theses and lecture notes are references too)
+// Zotero's item types grouped as a reader thinks of them (books, theses and lecture notes are references too)
 const typeOf = (p: Paper) =>
   p.kind === "science_book" || p.kind === "book" || p.kind === "bookSection"
     ? "book"
@@ -48,13 +76,13 @@ async function copy(text: string, what: string) {
 }
 
 /** The References library. One per page: it keeps the papers it read, by citekey, for their actions. */
-export function referencesSource(): LibrarySource {
+export function referencesSource(): ReferencesLibrarySource {
   const papers = new Map<string, ZoteroPaper>();
   const paper = (i: LibraryItem) => papers.get(i.id)!;
   const openPdf = (p: ZoteroPaper) => (p.pdf ? openPath(p.pdf) : toast("No PDF yet", `Drop one into ${p.dir}/`));
-  let dir = "refs/papers";
+  let dir = referencesDirSetting();
 
-  const item = (p: ZoteroPaper): LibraryItem => ({
+  const item = (p: ZoteroPaper): LibraryItem & { columns?: Record<string, string | boolean | undefined> } => ({
     id: p.key,
     note: `${p.dir}/${p.key}.md`,
     // its first page (the panel's picture; the list draws none): the core's thumbnail of the PDF
@@ -67,13 +95,15 @@ export function referencesSource(): LibrarySource {
     tab: typeOf(p),
     groups: p.collections.map(toGroup),
     tags: p.tags,
-    text: `${p.key} ${p.title} ${p.authors.join(" ")} ${p.year ?? ""} ${p.venue ?? ""} ${p.doi ?? ""} ${p.arxiv ?? ""} ${p.isbn ?? ""} ${p.collections.join(" ")} ${p.tags.join(" ")}`,
+    text: `${p.key} ${p.title} ${p.authors.join(" ")} ${p.year ?? ""} ${p.venue ?? ""} ${p.publisher ?? ""} ${p.doi ?? ""} ${p.arxiv ?? ""} ${p.isbn ?? ""} ${p.collections.join(" ")} ${p.tags.join(" ")}`,
     sort: {
       added: p.added ?? "",
       year: Number(p.year ?? 0),
       author: (p.authors[0] ?? "").split(",")[0].toLowerCase(),
       title: p.title,
       venue: (p.venue ?? "").toLowerCase(),
+      publisher: (p.publisher ?? "").toLowerCase(),
+      citekey: p.key.toLowerCase(),
       kind: typeWords(p.kind),
       pdf: p.pdf ? 1 : 0,
     },
@@ -81,21 +111,36 @@ export function referencesSource(): LibrarySource {
       creators: lastNames(p),
       year: p.year ?? "",
       venue: p.venue ?? "",
+      publisher: p.publisher ?? "",
+      citekey: p.key,
       kind: typeWords(p.kind),
       added: (p.added ?? "").slice(0, 10),
       hasPdf: Boolean(p.pdf),
-      citekey: p.key,
     },
   });
 
   return {
     id: "references", title: "References", icon: "library", noun: "references",
+    tableColumns: [
+      { id: "title", label: "Title" },
+      { id: "author", label: "Creators", key: "creators" },
+      { id: "year", label: "Year" },
+      { id: "venue", label: "Publication" },
+      { id: "publisher", label: "Publisher" },
+      { id: "citekey", label: "Citekey" },
+      { id: "added", label: "Added" },
+      { id: "pdf", label: "PDF" },
+    ],
+    emptyActions: [
+      { label: "Add paper", icon: "plus", primary: true, title: "Add by DOI, arXiv, ISBN, BibTeX/RIS, or search", run: () => openPaperWorkflowModal("add") },
+      { label: "Import from Zotero", icon: "library", title: "Import from Zotero SQLite and Better BibTeX", run: () => openZoteroImportModal() },
+    ],
     async load() {
       const all = (await api.refs()) as ZoteroPaper[];
       papers.clear();
       for (const p of all) papers.set(p.key, p);
-      // the library's folder is catalog-papers' setting: read off the entries themselves (their folders' parent)
-      dir = all[0]?.dir.replace(/\/[^/]*$/, "") || dir;
+      // the library's folder is the references plugin's `dir` setting, or derived from existing entries
+      dir = all[0]?.dir.replace(/\/[^/]*$/, "") || referencesDirSetting();
       return all.map(item);
     },
     tabs: [{ id: "paper", title: "Papers" }, { id: "book", title: "Books" }, { id: "thesis", title: "Theses" }, { id: "notes", title: "Notes" }],
@@ -125,14 +170,18 @@ export function referencesSource(): LibrarySource {
       { id: "author", label: "first author" },
       { id: "title", label: "title" },
       { id: "venue", label: "venue" },
+      { id: "publisher", label: "publisher" },
+      { id: "citekey", label: "citekey" },
       { id: "kind", label: "type" },
       { id: "pdf", label: "has PDF", desc: true },
     ],
     search: "Search title, author, year, key, tag…",
-    empty: "No papers yet — add one by DOI or arXiv id.",
+    empty: "No papers yet — add one by DOI or arXiv id, or import from Zotero.",
     async detail(i) {
       const p = paper(i);
-      const props = await noteProps(`${p.dir}/${p.key}.md`).catch(() => ({} as Record<string, unknown>));
+      const plugId = referencesPlugin();
+      const noteText = await api.file(`${p.dir}/${p.key}.md`).then((f) => f.text, () => "");
+      const props = (noteText ? frontmatterOf(noteText)?.data : null) ?? {};
       const detailsLine = [
         p.volume ? `Vol. ${p.volume}` : "",
         p.issue ? `No. ${p.issue}` : "",
@@ -166,6 +215,7 @@ export function referencesSource(): LibrarySource {
         fields,
         actions: [
           { label: p.pdf ? "Read" : "Read the notes", icon: "pdf", primary: true, title: "Open the PDF (its note: “Note” in the PDF's bar) (R, Enter)", run: () => readPaper(p) },
+          { label: "Open folder", icon: "folder-open", more: true, title: "Open entry folder in file explorer", run: () => openExplorer("vault", "", p.dir) },
           ...(p.pdf ? [{ label: "Reveal in Explorer", icon: "folder-open", more: true, title: "Show PDF in system file manager", run: () => api.revealOutside(p.pdf!) }] : []),
           { label: p.has_notes ? "Notes" : "New notes", icon: "edit", run: () => openReadingNote(p.key) },
           { label: "Copy link", icon: "link", title: `[[${p.key}]]: citing is linking`, run: () => copy(`[[${p.key}]]`, "link") },
@@ -177,7 +227,7 @@ export function referencesSource(): LibrarySource {
             icon: "refresh",
             title: "Recognize metadata from the PDF and online scholarly/book indexes",
             run: async () => {
-              const r = (await api.pluginHelper("catalog-papers", "enrich_entry", { key: p.key, rename_citekey: true }, 120)) as {
+              const r = (await api.pluginHelper(plugId, "enrich_entry", { key: p.key, rename_citekey: true }, 120)) as {
                 key?: string;
                 old_key?: string;
                 upgraded?: boolean;
@@ -197,14 +247,14 @@ export function referencesSource(): LibrarySource {
           {
             label: "Check published", title: "Check Crossref / INSPIRE-HEP / OpenAlex for a published journal version while keeping arXiv version provenance",
             run: async () => {
-              const r = (await api.pluginHelper("catalog-papers", "upgrade_preprint", { key: p.key }, 90)) as { upgraded?: boolean; doi?: string; venue?: string; message?: string };
+              const r = (await api.pluginHelper(plugId, "upgrade_preprint", { key: p.key }, 90)) as { upgraded?: boolean; doi?: string; venue?: string; message?: string };
               toast(r?.upgraded ? `Upgraded ${p.key}` : `${p.key}: no newer publication`, r?.message ?? (r?.venue ? `${r.venue}${r.doi ? ` · doi:${r.doi}` : ""}` : "Metadata checked"), r?.upgraded ? "success" : "info");
             },
           },
           ...(p.arxiv ? [{
             label: "arXiv LaTeX", title: "Download and unpack the arXiv e-print LaTeX (.tex / .bib) source",
             run: async () => {
-              const r = (await api.pluginHelper("catalog-papers", "fetch_arxiv_source", { key: p.key }, 120)) as { dir?: string; main_tex?: string; files?: string[]; tex_files?: string[] };
+              const r = (await api.pluginHelper(plugId, "fetch_arxiv_source", { key: p.key }, 120)) as { dir?: string; main_tex?: string; files?: string[]; tex_files?: string[] };
               const mainTex = r?.main_tex ?? r?.tex_files?.[0];
               toast(`Fetched arXiv source for ${p.key}`, mainTex ?? r?.dir ?? `${r?.files?.length ?? 0} files`, "success", 7000,
                 mainTex && !mainTex.startsWith(".kandinsky/cache/") ? [{ label: "Open .tex", run: () => openPath(mainTex) }] : undefined);
@@ -236,23 +286,31 @@ export function referencesSource(): LibrarySource {
                 { key: "date", label: "Year / date", value: p.year ?? "", half: true },
                 { key: "venue", label: "Venue", value: p.venue ?? "", half: true },
                 { key: "publisher", label: "Publisher", value: p.publisher ?? "", half: true },
+                { key: "edition", label: "Edition", value: p.edition ?? "", half: true },
+                { key: "series", label: "Series", value: p.series ?? "", half: true },
                 { key: "doi", label: "DOI", value: p.doi ?? "", half: true },
                 { key: "arxiv", label: "arXiv", value: p.arxiv ?? "", half: true },
                 { key: "isbn", label: "ISBN", value: p.isbn ?? "", half: true },
                 { key: "volume", label: "Volume", value: p.volume ?? "", half: true },
                 { key: "issue", label: "Issue", value: p.issue ?? "", half: true },
                 { key: "pages", label: "Pages", value: p.pages ?? "", half: true },
+                { key: "url", label: "URL", value: p.url ?? "" },
+                { key: "abstractNote", label: "Abstract", value: p.abstract_text ?? "", rows: 3 },
                 { key: "collections", label: "Collections", hint: "comma-separated", value: p.collections.map(toGroup).join(", ") },
                 { key: "tags", label: "Tags", hint: "comma-separated", value: p.tags.join(", ") },
               ],
               async save(v) {
-                await api.pluginHelper("catalog-papers", "edit", {
+                await api.pluginHelper(referencesPlugin(), "edit", {
                   key: p.key,
                   title: v.title,
                   authors: split(v.authors, /;|\n/),
                   date: v.date,
                   venue: v.venue,
                   publisher: v.publisher,
+                  edition: v.edition,
+                  series: v.series,
+                  url: v.url,
+                  abstractNote: v.abstractNote,
                   collections: split(v.collections, /,/).map(fromGroup),
                   tags: split(v.tags, /,/),
                   doi: v.doi,
@@ -287,7 +345,7 @@ export function referencesSource(): LibrarySource {
             label: o.label,
             on: o.kind === "book" ? (p.kind === "book" || p.kind === "science_book" || p.kind === "bookSection") : p.kind === o.kind,
             run: async () => {
-              await api.pluginHelper("catalog-papers", "type", { key: p.key, kind: o.kind });
+              await api.pluginHelper(referencesPlugin(), "type", { key: p.key, kind: o.kind });
               toast(`Set type to ${o.label}`, p.key, "success");
               return p.key;
             },
@@ -298,7 +356,10 @@ export function referencesSource(): LibrarySource {
           ...(p.arxiv ? [{ label: `arXiv:${p.arxiv}`, url: `https://arxiv.org/abs/${p.arxiv}` }] : []),
         ]),
         body: p.abstract_text ? { title: "Abstract", text: p.abstract_text } : undefined,
-        notes: await ownWords(`${p.dir}/${p.key}.md`).then((text) => (text ? { text, open: () => void openReadingNote(p.key) } : undefined)),
+        notes: (() => {
+          const text = extractOwnWords(noteText);
+          return text ? { text, open: () => void openReadingNote(p.key) } : undefined;
+        })(),
       };
     },
     many(items) {
@@ -308,10 +369,11 @@ export function referencesSource(): LibrarySource {
           icon: "refresh",
           title: "Recognize metadata from each PDF and online scholarly/book indexes",
           run: async () => {
+            const plugId = referencesPlugin();
             let upgraded = 0;
             for (const i of items) {
               try {
-                const r = (await api.pluginHelper("catalog-papers", "enrich_entry", { key: i.id, rename_citekey: true }, 120)) as { upgraded?: boolean } | null;
+                const r = (await api.pluginHelper(plugId, "enrich_entry", { key: i.id, rename_citekey: true }, 120)) as { upgraded?: boolean } | null;
                 if (r?.upgraded) upgraded++;
               } catch { /* continue remaining items */ }
             }
@@ -372,14 +434,15 @@ export function referencesSource(): LibrarySource {
       async run(files, group) {
         let last: string | undefined;
         const col = group ? fromGroup(group) : "";
+        const plugId = referencesPlugin();
         for (const f of files) {
           try {
             let r: PaperAdded;
             if (col) {
               const safeName = f.name.replace(/[^\w.-]+/g, "_");
-              const cachePath = `.kandinsky/cache/plugins/catalog-papers/import-${Date.now()}-${safeName}`;
+              const cachePath = `.kandinsky/cache/plugins/${plugId}/import-${Date.now()}-${safeName}`;
               await api.upload(cachePath, f, true);
-              r = (await api.pluginHelper("catalog-papers", "import", {
+              r = (await api.pluginHelper(plugId, "import", {
                 path: cachePath,
                 name: f.name,
                 subfolder: col,
@@ -400,18 +463,19 @@ export function referencesSource(): LibrarySource {
     },
     // Zotero → plain files through a command of the vault (Zotero is only read): any `refs.<verb>-zotero`, a sync first
     async tools() {
+      const plugId = referencesPlugin();
       let inboxLabel = "Drop inbox…";
       try {
-        const inbox = (await api.pluginHelper("catalog-papers", "scan_inbox", {}, 15)) as { configured?: boolean; items?: unknown[]; files?: unknown[] } | null;
+        const inbox = (await api.pluginHelper(plugId, "scan_inbox", {}, 15)) as { configured?: boolean; items?: unknown[]; files?: unknown[] } | null;
         const n = inbox?.configured === false ? 0 : (inbox?.items?.length ?? inbox?.files?.length ?? 0);
         if (n > 0) inboxLabel = `Drop inbox (${n})…`;
       } catch { /* helper optional until configured */ }
       const baseTools = [
-        { label: "Add / search…", title: "Add by DOI, arXiv (with vN), ISBN, BibTeX/RIS paste, or search INSPIRE-HEP / Crossref / OpenAlex", run: () => openPaperWorkflowModal("add") },
+        { label: "Add paper", icon: "plus", primary: true, title: "Add by DOI, arXiv (with vN), ISBN, BibTeX/RIS paste, or search INSPIRE-HEP / Crossref / OpenAlex", run: () => openPaperWorkflowModal("add") },
         { label: inboxLabel, title: "Triage, rename and file dropped PDFs from watch_inbox into external_pdf_roots", run: () => openPaperWorkflowModal("inbox") },
         { label: "Scan external folders…", title: "Scan configured external PDF folders for papers and books, derive collections, and sync references", run: () => openPaperWorkflowModal("scan") },
         { label: "Duplicates…", title: "Detect and safely merge duplicate papers across DOI, arXiv, SHA-256, ISBN and title", run: () => openPaperWorkflowModal("duplicates") },
-        { label: "Import from Zotero…", title: "Lossless one-time Zotero migration (SQLite, linked PDFs in place, collections, notes and highlights)", run: () => openZoteroImportModal() },
+        { label: "Import from Zotero", icon: "library", title: "Lossless one-time Zotero migration (SQLite, linked PDFs in place, collections, notes and highlights)", run: () => openZoteroImportModal() },
       ];
       const mine = (await api.commands()).filter((c) => /^refs\.[\w-]*zotero$/.test(c.id));
       const z = mine.find((c) => c.id.includes("sync")) ?? mine[0];
@@ -428,13 +492,17 @@ export function referencesSource(): LibrarySource {
       }];
     },
     watch: (reload) => {
-      const offFs = on("fs", (e) => { if (touches(e.paths, (p) => p.startsWith(dir))) reload(); });
+      const offFs = on("fs", (e) => {
+        const watchDir = referencesDirSetting();
+        if (touches(e.paths, (p) => p.startsWith(dir) || p.startsWith(watchDir))) reload();
+      });
       const offPlug = on("plugin", (e) => {
-        if (e.plugin === "catalog-papers" && e.event === "papers:inbox") {
+        if (e.plugin !== referencesPlugin()) return;
+        if (e.event === "papers:inbox") {
           const count = (e.data as { count?: number } | null)?.count ?? 1;
           toast("New PDF(s) in drop inbox", `${count} file(s) ready to file`, "info", 7000, [{ label: "Triage", run: () => openPaperWorkflowModal("inbox") }]);
           reload();
-        } else if (e.plugin === "catalog-papers" && e.event === "papers:external-sync") {
+        } else if (e.event === "papers:external-sync") {
           reload();
         }
       });
@@ -464,8 +532,8 @@ function noteLinks(props: Record<string, unknown>, own: { label: string; url: st
 }
 /** The person's own words in a paper's note: its text with the properties, the blocks the generator puts there
  *  (the paper, its marks), embeds, its title line, HTML tags (Zotero's notes) and empty headings left out — the first ~500 characters, or "" when none. */
-async function ownWords(path: string): Promise<string> {
-  const text = await api.file(path).then((f) => f.text, () => "");
+function extractOwnWords(text: string): string {
+  if (!text) return "";
   const own = text
     .replace(/^---[\s\S]*?\n---\n?/, "")
     .replace(/```[\s\S]*?```/g, "")
