@@ -369,10 +369,21 @@ fn collect_raw_events_with_bases(root: &Path, cfg: &Config, bases_filter: Option
     out
 }
 
+const BASE_COLORS: [&str; 6] = ["purple", "blue", "cyan", "orange", "yellow", "green"];
+
+fn base_color_for(base_rel: &str) -> &'static str {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in base_rel.as_bytes() {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    BASE_COLORS[(h as usize) % BASE_COLORS.len()]
+}
+
 fn collect_base_events(root: &Path, cfg: &Config, bases_filter: Option<&[String]>, out: &mut Vec<RawEvent>) {
     let mut seen_notes: HashSet<(String, String)> = HashSet::new();
     let active_bases: &[String] = bases_filter.unwrap_or(&cfg.calendar.bases);
-    for base_rel in active_bases {
+    for (idx, base_rel) in active_bases.iter().enumerate() {
         let Ok(abs) = paths::safe_join(root, base_rel) else { continue };
         let Ok(src) = std::fs::read_to_string(&abs) else { continue };
         let res = crate::bases::evaluate(root, cfg, &src, None);
@@ -391,6 +402,14 @@ fn collect_base_events(root: &Path, cfg: &Config, bases_filter: Option<&[String]
             .end_date_property
             .as_deref()
             .and_then(|ed| view.columns.iter().position(|c| c.id == ed || c.key.as_deref() == Some(ed)));
+        let base_color = if active_bases.len() > 1 {
+            // Guarantee distinct colors across the first several active bases while remaining deterministic per path.
+            let candidate = base_color_for(base_rel);
+            let used_before = active_bases[..idx].iter().any(|prev| base_color_for(prev) == candidate);
+            if used_before { BASE_COLORS[idx % BASE_COLORS.len()] } else { candidate }
+        } else {
+            base_color_for(base_rel)
+        };
         for row in &view.rows {
             let Some(date_s) = cell_date_str(row.cells.get(ci)) else { continue };
             let Ok(start_d) = NaiveDate::parse_from_str(&date_s, "%Y-%m-%d") else { continue };
@@ -411,7 +430,7 @@ fn collect_base_events(root: &Path, cfg: &Config, bases_filter: Option<&[String]
                 start: None,
                 end: None,
                 all_day: true,
-                color: "purple".into(),
+                color: base_color.into(),
                 location: String::new(),
                 repeat: CalendarRecurrence::None,
                 series: Series::default(),
@@ -1328,7 +1347,7 @@ fn reschedule_base_item(root: &Path, rest: &str, date: NaiveDate, _title: &str) 
         start: None,
         end: None,
         all_day: true,
-        color: "purple".into(),
+        color: base_color_for(base_rel).into(),
         location: String::new(),
         repeat: CalendarRecurrence::None,
         links: vec![format!("[[{actual_title}]]")],
@@ -1645,12 +1664,16 @@ pub fn import_ics(root: &Path, cfg: &Config, req: &IcsImportRequest) -> Result<I
 }
 
 pub fn export_ics(root: &Path, cfg: &Config) -> String {
+    export_ics_with_bases(root, cfg, None)
+}
+
+pub fn export_ics_with_bases(root: &Path, cfg: &Config, bases_filter: Option<&[String]>) -> String {
     let mut lines = vec![
         "BEGIN:VCALENDAR".to_string(),
         "VERSION:2.0".to_string(),
         "PRODID:-//Kandinsky//Native Calendar//EN".to_string(),
     ];
-    for ev in collect_raw_events(root, cfg) {
+    for ev in collect_raw_events_with_bases(root, cfg, bases_filter) {
         if matches!(ev.source, CalendarSource::Task | CalendarSource::Ics) {
             continue;
         }
@@ -2192,5 +2215,32 @@ mod tests {
         ev.series.until = Some(day("2026-11-20"));
         ev.series.except = vec![day("2026-10-28")];
         assert_eq!(shown(&ev, "2026-10-20", "2026-11-30"), ["2026-11-11"]);
+    }
+
+    #[test]
+    fn multi_source_bases_get_distinct_colors_and_ics_export_respects_filter() {
+        let d = tempfile::tempdir().unwrap();
+        let cfg = Config::default();
+        std::fs::write(d.path().join("Alpha.md"), "---\ntype: milestone\ndue: 2026-11-20\n---\n").unwrap();
+        std::fs::write(d.path().join("Beta.md"), "---\ntype: exam\ndue: 2026-11-21\n---\n").unwrap();
+        std::fs::write(
+            d.path().join("Milestones.base"),
+            "filters: 'type == \"milestone\"'\nviews:\n  - type: calendar\n    name: Cal\n    dateProperty: due\n    order: [file.name, due]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            d.path().join("Exams.base"),
+            "filters: 'type == \"exam\"'\nviews:\n  - type: calendar\n    name: Cal\n    dateProperty: due\n    order: [file.name, due]\n",
+        )
+        .unwrap();
+        let bases = vec!["Milestones.base".to_string(), "Exams.base".to_string()];
+        let res = query_range_with_bases(d.path(), &cfg, day("2026-11-18"), day("2026-11-24"), Some(&bases)).unwrap();
+        let alpha = res.events.iter().find(|e| e.title == "Alpha").unwrap();
+        let beta = res.events.iter().find(|e| e.title == "Beta").unwrap();
+        assert_ne!(alpha.color, beta.color, "each .base source gets a distinct palette color");
+
+        let only_first = vec!["Milestones.base".to_string()];
+        let ics = export_ics_with_bases(d.path(), &cfg, Some(&only_first));
+        assert!(ics.contains("SUMMARY:Alpha") && !ics.contains("SUMMARY:Beta"), "{ics}");
     }
 }

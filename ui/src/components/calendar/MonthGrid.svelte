@@ -2,6 +2,7 @@
   // Monthly grid for the native Calendar: shows Daily Note dots, multi-day event spans, timed/all-day pills, open tasks & .base overlays, with drag-and-drop rescheduling.
   import type { CalendarDaySummary, CalendarEvent, WeekStart } from "../../lib/types";
   import { addDays, colorSpec, daysBetween, monthGridDays, todayIso, weekdayNames } from "./calendar-dates";
+  import type { AnchorRect } from "./EventPopover.svelte";
 
   let {
     year,
@@ -25,7 +26,7 @@
     events?: CalendarEvent[];
     compact?: boolean;
     onselectday: (iso: string) => void;
-    oneditevent?: (ev: CalendarEvent) => void;
+    oneditevent?: (ev: CalendarEvent, anchorRect?: AnchorRect) => void;
     onmoveevent?: (ev: CalendarEvent, newDate: string) => void;
     /** When set, an open task gets a checkbox that calls this (a view block ticks its rows). */
     ontoggle?: (ev: CalendarEvent) => void;
@@ -109,12 +110,18 @@
               {@const isSpan = ev.end_date > ev.date}
               {@const tickable = !!ontoggle && (cantoggle ? cantoggle(ev) : ev.source === "task" && !ev.completed)}
               <div class="pill-row">
-                {#if tickable}
+                {#if tickable || ev.source === "task"}
                   <!-- a checkbox beside the pill (not in it): a button cannot hold another control -->
-                  <input type="checkbox" class="tick" aria-label="Done: {ev.title}"
+                  <input
+                    type="checkbox"
+                    class="kandinsky-check tick"
+                    checked={ev.completed}
+                    disabled={!tickable || ev.completed}
+                    aria-label="Done: {ev.title}"
                     onclick={(e) => e.stopPropagation()}
                     onkeydown={(e) => e.stopPropagation()}
-                    onchange={() => ontoggle?.(ev)} />
+                    onchange={() => { if (tickable && !ev.completed) ontoggle?.(ev); }}
+                  />
                 {/if}
                 <button
                   type="button"
@@ -124,7 +131,11 @@
                   draggable={ev.editable}
                   ondragstart={(e) => onDragStart(e, ev, c.iso)}
                   ondragend={() => { draggingOcc = null; dragOverDate = null; }}
-                  onclick={(e) => { e.stopPropagation(); oneditevent?.(ev); }}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    oneditevent?.(ev, { top: r.top, left: r.left, bottom: r.bottom, right: r.right });
+                  }}
                   style:background={col.bg}
                   style:color={col.fg}
                   title={`${ev.start ? ev.start + " · " : ""}${ev.title}`}
@@ -171,8 +182,8 @@
   .note-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: none; }
   .note-dot.faint { background: var(--border-strong); }
   .items { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .pill-row { display: flex; align-items: center; gap: 3px; min-width: 0; }
-  .pill-row .tick { margin: 0; width: 11px; height: 11px; flex: none; accent-color: var(--accent); }
+  .pill-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .pill-row .tick { font-size: 11px; flex: none; cursor: pointer; }
   .pill { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; padding: 2px 5px; border-radius: 4px; font-size: 11px; line-height: 1.3; text-align: left; }
   .pill.span { border-left: 2px solid currentColor; }
   .pill.done .t { text-decoration: line-through; opacity: .65; }
