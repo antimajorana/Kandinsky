@@ -174,11 +174,22 @@
     if (trimmed) chooseCover(trimmed);
   }
 
-  const handleProperties = () => (onToggleProperties ? onToggleProperties() : toggleProperties());
+  const handleProperties = () => {
+    if (onToggleProperties) {
+      onToggleProperties();
+      return;
+    }
+    const v = view();
+    if (v) {
+      window.dispatchEvent(new CustomEvent("kandinsky-inline-add-property", { detail: { view: v } }));
+      return;
+    }
+    toggleProperties();
+  };
   const handleWidth = () => (onToggleWidth ? onToggleWidth() : void writeFrontmatterProp("width", isFullWidth ? null : "full"));
 </script>
 
-<div class="note-hero" class:has-cover={Boolean(coverValue)} class:page-layout={pageLayout} class:full-width={isFullWidth}>
+<div class="note-hero" class:has-cover={Boolean(coverValue)} class:page-layout={pageLayout} class:full-width={isFullWidth} class:pop-open={Boolean(iconAnchor || coverAnchor)}>
   {#if coverValue}
     <div class="note-cover {isPresetCover ? `preset-${coverValue}` : 'preset-image'}" data-testid="note-cover">
       {#if !isPresetCover && resolvedCoverUrl}
@@ -201,7 +212,9 @@
         <button type="button" class="hero-act" bind:this={coverBtnEl} onclick={() => openCoverPicker(coverBtnEl)}>
           {coverValue ? "Change cover" : "Add cover"}
         </button>
-        <button type="button" class="hero-act" onclick={handleProperties}>Properties</button>
+        <button type="button" class="hero-act" data-testid="hero-add-property" onclick={handleProperties}>
+          {pageLayout ? "Properties" : "+ Add property"}
+        </button>
         <button type="button" class="hero-act hero-width-btn" class:active={isFullWidth} onclick={handleWidth}
           title={isFullWidth ? (pageLayout ? "Switch to standard 1080px page width" : "Switch to standard 740px reading width") : (pageLayout ? "Expand page to full width" : "Expand note to full width")}>
           {isFullWidth ? "Standard width" : "Full width"}
@@ -320,13 +333,29 @@
   @container (max-width: 760px) { .page-layout .hero-measure { padding: 18px 18px 4px; } }
   :global(html.phone) .hero-measure { padding: 16px 16px 4px; }
   .hero-actions {
-    display: flex; align-items: center; gap: 14px; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint);
+    display: flex; align-items: center; flex-wrap: wrap; gap: 14px; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint);
+    opacity: 0; transition: opacity 120ms ease;
   }
+  .note-hero:hover .hero-actions,
+  .note-hero:focus-within .hero-actions,
+  .note-hero.pop-open .hero-actions,
+  :global(.cm-scroller:has(> .cm-note-hero-slot:hover)) .hero-actions,
+  :global(.cm-scroller:has(.inline-title-wrap:hover, .inline-title:hover, .cm-page-title-h1:hover)) .hero-actions,
+  :global(.page-scroll:has(.page-head:hover)) .hero-actions,
+  :global(:root[data-touch]) .hero-actions,
+  :global(html.phone) .hero-actions { opacity: 1; }
 
   .hero-act { padding: 1px 0; border-radius: 4px; color: var(--text-faint); font: inherit; background: transparent; border: 0; cursor: pointer; transition: color 120ms ease, opacity 120ms ease; }
   .hero-act:hover, .hero-act:focus-visible { color: var(--text); outline: none; }
   .hero-width-btn { opacity: 0; }
-  .note-hero:hover .hero-width-btn, .hero-width-btn:focus-visible, .hero-width-btn.active { opacity: 1; }
+  .note-hero:hover .hero-width-btn,
+  .note-hero:focus-within .hero-width-btn,
+  .note-hero.pop-open .hero-width-btn,
+  :global(.cm-scroller:has(.inline-title-wrap:hover, .inline-title:hover, .cm-page-title-h1:hover)) .hero-width-btn,
+  :global(:root[data-touch]) .hero-width-btn,
+  :global(html.phone) .hero-width-btn,
+  .hero-width-btn:focus-visible,
+  .hero-width-btn.active { opacity: 1; }
 
   .hero-pop { display: flex; flex-direction: column; gap: 8px; padding: 2px; }
   .pop-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }

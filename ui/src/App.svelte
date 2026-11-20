@@ -36,8 +36,7 @@
   import { installDiagnostics } from "./lib/diagnostics";
   import { installNavInput } from "./lib/nav-input";
   import { invalidate, invalidateAll } from "./lib/raw";
-  import Rail from "./components/Rail.svelte";
-  import Sidebar from "./components/Sidebar.svelte";
+  import NotionSidebar from "./components/NotionSidebar.svelte";
   import { attachTabs, tabs, whenNoTabs } from "./lib/tabs.svelte";
   import { attachPaneZoom } from "./lib/pane-zoom";
   import { attachGoneFiles } from "./lib/gone-files";
@@ -64,7 +63,6 @@
   import GuestBar from "./components/GuestBar.svelte";
   import { guest, loadGuest } from "./lib/guest.svelte";
   import { startWhere } from "./lib/where.svelte";
-  import { isNotionShell, shellMode } from "./lib/shell-mode.svelte";
   import { initFolderColors } from "./lib/folder-colors.svelte";
   import { installZenListeners } from "./lib/zen.svelte";
   import { installVoiceRecorderListener, voiceRecorder } from "./lib/voice-recorder.svelte";
@@ -82,8 +80,6 @@
 
   let dockEl: HTMLDivElement;
   let settingsReady: Promise<unknown> = Promise.resolve();
-
-  const notion = $derived(shellMode.value === "notion" && isNotionShell());
 
   // shortcuts: defaults, `.kandinsky/keys.toml` overrides and script keys, all from one keymap
   const bound = $derived(bindings());
@@ -298,19 +294,16 @@
   });
 </script>
 
-<div class="shell" class:notion class:full={fullscreen.on} class:phone={phone.on} class:typing={phone.on && keyboardBar.on} class:vtabs={!notion && tabs.layout === "vertical"} class:split={tabs.groups.filter((g) => g.visible).length > 1}>
+<div class="shell notion" class:full={fullscreen.on} class:phone={phone.on} class:typing={phone.on && keyboardBar.on} class:split={tabs.groups.filter((g) => g.visible).length > 1}>
   {#if phone.on && !nativeShell.on}<PhoneTop />{/if}
   {#if guest.info}<GuestBar />{/if}
   <div class="main">
-    {#if notion || tabs.layout === "vertical"}<Sidebar />{:else}<Rail />{/if}
-    <!-- vertical tabs: the sidebar runs the full height (Zen), the status bar sits under the panes;
-         notion shell: unified sidebar + full-width status bar across the bottom -->
+    <NotionSidebar />
     <div class="work">
       <div class="dock-wrap"><div class="dock" bind:this={dockEl}></div></div>
-      {#if !notion && tabs.layout === "vertical"}<StatusBar />{/if}
     </div>
   </div>
-  {#if notion || tabs.layout !== "vertical"}<StatusBar />{/if}
+  <StatusBar />
   {#if phone.on}<KeyboardBar />{/if}
   {#if phone.on && !nativeShell.on && !keyboardBar.on}<PhoneBar />{/if}
 </div>
@@ -337,7 +330,6 @@
   .work { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
   .dock-wrap { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: clip; }
   .dock { position: absolute; top: 6px; right: 6px; bottom: 0; left: 0; }
-  .vtabs .dock { top: 8px; right: 8px; }
   .notion .dock { inset: 0; }
   .notion :global(.dockview-theme-kandinsky .dv-dockview) { background-color: var(--border); }
   .notion :global(.dockview-theme-kandinsky .dv-groupview),

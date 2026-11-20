@@ -20,6 +20,7 @@ export type OptionField = {
   /** Text of several lines (a signature): a box, Enter makes a new line. */
   | { kind: "longtext" }
   | { kind: "number" }
+  | { kind: "date" }
   | { kind: "toggle" }
   /** One of a fixed set; `""` in the list reads as "not set". */
   | { kind: "choice"; choices: string[] }
@@ -68,8 +69,8 @@ export const BUILTIN_FIELDS: Record<string, OptionField[]> = {
   // the Calendar pane as a block; the `calendar` row view of dated tasks has no entry, so it gets ROW_VIEW_FIELDS.
   // `mode`, not `view`: a .page block and a bookmark name their type with `view:` (lib/blocks.ts still reads an old `view`)
   "calendar-pane": [
-    { key: "mode", label: "Default view", kind: "choice", choices: ["month", "week", "agenda", "day"] },
-    { key: "date", label: "Focus date", kind: "text", hint: "YYYY-MM-DD (optional)" },
+    { key: "mode", label: "Default view", kind: "choice", choices: ["month", "week", "agenda"] },
+    { key: "date", label: "Focus date", kind: "date", hint: "YYYY-MM-DD (optional)" },
   ],
   chart: [
     { key: "path", label: "Base or CSV file", kind: "text" },
@@ -85,7 +86,8 @@ export const BUILTIN_FIELDS: Record<string, OptionField[]> = {
   ],
   countdown: [
     { key: "label", label: "Label", kind: "text" },
-    { key: "target_date", label: "Target date", kind: "text", hint: "YYYY-MM-DD" },
+    { key: "target_date", label: "Target date", kind: "date", hint: "YYYY-MM-DD" },
+    { key: "start_date", label: "Start date", kind: "date", hint: "YYYY-MM-DD (optional)" },
   ],
   button: [
     { key: "label", label: "Button label", kind: "text" },
@@ -99,11 +101,11 @@ export const BUILTIN_FIELDS: Record<string, OptionField[]> = {
   embed: [
     { key: "url", label: "URL or vault path", kind: "text" },
     { key: "title", label: "Title", kind: "text" },
+    { key: "height", label: "Preview height", kind: "number", hint: "in pixels (optional)" },
   ],
   synced: [
-    { key: "source", label: "Synced source", kind: "text", hint: "Note title and block anchor" },
-    { key: "path", label: "Source note path", kind: "text" },
-    { key: "block", label: "Block identifier", kind: "text" },
+    { key: "path", label: "Source note path", kind: "text", hint: "vault path to source note" },
+    { key: "block", label: "Block identifier", kind: "text", hint: "block anchor ID (without ^)" },
   ],
   note: [path("The note shown")],
   text: [{ key: "text", label: "Text", kind: "text", hint: "markdown" }],

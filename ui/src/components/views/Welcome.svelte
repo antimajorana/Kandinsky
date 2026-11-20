@@ -9,25 +9,27 @@
   import { errText } from "../../lib/text";
   import { toast } from "../../lib/state.svelte";
   import { installFrom } from "../../lib/plugin-manage";
+  import { settings } from "../../lib/settings.svelte";
   import type { Available } from "../../lib/gen/Available";
 
   let { doc }: { doc?: string } = $props();
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
 
   /** The tour: what each does, in a line, and the command it runs. A command missing here (a phone) is left out. */
-  const TOUR: { id: string; icon: IconName; title: string; what: string }[] = [
-    { id: "ui.palette", icon: "command", title: "Commands", what: "Everything Kandinsky does, by name: type a few letters" },
-    { id: "ui.quickOpen", icon: "file", title: "Open a file", what: "Any note, PDF or drawing, by a part of its name" },
-    { id: "ui.search", icon: "search", title: "Search", what: "The words inside every note" },
-    { id: "ui.note.new", icon: "file-text", title: "New note", what: "From a template, filed where it belongs" },
-    { id: "ui.capture", icon: "inbox", title: "Capture", what: "A thought, a task or a link into today's log, without leaving what you do" },
-    { id: "ui.sidePanel", icon: "panel-left", title: "Side panel", what: "Files, search, the outline and git, beside the page" },
-    { id: "ui.libraries", icon: "library", title: "Libraries", what: "Papers, books, drawings, films: your collections" },
-    { id: "ui.terminal.new", icon: "terminal", title: "Terminal", what: "A shell in the vault; AI agents run here too" },
-    { id: "ui.settings", icon: "settings", title: "Settings", what: "Every option, with features to try on each page" },
-  ];
   const tour = $derived.by(() => {
     const known = new Set(allCommands().map((c) => c.id));
-    return TOUR.filter((t) => known.has(t.id));
+    const items: { id: string; icon: IconName; title: string; what: string }[] = [
+      { id: "ui.palette", icon: "command", title: "Commands", what: "Everything Kandinsky does, by name: type a few letters" },
+      { id: "ui.quickOpen", icon: "file", title: "Open a file", what: "Any note, PDF or drawing, by a part of its name" },
+      { id: "ui.search", icon: "search", title: "Search", what: "The words inside every note" },
+      { id: "ui.note.new", icon: "file-text", title: "New note", what: "From a template, filed where it belongs" },
+      { id: "ui.capture", icon: "inbox", title: "Capture", what: "A thought, a task or a link into today's log, without leaving what you do" },
+      { id: "ui.sidePanel", icon: "panel-left", title: "Side panel", what: devMode ? "Files, search, outline and git, beside the page" : "Toggle the workspace navigation sidebar" },
+      { id: "ui.libraries", icon: "library", title: "Libraries", what: "Papers, books, drawings, films: your collections" },
+      { id: "ui.terminal.new", icon: "terminal", title: "Terminal", what: "A shell in the vault; AI agents run here too" },
+      { id: "ui.settings", icon: "settings", title: "Settings", what: "Personalize themes, writing, calendar and extensions" },
+    ];
+    return items.filter((t) => known.has(t.id));
   });
   const run = (id: string) => void allCommands().find((c) => c.id === id)?.run();
 
@@ -71,13 +73,13 @@
     {/each}
   </div>
 
-  <h3>Add features</h3>
+  <h3>Optional extensions</h3>
   {#if failed}
-    <p class="faint">The release's plugins could not be read ({failed}). Settings → Plugins → Install… takes a folder or an address too.</p>
+    <p class="faint">Optional extensions are unavailable ({failed}).</p>
   {:else if offered === null}
-    <p class="faint">Reading the release's plugins…</p>
+    <p class="faint">Checking optional extensions…</p>
   {:else if offered.length === 0}
-    <p class="faint">Every plugin of the release that runs here is installed. Settings → Plugins switches them on and off.</p>
+    <p class="faint">Everything you need is ready. Manage optional extensions anytime in Settings → Extensions.</p>
   {:else}
     <ul class="plugins">
       {#each offered as p (p.id)}

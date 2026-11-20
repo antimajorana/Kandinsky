@@ -25,7 +25,7 @@ test("install from a folder (on, permissions said), switch off and on, update ke
   await page.keyboard.press("F1");
   await page.keyboard.type("Settings");
   await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click();
-  await page.getByRole("button", { name: /^Plugins( \d+)?$/ }).first().click();
+  await page.getByRole("button", { name: /^Extensions( \d+)?$/ }).first().click();
 
   await page.getByRole("button", { name: "Install from path…" }).click();
   await page.keyboard.type(src);
@@ -95,7 +95,7 @@ test("Install from path… lists the release's plugins and installs one from its
     await page.keyboard.press("F1");
     await page.keyboard.type("Settings");
     await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click();
-    await page.getByRole("button", { name: /^Plugins( \d+)?$/ }).first().click();
+    await page.getByRole("button", { name: /^Extensions( \d+)?$/ }).first().click();
     await page.getByRole("button", { name: "Install from path…" }).click();
     const palette = page.getByTestId("palette");
     await expect(palette.getByText("Released 2.0.0", { exact: true })).toBeVisible();

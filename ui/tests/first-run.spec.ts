@@ -50,7 +50,7 @@ test("a first start: the Today screen with nothing configured, no error, no vim,
   await page.keyboard.press("Meta+,");
   const nav = page.getByRole("navigation", { name: "Settings pages" });
   await expect(nav).toBeVisible();
-  await nav.getByRole("button", { name: /^Plugins/ }).first().click();
+  await nav.getByRole("button", { name: /^Extensions/ }).first().click();
   await expect(page.getByRole("heading", { name: /Installed & Core Plugins/ })).toBeVisible();
   await expect(page.locator(".toast[data-kind=error]")).toHaveCount(0);
   expect(errors).toEqual([]);

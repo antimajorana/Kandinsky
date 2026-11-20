@@ -1,27 +1,67 @@
 <script lang="ts">
-  // A `.base` file opened on its own: the table full-size, plus its YAML in the editor.
+  // A `.base` file opened on its own: calm topbar + full-size interactive table.
   import BaseTable from "../components/BaseTable.svelte";
-  import Icon from "../components/Icon.svelte";
-  import { shownPath } from "../lib/paths";
-  import { open } from "../lib/dock";
-  import type { PaneProps } from "../lib/dock";
+  import PaneTopbar from "../components/PaneTopbar.svelte";
+  import { below, popMenu } from "../lib/menu";
+  import { shownName } from "../lib/paths";
+  import { copyPath } from "../lib/tabs.svelte";
+  import { isFileStarred, toggleFileStar } from "../lib/bookmarks.svelte";
+  import { open, type PaneProps } from "../lib/dock";
+  import { api } from "../lib/api";
+  import { toast } from "../lib/state.svelte";
 
   let { spec }: PaneProps<"base"> = $props();
+  // svelte-ignore state_referenced_locally -- a pane's spec is fixed for its lifetime
+  const path = spec.path;
+  const starred = $derived(isFileStarred(path));
+  const baseTitle = $derived(shownName(path));
+
+  async function copyWikilink(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(`[[${baseTitle}]]`);
+      toast("Wikilink copied", baseTitle);
+    } catch {
+      toast("Could not copy to clipboard", "", "error");
+    }
+  }
+
+  function openShareMenu(e: MouseEvent): void {
+    popMenu(
+      below(e, [
+        { label: "Copy [[wikilink]]", icon: "link", run: () => void copyWikilink() },
+        { label: "Copy file path", icon: "file-text", run: () => void copyPath(path) },
+        { label: "Export / Print…", icon: "external-link", run: () => window.print() },
+      ], 4),
+    );
+  }
+
+  function openMoreMenu(e: MouseEvent): void {
+    popMenu(
+      below(e, [
+        { label: "Edit source", icon: "file-code", run: () => open({ kind: "editor", path }) },
+        { label: "Reveal in Explorer", icon: "folder-open", run: () => open({ kind: "explorer", source: "vault", place: "", path: path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "" }) },
+        "sep",
+        { label: "Move to Trash", icon: "trash", danger: true, run: () => void api.trash(path).then(() => toast("Moved to Trash", baseTitle)) },
+      ], 4),
+    );
+  }
 </script>
 
 <div class="base-pane">
-  <header>
-    <span class="name"><Icon name="table" size={14} /> {shownPath(spec.path)}</span>
-    <button class="btn" onclick={() => open({ kind: "editor", path: spec.path })} title="Edit database source"><Icon name="file-code" size={14} /> Edit source</button>
-  </header>
+  <PaneTopbar
+    {path}
+    title={baseTitle}
+    ariaLabel="Database header"
+    {starred}
+    showFileIcon={true}
+    onStar={() => toggleFileStar(path, baseTitle)}
+    onShare={openShareMenu}
+    onMore={openMoreMenu}
+  />
   <BaseTable path={spec.path} view={spec.view} />
 </div>
 
 <style>
   .base-pane { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
   .base-pane > :global(.base) { flex: 1; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
-  .name { display: inline-flex; gap: 6px; align-items: center; font-family: var(--font-mono); font-size: calc(12.5px * var(--ui-scale, 1)); }
-  .btn { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--border-strong); }
-  .btn:hover { background: var(--bg-hover); }
 </style>

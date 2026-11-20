@@ -116,13 +116,13 @@ test("quick open: Ctrl+Enter opens the file beside the active tab instead of ove
   await expect(palette.getByText("related", { exact: true }).first()).toBeVisible();
   await expect(palette.getByText("open beside")).toBeVisible();
   await page.keyboard.press("Control+Enter");
-  // the two halves: every row of the sidebar's one Open section says its half; the pair on screen is the
-  // active row and the other half's shown one
+  // the two halves: two Dockview groups on screen, with one active row and one split-shown row in Open tabs
   const open = side.getByTestId("open-tabs");
   const split = open.locator(".pane-row.active, .pane-row.split-shown");
-  await expect(open.locator(".split-badge")).toHaveText(["Split 1", "Split 2"]);
+  await expect(page.locator(".dv-groupview")).toHaveCount(2);
   await expect(split).toHaveCount(2);
   await expect(open.locator(".pane-row.active")).toHaveText(/related/);
+  await expect(open.locator(".pane-row.split-shown")).toHaveText(/hubbard/);
   await expect(page.locator(".cm-editor.cm-focused", { hasText: "Related" })).toBeVisible(); // the new note takes the keys once loaded
   // a third file opened beside goes to the other split, not a third one
   await page.keyboard.press("Control+p");
@@ -130,10 +130,10 @@ test("quick open: Ctrl+Enter opens the file beside the active tab instead of ove
   await page.keyboard.type("paste");
   await expect(palette.getByTestId("palette-item").filter({ hasText: "paste" }).first()).toBeVisible();
   await page.keyboard.press("Control+Enter");
+  await expect(page.locator(".dv-groupview")).toHaveCount(2);
   await expect(split).toHaveCount(2);
   await expect(open.locator(".pane-row.active")).toHaveText(/paste/);
   await expect(split.filter({ hasText: "related" })).toHaveCount(1);
-  await expect(open.locator(".split-badge", { hasText: "Split 3" })).toHaveCount(0);
 });
 
 // The Notion sidebar is the side panel: its tree (the Files tool) stays in it and the sidebar hides and comes back with the

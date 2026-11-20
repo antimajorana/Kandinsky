@@ -144,7 +144,16 @@
 {:else if kind === "bool"}
   <label class="check"><input type="checkbox" aria-label={label} checked={value === true} onchange={(e) => onset((e.currentTarget as HTMLInputElement).checked)} /><span>{value === true ? "Yes" : "No"}</span></label>
 {:else if kind === "enum" || kind === "status"}
-  <Select label={label} value={scalarText(value)} {options} onchange={(v) => onset(v || null)} />
+  {@const curText = scalarText(value)}
+  {@const selPig = classifyPigment(name, curText, 0)}
+  <div
+    class="select-wrap"
+    class:is-empty={!curText}
+    class:has-dot={Boolean(curText && selPig.dot)}
+    data-tone={curText && selPig.tone ? selPig.tone : undefined}
+  >
+    <Select label={label} value={curText} {options} onchange={(v) => onset(v || null)} />
+  </div>
 {:else if kind === "rating"}
   {@const cur = Math.max(0, Math.min(5, Math.round(Number(value) || 0)))}
   <div class="rating-row" role="radiogroup" aria-label={label}>
@@ -190,6 +199,24 @@
   .field::placeholder, .text-row :global(.field::placeholder) { color: var(--text-faint); font-style: italic; }
   .num { font-variant-numeric: tabular-nums; }
   input[type="date"], input[type="datetime-local"] { font-variant-numeric: tabular-nums; color-scheme: light dark; }
+  .select-wrap { display: flex; align-items: center; min-width: 0; width: 100%; min-height: calc(26px * var(--ui-scale, 1)); }
+  .select-wrap :global(.select) { width: 100%; min-width: 0; display: flex; align-items: center; }
+  .select-wrap :global(.trigger) {
+    width: fit-content; max-width: 100%; min-height: calc(22px * var(--ui-scale, 1)); height: auto;
+    padding: 2px 8px; gap: 6px; border-radius: var(--radius-sm); border: 1px solid transparent;
+    background: var(--bg-alt); color: var(--text); font-size: calc(12px * var(--ui-scale, 1)); font-weight: 500;
+  }
+  .select-wrap.is-empty :global(.trigger) { background: transparent; color: var(--text-faint); font-style: italic; font-weight: 400; padding-left: 7px; }
+  .select-wrap:hover :global(.trigger), .select-wrap :global(.trigger:hover) { border-color: var(--border); }
+  .select-wrap :global(.trigger:focus-visible), .select-wrap :global(.trigger[aria-expanded="true"]) { border-color: var(--accent); }
+  .select-wrap :global(.trigger svg) { opacity: 0; transition: opacity .12s; }
+  .select-wrap:hover :global(.trigger svg), .select-wrap :global(.trigger:focus-visible svg), .select-wrap :global(.trigger[aria-expanded="true"] svg) { opacity: 1; }
+  .select-wrap.has-dot :global(.trigger::before) { content: "●"; font-size: .62em; line-height: 1; margin-right: -1px; }
+  .select-wrap[data-tone="viridian"] :global(.trigger) { background: color-mix(in srgb, var(--green) 14%, transparent); border-color: color-mix(in srgb, var(--green) 26%, transparent); color: var(--green); }
+  .select-wrap[data-tone="cobalt"] :global(.trigger) { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--accent-strong, var(--accent)); }
+  .select-wrap[data-tone="ochre"] :global(.trigger) { background: color-mix(in srgb, var(--yellow) 15%, transparent); border-color: color-mix(in srgb, var(--yellow) 28%, transparent); color: var(--yellow); }
+  .select-wrap[data-tone="mauve"] :global(.trigger) { background: color-mix(in srgb, var(--purple) 15%, transparent); border-color: color-mix(in srgb, var(--purple) 28%, transparent); color: var(--purple); }
+  .select-wrap[data-tone="vermilion"] :global(.trigger) { background: color-mix(in srgb, var(--red) 14%, transparent); border-color: color-mix(in srgb, var(--red) 26%, transparent); color: var(--red); }
   .check { display: inline-flex; align-items: center; gap: 7px; min-height: calc(26px * var(--ui-scale, 1)); padding: 0 7px; color: var(--text-muted); font-size: calc(12.5px * var(--ui-scale, 1)); cursor: pointer; }
   .check input { accent-color: var(--accent); width: calc(14px * var(--ui-scale, 1)); height: calc(14px * var(--ui-scale, 1)); }
   .rating-row { display: inline-flex; align-items: center; gap: 2px; min-height: calc(26px * var(--ui-scale, 1)); padding: 0 4px; }
@@ -212,20 +239,27 @@
   .pill.link .pill-text { color: inherit; }
   .pill .pill-text.opens { color: inherit; cursor: pointer; }
   .pill .pill-text.unfiled { color: var(--red); }
-  .text-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; min-width: 0; }
-  .text-row.has-pigment:not(:focus-within) { padding-left: 6px; border-radius: 5px; }
-  .text-row[data-tone="viridian"]:not(:focus-within) { background: color-mix(in srgb, var(--green) 12%, transparent); color: var(--green); }
+  .text-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; min-width: 0; width: 100%; }
+  .text-row.has-pigment:not(:focus-within) {
+    width: fit-content; max-width: 100%; padding: 1px 8px; border-radius: var(--radius-sm); gap: 6px;
+    border: 1px solid transparent;
+  }
+  .text-row.has-pigment:not(:focus-within) :global(.field) {
+    width: auto; field-sizing: content; max-width: 100%; height: calc(22px * var(--ui-scale, 1)); padding: 0; border: 0;
+  }
+  .text-row[data-tone="viridian"]:not(:focus-within) { background: color-mix(in srgb, var(--green) 14%, transparent); border-color: color-mix(in srgb, var(--green) 26%, transparent); color: var(--green); }
   .text-row[data-tone="viridian"]:not(:focus-within) :global(.field) { color: var(--green); font-weight: 500; }
-  .text-row[data-tone="cobalt"]:not(:focus-within) { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-strong, var(--accent)); }
+  .text-row[data-tone="cobalt"]:not(:focus-within) { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--accent-strong, var(--accent)); }
   .text-row[data-tone="cobalt"]:not(:focus-within) :global(.field) { color: var(--accent-strong, var(--accent)); font-weight: 500; }
-  .text-row[data-tone="ochre"]:not(:focus-within) { background: color-mix(in srgb, var(--yellow) 13%, transparent); color: var(--yellow); }
+  .text-row[data-tone="ochre"]:not(:focus-within) { background: color-mix(in srgb, var(--yellow) 15%, transparent); border-color: color-mix(in srgb, var(--yellow) 28%, transparent); color: var(--yellow); }
   .text-row[data-tone="ochre"]:not(:focus-within) :global(.field) { color: var(--yellow); font-weight: 500; }
-  .text-row[data-tone="mauve"]:not(:focus-within) { background: color-mix(in srgb, var(--purple) 13%, transparent); color: var(--purple); }
+  .text-row[data-tone="mauve"]:not(:focus-within) { background: color-mix(in srgb, var(--purple) 15%, transparent); border-color: color-mix(in srgb, var(--purple) 28%, transparent); color: var(--purple); }
   .text-row[data-tone="mauve"]:not(:focus-within) :global(.field) { color: var(--purple); font-weight: 500; }
-  .text-row[data-tone="vermilion"]:not(:focus-within) { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+  .text-row[data-tone="vermilion"]:not(:focus-within) { background: color-mix(in srgb, var(--red) 14%, transparent); border-color: color-mix(in srgb, var(--red) 26%, transparent); color: var(--red); }
   .text-row[data-tone="vermilion"]:not(:focus-within) :global(.field) { color: var(--red); font-weight: 500; }
   .status-dot { font-size: .62em; line-height: 1; flex: none; }
   .text-row > :global(:not(.status-dot):first-of-type), .text-row > :global(:first-child:not(.status-dot)) { flex: 1; min-width: 0; }
+  .text-row.has-pigment:not(:focus-within) > :global(:not(.status-dot)) { flex: 0 1 auto; }
   .text-row .open { flex: none; width: calc(22px * var(--ui-scale, 1)); height: calc(22px * var(--ui-scale, 1)); color: var(--text-faint); }
   .text-row .open:hover { color: var(--link, var(--accent)); }
   .text-row :global(.field.is-link) { color: var(--link, var(--accent)); }

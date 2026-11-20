@@ -113,13 +113,22 @@ test("properties-audit widget and upstream staleness pills surface schema issues
   await expect(page.getByTestId("audit-summary-text")).toContainText("issue");
   await expect(page.getByTestId("review-upstream-pill")).toHaveText("Upstream stale");
 
-  // Opening Theorem.md shows the clickable Upstream stale pill in the note header (checked in dark + light)
+  // Opening Theorem.md shows the clickable Upstream stale pill in the note header only when developer_mode is enabled (checked in dark + light)
   await openViaPalette(page, "Theorem.md");
   const pill = page.getByTestId("upstream-health-pill").first();
   await expect(pill).toBeVisible();
   await expect(pill).toHaveText("Upstream stale");
   await page.emulateMedia({ colorScheme: "light" });
   await expect(pill).toBeVisible();
+  // In calm mode (developer_mode = false), upstream-health-pill is hidden
+  const cfg = (await (await page.request.get("/api/config", { headers: H })).json()).config;
+  const wasDev = cfg.developer_mode;
+  try {
+    await page.request.put("/api/config", { headers: H, data: { ...cfg, developer_mode: false } });
+    await expect(page.getByTestId("upstream-health-pill")).toHaveCount(0);
+  } finally {
+    await page.request.put("/api/config", { headers: H, data: { ...cfg, developer_mode: wasDev } });
+  }
 });
 
 test("Zotero migration wizard and References workflow modal open cleanly in dark and light themes", async ({ page }) => {

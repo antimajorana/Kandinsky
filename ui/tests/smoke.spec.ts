@@ -69,7 +69,7 @@ test("Settings is generated from the schema and saves to config.toml", async ({ 
   await page.getByText("Finish the GW notes.").waitFor(); // the keymap is attached once the app is up (was flaky)
   await page.keyboard.press("Meta+,");
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Plugins/ }).click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions/ }).click();
   const adv = page.getByTestId("settings-advanced");
   await adv.locator("summary").click();
   await expect(adv.getByText("Where the terminal panel docks")).toBeVisible();
@@ -82,7 +82,7 @@ test("Settings is generated from the schema and saves to config.toml", async ({ 
   await expect.poll(async () => (await cfg()).terminal.position).toBe("bottom");
   await expect(adv.locator('.row[data-path="terminal.position"]')).not.toContainText("modified");
   // the themed dropdown (no native <select>) for longer lists: keyboard picks
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Editor & Writing/ }).click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Editor & Notes/ }).click();
   await page.locator('[id="editor.date_names"]').waitFor();
   await page.getByPlaceholder("Search settings…").fill("housekeeping");
   await expect(page.getByText("Show housekeeping commits", { exact: false })).toBeVisible();

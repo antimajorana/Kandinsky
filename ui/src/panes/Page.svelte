@@ -13,22 +13,24 @@
   import type { Document } from "yaml";
   import { api, ApiError } from "../lib/api";
   import { closePanel, open, openPath, type PaneProps } from "../lib/dock";
-  import { openHome } from "../lib/actions";
   import { allBlocks, drawnType, getBlock, mountBlock, optionFields } from "../lib/blocks";
   import BlockOptions from "../components/BlockOptions.svelte";
   import { rowViewTypes } from "../lib/views";
   import { pick, type PickItem } from "../lib/palette.svelte";
-  import { app, toast } from "../lib/state.svelte";
+  import { toast } from "../lib/state.svelte";
   import { isNotionShell } from "../lib/shell-mode.svelte";
   import { isFileStarred, toggleFileStar } from "../lib/bookmarks.svelte";
-  import { copyPath, tabs, toggleSidebar } from "../lib/tabs.svelte";
+  import { copyPath } from "../lib/tabs.svelte";
+  import { settings } from "../lib/settings.svelte";
   import {
     parsePage, writePage, readPageProps, setPageProp, blockSrc, newBlock, findBlock, blockAt, insertBlock, insertRow, insertColumn, moveBlock, removeBlock, setWidths,
     type BlockAt, type Drop, type PageBlock, type PageModel,
   } from "../lib/page-doc";
   import ContextMenu from "../components/ContextMenu.svelte";
+  import EmptyState from "../components/EmptyState.svelte";
   import NoteHero from "../components/NoteHero.svelte";
   import PageBlockPicker from "../components/PageBlockPicker.svelte";
+  import PaneTopbar from "../components/PaneTopbar.svelte";
   import { pluginMenu } from "../lib/plugin-menus";
   import Icon from "../components/Icon.svelte";
   import { openPageHistory } from "../lib/page-history.svelte";
@@ -278,8 +280,7 @@
   }
 
   const starred = $derived(isFileStarred(path));
-  const pathSegments = $derived(path.split("/"));
-  const folderSegments = $derived(path.startsWith(".kandinsky/") ? [] : pathSegments.slice(0, -1));
+  const devMode = $derived(Boolean(settings.config?.developer_mode));
   const pageTitle = $derived(page.title || shownName(path));
   const pageProps = $derived(page.props ?? null);
   const isFullWidth = $derived(pageProps?.width === "full");
@@ -407,8 +408,10 @@
         { label: showPageProps ? "Hide properties" : "Properties", icon: "table", run: () => { showPageProps = !showPageProps; } },
         { label: arranging ? "Finish arranging" : "Arrange blocks", icon: arranging ? "check" : "edit", run: () => { arranging = !arranging; } },
         { label: "Version history & restore…", icon: "clock", run: showPageHistory },
-        { label: "Open Git repository pane", icon: "git", run: () => open({ kind: "git" }) },
-        { label: "Edit page source", icon: "file-code", run: () => open({ kind: "editor", path }) },
+        ...(devMode ? [
+          { label: "Open Git repository pane", icon: "git" as const, run: () => open({ kind: "git" }) },
+          { label: "Edit page source", icon: "file-code" as const, run: () => open({ kind: "editor", path }) },
+        ] : []),
         { label: "Copy file path", icon: "file-text", run: () => void copyPath(path) },
         "sep",
         { label: "Move page to Trash", icon: "trash", danger: true, run: () => void trashThisPage() },
@@ -469,31 +472,17 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="page-pane" bind:this={pageRootEl} onkeydown={onKey}>
-  <header class="topbar" aria-label="Page header">
-    <div class="breadcrumbs">
-      {#if isNotionShell() && tabs.sidebar.collapsed}
-        <button type="button" class="icon-btn expand-sb" onclick={toggleSidebar} title="Expand sidebar (Super+S)" aria-label="Expand sidebar">
-          <Icon name="panel-left" size={15} />
-        </button>
-      {/if}
-      <button type="button" class="seg vault" onclick={() => void openHome()} title="Open vault Home">
-        {app.workspace?.name ?? "Workspace"}
-      </button>
-      <span class="sep">›</span>
-      {#if folderSegments.length > 0}
-        <span class="folder-trail">
-          {#each folderSegments as seg, i}
-            {#if i > 0}<span class="sub-sep">/</span>{/if}
-            <button type="button" class="seg" title="Show {folderSegments.slice(0, i + 1).join('/')} in the explorer"
-              onclick={() => open({ kind: "explorer", source: "vault", place: "", path: folderSegments.slice(0, i + 1).join("/"), select: pathSegments[i + 1] })}>{seg}</button>
-          {/each}
-        </span>
-        <span class="sep">›</span>
-      {/if}
-      <strong class="doc-crumb" dir="auto">{pageTitle}</strong>
-    </div>
-    <div class="top-actions">
-      {#if editedLabel}<span class="edited-lbl">{editedLabel}</span>{/if}
+  <PaneTopbar
+    {path}
+    title={pageTitle}
+    ariaLabel="Page header"
+    {starred}
+    {editedLabel}
+    onStar={() => toggleFileStar(path, pageTitle)}
+    onShare={openShareMenu}
+    onMore={openPageActions}
+  >
+    {#snippet actions()}
       {#if arranging}
         <button type="button" class="tool" onclick={undoLast} disabled={!undo.length} title="Undo the last change (Ctrl+Z)"><Icon name="undo" size={13} /> Undo</button>
         <button type="button" class="tool primary" onclick={() => (arranging = false)} title="Finish arranging (Esc)"><Icon name="check" size={13} /> Done</button>
@@ -501,18 +490,10 @@
         <button type="button" class="tool" onclick={() => openVisualPicker((b) => insertRow(page, page.rows.length, b))} title="Add a dashboard block"><Icon name="plus" size={13} /> Add block</button>
         <button type="button" class="tool" onclick={() => (arranging = true)} title="Rearrange blocks and columns"><Icon name="sliders" size={13} /> Layout</button>
       {/if}
-      <button type="button" class="icon-btn star-icon" class:starred={starred}
-        aria-label={starred ? "Remove from Favorites" : "Add to Favorites"}
-        title={starred ? "Remove from Favorites" : "Add to Favorites"}
-        onclick={() => toggleFileStar(path, pageTitle)}>
-        {starred ? "★" : "☆"}
-      </button>
-      <button type="button" class="top-pill" onclick={openShareMenu} title="Copy or export page">Share</button>
-      <button type="button" class="top-more" aria-label="Page actions" title="Page actions" onclick={openPageActions}>···</button>
-    </div>
-  </header>
+    {/snippet}
+  </PaneTopbar>
 
-  <div class="page scroll" class:arranging>
+  <div class="page page-scroll scroll" class:arranging>
     {#if !error}
       <NoteHero
         {path}
@@ -600,8 +581,14 @@
         {#if arranging}{@render slot({ kind: "row", row: page.rows.length }, "rend", "row")}{/if}
         {#if !page.rows.length && !arranging}
           <section class="pb card empty">
-            <strong>This dashboard is ready.</strong>
-            <button class="link" onclick={() => openVisualPicker((b) => insertRow(page, 0, b))}>+ Add your first block</button>
+            <EmptyState
+              icon="pages"
+              title="This dashboard is ready"
+              reason="Add blocks for notes, tasks, calendars, or charts to organize this page."
+              actionLabel="+ Add your first block"
+              onAction={() => openVisualPicker((b) => insertRow(page, 0, b))}
+              compact={true}
+            />
           </section>
         {/if}
       {/if}
@@ -620,53 +607,24 @@
 
 <style>
   .page-pane { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
-  .topbar {
-    flex: none; height: 40px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between;
-    gap: 12px; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--text-muted);
-    border-bottom: 1px solid var(--border); background: var(--bg); white-space: nowrap;
-  }
-  .breadcrumbs { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .expand-sb { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 5px; color: var(--text-muted); flex: none; margin-right: 2px; }
-  .expand-sb:hover { background: var(--bg-hover); color: var(--text); }
-  .breadcrumbs .seg { padding: 2px 5px; border-radius: 4px; color: var(--text-muted); font: inherit; }
-  .breadcrumbs button.seg:hover { background: var(--bg-hover); color: var(--text); }
-  .breadcrumbs .folder-trail { display: inline-flex; align-items: center; gap: 1px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .breadcrumbs .sub-sep { color: var(--text-faint); padding: 0 1px; }
-  .breadcrumbs .sep { color: var(--text-faint); opacity: .75; }
-  .breadcrumbs .doc-crumb { color: var(--heading); font-weight: 500; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
-
-  .top-actions { display: inline-flex; align-items: center; gap: 8px; flex: none; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint); }
-  .edited-lbl { color: var(--text-faint); margin-right: 2px; }
-  .top-pill { padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font: inherit; cursor: pointer; transition: background 120ms, color 120ms, border-color 120ms; }
-  .top-pill:hover { background: var(--bg-hover); color: var(--text); border-color: var(--border-strong); }
-  .star-pill.starred { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 11%, transparent); border-color: color-mix(in srgb, var(--yellow) 36%, var(--border)); font-weight: 500; }
-  .top-link, .top-more { padding: 3px 5px; border-radius: 5px; color: var(--text-muted); font: inherit; cursor: pointer; transition: background 120ms, color 120ms; }
-  .top-link:hover, .top-more:hover { background: var(--bg-hover); color: var(--text); }
-  .top-more { font-weight: 600; letter-spacing: 0.06em; padding: 3px 6px; }
-  .trash-btn { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 5px; color: var(--text-faint); transition: background 120ms, color 120ms; }
-  .trash-btn:hover { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
-
-  @media (max-width: 920px) {
-    .edited-lbl, .edit-txt-btn { display: none; }
-    .topbar { padding: 0 12px; }
-    .top-actions { gap: 6px; }
-  }
 
   .page { flex: 1; min-height: 0; overflow: auto; background: var(--bg); container-type: inline-size; }
   .inner { max-width: 1080px; margin: 0 auto; padding: 8px 36px 64px; position: relative; }
   .inner.full-width { max-width: none; }
 
+  .page-pane :global(.page-scroll:has(.page-head:hover) .hero-width-btn),
+  .page-pane :global(.page-scroll:has(.hero-actions:hover) .hero-width-btn) { opacity: 1; }
   .page-head { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; min-width: 0; }
   .page-head .page-emblem { margin-right: 0; }
   .page-title {
-    font-size: calc(28px * var(--ui-scale, 1)); font-weight: 700; letter-spacing: -0.026em; line-height: 1.2;
+    font-size: calc(33px * var(--ui-scale, 1)); font-weight: 700; letter-spacing: -0.028em; line-height: 1.18;
     color: var(--heading, var(--text)); margin: 0; padding: 2px 4px; margin-left: -4px; border-radius: 5px;
     cursor: text; min-width: 0; overflow-wrap: anywhere;
   }
   .page-title:hover { background: var(--bg-hover); }
   .page-title-input {
-    flex: 1; min-width: 0; font-family: inherit; font-size: calc(28px * var(--ui-scale, 1)); font-weight: 700;
-    letter-spacing: -0.026em; line-height: 1.2; color: var(--heading, var(--text)); background: var(--bg-hover);
+    flex: 1; min-width: 0; font-family: inherit; font-size: calc(33px * var(--ui-scale, 1)); font-weight: 700;
+    letter-spacing: -0.028em; line-height: 1.18; color: var(--heading, var(--text)); background: var(--bg-hover);
     border: 0; border-radius: 5px; padding: 2px 6px; margin-left: -6px; outline: none; box-shadow: inset 0 -2px 0 var(--accent);
   }
 

@@ -62,11 +62,11 @@ test("dropping a PDF on the Library adds an entry with the file", async ({ page,
   const open = page.getByTestId("sidebar").getByTestId("open-tabs");
   await expect(page.locator(".pdf-pane").last()).toBeVisible(); // the PDF alone (the Open list may not show for one tab)
   await page.locator(".pdf-pane, .dv-active-group").getByRole("button", { name: "Paper's note", exact: true }).first().click();
-  // the sidebar's Open list shows both halves of the split, each with its badge, the note's half active
-  const pdfRow = open.locator(".pane-row").filter({ has: page.locator(".pane-title", { hasText: ".pdf" }) });
-  await expect(pdfRow.locator(".split-badge")).toHaveText(/Split \d/);
+  // the sidebar's Open list shows both halves of the split, the PDF shown beside and the note's half active
+  const pdfRow = open.locator(".pane-row.split-shown").filter({ has: page.locator(".pane-title", { hasText: ".pdf" }) });
+  await expect(page.locator(".dv-groupview")).toHaveCount(2);
+  await expect(pdfRow).toHaveCount(1);
   await expect(open.locator(".pane-row.active .pane-title")).toHaveText(/^\s*dropped\s*$/); // the note is named after the citekey
-  await expect(open.locator(".pane-row.active .split-badge")).toHaveText(/Split \d/);
 });
 
 test("Library: sort by year / title; delete an entry (asks, goes to the Trash, refs.bib updated)", async ({ page, request }) => {

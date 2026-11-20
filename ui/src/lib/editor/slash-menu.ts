@@ -262,7 +262,7 @@ const SLASH_BLOCKS: SlashBlock[] = [
     title: "Synced Block",
     hint: "synced",
     keywords: ["synced", "transclude", "reuse", "block", "live"],
-    template: "```view\ntype: synced\nsource: \n```\n\0",
+    template: "```view\ntype: synced\npath: \nblock: \n```\n\0",
   },
   {
     id: "diagram-mermaid",
@@ -961,7 +961,7 @@ const slashMenuTheme = EditorView.baseTheme({
     background: "var(--bg-elev)",
     border: "1px solid var(--border-strong)",
     borderRadius: "var(--radius, 8px)",
-    boxShadow: "var(--shadow-lg)",
+    boxShadow: "var(--shadow-pop)",
     padding: "4px",
     fontFamily: "var(--font-ui, sans-serif)",
     color: "var(--text)",

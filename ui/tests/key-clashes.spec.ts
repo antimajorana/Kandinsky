@@ -10,7 +10,7 @@ test("the default keys do not clash; a clash made by hand is shown on both comma
   await page.keyboard.press("F1");
   await page.keyboard.type("Settings");
   await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click();
-  await page.getByRole("button", { name: /^Keyboard/ }).first().click();
+  await page.getByRole("button", { name: /^Shortcuts/ }).first().click();
   await expect(page.getByRole("button", { name: "Shortcut for Command palette" })).toBeVisible();
   // a command's other keys are shown on its row (F1 beside the palette's Super+E, Ctrl+P beside Super+P)
   await expect(page.getByText(/also .*F1/).first()).toBeVisible();
@@ -25,7 +25,7 @@ test("the default keys do not clash; a clash made by hand is shown on both comma
   await page.keyboard.press("F1");
   await page.keyboard.type("Settings");
   await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click();
-  await page.getByRole("button", { name: /^Keyboard/ }).first().click();
+  await page.getByRole("button", { name: /^Shortcuts/ }).first().click();
   await expect(page.locator('[data-clash="ui.files"]')).toContainText("same key as Git");
   await expect(page.locator('[data-clash="ui.git"]')).toContainText("same key as Show files");
   await request.put("/api/keys", { headers: H, data: { id: "ui.files", keys: null } }); // the shared vault as it was

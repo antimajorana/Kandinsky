@@ -3,8 +3,10 @@
   import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
   import { EditorView } from "@codemirror/view";
   import Icon from "../Icon.svelte";
+  import Select from "../Select.svelte";
   import { drawnType, optionFields } from "../../lib/blocks";
   import type { OptionField } from "../../lib/block-options";
+  import { showSourceFence } from "../../lib/editor/live/live-preview.js";
 
   let {
     blockEl,
@@ -148,7 +150,11 @@
     if (!view) return;
     const range = findFenceRange(view);
     if (!range) return;
-    view.dispatch({ selection: { anchor: Math.min(range.innerFrom, view.state.doc.length) }, scrollIntoView: true });
+    view.dispatch({
+      effects: showSourceFence.of({ from: range.from, to: range.to }),
+      selection: { anchor: Math.min(range.innerFrom, view.state.doc.length) },
+      scrollIntoView: true,
+    });
     view.focus();
     open = false;
   }
@@ -166,7 +172,7 @@
   >
     <Icon name="sliders" size={12} /> <span>Configure</span>
   </button>
-  <button type="button" class="cfg-btn icon" title="Edit block source" aria-label="Edit block source" onclick={editBlockSource}>
+  <button type="button" class="cfg-btn icon" title="Edit Markdown source" aria-label="Edit Markdown source" onclick={editBlockSource}>
     <Icon name="file-code" size={12} />
   </button>
 
@@ -184,11 +190,23 @@
               <span>{f.label}</span>
             </label>
           {:else if f.kind === "choice"}
+            <div class="fld">
+              <span>{f.label}</span>
+              <Select
+                label={f.label}
+                value={String(draft[f.key] ?? "")}
+                options={(f.choices ?? []).map((c) => ({ value: c, label: c || "(default)" }))}
+                onchange={(v) => (draft = { ...draft, [f.key]: v })}
+              />
+            </div>
+          {:else if f.kind === "date"}
             <label class="fld">
               <span>{f.label}</span>
-              <select value={String(draft[f.key] ?? "")} onchange={(e) => (draft = { ...draft, [f.key]: e.currentTarget.value })}>
-                {#each f.choices ?? [] as c (c)}<option value={c}>{c || "(default)"}</option>{/each}
-              </select>
+              <input
+                type="date"
+                value={String(draft[f.key] ?? "").slice(0, 10)}
+                onchange={(e) => (draft = { ...draft, [f.key]: e.currentTarget.value })}
+              />
             </label>
           {:else if f.kind === "number" || f.kind === "text" || f.kind === "list"}
             <label class="fld">
@@ -205,7 +223,7 @@
       </div>
       {#if error}<p class="err">{error}</p>{/if}
       <footer class="pop-foot">
-        <button type="button" class="ghost" onclick={editBlockSource}>Edit block source</button>
+        <button type="button" class="ghost" onclick={editBlockSource}>Edit Markdown source</button>
         <button type="submit" class="save">Apply</button>
       </footer>
     </form>
@@ -223,8 +241,11 @@
   .pop-head .x:hover { color: var(--text); background: var(--bg-hover); }
   .pop-fields { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
   .fld { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--text-muted); }
-  .fld input, .fld select { padding: 5px 7px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); font: inherit; }
-  .fld input:focus, .fld select:focus { outline: none; border-color: var(--accent); }
+  .fld input { padding: 5px 7px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); font: inherit; }
+  .fld input:focus { outline: none; border-color: var(--accent); }
+  .fld input[type="date"] { color-scheme: light dark; font-variant-numeric: tabular-nums; }
+  .fld :global(.select) { width: 100%; min-width: 0; }
+  .fld :global(.trigger) { padding: 5px 7px; font-size: 12px; background: var(--bg); }
   .chk { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text); cursor: pointer; }
   .chk input { accent-color: var(--accent); }
   .err { margin: 0; font-size: 11.5px; color: var(--red); }

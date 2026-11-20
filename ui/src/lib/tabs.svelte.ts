@@ -135,7 +135,7 @@ function applyHeaders(d: DockviewApi): void {
     const zone = groupZone(g), side = zone === "side";
     const hide = isNotionShell() ? zone === "main" : vertical() && !side;
     if (g.header.hidden !== hide) g.header.hidden = hide;
-    for (const c of ["kandinsky-side-group", "atlas-side-group"]) g.element.classList.toggle(c, side && vertical()); // the old name: user CSS
+    for (const c of ["kandinsky-side-group", "atlas-side-group"]) g.element.classList.toggle(c, side && chromelessMain()); // the old name: user CSS
   }
   halfCloses(d);
 }
@@ -162,7 +162,7 @@ function halfCloses(d: DockviewApi): void {
 export function attachTabs(d: DockviewApi): void {
   const watchTitle = (p: IDockviewPanel) => p.api.onDidTitleChange(schedule);
   d.panels.forEach(watchTitle);
-  d.onDidAddPanel((p) => { watchTitle(p); schedule(); });
+  d.onDidAddPanel((p) => { watchTitle(p); applyHeaders(d); schedule(); });
   d.onDidAddGroup(() => { applyHeaders(d); schedule(); });
   window.addEventListener("kandinsky-layout", () => { applyHeaders(d); schedule(); }); // panel shown / hidden or shellMode switched
   window.addEventListener("kandinsky-expand-sidebar", () => {
@@ -399,7 +399,7 @@ export function gotoTab(n: number | "last"): void {
 
 // --- sidebar geometry ------------------------------------------------------------------------------
 
-function saveSidebar(): void { save(KEYS.sidebar, $state.snapshot(tabs.sidebar)); saveShellPrefs(); }
+function saveSidebar(): void { save(KEYS.sidebar, $state.snapshot(tabs.sidebar)); saveShellPrefs("sidebar"); }
 shellPart("sidebar", {
   get: () => $state.snapshot(tabs.sidebar),
   set: (v) => {

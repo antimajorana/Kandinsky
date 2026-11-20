@@ -11,7 +11,7 @@ test("the Keyboard Shortcuts page shows the capture key and where it lives", asy
     await page.getByTestId("palette").getByText("Settings", { exact: true }).first().click({ timeout: 1000 });
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10_000 });
-  await page.getByText("Keyboard Shortcuts", { exact: true }).first().click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Shortcuts/ }).click();
   const panel = page.locator(".settings-panel.capture-key");
   await expect(panel.getByRole("heading", { name: "Capture key" })).toBeVisible();
   await expect(panel.locator(".row .label")).toHaveText("Now");

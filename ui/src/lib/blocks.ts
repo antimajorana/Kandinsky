@@ -201,7 +201,15 @@ function paneBlock(kind: PaneKind, specOf = (ctx: BlockCtx): PaneSpec | string =
 }
 // the Calendar's start view is `mode:` (`view:` is a .page block's type); a fence's `view: month…` from before still reads
 const calendarSpec = (c: BlockCtx) => specFromOptions("calendar", { ...c.options, view: c.options.mode ?? c.options.view });
-for (const k of PANE_KINDS) if (k !== "block") registerBlock(k === "calendar" ? paneBlock(k, calendarSpec) : paneBlock(k));
+const calendarPaneOptions: OptionField[] = [
+  { key: "mode", label: "Mode", kind: "choice", choices: ["month", "week", "agenda"], default: "month" },
+  { key: "date", label: "Date", kind: "date", hint: "YYYY-MM-DD (optional)" },
+];
+for (const k of PANE_KINDS) {
+  if (k !== "block") {
+    registerBlock(k === "calendar" ? { ...paneBlock(k, calendarSpec), options: calendarPaneOptions } : paneBlock(k));
+  }
+}
 
 // `calendar` named the Calendar pane for a while (now `calendar-pane`), so such blocks still open the pane: one with
 // no row-view option and either a pane option (a start view, a day as `date`) or no note around it (a .page, a bookmark)
@@ -277,8 +285,8 @@ registerBlock({
   icon: "flag", card: true,
   options: [
     { key: "label", label: "Event / milestone", kind: "text", default: "Milestone" },
-    { key: "target_date", label: "Target date", kind: "text", hint: "YYYY-MM-DD (or YYYY-MM-DD HH:MM)" },
-    { key: "start_date", label: "Start date", kind: "text", hint: "optional YYYY-MM-DD for elapsed progress bar" },
+    { key: "target_date", label: "Target date", kind: "date", hint: "YYYY-MM-DD (or YYYY-MM-DD HH:MM)" },
+    { key: "start_date", label: "Start date", kind: "date", hint: "optional YYYY-MM-DD for elapsed progress bar" },
   ],
 });
 registerBlock({
@@ -380,10 +388,19 @@ registerBlock({
 registerBlock({
   ...lazyBlock("synced", "Synced block", () => import("../components/widgets/SyncedBlockEmbed.svelte"), (c) => ({ options: c.options, doc: c.doc })),
   icon: "link", card: false,
+  options: [
+    { key: "path", label: "Source note path", kind: "text", hint: "vault path to source note (e.g. notes/source.md)" },
+    { key: "block", label: "Block identifier", kind: "text", hint: "block anchor ID (without ^)" },
+  ],
 });
 registerBlock({
   ...lazyBlock("embed", "Media / Web Embed", () => import("../components/widgets/EmbedBlock.svelte"), (c) => ({ options: c.options, doc: c.doc })),
   icon: "external-link", card: false,
+  options: [
+    { key: "url", label: "URL or vault path", kind: "text", hint: "https://… or vault-relative file path" },
+    { key: "title", label: "Title", kind: "text", hint: "optional display title" },
+    { key: "height", label: "Preview height", kind: "number", hint: "optional height in pixels" },
+  ],
 });
 
 // --- mounting -------------------------------------------------------------------------------------

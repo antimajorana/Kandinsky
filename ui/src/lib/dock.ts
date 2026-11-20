@@ -18,7 +18,7 @@ import {
 import { mount, unmount } from "svelte";
 import { basename, paneId, paneIcon, paneTitle, paneZone, specZone, type PaneKind, type PaneSpec, type SpecOf } from "./panes";
 import { getDock, setDock, kindOf, panelZone, zoneGroup } from "./dock-instance";
-import { besideActive, placement, reveal, hidePanel, setContentVisible, constrainTerminal, placeTerminalPanel, keepShape, nextTerminalN, noteToolSizes, paneElement } from "./dock-panels";
+import { besideActive, holdToolSizes, placement, reveal, hidePanel, setContentVisible, constrainTerminal, placeTerminalPanel, keepShape, nextTerminalN, noteToolSizes, paneElement } from "./dock-panels";
 import { offerStep, paneCanStep } from "./pane-nav";
 import { canStep, jumpTo, noteVisit, stepHistory, visits } from "./nav-history";
 import { travelSign } from "./nav-signs";
@@ -417,11 +417,17 @@ export function open(spec: PaneSpec, opts: { activate?: boolean; beside?: boolea
     if (spec.kind === "pdf" && spec.page !== undefined) pdfPages.get(id)?.(spec.page, { quote: spec.quote, annotation: spec.annotation });
     if (spec.kind === "excalidraw" && spec.page) drawingPages.get(id)?.(spec.page);
     if (spec.kind === "plugin" && spec.anchor) pluginAnchors.get(id)?.(spec.anchor);
-    if (spec.kind === "explorer" && spec.path !== undefined) explorerGo.get(id)?.({ source: spec.source, place: spec.place, path: spec.path }, spec.select);
+    if (spec.kind === "explorer" && spec.path !== undefined) {
+      // the folder asked for goes into the tab's own parameters too: an explorer asleep (unseen a while, hibernate.ts)
+      // has no `explorerGo` and wakes from them — it showed the folder it was opened on, not the one asked for
+      existing.api.updateParameters({ ...(existing.params ?? {}), ...spec });
+      explorerGo.get(id)?.({ source: spec.source, place: spec.place, path: spec.path }, spec.select);
+    }
     if (spec.kind === "calendar" && (spec.date !== undefined || spec.view !== undefined)) calendarGo.get(id)?.(spec.date, spec.view);
     return existing.api;
   }
   setOpening(opts.activate === false ? null : id);
+  const groupsBefore = dock.groups.length, restoreTools = holdToolSizes();
   const panel = dock.addPanel({
     id,
     component: spec.kind,
@@ -433,15 +439,25 @@ export function open(spec: PaneSpec, opts: { activate?: boolean; beside?: boolea
     // 8 PDFs open) — and keeps its place through pane-scroll.ts
     renderer: spec.kind === "terminal" ? "always" : "onlyWhenVisible",
     inactive: opts.activate === false,
-    ...((opts.beside && besideActive()) || placement(specZone(spec))),
+    ...((opts.beside && besideActive()) || newestFirst(placement(specZone(spec)))),
   } as AddPanelOptions<PaneSpec>);
   setOpening(null);
+  // a new group among the editors takes its room from them, not from the side panel or the terminal
+  if (dock.groups.length > groupsBefore && specZone(spec) === "main") restoreTools();
   if (opts.activate !== false && !opts.beside) replaceInGroup(panel);
   // a pane added to a hidden tool panel (a new shell, an SSH session while Ctrl+J hid the terminals) shows it, as
   // asking again for an open one does; added in the background it stays hidden, its always-rendered content too
   if (opts.activate !== false) reveal(panel.group);
   else if (!panel.group.api.isVisible) setContentVisible(panel.group, false);
   return panel.api;
+}
+
+/** New tabs on top (`ui.new_tabs_first`): a pane added to an existing group goes first in it — the side list and a
+ *  horizontal strip both follow the group's order, and so do drags. A new group (a split) is left as placed. */
+function newestFirst(at: Partial<AddPanelOptions>): Partial<AddPanelOptions> {
+  const pos = at.position;
+  if (!Boolean((settings.config?.ui as { new_tabs_first?: boolean } | undefined)?.new_tabs_first) || !pos || !("referenceGroup" in pos) || pos.direction) return at;
+  return { ...at, position: { ...pos, index: 0 } };
 }
 
 /** One tab per pane (`ui.one_tab`): the pane just opened in the editor area takes the place of what its group showed —

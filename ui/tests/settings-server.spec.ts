@@ -10,8 +10,8 @@ async function serverPage(page: Page) {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+,");
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Plugins/ }).click();
-  await page.getByTestId("settings-advanced").locator("summary").click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByTestId("settings-advanced").locator("> summary").click();
   return page.getByTestId("server-panel");
 }
 
@@ -31,18 +31,18 @@ test("Server shows inside folded Advanced & Server settings under Extensions wit
   await open();
   await expect(nav.getByRole("button", { name: "Advanced" })).toHaveCount(0);
   await expect(nav.getByRole("button", { name: "Server" })).toHaveCount(0);
-  await nav.getByRole("button", { name: /^Plugins/ }).click();
+  await nav.getByRole("button", { name: /^Extensions/ }).click();
   const adv = page.getByTestId("settings-advanced");
   await expect(adv).not.toHaveAttribute("open", "");
-  await adv.locator("summary").click();
+  await adv.locator("> summary").click();
   await expect(page.getByTestId("server-panel")).toBeVisible();
 
   await page.route("**/api/auth/me", (r) => r.fulfill({ json: { server: true, via: "proxy", user: "u", signOut: false } }));
   await open();
   await expect(nav.getByRole("button", { name: "Server" })).toHaveCount(0);
   await expect(nav.getByRole("button", { name: "Advanced" })).toHaveCount(0);
-  await nav.getByRole("button", { name: /^Plugins/ }).click();
-  await page.getByTestId("settings-advanced").locator("summary").click();
+  await nav.getByRole("button", { name: /^Extensions/ }).click();
+  await page.getByTestId("settings-advanced").locator("> summary").click();
   await expect(page.getByTestId("server-panel")).toBeVisible();
 
   await page.addInitScript(() => { (window as unknown as { KandinskyNative: unknown }).KandinskyNative = { ready() {}, tabs() {} }; });

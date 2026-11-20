@@ -107,9 +107,9 @@ test("fullscreen follows the keys: editor → terminal → editor stays fullscre
   await expect(term).toBeVisible();
 });
 
-// Fullscreen keeps a split, and a small button unsplits it: two editors side by side are two badged rows of the
-// sidebar's Open section; fullscreen keeps both on screen; the section's button makes them one editor again
-test("a split is two badged rows of the open tabs, fullscreen keeps it, and its button unsplits", async ({ page }) => {
+// Fullscreen keeps a split, and a small button unsplits it: two editors side by side show as active/split-shown rows in
+// the sidebar's Open section; fullscreen keeps both on screen; the section's button makes them one editor again
+test("a split shows both panes in open tabs, fullscreen keeps it, and its button unsplits", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   for (const f of ["journal.md", "paste.md"]) {
@@ -120,7 +120,8 @@ test("a split is two badged rows of the open tabs, fullscreen keeps it, and its 
   const open = sidebar.getByTestId("open-tabs");
   await open.locator(".pane-row", { hasText: "paste" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Split right" }).click();
-  await expect(open.locator(".split-badge")).toHaveCount(2);
+  await expect(page.locator(".dv-groupview")).toHaveCount(2);
+  await expect(open.locator(".pane-row.active, .pane-row.split-shown")).toHaveCount(2);
   await expect(page.locator(".cm-editor:visible")).toHaveCount(2);
   await expect(open, "one Open section, not one per split").toHaveCount(1);
 
@@ -132,7 +133,8 @@ test("a split is two badged rows of the open tabs, fullscreen keeps it, and its 
   await expect.poll(async () => (await box(sidebar)).width).toBeGreaterThan(150);
 
   await open.getByRole("button", { name: "Unsplit" }).click();
-  await expect(open.locator(".split-badge")).toHaveCount(0);
+  await expect(page.locator(".dv-groupview")).toHaveCount(1);
+  await expect(open.locator(".pane-row.split-shown")).toHaveCount(0);
   await expect(page.locator(".cm-editor:visible")).toHaveCount(1);
   await expect(open.locator(".pane-row", { hasText: "journal" })).toHaveCount(1);
   await expect(open.locator(".pane-row", { hasText: "paste" })).toHaveCount(1);

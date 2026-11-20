@@ -42,3 +42,5 @@ export const redecorate: StateEffectType<null>;
 export const showRawProperties: StateEffectType<boolean>;
 /** Shows the properties as raw YAML, the caret on their first key; false when the note has none. */
 export function editRawProperties(view: import("@codemirror/view").EditorView): boolean;
+/** Opens a rendered ```view fence in Markdown source until selection leaves the fence. */
+export const showSourceFence: StateEffectType<{ from: number; to: number } | null>;

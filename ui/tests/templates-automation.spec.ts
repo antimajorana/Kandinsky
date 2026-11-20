@@ -77,7 +77,7 @@ test("Settings → Writing lists each template with when it applies, and preview
   await page.goto("/");
   await page.getByText("Finish the GW notes.").waitFor();
   await page.keyboard.press("Meta+,");
-  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Editor & Writing/ }).click();
+  await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Editor & Notes/ }).click();
   const card = page.locator(".tpl", { hasText: "Film" });
   await expect(card).toContainText("a note whose kind becomes movie (its own rule)");
   await card.getByRole("button", { name: "preview" }).click();

@@ -83,6 +83,44 @@ export function markBrackets(source, at, mark, caret = -1) {
 // --- reveal rule ------------------------------------------------------------
 
 /**
+ * Explicitly source-opened fences (e.g. ```view blocks whose "Edit Markdown source" button was clicked):
+ * stored as [from, to] ranges mapped through edits and cleared as soon as the selection leaves that fence.
+ */
+export const showSourceFence = StateEffect.define();
+export const sourceFences = StateField.define({
+  create: () => [],
+  update(ranges, tr) {
+    let next = tr.docChanged
+      ? ranges
+          .map((r) => ({ from: tr.changes.mapPos(r.from, 1), to: tr.changes.mapPos(r.to, -1) }))
+          .filter((r) => r.from <= r.to)
+      : ranges;
+    for (const e of tr.effects) {
+      if (e.is(showSourceFence)) {
+        next = e.value ? [e.value] : [];
+      }
+    }
+    if (tr.selection && next.length) {
+      next = next.filter((r) => tr.state.selection.ranges.some((sr) => sr.from <= r.to && sr.to >= r.from));
+    }
+    return next;
+  },
+});
+
+function fenceOpenedAsSource(state, from, to) {
+  const ranges = state.field(sourceFences, false) || [];
+  return ranges.some((r) => r.from <= to && r.to >= from);
+}
+
+function isViewFence(state, node, chunk) {
+  if (node.name !== "FencedCode") return false;
+  const info = node.node.getChild("CodeInfo");
+  if (info && state.doc.sliceString(info.from, info.to).trim() === "view") return true;
+  const firstLine = state.doc.lineAt(chunk.from).text;
+  return /^[ \t]*(?:`{3,}|~{3,})[ \t]*view(?:[ \t]*$)/.test(firstLine);
+}
+
+/**
  * Should this construct show its raw source?
  *
  * True when any selection range touches [from, to] -- inclusive at both edges,
@@ -927,7 +965,7 @@ function remeasure(host, view, settled) {
 function enterOnClick(host, view) {
   if (!view) return; // headless tests build widgets without a view
   host.addEventListener("mousedown", (event) => {
-    if (event.button !== 0 || event.target.closest(INTERACTIVE)) return;
+    if (event.button !== 0 || event.target.closest(INTERACTIVE) || host.querySelector(".view-block") || event.target.closest(".view-block")) return;
     const pos = view.posAtDOM(host);
     if (pos == null) return;
     event.preventDefault();
@@ -1156,21 +1194,22 @@ export function buildDecorations(state, ranges, options = {}) {
         from: state.doc.lineAt(node.from).from,
         to: state.doc.lineAt(node.to).to,
       };
-      if (revealed(state, chunk.from, chunk.to)) return false; // being edited
+      const isView = isViewFence(state, node, chunk);
+      if (isView ? fenceOpenedAsSource(state, chunk.from, chunk.to) : revealed(state, chunk.from, chunk.to)) return false; // being edited
       const source = state.doc.sliceString(chunk.from, chunk.to);
       const html = opts.blockHtml(source, state);
       // a raw block of closing tags only (`</div>` after a blank line inside a `<div>`) renders to nothing, as in
       // Obsidian: not its source as text
       const closers = node.name === "HTMLBlock" && /^(\s*<\/[A-Za-z][\w-]*\s*>)+\s*$/.test(source);
       if (!html && !closers) return undefined; // unknown to the renderer: decorate as markdown
-      rendered.push({ ...chunk, source, html: html || "" });
+      rendered.push({ ...chunk, source, html: html || "", isView });
       return false;
     },
   });
 
   for (const chunk of rendered) {
     const widget = new RenderedBlockWidget(chunk.source, chunk.html, opts.hydrateBlock, opts.releaseBlock);
-    add(chunk.from, chunk.to, Decoration.replace({ widget, block: true }));
+    add(chunk.from, chunk.to, Decoration.replace({ widget, block: true, ...(chunk.isView ? { skipEntry: true } : {}) }));
   }
 
   // Both walks run in document order, so one moving cursor answers "is this
@@ -1726,7 +1765,7 @@ export function livePreview(options = {}) {
       if (
         !tr.docChanged &&
         !tr.selection &&
-        !tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(redecorate)) &&
+        !tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(redecorate) || e.is(showSourceFence)) &&
         syntaxTree(tr.startState) === syntaxTree(tr.state)
       ) {
         return {
@@ -1753,7 +1792,7 @@ export function livePreview(options = {}) {
     ],
   });
 
-  return [[calloutFolds, rawProperties, keepCaretOutOfProperties, field], blockEntryKeymap(field)];
+  return [[calloutFolds, rawProperties, sourceFences, keepCaretOutOfProperties, field], blockEntryKeymap(field)];
 }
 
 /**
@@ -1835,7 +1874,8 @@ function decorate(state, opts) {
  */
 const STRUCTURAL = /```|~~~|\$\$|<|^---|^\s*\|/m;
 function redecorate_(value, tr, opts) {
-  if (tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(redecorate))) return null;
+  if (tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(redecorate) || e.is(showSourceFence))) return null;
+  if (tr.startState.field(sourceFences, false)?.length !== tr.state.field(sourceFences, false)?.length) return null;
   const state = tr.state, tree = syntaxTree(state), oldTreeFull = syntaxTree(tr.startState);
   // the parser moved on with no edit (a big note is parsed in slices, more of it on a slow machine): only what it
   // changed is drawn again

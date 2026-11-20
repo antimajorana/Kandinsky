@@ -61,7 +61,9 @@ test("bookmarks: a tab and a saved search go to the bookmarks file and show in F
 test("unified NotionSidebar shows primary navigation and vault footer cleanly", async ({ page }) => {
   await expect(side(page).getByTestId("apps").getByRole("button", { name: "Home", exact: true })).toBeVisible();
   await expect(side(page).getByTestId("nav-calendar")).toBeVisible();
-  await expect(side(page).getByTestId("sidebar-import")).toHaveCount(1);
+  await expect(side(page).getByTestId("nav-library")).toBeVisible();
+  await expect(side(page).getByTestId("sidebar-import")).toHaveCount(0);
+  await expect(side(page).getByRole("button", { name: "Trash", exact: true })).toBeVisible();
   await expect(side(page).getByRole("button", { name: "Settings", exact: true })).toBeVisible();
 });
 
