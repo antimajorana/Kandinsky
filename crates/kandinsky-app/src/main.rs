@@ -317,23 +317,6 @@ fn fit_to_screen(window: &tauri::WebviewWindow) {
     let _ = window.center();
 }
 
-/// Windows: a touchpad pinch reaches the page as a Ctrl+wheel, which the graph, a PDF and pane-zoom.ts zoom with (and
-/// stop, so WebView2 never scales the whole window). wry turns WebView2's pinch zoom off together with its zoom keys
-/// (Tauri's `zoom_hotkeys_enabled`), and WebView2 then drops the gesture before the page sees it: a pinch did nothing.
-/// Only the pinch is turned on: Ctrl+plus and Ctrl+minus stay the app's own (pane-zoom.ts).
-#[cfg(windows)]
-fn pinch_reaches_page(window: &tauri::WebviewWindow) {
-    let _ = window.with_webview(|w| unsafe {
-        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings5;
-        use windows_core::Interface;
-        let Ok(core) = w.controller().CoreWebView2() else { return };
-        let Ok(settings) = core.Settings() else { return };
-        if let Ok(s5) = settings.cast::<ICoreWebView2Settings5>() {
-            let _ = s5.SetIsPinchZoomEnabled(true);
-        }
-    });
-}
-
 /// The window in the theme's background (tokens.css `--bg-app`) until the page paints: no white flash at start.
 fn paint_before_page(window: &tauri::WebviewWindow, vault: &std::path::Path) {
     use kandinsky_core::config::{Config, Theme};
@@ -343,7 +326,8 @@ fn paint_before_page(window: &tauri::WebviewWindow, vault: &std::path::Path) {
         Theme::Light => false,
         Theme::System => window.theme().map_or(true, |t| t == tauri::Theme::Dark),
     };
-    let plain = ui.as_ref().is_some_and(|u| {
+    // the page's own default when the settings cannot be read (index.html, Palette::default)
+    let plain = ui.as_ref().is_none_or(|u| {
         let p = if dark { u.palette_dark.unwrap_or(u.palette) } else { u.palette };
         p == kandinsky_core::config::Palette::Plain
     });
@@ -936,8 +920,6 @@ impl MainSpec {
             .build()?;
         fit_to_screen(&main);
         paint_before_page(&main, &vault_bg);
-        #[cfg(windows)]
-        pinch_reaches_page(&main);
         // WebKitGTK silently drops a window.open that no fresh click started — and a plugin's sign-in
         // opens its page only after its helper has answered. Every request still goes through on_new_window.
         #[cfg(target_os = "linux")]
@@ -1325,9 +1307,14 @@ const WEBVIEW2_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScree
 /// first one made otherwise would start an empty profile under the new identifier, which then wins at every start.
 pub(crate) fn window<'a, R: tauri::Runtime, M: tauri::Manager<R>>(app: &'a M, label: impl Into<String>, url: WebviewUrl) -> WebviewWindowBuilder<'a, R, M> {
     let built = WebviewWindowBuilder::new(app, label, url);
-    // the same arguments for every window: WebView2 will not open two with different ones on one data folder
+    // the same arguments for every window: WebView2 will not open two with different ones on one data folder.
+    // Zoom on: wry turns WebView2's pinch zoom off with its zoom keys, and WebView2 then drops a touchpad pinch before the
+    // page sees it (a pinch did nothing on the graph, a PDF, a pane). It must be on before the first navigation (WebView2
+    // applies settings from the next one, and the page never navigates again). The page keeps the zoom its own:
+    // nav-input.ts `noPageZoom` cancels every Ctrl+wheel at the window after the view under it zoomed, the keymap takes
+    // Ctrl+plus/minus/0 (pane-zoom.ts), and frame_page.js does both in a web tab's frame.
     #[cfg(windows)]
-    let built = built.additional_browser_args(WEBVIEW2_ARGS);
+    let built = built.additional_browser_args(WEBVIEW2_ARGS).zoom_hotkeys_enabled(true);
     match kandinsky_core::platform::dirs_migrate::webview_dir() {
         Some(dir) => built.data_directory(dir),
         None => built,
@@ -1403,17 +1390,31 @@ mod tests {
     fn webview_finds_its_proxy_through_winhttp_and_keeps_wrys_defaults() {
         // Chromium's own proxy discovery held the first request (the core's page) ~20 s: the window stayed empty
         assert!(WEBVIEW2_ARGS.split(' ').any(|a| a == "--winhttp-proxy-resolver"));
-        assert!(WEBVIEW2_ARGS.contains("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"));
+        // wry's own arguments (wry webview2 `default_args`, autoplay on as Tauri leaves it): set here, they are no longer added
+        assert!(WEBVIEW2_ARGS.starts_with("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required "));
         assert!(!WEBVIEW2_ARGS.contains("--no-proxy-server"), "a proxy the system names must keep working");
     }
 
     #[test]
     fn the_window_before_its_page_is_the_pages_background() {
-        // palettes.css `plain` and tokens.css `--bg-app`, as ui/index.html paints them
-        assert_eq!(page_background(true, true), (0x20, 0x20, 0x20));
-        assert_eq!(page_background(false, true), (0xf7, 0xf7, 0xf5));
-        assert_eq!(page_background(true, false), (0x12, 0x13, 0x17));
-        assert_eq!(page_background(false, false), (0xea, 0xe6, 0xde));
+        // the same colours as palettes.css `plain` and tokens.css `--bg-app`, and as ui/index.html paints them
+        let palettes = include_str!("../../../ui/src/styles/palettes.css");
+        let tokens = include_str!("../../../ui/src/styles/tokens.css");
+        let index = include_str!("../../../ui/index.html");
+        let hex = |(r, g, b): (u8, u8, u8)| format!("#{r:02x}{g:02x}{b:02x}");
+        let bg_in = |css: &str, block: &str| {
+            let at = css.find(block).unwrap_or_else(|| panic!("{block} not found"));
+            let rest = &css[at..];
+            let v = &rest[rest.find("--bg-app:").expect("--bg-app") + 9..];
+            v.trim_start()[..7].to_string()
+        };
+        assert_eq!(hex(page_background(true, true)), bg_in(palettes, "[data-theme=\"light\"])[data-palette=\"plain\"]"));
+        assert_eq!(hex(page_background(false, true)), bg_in(palettes, "[data-theme=\"light\"][data-palette=\"plain\"]"));
+        assert_eq!(hex(page_background(true, false)), bg_in(tokens, ":root, [data-theme=\"dark\"] {"));
+        assert_eq!(hex(page_background(false, false)), bg_in(tokens, "[data-theme=\"light\"] {"));
+        for (dark, plain) in [(true, true), (false, true), (true, false), (false, false)] {
+            assert!(index.contains(&format!("background: {}", hex(page_background(dark, plain)))), "index.html paints {}", hex(page_background(dark, plain)));
+        }
     }
 
     #[test]

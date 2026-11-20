@@ -42,11 +42,6 @@ objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
 objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "objc2-app-kit", "WKWebView", "WKWebViewConfiguration", "WKUserContentController", "WKUserScript", "WKContentWorld"] }
 
-[target.'cfg(windows)'.dependencies]
-# WebView2's settings that Tauri does not expose (main.rs `pinch_reaches_page`); the versions wry uses
-webview2-com = "0.39"
-windows-core = "0.62"
-
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 # the tray icon on Windows and macOS (tray_tauri.rs); Linux has its own (ksni below: Tauri's loads
 # libayatana-appindicator at run time and panics without it)

@@ -66,6 +66,12 @@
     else if (e.ctrlKey && plain && !e.shiftKey && k === "f") send({ action: "find" });
     else if (meta) send({ key: { key: e.key, code: e.code, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey } });
   }, true);
+  // the zoom stays Kandinsky's: a pinch (a Ctrl+wheel) or Ctrl+plus/minus/0 in a web tab would scale the whole window
+  // (main.rs turns WebView2's zoom on for the pinch); a site that zooms itself with them has had them first
+  addEventListener("wheel", (e) => { if (e.ctrlKey && !e.defaultPrevented) e.preventDefault(); }, { passive: false });
+  addEventListener("keydown", (e) => {
+    if (e.ctrlKey && !e.altKey && !e.metaKey && !e.defaultPrevented && ["=", "+", "-", "0"].includes(e.key)) e.preventDefault();
+  });
   // the link under the pointer (or the keyboard's focus): its address in the pane's corner, as a browser's status bar
   let hover = "";
   const hovered = (t) => {

@@ -31,6 +31,8 @@ html.phone button.switch { transform: scale(1.5); margin: 6px 10px; }
 html.phone button.link, html.phone .tools > button.tool { min-height: 40px; }
 html.phone label.toggle > input[type="checkbox"] { width: 26px; height: 26px; }
 html, body { margin: 0; height: 100%; overflow: clip; }
+/* the canvas too (index.html gives html the start-up colour; this palette's own once the styles are in) */
+html { background: var(--bg-app); }
 body {
   font-family: var(--font-ui); font-size: calc(14px * var(--ui-scale, 1)); line-height: 1.5; color: var(--text); background: var(--bg-app);
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
