@@ -68,7 +68,9 @@ export function zoomPane(step: -1 | 0 | 1): void {
 function onWheel(e: WheelEvent): void {
   if (!e.ctrlKey || e.defaultPrevented || !dock) return;
   const p = dock.panels.find((x) => x.view.content.element.contains(e.target as Node));
-  if (!p) return;
+  // the Windows app passes a touchpad pinch to the page (kandinsky-app `pinch_reaches_page`): one no pane took must not
+  // scale the whole window instead (WebView2's own pinch zoom); in a browser it stays the browser's page zoom
+  if (!p) { if ((window as { chrome?: { webview?: unknown } }).chrome?.webview) e.preventDefault(); return; }
   e.preventDefault();
   const px = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY; // lines → pixels
   zoomTo(p, (steps.get(p.id) ?? 0) - px * WHEEL_STEP);

@@ -226,6 +226,7 @@
     const c = canvas.getContext("2d");
     if (!c) return;
     const light = lightMode, col = theme(), k = view.k;
+    canvas.dataset.zoom = k.toFixed(4); // the camera's scale as drawn (graph-zoom.spec.ts reads it)
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.fillStyle = col.bg;
     c.fillRect(0, 0, w, h);
