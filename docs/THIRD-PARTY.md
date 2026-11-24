@@ -1,5 +1,7 @@
 # Third-party code inside this repository
 
+Kandinsky is based on [Atlas by Alneb](https://github.com/Alneb/atlas). It was renamed and modified in November 2026.
+
 Kandinsky is licensed AGPL-3.0-or-later (`LICENSE`), except its plugin SDK (`crates/kandinsky-plugin`, `crates/kandinsky-core/sdk/js`), which is MIT OR Apache-2.0 so plugins may carry any licence. These parts come from elsewhere and keep their own licences:
 
 | path | what | licence | changes |

@@ -1,28 +1,36 @@
 # Kandinsky
 
-A workspace for Markdown notes, PDFs, tables, and tasks. Your vault is a folder of plain files, with Kandinsky’s settings and plugins in `.kandinsky/`.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/readme/workspace-dark.webp">
-  <img src="docs/img/readme/workspace-light.webp" alt="Kandinsky workspace with the page tree, note properties, and a Markdown note">
-</picture>
-
-- Write with live preview, wikilinks, backlinks, templates, and tasks. Query notes with Obsidian Bases.
-- Arrange blocks on pages, annotate PDFs, and edit CSV and TSV tables. Open Excel sheets read-only or export them to CSV for editing.
-- Extend the workspace with plugins for mail, calendars, research, and other tools.
+A workspace for Markdown notes, tasks, PDFs, and tables. Your **vault** is the folder where your notes and files live.
 
 ## Get started
 
-- [Download the latest installer](https://github.com/antimajorana/kandinsky/releases/latest) · [First run](docs/guides/FIRST-RUN.md) · [Self-hosting](docs/guides/SERVER.md)
-- [Obsidian and Notion compatibility](docs/guides/COMPATIBILITY.md) · [Plugin maturity](docs/guides/PLUGIN-MATURITY.md)
+1. Download the Windows x64 installer and run the `.exe`. [Latest release](https://github.com/antimajorana/kandinsky/releases/latest)
+2. Open Kandinsky and choose **New vault…** or **Open a folder…**. You can open an existing Obsidian vault.
+3. Select **New note** in the sidebar. Type `[[Note name]]` to link to another note. [First-run guide](docs/guides/FIRST-RUN.md)
 
-To develop locally with Rust stable and Node 24:
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/readme/workspace-dark.webp">
+  <img src="docs/img/readme/workspace-light.webp" alt="A Markdown note with properties, links, and an embedded recipe table">
+</picture>
+
+## Organize notes with Bases
+
+A **Base** shows your notes as a table, board, or calendar. Each row is a note, so you can filter and sort by its properties, such as status or rating. Press **F1** and search for **Bases** to open or create one. Select **New** to create a row from a template and answer its prompts. [Notes and templates](docs/guides/NOTES-SYSTEM.md#notes-from-templates)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/readme/base-template-dark.webp">
+  <img src="docs/img/readme/base-template-light.webp" alt="A Base’s new-row form showing a default template with two prompts">
+</picture>
+
+## Build from source
+
+For local development, use Rust stable and Node 24.
 
 ```sh
 npm --prefix ui ci
 bash scripts/dev/dev.sh /path/to/vault
 ```
 
-[Documentation](docs/INDEX.md) · [Contributing](docs/CONTRIBUTING.md) · [Changelog](docs/CHANGELOG.md) · [Security](docs/SECURITY.md)
+[Documentation](docs/INDEX.md) · [Compatibility](docs/guides/COMPATIBILITY.md) · [Self-hosting](docs/guides/SERVER.md) · [Changelog](docs/CHANGELOG.md)
 
-Kandinsky is based on [Atlas by Alneb](https://github.com/Alneb/atlas), renamed and modified in November 2026. [AGPL-3.0-or-later](LICENSE) · [SDK and third-party licenses](docs/THIRD-PARTY.md)
+[AGPL-3.0-or-later](LICENSE) · [License notices](docs/THIRD-PARTY.md)
