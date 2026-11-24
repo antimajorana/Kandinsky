@@ -17,6 +17,24 @@ async function openSettings(page: Page) {
 }
 
 test.beforeEach(({ page }) => vaultLook(page)); // these change the vault's look and expect the page to follow
+for (const commit of ["deadbeef", "", "unknown"]) {
+  test(`Appearance links to source only for a known revision (${commit || "empty"})`, async ({ page }) => {
+    await page.route("**/api/version", async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ response, json: { ...await response.json(), version: "0.0.0-test", commit } });
+    });
+    await openSettings(page);
+    await nav(page).getByRole("button", { name: /^Appearance/ }).click();
+    await expect(page.getByTestId("kandinsky-version")).toContainText("0.0.0-test");
+    const source = page.getByTestId("kandinsky-credit").getByRole("link", { name: "Source code" });
+    if (commit === "deadbeef") {
+      await expect(source).toHaveAttribute("href", "https://github.com/antimajorana/Kandinsky/tree/deadbeef");
+    } else {
+      await expect(source).toHaveCount(0);
+    }
+  });
+}
+
 test("the 7 streamlined settings categories render cleanly with Advanced folded", async ({ page }) => {
   await openSettings(page);
   for (const name of ["Appearance", "Editor & Notes", "Calendar & Daily Notes", "Files & Links", "PDF & Citations", "Shortcuts", "Extensions"]) {

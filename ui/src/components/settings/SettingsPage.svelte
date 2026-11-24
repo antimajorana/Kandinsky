@@ -7,6 +7,7 @@
   import ToolDrafts from "../ToolDrafts.svelte";
   import SettingField from "./SettingField.svelte";
   import OverviewPanel from "./OverviewPanel.svelte";
+  import BuildInfo from "./BuildInfo.svelte";
   import PreviewPanel from "./PreviewPanel.svelte";
   import DeviceLookPanel from "./DeviceLookPanel.svelte";
   import SnippetsPanel from "./SnippetsPanel.svelte";
@@ -198,6 +199,7 @@
       {/each}
     </section>
   {/if}
+  {#if page.page === "appearance"}<BuildInfo />{/if}
 </article>
 
 {#if naming === "snippet"}<InputDialog title="New CSS snippet" hint="A name, e.g. wide-notes" onsubmit={(n) => { naming = null; void newSnippet(n); }} oncancel={() => (naming = null)} />{/if}
