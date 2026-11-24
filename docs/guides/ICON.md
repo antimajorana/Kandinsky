@@ -30,10 +30,6 @@ The map is hidden behind the globe with an SVG **mask**, not by painting the glo
 - **The capture box** (`crates/kandinsky-capture/src/window.rs`, `window_icon`): the 64 px PNG is built into the program (`include_bytes!`) and set as the winit window icon. That matters on X11. On Wayland the compositor takes the icon from the desktop file that the app id `kandinsky-capture` names (`kandinsky-capture.desktop`, `Icon=kandinsky`).
 - **The desktop app's window** uses Tauri's bundle icons, which are compiled in, so it needs a rebuild of `kandinsky-app` to change.
 
-## Inside the app: the vault's initial, not the logo
-
-The badge at the top of the rail and of the sidebar used to be a hard-coded letter "A". It is now `ui/src/components/VaultBadge.svelte`: the open vault's initial, so two windows on two vaults can be told apart at a glance. It takes the first letter or digit of the name (`~notes` → `N`), otherwise the first grapheme (an emoji stays whole), in upper case. The tooltip is the vault's name. It keeps the old badge's theme gradient, so it follows light, dark and e-ink. `Rail.svelte` (30 px) and `Sidebar.svelte` (28 px) both use it, where each used to carry its own copy of the style.
-
 ## How it was chosen
 
 Six rounds on one gallery page (a private claude.ai artifact). The candidates' generator scripts were scratch work and are not kept.

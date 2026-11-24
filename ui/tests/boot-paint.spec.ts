@@ -19,13 +19,13 @@ test("the page paints the app's background and an opening line before any of its
   await expect(boot).toHaveText("Opening Kandinsky…");
   await expect(boot).toBeVisible();
   // the tests' vault is dark with the `plain` palette: its --bg-app (palettes.css), not black, not the browser's white
-  await expect.poll(() => bg(page, "html")).toBe("rgb(32, 32, 32)");
-  expect(await bg(page, "body")).toBe("rgb(32, 32, 32)");
+  await expect.poll(() => bg(page, "html")).toBe("rgb(34, 38, 46)");
+  expect(await bg(page, "body")).toBe("rgb(34, 38, 46)");
   release();
   // the app takes over: its shell, the opening line gone, the canvas in the palette's colour
   await expect(page.getByText("Finish the GW notes.")).toBeVisible({ timeout: 20_000 });
   await expect(boot).toBeHidden();
-  await expect.poll(() => bg(page, "html")).toBe("rgb(32, 32, 32)");
+  await expect.poll(() => bg(page, "html")).toBe("rgb(34, 38, 46)");
 });
 
 test("a light theme kept in this browser starts light", async ({ page }) => {
@@ -33,7 +33,7 @@ test("a light theme kept in this browser starts light", async ({ page }) => {
   const release = await holdAssets(page);
   await page.goto("/", { waitUntil: "commit" });
   await expect(page.getByTestId("boot")).toBeVisible();
-  await expect.poll(() => bg(page, "html")).toBe("rgb(247, 247, 245)"); // `plain`'s light --bg-app
+  await expect.poll(() => bg(page, "html")).toBe("rgb(242, 241, 237)"); // `plain`'s light --bg-app
   release();
   await expect(page.getByText("Finish the GW notes.")).toBeVisible({ timeout: 20_000 });
 });
