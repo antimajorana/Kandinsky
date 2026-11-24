@@ -8,6 +8,11 @@ upstream Atlas releases and keep the names that release used.
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-24
+
+- Ship the AGPL license and available third-party notices with the desktop app. Settings links to the source for the running build.
+- Retire the Atlas 0.2.10 setup kit and remove generated files from the source tree.
+
 ## [0.4.3] - 2026-11-24
 
 ### Added
