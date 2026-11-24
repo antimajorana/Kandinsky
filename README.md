@@ -1,25 +1,27 @@
 # Kandinsky
 
-A workspace for Markdown notes, tasks, PDFs, and tables. Your **vault** is the folder where your notes and files live.
+Kandinsky is a workspace for Markdown notes, tasks, PDFs, and tables. Your **vault** is the folder that holds those files.
 
-## Get started
+[Download for Windows (x64)](https://github.com/antimajorana/kandinsky/releases/latest) · [First-run guide](docs/guides/FIRST-RUN.md)
 
-1. Download the Windows x64 installer and run the `.exe`. [Latest release](https://github.com/antimajorana/kandinsky/releases/latest)
-2. Open Kandinsky and choose **New vault…** or **Open a folder…**. You can open an existing Obsidian vault.
-3. Select **New note** in the sidebar. Type `[[Note name]]` to link to another note. [First-run guide](docs/guides/FIRST-RUN.md)
+Run the installer, then choose **New vault…** or **Open a folder…**. You can open an existing Obsidian vault directly.
+
+## A coffee notebook
+
+Create a note called **Coffee** and type `[[V60]]` to link to a recipe note. Give each recipe a `type` of `Recipe` and a `rating`.
+
+A **Base** shows matching notes as a table, board, or calendar. Press **F1**, search for **Bases**, and create `recipes.base`. Filter by type, sort by rating, and embed the table in **Coffee** with `![[recipes.base]]`.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/readme/workspace-dark.webp">
-  <img src="docs/img/readme/workspace-light.webp" alt="A Markdown note with properties, links, and an embedded recipe table">
+  <img src="docs/img/readme/workspace-light.webp" alt="Coffee note with links and an embedded recipe table sorted by rating">
 </picture>
 
-## Organize notes with Bases
-
-A **Base** shows your notes as a table, board, or calendar. Each row is a note, so you can filter and sort by its properties, such as status or rating. Press **F1** and search for **Bases** to open or create one. Select **New** to create a row from a template and answer its prompts. [Notes and templates](docs/guides/NOTES-SYSTEM.md#notes-from-templates)
+Select **New** in the Base to add another recipe from a template. In this example, **Brew log** asks for the dose and water amount. The answers are saved in a Markdown note that appears in the table. [Notes and templates](docs/guides/NOTES-SYSTEM.md#notes-from-templates)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/readme/base-template-dark.webp">
-  <img src="docs/img/readme/base-template-light.webp" alt="A Base’s new-row form showing a default template with two prompts">
+  <img src="docs/img/readme/base-template-light.webp" alt="New recipe form with the Brew log template and fields for dose and water">
 </picture>
 
 ## Build from source
