@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn proc_stat_distinguishes_live_processes_from_unreaped_ones() {
         assert_eq!(linux_pid_alive(b"5 (worker) Z \xff) S 1 2"), Some(true));
-        for state in [b'Z', b'X', b'x'] {
+        for &state in b"ZXx" {
             assert_eq!(linux_pid_alive(&[b'5', b' ', b'(', b')', b' ', state, b' ', b'1']), Some(false));
         }
         assert_eq!(linux_pid_alive(b"5 (worker)"), None);
