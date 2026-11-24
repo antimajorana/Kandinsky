@@ -21,21 +21,19 @@ const bin = resolve(arg("--bin", join(root, "target/debug/kandinsky")));
 const out = resolve(arg("--out", join(root, "docs/img/readme")));
 const say = (m) => console.log(`[shots] ${m}`);
 
-const recipe = (method, ratio, minutes, rating, body) =>
-  `---\ntype: Recipe\nmethod: ${method}\nratio: "${ratio}"\nminutes: ${minutes}\nrating: ${rating}\ntopics: ["[[Coffee]]"]\n---\n${body}`;
+const sockCase = (status, lastSeen, color, body) =>
+  `---\ntype: Sock case\nstatus: ${status}\nlast_seen: ${lastSeen}\ncolor: ${color}\ntopics: ["[[Missing Socks]]"]\n---\n${body}`;
 const FILES = {
   ".kandinsky/config.toml": `log_dir = "log"\nvim = false\n\n[ui]\nrestore_layout = false\n\n[editor]\nproperties = "inline"\n`,
-  "notes/Coffee.md": `---\ntype: Topic\ntags: [kitchen, reading]\naliases: [coffee brewing]\n---\n# Coffee\n\nNotes on brewing at home: what changes the cup, and the recipes that worked. See [[Extraction]] for the numbers and [[Grinders]] for the gear.\n\n> [!tip] Start here\n> Fix the ratio first, then change one thing at a time: grind, water, time.\n\n## Recipes\n\n![[recipes.base]]\n`,
-  "notes/Extraction.md": `---\ntype: Concept\ntopics: ["[[Coffee]]"]\n---\n# Extraction\n\nHow much of the coffee ends up in the cup. The **extraction yield** is the dissolved mass over the dry dose:\n\n$$\nE = \\frac{\\mathrm{TDS} \\cdot m_\\text{beverage}}{m_\\text{dose}}\n$$\n\nA yield of $18$–$22\\,\\%$ tastes balanced; below it the cup is sour, above it bitter.\n\n| Brew | Dose | Water | Yield |\n|---|---|---|---|\n| V60 | 15 g | 250 g | 20 % |\n| Espresso | 18 g | 36 g | 19 % |\n\nRelated: [[Coffee]], [[Grinders]].\n`,
-  "notes/Grinders.md": `---\ntype: Concept\ntopics: ["[[Coffee]]"]\n---\n# Grinders\n\nBurrs, not blades: an even grind extracts evenly.\n`,
-  "notes/recipes/V60.md": recipe("pour-over", "1:16", 3.5, 5, "# V60\n\n15 g, 250 g of water at 94 °C, a 45 s bloom.\n"),
-  "notes/recipes/Espresso.md": recipe("espresso", "1:2", 0.5, 4, "# Espresso\n\n18 g in, 36 g out, 28 s.\n"),
-  "notes/recipes/AeroPress.md": recipe("immersion", "1:14", 2, 4, "# AeroPress\n\nInverted, 17 g, two minutes, a slow press.\n"),
-  "notes/recipes/French press.md": recipe("immersion", "1:15", 4, 3, "# French press\n\nCoarse, four minutes, skim before plunging.\n"),
-  "notes/recipes/recipes.base": `filters:\n  and:\n    - type == "Recipe"\nviews:\n  - type: table\n    name: By rating\n    rowTemplate: brew-log\n    order: [file.name, method, ratio, rating]\n    sort:\n      - property: rating\n        direction: DESC\n`,
-  "templates/brew-log.md": "---\ntemplate_title: Brew log\ndose: {{prompt:Dose (g) | number}}\nwater: {{prompt:Water (g) | number}}\n---\n# {{title}}\n\n## Tasting notes\n\n{{cursor}}\n",
-  "log/2026-10-23.md": "# 2026-10-23\n\n- 08:10 Tried the V60 with a longer bloom: sweeter.\n",
-  "FOCUS.md": "# Focus\n\nWrite up the brewing notes.\n",
+  "notes/Missing Socks.md": `---\ntype: Topic\ntags: [laundry, mysteries]\naliases: [sock casebook]\n---\n# Missing Socks\n\nFour socks went into the wash. Three came back. See [[Striped Sock]] for the open case. [[The Dryer]] has declined to comment.\n\n> [!tip] Lead to follow\n> Check inside the fitted sheet. It has a history.\n\n## Case notes\n\n![[sock-cases.base]]\n`,
+  "notes/The Dryer.md": "# The Dryer\n\nThe only statement on record was a beep.\n",
+  "notes/cases/Striped Sock.md": sockCase("Missing", "Laundry basket", "Yellow", "# Striped Sock\n\nLast seen before the spin cycle.\n"),
+  "notes/cases/Blue Sock.md": sockCase("Found", "Inside the duvet", "Blue", "# Blue Sock\n\nRecovered from the far corner of the duvet cover.\n"),
+  "notes/cases/Hiking Sock.md": sockCase("Found", "Behind the dryer", "Charcoal", "# Hiking Sock\n\nFound during a search for spare change.\n"),
+  "notes/cases/Polka-Dot Sock.md": sockCase("Found", "Inside another sock", "Red", "# Polka-Dot Sock\n\nThe other sock was a size larger.\n"),
+  "notes/cases/sock-cases.base": `filters:\n  and:\n    - type == "Sock case"\nproperties:\n  note.last_seen:\n    displayName: Last seen\nviews:\n  - type: table\n    name: By status\n    rowTemplate: sock-report\n    order: [file.name, status, note.last_seen, color]\n    sort:\n      - property: status\n        direction: DESC\n`,
+  "templates/sock-report.md": "---\ntemplate_title: Sock report\nstatus: Missing\ncolor: {{prompt:Color}}\nlast_seen: {{prompt:Last seen}}\n---\n# {{title}}\n\n## Search notes\n\n{{cursor}}\n",
+  "FOCUS.md": "# Focus\n\nCheck the fitted sheet.\n",
 };
 
 const tmp = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "kandinsky-demo-"));
@@ -82,16 +80,16 @@ try {
     await ctx.addCookies([{ name: "kandinsky_local", value: KEY, url }]);
     const page = await ctx.newPage();
     await page.goto(url);
-    await page.getByText("Write up the brewing notes.").first().waitFor({ timeout: 30_000 });
+    await page.getByText("Check the fitted sheet.").first().waitFor({ timeout: 30_000 });
     const tree = page.getByTestId("sidebar").locator(".tree-scroll");
     await tree.getByText("notes", { exact: true }).click();
-    await tree.getByText("Coffee", { exact: true }).click();
-    await page.locator(".cm-content").getByText(/Notes on brewing at home/).waitFor();
-    await page.locator(".cm-content").getByText("V60", { exact: true }).first().waitFor();
+    await tree.getByText("Missing Socks", { exact: true }).click();
+    await page.locator(".cm-content").getByText(/Four socks went into the wash/).waitFor();
+    await page.locator(".cm-content .file-embed .base").getByText("Striped Sock", { exact: true }).waitFor();
     const favorite = page.getByRole("button", { name: "Add to Favorites" });
     if (await favorite.count()) {
       await favorite.click();
-      await page.getByTestId("sidebar").getByRole("region", { name: "Favorites" }).getByText("Coffee").waitFor();
+      await page.getByTestId("sidebar").getByRole("region", { name: "Favorites" }).getByText("Missing Socks", { exact: true }).waitFor();
       await page.locator(".toast").filter({ hasText: "Bookmarked" }).getByRole("button", { name: "Close" }).click();
     }
     await capture(page, "workspace", theme);
@@ -99,13 +97,13 @@ try {
     const palette = page.getByTestId("palette");
     await palette.getByRole("textbox").fill("Bases");
     await palette.getByText(/^Bases: open one/).click();
-    await palette.getByText("recipes", { exact: true }).click();
+    await palette.getByText("sock-cases", { exact: true }).click();
     await page.locator(".base-pane").getByRole("button", { name: "New", exact: true }).click();
     const row = page.getByRole("dialog", { name: "New row" });
-    await row.getByRole("button", { name: "Template", exact: true }).getByText("Brew log", { exact: true }).waitFor();
-    await row.getByRole("textbox", { name: "Title", exact: true }).fill("Morning V60");
-    await row.getByRole("spinbutton", { name: "Dose (g)", exact: true }).fill("15");
-    await row.getByRole("spinbutton", { name: "Water (g)", exact: true }).fill("250");
+    await row.getByRole("button", { name: "Template", exact: true }).getByText("Sock report", { exact: true }).waitFor();
+    await row.getByRole("textbox", { name: "Title", exact: true }).fill("Green Sock");
+    await row.getByRole("textbox", { name: "Color", exact: true }).fill("Moss green");
+    await row.getByRole("textbox", { name: "Last seen", exact: true }).fill("By the laundry basket");
     await capture(page, "base-template", theme, { x: 252, y: 0, width: 1188, height: 610 });
     await ctx.close();
   }
