@@ -19,6 +19,14 @@
     "publisher": "alneb",
     "homepage": "https://github.com/antimajorana/kandinsky",
     "license": "AGPL-3.0-or-later",
+    "resources": {
+      "../../LICENSE": "licenses/AGPL-3.0.txt",
+      "../../docs/THIRD-PARTY.md": "licenses/THIRD-PARTY.md",
+      "../vendor/softbuffer/LICENSE-APACHE": "licenses/softbuffer/LICENSE-APACHE",
+      "../vendor/softbuffer/LICENSE-MIT": "licenses/softbuffer/LICENSE-MIT",
+      "../vendor/kreuzberg-tesseract/LICENSE": "licenses/kreuzberg-tesseract/LICENSE",
+      "../../ui/src/assets/fonts/kandinsky-term-symbols-OFL.txt": "licenses/kandinsky-term-symbols-OFL.txt"
+    },
     "category": "Productivity",
     "shortDescription": "One fast desktop workspace over plain files",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico", "icons/icon.png"],

@@ -16,12 +16,13 @@
   // (it may be newer than the core)
   let version = $state<Awaited<ReturnType<typeof api.version>> | null>(null);
   $effect(() => { void api.version().then((v) => (version = v), () => {}); });
+  const sourceRef = $derived(version?.commit && /^[0-9a-f]{7,40}$/i.test(version.commit) ? version.commit : version && `v${version.version}`);
   const feats = (id: string) => (pageDef(id)?.features ?? []).flatMap((f) => { const a = actions.find((x) => x.id === f); return a ? [a] : []; });
 </script>
 
 {#if version}<p class="version" data-testid="kandinsky-version">Kandinsky <b>{version.version}</b>{#if version.commit} · commit <code>{version.commit}</code>{/if}{#if version.plugin_api} · plugin API {version.plugin_api}{/if}{#if version.ui} · interface build <code>{version.ui}</code>{/if}</p>{/if}
 <!-- the credit the licence asks for (README.md, "License"): a modified version of Atlas -->
-<p class="version credit" data-testid="kandinsky-credit">Kandinsky is based on Atlas by Alneb (github.com/Alneb/atlas), AGPL-3.0 · modified 2026-11-15</p>
+<p class="version credit" data-testid="kandinsky-credit">Kandinsky is based on Atlas by Alneb (github.com/Alneb/atlas), AGPL-3.0-or-later · modified 2026-11-15{#if sourceRef} · <a href={`https://github.com/antimajorana/Kandinsky/tree/${encodeURIComponent(sourceRef)}`} target="_blank" rel="noreferrer">Source code</a>{/if}</p>
 <section class="cards" aria-label="Areas">
   {#each cards as p (p.page)}
     {@const changed = p.fields.filter(isModified).length}
