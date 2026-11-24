@@ -10,7 +10,7 @@
   import { leftCopies, keepThis as keep, takeOther as take2, bothTexts, settleWith, type NoteSide } from "../lib/sync-copies";
   import SyncCompare from "./SyncCompare.svelte";
 
-  let { path, mine, take }: { path: string; mine: () => string; take: (text: string) => void } = $props();
+  let { path, mine, take }: { path: string; mine: () => string; take: NoteSide["take"] } = $props();
 
   let copies = $state<string[]>([]);
   // the note is the editor's: its text as typed, and taken back into it (saved by the editor)

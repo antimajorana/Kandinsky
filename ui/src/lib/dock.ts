@@ -413,10 +413,27 @@ export function open(spec: PaneSpec, opts: { activate?: boolean; beside?: boolea
       // the file asked for again: the tree scrolls back to it (the active file did not change, so nothing else says so)
       if (spec.kind !== "explorer" && "path" in spec && spec.path) window.dispatchEvent(new CustomEvent("kandinsky-active-file", { detail: spec.path }));
     }
-    if (spec.kind === "editor" && spec.line !== undefined) editors.get(id)?.gotoLine(spec.line);
-    if (spec.kind === "pdf" && spec.page !== undefined) pdfPages.get(id)?.(spec.page, { quote: spec.quote, annotation: spec.annotation });
-    if (spec.kind === "excalidraw" && spec.page) drawingPages.get(id)?.(spec.page);
-    if (spec.kind === "plugin" && spec.anchor) pluginAnchors.get(id)?.(spec.anchor);
+    if (spec.kind === "editor" && spec.line !== undefined) {
+      const editor = editors.get(id);
+      if (editor) editor.gotoLine(spec.line);
+      else existing.api.updateParameters({ line: spec.line }); // consumed when the editor finishes loading
+    }
+    if (spec.kind === "pdf" && spec.page !== undefined) {
+      const showPage = pdfPages.get(id);
+      const at = { quote: spec.quote, annotation: spec.annotation };
+      if (showPage) showPage(spec.page, at);
+      else existing.api.updateParameters({ page: spec.page, ...at });
+    }
+    if (spec.kind === "excalidraw" && spec.page) {
+      const showPage = drawingPages.get(id);
+      if (showPage) showPage(spec.page);
+      else existing.api.updateParameters({ page: spec.page });
+    }
+    if (spec.kind === "plugin" && spec.anchor) {
+      const goTo = pluginAnchors.get(id);
+      if (goTo) goTo(spec.anchor);
+      else existing.api.updateParameters({ anchor: spec.anchor });
+    }
     if (spec.kind === "explorer" && spec.path !== undefined) {
       // the folder asked for goes into the tab's own parameters too: an explorer asleep (unseen a while, hibernate.ts)
       // has no `explorerGo` and wakes from them — it showed the folder it was opened on, not the one asked for

@@ -311,15 +311,15 @@ pub fn new_note(root: &Path, cfg: &Config, req: &NewNote) -> Result<NewNoteResul
 }
 
 /// A note's text before it has a place: the template filled in, then the body.
-struct Draft {
-    text: String,
+pub(crate) struct Draft {
+    pub(crate) text: String,
     /// 1-based line of `tp.file.cursor()`, if the template has one.
-    cursor: Option<u32>,
+    pub(crate) cursor: Option<u32>,
     /// The folder the template files its notes in (`create_in:` or Templater's `tp.file.move`).
     create_in: Option<String>,
 }
 
-fn draft(root: &Path, cfg: &Config, template: Option<&str>, title: &str, body: Option<&str>, values: &Map<String, Value>, now: NaiveDateTime) -> Result<Draft> {
+pub(crate) fn draft(root: &Path, cfg: &Config, template: Option<&str>, title: &str, body: Option<&str>, values: &Map<String, Value>, now: NaiveDateTime) -> Result<Draft> {
     let _names = vault_names(cfg);
     let (template, create_in) = match template.filter(|t| !t.is_empty()) {
         Some(t) => take_create_in(&template_text(root, cfg, t)?),
@@ -666,7 +666,9 @@ fn ends_with_fence(text: &str) -> bool {
 
 fn replace_synced_block(src: &str, bid: &str, tag: &str, replacement: &str, attach_line: Option<u32>) -> Result<String> {
     let eol = if src.contains("\r\n") { "\r\n" } else { "\n" };
-    let lines: Vec<&str> = src.lines().collect();
+    let (_, body) = kandinsky_text::frontmatter::split(src);
+    let frontmatter = &src[..src.len() - body.len()];
+    let lines: Vec<&str> = body.lines().collect();
     let (fenced, fence_spans) = fence_map(&lines);
     let anchor_idx = (0..lines.len()).find(|&i| {
         let trimmed = lines[i].trim_end();
@@ -705,7 +707,6 @@ fn replace_synced_block(src: &str, bid: &str, tag: &str, replacement: &str, atta
             }
             (s, idx + 1, false)
         };
-        let multi_para = has_blank_line_outside_fences(replacement);
         let mut rep_lines: Vec<String> = if replacement.is_empty() {
             if start > 0 && !lines[start - 1].trim().is_empty() {
                 vec![String::new(), tag.to_string()]
@@ -714,10 +715,18 @@ fn replace_synced_block(src: &str, bid: &str, tag: &str, replacement: &str, atta
             }
         } else {
             let mut body: Vec<String> = replacement.lines().map(String::from).collect();
-            if multi_para {
+            let list = is_list_line(&body[0]);
+            let indent = leading_spaces(&body[0]);
+            let continuation = |line: &str| !line.trim().is_empty() && leading_spaces(line) > indent;
+            let inline_list = list && !standalone && body.iter().skip(1).all(|l| continuation(l))
+                && !lines.get(end).is_some_and(|l| continuation(l));
+            let marked = has_blank_line_outside_fences(replacement) || (list && !inline_list);
+            if marked {
                 body.insert(0, start_marker);
             }
-            if standalone || multi_para || ends_with_fence(replacement) || replacement.trim_start().starts_with('#') {
+            if inline_list {
+                body[0] = format!("{} {tag}", body[0].trim_end());
+            } else if standalone || marked || ends_with_fence(replacement) || replacement.trim_start().starts_with('#') {
                 body.push(tag.to_string());
             } else if let Some(last) = body.last_mut() {
                 if last.trim().is_empty() {
@@ -731,18 +740,16 @@ fn replace_synced_block(src: &str, bid: &str, tag: &str, replacement: &str, atta
         let mut out: Vec<String> = lines[..start].iter().map(|s| (*s).to_string()).collect();
         out.append(&mut rep_lines);
         out.extend(lines[end..].iter().map(|s| (*s).to_string()));
-        return Ok(format!("{}{trailing_nl}", out.join(eol)));
+        return Ok(format!("{frontmatter}{}{trailing_nl}", out.join(eol)));
     }
 
     if let Some(line_no) = attach_line {
-        let idx = (line_no as usize).saturating_sub(1);
-        if idx >= lines.len() {
-            return Err(Error::BadRequest("attach_line out of range".into()));
-        }
+        let idx = (line_no as usize).checked_sub(frontmatter.lines().count() + 1).filter(|&idx| idx < lines.len())
+            .ok_or_else(|| Error::BadRequest("attach_line out of range".into()))?;
         let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
         let body = if replacement.is_empty() { lines[idx].trim_end().to_string() } else { replacement.to_string() };
         out[idx] = format!("{body} {tag}");
-        return Ok(format!("{}{trailing_nl}", out.join(eol)));
+        return Ok(format!("{frontmatter}{}{trailing_nl}", out.join(eol)));
     }
     Err(Error::NotFound(format!("block anchor {tag} not found")))
 }
@@ -1200,5 +1207,29 @@ mod tests {
         assert_eq!(put("1) First step\n2) Second step ^abc\n", "2) Second step v2"), "1) First step\n2) Second step v2 ^abc\n");
         assert_eq!(put("-\tone\nTwo ^abc\n", "Two v2"), "-\tone\nTwo v2 ^abc\n");
         assert!(is_list_line("  3.\tthree") && is_list_line("+ x") && !is_list_line("2026.") && !is_list_line("-x") && !is_list_line(") x"));
+    }
+
+    #[test]
+    fn synced_block_edits_leave_frontmatter_intact() {
+        let src = "\u{feff}---\r\ntitle: Notebook ^abc\r\n...\r\nFirst paragraph ^abc\r\n\r\nAfter.\r\n";
+        let updated = replace_synced_block(src, "abc", "^abc", "New paragraph", None).unwrap();
+        assert_eq!(updated, "\u{feff}---\r\ntitle: Notebook ^abc\r\n...\r\nNew paragraph ^abc\r\n\r\nAfter.\r\n");
+
+        let src = "---\ntitle: Notebook\n---\nParagraph\n";
+        assert!(matches!(replace_synced_block(src, "abc", "^abc", "New", Some(2)), Err(Error::BadRequest(_))));
+        assert_eq!(replace_synced_block(src, "abc", "^abc", "New", Some(4)).unwrap(), "---\ntitle: Notebook\n---\nNew ^abc\n");
+    }
+
+    #[test]
+    fn repeated_synced_list_edits_replace_the_full_selection() {
+        let put = |src: &str, text: &str| replace_synced_block(src, "abc", "^abc", text, None).unwrap();
+        let src = "- Original ^abc\n  - Child\n- Neighbor\n";
+        let updated = put(src, "- Edited\n  - Child v2");
+        assert_eq!(updated, "- Edited ^abc\n  - Child v2\n- Neighbor\n");
+        assert_eq!(put(&updated, "- Final"), "- Final ^abc\n- Neighbor\n");
+
+        let two_items = put(src, "- One\n- Two");
+        assert_eq!(two_items, "<!-- synced:abc -->\n- One\n- Two\n^abc\n- Neighbor\n");
+        assert_eq!(put(&two_items, "Final"), "Final\n^abc\n- Neighbor\n");
     }
 }

@@ -1,17 +1,19 @@
 // A Sheet being edited: every change is an Op, applying one gives back the Op that undoes it, so undo / redo is a
 // stack of Ops. The rows stay plain arrays (a run's table has 10⁶ cells: no deep proxies); `version` is what the view
 // watches. Unsaved = the history is somewhere else than where it was saved.
-import { numericColumns, type Sheet } from "./parse";
-import { rowText } from "./write";
+import { numericColumns, type RawRecord, type Sheet } from "./parse";
+import { rewriteRecord, rowText } from "./write";
 
 /** A place in the table as shown: `r` a position in the rows shown, `c` in the columns shown. */
 export type Cell = { r: number; c: number };
 
-type Snapshot = { raw: (string | null)[]; headerRaw: string | null; comments: Sheet["comments"]; header: string[] };
+type Snapshot = Pick<Sheet, "raw" | "headerRaw" | "comments" | "header" | "headerSource">;
+type RowState = { raw: RawRecord; length: number };
+type CommentPlace = { index: number; at: number };
 
 export type Op =
-  | { kind: "cells"; at: { r: number; c: number; value: string }[] }
-  | { kind: "insertRows"; at: number; rows: string[][]; raw?: (string | null)[] }
+  | { kind: "cells"; at: { r: number; c: number; value: string }[]; restoreRows?: Map<number, RowState> }
+  | { kind: "insertRows"; at: number; rows: string[][]; raw?: RawRecord[]; restoreComments?: CommentPlace[] }
   | { kind: "deleteRows"; at: number; count: number }
   | { kind: "moveRows"; from: number; count: number; to: number }
   | { kind: "insertCol"; at: number; name: string; cells?: string[]; restore?: Snapshot }
@@ -34,11 +36,11 @@ export class SheetEdit {
   private floor = 0;
   constructor(public sheet: Sheet) {}
 
-  private get at(): number { return this.past.at(-1)?.id ?? this.floor; }
-  get dirty(): boolean { void this.version; return this.at !== this.savedId; }
+  get revision(): number { return this.past.at(-1)?.id ?? this.floor; }
+  get dirty(): boolean { void this.version; return this.revision !== this.savedId; }
   get canUndo(): boolean { void this.version; return this.past.length > 0; }
   get canRedo(): boolean { void this.version; return this.future.length > 0; }
-  markSaved(): void { this.savedId = this.at; this.version++; }
+  markSaved(revision: number): void { this.savedId = revision; this.version++; }
 
   /** A change made by the person: kept for undo, redo forgotten. */
   do(op: Op): void {
@@ -59,23 +61,23 @@ export class SheetEdit {
 
   private snapshot(): Snapshot {
     const s = this.sheet;
-    return { raw: s.raw.slice(), headerRaw: s.headerRaw, comments: s.comments.map((c) => ({ ...c })), header: s.header.slice() };
+    return { raw: s.raw.slice(), headerRaw: s.headerRaw, comments: s.comments.map((c) => ({ ...c })), header: s.header.slice(), headerSource: s.headerSource };
   }
   private restore(x: Snapshot) {
-    Object.assign(this.sheet, { raw: x.raw.slice(), headerRaw: x.headerRaw, comments: x.comments.map((c) => ({ ...c })), header: x.header.slice() });
+    Object.assign(this.sheet, { ...x, raw: x.raw.slice(), comments: x.comments.map((c) => ({ ...c })), header: x.header.slice() });
   }
   /** Every row's columns changed: none keeps its text as read. */
   private rewriteAll() {
     const s = this.sheet;
-    s.raw = s.rows.map(() => null);
-    s.headerRaw = null;
+    s.raw = s.raw.map(rewriteRecord);
+    s.headerRaw = rewriteRecord(s.headerRaw);
     this.headerComment();
   }
   /** A header kept in the file's last opening comment follows the header's names. */
   private headerComment() {
     const s = this.sheet, mark = s.layout.comment;
     if (s.headerSource !== "comment" || !mark) return;
-    const lead = s.comments.filter((c) => c.at <= 0).at(-1);
+    const lead = s.comments.filter((c) => c.at <= 0 && !c.blank).at(-1);
     if (lead) lead.text = `${mark} ${rowText(s.header, { ...s.layout, quoteAll: false })}`;
   }
   private renumber() { this.sheet.numeric = numericColumns(this.sheet.header.length, this.sheet.rows); }
@@ -88,29 +90,49 @@ export class SheetEdit {
         return { kind: "batch", ops: op.ops.map((o) => this.apply(o)).reverse() };
       case "cells": {
         const back = op.at.map(({ r, c }) => ({ r, c, value: s.rows[r]?.[c] ?? "" }));
+        const restoreRows = new Map<number, RowState>();
         for (const { r, c, value } of op.at) {
           const row = s.rows[r];
           if (!row) continue;
+          if (!restoreRows.has(r)) {
+            restoreRows.set(r, { raw: s.raw[r], length: row.length });
+            s.raw[r] = rewriteRecord(s.raw[r]);
+          }
           while (row.length <= c) row.push("");
           row[c] = value;
-          s.raw[r] = null;
+        }
+        for (const [r, old] of op.restoreRows ?? []) {
+          s.rows[r].length = old.length;
+          s.raw[r] = old.raw;
         }
         const cols = new Set(op.at.map((x) => x.c));
         const num = numericColumns(s.header.length, s.rows);
         for (const c of cols) s.numeric[c] = num[c];
-        return { kind: "cells", at: back };
+        return { kind: "cells", at: back, restoreRows };
       }
       case "insertRows": {
         const width = s.header.length;
-        s.rows.splice(op.at, 0, ...op.rows.map((r) => { const x = r.slice(); while (x.length < width) x.push(""); return x; }));
+        const rows = op.rows.map((r) => {
+          const row = r.slice();
+          if (!op.raw) while (row.length < width) row.push("");
+          return row;
+        });
+        s.rows.splice(op.at, 0, ...rows);
         s.raw.splice(op.at, 0, ...(op.raw ?? op.rows.map(() => null)));
-        for (const c of s.comments) if (c.at > op.at) c.at += op.rows.length;
-        return { kind: "deleteRows", at: op.at, count: op.rows.length };
+        for (const c of s.comments) if (c.at > op.at) c.at += rows.length;
+        for (const { index, at } of op.restoreComments ?? []) s.comments[index].at = at;
+        return { kind: "deleteRows", at: op.at, count: rows.length };
       }
       case "deleteRows": {
         const rows = s.rows.splice(op.at, op.count), raw = s.raw.splice(op.at, op.count);
-        for (const c of s.comments) if (c.at > op.at) c.at = Math.max(op.at, c.at - op.count);
-        return { kind: "insertRows", at: op.at, rows, raw };
+        // A blank or comment within the deleted span moves to its start. Undo needs its exact old position.
+        const restoreComments: CommentPlace[] = [];
+        s.comments.forEach((c, index) => {
+          if (c.at <= op.at) return;
+          if (c.at <= op.at + rows.length) restoreComments.push({ index, at: c.at });
+          c.at = Math.max(op.at, c.at - rows.length);
+        });
+        return { kind: "insertRows", at: op.at, rows, raw, restoreComments };
       }
       case "moveRows": {
         const rows = s.rows.splice(op.from, op.count), raw = s.raw.splice(op.from, op.count);
@@ -148,7 +170,7 @@ export class SheetEdit {
         if (s.headerSource === "none") { s.headerSource = "row"; s.headerRaw = null; }
         s.header[op.c] = op.name;
         if (op.restore) this.restore({ ...op.restore, header: s.header.slice() });
-        else { s.headerRaw = null; this.headerComment(); }
+        else { s.headerRaw = rewriteRecord(s.headerRaw); this.headerComment(); }
         return { kind: "rename", c: op.c, name: restore.header[op.c], restore };
       }
       case "headerRow": {

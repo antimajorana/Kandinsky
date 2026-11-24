@@ -20,6 +20,7 @@
   import { MARK_ID } from "../lib/note-anchor";
   import { flushSync, onMount } from "svelte";
   import type { PaneProps } from "../lib/dock";
+  import { currentPaneSpec } from "../lib/dock-instance";
   import { openReader, type OutlineItem, type Reader, type Zoom } from "../lib/pdf-reader";
   import { attachTools, COLORS, type ToolName, type Tools } from "../lib/pdf-tools";
   import { attachPdfMarks, markAt, recoloured, reworded, STAMPS, type Mark, type MarksView, type Stamp } from "../lib/pdf-marks";
@@ -435,10 +436,13 @@
     try {
       const was = savedPosition();
       // read further on another device (its note's place newer than this viewer's): opened there
-      const noted = spec.page ? null : await noteOfPdf().then((n) => (n ? notedPlace(n) : null));
+      const noted = currentPaneSpec(panel.id, spec).page ? null : await noteOfPdf().then((n) => (n ? notedPlace(n) : null));
       if (noted && noted.page !== was.page && noted.at > (pdfPosition(spec.path).t ?? 0)) { was.page = noted.page; was.y = null; }
       if (noted) notedPage = noted.page;
-      const reader = await openReader(container, spec.path, await engine(engineName), { zoom: was.zoom ?? openZoom(), page: spec.page ?? was.page, y: spec.page ? null : was.y });
+      const readerEngine = await engine(engineName);
+      if (disposed) return;
+      const { page } = currentPaneSpec(panel.id, spec);
+      const reader = await openReader(container, spec.path, readerEngine, { zoom: was.zoom ?? openZoom(), page: page ?? was.page, y: page ? null : was.y });
       if (disposed) { reader.destroy(); return; }
       r = reader;
       pages = reader.pages;
@@ -452,11 +456,14 @@
       reader.on("page", (n) => { pageInput = String(n); current = n; rememberPosition(); seeBookmark(); });
       reader.on("scale", ({ scale, zoom: z }) => { scaleLabel = labelOf(z, scale); rememberPosition(); });
       reader.on("find", ({ current: c, total, done }) => { findInfo = total ? `${c}/${total}` : done ? "No match" : "…"; });
-      // a link's page, words and annotation, used once: a restored layout must not jump back
-      if (spec.page) {
-        mark(spec.page, spec);
-        panel.updateParameters({ ...spec, page: undefined, quote: undefined, annotation: undefined });
+      // A new request may have arrived while the reader was loading. Each destination is used once.
+      const target = currentPaneSpec(panel.id, spec);
+      if (target.page !== undefined) {
+        if (target.page !== page) goto(target.page);
+        mark(target.page, target);
+        panel.updateParameters({ page: undefined, quote: undefined, annotation: undefined });
       }
+      pdfPages.set(panel.id, (n, at) => { goto(n); if (at) mark(n, at); });
     } catch (err) {
       error = errText(err);
     }
@@ -498,7 +505,6 @@
 
   onMount(() => {
     void openViewer();
-    pdfPages.set(panel.id, (n, at) => { goto(n); if (at) mark(n, at); });
     const offActive = panel.onDidActiveChange((e) => { if (e.isActive && r) requestAnimationFrame(takeFreeKeys); });
     const onSelChange = () => { clearTimeout(selTimer); selTimer = window.setTimeout(() => void syncSelection(), 60); };
     const onWinClick = () => { if (toolbarSendOpen) toolbarSendOpen = false; };

@@ -92,6 +92,7 @@ test("bases: new note in the view, board with drag, hide and add a column", asyn
   await expect(pane.locator("tbody tr")).toHaveCount(2);
 
   await pane.getByRole("button", { name: "New", exact: true }).click();
+  await page.getByRole("dialog", { name: "New row" }).getByRole("button", { name: "Create row" }).click();
   await expect.poll(() => text("db/tasks/Untitled.md")).toBe("---\nkind: task\nstatus:\n---\n");
   await page.getByTestId("sidebar").getByTestId("open-tabs").locator(".pane-row .pane-main", { hasText: "tasks.base" }).click();
   await expect(pane.locator("tbody tr")).toHaveCount(3);

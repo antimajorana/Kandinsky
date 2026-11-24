@@ -370,7 +370,7 @@
   .hero-measure {
     font-size: var(--prose-size, 15.5px);
     max-width: calc(var(--prose-width, var(--line-width, 740px)) + 112px);
-    margin: 0 auto; padding: 28px 56px 6px; width: 100%; box-sizing: border-box;
+    margin: 0 auto; padding: 29px var(--note-padding) 8px; width: 100%; box-sizing: border-box;
   }
   .has-cover .hero-measure { padding-top: 16px; }
   .page-layout .hero-measure { max-width: 1080px; padding: 24px 36px 4px; }
@@ -379,7 +379,7 @@
   @container (max-width: 760px) { .page-layout .hero-measure { padding: 18px 18px 4px; } }
   :global(html.phone) .hero-measure { padding: 16px 16px 4px; }
   .hero-actions {
-    display: flex; align-items: center; flex-wrap: wrap; gap: 14px; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint);
+    display: flex; align-items: center; flex-wrap: wrap; gap: 4px; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-muted);
     opacity: 0; transition: opacity 120ms ease;
   }
   .note-hero:hover .hero-actions,
@@ -391,8 +391,8 @@
   :global(:root[data-touch]) .hero-actions,
   :global(html.phone) .hero-actions { opacity: 1; }
 
-  .hero-act { padding: 1px 0; border-radius: 4px; color: var(--text-faint); font: inherit; background: transparent; border: 0; cursor: pointer; transition: color 120ms ease, opacity 120ms ease; }
-  .hero-act:hover, .hero-act:focus-visible { color: var(--text); outline: none; }
+  .hero-act { min-height: 24px; padding: 2px 6px; border-radius: var(--radius-sm); color: var(--text-muted); font: inherit; background: transparent; border: 0; cursor: pointer; transition: color 120ms ease, opacity 120ms ease; }
+  .hero-act:hover, .hero-act:focus-visible { color: var(--text); background: var(--bg-hover); }
   .hero-width-btn { opacity: 0; }
   .note-hero:hover .hero-width-btn,
   .note-hero:focus-within .hero-width-btn,

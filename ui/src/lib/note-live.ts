@@ -7,8 +7,8 @@
 // for the document and takes their text before it edits.
 import * as Y from "yjs";
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from "y-protocols/awareness";
-import { yCollab } from "y-codemirror.next";
-import { StateEffect } from "@codemirror/state";
+import { yCollab, ySyncAnnotation } from "y-codemirror.next";
+import { StateEffect, Transaction } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { joinLive } from "./live";
 
@@ -28,6 +28,7 @@ export interface LiveNote {
   writes(): boolean;
   /** The device saving the note when it is not this one, else null. */
   writerName(): string | null;
+  isSyncTransaction(tr: Transaction): boolean;
   close(): void;
 }
 
@@ -45,7 +46,7 @@ export function liveNote(path: string, view: EditorView, onPeers?: (names: strin
     bound = true;
     clearTimeout(waiting);
     const want = text.toString(), have = view.state.doc.toString();
-    if (want !== have) view.dispatch({ changes: { from: 0, to: have.length, insert: want } });
+    if (want !== have) view.dispatch({ changes: { from: 0, to: have.length, insert: want }, annotations: Transaction.remote.of(true) });
     view.dispatch({ effects: StateEffect.appendConfig.of(yCollab(text, awareness)) });
   };
   /** Alone (or nobody answered): the note's own text, made the same way on every device. */
@@ -104,6 +105,7 @@ export function liveNote(path: string, view: EditorView, onPeers?: (names: strin
     others: () => live.others(),
     writes: () => live.writes(),
     writerName: () => live.writerName(),
+    isSyncTransaction: (tr) => tr.annotation(ySyncAnnotation) !== undefined,
     close() {
       clearTimeout(waiting);
       removeAwarenessStates(awareness, [doc.clientID], "local");

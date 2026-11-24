@@ -8,13 +8,42 @@ upstream Atlas releases and keep the names that release used.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-24
+
+### Added
+
+- Create and name Base rows with a Markdown template, answer its prompts, and save a default template for each view.
+- New templates made in Settings ask for a name and start with a Markdown heading and cursor.
+- Base automations can run on demand for a selected row, create follow-ups in another Base, update related rows, and show which files changed in each run.
+
 ### Changed
 
+- Base automations can be edited and run multiple actions in order. Unfiltered property triggers also detect list edits
+  and property removal.
+- The workspace has prominent Search and New note actions, a shared header for notes, pages and Bases, and clearer
+  note titles and properties in both themes.
 - Renamed from Atlas to Kandinsky (based on Atlas by Alneb, AGPL-3.0; modified 2026-11-15): crates, packages,
   the vault's `.kandinsky/` folder, the app's folders and identifier, `KANDINSKY_*` variables, headers, markers and
   the phone app's packages. Data from before is migrated or still read: a vault's `.atlas/` is renamed when it is
   opened, the app's folders are moved once, and old variables, headers, note markers, drawing keys and browser
   settings keep working ([docs/guides/DEVELOPING.md](guides/DEVELOPING.md#names-from-before-the-rename)).
+
+### Fixed
+
+- Create-only uploads and workbook-to-CSV exports preserve existing files when two writes choose the same name.
+- A PDF save rejected because the file changed leaves the original backup available for the next successful edit.
+- Note text and its modification time now come from the same file when another process replaces it during a read.
+- Synced Markdown blocks preserve frontmatter and keep nested list items editable after a reload.
+- Page Lock also protects notes from edits through task checkboxes, table controls and commands while keeping synced
+  changes visible.
+- Tables keep unsaved edits during saves and external reloads, preserve UTF-8 byte-order marks, blank lines and
+  mixed line endings, and restore headerless layout on undo.
+- Opening a sleeping or loading tab keeps the requested note line, PDF page, drawing page or plugin anchor.
+- Linux and Android recognize when a process has exited and is waiting for its parent to reap it.
+- Calendar edits save when the editor closes. Edits and deletions for this and following occurrences respect
+  explicit dates and recurrence end counts.
+- `kandinsky properties-audit` exits with an error when the property schema is invalid.
+- The development launcher stops Vite cleanly, and `npm run hot` works from this checkout.
 
 ## [0.4.2] - 2026-11-19
 

@@ -48,6 +48,7 @@ Notes nested under the note their `by` property links to: a hierarchy made of pr
 A template is a plain note in the templates folder (`[notes] templates`, default `templates/`). In it `{{date}}`, `{{time}}` and `{{title}}` are filled in — the syntax of Obsidian's core Templates plugin, a deliberately small subset.
 
 - **New note from a template…** (Super+N): choose the template, type the name; the note is created in the folder of the file in front of you and opened.
+- **New** in a Base opens a row form with a title, a template, and any questions the template asks. **Set as view default** remembers the choice for future rows in that view. The Base determines the folder and fills in its filter properties.
 - **Quick open creates**: Ctrl+P, a name that no file has → "Create note “…”" (offered only once the search has answered, so Enter typed early never creates what was about to be found).
 - A new note **never replaces a file**: a taken name gets " 2", " 3"… (`create_new` in the core).
 - `POST /api/note/new {template?, title, dir?, text?}` → `{path, line}`. Code: `crates/kandinsky-core/src/notes.rs`, `ui/src/lib/notes-system.ts`.
@@ -123,7 +124,7 @@ Kinds: `text`, `number`, `bool` (also `checkbox`), `date`, `datetime`, `list` (a
 - Unknown properties when `strict: true` (or `?strict=true` / `--strict`)
 
 Reachable everywhere from the same engine:
-- **CLI:** `kandinsky [--workspace <dir>] properties-audit [--strict] [--json] [--no-fail]` (exits non-zero when issues exist unless `--no-fail` is passed)
+- **CLI:** `kandinsky [--workspace <dir>] properties-audit [--strict] [--json] [--no-fail]` exits non-zero on note issues or schema problems unless `--no-fail` is passed.
 - **HTTP & Command:** `GET /api/properties/audit?strict=false`, core command `properties-audit`, and Command Palette *Properties: audit vault schema* (`notes.propertiesAudit`)
 - **Dashboard / view block:** `type: properties-audit` (`ui/src/components/widgets/PropertiesAuditWidget.svelte`, `/properties-audit` in the slash menu), grouping findings by issue kind or note with 1-click jump to the exact file and YAML line
 - **MCP:** `kandinsky_properties_audit` (plus `kandinsky_set_property`, which validates edits against the spec before writing unless `force: true`)

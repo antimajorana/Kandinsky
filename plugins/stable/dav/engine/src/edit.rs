@@ -235,16 +235,62 @@ fn rule_with(rule: &str, until: Option<&str>, count: Option<usize>) -> String {
     parts.join(";")
 }
 
-/// How many occurrences of the master come before `t`.
-fn count_before(cal: &Component, uid: &str, t: NaiveDateTime, frame: Frame, user: &Zone) -> usize {
-    let mut one = cal.clone();
-    one.subs.retain(|c| c.name != "VEVENT" || (c.prop("RECURRENCE-ID").is_none() && c.text("UID").unwrap_or_default() == uid));
-    for e in one.subs.iter_mut().filter(|c| c.name == "VEVENT") {
-        e.remove("EXDATE"); // COUNT counts excluded occurrences too
-    }
-    let first = cal.subs.iter().find(|c| c.name == "VEVENT").and_then(|m| frame_of(m, &zones_of(cal)).ok()).map(|x| x.1).unwrap_or(t);
+/// How many of the rule's original COUNT remain on or after `t`.
+fn rule_count_after(cal: &Component, uid: &str, t: NaiveDateTime, frame: Frame, user: &Zone) -> Option<usize> {
+    let master = &cal.subs[master_index(cal, uid)?];
+    let rule = &master.prop("RRULE")?.value;
+    let count = rule.split(';').find_map(|part| part.strip_prefix("COUNT="))?.parse::<usize>().ok()?;
+    let mut one = Component { subs: zones_of(cal), ..Default::default() };
+    let first = frame_of(master, &one.subs).ok()?.1;
+    let mut master = master.clone();
+    master.remove("EXDATE"); // COUNT counts excluded occurrences too
+    master.remove("RDATE"); // explicit dates are independent of the rule's COUNT
+    one.subs.push(master);
     let range = recur::Range { from: frame.instant(first, user) - Duration::seconds(1), to: frame.instant(t, user) };
-    recur::expand(&one, range, user).iter().filter(|i| i.from < frame.instant(t, user).timestamp()).count()
+    let before = recur::expand(&one, range, user).iter().filter(|i| i.from < range.to.timestamp()).count();
+    Some(count.saturating_sub(before))
+}
+
+fn rule_ended(rule: &Line, frame: Frame, t: NaiveDateTime, zones: &[Component], count_after: Option<usize>) -> bool {
+    count_after == Some(0)
+        || rule.value.split(';').find_map(|part| part.strip_prefix("UNTIL="))
+            .and_then(|end| recur::rule_until(end, frame, zones)).is_some_and(|end| end < t)
+}
+
+/// Cuts off the rule before this occurrence when it still reaches that far.
+fn truncate_rule(
+    master: &mut Component,
+    frame: Frame,
+    t: NaiveDateTime,
+    user: &Zone,
+    zones: &[Component],
+    count_after: Option<usize>,
+) {
+    let Some(rule) = master.prop("RRULE") else { return };
+    if !rule_ended(rule, frame, t, zones, count_after) {
+        master.set("RRULE", vec![], rule_with(&rule.value, Some(&until_before(frame, t, user)), None));
+    }
+}
+
+/// Filters the individual values on RDATE or EXDATE lines, retaining their parameters and any PERIOD end.
+fn retain_date_values(
+    master: &mut Component,
+    name: &str,
+    zones: &[Component],
+    keep: impl Fn(Option<recur::Stamp>) -> bool,
+) {
+    master.props.retain_mut(|line| {
+        if line.name != name {
+            return true;
+        }
+        line.value = line
+            .value
+            .split(',')
+            .filter(|value| keep(recur::date_list_stamp(line, value, zones)))
+            .collect::<Vec<_>>()
+            .join(",");
+        !line.value.is_empty()
+    });
 }
 
 /// Applies the editor's change to one event (`rid`: the occurrence, for a recurring one).
@@ -301,9 +347,7 @@ pub fn update(text: &str, uid: &str, rid: Option<&str>, scope: Scope, c: &Change
             Ok(Written { object: Some(cal.write()), split: None })
         }
         (Scope::Following, Some(t)) => {
-            let old_rule = cal.subs[mi].prop("RRULE").map(|l| l.value.clone()).unwrap_or_default();
-            let count = old_rule.split(';').find_map(|p| p.strip_prefix("COUNT=")).and_then(|n| n.parse::<usize>().ok());
-            let before = count.map(|_| count_before(&cal, uid, t, frame, user));
+            let count_after = rule_count_after(&cal, uid, t, frame, user);
             // the new series: the master from this occurrence on, the later overrides and exclusions with it
             let new_uid = format!("{}-{}", uid.split("-from-").next().unwrap_or(uid), format_args!("from-{}", t.format("%Y%m%dT%H%M%S")));
             let mut next = cal.clone();
@@ -326,12 +370,21 @@ pub fn update(text: &str, uid: &str, rid: Option<&str>, scope: Scope, c: &Change
                         m.set("DTEND", e.params, e.value);
                     }
                 }
-                if let (Some(n), Some(b)) = (count, before) {
-                    m.set("RRULE", vec![], rule_with(&old_rule, None, Some(n.saturating_sub(b).max(1))));
+                if let Some(rule) = m.prop("RRULE") {
+                    if rule_ended(rule, frame, t, &zones, count_after) {
+                        m.remove("RRULE");
+                    } else if let Some(count) = count_after {
+                        m.set("RRULE", vec![], rule_with(&rule.value, None, Some(count)));
+                    }
                 }
-                let keep: Vec<Line> = m.props.iter().filter(|l| l.name == "EXDATE").filter(|l| recur::stamp(l, &zones).is_none_or(|s| frame.naive(s) >= t)).cloned().collect();
-                m.remove("EXDATE");
-                m.props.extend(keep);
+                // DTSTART already represents the selected occurrence, even if the edit moves it.
+                retain_date_values(m, "RDATE", &zones, |s| s.is_some_and(|s| frame.naive(s) > t));
+                retain_date_values(m, "EXDATE", &zones, |s| {
+                    s.is_none_or(|s| match s {
+                        recur::Stamp::Day(day) => day >= t.date(),
+                        _ => frame.naive(s) >= t,
+                    })
+                });
                 m.remove("CREATED");
             }
             for e in next.subs.iter_mut().filter(|e| e.name == "VEVENT") {
@@ -346,8 +399,10 @@ pub fn update(text: &str, uid: &str, rid: Option<&str>, scope: Scope, c: &Change
                 e.name != "VEVENT" || e.text("UID").unwrap_or_default() != uid || e.prop("RECURRENCE-ID").and_then(|l| recur::stamp(l, &zones)).is_none_or(|s| frame.naive(s) < t)
             });
             let mi = master_index(&cal, uid).ok_or("the series vanished")?;
-            cal.subs[mi].set("RRULE", vec![], rule_with(&old_rule, Some(&until_before(frame, t, user)), None));
-            touch(&mut cal.subs[mi], now);
+            let master = &mut cal.subs[mi];
+            truncate_rule(master, frame, t, user, &zones, count_after);
+            retain_date_values(master, "RDATE", &zones, |s| s.is_none_or(|s| frame.naive(s) < t));
+            touch(master, now);
             Ok(Written { object: Some(cal.write()), split: Some((new_uid, next.write())) })
         }
         _ => {
@@ -534,11 +589,13 @@ pub fn delete(text: &str, uid: &str, rid: Option<&str>, scope: Scope, user: &Zon
         Scope::All => Ok(None),
         Scope::Following if at <= first => Ok(None),
         Scope::Following => {
+            let count_after = rule_count_after(&cal, uid, at, frame, user);
             cal.subs.retain(|e| same(e, &|t| t < at));
             let mi = master_index(&cal, uid).ok_or("the series vanished")?;
-            let rule = cal.subs[mi].prop("RRULE").map(|l| l.value.clone()).unwrap_or_default();
-            cal.subs[mi].set("RRULE", vec![], rule_with(&rule, Some(&until_before(frame, at, user)), None));
-            touch(&mut cal.subs[mi], now);
+            let master = &mut cal.subs[mi];
+            truncate_rule(master, frame, at, user, &zones, count_after);
+            retain_date_values(master, "RDATE", &zones, |s| s.is_none_or(|s| frame.naive(s) < at));
+            touch(master, now);
             Ok(Some(cal.write()))
         }
         Scope::This => {
@@ -659,5 +716,49 @@ mod tests {
         let single = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e\r\nSUMMARY:A\r\nX-KANDINSKY-SOURCE:notes/a.md\r\nDTSTART;VALUE=DATE:20261104\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
         let t = update(single, "e", None, Scope::This, &ch("2026-11-05", "2026-11-07"), &TORONTO, now()).unwrap().object.unwrap();
         assert!(t.contains("X-KANDINSKY-SOURCE:notes/a.md") && t.contains("DTSTART;VALUE=DATE:20261105") && t.contains("DTEND;VALUE=DATE:20261107"), "{t}");
+    }
+
+    #[test]
+    fn following_partitions_explicit_dates_and_leaves_a_series_without_rules() {
+        let series = SERIES.replace(
+            "RRULE:FREQ=WEEKLY;COUNT=4",
+            "RDATE;TZID=America/Toronto:20261109T100000,20261116T100000\r\nRDATE;TZID=America/Toronto;VALUE=PERIOD:20261123T100000/PT1H",
+        );
+        let rid = Some("20261116T100000");
+        let changed = Change { summary: Some("Seminar B".into()), ..ch("2026-11-16T14:00", "2026-11-16T15:00") };
+        let split = update(&series, "s1", rid, Scope::Following, &changed, &TORONTO, now()).unwrap();
+        let old = split.object.unwrap();
+        let (_, new) = split.split.unwrap();
+        for object in [&old, &new] {
+            let cal = ics::parse(object).unwrap().remove(0);
+            let event = cal.subs.iter().find(|c| c.name == "VEVENT").unwrap();
+            assert!(event.prop("RRULE").is_none(), "{object}");
+        }
+        assert!(ics::unfold(&new).contains("RDATE;TZID=America/Toronto;VALUE=PERIOD:20261123T100000/PT1H"), "{new}");
+        assert_eq!(starts(&old, "2026-11-01", "2026-12-31"), ["2026-11-02T10:00 Seminar", "2026-11-09T10:00 Seminar"]);
+        assert_eq!(starts(&new, "2026-11-01", "2026-12-31"), ["2026-11-16T14:00 Seminar B", "2026-11-23T10:00 Seminar B"]);
+
+        let shortened = delete(&series, "s1", rid, Scope::Following, &TORONTO, now()).unwrap().unwrap();
+        assert!(!shortened.contains("RRULE"));
+        assert_eq!(starts(&shortened, "2026-11-01", "2026-12-31"), starts(&old, "2026-11-01", "2026-12-31"));
+    }
+
+    #[test]
+    fn explicit_dates_and_exceptions_do_not_use_up_the_rules_count() {
+        let series = SERIES.replace(
+            "RRULE:FREQ=WEEKLY;COUNT=4",
+            "RRULE:FREQ=WEEKLY;COUNT=4\r\nRDATE;TZID=America/Toronto:20261106T100000,20261120T100000,20261214T100000\r\nEXDATE;TZID=America/Toronto:20261109T100000,20261123T100000",
+        );
+        let rid = Some("20261116T100000");
+        let changed = Change { summary: Some("Seminar B".into()), ..Default::default() };
+        let split = update(&series, "s1", rid, Scope::Following, &changed, &TORONTO, now()).unwrap();
+        let old = split.object.unwrap();
+        let (_, new) = split.split.unwrap();
+        assert!(new.contains("COUNT=2"), "{new}");
+        assert_eq!(starts(&old, "2026-11-01", "2026-12-31"), ["2026-11-02T10:00 Seminar", "2026-11-06T10:00 Seminar"]);
+        assert_eq!(starts(&new, "2026-11-01", "2026-12-31"), ["2026-11-16T10:00 Seminar B", "2026-11-20T10:00 Seminar B", "2026-12-14T10:00 Seminar B"]);
+
+        let shortened = delete(&series, "s1", Some("20261214T100000"), Scope::Following, &TORONTO, now()).unwrap().unwrap();
+        assert_eq!(starts(&shortened, "2026-11-01", "2026-12-31"), ["2026-11-02T10:00 Seminar", "2026-11-06T10:00 Seminar", "2026-11-16T10:00 Seminar", "2026-11-20T10:00 Seminar"]);
     }
 }

@@ -37,7 +37,10 @@ test("a note reopened, or woken from sleep, is where it was left", async ({ page
   expect(at).toBeGreaterThan(3000);
 
   // ten other notes: n0 goes past the working set, and is put to sleep
-  for (let i = 1; i < 11; i++) { await kandinsky(page, "open", `sleep/n${i}.md`); await page.waitForTimeout(150); }
+  for (let i = 1; i < 11; i++) {
+    await kandinsky(page, "open", `sleep/n${i}.md`);
+    await expect(page.locator(`.live-cm[data-note="sleep/n${i}.md"]`)).toBeVisible();
+  }
   const slept = await kandinsky<number>(page, "hibernate", 0);
   expect(slept).toBeGreaterThan(0);
   expect((await kandinsky<{ asleep: number }>(page, "sleeping")).asleep).toBe(slept);
@@ -50,6 +53,14 @@ test("a note reopened, or woken from sleep, is where it was left", async ({ page
   await page.keyboard.press("Control+w");
   await kandinsky(page, "open", "sleep/n0.md");
   await expect.poll(() => editorTop(page), { timeout: 5000 }).toBeGreaterThan(at - 200);
+
+  // n1 was also past the working set. A requested line takes precedence over its remembered place.
+  const before = (await kandinsky<{ asleep: number }>(page, "sleeping")).asleep;
+  await kandinsky(page, "open", "sleep/n1.md", 551);
+  const activeLine = page.locator('.live-cm[data-note="sleep/n1.md"] .cm-activeLine');
+  await expect(activeLine).toHaveText("Line 276 of note 1.");
+  await expect(activeLine).toBeInViewport();
+  expect((await kandinsky<{ asleep: number }>(page, "sleeping")).asleep).toBe(before - 1);
 });
 
 test("a PDF tab switched away and back keeps its scroll (it leaves the page while hidden)", async ({ page }) => {
@@ -70,4 +81,18 @@ test("a PDF tab switched away and back keeps its scroll (it leaves the page whil
   await expect(page.locator(".kandinsky-pane-pdf")).toHaveCount(0); // out of the page, not hidden in it
   await kandinsky(page, "open", pdf);
   await expect.poll(() => page.locator(".kandinsky-pane-pdf .viewer-container").first().evaluate((el) => el.scrollTop)).toBeGreaterThan(at - 50);
+});
+
+test("the latest page request is applied to a PDF that is still opening", async ({ page }) => {
+  const path = "sleep/queued-pages.pdf";
+  mkdirSync(join(WS, "sleep"), { recursive: true });
+  writeFileSync(join(WS, path), pagesPdf(6));
+  await page.goto("/");
+  await page.getByText("Finish the GW notes.").waitFor();
+  await page.evaluate((file) => {
+    const app = (window as unknown as { __kandinsky: { open(path: string, page: number): void } }).__kandinsky;
+    app.open(file, 2);
+    app.open(file, 6);
+  }, path);
+  await expect(page.getByRole("textbox", { name: "Page", exact: true })).toHaveValue("6", { timeout: 15_000 });
 });

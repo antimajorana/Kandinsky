@@ -1,7 +1,7 @@
 //! Writing through a base: a new note that belongs to a view ("+ New", Notion), and view edits
 //! (hide / show a column, add a board view) written back to the `.base` YAML.
 use super::{evaluate, BaseFile, View};
-use crate::api::{BaseRowCreated, ViewEdit};
+use crate::api::{BaseNewRow, BaseRowCreated, ViewEdit};
 use crate::config::Config;
 use crate::{Error, Result};
 use serde_yaml::{Mapping, Value};
@@ -41,7 +41,7 @@ pub fn prefill(base_src: &str, view: Option<&str>) -> (Option<String>, Vec<(Stri
 }
 
 fn pick<'a>(views: &'a [View], name: Option<&str>) -> Option<&'a View> {
-    name.and_then(|n| views.iter().find(|v| v.name.as_deref() == Some(n))).or(views.first())
+    name.and_then(|n| views.iter().find(|v| v.name.as_deref().unwrap_or(&v.kind) == n)).or(views.first())
 }
 
 /// The expression strings of a filter tree that must ALL hold (a list or an `and`).
@@ -82,10 +82,45 @@ fn literal(s: &str) -> Option<Value> {
 /// properties and the view's other property columns as empty keys (the Properties panel shows
 /// them, ready to fill). Says whether the note now shows in the view.
 pub fn new_row(root: &Path, cfg: &Config, base_rel: &str, base_src: &str, view: Option<&str>) -> Result<BaseRowCreated> {
+    new_row_with(root, cfg, base_rel, base_src, view, RowInit::default())
+}
+
+pub fn new_row_from_request(root: &Path, cfg: &Config, base_src: &str, req: &BaseNewRow) -> Result<BaseRowCreated> {
+    let init = RowInit {
+        title: req.title.as_deref().unwrap_or_default(),
+        this: req.this.as_deref(),
+        template: req.template.as_deref(),
+        values: req.values.as_ref(),
+        use_view_template: true,
+        ..RowInit::default()
+    };
+    new_row_with(root, cfg, &req.path, base_src, req.view.as_deref(), init)
+}
+
+#[derive(Default)]
+pub(super) struct RowInit<'a> {
+    pub title: &'a str,
+    pub source_link: Option<(&'a str, Value)>,
+    pub this: Option<&'a str>,
+    template: Option<&'a str>,
+    values: Option<&'a serde_json::Map<String, serde_json::Value>>,
+    use_view_template: bool,
+}
+
+impl<'a> RowInit<'a> {
+    pub(super) fn automation(title: &'a str, source_link: Option<(&'a str, Value)>, source: &'a str) -> Self {
+        Self { title, source_link, this: Some(source), ..Self::default() }
+    }
+}
+
+pub(super) fn new_row_with(
+    root: &Path, cfg: &Config, base_rel: &str, base_src: &str, view: Option<&str>, init: RowInit<'_>,
+) -> Result<BaseRowCreated> {
+    let this = init.this;
     let (folder, props) = prefill(base_src, view);
     let folder = folder.or_else(|| {
         // no folder in the filters: where most of the view's notes already are, else beside the base
-        let r = evaluate(root, cfg, base_src, None);
+        let r = evaluate(root, cfg, base_src, this);
         let v = view.and_then(|n| r.views.iter().find(|v| v.name == n)).or(r.views.first())?;
         let mut count = std::collections::HashMap::<&str, u32>::new();
         for row in &v.rows {
@@ -96,8 +131,26 @@ pub fn new_row(root: &Path, cfg: &Config, base_rel: &str, base_src: &str, view: 
     });
     let folder = folder.unwrap_or_else(|| base_rel.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string()));
     let base: BaseFile = serde_yaml::from_str(base_src).map_err(|e| Error::BadRequest(format!("base: {e}")))?;
+    let selected_view = pick(&base.views, view);
     let mut keys: Vec<(String, Option<Value>)> = props.into_iter().map(|(k, v)| (k, Some(v))).collect();
-    for id in pick(&base.views, view).map(|v| v.order.as_slice()).unwrap_or_default() {
+    let title = init.title.trim();
+    let title = crate::notes::file_stem(title.strip_suffix(".md").unwrap_or(title));
+    let title = if title.is_empty() { "Untitled" } else { &title };
+    let template = init.template
+        .or_else(|| selected_view.filter(|_| init.use_view_template).and_then(|v| v.row_template.as_deref()))
+        .filter(|t| !t.is_empty());
+    let draft = template.map(|t| {
+        let values = serde_json::Map::new();
+        crate::notes::draft(root, cfg, Some(t), title, None, init.values.unwrap_or(&values), chrono::Local::now().naive_local())
+    }).transpose()?;
+    if let Some((key, value)) = init.source_link {
+        if let Some((_, existing)) = keys.iter_mut().find(|(k, _)| k == key) {
+            *existing = Some(value);
+        } else {
+            keys.push((key.to_string(), Some(value)));
+        }
+    }
+    for id in selected_view.map(|v| v.order.as_slice()).unwrap_or_default() {
         if let Some(k) = super::prop_key(id) {
             if !keys.iter().any(|(x, _)| *x == k) {
                 keys.push((k, None));
@@ -122,24 +175,46 @@ pub fn new_row(root: &Path, cfg: &Config, base_rel: &str, base_src: &str, view: 
         }
     }
     let text = if fm.is_empty() { String::new() } else { format!("---\n{fm}---\n") };
+    let (text, line) = match draft {
+        Some(draft) => {
+            let (yaml, _) = kandinsky_text::frontmatter::split(&draft.text);
+            if let Some(yaml) = yaml {
+                serde_yaml::from_str::<Option<Mapping>>(yaml)
+                    .map_err(|e| Error::BadRequest(format!("template properties: {e}")))?;
+            }
+            let merged = kandinsky_text::merge::merge(&text, &draft.text).text;
+            let head_lines = |text: &str| {
+                let (_, body) = kandinsky_text::frontmatter::split(text);
+                text[..text.len() - body.len()].lines().count() as u32
+            };
+            let line = draft.cursor.map(|line| line.saturating_sub(head_lines(&draft.text)) + head_lines(&merged));
+            (merged, line)
+        }
+        None => (text, None),
+    };
     // the first free name, taken atomically: two quick "+ New" never write one note; the folder (from the base's
     // filters) stays in the vault
     let folder = folder.trim_matches('/');
     let mut made = None;
     for i in 0..1000 {
-        let name = if i == 0 { "Untitled.md".to_string() } else { format!("Untitled {i}.md") };
+        let name = if i == 0 { format!("{title}.md") } else { format!("{title} {i}.md") };
         let rel = if folder.is_empty() { name } else { format!("{folder}/{name}") };
-        if crate::vault_write::create(&crate::paths::safe_join(root, &rel)?, text.as_bytes())? == crate::vault_write::Created::New {
+        let abs = crate::paths::safe_join(root, &rel)?;
+        let rel = crate::paths::rel_path(root, &abs).ok_or_else(|| Error::BadPath(rel))?;
+        if this.is_some() && (cfg.index_excluded(&rel) || crate::state_dir::is_state_rel(&rel)) {
+            return Err(Error::BadRequest("the destination view places its rows outside indexed notes".into()));
+        }
+        if crate::vault_write::create(&abs, text.as_bytes())? == crate::vault_write::Created::New {
             made = Some(rel);
             break;
         }
     }
-    let rel = made.ok_or_else(|| Error::BadRequest("too many Untitled notes".into()))?;
+    let rel = made.ok_or_else(|| Error::BadRequest(format!("too many notes named {title}")))?;
     drop(turn);
-    let r = evaluate(root, cfg, base_src, None);
+    let r = evaluate(root, cfg, base_src, this);
     let v = view.and_then(|n| r.views.iter().find(|v| v.name == n)).or(r.views.first());
     let matches = v.is_some_and(|v| v.rows.iter().any(|row| row.path == rel));
-    Ok(BaseRowCreated { path: rel, matches })
+    Ok(BaseRowCreated { path: rel, matches, line })
 }
 
 /// Applies a view edit to the `.base` source and returns the new YAML. (Comments in the file are
@@ -184,6 +259,9 @@ pub fn edit_view(base_src: &str, view: &str, edit: &ViewEdit) -> Result<String> 
             return to_text(&doc);
         }
         ViewEdit::Automations { automations } => {
+            if automations.iter().any(|rule| rule.steps().is_empty()) {
+                return Err(Error::BadRequest("an automation needs at least one action".into()));
+            }
             if automations.is_empty() {
                 unset(&mut doc, "automations");
             } else {
@@ -249,6 +327,7 @@ pub fn edit_view(base_src: &str, view: &str, edit: &ViewEdit) -> Result<String> 
     let i = views
         .iter()
         .position(|v| v.get("name").and_then(Value::as_str) == Some(view))
+        .or_else(|| views.iter().position(|v| v.get("name").is_none() && v.get("type").and_then(Value::as_str).unwrap_or("table") == view))
         .or_else(|| (!views.is_empty() && views[0].get("name").is_none()).then_some(0))
         .ok_or_else(|| Error::NotFound(format!("view {view}")))?;
     let order = |v: &Value| -> Vec<Value> {
@@ -259,6 +338,10 @@ pub fn edit_view(base_src: &str, view: &str, edit: &ViewEdit) -> Result<String> 
         a == id || a.strip_prefix("note.") == Some(id) || id.strip_prefix("note.") == Some(a)
     };
     match edit {
+        ViewEdit::RowTemplate { template } => match template.as_deref().filter(|t| !t.is_empty()) {
+            Some(t) => set(&mut views[i], "rowTemplate", t.into()),
+            None => unset(&mut views[i], "rowTemplate"),
+        },
         ViewEdit::Hide { column } => {
             let mut o = order(&views[i]);
             o.retain(|c| !same(c, column));
@@ -601,6 +684,30 @@ mod tests {
         assert!(d.path().join("db/items/Untitled 1.md").exists(), "never overwrites");
         let out = "filters: 'file.inFolder(\"../out\")'\nviews: [{type: table}]\n";
         assert!(new_row(d.path(), &Config::default(), "db/items.base", out, None).is_err(), "a folder out of the vault is refused");
+    }
+
+    #[test]
+    fn a_configured_row_template_keeps_filter_values_and_can_be_skipped() {
+        let d = tempfile::tempdir().unwrap();
+        let cfg = Config::default();
+        std::fs::create_dir(d.path().join("templates")).unwrap();
+        std::fs::write(d.path().join("templates/brief.md"), "---\nstatus: Closed\n---\n# {{title}}\n\n{{cursor}}Draft\n").unwrap();
+        let source = "filters: 'file.inFolder(\"db/items\")'\nviews:\n  - name: Open\n    filters: 'status == \"Open\"'\n    order: [file.name, owner]\n";
+        let source = edit_view(source, "Open", &ViewEdit::RowTemplate { template: Some("brief".into()) }).unwrap();
+        let mut req = BaseNewRow {
+            path: "items.base".into(), view: Some("Open".into()), title: Some("Roadmap.md".into()),
+            template: None, values: None, this: None,
+        };
+        let row = new_row_from_request(d.path(), &cfg, &source, &req).unwrap();
+        let text = std::fs::read_to_string(d.path().join(&row.path)).unwrap();
+        assert_eq!(row.path, "db/items/Roadmap.md");
+        assert!(row.matches);
+        assert_eq!(text, "---\nstatus: Open\nowner:\n---\n# Roadmap\n\nDraft\n");
+        assert_eq!(text.lines().nth(row.line.unwrap() as usize - 1), Some("Draft"));
+        req.template = Some(String::new());
+        let blank = new_row_from_request(d.path(), &cfg, &source, &req).unwrap();
+        assert_eq!(blank.path, "db/items/Roadmap 1.md");
+        assert_eq!(std::fs::read_to_string(d.path().join(&blank.path)).unwrap(), "---\nstatus: Open\nowner:\n---\n");
     }
 
     #[test]

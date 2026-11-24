@@ -10,6 +10,7 @@
   import { onMount } from "svelte";
   import type { PaneProps } from "../lib/dock";
   import { setDirty } from "../lib/dock";
+  import { currentPaneSpec } from "../lib/dock-instance";
   import { api, ApiError } from "../lib/api";
   import { keepRecovery, recoveryPath } from "../lib/recovery";
   import { settings } from "../lib/settings.svelte";
@@ -25,6 +26,7 @@
   let { spec, panel }: PaneProps<"excalidraw"> = $props();
   let host: HTMLDivElement;
   let d: Drawing | null = null;
+  let disposed = false;
   let baseMtime: number | undefined;
   let dirty = $state(false);
   let saving: Promise<void> | null = null;
@@ -114,6 +116,7 @@
 
   async function reload() {
     conflict = false;
+    drawingPages.delete(panel.id);
     d?.destroy();
     d = null;
     pad = null;
@@ -135,16 +138,26 @@
   async function load() {
     try {
       const f = await api.file(spec.path);
+      const scene = plugin ? await sceneJson(f.text) : f.text;
+      if (disposed) return;
       baseMtime = f.mtime;
       original = f.text;
-      d = await mountDrawing(host, plugin ? await sceneJson(f.text) : f.text, themeNow(), () => {
+      const drawing = await mountDrawing(host, scene, themeNow(), () => {
         dirty = true;
         clearTimeout(timer);
         timer = window.setTimeout(save, 1000);
       }, { pen: notepadStyle(), onFullscreen: () => void toggleFullscreen(), path: spec.path, live: settings.config?.editor.live ?? true, onPeers: (n) => (peers = n), perRow: perRow(), pageMode: notepadStyle() && pageMode(), draw: settings.config?.draw });
+      if (disposed) { drawing.destroy(); return; }
+      d = drawing;
       pad = d.notepad ?? null;
-      if (spec.page) d.showPage(spec.page); // opened from a page's embed
-      else { const at = await lastPage(spec.path); if (at) d.showPage(`^frame=${at}`); } // else where it was last shown
+      const at = currentPaneSpec(panel.id, spec).page ? null : await lastPage(spec.path);
+      if (disposed || d !== drawing) return;
+      const { page } = currentPaneSpec(panel.id, spec);
+      if (page) {
+        drawing.showPage(page);
+        panel.updateParameters({ page: undefined });
+      } else if (at) drawing.showPage(`^frame=${at}`);
+      drawingPages.set(panel.id, (p) => drawing.showPage(p));
       dirty = false;
       // Excalidraw's autoFocus fires before dockview shows the pane; focus once it is laid out.
       requestAnimationFrame(() => host.querySelector<HTMLElement>(".excalidraw")?.focus());
@@ -160,12 +173,10 @@
   $effect(() => { setDirty(panel.id, dirty); });
 
   onMount(() => {
-    let gone = false;
     void load();
-    const askMirror = () => void mirrorState().then((m) => { if (!gone) mirror = m && { host: hostOf(m.address), state: m.state }; }, () => {});
+    const askMirror = () => void mirrorState().then((m) => { if (!disposed) mirror = m && { host: hostOf(m.address), state: m.state }; }, () => {});
     askMirror();
     window.addEventListener("kandinsky-mirror-unlinked", askMirror); // linked or unlinked in the vault switcher
-    drawingPages.set(panel.id, (p) => d?.showPage(p)); // an embed's "Edit Page 2" with the drawing already open
     drawingExports.set(panel.id, async () => {
       if (!d) throw new Error("the drawing is still loading");
       await api.putFile(`${spec.path}.svg`, await d.svg());
@@ -187,7 +198,7 @@
     const keepPage = () => { if (d) void rememberPage(spec.path, d.pageNow()); };
     const pageTick = window.setInterval(keepPage, 5000);
     return () => {
-      gone = true;
+      disposed = true;
       if (zen) document.documentElement.classList.remove("kandinsky-zen"); // the pane closed in zen: the app back
       keepPage(); clearInterval(pageTick);
       if (dirty && d) void save(fileText()); // the scene read now, before the drawing goes

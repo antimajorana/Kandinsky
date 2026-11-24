@@ -357,6 +357,7 @@ export function noteExtensions(
         keyup: (e) => { shiftHeld = e.shiftKey; return false; },
         blur: () => { shiftHeld = false; return false; },
         paste: (e, view) => {
+          if (view.state.readOnly) return false;
           // 1. a URL pasted over selected text makes a link (Obsidian)
           const url = e.clipboardData?.getData("text/plain").trim() ?? "";
           const sel = view.state.selection.main;
@@ -378,6 +379,7 @@ export function noteExtensions(
           return true;
         },
         drop: (e, view) => {
+          if (view.state.readOnly) return false;
           const uriHint = extractDropUriHint(e);
           const files = takeFiles(e);
           if (!files) return false;
@@ -418,6 +420,7 @@ export function noteExtensions(
 
 /** The files' embeds (lib/attach.ts) inserted at `at`, the caret after them. */
 export async function attachAt(view: EditorView, notePath: string, files: File[], at: number): Promise<void> {
+  if (view.state.readOnly) return;
   const done = await attachFiles(notePath, files);
   if (!done.length) return;
   const insert = done.map((a) => a.embed).join("\n");
@@ -425,6 +428,7 @@ export async function attachAt(view: EditorView, notePath: string, files: File[]
 }
 
 async function dropAt(view: EditorView, notePath: string, files: File[], at: number, uriHint?: string): Promise<void> {
+  if (view.state.readOnly) return;
   const done = await attachDroppedFiles(notePath, files, uriHint);
   if (!done.length) return;
   const clamped = Math.max(0, Math.min(at, view.state.doc.length));

@@ -50,16 +50,20 @@
     if (bad.length) { error = `Not an address: ${bad.join(", ")}`; return; }
     // guests only when they changed: an untouched event keeps its lines as they are
     const attendees = !theirs && guests !== guestsWere ? guestList() : undefined;
-    const change = { summary: f.summary, start, end, all_day: f.all_day, location: f.location, description: f.description, rrule: f.rrule, attendees };
-    if (!e) {
+    // Closing clears the parent state that supplies the event prop.
+    const event = e;
+    const calendar = f.calendar || undefined;
+    const rrule = event && f.rrule === (event.rrule ?? "") ? undefined : f.rrule;
+    const change = { summary: f.summary, start, end, all_day: f.all_day, location: f.location, description: f.description, rrule, attendees };
+    if (!event) {
       onclose();
-      await cal.create({ ...change, calendar: f.calendar || undefined });
+      await cal.create({ ...change, calendar });
       return;
     }
-    const scope = await cal.askScope(e, "Change");
+    const scope = await cal.askScope(event, "Change");
     if (!scope) return;
     onclose();
-    await cal.change(e, { ...change, move_to: f.calendar && f.calendar !== e.calendar ? f.calendar : undefined, from_start: e.start }, scope, "Saved");
+    await cal.change(event, { ...change, move_to: calendar !== event.calendar ? calendar : undefined, from_start: event.start }, scope, "Saved");
   }
 
   function key(ev: KeyboardEvent) {

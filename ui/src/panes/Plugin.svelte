@@ -7,6 +7,7 @@
   import { onMount } from "svelte";
   import type { PaneProps } from "../lib/dock";
   import { setDirty } from "../lib/dock";
+  import { currentPaneSpec } from "../lib/dock-instance";
   import { app, toast } from "../lib/state.svelte";
   import { paneParks, pluginAnchors } from "../lib/registry";
   import { plugins, loadPlugins, loadView, pluginApi, pluginOn, type PluginPane } from "../lib/plugins.svelte";
@@ -20,11 +21,23 @@
   let cleanup: (() => void) | undefined;
   let scope = paneScope();
   let generation = 0;
+  let disposed = false;
   let viewPath = "";
   let viewText: string | null = null;
   // the mounted view's hooks; reset on every mount, so an older mount's calls change nothing
   let saver: (() => void | Promise<void>) | undefined;
   let goTo: ((anchor: string) => void) | undefined;
+  let anchorReady = false;
+
+  function registerAnchor() {
+    if (!anchorReady || !goTo) return;
+    pluginAnchors.set(panel.id, goTo);
+    const { anchor } = currentPaneSpec(panel.id, spec);
+    if (anchor) {
+      panel.updateParameters({ anchor: undefined });
+      goTo(anchor);
+    }
+  }
 
   /** The editor contract of one mount: calls from a mount that was replaced are ignored. */
   function paneOf(mine: number): PluginPane {
@@ -32,7 +45,14 @@
     return {
       setDirty: (d) => { if (live()) setDirty(panel.id, !!d); },
       onSave: (fn) => { if (live()) saver = fn; return () => { if (saver === fn) saver = undefined; }; },
-      onAnchor: (fn) => { if (live()) goTo = fn; return () => { if (goTo === fn) goTo = undefined; }; },
+      onAnchor: (fn) => {
+        if (live()) { goTo = fn; registerAnchor(); }
+        return () => {
+          if (!live() || goTo !== fn) return;
+          goTo = undefined;
+          pluginAnchors.delete(panel.id);
+        };
+      },
       close: () => { if (live()) panel.close(); },
     };
   }
@@ -52,12 +72,15 @@
 
   async function mount() {
     await save().catch(() => {}); // the plugin changed under unsaved work: save it before the view is replaced
+    if (disposed) return;
     const mine = ++generation;
     cleanup?.();
     cleanup = undefined;
     scope.release();
     scope = paneScope();
     saver = goTo = undefined;
+    anchorReady = false;
+    pluginAnchors.delete(panel.id);
     setDirty(panel.id, false);
     host.replaceChildren();
     error = "";
@@ -76,9 +99,13 @@
       if (mine !== generation) return;
       viewText = text;
       if (typeof mod.default !== "function") throw new Error("the module has no default export function (host, kandinsky) => …");
-      const r = await mod.default(host, pluginApi(p, { path: spec.path, arg: spec.arg, anchor: spec.anchor, pane: paneOf(mine), hold: scope.hold }));
+      const { anchor } = currentPaneSpec(panel.id, spec);
+      const r = await mod.default(host, pluginApi(p, { path: spec.path, arg: spec.arg, anchor, pane: paneOf(mine), hold: scope.hold }));
       if (mine !== generation) { if (typeof r === "function") r(); return; }
       cleanup = typeof r === "function" ? r : undefined;
+      if (anchor && currentPaneSpec(panel.id, spec).anchor === anchor) panel.updateParameters({ anchor: undefined });
+      anchorReady = true;
+      registerAnchor();
     } catch (e) {
       viewText = null;
       error = `${p.view}: ${errText(e)}`;
@@ -97,7 +124,6 @@
   onMount(() => {
     void mount();
     paneParks.set(panel.id, save);
-    pluginAnchors.set(panel.id, (a) => goTo?.(a));
     let t: ReturnType<typeof setTimeout> | undefined, manifest = false, other = false;
     const prefix = `.kandinsky/plugins/${spec.id}/`;
     const off = on("fs", (e) => {
@@ -117,7 +143,7 @@
       }, 250);
     });
     return () => {
-      off(); clearTimeout(t); generation++; cleanup?.(); scope.release();
+      disposed = true; off(); clearTimeout(t); generation++; cleanup?.(); scope.release();
       if (paneParks.get(panel.id) === save) paneParks.delete(panel.id);
       pluginAnchors.delete(panel.id);
       setDirty(panel.id, false);

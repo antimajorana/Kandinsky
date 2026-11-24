@@ -45,4 +45,4 @@ sub_items_by?: string,
 /**
  * Relation property indicating blocking dependencies (`blockedBy`).
  */
-blocked_by?: string, };
+blocked_by?: string, row_template?: string, };

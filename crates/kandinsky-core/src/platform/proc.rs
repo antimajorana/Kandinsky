@@ -9,11 +9,12 @@ mod flags {
     pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 }
 
-/// Whether process `pid` is running.
+/// Whether process `pid` is still alive.
 pub fn pid_alive(pid: u32) -> bool {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        std::path::Path::new(&format!("/proc/{pid}")).exists()
+        let dir = std::path::PathBuf::from(format!("/proc/{pid}"));
+        std::fs::read(dir.join("stat")).ok().and_then(|stat| linux_pid_alive(&stat)).unwrap_or_else(|| dir.exists())
     }
     #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
     {
@@ -36,6 +37,15 @@ pub fn pid_alive(pid: u32) -> bool {
             ok && code == STILL_ACTIVE as u32
         }
     }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn linux_pid_alive(stat: &[u8]) -> Option<bool> {
+    // The process name inside the parentheses can itself contain ')' or non-UTF-8 bytes.
+    let name_end = stat.iter().rposition(|&byte| byte == b')')?;
+    let [b' ', state, b' ', ..] = &stat[name_end + 1..] else { return None };
+    // An exited process can keep its /proc entry until its parent reaps it.
+    Some(!matches!(state, b'Z' | b'X' | b'x'))
 }
 
 /// Windows: a console program started by the desktop app (which has no console of its own) gets no console window,
@@ -306,6 +316,16 @@ mod tests {
     fn this_process_is_alive() {
         assert!(pid_alive(std::process::id()));
         assert!(!pid_alive(u32::MAX - 7));
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[test]
+    fn proc_stat_distinguishes_live_processes_from_unreaped_ones() {
+        assert_eq!(linux_pid_alive(b"5 (worker) Z \xff) S 1 2"), Some(true));
+        for state in [b'Z', b'X', b'x'] {
+            assert_eq!(linux_pid_alive(&[b'5', b' ', b'(', b')', b' ', state, b' ', b'1']), Some(false));
+        }
+        assert_eq!(linux_pid_alive(b"5 (worker)"), None);
     }
 
     #[test]

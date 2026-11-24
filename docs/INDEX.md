@@ -8,6 +8,7 @@
 - [TOOLS.md](guides/TOOLS.md) — standalone Python tools (vault scoring/migration, Zotero import, refs.bib) with measurements on real data
 - [LSP-language-servers.md](guides/LSP-language-servers.md) — slice 1b: language servers (rust-analyzer, pylsp/pyright, texlab, clangd) relayed over WebSocket; [lsp] settings; fake-server test
 - [MD-RENDERING.md](guides/MD-RENDERING.md) — markdown rendering vs Obsidian: the render audit (`npm run audit:md`, every note), 11 root causes fixed (528 → 11 findings), properties panel, what is left in the sources
+- [COMPATIBILITY.md](guides/COMPATIBILITY.md) — supported Obsidian and Notion workflows and current limits
 - [PLUGINS.md](guides/PLUGINS.md) — workspace plugins (`.kandinsky/plugins/<id>/`: manifest, view module, data script); why Runs left the core; plugin API; trust
 - [PAPERS-PDF-SOURCES.md](guides/PAPERS-PDF-SOURCES.md) — how a plugin finds a paper's PDF: `[contributes.catalog-papers] pdf_sources`, `kandinsky.attach_pdf`, `POST /api/refs/attach`, the order setting; papers-open-access (Semantic Scholar, Europe PMC, CORE)
 - [ZOTERO.md](guides/ZOTERO.md) — Zotero → Kandinsky: automatic one-way sync (three-way per field, conflicts reported) and saving from the browser via the Zotero Connector protocol (off by default, `[refs] connector`); the reading note `<citekey>.md` and the `library.paper` block (section 4)

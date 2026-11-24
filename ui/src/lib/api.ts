@@ -368,7 +368,7 @@ export const api = {
   /** Bases YAML evaluated without a file (view blocks in notes, plugin queries). */
   baseQuery: (src: string, thisPath?: string) => request<import("./types").BaseResult>("POST", "/api/base/query", { body: thisPath ? { src, this: thisPath } : { src } }),
   /** A new note in a base's view (folder and properties from its filters). */
-  baseRow: (path: string, view?: string) => request<import("./gen/BaseRowCreated").BaseRowCreated>("POST", "/api/base/row", { body: { path, view } }),
+  baseRow: (body: import("./gen/BaseNewRow").BaseNewRow) => request<import("./gen/BaseRowCreated").BaseRowCreated>("POST", "/api/base/row", { body }),
   /** Hide / show a column, add a board view: written to the `.base`. */
   baseView: (e: import("./gen/BaseViewEdit").BaseViewEdit) => request<void>("POST", "/api/base/view", { body: e }),
   linkMention: (m: import("./types").LinkMention) => request<void>("POST", "/api/link-mention", { body: m }),
@@ -536,6 +536,10 @@ export const api = {
     request<import("./gen/FormulaPreviewResponse").FormulaPreviewResponse>("POST", "/api/base/formula-preview", { body: req }),
   runBaseRecurring: (path: string) =>
     request<string[]>("POST", "/api/base/run-recurring", { body: { path } }),
+  runBaseAutomation: (body: import("./gen/BaseAutomationRequest").BaseAutomationRequest) =>
+    request<import("./gen/BaseAutomationRun").BaseAutomationRun>("POST", "/api/base/automations/run", { body }),
+  baseAutomationHistory: (path: string) =>
+    request<import("./gen/BaseAutomationRun").BaseAutomationRun[]>("GET", "/api/base/automations/history", { query: { path } }),
   /** Synced block source edits. */
   updateSyncedBlock: (req: import("./gen/SyncedBlockWrite").SyncedBlockWrite, keepalive = false) =>
     request<import("./gen/SyncedBlockResult").SyncedBlockResult>("POST", "/api/note/synced-block", { body: req, keepalive }),

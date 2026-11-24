@@ -2337,7 +2337,7 @@ async fn base_query_post(State(st): S, Json(q): Json<BaseInline>) -> Result<Json
 async fn base_row_post(State(st): S, Json(q): Json<BaseNewRow>) -> Result<Json<BaseRowCreated>> {
     let (r, extra) = with_ws(&st, move |ws| {
         let src = files::read_text(&ws, &q.path)?.text;
-        let r = crate::bases::new_row(ws.root(), &ws.config()?, &q.path, &src, q.view.as_deref())?;
+        let r = crate::bases::new_row_from_request(ws.root(), &ws.config()?, &src, &q)?;
         let extra = crate::bases::automations::on_note_written(&ws, &r.path, true);
         Ok((r, extra))
     })
@@ -2349,6 +2349,9 @@ async fn base_row_post(State(st): S, Json(q): Json<BaseNewRow>) -> Result<Json<B
 async fn base_view_post(State(st): S, Json(q): Json<BaseViewEdit>) -> Result<StatusCode> {
     let path = q.path.clone();
     with_ws(&st, move |ws| {
+        if let ViewEdit::RowTemplate { template: Some(template) } = &q.edit {
+            crate::notes::template_text(ws.root(), &ws.config()?, template)?;
+        }
         let doc = files::read_text(&ws, &q.path)?;
         let text = crate::bases::edit_view(&doc.text, &q.view, &q.edit)?;
         files::write_text(&ws, &FileWrite { path: q.path, text, base_mtime: Some(doc.mtime), only_new: false, apply_here: false }).map(drop)
@@ -2373,6 +2376,18 @@ async fn base_get(State(st): S, Query(q): Query<BaseQuery>) -> Result<Json<BaseR
 
 async fn base_formula_preview_post(State(st): S, Json(req): Json<FormulaPreviewRequest>) -> Result<Json<FormulaPreviewResponse>> {
     Ok(Json(with_ws(&st, move |ws| crate::bases::formula_preview(ws.root(), &ws.config()?, &req)).await?))
+}
+
+async fn base_automation_run_post(State(st): S, Json(req): Json<BaseAutomationRequest>) -> Result<Json<BaseAutomationRun>> {
+    let run = with_ws(&st, move |ws| crate::bases::automations::run_manual(&ws, &req)).await?;
+    if !run.files.is_empty() {
+        st.bus.publish(Event::Fs { paths: run.files.clone() });
+    }
+    Ok(Json(run))
+}
+
+async fn base_automation_history_get(State(st): S, Query(q): Query<BaseQuery>) -> Result<Json<Vec<BaseAutomationRun>>> {
+    Ok(Json(with_ws(&st, move |ws| crate::bases::automations::run_history(&ws, &q.path)).await?))
 }
 
 #[derive(serde::Deserialize)]
@@ -3665,6 +3680,8 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/base/row", post(base_row_post))
         .route("/api/base/query", post(base_query_post))
         .route("/api/base/formula-preview", post(base_formula_preview_post))
+        .route("/api/base/automations/run", post(base_automation_run_post))
+        .route("/api/base/automations/history", get(base_automation_history_get))
         .route("/api/base/run-recurring", post(base_run_recurring_post))
         .route("/api/view", post(view_post))
         .route("/api/css-snippets", get(css_snippets_get))

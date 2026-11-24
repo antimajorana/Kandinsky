@@ -37,7 +37,7 @@ stop_one() {
 
 start_core() {
   say "building the core (cargo build -p kandinsky) — log: $run/build.log"
-  if ! cargo build -q -p kandinsky --manifest-path "$root/Cargo.toml" > "$run/build.log" 2>&1; then
+  if ! cargo build --locked -q -p kandinsky --manifest-path "$root/Cargo.toml" > "$run/build.log" 2>&1; then
     say "BUILD FAILED:"; tail -30 "$run/build.log"; return 1
   fi
   say "starting the core on $ws, port $port — log: $run/core.log"
@@ -47,7 +47,11 @@ start_core() {
 
 start_ui() {
   say "starting Vite (hot reload) — log: $run/vite.log"
-  KANDINSKY_API="http://127.0.0.1:$port" setsid npm --prefix "$root/ui" run dev > "$run/vite.log" 2>&1 &
+  # Record Vite's PID so a stop also closes the listening socket.
+  (
+    cd "$root/ui" || exit 1
+    KANDINSKY_API="http://127.0.0.1:$port" exec setsid ./node_modules/.bin/vite --host 127.0.0.1
+  ) > "$run/vite.log" 2>&1 &
   echo $! > "$run/vite.pid"
 }
 

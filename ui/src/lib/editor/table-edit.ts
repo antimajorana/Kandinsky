@@ -27,6 +27,7 @@ let pending: ({ first: number } & Target) | null = null;
 const openers = new WeakMap<Element, (caret: Caret) => void>();
 
 function write(view: EditorView, t: Table, change: (t: Table) => void, then?: Target) {
+  if (view.state.readOnly) return;
   change(t);
   const doc = view.state.doc, from = doc.line(t.first).from, to = doc.line(t.last).to;
   pending = then ? { first: t.first, ...then } : null;
@@ -109,7 +110,7 @@ function cellEditable(view: EditorView, table: HTMLElement, cell: HTMLElement, r
   openers.set(cell, (caret) => openCell(view, table, cell, r, c, caret));
   cell.addEventListener("mousedown", (e) => {
     // a link, a checkbox or a button in the cell does its own thing (the editor's link clicks: lib/editor/link-clicks.ts)
-    if (!cell.isContentEditable && (e.button !== 0 || (e.target as Element | null)?.closest?.(LIVE_IN_CELL))) return;
+    if (view.state.readOnly || (!cell.isContentEditable && (e.button !== 0 || (e.target as Element | null)?.closest?.(LIVE_IN_CELL)))) return;
     e.stopPropagation(); // the editor would move its caret into the table and show its markdown
     if (cell.isContentEditable) return;
     e.preventDefault();
@@ -121,7 +122,7 @@ function cellEditable(view: EditorView, table: HTMLElement, cell: HTMLElement, r
 
 /** The cell as its markdown, editable, the caret at `caret`; leaving it writes it back. */
 function openCell(view: EditorView, table: HTMLElement, cell: HTMLElement, r: number, c: number, caret: Caret) {
-  if (cell.isContentEditable) return;
+  if (view.state.readOnly || cell.isContentEditable) return;
   const t = now(view, table);
   if (!t) return;
   const before = t.rows[r]?.[c] ?? "";
@@ -143,6 +144,7 @@ function openCell(view: EditorView, table: HTMLElement, cell: HTMLElement, r: nu
     listening.abort();
     cell.contentEditable = "false";
     cell.classList.remove("editing");
+    if (view.state.readOnly) { cell.replaceChildren(...drawn); return; }
     const text = clean(cell.textContent ?? "");
     const t2 = now(view, table);
     if (!t2) return;
@@ -263,7 +265,7 @@ function controls(view: EditorView, table: HTMLElement) {
   table.addEventListener("contextmenu", (e) => {
     const hit = cellAt(e);
     // an open cell keeps the browser's menu (spelling), as does Shift+right-click
-    if (!hit || hit.cell.isContentEditable || e.shiftKey) return;
+    if (view.state.readOnly || !hit || hit.cell.isContentEditable || e.shiftKey) return;
     e.preventDefault();
     e.stopPropagation();
     popMenu(atPointer(e, cellMenu(view, table, hit.r, hit.c)));

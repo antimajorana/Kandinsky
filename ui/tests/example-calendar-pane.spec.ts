@@ -224,6 +224,34 @@ test("a meeting the user is invited to in Exchange: the card joins the call and 
   await expect(going.getByRole("button", { name: "Yes" })).toHaveAttribute("aria-pressed", "true");
 });
 
+test("editing following occurrences leaves an unchanged repeat rule to the engine", async ({ page }) => {
+  const updates: Record<string, unknown>[] = [];
+  const day = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const ev = {
+    uid: "s1", rid: ymd(today), summary: "Weekly seminar", start: day(today), end: day(tomorrow),
+    all_day: true, recurring: true, rrule: "FREQ=WEEKLY;COUNT=4", free: false,
+    calendar: "home/personal", calendar_name: "Personal", href: "http://127.0.0.1:9/caldav/personal/s1.ics", writable: true,
+  };
+  await page.route("**/api/plugins/dav/helper", async (route) => {
+    const body = route.request().postDataJSON() as { method: string; params: Record<string, unknown> };
+    if (body.method === "watch") return route.fulfill({ json: { sources: [{ id: "home/personal", kind: "caldav", account: "home", url: "http://127.0.0.1:9/caldav/personal/", name: "Personal", writable: true, synced: 0 }], write: "home/personal", accounts: [], configured: true } });
+    if (body.method === "range") return route.fulfill({ json: { events: [ev] } });
+    if (body.method === "update") { updates.push(body.params); return route.fulfill({ json: { undo: 1 } }); }
+    return route.continue();
+  });
+  const cal = await openPane(page);
+  await cal.getByText(ev.summary, { exact: true }).first().click();
+  await page.getByRole("dialog", { name: ev.summary }).getByTitle("Edit (e)").click();
+  const editor = page.getByRole("dialog", { name: "Edit event" });
+  await expect(editor.getByLabel("Repeat")).toHaveValue(ev.rrule);
+  await editor.getByRole("textbox", { name: "Title" }).fill("Updated seminar");
+  await editor.getByRole("button", { name: "Save" }).click();
+  await page.getByTestId("palette").getByText("This and following events", { exact: true }).click();
+  await expect.poll(() => updates.length).toBe(1);
+  expect(updates[0]).toMatchObject({ uid: ev.uid, rid: ev.rid, summary: "Updated seminar", scope: "following" });
+  expect(updates[0]).not.toHaveProperty("rrule");
+});
+
 test("the card's trash button deletes the event through the engine (the card closing first must not lose it)", async ({ page }) => {
   const deleted: Record<string, unknown>[] = [];
   const at = (h: number) => { const d = new Date(); d.setHours(h, 0, 0, 0); return d.toISOString(); };

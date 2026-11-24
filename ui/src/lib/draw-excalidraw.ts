@@ -374,9 +374,19 @@ export async function mountDrawing(host: HTMLElement, json: string, theme: "dark
     const at = pageAt(pages, st.width / 2 / st.zoom.value - st.scrollX, st.height / 2 / st.zoom.value - st.scrollY);
     return at >= 0 ? pages[at].id : null;
   }
+  let pendingPage: number | string | undefined;
+  let pageFrame = 0;
   /** Scrolls to a page (a number, or what follows `#` in an embed), waiting for Excalidraw's API on a fresh mount. */
   function showPage(ref: number | string): void {
-    if (!api) { requestAnimationFrame(() => showPage(ref)); return; }
+    if (!api) {
+      pendingPage = ref;
+      pageFrame ||= requestAnimationFrame(() => {
+        pageFrame = 0;
+        if (pendingPage !== undefined) showPage(pendingPage);
+      });
+      return;
+    }
+    pendingPage = undefined;
     const els = api.getSceneElements();
     const f = typeof ref === "number" ? (() => { const p = pagesOf(els as never)[ref - 1]; return p && els.find((e) => e.id === p.id); })() : frameRef(els as never, ref);
     if (f) { held = f.id; api.scrollToContent(f as never, { fitToViewport: true, viewportZoomFactor: FIT, animate: false }); }
@@ -477,7 +487,7 @@ export async function mountDrawing(host: HTMLElement, json: string, theme: "dark
     showPage,
     pageNow,
     destroy() {
-      clearTimeout(pagesT); cancelAnimationFrame(holding); cancelAnimationFrame(cornering); host.removeEventListener("keydown", turn, true);
+      clearTimeout(pagesT); cancelAnimationFrame(holding); cancelAnimationFrame(cornering); cancelAnimationFrame(pageFrame); host.removeEventListener("keydown", turn, true);
       host.removeEventListener("pointerdown", press, true); host.removeEventListener("pointerup", lift, true); host.removeEventListener("pointercancel", lift, true); host.removeEventListener("wheel", wheel, true); resized.disconnect(); live?.close(); ink.off(); offMoves(); offFingers(); watchers.clear(); root.unmount(); },
     others: () => live?.others() ?? 0,
     writes: () => live?.writes() ?? true,

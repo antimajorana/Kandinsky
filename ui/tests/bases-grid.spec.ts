@@ -13,6 +13,132 @@ async function openBase(page: Page, name: string) {
   return page.locator(".base-pane");
 }
 
+test("a Base view saves a default template and uses its prompts when creating a row", async ({ page, request }, info) => {
+  const base = "db/row-templates.base", template = "templates/row-brief.md";
+  const note = "db/briefs/Build a prototype.md";
+  try {
+    expect((await put(request, base, 'filters: \'file.inFolder("db/briefs")\'\nviews:\n  - type: table\n    name: Active\n    filters: \'status == "Open"\'\n    order: [file.name, status, estimate]\n  - type: table\n    name: All briefs\n')).ok()).toBe(true);
+    expect((await put(request, template, '---\ntemplate_title: Project brief\ncreate_in: elsewhere\nstatus: Closed\nestimate: {{prompt:Estimate | number}}\n---\n# {{title}}\n\n## Goals\n')).ok()).toBe(true);
+    const pane = await openBase(page, "row-templates.base");
+    const dialog = page.getByRole("dialog", { name: "New row" });
+    await pane.getByRole("button", { name: "New", exact: true }).click();
+    await expect(dialog.getByLabel("Title")).toBeFocused();
+    await dialog.getByLabel("Title").fill("Build a prototype");
+    await dialog.getByRole("button", { name: "Template", exact: true }).click();
+    await dialog.getByRole("option", { name: /Project brief/ }).click();
+    await dialog.getByRole("button", { name: "Set as view default" }).click();
+    await expect(dialog.getByText("Default template for this view")).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    expect((await request.get(`/api/file?path=${encodeURIComponent(note)}`, { headers: H })).status()).toBe(404);
+    expect(await text(request, base)).toContain("rowTemplate: row-brief");
+
+    const reopened = await openBase(page, "row-templates.base");
+    await reopened.getByRole("button", { name: "New", exact: true }).click();
+    await dialog.getByLabel("Title").fill("Build a prototype");
+    await expect(dialog.getByRole("button", { name: "Template", exact: true })).toHaveText("Project brief");
+    await dialog.getByRole("spinbutton", { name: "Estimate" }).fill("2.5");
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate((theme) => document.documentElement.setAttribute("data-theme", theme), theme);
+      await page.screenshot({ path: info.outputPath(`new-base-row-${theme}.png`) });
+    }
+    await dialog.getByRole("button", { name: "Create row" }).click();
+    await expect(page.locator(`.live-cm[data-note="${note}"]`)).toBeVisible();
+    expect(await text(request, note)).toBe("---\nstatus: Open\nestimate: 2.5\n---\n# Build a prototype\n\n## Goals\n");
+
+    await openFile(page, "row-templates.base");
+    await reopened.locator(".view-switch").click();
+    await page.getByRole("menuitem", { name: /^All briefs/ }).click();
+    await reopened.getByRole("button", { name: "New", exact: true }).click();
+    await expect(dialog.getByRole("button", { name: "Template", exact: true })).toHaveText("Blank note");
+  } finally {
+    for (const path of [base, template, note]) {
+      await request.post(`/api/fs/trash?path=${encodeURIComponent(path)}`, { headers: H });
+    }
+  }
+});
+
+test("run a manual automation, create and update rows in another Base, and see the results in history", async ({ page, request }) => {
+  const inbox = "db/manual-inbox.base", followups = "db/manual-followups.base";
+  const note = "db/manual-inbox/Intake.md", created = "db/manual-followups/Review Intake.md", related = "db/manual-followups/Related.md";
+  try {
+    expect((await put(request, note, `---\nprojects: '[[${related}]]'\n---\n# Intake\n`)).ok()).toBe(true);
+    expect((await put(request, related, "---\nstatus: Open\n---\n")).ok()).toBe(true);
+    expect((await put(request, inbox, 'filters: \'file.inFolder("db/manual-inbox")\'\nviews: [{type: table, name: Inbox}]\n')).ok()).toBe(true);
+    expect((await put(request, followups, 'filters: \'file.inFolder("db/manual-followups")\'\nviews: [{type: table, name: Open, filters: \'status == "Open"\'}]\n')).ok()).toBe(true);
+    const pane = await openBase(page, "manual-inbox.base");
+    await pane.getByTestId("base-automations-btn").click();
+    const panel = page.getByTestId("base-automations-popover");
+    await panel.getByLabel("Name", { exact: true }).fill("Schedule review");
+    await panel.getByRole("button", { name: "Trigger", exact: true }).click();
+    await panel.getByRole("option", { name: "Run manually", exact: true }).click();
+    await panel.getByRole("button", { name: "Action 1 type" }).click();
+    await panel.getByRole("option", { name: "Create row in a Base" }).click();
+    await panel.getByLabel("Destination Base").fill(followups);
+    await panel.getByLabel("View (optional)").fill("Open");
+    await panel.getByLabel("New note title (optional)").fill("Review {{title}}");
+    await panel.getByLabel("Link back property (optional)").fill("source");
+    await panel.getByRole("button", { name: "Add action", exact: true }).click();
+    await panel.getByRole("button", { name: "Action 2 type" }).click();
+    await panel.getByRole("option", { name: "Update related rows in a Base" }).click();
+    const update = panel.getByRole("group", { name: "Action 2" });
+    await update.getByLabel("Destination Base").fill(followups);
+    await update.getByLabel("Relation on this row").fill("projects");
+    await update.getByLabel("Target property").fill("reviewed");
+    await update.getByLabel("Property value").fill("true");
+    await panel.getByRole("button", { name: "Add automation", exact: true }).click();
+    await panel.getByRole("button", { name: "Run Schedule review" }).click();
+    await expect(panel.getByRole("button", { name: "Row", exact: true })).toHaveText("Intake");
+    await panel.getByRole("button", { name: "Run on row", exact: true }).click();
+    await expect(panel.getByText("Schedule review · Completed")).toBeVisible();
+    await expect(panel.getByRole("button", { name: created, exact: true })).toBeVisible();
+    await expect(panel.getByRole("button", { name: related, exact: true })).toBeVisible();
+    expect(await text(request, related)).toContain("reviewed: true");
+    const contents = await text(request, created);
+    expect(contents).toContain("status: Open");
+    expect(contents).toContain(`[[${note}]]`);
+    await panel.getByRole("button", { name: created, exact: true }).click();
+    await expect(page.locator(`.live-cm[data-note="${created}"]`)).toBeVisible();
+  } finally {
+    for (const path of [inbox, followups, note, created, related]) {
+      await request.post(`/api/fs/trash?path=${encodeURIComponent(path)}`, { headers: H });
+    }
+  }
+});
+
+test("edit a legacy automation and run its reordered actions on a property change", async ({ page, request }) => {
+  const base = "db/ordered-rule.base", note = "db/ordered-rule/a.md";
+  const open = "---\nstatus: Open\n---\nBody.\n";
+  try {
+    expect((await put(request, note, open)).ok()).toBe(true);
+    expect((await put(request, base, `filters: 'file.inFolder("db/ordered-rule")'
+automations:
+  - name: Complete
+    trigger: {kind: property_changed, property: status, to: Done}
+    action: {kind: set_property, property: phase, value: complete}
+views:
+  - type: table
+`)).ok()).toBe(true);
+    const pane = await openBase(page, "ordered-rule.base");
+    await pane.getByTestId("base-automations-btn").click();
+    const panel = page.getByTestId("base-automations-popover");
+    await panel.getByRole("button", { name: "Edit Complete" }).click();
+    await panel.getByRole("button", { name: "Add action", exact: true }).click();
+    await panel.getByRole("button", { name: "Action 2 type" }).click();
+    await panel.getByRole("option", { name: "Set property", exact: true }).click();
+    await panel.getByRole("group", { name: "Action 2" }).getByLabel("Target property").fill("phase");
+    await panel.getByRole("group", { name: "Action 2" }).getByLabel("Property value").fill("pending");
+    await panel.getByRole("button", { name: "Move action 2 up" }).click();
+    await panel.getByRole("button", { name: "Save automation" }).click();
+    await expect(panel.getByText(/Set phase = pending · Set phase = complete/)).toBeVisible();
+    expect((await put(request, note, open.replace("Open", "Done"))).ok()).toBe(true);
+    await expect.poll(() => text(request, note)).toContain("phase: complete");
+  } finally {
+    for (const path of [base, note]) {
+      await request.post(`/api/fs/trash?path=${encodeURIComponent(path)}`, { headers: H });
+    }
+  }
+});
+
 test("a cell edited from the keyboard gives the focus back to its cell, on Enter and on Escape", async ({ page, request }) => {
   await put(request, "db/kbd/a.md", "---\nstatus: todo\n---\n");
   await put(request, "db/kbd.base", 'filters:\n  and:\n    - file.inFolder("db/kbd")\nviews:\n  - type: table\n    name: T\n    order: [file.name, status]\n');

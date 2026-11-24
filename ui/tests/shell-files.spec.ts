@@ -38,6 +38,26 @@ test.afterEach(async ({ request }) => {
   savedConfig = null;
 });
 
+test("New note stays visible in the sidebar and opens an editable Markdown file", async ({ page, request }) => {
+  const title = "Sidebar draft";
+  const path = `${title}.md`;
+  await page.goto("/");
+  await page.getByText("Finish the GW notes.").waitFor();
+  const sidebar = page.getByTestId("sidebar");
+  try {
+    await sidebar.getByRole("button", { name: "New note", exact: true }).click();
+    await page.getByRole("textbox", { name: "New note", exact: true }).fill(title);
+    await page.getByRole("button", { name: "Create", exact: true }).click();
+    await expect(page.locator(`.live-cm[data-note="${path}"] .cm-content`)).toHaveAttribute("contenteditable", "true");
+    await expect(sidebar.locator(`.tree-scroll [data-path="${path}"]`)).toBeVisible();
+    const saved = await request.get(`/api/file?path=${encodeURIComponent(path)}`, { headers: H });
+    expect(saved.ok()).toBe(true);
+    expect((await saved.json()).text).toBe("");
+  } finally {
+    await request.post(`/api/fs/trash?path=${encodeURIComponent(path)}`, { headers: H });
+  }
+});
+
 test("a workspace saves the open tabs to a file, and switching to it brings them back", async ({ page, request }) => {
   await verticalTabs(request);
   await page.goto("/");

@@ -11,6 +11,7 @@ const BOX = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\]/;
 /** Ticks (or opens again) the task on line `n`: the box flips at once, then the core's line replaces it — unless
  *  the line was edited meanwhile, or the core is unreachable (the flip stays). False when `n` is not a task. */
 export function tickTaskLine(view: EditorView, n: number): boolean {
+  if (view.state.readOnly) return false;
   const line = view.state.doc.line(n);
   const m = BOX.exec(line.text);
   if (!m) return false;
@@ -19,7 +20,7 @@ export function tickTaskLine(view: EditorView, n: number): boolean {
   view.dispatch({ changes: { from: at, to: at + 1, insert: done ? "x" : " " }, userEvent: "input.task" });
   const flipped = view.state.doc.line(n).text;
   void api.taskLine(line.text, done, view.state.facet(editorPath) || undefined).then(({ lines }) => {
-    if (!view.dom.isConnected || n > view.state.doc.lines) return;
+    if (!view.dom.isConnected || view.state.readOnly || n > view.state.doc.lines) return;
     const now = view.state.doc.line(n);
     const text = lines.join("\n");
     if (now.text === flipped && text !== flipped) view.dispatch({ changes: { from: now.from, to: now.to, insert: text }, userEvent: "input.task" });

@@ -6,7 +6,7 @@
 export interface Layout {
   /** "," ";" "\t" "|" — or " " for whitespace-aligned columns (no quoting there) */
   delimiter: string;
-  eol: "\n" | "\r\n";
+  eol: RecordEnding;
   /** every field was quoted ("a","b"): edited rows are quoted the same way */
   quoteAll: boolean;
   /** "a, b": one space after each delimiter */
@@ -22,16 +22,20 @@ export interface Layout {
 /** Where the column names come from: a first row, the last comment line before the data, or nowhere. */
 export type HeaderSource = "row" | "comment" | "none";
 
+export type RecordEnding = "\n" | "\r\n" | "\r";
+/** A record's original text, with an explicit ending only where it differs from the file's default. */
+export type RawRecord = string | { text: string | null; ending: RecordEnding | "" } | null;
+
 export interface Sheet {
   layout: Layout;
   header: string[];
   headerSource: HeaderSource;
   rows: string[][];
   /** each row's text as read (null: edited, write it anew); the header row's at `headerRaw` */
-  raw: (string | null)[];
-  headerRaw: string | null;
-  /** comment lines, each before data row `at` (-1: before the header row; rows.length: after the last) */
-  comments: { at: number; text: string }[];
+  raw: RawRecord[];
+  headerRaw: RawRecord;
+  /** Comments and blank lines before data row `at` (-1: before the header row; rows.length: after the last). */
+  comments: { at: number; text: string; blank?: true; ending?: RecordEnding | "" }[];
   numeric: boolean[];
   delimiterName: string;
   /** an Excel sheet's formulas behind its values, "row,col" of `rows` → the formula without `=` (shown, not run) */
@@ -51,26 +55,29 @@ export function toNum(s: string): number {
 const NAMES: Record<string, string> = { ",": "comma-separated", ";": "semicolon-separated", "\t": "tab-separated", "|": "pipe-separated", " ": "whitespace-separated" };
 
 /** A record: its fields and the text it spans. */
-interface Rec { fields: string[]; raw: string; quoted: boolean[] }
+interface Rec { fields: string[]; raw: string; quoted: boolean[]; ending: RecordEnding | "" }
 
-/** The records of `text` split on `d` (quotes honoured), or on runs of blanks for " ". Lines left empty are dropped. */
-function records(text: string, d: string, limit = Infinity, progress?: (done: number) => void): Rec[] {
+/** The records of `text` split on `d` (quotes honoured), or on runs of blanks for " ". */
+function records(text: string, d: string, limit = Infinity, progress?: (done: number) => void, keepBlank = false): Rec[] {
   const out: Rec[] = [];
   if (d === " ") {
-    for (const line of text.split(/\r?\n/)) {
-      if (out.length >= limit) break;
-      if (line.trim()) out.push({ fields: line.trim().split(/\s+/), raw: line, quoted: [] });
+    for (const m of text.matchAll(/([^\r\n]*)(\r\n|[\r\n]|$)/g)) {
+      if (!m[0] || out.length >= limit) break;
+      const raw = m[1], trimmed = raw.trim();
+      if (trimmed || keepBlank) out.push({ fields: trimmed ? trimmed.split(/\s+/) : [], raw, quoted: [], ending: m[2] as Rec["ending"] });
     }
     return out;
   }
   let i = 0, start = 0, field = "", fields: string[] = [], quoted: boolean[] = [], inQ = false, wasQ = false;
   const endField = () => { fields.push(field); quoted.push(wasQ); field = ""; wasQ = false; };
-  const endRec = (end: number) => {
+  const endRec = (end: number, ending: Rec["ending"]) => {
     endField();
     const raw = text.slice(start, end);
-    if (raw.trim()) out.push({ fields, raw, quoted });
+    if (keepBlank || raw.trim()) {
+      out.push({ fields, raw, quoted, ending });
+      if (progress && out.length % 50_000 === 0) progress(end / text.length);
+    }
     fields = []; quoted = [];
-    if (progress && out.length % 50_000 === 0) progress(end / text.length);
   };
   for (; i < text.length && out.length < limit; i++) {
     const ch = text[i];
@@ -80,12 +87,13 @@ function records(text: string, d: string, limit = Infinity, progress?: (done: nu
     } else if (ch === '"' && field.trim() === "") { inQ = true; wasQ = true; field = ""; }
     else if (ch === d) endField();
     else if (ch === "\n" || ch === "\r") {
-      endRec(i);
-      if (ch === "\r" && text[i + 1] === "\n") i++;
+      const ending = ch === "\r" && text[i + 1] === "\n" ? "\r\n" : ch;
+      endRec(i, ending);
+      i += ending.length - 1;
       start = i + 1;
     } else field += ch;
   }
-  if (out.length < limit && start < text.length) endRec(text.length);
+  if (out.length < limit && start < text.length) endRec(text.length, "");
   return out;
 }
 
@@ -121,18 +129,21 @@ function looksLikeHeader(first: string[], below: string[][]): boolean {
 export function parseSheet(input: string, path = "", progress?: (done: number) => void): Sheet {
   const bom = input.charCodeAt(0) === 0xfeff;
   const text = bom ? input.slice(1) : input;
-  const eol = /\r\n/.test(text.slice(0, 65536)) ? "\r\n" : "\n";
   // leading comment lines decide the comment marker
-  const firstLine = text.slice(0, text.search(/\r?\n|$/)).trimStart();
+  const firstLine = text.slice(0, text.search(/[\r\n]|$/)).trimStart();
   const comment = /^[#%]/.test(firstLine) ? firstLine[0] : null;
   const isComment = (raw: string) => !!comment && raw.trimStart().startsWith(comment);
-  const dataSample = text.split(/\r?\n/).filter((l) => l.trim() && !isComment(l)).slice(0, 60).join("\n");
+  const dataSample = text.split(/\r\n|[\r\n]/).filter((l) => l.trim() && !isComment(l)).slice(0, 60).join("\n");
   const d = sniff(dataSample, path);
+  const all = records(text, d, Infinity, progress, true);
+  const eol = all.find((r) => r.ending)?.ending || "\n";
+  const trailingEol = !!all.at(-1)?.ending;
 
-  const comments: { at: number; text: string }[] = [];
+  const comments: Sheet["comments"] = [];
   const data: Rec[] = [];
-  for (const r of records(text, d, Infinity, progress)) {
-    if (isComment(r.raw) && !r.quoted.some(Boolean)) comments.push({ at: data.length, text: r.raw });
+  for (const r of all) {
+    const blank = !r.raw.trim();
+    if (blank || (isComment(r.raw) && !r.quoted.some(Boolean))) comments.push({ at: data.length, text: r.raw, ...(blank ? { blank: true } : {}), ...(r.ending === eol ? {} : { ending: r.ending }) });
     else data.push(r);
   }
   const sample = data.slice(0, 200);
@@ -143,11 +154,11 @@ export function parseSheet(input: string, path = "", progress?: (done: number) =
   const quoteAll = sample.length > 0 && sample.every((r) => r.quoted.length > 0 && r.quoted.every(Boolean));
   // a quoted field's spaces are its own: the one after the delimiter was dropped before its quote
   let rows = data.map((r) => r.fields.map((f, k) => (r.quoted[k] ? f : clean(f))));
-  let raw: (string | null)[] = data.map((r) => r.raw);
+  let raw: RawRecord[] = data.map((r) => r.ending === eol ? r.raw : { text: r.raw, ending: r.ending });
   const width = Math.max(1, ...rows.slice(0, 500).map((r) => r.length));
 
-  let header: string[], headerSource: HeaderSource = "none", headerRaw: string | null = null;
-  const lead = comments.filter((c) => c.at <= 0);
+  let header: string[], headerSource: HeaderSource = "none", headerRaw: RawRecord = null;
+  const lead = comments.filter((c) => c.at <= 0 && !c.blank);
   const fromComment = lead.length ? records(lead[lead.length - 1].text.trimStart().slice(1).trim(), d)[0]?.fields.map(clean) ?? [] : [];
   if (looksLikeHeader(rows[0] ?? [], rows.slice(1, 40))) {
     header = rows[0]; headerSource = "row"; headerRaw = raw[0];
@@ -158,7 +169,7 @@ export function parseSheet(input: string, path = "", progress?: (done: number) =
   } else header = [];
   while (header.length < width) header.push(`col ${header.length + 1}`);
 
-  const layout: Layout = { delimiter: d, eol, quoteAll, spaceAfter, bom, trailingEol: /\r?\n$/.test(text), comment, columnEnds: d === " " ? alignedEnds(raw) : null };
+  const layout: Layout = { delimiter: d, eol, quoteAll, spaceAfter, bom, trailingEol, comment, columnEnds: d === " " ? alignedEnds(raw) : null };
   return { layout, header, headerSource, rows, raw, headerRaw, comments, numeric: numericColumns(header.length, rows), delimiterName: NAMES[d] };
 }
 
@@ -177,9 +188,10 @@ export function numericColumns(width: number, rows: string[][]): boolean[] {
 }
 
 /** The right edge of each column when every sampled line ends its fields at the same places; else null. */
-function alignedEnds(raw: (string | null)[]): number[] | null {
+function alignedEnds(raw: RawRecord[]): number[] | null {
   let ends: number[] | null = null;
-  for (const line of raw.slice(0, 50)) {
+  for (const record of raw.slice(0, 50)) {
+    const line = typeof record === "string" ? record : record?.text ?? null;
     if (line === null) continue;
     const here = [...line.matchAll(/\S+/g)].map((m) => m.index! + m[0].length);
     if (ends && (here.length !== ends.length || here.some((e, k) => e !== ends![k]))) return null;

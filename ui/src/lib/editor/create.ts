@@ -81,7 +81,7 @@ export interface KandinskyEditor {
   view: EditorView;
   setVim(on: boolean): void;
   /** Make the document this text (a reload from disk), changing only what differs. */
-  setDoc(text: string, opts?: { keepUndo?: boolean }): void;
+  setDoc(text: string, opts?: { keepUndo?: boolean; fromDisk?: boolean }): void;
   gotoLine(line: number): void;
   vimMode(): VimModeLabel;
   /** Raw Markdown source mode (live preview off). */
@@ -199,6 +199,7 @@ export function createEditor(o: EditorOptions): KandinskyEditor {
   const view = new EditorView({
     state: EditorState.create({ doc: o.doc, extensions, selection: { anchor } }),
     parent: o.parent,
+    scrollTo: o.line === undefined ? undefined : EditorView.scrollIntoView(anchor, { y: "center" }),
   });
   viewRef.view = view;
   let destroyed = false;
@@ -288,7 +289,11 @@ export function createEditor(o: EditorOptions): KandinskyEditor {
       if (!change) return;
       // only what differs: the caret, the folds, the scroll position and the problems' marks stay where they were.
       // What another program wrote is not a step of this editor's undo (`keepUndo`: what the person chose to bring in).
-      view.dispatch({ changes: change, annotations: opts?.keepUndo ? [] : [Transaction.addToHistory.of(false)] });
+      const annotations = [
+        ...(!opts?.keepUndo ? [Transaction.addToHistory.of(false)] : []),
+        ...(!opts?.keepUndo || opts?.fromDisk ? [Transaction.remote.of(true)] : []),
+      ];
+      view.dispatch({ changes: change, annotations });
     },
     gotoLine(line) {
       const doc = view.state.doc;

@@ -205,6 +205,7 @@
 
 <style>
   .inline-props { max-width: var(--measure, 740px); margin: 0 auto; padding: 6px 0 10px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+  :global(.cm-notion-inline-props) .inline-props { max-width: none; margin-inline: 0; }
   .inline-props.invalid { margin: 0 auto; flex-direction: row; align-items: center; gap: 10px; font-size: calc(12.5px * var(--ui-scale, 1)); color: var(--red); padding: 8px 10px; border-radius: var(--radius); background: var(--red-soft); }
   .fix-btn { padding: 2px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); color: var(--text); font-size: calc(12px * var(--ui-scale, 1)); }
   .prop-row { display: grid; grid-template-columns: minmax(96px, 148px) minmax(0, 1fr) 22px; align-items: center; gap: 6px; padding: 1px 0; }

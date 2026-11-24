@@ -54,6 +54,12 @@ pub fn stamp(line: &Line, zones: &[Component]) -> Option<Stamp> {
     stamp_value(&line.value, line.param("TZID"), zones)
 }
 
+/// A list entry may be a PERIOD, whose first value is the occurrence's start.
+pub(crate) fn date_list_stamp(line: &Line, value: &str, zones: &[Component]) -> Option<Stamp> {
+    let start = value.split_once('/').map_or(value, |(start, _)| start);
+    stamp_value(start, line.param("TZID"), zones)
+}
+
 /// Every value of a list property (`EXDATE:a,b`, several lines).
 fn stamps(ev: &Component, name: &str, zones: &[Component]) -> Vec<Stamp> {
     ev.props
@@ -62,8 +68,7 @@ fn stamps(ev: &Component, name: &str, zones: &[Component]) -> Vec<Stamp> {
         .flat_map(|l| {
             l.value
                 .split(',')
-                // a PERIOD's start (RDATE;VALUE=PERIOD:start/end)
-                .filter_map(|v| stamp_value(v.split('/').next().unwrap_or(v), l.param("TZID"), zones))
+                .filter_map(|v| date_list_stamp(l, v, zones))
                 .collect::<Vec<_>>()
         })
         .collect()
@@ -105,6 +110,14 @@ impl Frame {
             Frame::Zoned(z) => (vec![("TZID".into(), z.name())], t.format("%Y%m%dT%H%M%S").to_string()),
         }
     }
+}
+
+/// The inclusive end of a recurrence rule as a wall-clock time in its frame.
+pub(crate) fn rule_until(value: &str, frame: Frame, zones: &[Component]) -> Option<NaiveDateTime> {
+    stamp_value(value, None, zones).map(|stamp| match stamp {
+        Stamp::Day(day) => day.and_hms_opt(23, 59, 59).unwrap_or_default(),
+        other => frame.naive(other),
+    })
 }
 
 /// `PT1H30M`, `P1D`, `-PT15M`, `P2W` → a duration.
@@ -328,10 +341,7 @@ fn starts(master: &Component, frame: Frame, first: NaiveDateTime, lo: NaiveDateT
             .split(';')
             .filter(|part| {
                 if let Some(v) = part.strip_prefix("UNTIL=") {
-                    until = stamp_value(v, None, zones).map(|s| match s {
-                        Stamp::Day(d) => d.and_hms_opt(23, 59, 59).unwrap_or_default(),
-                        other => frame.naive(other),
-                    });
+                    until = rule_until(v, frame, zones);
                     false
                 } else {
                     !part.is_empty()

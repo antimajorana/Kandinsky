@@ -76,7 +76,7 @@
 .live-cm.cm-editor .cm-scroller.cm-scroller { font-family: var(--prose-font, var(--font-ui)); line-height: var(--prose-line-height, 1.68); }
 .live-cm .cm-scroller:has(> .cm-note-hero-slot) { flex-wrap: wrap !important; align-content: flex-start; }
 .live-cm .cm-note-hero-slot { flex: 0 0 100%; width: 100%; box-sizing: border-box; }
-.live-cm .cm-content { max-width: calc(var(--prose-width, var(--line-width, 740px)) + 112px); margin: 0 auto; padding: 36px 56px 45vh; box-sizing: border-box; width: 100%; }
+.live-cm .cm-content { max-width: calc(var(--prose-width, var(--line-width, 740px)) + 112px); margin: 0 auto; padding: 36px var(--note-padding) 45vh; box-sizing: border-box; width: 100%; }
 .live-cm .cm-scroller:has(> .cm-note-hero-slot) > .cm-content { flex: 1 1 0%; min-width: 0; width: auto; padding-top: 4px; }
 /* a phone's width goes to the words: 16 px at the sides (the desktop's 56 px took a fifth of the line) */
 html.phone .live-cm .cm-content { padding: 20px 16px 45vh; }
@@ -236,7 +236,7 @@ html.phone .live-cm .cm-scroller:has(> .cm-note-hero-slot) > .cm-content { paddi
 .page-emblem:hover { transform: scale(1.05); background: color-mix(in srgb, var(--accent) 20%, transparent); }
 .inline-title-wrap { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 12px; padding: 0 0 .35em; }
 .inline-title-wrap .page-emblem { margin-right: 0; margin-top: 0.28em; }
-.markdown .inline-title { font-size: 2.06em; font-weight: 700; letter-spacing: -.028em; color: var(--heading, var(--text)); line-height: 1.18; margin: 0; padding: 0 0 .35em; overflow-wrap: anywhere; }
+.markdown .inline-title { font-size: 2.32em; font-weight: 740; letter-spacing: -.035em; color: var(--heading, var(--text)); line-height: 1.15; margin: 0; padding: 0 0 .35em; overflow-wrap: anywhere; }
 .inline-title-wrap textarea.inline-title { padding-bottom: 0; min-width: 0; }
 /* the icon sits in the line's left padding: the line keeps its text flow (a grid made each run of text its own item,
    and CodeMirror's Home, clicks and arrows measure that flow) */

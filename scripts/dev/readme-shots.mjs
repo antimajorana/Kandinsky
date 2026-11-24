@@ -4,7 +4,7 @@
 //   node scripts/dev/readme-shots.mjs [--bin target/debug/kandinsky] [--out docs/img/readme]
 //
 // Builds the vault in the temp folder, serves it with `kandinsky serve` (locked, its own vault list and secret store),
-// opens two notes side by side in Chromium and writes <out>/workspace-{light,dark}.webp (cwebp, quality 82).
+// opens a note in Chromium and writes <out>/workspace-{light,dark}.webp (cwebp, quality 82).
 // Everything it starts or writes outside <out> is removed at the end.
 import { createRequire } from "node:module";
 import { spawn, execFileSync } from "node:child_process";
@@ -60,34 +60,27 @@ try {
     await new Promise((r) => setTimeout(r, 500));
   }
   mkdirSync(out, { recursive: true });
-  browser = await chromium.launch();
+  browser = await chromium.launch({ executablePath: process.env.KANDINSKY_PW_CHROME });
   for (const theme of ["light", "dark"]) {
-    const ctx = await browser.newContext({ viewport: { width: 1440, height: 860 }, colorScheme: theme, extraHTTPHeaders: { authorization: `Bearer ${KEY}` } });
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 960 }, colorScheme: theme, extraHTTPHeaders: { authorization: `Bearer ${KEY}` } });
     await ctx.addCookies([{ name: "kandinsky_local", value: KEY, url }]);
     const page = await ctx.newPage();
     await page.goto(url);
     await page.getByText("Write up the brewing notes.").first().waitFor({ timeout: 30_000 });
-    const open = async (name, text) => {
-      await page.keyboard.press("Control+p");
-      await page.keyboard.type(name);
-      await page.getByTestId("palette").getByText(name, { exact: true }).first().waitFor();
-      await page.keyboard.press("Enter");
-      await page.locator(".cm-content").filter({ hasText: text }).first().waitFor();
-    };
-    await open("Extraction", "How much of the coffee");
-    await open("Coffee", "Notes on brewing at home");
-    await page.getByTestId("sidebar").locator(".tab", { hasText: "Coffee" }).first().click({ button: "right" });
-    await page.getByRole("menuitem", { name: "Split right" }).click();
-    await page.locator(".editor-pane").filter({ visible: true }).nth(1).waitFor();
-    await page.locator(".cm-content").filter({ hasText: "V60" }).first().waitFor(); // the Base's rows
-    for (const h of ["Extraction", "Coffee"]) { // each caret to the blank line under its heading: no revealed `#`
-      await page.locator(".cm-line", { hasText: new RegExp(`^#?\\s*${h}$`) }).first().click();
-      await page.keyboard.press("End");
-      await page.keyboard.press("ArrowDown");
+    const tree = page.getByTestId("sidebar").locator(".tree-scroll");
+    await tree.getByText("notes", { exact: true }).click();
+    await tree.getByText("Coffee", { exact: true }).click();
+    await page.locator(".cm-content").getByText(/Notes on brewing at home/).waitFor();
+    await page.locator(".cm-content").getByText("V60", { exact: true }).first().waitFor();
+    const favorite = page.getByRole("button", { name: "Add to Favorites" });
+    if (await favorite.count()) {
+      await favorite.click();
+      await page.getByTestId("sidebar").getByRole("region", { name: "Favorites" }).getByText("Coffee").waitFor();
+      await page.locator(".toast").filter({ hasText: "Bookmarked" }).getByRole("button", { name: "Close" }).click();
     }
     await page.mouse.move(0, 0);
     await page.evaluate(() => document.activeElement?.blur?.()); // no caret, no revealed `#`
-    await page.waitForTimeout(1500); // math, the Base and fonts settle
+    await page.evaluate(() => document.fonts.ready);
     const png = join(tmp, `workspace-${theme}.png`);
     await page.screenshot({ path: png });
     execFileSync("cwebp", ["-quiet", "-q", "82", png, "-o", join(out, `workspace-${theme}.webp`)]);

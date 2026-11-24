@@ -12,6 +12,7 @@
   import { onVaultChange } from "../../lib/vault";
   import { reloadOnChange } from "../../lib/reload-on-change";
   import { keepRecovery, recoveryPath } from "../../lib/recovery";
+  import { frontmatterSpan } from "../../lib/property-model";
   import type { Mtime } from "../../lib/gen/Mtime";
 
   let { options, doc }: { options: Record<string, unknown>; doc: string } = $props();
@@ -50,7 +51,9 @@
 
   function extractSyncedBlock(src: string, id: string): string | null {
     const tag = `^${id}`;
-    const lines = src.split(/\r?\n/);
+    const frontmatter = frontmatterSpan(src);
+    const body = frontmatter ? src.slice(frontmatter.end).replace(/^\r?\n/, "") : src;
+    const lines = body.split(/\r?\n/);
     const startMarker = `<!-- synced:${id} -->`;
 
     // Track CommonMark fence spans forward so nested ``` inside ~~~ or ```` matches accurately.

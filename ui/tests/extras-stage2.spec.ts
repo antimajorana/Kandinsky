@@ -96,9 +96,10 @@ test.describe("Stage 2 High-Payoff Extras (E2, E6, E7, E8, E10)", () => {
     }).toBe(true);
   });
 
-  test("E7: Lock page toggles read-only state, Locked pill, and Unlock", async ({ page, request }) => {
+  test("E7: A locked page rejects widget edits and follows external changes until unlocked", async ({ page, request }) => {
     const notePath = "notes/e7-lock-test.md";
-    await openNoteInEditor(page, request, notePath, "---\ntitle: Lock Test\n---\n# Lock Test\n\nInitial body.\n");
+    await openNoteInEditor(page, request, notePath, "---\ntitle: Lock Test\n---\n# Lock Test\n\nInitial body.\n\n- [ ] Example task\n\n| Header | Other |\n| --- | --- |\n| Example cell | Value |\n\n<!-- kandinsky:no-tasks -->\n");
+    const read = () => page.evaluate(() => (window as unknown as { __kandinsky: { editor(): { text: string } } }).__kandinsky.editor().text);
 
     await page.getByTestId("editor-more-btn").click();
     await page.getByRole("menuitem", { name: "Lock page" }).click();
@@ -117,10 +118,29 @@ test.describe("Stage 2 High-Payoff Extras (E2, E6, E7, E8, E10)", () => {
     await page.keyboard.type("SHOULD_NOT_APPEAR");
     await expect(page.locator(".cm-content")).not.toContainText("SHOULD_NOT_APPEAR");
 
+    const lockedText = await read();
+    const task = page.locator(".cm-line", { hasText: "Example task" }).locator(".cm-task-mark");
+    const cell = page.locator(".table-edit td", { hasText: "Example cell" });
+    await task.dispatchEvent("mousedown");
+    await cell.dispatchEvent("mousedown", { button: 0 });
+    await expect(cell).not.toHaveClass(/editing/);
+    await page.getByRole("button", { name: "Add a row" }).dispatchEvent("mousedown");
+    expect(await read()).toBe(lockedText);
+
+    // A write from another program still reloads into the open note.
+    const external = lockedText.replace("Initial body.", "Changed externally.");
+    expect((await request.put("/api/file", { headers: HEADERS, data: { path: notePath, text: external } })).ok()).toBe(true);
+    await expect.poll(read).toBe(external);
+    await expect(pill).toBeVisible();
+
     // Click Locked pill to unlock
     await pill.click();
     await expect(pill).toHaveCount(0);
     await expect(page.locator(".cm-content")).toHaveAttribute("contenteditable", "true");
+    await task.dispatchEvent("mousedown");
+    await expect.poll(read).toContain("- [x] Example task");
+    await cell.dispatchEvent("mousedown", { button: 0 });
+    await expect(cell).toHaveClass(/editing/);
   });
 
   test("E8: Share -> Export to PDF returns valid %PDF- bytes", async ({ page, request }) => {

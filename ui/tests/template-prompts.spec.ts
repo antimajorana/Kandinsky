@@ -17,8 +17,10 @@ test("a template asks its questions after the name and fills values, filters and
   const form = page.getByRole("dialog", { name: "“Sync with Ada”" });
   await form.getByLabel("Who").fill("Ada Lovelace");
   await form.getByLabel("Topic").fill("the DMFT fit");
-  await expect(form.getByLabel("Kind")).toHaveValue("weekly");
-  await form.getByLabel("Kind").selectOption("ad hoc");
+  const kind = form.getByRole("button", { name: "Kind", exact: true });
+  await expect(kind).toHaveText("weekly");
+  await kind.click();
+  await form.getByRole("option", { name: "ad hoc" }).click();
   await form.getByLabel("When").fill("2026-11-02");
   await form.getByRole("button", { name: "Create" }).click();
   await expect(page.locator(".cm-content")).toContainText("About: the DMFT fit");

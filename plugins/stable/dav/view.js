@@ -2110,29 +2110,29 @@ function An(t, a) {
 			$(j, `Not an address: ${n.join(", ")}`);
 			return;
 		}
-		let r = !U(E) && U(w) !== S ? D() : void 0, i = {
+		let r = !U(E) && U(w) !== S ? D() : void 0, i = o(), s = b.calendar || void 0, c = i && b.rrule === (i.rrule ?? "") ? void 0 : b.rrule, l = {
 			summary: b.summary,
 			start: e,
 			end: t,
 			all_day: b.all_day,
 			location: b.location,
 			description: b.description,
-			rrule: b.rrule,
+			rrule: c,
 			attendees: r
 		};
-		if (!o()) {
+		if (!i) {
 			a.onclose(), await a.cal.create({
-				...i,
-				calendar: b.calendar || void 0
+				...l,
+				calendar: s
 			});
 			return;
 		}
-		let s = await a.cal.askScope(o(), "Change");
-		s && (a.onclose(), await a.cal.change(o(), {
-			...i,
-			move_to: b.calendar && b.calendar !== o().calendar ? b.calendar : void 0,
-			from_start: o().start
-		}, s, "Saved"));
+		let u = await a.cal.askScope(i, "Change");
+		u && (a.onclose(), await a.cal.change(i, {
+			...l,
+			move_to: s === i.calendar ? void 0 : s,
+			from_start: i.start
+		}, u, "Saved"));
 	}
 	function ie(e) {
 		e.key === "Escape" ? (e.stopPropagation(), a.onclose()) : e.key === "Enter" && (e.ctrlKey || e.metaKey) && (e.preventDefault(), I());

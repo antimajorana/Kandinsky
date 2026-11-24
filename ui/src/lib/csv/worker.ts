@@ -14,7 +14,8 @@ self.onmessage = async (e: MessageEvent<{ bytes: ArrayBuffer; path: string }>) =
     return;
   }
   try {
-    const text = new TextDecoder().decode(e.data.bytes);
+    // Leave the BOM in the text so parseSheet can record it for the next save.
+    const text = new TextDecoder("utf-8", { ignoreBOM: true }).decode(e.data.bytes);
     const sheet = parseSheet(text, e.data.path, (done) => self.postMessage({ progress: done }));
     for (let i = 0; i < sheet.rows.length; i += CHUNK) self.postMessage({ rows: sheet.rows.slice(i, i + CHUNK), raw: sheet.raw.slice(i, i + CHUNK) });
     self.postMessage({ sheet: { ...sheet, rows: [], raw: [] } });

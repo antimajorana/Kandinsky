@@ -1,6 +1,6 @@
 // A Sheet back to text in the file's own layout: rows never edited keep their bytes as read, edited ones are written
 // with the same delimiter, quoting and spacing, and comment lines stay where they were.
-import type { Layout, Sheet } from "./parse";
+import type { Layout, RawRecord, RecordEnding, Sheet } from "./parse";
 
 /** One field as the layout writes it: quoted when it must be (or when the file quotes everything). `first`: it starts
  *  the line, where the comment marker unquoted would make the row a comment when read back. */
@@ -22,16 +22,35 @@ export function rowText(cells: string[], l: Layout): string {
 }
 
 export function writeSheet(s: Sheet): string {
-  const l = s.layout, lines: string[] = [];
-  const before = new Map<number, string[]>();
-  for (const c of s.comments) before.set(c.at, [...(before.get(c.at) ?? []), c.text]);
-  const comments = (at: number) => lines.push(...(before.get(at) ?? []));
+  const l = s.layout;
+  const lines: (string | { text: string; ending?: RecordEnding | "" })[] = [];
+  const before = new Map<number, Sheet["comments"]>();
+  for (const comment of s.comments) {
+    let group = before.get(comment.at);
+    if (!group) before.set(comment.at, group = []);
+    group.push(comment);
+  }
+  const comments = (at: number) => { for (const comment of before.get(at) ?? []) lines.push(comment); };
+  const row = (raw: RawRecord | undefined, cells: string[]) => {
+    if (raw !== null && typeof raw === "object") lines.push({ text: raw.text ?? rowText(cells, l), ending: raw.ending });
+    else lines.push(raw ?? rowText(cells, l));
+  };
   comments(-1);
-  if (s.headerSource === "row") lines.push(s.headerRaw ?? rowText(s.header, l));
+  if (s.headerSource === "row") row(s.headerRaw, s.header);
   s.rows.forEach((r, i) => {
     comments(i);
-    lines.push(s.raw[i] ?? rowText(r, l));
+    row(s.raw[i], r);
   });
   comments(s.rows.length);
-  return (l.bom ? "\ufeff" : "") + lines.join(l.eol) + (l.trailingEol ? l.eol : "");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const ending = i < lines.length - 1 || l.trailingEol ? (typeof line === "string" ? l.eol : line.ending || l.eol) : "";
+    lines[i] = (typeof line === "string" ? line : line.text) + ending;
+  }
+  return (l.bom ? "\ufeff" : "") + lines.join("");
+}
+
+/** Drop the original field formatting while keeping any non-default record ending. */
+export function rewriteRecord(raw: RawRecord): RawRecord {
+  return raw !== null && typeof raw === "object" ? { text: null, ending: raw.ending } : null;
 }

@@ -1,9 +1,10 @@
 <script lang="ts">
   // Settings → Writing → Templates: every template with when it applies by itself (its own `apply_when:`, the vault's
   // rules, the older settings — the core's one list, template_rules.rs), where its notes go, what it asks, and a
-  // preview of what it makes. Edit opens the template; New makes one with an example rule.
+  // preview of what it makes. Edit opens the template; New names a template for manual use.
   import Icon from "../Icon.svelte";
   import { api } from "../../lib/api";
+  import { inputDialog } from "../../lib/confirm";
   import { openPath } from "../../lib/dock";
   import { templateLabel } from "../../lib/notes-system";
   import { settings } from "../../lib/settings.svelte";
@@ -24,13 +25,31 @@
     } catch (e) { toast("No preview", errText(e), "error"); }
   }
 
-  const STARTER = `---\ntemplate_title: New template\n# when it applies by itself (each line one case; remove the ones you do not want):\napply_when:\n  - folder: notes/projects        # a new note in this folder\n  - property: { type: project }   # a note whose type becomes project\ntype: project\ndate: {{now}}\n---\n# {{title}}\n\n## Goals\n\n## Notes\n`;
+  let creating = $state(false);
   async function create() {
-    const dir = (settings.config?.notes.templates ?? "templates").replace(/\/+$/, "");
-    let path = `${dir}/new template.md`;
-    for (let n = 2; !(await api.createFile(path, STARTER)).written; n++) path = `${dir}/new template ${n}.md`;
-    openPath(path);
-    void load();
+    creating = true;
+    try {
+      const title = await inputDialog("Name your template", "", "Use it when creating a note or row.", "Create template");
+      if (!title) return;
+      const name = title.replace(/\.md$/i, "").trim();
+      if (!name || name.startsWith(".") || /[\\/:*?"<>|#^\[\]]/.test(name)) {
+        toast("Choose a different name", "Use a visible file name without path separators or reserved characters.", "error");
+        return;
+      }
+      const dir = (settings.config?.notes.templates ?? "templates").replace(/\/+$/, "");
+      const path = `${dir}/${name}.md`;
+      const result = await api.createFile(path, "# {{title}}\n\n{{cursor}}\n");
+      if (!result.written) {
+        toast("A template with that name already exists");
+        return;
+      }
+      openPath(path);
+      void load();
+    } catch (e) {
+      toast("Could not create the template", errText(e), "error");
+    } finally {
+      creating = false;
+    }
   }
 </script>
 
@@ -50,7 +69,7 @@
         <ul>
           {#if t.default}<li>a note nothing else chose</li>{/if}
           {#each t.applies as a (a)}<li>{a}</li>{/each}
-          {#if !t.default && !t.applies.length}<li class="muted">only when chosen (New…, Insert template…)</li>{/if}
+          {#if !t.default && !t.applies.length}<li class="muted">available when creating a note or Base row</li>{/if}
         </ul>
         {#if t.folder || t.prompts.length}
           <p class="meta">{#if t.folder}files its notes in <code>{t.folder}</code>{/if}{#if t.folder && t.prompts.length} · {/if}{#if t.prompts.length}asks {t.prompts.join(", ")}{/if}</p>
@@ -59,7 +78,7 @@
       </article>
     {:else}<p class="muted">No templates yet in <code>{settings.config?.notes.templates ?? "templates"}/</code>.</p>{/each}
   {/if}
-  <button class="btn" onclick={() => void create()}><Icon name="plus" size={13} /> New template</button>
+  <button class="btn" disabled={creating} onclick={() => void create()}><Icon name="plus" size={13} /> New template</button>
 </section>
 
 <style>

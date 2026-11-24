@@ -19,8 +19,9 @@
   import type { ViewEdit } from "../../lib/gen/ViewEdit";
   import type { IconName } from "../../lib/panes";
 
-  let { basePath = "", res, view, pinned, compact, props, typeOf, onpick, onedit, onnew }: {
+  let { basePath = "", thisPath, res, view, pinned, compact, props, typeOf, onpick, onedit, onnew }: {
     basePath?: string;
+    thisPath?: string;
     res: BaseResult;
     view: BaseView;
     /** an embed that names its view: no switching */
@@ -128,7 +129,7 @@
       <Icon name="clock" size={13} />{#if !compact}<span>Automations</span>{/if}{#if autoCount}<span class="badge">{autoCount}</span>{/if}
     </button>
   {/if}
-  <button type="button" class="new" class:compact onclick={onnew} aria-label="New" title="New note in this view (its filters fill the folder and properties)"><Icon name="plus" size={12} />{#if !compact} New{/if}</button>
+  <button type="button" class="new" class:compact onclick={onnew} aria-label="New" aria-haspopup="dialog" title="Create a row in this view"><Icon name="plus" size={12} />{#if !compact} New{/if}</button>
 </div>
 
 {#if pop}
@@ -152,7 +153,7 @@
     </Popover>
   {:else if p.which === "automations"}
     <Popover anchor={p.anchor} label="Automations" width={480} onclose={() => (pop = null)}>
-      <AutomationsPopover {basePath} {res} {props} {onedit} onclose={() => (pop = null)} />
+      <AutomationsPopover {basePath} {thisPath} rows={view.rows} {res} {props} {onedit} onclose={() => (pop = null)} />
     </Popover>
   {:else}
     <Popover anchor={p.anchor} label="Properties" width={380} onclose={() => (pop = null)}>

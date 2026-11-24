@@ -338,8 +338,8 @@ fn paint_before_page(window: &tauri::WebviewWindow, vault: &std::path::Path) {
 /// `--bg-app` of the palette (palettes.css `plain`, else tokens.css), as ui/index.html paints it before its styles load.
 fn page_background(dark: bool, plain: bool) -> (u8, u8, u8) {
     match (dark, plain) {
-        (true, true) => (0x20, 0x20, 0x20),
-        (false, true) => (0xf7, 0xf7, 0xf5),
+        (true, true) => (0x22, 0x26, 0x2e),
+        (false, true) => (0xf2, 0xf1, 0xed),
         (true, false) => (0x12, 0x13, 0x17),
         (false, false) => (0xea, 0xe6, 0xde),
     }

@@ -1,7 +1,7 @@
 // A table file read and written whole through /api/raw (no 5 MB cap, unlike /api/file): read with its modification
 // time, parsed in a worker, saved only if nobody changed it since (409 otherwise, as every editor's save).
 import { apiBase, ApiError } from "../api";
-import { sheetFromRows, type Sheet } from "./parse";
+import { sheetFromRows, type RawRecord, type Sheet } from "./parse";
 import { writeSheet } from "./write";
 
 const href = (path: string, q: Record<string, string> = {}) => `${apiBase()}/api/raw?${new URLSearchParams({ path, ...q })}`;
@@ -17,7 +17,7 @@ export async function loadSheet(path: string, progress?: (done: number) => void)
   const sheet = await new Promise<Sheet>((resolve, reject) => {
     const w = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     // the rows come in slices (worker.ts), then the sheet without them
-    const rows: string[][] = [], raw: (string | null)[] = [];
+    const rows: string[][] = [], raw: RawRecord[] = [];
     w.onmessage = (e) => {
       if (e.data.progress !== undefined) return progress?.(e.data.progress);
       if (e.data.rows) { for (let i = 0; i < e.data.rows.length; i++) { rows.push(e.data.rows[i]); raw.push(e.data.raw[i]); } return; }

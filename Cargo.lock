@@ -5300,7 +5300,7 @@ dependencies = [
 
 [[package]]
 name = "kandinsky"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5315,7 +5315,7 @@ dependencies = [
 
 [[package]]
 name = "kandinsky-android"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5340,7 +5340,7 @@ dependencies = [
 
 [[package]]
 name = "kandinsky-app"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "adblock",
  "anyhow",
@@ -5373,7 +5373,7 @@ dependencies = [
 
 [[package]]
 name = "kandinsky-capture"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5421,7 +5421,7 @@ dependencies = [
 
 [[package]]
 name = "kandinsky-core"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "anyhow",
  "arboard",
@@ -5581,21 +5581,21 @@ dependencies = [
 
 [[package]]
 name = "kandinsky-pen"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "openink-shape",
 ]
 
 [[package]]
 name = "kandinsky-plugin"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "kandinsky-rar"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "cmake",
  "flate2",
@@ -5627,7 +5627,7 @@ dependencies = [
 
 [[package]]
 name = "kandinsky-template"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "chrono",
  "serde_json",

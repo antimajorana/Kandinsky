@@ -57,6 +57,38 @@ test("a change elsewhere in the source note does not make the next synced save f
   await trash(request, src, "notes/fix-synced-rebase-host.md");
 });
 
+test("synced list edits preserve frontmatter and keep the whole list item after reload", async ({ page, request }) => {
+  const src = "notes/fix-synced-list-src.md";
+  const name = "fix-synced-list-host";
+  const frontmatter = "---\ntitle: Source metadata ^blk-list\n---\n";
+  try {
+    await request.put("/api/file", {
+      headers: H,
+      data: { path: src, text: `${frontmatter}- Shared text. ^blk-list\n  - Child\n- Neighbor\n` },
+    });
+    const card = await host(request, page, name, src, "blk-list");
+    const editor = card.locator("textarea");
+    const edit = () => card.getByRole("button", { name: "Edit synced block" }).click();
+    await edit();
+    await expect(editor).toHaveValue("- Shared text.\n  - Child");
+    await editor.fill("- Edited\n  - Child v2");
+    await editor.blur();
+    await expect.poll(() => fileText(request, src)).toBe(`${frontmatter}- Edited ^blk-list\n  - Child v2\n- Neighbor\n`);
+    await expect(card.locator(".status")).toHaveText("In sync");
+
+    await page.reload();
+    await page.getByText("Finish the GW notes.").waitFor();
+    await openFile(page, `${name}.md`);
+    await edit();
+    await expect(editor).toHaveValue("- Edited\n  - Child v2");
+    await editor.fill("- Final");
+    await editor.blur();
+    await expect.poll(() => fileText(request, src)).toBe(`${frontmatter}- Final ^blk-list\n- Neighbor\n`);
+  } finally {
+    await trash(request, src, `notes/${name}.md`);
+  }
+});
+
 test("a synced block changed in its note while edited offers Reload and Keep mine", async ({ page, request }) => {
   const src = "notes/fix-synced-conflict-src.md";
   await request.put("/api/file", { headers: H, data: { path: src, text: "# Source\n\nShared text. ^blk-clash\n\nTail.\n" } });

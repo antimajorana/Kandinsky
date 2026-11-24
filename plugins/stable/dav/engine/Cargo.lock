@@ -725,7 +725,7 @@ dependencies = [
 
 [[package]]
 name = "kandinsky-plugin"
-version = "0.2.10"
+version = "0.4.2"
 dependencies = [
  "serde_json",
 ]
@@ -735,6 +735,7 @@ name = "kandinsky-text"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "regex",
  "serde_yaml",
 ]
 

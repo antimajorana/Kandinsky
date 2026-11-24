@@ -1652,6 +1652,9 @@ pub struct BaseView {
     #[serde(default)]
     #[ts(optional)]
     pub blocked_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub row_template: Option<String>,
 }
 
 /// A Base filter as Obsidian writes it: one expression (`status == "done"`, `file.hasTag("paper")`), or a group of them
@@ -1778,6 +1781,7 @@ pub enum ViewEdit {
         #[serde(default)]
         property: Option<String>,
     },
+    RowTemplate { template: Option<String> },
     /// Add, update, rename, or remove a formula expression in `formulas:`.
     Formula {
         name: String,
@@ -1925,6 +1929,18 @@ pub struct BaseNewRow {
     #[serde(default)]
     #[ts(optional)]
     pub view: Option<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub title: Option<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub template: Option<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub values: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub this: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -1933,6 +1949,9 @@ pub struct BaseRowCreated {
     pub path: String,
     /// The new note shows in the view (its filters could not all be satisfied by prefilling).
     pub matches: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub line: Option<u32>,
 }
 
 /// `GET /api/base?path=<.base>&this=<embedding note>`.
@@ -1971,7 +1990,19 @@ pub struct BaseAutomation {
     #[serde(default = "default_true")]
     pub enabled: bool,
     pub trigger: AutomationTrigger,
-    pub action: AutomationAction,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub action: Option<AutomationAction>,
+    // Older rules store a single step in `action`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub actions: Option<Vec<AutomationAction>>,
+}
+
+impl BaseAutomation {
+    pub fn steps(&self) -> &[AutomationAction] {
+        self.actions.as_deref().unwrap_or(self.action.as_slice())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -1985,6 +2016,7 @@ pub enum AutomationTrigger {
         to: Option<String>,
     },
     NoteCreated,
+    Manual,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -1993,6 +2025,46 @@ pub enum AutomationTrigger {
 pub enum AutomationAction {
     SetProperty { property: String, value: String },
     AppendLog { text: String },
+    CreateRow {
+        base: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        view: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        title: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        link_property: Option<String>,
+    },
+    UpdateRelated {
+        base: String,
+        relation: String,
+        property: String,
+        value: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BaseAutomationRequest {
+    pub path: String,
+    pub note: String,
+    pub rule: BaseAutomation,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub this: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BaseAutomationRun {
+    pub rule: String,
+    pub note: String,
+    pub trigger: AutomationTrigger,
+    pub at: String,
+    pub files: Vec<String>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]

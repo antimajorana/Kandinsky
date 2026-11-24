@@ -238,8 +238,11 @@
   function newFile(dir: string) {
     dialog = { title: dir ? `New note in ${dir}/` : "New note", hint: "No extension → Markdown note (.md)", ok: "Create", submit: async (name) => {
       const path = join(dir, /\.[a-z0-9]+$/i.test(name) ? name : `${name}.md`);
-      if (await api.file(path).then(() => true, () => false)) { toast("Could not create the file", "Something with that name already exists.", "error"); return; }
-      try { await api.putFile(path, ""); openPath(path); } catch (e) { fail("Could not create the file")(e); }
+      try {
+        const { written } = await api.createFile(path, "");
+        if (written) openPath(path);
+        else toast("Could not create the file", "Something with that name already exists.", "error");
+      } catch (e) { fail("Could not create the file")(e); }
     } };
   }
   function newFolder(dir: string) {
@@ -431,8 +434,8 @@
     </header>
 
     <nav class="nav-list" aria-label="Primary">
-      <button class="nav-row" aria-label="Search" title={searchKey ? `Search notes & commands · ${searchKey}` : "Search notes & commands"} onclick={() => openPalette("all")}>
-        <span class="nav-left"><Icon name="search" size={14} />{#if wide}<span>Search</span>{/if}</span>
+      <button class="nav-row search-row" aria-label="Search" title={searchKey ? `Search notes & commands · ${searchKey}` : "Search notes & commands"} onclick={() => openPalette("all")}>
+        <span class="nav-left"><Icon name="search" size={16} />{#if wide}<span>Search</span>{/if}</span>
         {#if wide && searchKey}<span class="kbd">{chordLabel(searchKey).join(" ")}</span>{/if}
       </button>
       {#if devMode}
@@ -443,15 +446,15 @@
       {/if}
       <div class="nav-apps" data-testid="apps">
         <button class="nav-row app" class:active={isHomeActive} class:open={homeTile ? Boolean(openAppId(homeTile)) : isHomeActive}
-          aria-label="Home" title={tipFor("Home", "ui.today")} data-app-id="today" onclick={() => void openHome()}>
+          aria-label="Home" aria-current={isHomeActive ? "page" : undefined} title={tipFor("Home", "ui.today")} data-app-id="today" onclick={() => void openHome()}>
           <span class="nav-left"><Icon name="home" size={14} />{#if wide}<span>Home</span>{/if}</span>
         </button>
-        <button class="nav-row" class:active={tabs.active === "calendar"} aria-label="Calendar" title={tipFor("Calendar", "ui.calendar")} onclick={() => open({ kind: "calendar" })} data-testid="nav-calendar">
+        <button class="nav-row" class:active={tabs.active === "calendar"} aria-label="Calendar" aria-current={tabs.active === "calendar" ? "page" : undefined} title={tipFor("Calendar", "ui.calendar")} onclick={() => open({ kind: "calendar" })} data-testid="nav-calendar">
           <span class="nav-left"><Icon name="calendar" size={14} />{#if wide}<span>Calendar</span>{/if}</span>
         </button>
         {#if !appHidden("library")}
           <button class="nav-row app" class:active={libraryActive} class:open={libraryOpen}
-            aria-label="Library" title={tipFor("Library", "ui.library")} data-app-id={libraryTile?.ids[0] ?? "plugin:catalog"}
+            aria-label="Library" aria-current={libraryActive ? "page" : undefined} title={tipFor("Library", "ui.library")} data-app-id={libraryTile?.ids[0] ?? "plugin:catalog"}
             onclick={() => (libraryTile ? launchApp(libraryTile) : openLibraries(builtinOn("library") ? "references" : undefined))}
             oncontextmenu={(e) => { if (libraryTile) onAppMenu(e, libraryTile); }}
             data-testid="nav-library">
@@ -605,7 +608,6 @@
     <div class="sec-row tree-head wide-only">
       <span class="sec-label">Pages</span>
       <span class="sec-actions">
-        <button class="sec-btn" title="New note" aria-label="New note" onclick={() => newFile("")}><Icon name="plus" size={13} /></button>
         <button class="sec-btn" title="New folder" aria-label="New folder" onclick={() => newFolder("")}><Icon name="folder" size={13} /></button>
         <button class="sec-btn" class:on={treeView.showAll} title={treeView.showAll ? "Hide dotfiles & companions" : "Show hidden files"} aria-label="Show hidden files" aria-pressed={treeView.showAll} onclick={toggleShowAll}><Icon name="eye" size={13} /></button>
       </span>
@@ -624,6 +626,9 @@
         <button class="nav-row" aria-label="Plugins" title="Plugins" onclick={() => openSettingsAt("plugins")}><span class="nav-left"><Icon name="plugin" size={14} />{#if wide}<span>Plugins</span>{/if}</span></button>
       {/if}
       <button class="nav-row" class:active={tabs.active === "settings"} aria-label="Settings" title={tipFor("Settings", "ui.settings")} onclick={() => open({ kind: "settings" })}><span class="nav-left"><Icon name="settings" size={14} />{#if wide}<span>Settings</span>{/if}</span></button>
+      <button class="nav-row new-note" aria-label="New note" title="New note" onclick={() => newFile("")}>
+        <span class="nav-left"><Icon name="plus" size={16} />{#if wide}<span>New note</span>{/if}</span>
+      </button>
     </footer>
 
     {#if !collapsed}<div class="edge" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" onpointerdown={resize} ondblclick={() => setSidebarWidth(252)}></div>{/if}
@@ -641,7 +646,7 @@
   .notion-sidebar {
     position: absolute; inset: 0 auto 0 0; width: var(--sb-collapsed-w);
     background: var(--bg-side, var(--bg-alt)); border-right: 1px solid var(--border);
-    padding: 12px 10px; display: flex; flex-direction: column; font-size: calc(13.5px * var(--ui-scale, 1));
+    padding: 12px 10px 10px; display: flex; flex-direction: column; font-size: calc(13.5px * var(--ui-scale, 1));
     user-select: none; min-height: 0; z-index: 30; transition: box-shadow .16s ease;
   }
   .notion-sidebar:not(.wide) { padding: 10px 6px; align-items: center; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
@@ -651,31 +656,34 @@
     border-right: 1px solid var(--border-strong); border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
     box-shadow: var(--shadow-pop); z-index: 60;
   }
-  .vault-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 2px 4px 10px 6px; flex: none; }
+  .vault-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 0 2px 12px 6px; flex: none; }
   .notion-sidebar:not(.wide) .vault-head { justify-content: center; padding: 0 0 8px; width: 100%; }
-  .vault-btn { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 9px; padding: 3px 4px; margin-left: -4px; border-radius: 6px; font-weight: 600; font-size: calc(14px * var(--ui-scale, 1)); letter-spacing: -0.01em; color: var(--heading); text-align: left; }
+  .vault-btn { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 9px; min-height: 36px; padding: 3px 4px; margin-left: -4px; border-radius: var(--radius); font-weight: 650; font-size: calc(14px * var(--ui-scale, 1)); letter-spacing: -0.01em; color: var(--heading); text-align: left; }
   .vault-btn:hover { background: var(--bg-hover); }
-  .brand-emblem { flex: none; border-radius: 50%; box-shadow: var(--shadow-sm); }
+  .brand-emblem { flex: none; width: 26px; height: 26px; }
   .vault-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .vault-chev { display: inline-flex; color: var(--text-faint); opacity: 0; transition: opacity .12s; }
-  .vault-btn:hover .vault-chev, .vault-btn:focus-visible .vault-chev { opacity: 1; }
+  .vault-chev { display: inline-flex; flex: none; color: var(--text-muted); }
   .head-btns { display: inline-flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }
   .vault-head:hover .head-btns, .vault-head:focus-within .head-btns, .head-btns.shown { opacity: 1; }
   .head-icon { width: 24px; height: 24px; border-radius: 5px; display: grid; place-items: center; color: var(--text-faint); }
   .head-icon:hover, .head-icon.on { background: var(--bg-hover); color: var(--text); }
-  .nav-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; flex: none; }
+  .nav-list { display: flex; flex-direction: column; gap: 3px; margin-bottom: 14px; flex: none; }
   .nav-apps { display: flex; flex-direction: column; gap: 2px; }
+  .wide .nav-apps { max-height: min(32vh, 265px); overflow-y: auto; padding: 2px; margin: -2px; }
   .notion-sidebar:not(.wide) .nav-list, .notion-sidebar:not(.wide) .nav-apps { align-items: center; width: 100%; }
   .notion-sidebar:not(.wide) .nav-list { margin-bottom: 8px; }
-  .nav-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; padding: 5px 8px; border-radius: 6px; color: var(--text-muted); font-size: calc(13px * var(--ui-scale, 1)); text-align: left; transition: background .1s, color .1s; }
+  .nav-row { display: flex; align-items: center; justify-content: space-between; flex: none; gap: 6px; width: 100%; min-height: 28px; padding: 4px 8px; border-radius: var(--radius); color: var(--text-muted); font-size: calc(13px * var(--ui-scale, 1)); text-align: left; transition: background .1s, color .1s; }
   .notion-sidebar:not(.wide) .nav-row { width: 32px; height: 30px; padding: 0; justify-content: center; }
   .nav-row:hover { background: var(--bg-hover); color: var(--text); }
   .nav-row.active { background: var(--accent-soft, var(--bg-active)); color: var(--heading); font-weight: 500; }
-  .nav-left { min-width: 0; display: inline-flex; align-items: center; gap: 8px; }
-  .nav-left :global(.icon) { color: var(--text-faint); }
+  .nav-left { min-width: 0; display: inline-flex; align-items: center; gap: 9px; }
+  .nav-left > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-left :global(.icon) { color: var(--text-muted); flex: none; }
   .nav-row:hover .nav-left :global(.icon), .nav-row.active .nav-left :global(.icon) { color: currentColor; }
   .trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .kbd { flex: none; font-size: calc(10.5px * var(--ui-scale, 1)); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-faint); font-family: var(--font-mono); }
+  .wide .search-row { min-height: 34px; margin-bottom: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+  .wide .search-row:is(:hover, :focus-visible) { border-color: var(--border-strong); }
+  .kbd { flex: none; font-size: calc(10.5px * var(--ui-scale, 1)); padding: 1px 4px; border-radius: var(--radius-sm); background: var(--bg-hover); color: var(--text-muted); font-family: var(--font-mono); }
   .nav-badge { flex: none; font-size: calc(10.5px * var(--ui-scale, 1)); font-weight: 600; padding: 0 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-variant-numeric: tabular-nums; }
   .pins-sec, .panes-sec, .fav-sec { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; flex: none; }
   .notion-sidebar:not(.wide) :is(.pins-sec, .panes-sec) { align-items: center; width: 100%; border-top: 1px solid var(--border); padding-top: 6px; margin-bottom: 6px; }
@@ -718,16 +726,18 @@
   .sec-chev { display: inline-flex; color: var(--text-faint); opacity: 0; transition: transform .12s, opacity .12s; }
   .sec-chev.open { transform: rotate(90deg); }
   .sec-toggle:hover .sec-chev { opacity: 1; }
-  .sec-actions { display: inline-flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }
-  .tree-head:hover .sec-actions, .tree-head:focus-within .sec-actions { opacity: 1; }
-  .sec-btn { width: 20px; height: 20px; border-radius: 4px; display: grid; place-items: center; color: var(--text-faint); }
+  .sec-actions { display: inline-flex; align-items: center; gap: 2px; }
+  .sec-btn { width: 24px; height: 24px; border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--text-muted); }
   .sec-btn:hover, .sec-btn.on { background: var(--bg-hover); color: var(--text); }
   .tree-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; padding: 1px 0 8px; }
   .tree-scroll.drop-root { box-shadow: inset 0 0 0 1px var(--accent); border-radius: 6px; }
   .tree-scroll :global(.row.drop-into) { box-shadow: inset 0 0 0 1px var(--accent); background: var(--bg-hover); }
   .err-msg { margin: 0; padding: 6px 8px; font-size: 12px; color: var(--red); }
-  .side-foot { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px; display: flex; flex-direction: column; gap: 2px; flex: none; }
+  .side-foot { border-top: 1px solid var(--border); padding-top: 7px; margin-top: 4px; display: flex; flex-direction: column; gap: 2px; flex: none; }
   .notion-sidebar:not(.wide) .side-foot { margin-top: auto; width: 100%; align-items: center; }
+  .nav-row.new-note { min-height: 34px; margin-top: 5px; background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
+  .nav-row.new-note .nav-left :global(.icon) { color: currentColor; }
+  .nav-row.new-note:hover { background: var(--accent-sel); }
   .edge { position: absolute; top: 0; bottom: 0; right: -3px; width: 6px; cursor: col-resize; z-index: 2; }
   .edge:hover { background: linear-gradient(to right, transparent 2px, color-mix(in srgb, var(--accent) 45%, transparent) 2px 4px, transparent 4px); transition: background .12s .25s; }
 </style>

@@ -727,6 +727,7 @@ class TaskMarkWidget extends WidgetType {
     // markdown does not have. (Kandinsky: a click now makes that edit, `[ ]` ↔ `[x]`.)
     box.addEventListener("mousedown", (e) => {
       e.preventDefault();
+      if (view.state.readOnly) return;
       const line = view.state.doc.lineAt(view.posAtDOM(box));
       if (this.toggle && this.toggle(view, line.number)) return; // Kandinsky: the caller's tick (done date, recurrence)
       const m = /\[( |x|X)\]/.exec(line.text);
@@ -734,6 +735,7 @@ class TaskMarkWidget extends WidgetType {
       const at = line.from + m.index + 1;
       view.dispatch({ changes: { from: at, to: at + 1, insert: m[1] === " " ? "x" : " " } });
     });
+    box.addEventListener("click", (e) => { if (view.state.readOnly) e.preventDefault(); });
     return box;
   }
 }
@@ -1118,7 +1120,7 @@ function remeasure(host, view, settled) {
 function enterOnClick(host, view) {
   if (!view) return; // headless tests build widgets without a view
   host.addEventListener("mousedown", (event) => {
-    if (event.button !== 0 || event.target.closest(INTERACTIVE) || host.querySelector(".view-block") || event.target.closest(".view-block")) return;
+    if (view.state.readOnly || event.button !== 0 || event.target.closest(INTERACTIVE) || host.querySelector(".view-block") || event.target.closest(".view-block")) return;
     const pos = view.posAtDOM(host);
     if (pos == null) return;
     event.preventDefault();

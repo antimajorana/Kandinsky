@@ -15,6 +15,7 @@
   --radius-sm: 5px; --radius: 6px; --radius-lg: 10px; --radius-xl: 12px;
   --rail-w: 44px; --status-h: 26px;
   --editor-size: 16px; --prose-size: 16px; --prose-line-height: 1.68; --measure: 740px;
+  --note-padding: clamp(22px, 6%, 56px);
   --fab-room: 0px; /* the room the phone's floating capture button needs under scrolled content */
   --ease: cubic-bezier(.2, .8, .2, 1);
   /* scrollbars: the text colour, faint, so they show on any palette; brighter on hover */

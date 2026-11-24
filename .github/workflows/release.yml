@@ -1,4 +1,4 @@
-# A tag `v*`: every package (packages.yml), attached to a draft GitHub release for the maintainer to review and publish.
+# Regular version tags stage all packages. A tag with the Release-Target: windows trailer publishes the PC installer.
 name: Release
 
 on:
@@ -6,17 +6,40 @@ on:
     tags: ["v*"]
 
 jobs:
+  target:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      windows: ${{ steps.target.outputs.windows }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+      - name: Read the release target
+        id: target
+        run: |
+          git show-ref --verify --quiet "$GITHUB_REF"
+          target=$(git for-each-ref --format='%(trailers:key=Release-Target,valueonly)' "$GITHUB_REF")
+          case "$target" in
+            windows) echo 'windows=true' >> "$GITHUB_OUTPUT" ;;
+            '') echo 'windows=false' >> "$GITHUB_OUTPUT" ;;
+            *) echo '::error::Unexpected release target'; exit 1 ;;
+          esac
+
   packages:
+    needs: target
     uses: ./.github/workflows/packages.yml
     with:
       release: true
+      windows_only: ${{ needs.target.outputs.windows == 'true' }}
     secrets: inherit
 
   publish:
-    needs: packages
+    needs: [target, packages]
     # also when a plugin engine is missing or its job was cancelled waiting for a runner (packages.yml lets that pass);
     # a missing desktop package still fails below. Tests are not run here: a release never waits for them.
-    if: ${{ always() }}
+    if: ${{ always() && needs.target.outputs.windows == 'false' }}
     runs-on: ubuntu-24.04
     # the only job that writes (the draft release)
     permissions:
@@ -46,3 +69,46 @@ jobs:
             artifacts/android-apks/**/*.apk
             artifacts/plugins/*.tar.gz
             artifacts/plugins/plugins.json
+
+  publish-windows:
+    needs: [target, packages]
+    if: ${{ needs.target.outputs.windows == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v8
+        with:
+          name: kandinsky-Windows
+          path: windows-installer
+      - name: Verify the installer and prepare release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          version=${GITHUB_REF_NAME#v}
+          node scripts/dev/release-version.mjs --check
+          installers=(windows-installer/**/*_${version}_x64-setup.exe)
+          if (( ${#installers[@]} != 1 )) || [ ! -s "${installers[0]}" ]; then
+            echo '::error::Expected one non-empty Windows x64 installer for the release version'
+            exit 1
+          fi
+          (cd "$(dirname "${installers[0]}")" && sha256sum "$(basename "${installers[0]}")") > windows-installer/SHA256SUMS.txt
+          {
+            printf 'Download and run **%s** to install Kandinsky on Windows (x64). The installer is unsigned.\n\n' "$(basename "${installers[0]}")"
+            node scripts/dev/release-tag.mjs "$version" --print | tail -n +3
+          } > release-notes.md
+      - name: Publish the Windows release
+        uses: softprops/action-gh-release@v3
+        with:
+          fail_on_unmatched_files: true
+          draft: false
+          make_latest: true
+          body_path: release-notes.md
+          files: |
+            windows-installer/**/*.exe
+            windows-installer/SHA256SUMS.txt

@@ -8,12 +8,12 @@
     "url": "https://github.com/antimajorana/kandinsky.git",
     "directory": "ui"
   },
-  "version": "0.4.2",
+  "version": "0.4.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "hot": "node ../../dev-harness/hot-build.mjs",
+    "hot": "bash ../scripts/dev/dev.sh",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.node.json --noEmit",
     "test": "playwright test",

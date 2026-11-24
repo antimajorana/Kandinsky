@@ -9,17 +9,18 @@
   import { openLintPanel } from "@codemirror/lint";
   import { workspaceSymbols } from "../lib/editor/lsp";
   import { settings, setPropertiesView } from "../lib/settings.svelte";
-  import { fileIcon } from "../lib/panes";
   import Icon from "../components/Icon.svelte";
+  import PaneTopbar from "../components/PaneTopbar.svelte";
   import { mount, onMount, unmount } from "svelte";
-  import { EditorView } from "@codemirror/view";
-  import { Compartment, EditorState, StateEffect, type Text } from "@codemirror/state";
+  import { EditorView, keymap } from "@codemirror/view";
+  import { historyKeymap } from "@codemirror/commands";
+  import { Compartment, EditorState, Prec, StateEffect, Transaction, type Text } from "@codemirror/state";
   import { api, apiBase, ApiError } from "../lib/api";
-  import { diff, editFrontmatter } from "../lib/frontmatter-edit";
+  import { diff, editFrontmatter, pageLockChange, setPageLock } from "../lib/frontmatter-edit";
   import { on, touches } from "../lib/bus";
   import { app, toast } from "../lib/state.svelte";
   import { setDirty, closePanel, open, openPath } from "../lib/dock";
-  import { openHome } from "../lib/actions";
+  import { currentPaneSpec } from "../lib/dock-instance";
   import { editors, noteEditorActive, openIntent } from "../lib/registry";
   import { createEditor, isMarkdown, type KandinskyEditor } from "../lib/editor/create";
   import { redecorateEditor } from "../lib/editor/note-extensions";
@@ -41,7 +42,7 @@
   import { propsPanel, toggleProperties } from "../lib/properties-panel.svelte";
   import { isNotionShell } from "../lib/shell-mode.svelte";
   import { isFileStarred, toggleFileStar } from "../lib/bookmarks.svelte";
-  import { copyPath, tabs, toggleSidebar } from "../lib/tabs.svelte";
+  import { copyPath } from "../lib/tabs.svelte";
   import { phone } from "../lib/phone.svelte";
   import { nativeShell } from "../lib/native-shell.svelte";
   import { frontmatterOf, splitFrontmatter } from "../lib/property-model";
@@ -251,7 +252,7 @@
     }
     const change = diff(base, merged);
     if (!change) return;
-    ed.view.dispatch({ changes: change, userEvent: "input.template" });
+    ed.view.dispatch({ changes: change, userEvent: "input.template", annotations: auto || automation ? Transaction.remote.of(true) : [] });
     const rule = name.match(/^(.+?) \(.+\.base\)$/)?.[1] ?? name;
     const title = !auto ? `Template “${name}” applied` : rule ? `Automation “${rule}” updated this note` : "An automation updated this note";
     toast(title, `${auto ? "Set" : "Added"} ${added.join(", ")}`, "info", 9000, { label: "Undo", run: () => {
@@ -308,6 +309,18 @@
     }
   }
 
+  function takeSyncCopy(text: string): boolean {
+    if (!ed) return false;
+    if (ed.view.state.readOnly) {
+      toast("Page is read-only", "Unlock the page before applying a sync copy.", "error");
+      return false;
+    }
+    ed.setDoc(text, { keepUndo: true });
+    markDirty();
+    schedule(text);
+    return true;
+  }
+
   function openLink(target: string, opts?: { beside?: boolean }) {
     void openWikilink(target, path, opts); // a PDF link keeps its #page=… (lib/pdf-place.ts)
   }
@@ -320,7 +333,16 @@
     isMarkdown(path) && (noteProps?.locked === true || String(noteProps?.locked ?? "").toLowerCase() === "true"),
   );
   const lockSlot = new Compartment();
-  const lockExt = (locked: boolean) => (locked ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []);
+  const lockExt = (locked: boolean) => locked ? [
+    EditorState.readOnly.of(true),
+    EditorView.editable.of(false),
+    // Widgets and commands can dispatch edits without going through CodeMirror's input handlers.
+    EditorState.changeFilter.of((tr) => !tr.docChanged || tr.annotation(pageLockChange) === true ||
+      tr.annotation(Transaction.remote) === true || live?.isSyncTransaction(tr) === true),
+    // CodeMirror history and Yjs undo can bypass the change filter.
+    Prec.highest(keymap.of(historyKeymap.map((binding) => ({ ...binding, run: () => true })))),
+    Prec.highest(EditorView.domEventHandlers({ beforeinput: (e) => e.inputType === "historyUndo" || e.inputType === "historyRedo" })),
+  ] : [];
   $effect(() => {
     const locked = isPageLocked;
     if (!ed) return;
@@ -338,8 +360,6 @@
   });
   const readMins = $derived(Math.max(1, Math.ceil(wordCount / 220)));
   const starred = $derived(isFileStarred(path));
-  const pathSegments = $derived(path.split("/"));
-  const folderSegments = $derived(pathSegments.slice(0, -1));
   const editedLabel = $derived.by(() => {
     if (!mtime) return isNew ? "New file" : "";
     const diffSec = Math.max(0, Math.floor((nowTick - mtime) / 1000));
@@ -360,7 +380,10 @@
     if (!ed || !isMarkdown(path)) return;
     const next = !isPageLocked;
     try {
-      await editFrontmatter(ed.view, next ? { op: "set", key: "locked", value: true } : { op: "remove", key: "locked" });
+      if (!(await setPageLock(ed.view, next))) {
+        toast("Note changed during edit", "Try updating the page lock again.", "error");
+        return;
+      }
       toast(next ? "Page locked" : "Page unlocked", next ? "Read-only editing enabled" : "Editing re-enabled");
     } catch (err) {
       toast("Could not update page lock", errText(err), "error");
@@ -404,7 +427,7 @@
   async function toggleFullWidth(): Promise<void> {
     const next = !isFullWidth;
     localFullWidth = next;
-    if (isMarkdown(path) && ed) {
+    if (isMarkdown(path) && ed && !ed.view.state.readOnly) {
       try {
         await editFrontmatter(ed.view, next ? { op: "set", key: "width", value: "full" } : { op: "remove", key: "width" });
         localFullWidth = null;
@@ -447,7 +470,7 @@
       mtime = res.mtime;
       saved = fromDisk(res.text);
       docText = saved;
-      ed?.setDoc(saved, { keepUndo: true });
+      ed?.setDoc(saved, { keepUndo: true, fromDisk: true });
       conflict = false;
       markDirty();
     });
@@ -503,11 +526,12 @@
   function handlePaneDragOver(e: DragEvent): void {
     if (e.defaultPrevented || !hasExternalFiles(e)) return;
     e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    if (e.dataTransfer) e.dataTransfer.dropEffect = ed?.view.state.readOnly ? "none" : "copy";
   }
 
   function handlePaneDrop(e: DragEvent): void {
     if (e.defaultPrevented || !hasExternalFiles(e)) return;
+    if (ed?.view.state.readOnly) { e.preventDefault(); return; }
     const uriHint = extractDropUriHint(e);
     const pending = takeFiles(e);
     if (!pending) {
@@ -522,7 +546,7 @@
     const at = view.posAtCoords({ x: clampedX, y: e.clientY })
       ?? (e.clientY < contentRect.top ? bodyStart(view.state.doc) : view.state.doc.length);
     void pending.then(async (files) => {
-      if (!files.length || disposed || !ed) return;
+      if (!files.length || disposed || !ed || ed.view.state.readOnly) return;
       const done = await attachDroppedFiles(path, files, uriHint);
       if (!done.length || disposed || !ed) return;
       const curView = ed.view;
@@ -639,12 +663,14 @@
       if (disposed) return;
       saved = text;
       docText = text;
+      // A link or search result can request a line while this tab wakes up or its file is still loading.
+      const { line } = currentPaneSpec(panel.id, spec);
       ed = createEditor({
         parent: host,
         doc: text,
         path,
         vim: vimHere(),
-        line: spec.line,
+        line,
         onChange: (typed, keys, edit) => {
           if (headCache?.doc === edit.before) {
             const heads = mapHeadings(headCache.heads, edit.before, edit.changes, edit.after);
@@ -682,7 +708,7 @@
       // listings, as most notes have none (a 404 on every open is logged as an error)
       void readText(RECOVERY).then((r) => { if (!disposed && r && r !== text) { recovered = r; rescued = true; } });
       // the line was a one-shot jump; don't replay it on every layout restore
-      if (spec.line !== undefined) panel.updateParameters({ line: undefined });
+      if (line !== undefined) panel.updateParameters({ line: undefined });
       editors.set(panel.id, {
         path,
         gotoLine: (n) => ed?.gotoLine(n),
@@ -829,31 +855,10 @@
       title={drawn ? "The note's markdown, to edit" : `Drawn as ${noteView.title.toLowerCase()}`}>{drawn ? "Show as note" : `Show as ${noteView.title.toLowerCase()}`}</button>
   {/if}
   {#if isNotionShell() || (settings.config?.editor.breadcrumbs ?? true)}
-    <header class="topbar" aria-label="Path">
-      <div class="breadcrumbs">
-        {#if isNotionShell() && tabs.sidebar.collapsed}
-          <button type="button" class="icon-btn expand-sb" onclick={toggleSidebar} title="Expand sidebar (Super+S)" aria-label="Expand sidebar">
-            <Icon name="panel-left" size={15} />
-          </button>
-        {/if}
-        <button type="button" class="seg vault" onclick={() => void openHome()} title="Open vault Home">
-          {app.workspace?.name ?? "Workspace"}
-        </button>
-        <span class="sep">›</span>
-        {#if folderSegments.length > 0}
-          <span class="folder-trail">
-            {#each folderSegments as seg, i}
-              {#if i > 0}<span class="sub-sep">/</span>{/if}
-              <button type="button" class="seg" title="Show {folderSegments.slice(0, i + 1).join('/')} in the explorer"
-                onclick={() => open({ kind: "explorer", source: "vault", place: "", path: folderSegments.slice(0, i + 1).join("/"), select: pathSegments[i + 1] })}>{seg}</button>
-            {/each}
-          </span>
-          <span class="sep">›</span>
-        {/if}
-        <strong class="doc-crumb" dir="auto">
-          {#if !isMarkdown(path)}<Icon name={fileIcon(path)} size={13} />{/if}
-          {shownName(path)}
-        </strong>
+    <PaneTopbar {path} title={shownName(path)} ariaLabel="Path" showFileIcon={!isMarkdown(path)}
+      {starred} {editedLabel} onStar={() => toggleFileStar(path, shownName(path))}
+      onShare={openShareMenu} onMore={openPageMenu} moreTestId="editor-more-btn" moreLabel="Page actions">
+      {#snippet titleBadge()}
         {#if rawSource}
           <button type="button" class="source-chip" onclick={toggleSource} title="Switch back to Live Preview (Ctrl+E)">SOURCE</button>
         {/if}
@@ -863,8 +868,8 @@
             Locked
           </button>
         {/if}
-      </div>
-      <div class="top-actions">
+      {/snippet}
+      {#snippet actions()}
         {#if devMode && upstream}
           <button type="button" class="upstream-chip" class:stale={upstream.state === "stale"} data-testid="upstream-health-pill"
             onclick={openUpstreamMenu}
@@ -872,22 +877,13 @@
             {upstream.state === "stale" ? "Upstream stale" : "Upstream changed"}
           </button>
         {/if}
-        {#if editedLabel}<span class="edited-lbl">{editedLabel}</span>{/if}
         {#if isMarkdown(path) && status === "ready" && isResearchNote}
           <span class="oracle-slot" class:notion-quiet={isNotionShell()} bind:this={oracleSlotEl}>
             <OracleBar {path} flush={() => save(false)} gotoLine={(line) => ed?.gotoLine(line)} />
           </span>
         {/if}
-        <button type="button" class="icon-btn star-icon" class:starred={starred}
-          aria-label={starred ? "Remove from Favorites" : "Add to Favorites"}
-          title={starred ? "Remove from Favorites" : "Add to Favorites"}
-          onclick={() => toggleFileStar(path, shownName(path))}>
-          {starred ? "★" : "☆"}
-        </button>
-        <button type="button" class="top-pill" onclick={openShareMenu} title="Copy or export note">Share</button>
-        <button type="button" class="top-more" data-testid="editor-more-btn" aria-label="Page actions" title="Page actions" onclick={openPageMenu}>···</button>
-      </div>
-    </header>
+      {/snippet}
+    </PaneTopbar>
   {:else if isMarkdown(path) && status === "ready" && isResearchNote}
     <header class="topbar compact">
       <div class="top-actions" style="margin-left: auto;">
@@ -911,13 +907,13 @@
       </span>
     </div>
   {/if}
-  {#if isMarkdown(path)}<SyncCopies {path} mine={current} take={(text) => { ed?.setDoc(text, { keepUndo: true }); markDirty(); schedule(text); }} />{/if}
+  {#if isMarkdown(path)}<SyncCopies {path} mine={current} take={takeSyncCopy} />{/if}
   {#if recovered !== null}
     <div class="banner banner-warn" role="alert">
       <span>Unsaved changes to <strong>{shownPath(path)}</strong> were kept from last time.</span>
       <span class="banner-actions">
         <button class="btn btn-ghost" onclick={() => { recovered = null; rescued = false; void api.putFile(RECOVERY, "").catch(() => {}); }}>Discard them</button>
-        <button class="btn primary" onclick={() => { ed?.setDoc(recovered ?? "", { keepUndo: true }); recovered = null; markDirty(); }}>Restore</button>
+        <button class="btn primary" disabled={isPageLocked} onclick={() => { ed?.setDoc(recovered ?? "", { keepUndo: true }); recovered = null; markDirty(); }}>Restore</button>
       </span>
     </div>
   {/if}
@@ -991,22 +987,13 @@
     border-bottom: 1px solid var(--border); background: var(--bg); position: relative; z-index: 5; white-space: nowrap;
   }
   .topbar.compact { height: 32px; padding: 0 14px; }
-  .breadcrumbs { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .expand-sb { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 5px; color: var(--text-muted); flex: none; margin-right: 2px; }
-  .expand-sb:hover { background: var(--bg-hover); color: var(--text); }
-  .breadcrumbs .seg { padding: 2px 5px; border-radius: 4px; color: var(--text-muted); font: inherit; }
-  .breadcrumbs button.seg:hover { background: var(--bg-hover); color: var(--text); }
-  .breadcrumbs .folder-trail { display: inline-flex; align-items: center; gap: 1px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .breadcrumbs .sub-sep { color: var(--text-faint); padding: 0 1px; }
-  .breadcrumbs .sep { color: var(--text-faint); opacity: .75; }
-  .breadcrumbs .doc-crumb { display: inline-flex; align-items: center; gap: 5px; color: var(--heading); font-weight: 500; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
   .source-chip { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .04em; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); margin-left: 4px; cursor: pointer; }
   .source-chip:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
   .locked-chip { display: inline-flex; align-items: center; gap: 4px; font-size: calc(11px * var(--ui-scale, 1)); font-weight: 500; padding: 1px 7px; border-radius: 999px; background: var(--yellow-soft); color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 36%, transparent); margin-left: 4px; cursor: pointer; flex: none; }
   .locked-chip:hover { background: color-mix(in srgb, var(--yellow) 18%, transparent); }
 
   .top-actions { display: inline-flex; align-items: center; gap: 10px; flex: none; font-size: calc(12px * var(--ui-scale, 1)); color: var(--text-faint); }
-  .top-actions :global(.oracle-bar) { margin-left: 0; }
+  .oracle-slot :global(.oracle-bar) { margin-left: 0; }
   .oracle-slot { display: inline-flex; align-items: center; }
   /* In Notion shell mode, keep a calm, discoverable 22px ◎ Run c_lint trigger visible at rest
      and smoothly reveal File to Wiki… on topbar hover, focus, or active c_lint / Wiki modal state. */
@@ -1021,7 +1008,7 @@
     --ob-pill-bg: transparent;
     --ob-pill-px: 7px;
   }
-  .topbar:hover .oracle-slot.notion-quiet,
+  :global(.kandinsky-pane-topbar:hover) .oracle-slot.notion-quiet,
   .oracle-slot.notion-quiet:hover,
   .oracle-slot.notion-quiet:focus-within,
   .oracle-slot.notion-quiet:has(:global(.clean)),
@@ -1072,25 +1059,10 @@
     color: var(--text);
     border-color: var(--border-strong);
   }
-  .edited-lbl { color: var(--text-faint); margin-right: 2px; }
   .upstream-chip { padding: 2px 8px; border-radius: 999px; font-size: calc(11.5px * var(--ui-scale, 1)); font-weight: 500; background: var(--yellow-soft); color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 36%, transparent); cursor: pointer; white-space: nowrap; }
   .upstream-chip:hover { background: color-mix(in srgb, var(--yellow) 18%, transparent); }
   .upstream-chip.stale { background: var(--red-soft); color: var(--red); border-color: color-mix(in srgb, var(--red) 38%, transparent); }
   .upstream-chip.stale:hover { background: color-mix(in srgb, var(--red) 18%, transparent); }
-  .top-pill { padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font: inherit; cursor: pointer; transition: background 120ms, color 120ms, border-color 120ms; }
-  .top-pill:hover { background: var(--bg-hover); color: var(--text); border-color: var(--border-strong); }
-  .star-icon { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 5px; font-size: 15px; line-height: 1; color: var(--text-faint); transition: background 120ms, color 120ms; }
-  .star-icon:hover { background: var(--bg-hover); color: var(--heading); }
-  .star-icon.starred { color: var(--yellow); }
-  .top-more { padding: 3px 6px; border-radius: 5px; color: var(--text-muted); font: inherit; font-weight: 600; letter-spacing: 0.06em; cursor: pointer; transition: background 120ms, color 120ms; }
-  .top-more:hover { background: var(--bg-hover); color: var(--text); }
-
-  @media (max-width: 820px) {
-    .edited-lbl { display: none; }
-    .topbar { padding: 0 12px; }
-    .top-actions { gap: 6px; }
-  }
-  :global(html.phone) .topbar .breadcrumbs { display: none; }
   :global(html.phone) .topbar { justify-content: flex-end; height: 36px; padding: 0 10px; }
 
   .editor-host :global(.cm-editor) { height: 100%; }

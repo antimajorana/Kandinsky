@@ -2,4 +2,4 @@
 import type { AutomationAction } from "./AutomationAction";
 import type { AutomationTrigger } from "./AutomationTrigger";
 
-export type BaseAutomation = { name: string, enabled: boolean, trigger: AutomationTrigger, action: AutomationAction, };
+export type BaseAutomation = { name: string, enabled: boolean, trigger: AutomationTrigger, action?: AutomationAction, actions?: Array<AutomationAction>, };

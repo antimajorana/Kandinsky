@@ -548,7 +548,7 @@ mod tests {
     fn an_event_without_uid_gets_the_same_one_every_time() {
         let t = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:x\nDTSTART:20261101T090000Z\nEND:VEVENT\nEND:VCALENDAR\n";
         let (a, b) = (split_invite(t).unwrap(), split_invite(t).unwrap());
-        assert!(a[0].uid.starts_with("kandinsky-ics-"));
+        assert!(a[0].uid.starts_with("atlas-ics-"));
         assert_eq!(a[0].uid, b[0].uid);
         assert!(a[0].ics.contains(&format!("UID:{}", a[0].uid)));
         assert!(a[0].ics.contains("DTSTAMP:"), "a required DTSTAMP is added");

@@ -50,7 +50,7 @@ mod tests {
         let a = derive("<CAF=abc@mail.gmail.com>", "");
         assert_eq!(a, derive("CAF=abc@mail.gmail.com", ""), "brackets do not matter");
         assert_eq!(a, derive("  <CAF=abc@mail.gmail.com> ", " "));
-        assert!(a.starts_with("kandinsky-") && a.len() == 38, "{a}");
+        assert!(a.starts_with(PREFIX) && a.len() == PREFIX.len() + 32, "{a}");
         assert_ne!(a, derive("CAF=abc@mail.gmail.com", "deadline"), "a key tells events of one mail apart");
         assert_eq!(derive("x", "Due"), derive("x", "due"));
         assert_eq!(derive("./mail/a.md", "due"), derive("mail/a.md", "due"));

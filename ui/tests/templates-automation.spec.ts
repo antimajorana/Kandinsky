@@ -84,3 +84,23 @@ test("Settings → Writing lists each template with when it applies, and preview
   await expect(card.locator(".preview")).toContainText("## Review");
   await expect(card.locator(".preview")).not.toContainText("apply_when");
 });
+
+test("a named template made in settings starts ready for manual use", async ({ page, request }) => {
+  const path = "templates/Study brief.md";
+  try {
+    await page.goto("/");
+    await page.getByText("Finish the GW notes.").waitFor();
+    await page.keyboard.press("Meta+,");
+    await page.getByRole("navigation", { name: "Settings pages" }).getByRole("button", { name: /^Editor & Notes/ }).click();
+    await page.getByRole("button", { name: "New template", exact: true }).click();
+    const prompt = page.getByRole("dialog", { name: "Name your template" });
+    await prompt.getByRole("textbox").fill("Study brief");
+    await prompt.getByRole("button", { name: "Create template" }).click();
+    await expect(page.locator(`.live-cm[data-note="${path}"]`)).toBeVisible();
+    const template = await request.get(`/api/file?path=${encodeURIComponent(path)}`, { headers: H });
+    expect(template.ok()).toBe(true);
+    expect((await template.json()).text).toBe("# {{title}}\n\n{{cursor}}\n");
+  } finally {
+    await request.post(`/api/fs/trash?path=${encodeURIComponent(path)}`, { headers: H });
+  }
+});

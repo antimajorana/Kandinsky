@@ -41,6 +41,26 @@ fn the_guides_travel_with_the_binary() {
     assert!(String::from_utf8_lossy(&out.stdout).starts_with("# Developing Kandinsky"));
 }
 
+#[test]
+fn properties_audit_fails_for_an_invalid_schema_without_note_issues() {
+    let d = tempfile::tempdir().unwrap();
+    assert!(kandinsky(d.path(), &["properties-audit"]).status.success());
+
+    let templates = d.path().join("templates");
+    std::fs::create_dir(&templates).unwrap();
+    std::fs::write(templates.join("properties.yaml"), "properties: [unclosed").unwrap();
+
+    let out = kandinsky(d.path(), &["properties-audit", "--json"]);
+    assert_eq!(out.status.code(), Some(1));
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(report["issues"].as_array().unwrap().is_empty());
+    assert!(report["spec_problems"][0].as_str().unwrap().contains("not valid YAML"));
+
+    let out = kandinsky(d.path(), &["properties-audit", "--no-fail"]);
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("not valid YAML"));
+}
+
 /// Today's local date via `date`, to avoid a chrono dev-dependency for one string.
 fn chrono_like_today() -> String {
     let out = Command::new("date").arg("+%Y-%m-%d").output().unwrap();

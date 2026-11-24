@@ -16,6 +16,10 @@ on:
         description: the macOS packages too (GitHub's Mac runners are scarce, so CI leaves them to the release)
         type: boolean
         default: true
+      windows_only:
+        description: build the Windows installer and portable files
+        type: boolean
+        default: false
     secrets:
       ANDROID_KEYSTORE_B64:
         required: false
@@ -28,6 +32,7 @@ on:
 
 jobs:
   linux:
+    if: ${{ !inputs.windows_only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -75,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(inputs.macos && '["macos-latest","windows-latest"]' || '["windows-latest"]') }}
+        os: ${{ fromJSON(inputs.macos && !inputs.windows_only && '["macos-latest","windows-latest"]' || '["windows-latest"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -153,6 +158,7 @@ jobs:
   # every plugin's Rust engine, built on each desktop platform (scripts/dev/plugin-pack.mjs); a platform an engine
   # does not build on yet is reported (red) without holding the rest back: the archives say which platforms they carry
   plugin-engines:
+    if: ${{ !inputs.windows_only }}
     name: plugin engines (${{ matrix.targets }})
     runs-on: ${{ matrix.os }}
     continue-on-error: true
@@ -211,7 +217,7 @@ jobs:
     # the engines that did build: an engine job that failed or got no runner leaves its platform out of the archives.
     # always(), not !cancelled(): an engine job that timed out waiting for a Mac runner counts as cancelled, and with
     # !cancelled() this job was skipped and the release lost (v0.2.5 twice, v0.2.6)
-    if: ${{ always() }}
+    if: ${{ always() && !inputs.windows_only }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -232,6 +238,7 @@ jobs:
           if-no-files-found: error
 
   android:
+    if: ${{ !inputs.windows_only }}
     name: android (the three APKs)
     runs-on: ubuntu-24.04
     timeout-minutes: 90

@@ -22,7 +22,7 @@ agent notes in the repository, only their own paths committed.
 bash scripts/dev/dev.sh /path/to/a/vault   # the core and the UI with hot reload → http://localhost:5173
 ```
 
-Rust (stable), Node 20+, and on Linux the WebKitGTK development packages Tauri needs.
+Use Rust stable and Node 24 to match CI. The Linux desktop app also needs Tauri's WebKitGTK development packages.
 
 ## The gate
 

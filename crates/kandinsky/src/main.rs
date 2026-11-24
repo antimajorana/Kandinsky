@@ -119,7 +119,7 @@ enum Action {
         /// Print machine-readable JSON instead of human lines.
         #[arg(long)]
         json: bool,
-        /// Exit 0 even when issues are found.
+        /// Exit 0 even when note issues or schema problems are found.
         #[arg(long)]
         no_fail: bool,
     },
@@ -650,7 +650,7 @@ async fn main() -> Result<()> {
                 if report.spec_found { format!(" ({})", report.spec_path) } else { " (no properties.yaml found)".into() }
             );
         }
-        if !report.issues.is_empty() && !no_fail {
+        if !no_fail && (!report.issues.is_empty() || !report.spec_problems.is_empty()) {
             std::process::exit(1);
         }
         return Ok(());

@@ -1,12 +1,13 @@
 //! Local `.base` row automations (Trigger -> Action) and recurring note templates.
 use super::{passes, BaseFile, Ctx, Note};
-use crate::api::{AutomationAction, AutomationTrigger, BaseRecurringTemplate, RecurringCadence};
+use crate::api::{AutomationAction, AutomationTrigger, BaseAutomation, BaseAutomationRequest, BaseAutomationRun, BaseRecurringTemplate, RecurringCadence};
 use crate::config::Config;
 use crate::note_props::Props;
-use crate::{env, links, notes, paths, vault_write, Workspace};
+use crate::{env, links, notes, paths, vault_write, Error, Result, Workspace};
 use chrono::{Datelike, NaiveDate, NaiveDateTime};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::Path;
+use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
 static IN_FLIGHT: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -83,15 +84,21 @@ fn scalar_text(v: Option<&serde_yaml::Value>) -> Option<String> {
 fn trigger_matches(trigger: &AutomationTrigger, before: Option<&Props>, after: &Props, created: bool) -> bool {
     match trigger {
         AutomationTrigger::NoteCreated => created,
+        AutomationTrigger::Manual => false,
         AutomationTrigger::PropertyChanged { property, to } => {
-            let Some(actual) = scalar_text(after.get(property.as_str())) else { return false };
-            let was = before.and_then(|b| scalar_text(b.get(property.as_str())));
-            if was.is_some_and(|w| w.eq_ignore_ascii_case(&actual)) {
+            let previous = before.and_then(|b| b.get(property));
+            let current = after.get(property);
+            let value = scalar_text(current);
+            let unchanged = match (scalar_text(previous), value.as_deref()) {
+                (Some(was), Some(now)) => was.eq_ignore_ascii_case(now),
+                _ => previous == current,
+            };
+            if unchanged {
                 return false;
             }
             match to.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-                Some(want) => actual.eq_ignore_ascii_case(want),
-                None => !actual.is_empty(),
+                Some(want) => value.is_some_and(|actual| actual.eq_ignore_ascii_case(want)),
+                None => true,
             }
         }
     }
@@ -124,7 +131,7 @@ pub fn on_note_saved(ws: &Workspace, rel_path: &str, before: Option<&str>, held:
 }
 
 fn run(ws: &Workspace, rel_path: &str, created: bool, before: Option<&str>, held: Option<&str>) -> Ran {
-    let mut ran = Ran::default();
+    let ran = Ran::default();
     let Ok(cfg) = ws.config() else { return ran };
     if !rel_path.ends_with(".md") || cfg.index_excluded(rel_path) {
         return ran;
@@ -151,7 +158,7 @@ fn run(ws: &Workspace, rel_path: &str, created: bool, before: Option<&str>, held
     }
     let Ok(abs) = ws.resolve(rel_path) else { return ran };
     // the note as written now, not the index's copy, which may not have seen this write yet
-    let Ok(mut text) = std::fs::read_to_string(&abs) else { return ran };
+    let Ok(text) = std::fs::read_to_string(&abs) else { return ran };
     let mut after = Props::from_markdown(&text);
     // a save made over a half-typed property line has no readable old values: the last ones seen here stand in (taking
     // them as absent would fire again a rule whose value never changed); none seen, every property counts as just set
@@ -161,12 +168,13 @@ fn run(ws: &Workspace, rel_path: &str, created: bool, before: Option<&str>, held
         b => b.map(Props::from_markdown),
     };
     // this write's values when readable, else the old ones: the next save, over this unreadable text, compares to them
-    match (unreadable(&text), &before) {
+    let readable = !unreadable(&text);
+    match (!readable, &before) {
         (false, _) => remember(&seen_key, after.clone()),
         (true, Some(b)) => remember(&seen_key, b.clone()),
         (true, None) => {}
     }
-    let mut own = held.map(str::to_string);
+    let own = held.map(str::to_string);
     let vault = links::vault(ws.root(), &cfg);
     let none: Vec<String> = Vec::new();
     let notes_vec: Vec<Note> = vault
@@ -185,7 +193,7 @@ fn run(ws: &Workspace, rel_path: &str, created: bool, before: Option<&str>, held
     let Some(target) = by_path.get(rel_path).copied() else {
         return ran;
     };
-    let touched = &mut ran.touched;
+    let mut execution = Execution { ws, cfg: &cfg, rel: rel_path, abs: &abs, text, held: own, ran };
     for (base_rel, base) in parsed_bases {
         let ctx = Ctx {
             note: target,
@@ -201,75 +209,253 @@ fn run(ws: &Workspace, rel_path: &str, created: bool, before: Option<&str>, held
         }
         let Some(_guard) = acquire_flight(format!("{}::{base_rel}::{rel_path}", ws.root().display())) else { continue };
         for auto in &base.automations {
-            if !auto.enabled || !trigger_matches(&auto.trigger, before.as_ref(), &after, created) {
+            if !auto.enabled
+                || (!readable && matches!(auto.trigger, AutomationTrigger::PropertyChanged { .. }))
+                || !trigger_matches(&auto.trigger, before.as_ref(), &after, created)
+            {
                 continue;
             }
-            match &auto.action {
-                AutomationAction::SetProperty { property, value } => {
-                    let today_s = chrono::Local::now().format("%Y-%m-%d").to_string();
-                    let rendered = value
-                        .replace("{{title}}", &target.name)
-                        .replace("{{path}}", rel_path)
-                        .replace("{{date}}", &today_s);
-                    let current = scalar_text(Props::from_markdown(&text).get(property.as_str()));
-                    if current.as_deref() == Some(rendered.trim()) {
-                        continue;
-                    }
-                    // a literal value is typed (`true`, `3`); a filled-in title or path stays text, even `a: b` or `2026`
-                    let yval = if value.contains("{{") {
-                        serde_yaml::Value::String(rendered.clone())
-                    } else {
-                        serde_yaml::from_str::<serde_yaml::Value>(&rendered)
-                            .unwrap_or_else(|_| serde_yaml::Value::String(rendered.clone()))
-                    };
-                    let mut next = None;
-                    let wrote = vault_write::modify(&abs, |raw| {
-                        let n = crate::frontmatter::set_property(raw, property, &yval);
-                        next = Some(n.clone());
-                        Ok(n)
-                    });
-                    if wrote.is_ok() {
-                        if let Some(n) = next {
-                            text = n;
-                            // the rules after this one see the value set here as changed by this write
-                            after = Props::from_markdown(&text);
-                        }
-                        if let Some(h) = own.as_mut() {
-                            *h = crate::frontmatter::set_property(h, property, &yval);
-                        }
-                        touched.push(rel_path.to_string());
-                        ran.set.push(property.clone());
-                        ran.rule.get_or_insert_with(|| format!("{} ({base_rel})", auto.name));
+            execution.run_rule(&base_rel, auto);
+            after = Props::from_markdown(&execution.text);
+        }
+    }
+    if !unreadable(&execution.text) {
+        remember(&seen_key, after);
+    }
+    execution.ran.touched.sort();
+    execution.ran.touched.dedup();
+    execution.ran.held = execution.held.filter(|h| Some(h.as_str()) != held);
+    execution.ran
+}
+
+struct Execution<'a> {
+    ws: &'a Workspace,
+    cfg: &'a Config,
+    rel: &'a str,
+    abs: &'a Path,
+    text: String,
+    held: Option<String>,
+    ran: Ran,
+}
+
+impl Execution<'_> {
+    fn run_rule(&mut self, base: &str, rule: &BaseAutomation) -> BaseAutomationRun {
+        let now = chrono::Local::now();
+        let mut entry = BaseAutomationRun {
+            rule: rule.name.clone(),
+            note: self.rel.to_string(),
+            trigger: rule.trigger.clone(),
+            at: now.to_rfc3339(),
+            files: Vec::new(),
+            error: None,
+        };
+        for step in rule.steps() {
+            match self.step(base, &rule.name, step, now.naive_local(), &mut entry.files) {
+                Ok(()) => {}
+                Err(error) => {
+                    entry.error = Some(error.to_string());
+                    eprintln!("kandinsky: automation {:?} in {base}: {error}", rule.name);
+                    break;
+                }
+            }
+        }
+        self.ran.touched.extend(entry.files.iter().cloned());
+        if let Err(error) = remember_run(self.ws, base, &entry) {
+            eprintln!("kandinsky: could not save automation history for {base}: {error}");
+        }
+        entry
+    }
+
+    fn set_current(&mut self, base: &str, rule: &str, property: &str, value: &serde_yaml::Value) -> Result<bool> {
+        let (next, changed) = edit_property(self.abs, property, value)?;
+        self.text = next;
+        if changed {
+            if let Some(held) = self.held.as_mut() {
+                *held = crate::frontmatter::set_property(held, property, value);
+            }
+            if !self.ran.set.iter().any(|key| key == property) {
+                self.ran.set.push(property.to_string());
+            }
+            self.ran.rule.get_or_insert_with(|| format!("{rule} ({base})"));
+        }
+        Ok(changed)
+    }
+
+    fn step(&mut self, base: &str, rule: &str, step: &AutomationAction, now: NaiveDateTime, files: &mut Vec<String>) -> Result<()> {
+        let today = now.date().format("%Y-%m-%d").to_string();
+        let title = super::stem(self.rel);
+        let render = |template: &str| template.replace("{{title}}", &title).replace("{{path}}", self.rel).replace("{{date}}", &today);
+        match step {
+            AutomationAction::SetProperty { property, value } => {
+                let key = crate::frontmatter::plain_key(property)?;
+                let value = property_value(value, render(value));
+                if self.set_current(base, rule, key, &value)? {
+                    record_file(files, self.rel.to_string());
+                }
+            }
+            AutomationAction::AppendLog { text } => {
+                let cap = crate::capture::capture_at(self.ws.root(), self.cfg, &render(text), now)?;
+                if cap.path == self.rel {
+                    // The caller's copy lacks the line and must reload.
+                    self.ran.unheld = true;
+                    if let Ok(text) = std::fs::read_to_string(self.abs) {
+                        self.text = text;
                     }
                 }
-                AutomationAction::AppendLog { text: line } => {
-                    let now = chrono::Local::now().naive_local();
-                    let today_s = now.date().format("%Y-%m-%d").to_string();
-                    let msg = line
-                        .replace("{{title}}", &target.name)
-                        .replace("{{path}}", rel_path)
-                        .replace("{{date}}", &today_s);
-                    if let Ok(cap) = crate::capture::capture_at(ws.root(), &cfg, &msg, now) {
-                        // the note is today's log: the caller's copy lacks the line, so it must not take the new mtime
-                        if cap.path == rel_path {
-                            ran.unheld = true;
-                            if let Ok(t) = std::fs::read_to_string(&abs) {
-                                text = t;
-                            }
-                        }
-                        touched.push(cap.path);
+                record_file(files, cap.path);
+            }
+            AutomationAction::CreateRow { base, view, title, link_property } => {
+                let target = checked_base(self.ws, base)?;
+                let src = crate::files::read_text(self.ws, &target)?.text;
+                let document: BaseFile = serde_yaml::from_str(&src).map_err(|e| Error::BadRequest(format!("base: {e}")))?;
+                if document.views.is_empty()
+                    || view.as_deref().is_some_and(|name| !document.views.iter().any(|v| v.name.as_deref().unwrap_or(&v.kind) == name))
+                {
+                    return Err(Error::BadRequest(format!("no matching view in {target}")));
+                }
+                let title = title.as_deref().map(render).unwrap_or_default();
+                let link = link_property.as_deref().map(|property| {
+                    let property = crate::frontmatter::plain_key(property)?;
+                    let link = serde_yaml::Value::String(format!("[[{}]]", self.rel));
+                    Ok::<_, Error>((property, serde_yaml::Value::Sequence(vec![link])))
+                }).transpose()?;
+                let init = super::edit::RowInit::automation(&title, link, self.rel);
+                let row = super::edit::new_row_with(self.ws.root(), self.cfg, &target, &src, view.as_deref(), init)?;
+                let warning = (!row.matches).then(|| format!("{} was created outside the destination view in {target}", row.path));
+                record_file(files, row.path);
+                if let Some(warning) = warning {
+                    return Err(Error::BadRequest(warning));
+                }
+            }
+            AutomationAction::UpdateRelated { base: destination, relation, property, value } => {
+                let relation = crate::frontmatter::plain_key(relation)?;
+                let key = crate::frontmatter::plain_key(property)?;
+                let value = property_value(value, render(value));
+                let destination = checked_base(self.ws, destination)?;
+                let source = crate::files::read_text(self.ws, &destination)?.text;
+                let result = super::evaluate(self.ws.root(), self.cfg, &source, Some(self.rel));
+                if let Some(error) = result.error {
+                    return Err(Error::BadRequest(error));
+                }
+                let members: HashSet<_> = result.views.iter().flat_map(|view| view.rows.iter().map(|row| row.path.as_str())).collect();
+                let vault = links::vault(self.ws.root(), self.cfg);
+                let props = Props::from_markdown(&self.text);
+                let targets: std::collections::BTreeSet<_> = props.wikilink_targets(relation).iter()
+                    .filter_map(|target| vault.resolve(target, self.rel))
+                    .filter(|target| members.contains(target.as_str()))
+                    .collect();
+                for target in targets {
+                    let changed = if target == self.rel {
+                        self.set_current(base, rule, key, &value)?
+                    } else {
+                        edit_property(&self.ws.resolve(&target)?, key, &value)?.1
+                    };
+                    if changed {
+                        record_file(files, target);
                     }
                 }
             }
         }
+        Ok(())
     }
-    if !unreadable(&text) {
-        remember(&seen_key, after);
+}
+
+fn property_value(template: &str, rendered: String) -> serde_yaml::Value {
+    // A literal value is typed. A filled-in title or path stays text, even `a: b` or `2026`.
+    if template.contains("{{") {
+        serde_yaml::Value::String(rendered)
+    } else {
+        serde_yaml::from_str(&rendered).unwrap_or_else(|_| serde_yaml::Value::String(rendered))
     }
-    touched.sort();
-    touched.dedup();
-    ran.held = own.filter(|h| Some(h.as_str()) != held);
-    ran
+}
+
+fn edit_property(abs: &Path, key: &str, value: &serde_yaml::Value) -> Result<(String, bool)> {
+    let mut next = String::new();
+    let mut changed = false;
+    vault_write::modify(abs, |raw| {
+        let text = if Props::from_markdown(raw).get(key) == Some(value) {
+            raw.to_string()
+        } else {
+            crate::frontmatter::set_property(raw, key, value)
+        };
+        changed = text != raw;
+        next.clone_from(&text);
+        Ok(text)
+    })?;
+    Ok((next, changed))
+}
+
+fn record_file(files: &mut Vec<String>, file: String) {
+    if !files.contains(&file) {
+        files.push(file);
+    }
+}
+
+fn checked_base(ws: &Workspace, path: &str) -> Result<String> {
+    let path = ws.rel(&ws.resolve(path)?);
+    if !path.ends_with(".base") || crate::state_dir::is_state_rel(&path) {
+        return Err(Error::BadRequest("choose a Base in the vault".into()));
+    }
+    Ok(path)
+}
+
+pub fn run_manual(ws: &Workspace, req: &BaseAutomationRequest) -> Result<BaseAutomationRun> {
+    let base = checked_base(ws, &req.path)?;
+    let cfg = ws.config()?;
+    let abs = ws.resolve(&req.note)?;
+    let note = ws.rel(&abs);
+    if !note.ends_with(".md") || cfg.index_excluded(&note) {
+        return Err(Error::BadRequest("choose a note in the Base".into()));
+    }
+    let source = crate::files::read_text(ws, &base)?.text;
+    let parsed: BaseFile = serde_yaml::from_str(&source).map_err(|e| Error::BadRequest(format!("base: {e}")))?;
+    let rule = parsed.automations.iter().find(|rule| {
+        rule.enabled && rule.trigger == AutomationTrigger::Manual && *rule == &req.rule
+    }).ok_or_else(|| Error::BadRequest("the manual rule has changed or is disabled".into()))?;
+    let _guard = acquire_flight(format!("{}::{base}::{note}", ws.root().display()))
+        .ok_or(Error::Conflict { current: None })?;
+    let result = super::evaluate(ws.root(), &cfg, &source, req.this.as_deref());
+    if !result.views.iter().any(|view| view.rows.iter().any(|row| row.path == note)) {
+        return Err(Error::BadRequest("the note is outside the Base's views".into()));
+    }
+    let text = crate::files::read_text(ws, &note)?.text;
+    let mut execution = Execution { ws, cfg: &cfg, rel: &note, abs: &abs, text, held: None, ran: Ran::default() };
+    let entry = execution.run_rule(&base, rule);
+    if !unreadable(&execution.text) {
+        remember(&format!("{}::{note}", ws.root().display()), Props::from_markdown(&execution.text));
+    }
+    Ok(entry)
+}
+
+const HISTORY_LIMIT: usize = 50;
+
+fn history_path(ws: &Workspace, base: &str) -> PathBuf {
+    let key = Sha256::digest(base.as_bytes());
+    ws.cache_dir().join("base-automation-runs").join(format!("{key:x}.json"))
+}
+
+fn read_history(path: &Path) -> Result<Vec<BaseAutomationRun>> {
+    match std::fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| Error::Other(e.into())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+pub fn run_history(ws: &Workspace, base: &str) -> Result<Vec<BaseAutomationRun>> {
+    read_history(&history_path(ws, &checked_base(ws, base)?))
+}
+
+fn remember_run(ws: &Workspace, base: &str, entry: &BaseAutomationRun) -> Result<()> {
+    let path = history_path(ws, base);
+    vault_write::cache::locked(&path, || {
+        let mut entries = read_history(&path)?;
+        entries.insert(0, entry.clone());
+        entries.truncate(HISTORY_LIMIT);
+        let bytes = serde_json::to_vec(&entries).map_err(|e| Error::Other(e.into()))?;
+        vault_write::cache::write(&path, &bytes)?;
+        Ok(())
+    })
 }
 
 fn is_due(t: &BaseRecurringTemplate, today: NaiveDate) -> bool {
@@ -542,6 +728,98 @@ mod tests {
     use super::*;
 
     #[test]
+    fn manual_rule_creates_a_linked_row_in_another_base_and_records_history() {
+        let d = tempfile::tempdir().unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        let source = r#"
+filters: 'file.inFolder("Inbox")'
+views: [{type: table}]
+automations:
+  - name: Create follow-up
+    trigger: {kind: manual}
+    action: {kind: create_row, base: Followups.base, view: Open, title: "Follow up on {{title}}", link_property: source}
+"#;
+        let write = |path: &str, text: &str| vault_write::write(&d.path().join(path), text.as_bytes()).unwrap();
+        write("Inbox/Task.md", "# Task\n");
+        write("Other.md", "# Other\n");
+        write("Inbox.base", source);
+        write("Followups.base", "filters: 'file.inFolder(\"Followups\")'\nviews:\n  - type: table\n    name: Open\n    filters: 'status == \"Open\"'\n");
+        let rule = serde_yaml::from_str::<BaseFile>(source).unwrap().automations.remove(0);
+        assert!(on_note_written(&ws, "Inbox/Task.md", true).is_empty());
+        let mut request = BaseAutomationRequest { path: "Inbox.base".into(), note: "Other.md".into(), rule, this: None };
+        assert!(run_manual(&ws, &request).is_err());
+        request.note = "Inbox/Task.md".into();
+        let run = run_manual(&ws, &request).unwrap();
+        assert!(run.error.is_none(), "{:?}", run.error);
+        assert_eq!(run.files, ["Followups/Follow up on Task.md"]);
+        let text = std::fs::read_to_string(d.path().join(&run.files[0])).unwrap();
+        let props = Props::from_markdown(&text);
+        assert_eq!(props.wikilink_targets("source"), ["Inbox/Task.md"]);
+        assert_eq!(props.get("status").and_then(serde_yaml::Value::as_str), Some("Open"));
+        let history = run_history(&Workspace::open(d.path()).unwrap(), "Inbox.base").unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].files, run.files);
+        assert_eq!(history[0].trigger, AutomationTrigger::Manual);
+        assert!(run_history(&ws, "Followups.base").unwrap().is_empty());
+        write("Inbox.base", &source.replace("Create follow-up", "Create review"));
+        assert!(run_manual(&ws, &request).is_err());
+    }
+
+    #[test]
+    fn a_related_row_update_writes_only_members_of_the_destination_base() {
+        let d = tempfile::tempdir().unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        let write = |path: &str, text: &str| vault_write::write(&d.path().join(path), text.as_bytes()).unwrap();
+        let source = r#"
+filters: 'file.inFolder("Inbox")'
+views: [{type: table}]
+automations:
+  - name: Mark related
+    trigger: {kind: manual}
+    action: {kind: update_related, base: Projects.base, relation: projects, property: active, value: "true"}
+"#;
+        write("Inbox.base", source);
+        write("Inbox/Task.md", "---\nprojects: ['[[Projects/A]]', '[[Projects/B]]', '[[Other]]']\n---\n");
+        write("Projects.base", "filters: 'file.inFolder(\"Projects\")'\nviews: [{type: table}]\n");
+        for path in ["Projects/A.md", "Projects/B.md", "Other.md"] {
+            write(path, "# Project\n");
+        }
+        let rule = serde_yaml::from_str::<BaseFile>(source).unwrap().automations.remove(0);
+        let run = run_manual(&ws, &BaseAutomationRequest { path: "Inbox.base".into(), note: "Inbox/Task.md".into(), rule, this: None }).unwrap();
+        assert!(run.error.is_none(), "{:?}", run.error);
+        assert_eq!(run.files, ["Projects/A.md", "Projects/B.md"]);
+        for path in run.files {
+            assert!(std::fs::read_to_string(d.path().join(path)).unwrap().contains("active: true"));
+        }
+        assert_eq!(std::fs::read_to_string(d.path().join("Other.md")).unwrap(), "# Project\n");
+    }
+
+    #[test]
+    fn history_shows_completed_actions_when_a_later_step_fails() {
+        let d = tempfile::tempdir().unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        let source = r#"
+views: [{type: table}]
+automations:
+  - name: Partial run
+    trigger: {kind: manual}
+    actions:
+      - {kind: set_property, property: phase, value: Started}
+      - {kind: create_row, base: Reviews.base}
+      - {kind: set_property, property: phase, value: Finished}
+"#;
+        vault_write::write(&d.path().join("Work.base"), source.as_bytes()).unwrap();
+        vault_write::write(&d.path().join("Reviews.base"), b"filters:\n  and:\n    - 'file.inFolder(\"Reviews\")'\n    - 'quality > 5'\nviews: [{type: table}]\n").unwrap();
+        vault_write::write(&d.path().join("Task.md"), b"# Task\n").unwrap();
+        let rule = serde_yaml::from_str::<BaseFile>(source).unwrap().automations.remove(0);
+        let run = run_manual(&ws, &BaseAutomationRequest { path: "Work.base".into(), note: "Task.md".into(), rule, this: None }).unwrap();
+        assert!(run.error.as_deref().is_some_and(|error| error.contains("outside the destination view in Reviews.base")));
+        assert_eq!(run.files, ["Task.md", "Reviews/Untitled.md"]);
+        assert!(std::fs::read_to_string(d.path().join("Task.md")).unwrap().contains("phase: Started"));
+        assert_eq!(run_history(&ws, "Work.base").unwrap()[0].error, run.error);
+    }
+
+    #[test]
     fn property_changed_automation_sets_target_and_guards_loops() {
         let d = tempfile::tempdir().unwrap();
         let base = r#"filters: 'type == "task"'
@@ -567,6 +845,45 @@ views:
         assert_eq!(touched, vec!["T1.md"]);
         let text = std::fs::read_to_string(d.path().join("T1.md")).unwrap();
         assert!(text.contains("closed: true"), "{text}");
+    }
+
+    #[test]
+    fn an_unfiltered_property_trigger_detects_a_list_edit_and_a_removal() {
+        let trigger = AutomationTrigger::PropertyChanged { property: "tags".into(), to: None };
+        let first = Props::from_markdown("---\ntags: [one, two]\n---\n");
+        let updated = Props::from_markdown("---\ntags: [one]\n---\n");
+        let cleared = Props::default();
+        assert!(trigger_matches(&trigger, Some(&first), &updated, false));
+        assert!(trigger_matches(&trigger, Some(&updated), &cleared, false));
+        assert!(!trigger_matches(&trigger, Some(&updated), &updated, false));
+        assert!(!trigger_matches(&trigger, Some(&cleared), &cleared, false));
+    }
+
+    #[test]
+    fn an_ordered_rule_applies_every_action_and_returns_merged_editor_text() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("Tasks.base"), r#"
+automations:
+  - name: Complete task
+    trigger: {kind: property_changed, property: status, to: Done}
+    actions:
+      - {kind: set_property, property: phase, value: pending}
+      - {kind: set_property, property: archived, value: "true"}
+      - {kind: set_property, property: phase, value: complete}
+views:
+  - type: table
+"#).unwrap();
+        let before = "---\nstatus: Open\n---\nKeep this.\n";
+        let saved = before.replace("Open", "Done");
+        let path = d.path().join("Task.md");
+        std::fs::write(&path, &saved).unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        let ran = on_note_saved(&ws, "Task.md", Some(before), Some(&saved));
+        let disk = std::fs::read_to_string(&path).unwrap();
+        assert!(disk.contains("archived: true") && disk.contains("phase: complete") && disk.contains("Keep this."));
+        assert_eq!(ran.held.as_deref(), Some(disk.as_str()));
+        assert_eq!(ran.set, ["phase", "archived"]);
+        assert!(on_note_saved(&ws, "Task.md", Some(&disk), Some(&disk)).touched.is_empty());
     }
 
     const LOG_DONE: &str = r#"filters: 'type == "task"'

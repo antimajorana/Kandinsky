@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { parseSheet, toNum } from "../src/lib/csv/parse";
 import { compare, compile, stats } from "../src/lib/csv/filter";
-import { writeSheet } from "../src/lib/csv/write";
+import { rewriteRecord, writeSheet } from "../src/lib/csv/write";
 
 // A table read and written back (lib/csv/parse.ts, write.ts): what an edited row must keep so the next read gives the
 // same cells. Pure.
@@ -20,6 +20,26 @@ test("an edited first cell that starts with the comment marker is quoted, so it 
   const back = parseSheet(writeSheet(s), "r.csv");
   expect(back.rows).toEqual([["#3", "4"]]);
   expect(back.comments.map((c) => c.text)).toEqual(["# made by a run"]);
+});
+
+test("blank records and mixed endings survive a cell edit, including newlines inside a quoted cell", () => {
+  const text = '# a comment\r\nname,note\n \r\nAlice,"line one\nline two"\r\nBob,plain\rCarol,last\n\n';
+  const sheet = parseSheet(text, "people.csv");
+  expect(sheet.rows).toEqual([["Alice", "line one\nline two"], ["Bob", "plain"], ["Carol", "last"]]);
+  expect(writeSheet(sheet)).toBe(text);
+
+  sheet.rows[1][1] = "edited";
+  sheet.raw[1] = rewriteRecord(sheet.raw[1]);
+  expect(writeSheet(sheet)).toBe(text.replace("Bob,plain", "Bob,edited"));
+});
+
+test("blank lines before data do not replace a comment header", () => {
+  const text = "# U  E\r\n\n  1  2\r  3  4\n  ";
+  const sheet = parseSheet(text, "run.dat");
+  expect(sheet.headerSource).toBe("comment");
+  expect(sheet.header).toEqual(["U", "E"]);
+  expect(sheet.rows).toEqual([["1", "2"], ["3", "4"]]);
+  expect(writeSheet(sheet)).toBe(text);
 });
 
 test("a cell's number is the one it shows: Fortran exponents, inf and nan; a spread of large close values", () => {

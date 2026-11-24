@@ -116,7 +116,21 @@ pub fn tree(ws: &Workspace, rel: &str, all_hidden: bool) -> Result<Vec<TreeEntry
 
 pub fn read_text(ws: &Workspace, rel: &str) -> Result<FileText> {
     let path = ws.resolve(rel)?;
-    let meta = std::fs::metadata(&path).map_err(|_| Error::NotFound(rel.into()))?;
+    let file = std::fs::File::open(&path).map_err(|err| match path.metadata() {
+        // Windows can refuse to open a directory before its type can be checked on the handle.
+        Ok(meta) if meta.is_dir() => Error::BadRequest(format!("{rel} is a directory")),
+        Ok(_) => err.into(),
+        Err(_) => Error::NotFound(rel.into()),
+    })?;
+    let (text, mtime) = read_open_text(file, rel)?;
+    Ok(FileText { path: ws.rel(&path), text, mtime })
+}
+
+/// The modification time and bytes come from the same file even if the path is replaced during the read.
+fn read_open_text(file: std::fs::File, rel: &str) -> Result<(String, Mtime)> {
+    use std::io::Read;
+
+    let meta = file.metadata().map_err(|_| Error::NotFound(rel.into()))?;
     if meta.is_dir() {
         return Err(Error::BadRequest(format!("{rel} is a directory")));
     }
@@ -124,8 +138,13 @@ pub fn read_text(ws: &Workspace, rel: &str) -> Result<FileText> {
     if meta.len() > limit {
         return Err(Error::TooLarge(format!("{rel} is {} bytes (limit {limit})", meta.len())));
     }
-    let text = String::from_utf8(std::fs::read(&path)?).map_err(|_| Error::NotText(rel.into()))?;
-    Ok(FileText { path: ws.rel(&path), text, mtime: Mtime::of(&meta)? })
+    let mut bytes = Vec::with_capacity(meta.len() as usize + 1);
+    file.take(limit + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > limit {
+        return Err(Error::TooLarge(format!("{rel} is larger than {limit} bytes")));
+    }
+    let text = String::from_utf8(bytes).map_err(|_| Error::NotText(rel.into()))?;
+    Ok((text, Mtime::of(&meta)?))
 }
 
 /// Atomic (tmp + rename) write. With `base_mtime`, refuses to clobber a file changed since it was
@@ -141,7 +160,7 @@ pub fn write_text(ws: &Workspace, req: &FileWrite) -> Result<FileWritten> {
     if req.text.len() as u64 > limit {
         return Err(Error::TooLarge(format!("{} would be {} bytes (limit {limit})", req.path, req.text.len())));
     }
-    write_bytes(ws, &req.path, req.text.as_bytes(), guard)
+    write_bytes(ws, &req.path, req.text.as_bytes(), guard, None)
 }
 
 /// What a write checks before it replaces the file.
@@ -162,28 +181,21 @@ pub const ORIGINALS_DIR: &str = ".kandinsky/originals";
 /// Binary write (annotated PDFs). Before the first overwrite of a file, its original is kept under
 /// `.kandinsky/originals/<rel>` — a hard link when possible, so it costs no space.
 pub fn write_raw(ws: &Workspace, rel: &str, bytes: &[u8], base_mtime: Option<Mtime>) -> Result<FileWritten> {
-    let path = ws.resolve(rel)?;
-    if path.is_file() {
-        let keep = crate::state_dir::join(ws.root(), ORIGINALS_DIR).join(rel);
-        if !keep.exists() {
-            vault_write::link_or_copy(&path, &keep)?;
-        }
-    }
-    write_bytes(ws, rel, bytes, base_mtime.map_or(Guard::None, Guard::Mtime))
+    let keep = crate::state_dir::join(ws.root(), ORIGINALS_DIR).join(rel);
+    write_bytes(ws, rel, bytes, base_mtime.map_or(Guard::None, Guard::Mtime), Some(&keep))
 }
 
-fn write_bytes(ws: &Workspace, rel: &str, bytes: &[u8], guard: Guard) -> Result<FileWritten> {
+fn write_bytes(ws: &Workspace, rel: &str, bytes: &[u8], guard: Guard, keep: Option<&std::path::Path>) -> Result<FileWritten> {
     let path = ws.resolve(rel)?;
     if path == ws.root() || path.is_dir() {
         return Err(Error::BadRequest(format!("{rel} is a directory")));
     }
     // the check and the write under the file's lock: a `modify` (a mark, a tick, a property) never lands between them
-    vault_write::locked(&path, || checked_write(&path, bytes, guard))
+    vault_write::locked(&path, || checked_write(&path, bytes, guard, keep))
 }
 
-fn checked_write(path: &std::path::Path, bytes: &[u8], guard: Guard) -> Result<FileWritten> {
-    let path = path.to_path_buf();
-    let existing = std::fs::metadata(&path).ok();
+fn checked_write(path: &std::path::Path, bytes: &[u8], guard: Guard, keep: Option<&std::path::Path>) -> Result<FileWritten> {
+    let existing = std::fs::metadata(path).ok();
     match guard {
         Guard::None => {}
         Guard::Mtime(base) => {
@@ -198,14 +210,19 @@ fn checked_write(path: &std::path::Path, bytes: &[u8], guard: Guard) -> Result<F
             }
         }
     }
+    if let Some(keep) = keep {
+        if existing.as_ref().is_some_and(std::fs::Metadata::is_file) && !keep.exists() {
+            vault_write::link_or_copy(path, keep)?;
+        }
+    }
     let written = match guard {
-        Guard::OnlyNew => vault_write::create(&path, bytes)? == vault_write::Created::New,
+        Guard::OnlyNew => vault_write::create(path, bytes)? == vault_write::Created::New,
         Guard::None | Guard::Mtime(_) => {
-            vault_write::write(&path, bytes)?;
+            vault_write::write(path, bytes)?;
             true
         }
     };
-    Ok(FileWritten { mtime: Mtime::of(&std::fs::metadata(&path)?)?, written, template: None })
+    Ok(FileWritten { mtime: Mtime::of(&std::fs::metadata(path)?)?, written, template: None })
 }
 
 
@@ -398,6 +415,22 @@ mod tests {
     }
 
     #[test]
+    fn a_text_read_keeps_the_mtime_of_its_open_file_after_replacement() {
+        let (_d, w) = ws();
+        let path = w.root().join("b.md");
+        let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        std::fs::File::options().write(true).open(&path).unwrap().set_modified(old).unwrap();
+        let file = std::fs::File::open(&path).unwrap();
+
+        std::fs::rename(&path, w.root().join("old.md")).unwrap();
+        std::fs::write(&path, "replacement").unwrap();
+        assert_eq!(read_open_text(file, "b.md").unwrap(), ("b".to_string(), Mtime(1_700_000_000_000)));
+        let replacement = read_text(&w, "b.md").unwrap();
+        assert_eq!(replacement.text, "replacement");
+        assert_ne!(replacement.mtime, Mtime(1_700_000_000_000));
+    }
+
+    #[test]
     fn only_new_creates_once_and_never_replaces() {
         let (_d, w) = ws();
         let new = |text: &str| FileWrite { path: "notes/d.excalidraw".into(), text: text.into(), base_mtime: None, only_new: true, apply_here: false };
@@ -411,8 +444,10 @@ mod tests {
     }
 
     #[test]
-    fn non_utf8_is_rejected() {
+    fn text_reads_reject_missing_files_directories_and_non_utf8() {
         let (_d, w) = ws();
+        assert!(matches!(read_text(&w, "missing.md"), Err(Error::NotFound(_))));
+        assert!(matches!(read_text(&w, "notes"), Err(Error::BadRequest(_))));
         std::fs::write(w.root().join("bin.dat"), [0xff, 0xfe, 0x00]).unwrap();
         assert!(matches!(read_text(&w, "bin.dat"), Err(Error::NotText(_))));
     }
@@ -436,7 +471,13 @@ pub fn put_bytes(ws: &Workspace, rel: &str, bytes: &[u8], replace: bool) -> Resu
     if p.is_dir() || (p.exists() && !replace) {
         return Err(Error::Conflict { current: None });
     }
-    vault_write::write(&p, bytes)
+    if replace {
+        return vault_write::write(&p, bytes);
+    }
+    match vault_write::create(&p, bytes)? {
+        vault_write::Created::New => Ok(()),
+        vault_write::Created::Taken => Err(Error::Conflict { current: None }),
+    }
 }
 
 /// Move / rename inside the workspace; never overwrites (409).
@@ -650,5 +691,46 @@ mod manage_tests {
         assert!(put_bytes(&ws, "../out.bin", b"x", true).is_err());
         let e = tree(&ws, "in/new", false).unwrap();
         assert_eq!((e[0].size, e[0].modified.is_some()), (Some(1), true));
+    }
+
+    #[test]
+    fn an_upload_without_replace_leaves_a_file_created_during_the_upload() {
+        struct Arrival(std::path::PathBuf);
+        impl vault_write::WriteGuard for Arrival {
+            fn before(&self, _: &str, _: &vault_write::WriteKind, current: Option<vault_write::ContentHash>) -> Result<()> {
+                assert!(current.is_none());
+                std::fs::write(&self.0, b"another upload")?;
+                Ok(())
+            }
+            fn after(&self, _: &str, _: &vault_write::WriteKind, _: Option<vault_write::ContentHash>) {}
+        }
+
+        let d = tempfile::tempdir().unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        let path = ws.root().join("upload.bin");
+        ws.set_write_guard(std::sync::Arc::new(Arrival(path.clone())));
+        let written = put_bytes(&ws, "upload.bin", b"later upload", false);
+        ws.clear_write_guard();
+        assert!(matches!(written, Err(Error::Conflict { .. })));
+        assert_eq!(std::fs::read(path).unwrap(), b"another upload");
+    }
+
+    #[test]
+    fn a_stale_binary_save_does_not_claim_the_original() {
+        let d = tempfile::tempdir().unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        let path = ws.root().join("book.pdf");
+        let original = ws.root().join(ORIGINALS_DIR).join("book.pdf");
+        std::fs::write(&path, b"first version").unwrap();
+        assert!(matches!(write_raw(&ws, "book.pdf", b"stale edit", Some(Mtime(0))), Err(Error::Conflict { .. })));
+        assert!(!original.exists());
+        assert_eq!(std::fs::read(&path).unwrap(), b"first version");
+
+        std::fs::write(&path, b"new original").unwrap();
+        let current = Mtime::of(&std::fs::metadata(&path).unwrap()).unwrap();
+        write_raw(&ws, "book.pdf", b"first edit", Some(current)).unwrap();
+        write_raw(&ws, "book.pdf", b"second edit", None).unwrap();
+        assert_eq!(std::fs::read(path).unwrap(), b"second edit");
+        assert_eq!(std::fs::read(original).unwrap(), b"new original");
     }
 }

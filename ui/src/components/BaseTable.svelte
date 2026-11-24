@@ -11,6 +11,7 @@
   import BaseBoard from "./bases/BaseBoard.svelte";
   import BaseCalendar from "./bases/BaseCalendar.svelte";
   import BaseTimeline from "./bases/BaseTimeline.svelte";
+  import NewRowDialog from "./bases/NewRowDialog.svelte";
   import { errText } from "../lib/text";
   import { shownName, shownPath } from "../lib/paths";
   import { api } from "../lib/api";
@@ -66,17 +67,25 @@
     try { await api.setProperty({ path: note, key, text: "", list: Array.isArray(value), value }); await load(); }
     catch (e) { fail(`Could not change ${key}`)(e); }
   }
-  // a note being made: a second click (a double click on New) meanwhile does not make another
-  let creating = false;
-  async function newRow() {
-    if (!view || creating) return;
-    creating = true;
-    try {
-      const r = await api.baseRow(path, view.name);
-      openPath(r.path);
-      if (!r.matches) toast("Created " + shownPath(r.path), "It does not show in this view yet: fill the properties its filters ask for.");
-    } catch (e) { fail("Could not create the note")(e); }
-    finally { creating = false; }
+  let newViewName = $state<string | null>(null);
+  const newView = $derived(res?.views.find((v) => v.name === newViewName));
+
+  function startNewRow() {
+    if (view) newViewName = view.name;
+  }
+
+  async function newRow(title: string, template: string, values: Record<string, string>) {
+    if (!newView) return;
+    const r = await api.baseRow({ path, view: newView.name, title, template, values, this: thisPath });
+    newViewName = null;
+    openPath(r.path, r.line);
+    if (!r.matches) toast("Created " + shownPath(r.path), "Fill in the view’s filter properties to show this row.");
+  }
+
+  async function setRowTemplate(template: string | null) {
+    if (!newView) return;
+    await api.baseView({ path, view: newView.name, edit: { op: "row_template", template } });
+    await load();
   }
 
   onMount(() => {
@@ -91,7 +100,7 @@
 <div class="base" class:embedded class:tall-embed={embedded && (view?.kind === "calendar" || view?.kind === "timeline")} bind:this={host} bind:clientWidth={width} onmousedown={(e) => embedded && e.stopPropagation()}>
   {#if res && view}
     <div class="top">
-      <Toolbar basePath={path} {res} {view} {pinned} compact={embedded && width < 560} props={fields} {typeOf} onpick={(n) => (viewName = n)} onedit={(e, then) => void editView(e, then)} onnew={() => void newRow()} />
+      <Toolbar basePath={path} {thisPath} {res} {view} {pinned} compact={embedded && width < 560} props={fields} {typeOf} onpick={(n) => (viewName = n)} onedit={(e, then) => void editView(e, then)} onnew={startNewRow} />
       {#if embedded}<button type="button" class="open" onclick={() => openPath(path)} title="Open {path}">{shownName(path)}</button>{/if}
     </div>
   {/if}
@@ -102,7 +111,7 @@
   {:else if view && view.kind === "cards"}
     <BaseCards {view} />
   {:else if view && view.kind === "calendar" && (!embedded || width === 0 || width >= 420)}
-    <BaseCalendar {view} onwrite={(p, k, v) => void write(p, k, v)} onnew={() => void newRow()} />
+    <BaseCalendar {view} onwrite={(p, k, v) => void write(p, k, v)} onnew={startNewRow} />
   {:else if view && view.kind === "timeline"}
     <BaseTimeline {view} props={fields} onedit={(e) => void editView(e)} onwrite={(p, k, v) => void write(p, k, v)} />
   {:else if view && (view.kind === "list" || view.kind === "calendar" || narrow)}
@@ -115,6 +124,10 @@
     <p class="loading">Loading…</p>
   {/if}
 </div>
+
+{#if newView}
+  <NewRowDialog viewName={newView.name} defaultTemplate={newView.row_template} oncreate={newRow} ondefault={setRowTemplate} onclose={() => (newViewName = null)} />
+{/if}
 
 <style>
   .base { position: relative; display: flex; flex-direction: column; min-height: 0; font-family: var(--font-ui); font-size: calc(13px * var(--ui-scale, 1)); color: var(--text); white-space: normal; }

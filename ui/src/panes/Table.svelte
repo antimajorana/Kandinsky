@@ -11,12 +11,13 @@
   import { shownPath } from "../lib/paths";
   import { superOf } from "../lib/keys";
   import { on, touches } from "../lib/bus";
-  import { open } from "../lib/dock";
+  import { open, setDirty } from "../lib/dock";
   import type { PaneProps } from "../lib/dock";
   import { toast } from "../lib/state.svelte";
   import { api, ApiError } from "../lib/api";
   import { readViews, writeViews, type TableView } from "../lib/csv/views";
   import { writeXlsx } from "../lib/csv/xlsx-write";
+  import { writeSheet } from "../lib/csv/write";
   import { diskMtime, loadSheet, loadWorkbook, saveSheet } from "../lib/csv/io";
   import type { Sheet } from "../lib/csv/parse";
   import { SheetEdit, type Cell } from "../lib/csv/edit.svelte";
@@ -33,7 +34,7 @@
   import type { MenuItem } from "../lib/menu";
   import InputDialog from "../components/InputDialog.svelte";
 
-  let { spec }: PaneProps<"table"> = $props();
+  let { spec, panel }: PaneProps<"table"> = $props();
 
   let edit = $state.raw<SheetEdit | null>(null);
   // an Excel workbook: its sheets, the one shown; read here only (writing would lose its styles), saved as CSV
@@ -67,6 +68,7 @@
 
   // a new object at each edit (the rows change in place; the same object would tell no one)
   const sheet = $derived(edit ? { ...edit.sheet, version: edit.version } : null);
+  $effect(() => { setDirty(panel.id, !xlsx && !!edit?.dirty); });
   // the rows as they read (formulas' results): what the filters, sort, footer and plot use; a formula column is numeric
   // when its results are
   const values = $derived(sheet ? (sheet.version, valuesOf(sheet.rows)) : []);
@@ -225,23 +227,34 @@
   }
 
   // --- reading and saving ------------------------------------------------------------------------------------------
+  let loadRequest = 0;
+  let diskCheckPending = false;
+  let disposed = false;
   async function load() {
+    const request = ++loadRequest, path = spec.path, current = edit, version = current?.version;
+    const latest = () => request === loadRequest && path === spec.path;
     try {
       progress = 0;
       if (xlsx) {
-        const got = await loadWorkbook(spec.path);
+        const got = await loadWorkbook(path);
+        if (!latest()) return;
         if (!got.sheets.length) throw new Error("this workbook has no sheet with cells");
         book = got.sheets;
         mtime = got.mtime;
         pickSheet(Math.min(sheetAt, got.sheets.length - 1));
       } else {
-        const got = await loadSheet(spec.path, (p) => (progress = p));
+        const got = await loadSheet(path, (p) => { if (latest()) progress = p; });
+        if (!latest()) return;
+        if (saving || edit !== current || current?.version !== version) {
+          void checkDisk();
+          return;
+        }
         edit = new SheetEdit(got.sheet);
         mtime = got.mtime;
       }
       error = ""; conflict = false;
-    } catch (e) { error = errText(e); }
-    finally { progress = null; }
+    } catch (e) { if (latest()) error = errText(e); }
+    finally { if (request === loadRequest) progress = null; }
   }
   function pickSheet(i: number) {
     if (!book) return;
@@ -253,12 +266,19 @@
   async function saveAsCsv() {
     if (!edit || !book) return;
     const stem = spec.path.replace(/\.xlsx$/i, "") + (book.length > 1 ? ` - ${book[sheetAt].name.replace(/[\\/:*?"<>|]+/g, " ").trim()}` : "");
-    let to = `${stem}.csv`;
-    for (let n = 2; (await diskMtime(to)) > 0; n++) to = `${stem} (${n}).csv`;
+    const csv = new Blob([writeSheet(edit.sheet)], { type: "text/csv; charset=utf-8" });
     try {
-      await saveSheet(to, edit.sheet, 0);
-      toast("Saved as CSV", shownPath(to));
-      open({ kind: "table", path: to });
+      for (let n = 1; ; n++) {
+        const to = n === 1 ? `${stem}.csv` : `${stem} (${n}).csv`;
+        try { await api.upload(to, csv); }
+        catch (e) {
+          if (e instanceof ApiError && e.status === 409 && (await diskMtime(to)) > 0) continue;
+          throw e;
+        }
+        toast("Saved as CSV", shownPath(to));
+        open({ kind: "table", path: to });
+        return;
+      }
     } catch (e) { toast("Not saved", errText(e), "error"); }
   }
   /** The table as a new Excel workbook beside it (a free name: an existing workbook is never written over), formulas
@@ -278,16 +298,40 @@
   async function save(force = false) {
     if (xlsx) { toast(READONLY); return; }
     if (!edit || saving || (!edit.dirty && !force)) return;
+    const current = edit, revision = current.revision, path = spec.path;
+    const latest = () => !disposed && edit === current && path === spec.path;
     saving = true;
     try {
-      mtime = await saveSheet(spec.path, edit.sheet, mtime, force);
-      edit.markSaved();
+      const written = await saveSheet(path, current.sheet, mtime, force);
+      if (!latest()) return;
+      mtime = written;
+      current.markSaved(revision);
       conflict = false;
-      toast("Saved", shownPath(spec.path));
+      toast("Saved", shownPath(path));
     } catch (e) {
+      if (!latest()) return;
       if (e instanceof ApiError && e.status === 409) conflict = true;
       else toast("Save failed", errText(e), "error");
-    } finally { saving = false; }
+    } finally {
+      saving = false;
+      if (diskCheckPending) {
+        diskCheckPending = false;
+        void checkDisk();
+      }
+    }
+  }
+
+  /** A notification can come before the response to our own write, or describe an external write during it. */
+  async function checkDisk() {
+    if (disposed) return;
+    if (saving) { diskCheckPending = true; return; }
+    const path = spec.path, knownMtime = mtime, disk = await diskMtime(path).catch(() => null);
+    if (disposed || path !== spec.path || disk === null) return;
+    if (saving) { diskCheckPending = true; return; }
+    if (knownMtime !== mtime) { void checkDisk(); return; }
+    if (disk === mtime) return;
+    if (edit?.dirty) conflict = true;
+    else void load();
   }
 
   /** Ctrl+S / Ctrl+Z / Ctrl+Y: from inside the table, or from nowhere (a closed menu leaves the focus on the page)
@@ -370,12 +414,11 @@
     void loadViews();
     // a change on disk that is not our own save: read again when nothing is unsaved here, else say so (a reload would
     // also lose the undo history)
-    const off = on("fs", async (e) => {
+    const off = on("fs", (e) => {
       if (notePath && touches(e.paths, (p) => p === notePath)) void loadViews(); // the views changed elsewhere
-      if (!touches(e.paths, (p) => p === spec.path) || saving || (await diskMtime(spec.path)) === mtime) return;
-      if (edit?.dirty) conflict = true; else void load();
+      if (touches(e.paths, (p) => p === spec.path)) void checkDisk();
     });
-    return off;
+    return () => { disposed = true; loadRequest++; off(); setDirty(panel.id, false); };
   });
 </script>
 
@@ -416,8 +459,8 @@
   {#if conflict}
     <div class="banner" role="alert">
       The file changed on disk{edit?.dirty ? " while you have unsaved changes" : ""}.
-      <button class="btn" onclick={() => load()}>Reload it</button>
-      {#if edit?.dirty}<button class="btn danger" onclick={() => save(true)}>Overwrite with mine</button>{/if}
+      <button class="btn" disabled={saving} onclick={() => load()}>Reload it</button>
+      {#if edit?.dirty}<button class="btn danger" disabled={saving} onclick={() => save(true)}>Overwrite with mine</button>{/if}
     </div>
   {/if}
   {#if error}<p class="muted pad">{error}</p>{/if}

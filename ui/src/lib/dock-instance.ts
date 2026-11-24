@@ -8,6 +8,11 @@ let dock: DockviewApi | null = null;
 export const getDock = () => dock;
 export const setDock = (d: DockviewApi): void => { dock = d; };
 
+/** The panel's merged parameters can change while its component or file is loading. */
+export function currentPaneSpec<T extends PaneSpec>(id: string, initial: T): T {
+  return (dock?.getPanel(id)?.params as T | undefined) ?? initial;
+}
+
 export function kindOf(api: { id: string }): PaneKind {
   return api.id.split(":")[0] as PaneKind;
 }

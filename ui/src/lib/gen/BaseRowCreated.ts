@@ -4,4 +4,4 @@ export type BaseRowCreated = { path: string,
 /**
  * The new note shows in the view (its filters could not all be satisfied by prefilling).
  */
-matches: boolean, };
+matches: boolean, line?: number, };

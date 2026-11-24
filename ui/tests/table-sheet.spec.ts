@@ -1,4 +1,4 @@
-import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+import { test, expect, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import { openFile } from "./open";
 import { zip } from "./xlsx-fixture";
 
@@ -6,6 +6,7 @@ import { zip } from "./xlsx-fixture";
 // removed, a filter per column with the numbers underneath, columns hidden, and a change on disk while editing.
 const H = { "x-kandinsky": "1" };
 const read = (r: APIRequestContext, path: string) => r.get(`/api/file?path=${path}`, { headers: H }).then((x) => x.json()).then((j) => j.text as string);
+const rawAt = (path: string) => (url: URL) => url.pathname === "/api/raw" && url.searchParams.get("path") === path;
 
 async function open(page: Page, request: APIRequestContext, path: string, text: string) {
   await request.put("/api/file", { headers: H, data: { path, text } });
@@ -20,10 +21,18 @@ async function open(page: Page, request: APIRequestContext, path: string, text: 
   return pane;
 }
 
-const PEOPLE = 'name,city,born\nAlice,"Paris, FR",1980\nBob,"New\nYork",1975\nCarol,Lyon,1990\n';
+async function setCell(pane: Locator, from: number, to: number) {
+  await pane.locator("td:not(.rownum)", { hasText: new RegExp(`^${from}$`) }).dblclick();
+  const field = pane.getByRole("textbox", { name: "Edit cell" });
+  await field.fill(String(to));
+  await field.press("Enter");
+}
+
+const PEOPLE = '\ufeffname,city,born\nAlice,"Paris, FR",1980\nBob,"New\nYork",1975\nCarol,Lyon,1990\n';
 
 test("a cell edited and saved: only its row rewritten, quotes and the rest kept as they were", async ({ page, request }) => {
   const pane = await open(page, request, "data/people.csv", PEOPLE);
+  const tab = page.locator('.kandinsky-tab[title="data/people.csv"]');
   await expect(pane.locator("th", { hasText: "city" })).toBeVisible(); // a text-only first row is the header
   await expect(pane.getByText("3 rows · 3 columns · comma-separated")).toBeVisible();
   await expect(pane.locator("td", { hasText: "New" })).toContainText("York"); // a line break inside quotes stays in its cell
@@ -32,8 +41,10 @@ test("a cell edited and saved: only its row rewritten, quotes and the rest kept 
   await page.keyboard.type("Lyon, FR");
   await page.keyboard.press("Enter");
   await expect(pane.locator(".dirty")).toBeVisible();
+  await expect(tab).toHaveClass(/\bis-dirty\b/);
   await page.keyboard.press("Control+s");
   await expect(pane.locator(".dirty")).toHaveCount(0);
+  await expect(tab).not.toHaveClass(/\bis-dirty\b/);
   expect(await read(request, "data/people.csv")).toBe(PEOPLE.replace("Carol,Lyon,1990", 'Carol,"Lyon, FR",1990'));
   // undo puts it back (unsaved again), redo returns it
   await page.keyboard.press("Control+z");
@@ -41,6 +52,49 @@ test("a cell edited and saved: only its row rewritten, quotes and the rest kept 
   await expect(pane.locator(".dirty")).toBeVisible();
   await page.keyboard.press("Control+Shift+z");
   await expect(pane.locator(".dirty")).toHaveCount(0);
+});
+
+test("edits made while a save is in flight still need to be saved", async ({ page, request }) => {
+  const path = "data/save-in-flight.csv";
+  const pane = await open(page, request, path, "x,y\n1,2\n");
+  const save = pane.getByRole("button", { name: "Save", exact: true });
+  const raw = rawAt(path);
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(raw, async (route) => {
+    if (route.request().method() === "PUT") await pending;
+    await route.continue();
+  });
+  await setCell(pane, 1, 3);
+  const started = page.waitForRequest((r) => r.method() === "PUT" && raw(new URL(r.url())));
+  try {
+    await save.click();
+    await started;
+    await setCell(pane, 2, 4);
+  } finally { release(); }
+  await expect(save).toBeEnabled();
+  expect(await read(request, path)).toBe("x,y\n3,2\n");
+  await save.click();
+  await expect(save).toBeDisabled();
+  await expect.poll(() => read(request, path)).toBe("x,y\n3,4\n");
+});
+
+test("undoing a column rename in a headerless table restores the headerless layout", async ({ page, request }) => {
+  const path = "data/headerless-undo.csv";
+  const pane = await open(page, request, path, "1,2\n3,4\n");
+  const header = pane.getByRole("checkbox", { name: "header row" });
+  await expect(header).not.toBeChecked();
+  await setCell(pane, 1, 5);
+  await pane.locator("tr.names th", { hasText: "col 1" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Rename…" }).click();
+  const field = page.getByRole("dialog").locator("input");
+  await field.fill("First");
+  await field.press("Enter");
+  await expect(header).toBeChecked();
+  await pane.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(header).not.toBeChecked();
+  await pane.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => read(request, path)).toBe("5,2\n3,4\n");
 });
 
 test("rows inserted and deleted from the row menu; typing in a cell replaces it", async ({ page, request }) => {
@@ -60,6 +114,20 @@ test("rows inserted and deleted from the row menu; typing in a cell replaces it"
   await expect(pane.getByText("2 rows")).toBeVisible();
   await page.keyboard.press("Control+s");
   await expect.poll(() => read(request, "data/rows.csv")).toBe("k,v\nz,9\nb,2\n");
+});
+
+test("undoing a row deletion restores the position and line endings of blank records", async ({ page, request }) => {
+  const path = "data/blank-record-undo.csv";
+  const text = "name,value\r\none,1\n  \r\ntwo,2\r\n\nthree,3";
+  const pane = await open(page, request, path, text);
+  await pane.locator("td.rownum", { hasText: /^2$/ }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete row" }).click();
+  await expect(pane.getByText("2 rows")).toBeVisible();
+  await pane.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(pane.getByText("3 rows")).toBeVisible();
+  await setCell(pane, 1, 4);
+  await pane.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => read(request, path)).toBe(text.replace("one,1", "one,4"));
 });
 
 test("a filter per column, the numbers of what is shown, a column hidden and shown again", async ({ page, request }) => {
@@ -96,6 +164,28 @@ test("a change on disk while editing: told, and reloaded or overwritten", async 
   await expect(pane.getByRole("alert")).toContainText("changed on disk");
   await pane.getByRole("button", { name: "Overwrite with mine" }).click();
   await expect.poll(() => read(request, "data/race.csv")).toBe("a,b\n7,2\n");
+});
+
+test("a background reload preserves edits made while the new table is being read", async ({ page, request }) => {
+  const path = "data/reload-in-flight.csv";
+  const pane = await open(page, request, path, "x,y\n1,2\n");
+  const raw = rawAt(path);
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(raw, async (route) => {
+    if (route.request().method() === "GET") await pending;
+    await route.continue();
+  });
+  const disk = "x,y\n1,3\n";
+  const started = page.waitForRequest((r) => r.method() === "GET" && raw(new URL(r.url())));
+  try {
+    await request.put("/api/file", { headers: H, data: { path, text: disk } });
+    await started;
+    await setCell(pane, 1, 7);
+  } finally { release(); }
+  await expect(pane.getByRole("alert")).toContainText("unsaved changes");
+  await expect(pane.locator("td:not(.rownum)", { hasText: /^7$/ })).toBeVisible();
+  expect(await read(request, path)).toBe(disk);
 });
 
 test("formulas between cells: the result shown, the formula kept in the file and edited as itself", async ({ page, request }) => {
@@ -164,8 +254,10 @@ test("an Excel workbook opens as tables, a sheet at a time, read here only; a sh
   await page.screenshot({ path: "test-results/table-xlsx.png" });
   await pane.getByRole("tab", { name: "People" }).click();
   await expect(pane.locator("td", { hasText: "Ada" })).toBeVisible();
+  await request.put("/api/file", { headers: H, data: { path: "data/book - People.csv", text: "name\nExisting\n" } });
   await pane.getByRole("button", { name: "Save as CSV" }).click();
-  await expect.poll(() => read(request, "data/book - People.csv")).toBe("name\nAda\n");
+  await expect.poll(() => read(request, "data/book - People (2).csv")).toBe("name\nAda\n");
+  expect(await read(request, "data/book - People.csv")).toBe("name\nExisting\n");
   await expect(page.locator(".table-pane").last().getByText(/^1 rows · 1 columns/)).toBeVisible({ timeout: 10000 }); // one column: no delimiter to tell
 });
 

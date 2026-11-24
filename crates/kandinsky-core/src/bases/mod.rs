@@ -10,7 +10,7 @@ mod relations;
 mod summary;
 mod value;
 
-pub use edit::{edit_view, new_row, prefill};
+pub use edit::{edit_view, new_row, new_row_from_request, prefill};
 pub use relations::sync_back_relations;
 
 use crate::api::{BaseCell, BaseColumn, BaseResult, BaseRow, BaseView, ColumnSummary, PropertyKind, RollupSpec, SummaryKind};
@@ -91,6 +91,8 @@ struct View {
     /// Blocking dependency relation (`blockedBy: blocked_by`).
     #[serde(rename = "blockedBy", alias = "blocked_by", default)]
     blocked_by: Option<String>,
+    #[serde(rename = "rowTemplate", default)]
+    row_template: Option<String>,
 }
 
 impl View {
@@ -780,6 +782,7 @@ pub fn evaluate(root: &Path, cfg: &Config, base_src: &str, this: Option<&str>) -
                 end_date_property: view.end_date_property.clone(),
                 sub_items_by: view.sub_items_by.clone(),
                 blocked_by: view.blocked_by.clone(),
+                row_template: view.row_template.clone(),
             }
         })
         .collect();
