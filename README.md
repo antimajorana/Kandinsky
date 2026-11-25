@@ -36,3 +36,5 @@ bash scripts/dev/dev.sh /path/to/vault
 [Documentation](docs/INDEX.md) · [Compatibility](docs/guides/COMPATIBILITY.md) · [Self-hosting](docs/guides/SERVER.md) · [Changelog](docs/CHANGELOG.md)
 
 [AGPL-3.0-or-later](LICENSE) · [License notices](docs/THIRD-PARTY.md)
+
+Kandinsky is based on the core of [Alneb/Atlas](https://github.com/Alneb/atlas).
